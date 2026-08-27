@@ -34,8 +34,10 @@ streak means what it says.
 
 ## Install
 
-In Anki: Tools → Add-ons → Get Add-ons, or download `due_crew.ankiaddon`
-from [the releases page](https://github.com/sammyc2472/due-crew/releases)
+In Anki: Tools → Add-ons → Get Add-ons → code **2035408484**
+([AnkiWeb listing](https://ankiweb.net/shared/info/2035408484)) — or
+download `due_crew.ankiaddon` from
+[the releases page](https://github.com/sammyc2472/due-crew/releases)
 and double-click it. Anki 2.1.55+.
 
 ## Getting started
