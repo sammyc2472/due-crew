@@ -30,12 +30,12 @@ never freezes Anki.
 **Getting started:** Tools → Due Crew → sign in, then swap codes with a
 friend from the Friends screen.
 
-Open source (MIT): [repo link]
+Open source (MIT): https://github.com/sammyc2472/due-crew
 
 ---
 
 Notes for publishing (not part of the listing):
-- Fill in the repo link and support thread link.
+- Support thread link still needed; repo link is in.
 - Screenshots to take: board Today view (light + dark), Decks view with two
   people, the cheer flurry mid-fall, Settings Privacy tab.
 - AnkiWeb strips most HTML; this text works as plain paragraphs + the

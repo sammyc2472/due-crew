@@ -36,7 +36,7 @@ streak means what it says.
 
 ## Install
 
-From AnkiWeb (code: TBD), or download `due_crew.ankiaddon` from releases and
+From AnkiWeb (code: TBD), or download `due_crew.ankiaddon` from [releases](https://github.com/sammyc2472/due-crew/releases) and
 double-click it. Anki 2.1.55+.
 
 ## Getting started
