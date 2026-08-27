@@ -547,7 +547,8 @@ def _open_profile(uid):
 
 def open_server_join():
     from .ui.server_dialog import JoinServerDialog
-    JoinServerDialog(mw, server_name(), _switch_server).exec()
+    JoinServerDialog(mw, server_name(), _switch_server,
+                     open_server_register).exec()
 
 
 def open_server_register():

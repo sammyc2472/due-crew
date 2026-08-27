@@ -53,7 +53,7 @@ class AuthDialog(QDialog):
 
         buttons = QHBoxLayout()
         if self.on_join_server:
-            other = QPushButton("Join a different crew server…")
+            other = QPushButton("Use a different crew server…")
             other.setFlat(True)
             other.setCursor(Qt.CursorShape.PointingHandCursor)
             other.setStyleSheet("color: #2e7d32; border: none; font-size: 11px;")

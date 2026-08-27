@@ -13,11 +13,14 @@ from ..backend import directory
 
 
 class JoinServerDialog(QDialog):
-    """on_switch(config) performs the actual switch; {} means the default."""
+    """on_switch(config) performs the actual switch; {} means the default.
+    on_register (optional) opens the founder flow from here, so creating a
+    server is reachable before ever signing in."""
 
-    def __init__(self, parent, current_name, on_switch):
+    def __init__(self, parent, current_name, on_switch, on_register=None):
         super().__init__(parent)
         self.on_switch = on_switch
+        self.on_register = on_register
         self.current_name = current_name
         attach_alive(self)
         self._build()
@@ -57,6 +60,10 @@ class JoinServerDialog(QDialog):
         root.addWidget(self.error)
 
         buttons = QHBoxLayout()
+        if self.on_register:
+            register = QPushButton("Register your own…")
+            register.clicked.connect(self._register)
+            buttons.addWidget(register)
         if self.current_name:
             default_btn = QPushButton("Use the default server")
             default_btn.clicked.connect(self._use_default)
@@ -70,6 +77,12 @@ class JoinServerDialog(QDialog):
         self.join_btn.clicked.connect(self._join)
         buttons.addWidget(self.join_btn)
         root.addLayout(buttons)
+
+    def _register(self):
+        cb = self.on_register
+        self.reject()
+        if cb:
+            QTimer.singleShot(0, cb)
 
     def _browse(self):
         self.listing.clear()

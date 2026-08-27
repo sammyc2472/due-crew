@@ -69,11 +69,13 @@ code. About ten minutes:
    → Publish.
 4. Project settings → Your apps → add a **Web app** → copy the `apiKey` and
    `projectId` from the config it shows.
-5. In Anki: Tools → Due Crew → Settings → **Register your own…** → paste
-   both → Register. You get a server name (say it aloud) and a code (share
-   privately).
+5. In Anki, before or after signing in: on the sign-in screen click
+   **Use a different crew server…** → **Register your own…** (also in
+   Settings) → paste both → Register. You get a server name (say it aloud)
+   and a code (share privately) — then click **Use this server now** and
+   sign up on it.
 
-Friends then use **Join a different crew server…** on the sign-in screen,
+Friends then use **Use a different crew server…** on the sign-in screen,
 pick the name, enter the code, and sign up as usual. Your crew now runs on
 your own free Firebase quota, fully independent of the default server.
 
