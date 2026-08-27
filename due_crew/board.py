@@ -1,0 +1,424 @@
+"""Deck-screen board HTML. Pure rendering: no network, no collection access.
+
+Theme is decided in CSS, inside the webview, not in Python: both palettes
+ship as CSS custom properties, and the dark set applies under Anki's night
+body classes (with a prefers-color-scheme fallback). The Settings override
+forces a single palette. This holds on every Anki version regardless of what
+theme_manager reports.
+
+All server-sourced strings are escaped before they touch the webview.
+Entries carry days as {label: doc}; data["labels"] fixes the order and
+data["tomorrow"] is my next label, so a friend whose day already rolled over
+ahead of mine still renders as fresh.
+"""
+
+import html as _html
+import json as _json
+import time
+from datetime import datetime, timezone
+
+from .stats.decks import sig_match
+
+LIGHT = {
+    "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
+    "accent": "#2e7d32", "accent-ink": "#ffffff", "you-bg": "#e9f2e9",
+    "fresh": "#2e7d32", "hours": "#b26a00", "faded": "#aaaaa2",
+    "well": "#f2f2ec",
+}
+DARK = {
+    "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
+    "accent": "#7cc47f", "accent-ink": "#122912", "you-bg": "#2c372b",
+    "fresh": "#7cc47f", "hours": "#dda45c", "faded": "#6d726a",
+    "well": "#2b2d29",
+}
+NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
+                   ":root.night-mode")
+
+SORT_KEYS = ("reviews", "time", "retention", "streak")
+PERIODS = ("today", "week", "decks")
+HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
+           ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
+MEDALS = ("&#129351;", "&#129352;", "&#129353;")
+
+
+def _token_block(palette):
+    return "".join(f"--dc-{k}: {v}; " for k, v in palette.items())
+
+
+def _theme_css(cfg):
+    theme = cfg.get("theme", "auto")
+    if theme == "light":
+        return f"#due-crew {{ {_token_block(LIGHT)} }}"
+    if theme == "dark":
+        return f"#due-crew {{ {_token_block(DARK)} }}"
+    night = ", ".join(f"{sel} #due-crew" for sel in NIGHT_SELECTORS)
+    return (f"#due-crew {{ {_token_block(LIGHT)} }}\n"
+            f"    @media (prefers-color-scheme: dark) {{ #due-crew {{ {_token_block(DARK)} }} }}\n"
+            f"    {night} {{ {_token_block(DARK)} }}")
+
+
+def _fmt_time(ms):
+    m = int(ms) // 60000
+    return f"{m // 60}h {m % 60:02d}m" if m >= 60 else f"{m}m"
+
+
+def _ago_secs(secs):
+    if secs < 300:
+        return "just now", "fresh"
+    if secs < 3600:
+        return f"{int(secs // 60)}m ago", "fresh"
+    if secs < 86400:
+        return f"{int(secs // 3600)}h ago", "hours"
+    return f"{int(secs // 86400)}d ago", "faded"
+
+
+def _ago(ts_str):
+    if not ts_str:
+        return "", "faded"
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        secs = max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+    except Exception:
+        return "", "faded"
+    return _ago_secs(secs)
+
+
+def _day_metrics(doc):
+    return {"reviews": doc.get("reviews"),
+            "time_ms": doc.get("studyTimeMs"),
+            "retention": doc.get("accuracy"),
+            "streak": doc.get("streak")}
+
+
+def _week_row(days, labels):
+    found = [days.get(lb) for lb in labels if days.get(lb)]
+    if not found:
+        return None
+    reviews = [d["reviews"] for d in found if "reviews" in d]
+    times = [d["studyTimeMs"] for d in found if "studyTimeMs" in d]
+    accs = [(d["accuracy"], d.get("reviews", 1)) for d in found if "accuracy" in d]
+    streak = next((d["streak"] for d in found if "streak" in d), None)
+    acc = None
+    if accs:
+        weights = sum(max(r, 1) for _, r in accs)
+        acc = sum(a * max(r, 1) for a, r in accs) / weights
+    return {"reviews": sum(reviews) if reviews else None,
+            "time_ms": sum(times) if times else None,
+            "retention": acc, "streak": streak}
+
+
+def sort_key(cfg):
+    key = cfg.get("sort", "reviews")
+    return key if key in SORT_KEYS else "reviews"
+
+
+def build_rows(entries, labels, tomorrow, period, cfg):
+    today_lb = labels[0] if labels else ""
+    yest_lb = labels[1] if len(labels) > 1 else ""
+    fresh, stale, paused = [], [], []
+    for e in entries:
+        row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
+               "paused": e["paused"], "last_updated": e["last_updated"],
+               "reviews": None, "time_ms": None, "retention": None,
+               "streak": None, "stale": False}
+        if e["paused"]:
+            paused.append(row)
+            continue
+        days = e.get("days") or {}
+        if period == "week":
+            agg = _week_row(days, labels)
+            if agg is None:
+                if e["you"]:
+                    fresh.append(row)
+                continue
+            row.update(agg)
+            fresh.append(row)
+        else:
+            # a friend whose day rolled over ahead of mine writes my
+            # "tomorrow" label — that's their live today
+            today = days.get(tomorrow) or days.get(today_lb)
+            yesterday = days.get(yest_lb)
+            if today:
+                row.update(_day_metrics(today))
+                fresh.append(row)
+            elif yesterday and cfg.get("show_stale", True) and not e["you"]:
+                row.update(_day_metrics(yesterday))
+                row["stale"] = True
+                stale.append(row)
+            elif e["you"]:
+                fresh.append(row)
+    field = {"reviews": "reviews", "time": "time_ms",
+             "retention": "retention", "streak": "streak"}[sort_key(cfg)]
+    order = lambda r: r[field] if r[field] is not None else -1
+    fresh.sort(key=order, reverse=True)
+    stale.sort(key=order, reverse=True)
+    return fresh, stale + paused  # dormant rows last
+
+
+def build_deck_groups(entries):
+    """Groups anchored on your shared decks; extras are crew decks that match
+    none of yours (a pointer to the Shared decks dialog)."""
+    me = next((e for e in entries if e["you"]), None)
+    others = [e for e in entries if not e["you"]]
+    groups, matched = [], set()
+    for d in (me.get("decks") or []) if me else []:
+        rows = [(me["name"], True, d)]
+        for o in others:
+            for od in o.get("decks") or []:
+                if sig_match(d.get("sig"), od.get("sig")):
+                    rows.append((o["name"], False, od))
+                    matched.add((o["user_id"], od.get("name", "")))
+                    break
+        groups.append({"label": d.get("name", "?"), "rows": rows})
+    extras = []
+    for o in others:
+        for od in o.get("decks") or []:
+            if (o["user_id"], od.get("name", "")) not in matched:
+                extras.append((o["name"], od.get("name", "?")))
+    return groups, extras
+
+
+def _cell(value, fmt=str):
+    return "&mdash;" if value is None else fmt(value)
+
+
+def _css(cfg):
+    pad = 3 if cfg.get("compact") else 6
+    you_bg = "background: var(--dc-you-bg);" if cfg.get("highlight_me", True) else ""
+    return f"""
+    <style>
+    {_theme_css(cfg)}
+    #due-crew {{ margin: 18px auto 8px; max-width: 620px; color: var(--dc-ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
+    #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 10px; }}
+    #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
+    #due-crew .dc-pill {{ display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 1px 10px; border: 1px solid var(--dc-line); color: var(--dc-muted); text-decoration: none; }}
+    #due-crew .dc-pill.on {{ background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .dc-pill:first-child {{ border-radius: 20px 0 0 20px; }}
+    #due-crew .dc-pill:last-child {{ border-radius: 0 20px 20px 0; }}
+    #due-crew .dc-pill + .dc-pill {{ border-left: none; }}
+    #due-crew table {{ width: 100%; border-collapse: collapse; }}
+    #due-crew th {{ border-bottom: 1px solid var(--dc-line); padding: 2px 8px 5px; text-align: right; }}
+    #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    #due-crew th a.on {{ color: var(--dc-accent); }}
+    #due-crew td {{ padding: {pad}px 8px; border-bottom: 1px solid var(--dc-line); white-space: nowrap; }}
+    #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
+    #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
+    #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
+    #due-crew a.dc-cheer:hover {{ opacity: 1; }}
+    #due-crew tr.you td {{ {you_bg} }}
+    #due-crew tr.you td.nm {{ font-weight: 700; }}
+    #due-crew tr.dim td {{ color: var(--dc-faded); }}
+    #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
+    #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
+    #due-crew .la.faded {{ color: var(--dc-faded); }}
+    #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
+    #due-crew .dc-foot .sp {{ flex: 1; }}
+    #due-crew .dc-foot a {{ color: var(--dc-accent); text-decoration: none; font-weight: 700; }}
+    #due-crew .dc-note {{ font-style: italic; font-size: 11px; }}
+    #due-crew .dg {{ margin-bottom: 12px; }}
+    #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
+    #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
+    #due-crew .dr.me .dn {{ font-weight: 700; }}
+    #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
+    #due-crew .dtrack {{ position: relative; flex: 1; height: 12px; background: var(--dc-well);
+      border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
+    #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
+    #due-crew .dtrack .fs {{ background: var(--dc-accent); opacity: 0.35; }}
+    #due-crew .dtrack .fm {{ background: var(--dc-accent); }}
+    #due-crew .dc-count {{ width: 100px; flex-shrink: 0; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0;
+      border-top: 1px solid var(--dc-line); }}
+    #due-crew .dc-card {{ padding: 16px; text-align: center; border: 1px solid var(--dc-line);
+      border-radius: 10px; }}
+    #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
+    #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
+    #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    </style>
+    """
+
+
+def _pycmd(cmd):
+    return f"pycmd('duecrew:{cmd}'); return false;"
+
+
+def _head(period):
+    pills = ""
+    for key, label in (("today", "Today"), ("week", "This week"), ("decks", "Decks")):
+        cls = "dc-pill on" if period == key else "dc-pill"
+        pills += (f'<a class="{cls}" href="#" '
+                  f'onclick="{_pycmd("period:" + key)}">{label}</a>')
+    return (f'<div class="dc-head"><span class="dc-title">Due Crew</span>'
+            f'<span>{pills}</span></div>')
+
+
+def _row_html(row, rank, cfg):
+    name = _html.escape(str(row["name"]))
+    cls = "you" if row["you"] else ""
+    extra = ""
+    if row["paused"]:
+        cls += " dim"
+        extra = ' <span class="dc-note">&middot; on a break</span>'
+        cells = '<td class="n">&mdash;</td>' * 4
+    else:
+        if row["stale"]:
+            cls += " dim"
+            extra = ' <span class="la faded">&middot; yesterday</span>'
+        cells = (f'<td class="n">{_cell(row["reviews"], lambda v: format(v, ","))}</td>'
+                 f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
+                 f'<td class="n">{_cell(row["retention"], lambda v: f"{v:.1f}%")}</td>'
+                 f'<td class="n">{_cell(row["streak"])}</td>')
+    la = ""
+    if cfg.get("show_last_active", True) and not row["paused"] and not row["stale"]:
+        txt, tone = _ago(row["last_updated"])
+        if txt:
+            la = f'<span class="la {tone}">({txt})</span>'
+    if row["you"]:
+        cheer = '<td class="chc"></td>'
+    else:
+        cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
+                 f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
+    return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
+            f'<td class="nm">{name}{la}{extra}</td>{cells}{cheer}</tr>')
+
+
+def _table_html(data, cfg, period):
+    sort = sort_key(cfg)
+    fresh, dormant = build_rows(data["entries"], data["labels"],
+                                data.get("tomorrow", ""), period, cfg)
+    heads = "<th></th><th></th>"
+    for key, label in HEADERS:
+        on = "on" if key == sort else ""
+        arrow = " &#9662;" if key == sort else ""
+        heads += (f'<th><a class="{on}" href="#" '
+                  f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
+    heads += "<th></th>"
+    body = ""
+    for i, row in enumerate(fresh):
+        rank = MEDALS[i] if i < 3 else f"#{i + 1}"
+        body += _row_html(row, rank, cfg)
+    for row in dormant:
+        body += _row_html(row, "&mdash;", cfg)
+    solo = ""
+    if len(data["entries"]) == 1 and not data.get("pending"):
+        solo = ('<div class="dc-line">Just you so far &mdash; share your code '
+                'from the Friends screen.</div>')
+    return f'<table><tr>{heads}</tr>{body}</table>{solo}'
+
+
+def _bar(name, is_me, d):
+    total = max(int(d.get("total") or 0), 1)
+    seen_pct = min(100, round(100 * int(d.get("seen") or 0) / total))
+    mature_pct = min(100, round(100 * int(d.get("mature") or 0) / total))
+    counts = f'{int(d.get("seen") or 0):,} / {int(d.get("total") or 0):,}'
+    return (f'<div class="dr{" me" if is_me else ""}">'
+            f'<span class="dn">{_html.escape(str(name))}</span>'
+            f'<div class="dtrack"><i class="fs" style="width:{seen_pct}%;"></i>'
+            f'<i class="fm" style="width:{mature_pct}%;"></i></div>'
+            f'<span class="dc-count">{counts}</span></div>')
+
+
+def _decks_html(data):
+    groups, extras = build_deck_groups(data["entries"])
+    if not groups and not extras:
+        return ('<div class="dc-line" style="border-top: none;">No shared decks yet. '
+                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a> '
+                '&mdash; decks you and your crew both study match automatically.</div>')
+    html = ""
+    for g in groups:
+        label = _html.escape(str(g["label"]))
+        rows = "".join(_bar(n, me, d) for n, me, d in g["rows"])
+        html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
+    for who, deck in extras[:3]:
+        html += (f'<div class="dc-line">{_html.escape(str(who))} shares '
+                 f'&ldquo;{_html.escape(str(deck))}&rdquo; &mdash; '
+                 f'<a href="#" onclick="{_pycmd("decks")}">open Shared decks</a> to join.</div>')
+    html += ('<div class="dc-line" style="border-top: none; padding-top: 2px;">'
+             'light = seen &middot; dark = mature &middot; % of each person&rsquo;s own copy</div>')
+    return html
+
+
+def render(data, cfg, fetched_at):
+    period = cfg.get("period", "today")
+    if period not in PERIODS:
+        period = "today"
+    body = _decks_html(data) if period == "decks" else _table_html(data, cfg, period)
+
+    n_pending = len(data.get("pending", []))
+    if n_pending:
+        s = "s" if n_pending > 1 else ""
+        left = (f'{n_pending} invite{s} pending &middot; '
+                f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>')
+    else:
+        left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
+    if period == "decks":
+        left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
+
+    ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
+    foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
+            f'<span>Updated {ago} &middot; <a href="#" '
+            f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
+
+    return f'<div id="due-crew">{_css(cfg)}{_head(period)}{body}{foot}</div>'
+
+
+def _card(cfg, title, body_html):
+    return (f'<div id="due-crew">{_css(cfg)}<div class="dc-card">'
+            f'<b>{title}</b><span>{body_html}</span></div></div>')
+
+
+def signed_out_card(cfg):
+    return _card(cfg, "Due Crew",
+                 f'Your studying, alongside your friends\'. '
+                 f'<a href="#" onclick="{_pycmd("setup")}">Join your crew</a>')
+
+
+def loading_card(cfg):
+    return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
+
+
+def flurry_js(emojis, banner_text):
+    """Injected via web.eval after render — never inline in board HTML.
+    Banner picks its colors from the page's night classes."""
+    emoji_list = _json.dumps(emojis)
+    banner = _json.dumps(banner_text)
+    return """
+    (function() {
+        if (document.getElementById('dc-flurry')) { return; }
+        var night = /night/i.test(document.body.className) ||
+            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var banner = document.createElement('div');
+        banner.textContent = %s;
+        banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
+            'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
+            'box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
+            (night ? 'background:#262b24;color:#dfe1dc;border:1px solid #7cc47f;'
+                   : 'background:#ffffff;color:#23281f;border:1px solid #2e7d32;');
+        document.body.appendChild(banner);
+        setTimeout(function() { banner.style.opacity = '0'; }, 2600);
+        setTimeout(function() { banner.remove(); }, 3200);
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+        var emojis = %s;
+        var wrap = document.createElement('div');
+        wrap.id = 'dc-flurry';
+        wrap.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:69;overflow:hidden;';
+        var style = document.createElement('style');
+        style.textContent = '@keyframes dcfall { to { transform: translateY(108vh) rotate(300deg); } }';
+        wrap.appendChild(style);
+        for (var i = 0; i < 26; i++) {
+            var s = document.createElement('span');
+            s.textContent = emojis[i %% emojis.length];
+            s.style.cssText = 'position:absolute;top:-40px;left:' + (Math.random() * 100) + 'vw;' +
+                'font-size:' + (16 + Math.random() * 16) + 'px;' +
+                'animation:dcfall ' + (1.6 + Math.random() * 1.4) + 's linear ' +
+                (Math.random() * 0.7) + 's forwards;';
+            wrap.appendChild(s);
+        }
+        document.body.appendChild(wrap);
+        setTimeout(function() { wrap.remove(); }, 3800);
+    })();
+    """ % (banner, emoji_list)

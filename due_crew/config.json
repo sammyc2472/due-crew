@@ -1,0 +1,17 @@
+{
+  "show_leaderboard": true,
+  "period": "today",
+  "sort": "reviews",
+  "show_stale": true,
+  "sync_notifications": true,
+  "theme": "auto",
+  "compact": false,
+  "show_last_active": true,
+  "highlight_me": true,
+  "share_reviews": true,
+  "share_time": true,
+  "share_retention": true,
+  "share_streak": true,
+  "paused": false,
+  "shared_decks": []
+}

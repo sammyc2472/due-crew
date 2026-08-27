@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Due Crew — Firestore rules.
+//
+// Model: friendship is consent-based. Your own `friends` array controls who
+// may read your daily stats. The client only ever writes documents it owns.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isFriend(userId) {
+      return isAuthenticated() &&
+             request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends;
+    }
+
+    match /users/{userId} {
+      // Profiles are readable by any signed-in user. The client uses this to
+      // show display names and to detect "did they add me back?".
+      allow read: if isAuthenticated();
+
+      allow create, update, delete: if isOwner(userId);
+
+      match /daily_stats/{statsId} {
+        // Stats are readable only by the owner and people the owner added.
+        allow read: if isOwner(userId) || isFriend(userId);
+        allow write: if isOwner(userId);
+      }
+
+      // v1.2: shared-deck progress. Same consent gate as stats.
+      match /shared/{doc} {
+        allow read: if isOwner(userId) || isFriend(userId);
+        allow write: if isOwner(userId);
+      }
+
+      // v1.2: cheers. Only people the owner added may send, one doc per
+      // sender (the doc id), only the three emoji, nothing else in the doc.
+      match /cheers/{senderId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isFriend(userId)
+                              && request.auth.uid == senderId
+                              && request.resource.data.keys().hasOnly(['emoji', 'name', 'at'])
+                              && request.resource.data.emoji in ['🎉', '💪', '🔥'];
+      }
+    }
+
+    match /friend_codes/{code} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+                       request.resource.data.userId == request.auth.uid;
+
+      // Only the code's current owner may repoint it, and only at themselves.
+      // Without the first condition, anyone could hijack an existing code.
+      allow update: if isAuthenticated() &&
+                       resource.data.userId == request.auth.uid &&
+                       request.resource.data.userId == request.auth.uid;
+
+      allow delete: if isAuthenticated() &&
+                       resource.data.userId == request.auth.uid;
+    }
+  }
+}
