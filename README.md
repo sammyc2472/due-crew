@@ -42,7 +42,8 @@ and double-click it. Anki 2.1.55+.
 
 ## Getting started
 
-1. Tools → Due Crew → Sign in (or click "Join your crew" on the Decks screen).
+1. Click Due Crew on the Decks screen: join your crew with the server name
+   and code a friend sent you — or start a new crew.
 2. Friends → copy your code, send it to a friend. They add yours, you add
    theirs — you're crew.
 3. Study. Stats sync when Anki syncs.
@@ -69,15 +70,12 @@ code. About ten minutes:
    → Publish.
 4. Project settings → Your apps → add a **Web app** → copy the `apiKey` and
    `projectId` from the config it shows.
-5. In Anki, before or after signing in: on the sign-in screen click
-   **Use a different crew server…** → **Register your own…** (also in
-   Settings) → paste both → Register. You get a server name (say it aloud)
-   and a code (share privately) — then click **Use this server now** and
-   sign up on it.
+5. In Anki: Due Crew → **Start a new crew** → Continue → paste both →
+   Register. You get a server name (say it aloud) and a code (share
+   privately) — then click **Use this server now** and sign up on it.
 
-Friends then use **Use a different crew server…** on the sign-in screen,
-pick the name, enter the code, and sign up as usual. Your crew now runs on
-your own free Firebase quota, fully independent of the default server.
+Friends then pick **Join your crew**, enter the name and code, and sign up
+as usual. Your crew runs on your own free Firebase quota.
 
 ## Development
 

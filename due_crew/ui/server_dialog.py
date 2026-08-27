@@ -4,12 +4,98 @@ Both talk only to the directory on the default project."""
 
 from aqt.qt import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QPushButton, QTimer, QVBoxLayout,
+    QPushButton, Qt, QTimer, QVBoxLayout,
 )
-from aqt.utils import tooltip
+from aqt.utils import openLink, tooltip
 
 from . import attach_alive, run_bg
 from ..backend import directory
+
+WALKTHROUGH_URL = "https://github.com/sammyc2472/due-crew#run-your-own-crew-server"
+
+
+class WelcomeDialog(QDialog):
+    """First-run doors. self.choice: 'join', 'start', or 'signin'."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.choice = None
+        self.setWindowTitle("Due Crew")
+        self.setMinimumWidth(340)
+        root = QVBoxLayout(self)
+
+        intro = QLabel("Your friends' studying next to yours.\n"
+                       "Crews run on their own servers.")
+        intro.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        intro.setStyleSheet("font-size: 12.5px; margin-bottom: 6px;")
+        root.addWidget(intro)
+
+        self._door(root, "Join your crew",
+                   "Someone sent you a name and a code.", "join", primary=True)
+        self._door(root, "Start a new crew",
+                   "One person sets up the server — about ten minutes, free.",
+                   "start")
+
+        signin = QPushButton("Already have an account? Sign in")
+        signin.setFlat(True)
+        signin.setCursor(Qt.CursorShape.PointingHandCursor)
+        signin.setStyleSheet("color: #2e7d32; border: none; font-size: 11.5px;")
+        signin.clicked.connect(lambda: self._pick("signin"))
+        root.addWidget(signin, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def _door(self, root, label, sub, choice, primary=False):
+        btn = QPushButton(label)
+        btn.setMinimumHeight(34)
+        if primary:
+            btn.setDefault(True)
+        btn.clicked.connect(lambda: self._pick(choice))
+        root.addWidget(btn)
+        sub_label = QLabel(sub)
+        sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_label.setStyleSheet("font-size: 11px; margin-bottom: 6px;")
+        root.addWidget(sub_label)
+
+    def _pick(self, choice):
+        self.choice = choice
+        self.accept()
+
+
+class StartCrewDialog(QDialog):
+    """Founder framing before the register form. accept() = continue."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle("Due Crew — Start a new crew")
+        self.setMinimumWidth(380)
+        root = QVBoxLayout(self)
+        for line in (
+            "• One person per crew does this — everyone else just joins "
+            "with the name and code you'll get.",
+            "• About ten minutes: create a Firebase project, flip two "
+            "settings, paste two values.",
+            "• Your crew's data lives on your project, on Firebase's free plan.",
+        ):
+            label = QLabel(line)
+            label.setWordWrap(True)
+            root.addWidget(label)
+
+        guide = QPushButton("Open the step-by-step walkthrough")
+        guide.setFlat(True)
+        guide.setCursor(Qt.CursorShape.PointingHandCursor)
+        guide.setStyleSheet("color: #2e7d32; border: none; text-align: left;")
+        guide.clicked.connect(lambda: openLink(WALKTHROUGH_URL))
+        root.addWidget(guide, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        back = QPushButton("Back")
+        back.clicked.connect(self.reject)
+        buttons.addWidget(back)
+        go = QPushButton("Continue")
+        go.setDefault(True)
+        go.clicked.connect(self.accept)
+        buttons.addWidget(go)
+        root.addLayout(buttons)
 
 
 class JoinServerDialog(QDialog):
@@ -22,6 +108,7 @@ class JoinServerDialog(QDialog):
         self.on_switch = on_switch
         self.on_register = on_register
         self.current_name = current_name
+        self.joined = False
         attach_alive(self)
         self._build()
         QTimer.singleShot(0, self._browse)
@@ -102,6 +189,7 @@ class JoinServerDialog(QDialog):
         run_bg(self, directory.browse_names, done)
 
     def _use_default(self):
+        self.joined = True
         self.on_switch({})
         self.accept()
 
@@ -126,6 +214,7 @@ class JoinServerDialog(QDialog):
             if conf is None:
                 self.error.setText("No server matches that name and code.")
                 return
+            self.joined = True
             self.on_switch(conf)
             self.accept()
 
@@ -133,10 +222,12 @@ class JoinServerDialog(QDialog):
 
 
 class RegisterServerDialog(QDialog):
-    def __init__(self, parent, on_switch):
+    def __init__(self, parent, on_switch, prefill=None):
         super().__init__(parent)
         self.on_switch = on_switch
+        self.prefill = prefill  # (api_key, project_id) of a custom server
         self.result = None  # (name, code, config)
+        self.used = False
         attach_alive(self)
         self._build()
 
@@ -160,6 +251,9 @@ class RegisterServerDialog(QDialog):
         self.project_input = QLineEdit()
         self.project_input.setPlaceholderText("my-crew-firebase")
         root.addWidget(self.project_input)
+        if self.prefill and all(self.prefill):
+            self.key_input.setText(self.prefill[0])
+            self.project_input.setText(self.prefill[1])
 
         self.status = QLabel("")
         self.status.setWordWrap(True)
@@ -259,5 +353,6 @@ class RegisterServerDialog(QDialog):
 
     def _use(self):
         if self.result:
+            self.used = True
             self.on_switch(self.result[2])
             self.accept()

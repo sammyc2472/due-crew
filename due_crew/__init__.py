@@ -426,7 +426,7 @@ def _on_js(handled, message, context):
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
-        open_auth()
+        open_welcome()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
     elif cmd == "profile" and len(parts) > 2:
@@ -547,13 +547,37 @@ def _open_profile(uid):
 
 def open_server_join():
     from .ui.server_dialog import JoinServerDialog
-    JoinServerDialog(mw, server_name(), _switch_server,
-                     open_server_register).exec()
+    dlg = JoinServerDialog(mw, server_name(), _switch_server,
+                           open_server_register)
+    dlg.exec()
+    return dlg
 
 
 def open_server_register():
     from .ui.server_dialog import RegisterServerDialog
-    RegisterServerDialog(mw, _switch_server).exec()
+    conf = _server_config()
+    prefill = (conf.get("apiKey"), conf.get("projectId")) if conf else None
+    dlg = RegisterServerDialog(mw, _switch_server, prefill=prefill)
+    dlg.exec()
+    return dlg
+
+
+def open_welcome():
+    from .ui.server_dialog import StartCrewDialog, WelcomeDialog
+    dlg = WelcomeDialog(mw)
+    if not dlg.exec() or not dlg.choice:
+        return
+    if dlg.choice == "join":
+        joined = open_server_join()
+        if getattr(joined, "joined", False) and not client().signed_in:
+            open_auth()
+    elif dlg.choice == "start":
+        if StartCrewDialog(mw).exec():
+            registered = open_server_register()
+            if getattr(registered, "used", False) and not client().signed_in:
+                open_auth()
+    else:
+        open_auth()
 
 
 def open_auth():
@@ -604,7 +628,7 @@ def _on_decks_saved(changed):
 def open_settings():
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_auth, open_friends, _on_signed_out, open_decks,
+                         open_welcome, open_friends, _on_signed_out, open_decks,
                          server_name(), open_server_join, open_server_register)
     dlg.exec()
 
