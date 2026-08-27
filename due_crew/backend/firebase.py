@@ -25,14 +25,21 @@ import threading
 
 import requests
 
-API_KEY = "AIzaSyBgXxrfGhuZ1Zrf_DURu4Sd3B9VZw42Q9I"
-PROJECT_ID = "anki-leaderboard-f6691"
+DEFAULT_API_KEY = "AIzaSyBgXxrfGhuZ1Zrf_DURu4Sd3B9VZw42Q9I"
+DEFAULT_PROJECT_ID = "anki-leaderboard-f6691"
 AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
 TOKEN_URL = "https://securetoken.googleapis.com/v1/token"
-BASE = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents"
-DOC_ROOT = f"projects/{PROJECT_ID}/databases/(default)/documents"
 TIMEOUT = 10
 KEEP_DAYS = 7
+
+
+def firestore_base(project_id):
+    return (f"https://firestore.googleapis.com/v1/projects/{project_id}"
+            f"/databases/(default)/documents")
+
+
+def doc_root(project_id):
+    return f"projects/{project_id}/databases/(default)/documents"
 
 
 class AuthError(Exception):
@@ -140,8 +147,12 @@ def _clean_decks(value):
 
 
 class FirebaseClient:
-    def __init__(self, session_file):
+    def __init__(self, session_file, api_key=None, project_id=None):
         self.session_file = session_file
+        self.api_key = api_key or DEFAULT_API_KEY
+        self.project_id = project_id or DEFAULT_PROJECT_ID
+        self.base = firestore_base(self.project_id)
+        self.doc_root = doc_root(self.project_id)
         self.http = requests.Session()
         self._session_lock = threading.Lock()
         self._refresh_lock = threading.Lock()
@@ -194,7 +205,7 @@ class FirebaseClient:
 
     def _auth_post(self, endpoint, payload):
         try:
-            r = self.http.post(f"{AUTH_URL}:{endpoint}", params={"key": API_KEY},
+            r = self.http.post(f"{AUTH_URL}:{endpoint}", params={"key": self.api_key},
                                json=payload, timeout=TIMEOUT)
         except requests.RequestException:
             raise TransportError("auth request failed")
@@ -256,7 +267,7 @@ class FirebaseClient:
             if not rt:
                 return False
             try:
-                r = self.http.post(TOKEN_URL, params={"key": API_KEY},
+                r = self.http.post(TOKEN_URL, params={"key": self.api_key},
                                    data={"grant_type": "refresh_token",
                                          "refresh_token": rt},
                                    timeout=TIMEOUT)
@@ -283,19 +294,19 @@ class FirebaseClient:
         return r
 
     def get_doc(self, path):
-        r = self._req("GET", f"{BASE}/{path}")
+        r = self._req("GET", f"{self.base}/{path}")
         if r.status_code != 200:
             return None, r.status_code
         return _parse(r.json().get("fields")), 200
 
     def patch_doc(self, path, data, mask=None):
         mask_q = "&".join(f"updateMask.fieldPaths={k}" for k in (mask or data))
-        r = self._req("PATCH", f"{BASE}/{path}?{mask_q}",
+        r = self._req("PATCH", f"{self.base}/{path}?{mask_q}",
                       json={"fields": {k: _fv(v) for k, v in data.items()}})
         return r.status_code in (200, 201)
 
     def delete_doc(self, path):
-        return self._req("DELETE", f"{BASE}/{path}").status_code == 200
+        return self._req("DELETE", f"{self.base}/{path}").status_code == 200
 
     def batch_get(self, paths):
         """Many docs, one round trip. {path: fields-or-None(missing)}.
@@ -303,14 +314,14 @@ class FirebaseClient:
         out = {p: None for p in paths}
         if not paths:
             return out
-        r = self._req("POST", f"{BASE}:batchGet",
-                      json={"documents": [f"{DOC_ROOT}/{p}" for p in paths]})
+        r = self._req("POST", f"{self.base}:batchGet",
+                      json={"documents": [f"{self.doc_root}/{p}" for p in paths]})
         if r.status_code != 200:
             raise TransportError(f"batchGet failed: {r.status_code}")
         for item in r.json():
             if "found" in item:
                 name = item["found"]["name"]
-                out[name[len(DOC_ROOT) + 1:]] = _parse(item["found"].get("fields"))
+                out[name[len(self.doc_root) + 1:]] = _parse(item["found"].get("fields"))
         return out
 
     # ---- friends ----
@@ -463,6 +474,31 @@ class FirebaseClient:
         self._save_session()
         return True
 
+    def upload_heatmap(self, uid, counts):
+        """counts: {day_label: n}. One doc; write skipped when unchanged."""
+        digest = hashlib.sha1(
+            json.dumps(counts, sort_keys=True).encode()).hexdigest()
+        if self.session.get("heatmap_hash") == digest:
+            return True
+        if not self.patch_doc(f"users/{uid}/shared/heatmap", {"counts": counts}):
+            return False
+        self.session["heatmap_hash"] = digest
+        self._save_session()
+        return True
+
+    def fetch_heatmap(self, uid):
+        """{day_label: n} or None when the friend doesn't share (or 403)."""
+        doc, _status = self.get_doc(f"users/{uid}/shared/heatmap")
+        counts = (doc or {}).get("counts")
+        if not isinstance(counts, dict):
+            return None
+        return {str(k): _as_int(v) or 0 for k, v in counts.items()}
+
+    def delete_heatmap(self, uid):
+        self.delete_doc(f"users/{uid}/shared/heatmap")
+        self.session.pop("heatmap_hash", None)
+        self._save_session()
+
     def _cleanup(self, uid, today_label):
         """Blind-delete the stats docs that just aged out — doc ids are date
         labels, so no listing (and no reads) needed. Once per day."""
@@ -478,7 +514,7 @@ class FirebaseClient:
     # ---- account deletion ----
 
     def _delete_listed(self, collection_path):
-        r = self._req("GET", f"{BASE}/{collection_path}?pageSize=100")
+        r = self._req("GET", f"{self.base}/{collection_path}?pageSize=100")
         if r.status_code == 200:
             for doc in r.json().get("documents", []):
                 self.delete_doc(f"{collection_path}/{doc['name'].rsplit('/', 1)[-1]}")
@@ -491,6 +527,7 @@ class FirebaseClient:
         self._delete_listed(f"users/{uid}/daily_stats")
         self._delete_listed(f"users/{uid}/cheers")
         self.delete_doc(f"users/{uid}/shared/decks")
+        self.delete_doc(f"users/{uid}/shared/heatmap")
         if friend_code:
             self.delete_doc(f"friend_codes/{friend_code}")
         self.delete_doc(f"users/{uid}")

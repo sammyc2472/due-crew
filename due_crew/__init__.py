@@ -13,6 +13,7 @@ other refreshes fetch only today (plus my next label, so friends whose day
 already rolled over ahead of my timezone stay live).
 """
 
+import datetime
 import html
 import json
 import os
@@ -32,15 +33,18 @@ from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 
 CHEER_EMOJI = ("\U0001F389", "\U0001F4AA", "\U0001F525")  # party, muscle, fire
+STREAK_MILESTONES = (7, 30, 100, 365)
+HEATMAP_DAYS = 182
 
 _client = None
 _client_profile = None
 _state = {
     "entries": None, "days": {}, "decks": {}, "labels": [], "tomorrow": "",
     "pending": [], "ts": 0.0, "prev_label": "", "prev_counts": {},
-    "board_shown": False,
+    "prev_streaks": {}, "board_shown": False,
 }
 _pending_cheers = []
+_wrap = {"profile": None, "data": {}}
 _lock = threading.Lock()
 _fetching = False
 _menu_done = False
@@ -74,20 +78,134 @@ def save_cfg(c):
     mw.addonManager.writeConfig(__name__, c)
 
 
+def _server_config():
+    try:
+        with open(os.path.join(_profile_files(), "server.json")) as f:
+            conf = json.load(f)
+        return conf if isinstance(conf, dict) else {}
+    except Exception:
+        return {}
+
+
+def server_name():
+    return str(_server_config().get("name", ""))
+
+
 def client():
     global _client, _client_profile
     key = _profile_key()
     if _client is None or _client_profile != key:
-        _client = FirebaseClient(os.path.join(_profile_files(), "session.json"))
+        conf = _server_config()
+        _client = FirebaseClient(os.path.join(_profile_files(), "session.json"),
+                                 api_key=conf.get("apiKey"),
+                                 project_id=conf.get("projectId"))
         _client_profile = key
     return _client
+
+
+def _switch_server(conf):
+    """conf {} = back to the default server. Signs out locally, rebinds."""
+    global _client
+    if client().signed_in:
+        client().sign_out()
+    path = os.path.join(_profile_files(), "server.json")
+    try:
+        if conf:
+            with open(path, "w") as f:
+                json.dump(conf, f)
+        elif os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+    _client = None
+    _reset_runtime()
+    _rerender()
+    tooltip(f"Crew server: {html.escape(conf.get('name') or 'default')}. "
+            f"Sign in to continue.")
 
 
 def _reset_runtime():
     _state.update(entries=None, days={}, decks={}, labels=[], tomorrow="",
                   pending=[], ts=0.0, prev_label="", prev_counts={},
-                  board_shown=False)
+                  prev_streaks={}, board_shown=False)
     _pending_cheers.clear()
+
+
+# ---- weekly wrap + deck baselines (local, per profile) ----
+
+def _wrap_data():
+    key = _profile_key()
+    if _wrap["profile"] != key:
+        _wrap["profile"] = key
+        try:
+            with open(os.path.join(_profile_files(), "wrap.json")) as f:
+                _wrap["data"] = json.load(f)
+        except Exception:
+            _wrap["data"] = {}
+    return _wrap["data"]
+
+
+def _save_wrap():
+    try:
+        with open(os.path.join(_profile_files(), "wrap.json"), "w") as f:
+            json.dump(_wrap["data"], f)
+    except OSError:
+        pass
+
+
+def _week_key(label):
+    year, week, _day = datetime.date.fromisoformat(label).isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _update_wrap(entries, labels):
+    w = _wrap_data()
+    week = _week_key(labels[0])
+    if w.get("week") == week:
+        return
+    totals_r = totals_t = 0
+    best = w.setdefault("best", {})
+    best_name, best_gain = "", 0
+    for e in entries:
+        agg = board._week_row(e["days"], labels) or {}
+        reviews = agg.get("reviews") or 0
+        totals_r += reviews
+        totals_t += agg.get("time_ms") or 0
+        gain = reviews - best.get(e["user_id"], 0)
+        if reviews > 0 and gain > best_gain:
+            best_name, best_gain = e["name"], gain
+        if reviews > best.get(e["user_id"], 0):
+            best[e["user_id"]] = reviews
+    w["banner"] = {"reviews": totals_r, "time_ms": totals_t,
+                   "best_name": best_name}
+    w["week"] = week
+    w["dismissed"] = ""
+    w["deck_base"] = {f"{e['user_id']}|{d.get('name', '')}": int(d.get("seen") or 0)
+                      for e in entries for d in (e.get("decks") or [])}
+    _save_wrap()
+
+
+def _wrap_info():
+    w = _wrap_data()
+    if not _state["labels"] or w.get("week") != _week_key(_state["labels"][0]):
+        return None
+    if w.get("dismissed") == w.get("week"):
+        return None
+    banner = w.get("banner") or {}
+    return banner if banner.get("reviews") else None
+
+
+def _deck_deltas():
+    base = _wrap_data().get("deck_base") or {}
+    out = {}
+    for e in _state["entries"] or []:
+        for d in e.get("decks") or []:
+            key = f"{e['user_id']}|{d.get('name', '')}"
+            if key in base:
+                delta = int(d.get("seen") or 0) - base[key]
+                if delta > 0:
+                    out[(e["user_id"], d.get("name", ""))] = delta
+    return out
 
 
 def _board_data():
@@ -97,10 +215,11 @@ def _board_data():
 
 # ---- refresh ----
 
-def refresh_board(upload_stats=None, shared_decks=None, full=False):
+def refresh_board(upload_stats=None, shared_decks=None, heatmap=None, full=False):
     """Fetch (and optionally upload first) in the background. Main thread
     only. An upload is never dropped: only pure fetches dedup against an
-    in-flight refresh."""
+    in-flight refresh. heatmap: dict to upload, "off" to retract, None to
+    leave alone."""
     global _fetching
     if not mw.col or not client().signed_in:
         return
@@ -133,6 +252,11 @@ def refresh_board(upload_stats=None, shared_decks=None, full=False):
                 cl.upload_today(uid, name, labels[0], upload_stats, c)
             if shared_decks is not None and not c.get("paused"):
                 cl.upload_shared(uid, shared_decks)
+            if heatmap is not None:
+                if isinstance(heatmap, dict) and not c.get("paused"):
+                    cl.upload_heatmap(uid, heatmap)
+                elif cl.session.get("heatmap_hash"):
+                    cl.delete_heatmap(uid)  # share turned off, or paused
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
             mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))
@@ -182,6 +306,20 @@ def _commit(data, c, labels, tomorrow):
             if old is not None and counts[e["user_id"]] > old:
                 toasts.append(f"{html.escape(e['name'])} just studied — "
                               f"{counts[e['user_id']]:,} reviews today")
+    for e in data["entries"]:
+        if e["you"]:
+            continue
+        doc = e["days"].get(tomorrow) or e["days"].get(today)
+        streak_val = (doc or {}).get("streak")
+        if isinstance(streak_val, int):
+            old = _state["prev_streaks"].get(e["user_id"])
+            if isinstance(old, int) and c.get("sync_notifications", True):
+                for t in STREAK_MILESTONES:
+                    if old < t <= streak_val:
+                        toasts.append(f"{html.escape(e['name'])} hit a "
+                                      f"{t}-day streak \U0001F525")
+            _state["prev_streaks"][e["user_id"]] = streak_val
+
     _state["prev_label"] = today
     _state["prev_counts"] = counts
 
@@ -194,6 +332,7 @@ def _commit(data, c, labels, tomorrow):
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time())
+    _update_wrap(data["entries"], labels)
 
     if toasts:
         tooltip("<br>".join(toasts), period=5000)
@@ -220,7 +359,8 @@ def _play_cheers():
         text = f"{emojis[0]} {names[0]} sent cheers"
     else:
         text = f"{' '.join(dict.fromkeys(emojis))} {' and '.join(names)} sent cheers"
-    mw.web.eval(board.flurry_js(emojis, text))
+    back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
+    mw.web.eval(board.flurry_js(emojis, text, back=back))
 
 
 # ---- hooks ----
@@ -240,7 +380,8 @@ def _on_render(deck_browser, content):
             refresh_board()
         else:
             _state["board_shown"] = True
-            content.stats += board.render(_board_data(), c, _state["ts"])
+            content.stats += board.render(_board_data(), c, _state["ts"],
+                                          wrap=_wrap_info(), deltas=_deck_deltas())
     except Exception:
         traceback.print_exc()
 
@@ -256,10 +397,12 @@ def _on_sync_done():
     try:
         stats = gather_stats(mw.col, _profile_files())
         decks = gather_shared_decks(mw.col, c)
+        heat = (StatsQueries(mw.col).heatmap_counts(HEATMAP_DAYS)
+                if c.get("share_heatmap", True) else "off")
     except Exception:
         traceback.print_exc()
-        stats, decks = None, None
-    refresh_board(upload_stats=stats, shared_decks=decks)
+        stats, decks, heat = None, None, None
+    refresh_board(upload_stats=stats, shared_decks=decks, heatmap=heat)
 
 
 def _on_js(handled, message, context):
@@ -286,6 +429,19 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif cmd == "profile" and len(parts) > 2:
+        _open_profile(parts[2])
+    elif cmd == "wrapdismiss":
+        w = _wrap_data()
+        w["dismissed"] = w.get("week", "")
+        _save_wrap()
+        _swap(c)
+    elif cmd == "cheerback" and len(parts) > 3:
+        uid, emoji = parts[2], parts[3]
+        entry = next((e for e in (_state["entries"] or [])
+                      if e["user_id"] == uid), None)
+        if entry and emoji in CHEER_EMOJI:
+            _send_cheer(uid, entry["name"], emoji)
     else:
         print(f"due crew: unknown command {message!r}")
     return (True, None)
@@ -296,7 +452,8 @@ def _swap(c):
     if _state["entries"] is None:
         _rerender()
         return
-    html_out = board.render(_board_data(), c, _state["ts"])
+    html_out = board.render(_board_data(), c, _state["ts"],
+                            wrap=_wrap_info(), deltas=_deck_deltas())
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -341,11 +498,66 @@ def _send_cheer(to_uid, to_name, emoji):
     threading.Thread(target=job, daemon=True).start()
 
 
+# ---- friend profile card ----
+
+def _open_profile(uid):
+    entry = next((e for e in (_state["entries"] or [])
+                  if e["user_id"] == uid), None)
+    if entry is None or not mw.col:
+        return
+    q = StatsQueries(mw.col)
+    my_labels = [q.day_label(i) for i in range(HEATMAP_DAYS)]
+    my_days = set(q.heatmap_counts(HEATMAP_DAYS))
+    tomorrow = _state["tomorrow"]
+    labels = _state["labels"]
+    days = entry["days"]
+    doc = (days.get(tomorrow) or (days.get(labels[0]) if labels else None)
+           or next((days.get(lb) for lb in labels[1:] if days.get(lb)), None))
+    streak_val = (doc or {}).get("streak")
+    groups, _extras = board.build_deck_groups(_state["entries"])
+    decks_line = ", ".join(g["label"] for g in groups
+                           if any(u == uid for _n, _m, _d, u in g["rows"]))
+    cl = client()
+
+    def job():
+        try:
+            counts = cl.fetch_heatmap(uid)
+        except Exception:
+            counts = None
+
+        def show():
+            if mw.state != "deckBrowser":
+                return
+            cells = same = None
+            if counts is not None:
+                cells = [counts.get(lb, 0) for lb in reversed(my_labels)]
+                same = len(my_days & {lb for lb, n in counts.items() if n})
+            mw.web.eval(board.profile_overlay_js({
+                "name": entry["name"], "streak": streak_val,
+                "last_active": entry["last_updated"], "cells": cells,
+                "same_days": same, "decks_line": decks_line, "uid": uid,
+            }))
+
+        mw.taskman.run_on_main(show)
+
+    threading.Thread(target=job, daemon=True).start()
+
+
 # ---- dialogs ----
+
+def open_server_join():
+    from .ui.server_dialog import JoinServerDialog
+    JoinServerDialog(mw, server_name(), _switch_server).exec()
+
+
+def open_server_register():
+    from .ui.server_dialog import RegisterServerDialog
+    RegisterServerDialog(mw, _switch_server).exec()
+
 
 def open_auth():
     from .ui.auth_dialog import AuthDialog
-    dlg = AuthDialog(mw, client())
+    dlg = AuthDialog(mw, client(), server_name(), open_server_join)
     if dlg.exec() and dlg.user:
         _uid, name = dlg.user
         _reset_runtime()
@@ -391,7 +603,8 @@ def _on_decks_saved(changed):
 def open_settings():
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_auth, open_friends, _on_signed_out, open_decks)
+                         open_auth, open_friends, _on_signed_out, open_decks,
+                         server_name(), open_server_join, open_server_register)
     dlg.exec()
 
 

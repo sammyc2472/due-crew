@@ -12,6 +12,7 @@
   "share_time": true,
   "share_retention": true,
   "share_streak": true,
+  "share_heatmap": true,
   "paused": false,
   "shared_decks": []
 }

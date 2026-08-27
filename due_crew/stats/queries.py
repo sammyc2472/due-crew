@@ -53,3 +53,13 @@ class StatsQueries:
             "FROM revlog WHERE ease > 0 AND id < ?",
             cutoff - 1, cutoff * 1000)
         return set(rows or [])
+
+    def heatmap_counts(self, days=182):
+        """{day_label: answer_count} for the last `days` days. One query."""
+        cutoff = self._cutoff_s()
+        start_ms = (cutoff - days * 86400) * 1000
+        rows = self.col.db.all(
+            "SELECT CAST((? - id / 1000) / 86400 AS INTEGER), COUNT(*) "
+            "FROM revlog WHERE ease > 0 AND id >= ? AND id < ? "
+            "GROUP BY 1", cutoff - 1, start_ms, cutoff * 1000)
+        return {self.day_label(int(ago)): int(n) for ago, n in rows or []}

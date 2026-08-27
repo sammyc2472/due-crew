@@ -162,11 +162,11 @@ def build_deck_groups(entries):
     others = [e for e in entries if not e["you"]]
     groups, matched = [], set()
     for d in (me.get("decks") or []) if me else []:
-        rows = [(me["name"], True, d)]
+        rows = [(me["name"], True, d, me["user_id"])]
         for o in others:
             for od in o.get("decks") or []:
                 if sig_match(d.get("sig"), od.get("sig")):
-                    rows.append((o["name"], False, od))
+                    rows.append((o["name"], False, od, o["user_id"]))
                     matched.add((o["user_id"], od.get("name", "")))
                     break
         groups.append({"label": d.get("name", "?"), "rows": rows})
@@ -219,6 +219,16 @@ def _css(cfg):
     #due-crew .dc-foot .sp {{ flex: 1; }}
     #due-crew .dc-foot a {{ color: var(--dc-accent); text-decoration: none; font-weight: 700; }}
     #due-crew .dc-note {{ font-style: italic; font-size: 11px; }}
+    #due-crew a.dc-pl {{ color: inherit; text-decoration: none;
+      border-bottom: 1px dotted var(--dc-line); }}
+    #due-crew a.dc-pl:hover {{ color: var(--dc-accent); border-bottom-color: var(--dc-accent); }}
+    #due-crew .dc-wrap {{ display: flex; align-items: center; gap: 10px;
+      border: 1px solid var(--dc-accent); border-radius: 10px; padding: 8px 12px;
+      font-size: 12px; margin-bottom: 10px; }}
+    #due-crew .dc-wrap .wx {{ margin-left: auto; color: var(--dc-muted);
+      text-decoration: none; font-weight: 700; }}
+    #due-crew .dc-delta {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
+      margin-left: 6px; }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
@@ -282,6 +292,8 @@ def _row_html(row, rank, cfg):
     else:
         cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
                  f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
+        name = (f'<a class="dc-pl" href="#" title="Open profile" '
+                f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
             f'<td class="nm">{name}{la}{extra}</td>{cells}{cheer}</tr>')
 
@@ -310,19 +322,21 @@ def _table_html(data, cfg, period):
     return f'<table><tr>{heads}</tr>{body}</table>{solo}'
 
 
-def _bar(name, is_me, d):
+def _bar(name, is_me, d, delta=None):
     total = max(int(d.get("total") or 0), 1)
     seen_pct = min(100, round(100 * int(d.get("seen") or 0) / total))
     mature_pct = min(100, round(100 * int(d.get("mature") or 0) / total))
     counts = f'{int(d.get("seen") or 0):,} / {int(d.get("total") or 0):,}'
+    chip = f'<span class="dc-delta">+{delta:,} wk</span>' if delta else ""
     return (f'<div class="dr{" me" if is_me else ""}">'
             f'<span class="dn">{_html.escape(str(name))}</span>'
             f'<div class="dtrack"><i class="fs" style="width:{seen_pct}%;"></i>'
             f'<i class="fm" style="width:{mature_pct}%;"></i></div>'
-            f'<span class="dc-count">{counts}</span></div>')
+            f'<span class="dc-count">{counts}{chip}</span></div>')
 
 
-def _decks_html(data):
+def _decks_html(data, deltas=None):
+    deltas = deltas or {}
     groups, extras = build_deck_groups(data["entries"])
     if not groups and not extras:
         return ('<div class="dc-line" style="border-top: none;">No shared decks yet. '
@@ -331,7 +345,9 @@ def _decks_html(data):
     html = ""
     for g in groups:
         label = _html.escape(str(g["label"]))
-        rows = "".join(_bar(n, me, d) for n, me, d in g["rows"])
+        rows = "".join(
+            _bar(n, me, d, deltas.get((uid, d.get("name", ""))))
+            for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     for who, deck in extras[:3]:
         html += (f'<div class="dc-line">{_html.escape(str(who))} shares '
@@ -342,11 +358,22 @@ def _decks_html(data):
     return html
 
 
-def render(data, cfg, fetched_at):
+def render(data, cfg, fetched_at, wrap=None, deltas=None):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
-    body = _decks_html(data) if period == "decks" else _table_html(data, cfg, period)
+    body = (_decks_html(data, deltas) if period == "decks"
+            else _table_html(data, cfg, period))
+    if wrap:
+        best = ""
+        if wrap.get("best_name"):
+            best = (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
+                    f'best week yet')
+        body = (f'<div class="dc-wrap"><span>&#127881;</span>'
+                f'<span><b>This past week, together:</b> '
+                f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{best}</span>'
+                f'<a class="wx" href="#" title="Dismiss" '
+                f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
 
     n_pending = len(data.get("pending", []))
     if n_pending:
@@ -381,26 +408,45 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
-def flurry_js(emojis, banner_text):
+def flurry_js(emojis, banner_text, back=None):
     """Injected via web.eval after render — never inline in board HTML.
-    Banner picks its colors from the page's night classes."""
+    Banner picks its colors from the page's night classes. When `back` is
+    (uid, emoji) — a single sender — the banner is clickable to return the
+    cheer, and stays up a little longer."""
     emoji_list = _json.dumps(emojis)
     banner = _json.dumps(banner_text)
+    back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
     return """
     (function() {
         if (document.getElementById('dc-flurry')) { return; }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var backCmd = %s;
         var banner = document.createElement('div');
-        banner.textContent = %s;
+        var title = document.createElement('div');
+        title.textContent = %s;
+        banner.appendChild(title);
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
-            'box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
+            'text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
             (night ? 'background:#262b24;color:#dfe1dc;border:1px solid #7cc47f;'
                    : 'background:#ffffff;color:#23281f;border:1px solid #2e7d32;');
+        var linger = 2600;
+        if (backCmd && typeof pycmd !== 'undefined') {
+            linger = 5000;
+            banner.style.cursor = 'pointer';
+            var sub = document.createElement('div');
+            sub.textContent = 'click to send one back';
+            sub.style.cssText = 'font-size:11px;font-weight:400;opacity:0.7;margin-top:2px;';
+            banner.appendChild(sub);
+            banner.addEventListener('click', function() {
+                pycmd(backCmd);
+                banner.remove();
+            });
+        }
         document.body.appendChild(banner);
-        setTimeout(function() { banner.style.opacity = '0'; }, 2600);
-        setTimeout(function() { banner.remove(); }, 3200);
+        setTimeout(function() { banner.style.opacity = '0'; }, linger);
+        setTimeout(function() { banner.remove(); }, linger + 600);
         if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
         var emojis = %s;
         var wrap = document.createElement('div');
@@ -421,4 +467,132 @@ def flurry_js(emojis, banner_text):
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (banner, emoji_list)
+    """ % (back_cmd, banner, emoji_list)
+
+
+HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
+
+
+def _heat_level(n):
+    level = 0
+    for threshold, lvl in HEAT_LEVELS:
+        if n >= threshold:
+            level = lvl
+    return level
+
+
+def profile_overlay_js(profile):
+    """Build the friend-profile overlay. `profile`:
+      name, streak (int|None), last_active (str ts), cells (list of daily
+      counts oldest->newest, or None when their heatmap is private),
+      same_days (int|None), decks_line (str), uid.
+    Everything user-sourced is escaped here; the JS only injects the built
+    HTML and wires close/cheer."""
+    name = _html.escape(str(profile.get("name", "?")))
+    bits = [f'<span style="font-size: 15px; font-weight: 700;">{name}</span>']
+    if profile.get("streak") is not None:
+        bits.append(f'<span style="opacity: 0.7; font-size: 12px;">'
+                    f'{int(profile["streak"])}-day streak</span>')
+    ago_txt, _tone = _ago(profile.get("last_active", ""))
+    if ago_txt:
+        bits.append(f'<span style="opacity: 0.55; font-size: 11px; '
+                    f'margin-left: auto;">({_html.escape(ago_txt)})</span>')
+    head = ('<div style="display: flex; align-items: baseline; gap: 8px;">'
+            + "".join(bits) + "</div>")
+
+    cells = profile.get("cells")
+    if cells is None:
+        grid = ('<div style="font-size: 12px; opacity: 0.7; margin: 12px 0;">'
+                'Their heatmap is private.</div>')
+    else:
+        cols = []
+        week = []
+        for n in cells:
+            week.append(_heat_level(int(n)))
+            if len(week) == 7:
+                cols.append(week)
+                week = []
+        if week:
+            cols.append(week + [0] * (7 - len(week)))
+        col_html = ""
+        for col in cols[-26:]:
+            cell_html = "".join(
+                f'<i class="dchm h{lvl}"></i>' for lvl in col)
+            col_html += f'<div class="dchc">{cell_html}</div>'
+        grid = f'<div class="dchg">{col_html}</div>'
+
+    lines = ""
+    if profile.get("same_days") is not None:
+        lines += (f'<div style="font-size: 12px; padding: 2px 0;">'
+                  f'You&rsquo;ve studied on <b>{int(profile["same_days"])} of the '
+                  f'same days</b> this half-year.</div>')
+    if profile.get("decks_line"):
+        lines += (f'<div style="font-size: 12px; padding: 2px 0; opacity: 0.8;">'
+                  f'Shares with you: {_html.escape(str(profile["decks_line"]))}</div>')
+
+    inner = _json.dumps(head + grid + lines)
+    cheer_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
+    return """
+    (function() {
+        var old = document.getElementById('dc-profile');
+        if (old) { old.remove(); }
+        var night = /night/i.test(document.body.className) ||
+            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var accent = night ? '#7cc47f' : '#2e7d32';
+        var back = document.createElement('div');
+        back.id = 'dc-profile';
+        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
+            'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
+        var card = document.createElement('div');
+        card.style.cssText = 'min-width:340px;max-width:420px;border-radius:12px;padding:16px 20px;' +
+            'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
+            (night ? 'background:#23271f;color:#dfe1dc;border:1px solid #3d403b;'
+                   : 'background:#ffffff;color:#333333;border:1px solid #e2e2da;');
+        var style = document.createElement('style');
+        style.textContent = '.dchg{display:flex;gap:2px;margin:12px 0 8px;}' +
+            '.dchc{display:flex;flex-direction:column;gap:2px;}' +
+            '.dchm{width:8px;height:8px;border-radius:1.5px;display:block;background:' +
+            (night ? '#2b2d29' : '#f2f2ec') + ';}' +
+            '.dchm.h1{background:' + accent + ';opacity:0.25;}' +
+            '.dchm.h2{background:' + accent + ';opacity:0.45;}' +
+            '.dchm.h3{background:' + accent + ';opacity:0.7;}' +
+            '.dchm.h4{background:' + accent + ';}';
+        card.appendChild(style);
+        var body = document.createElement('div');
+        body.innerHTML = %s;
+        card.appendChild(body);
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:12px;';
+        function btn(label, primary) {
+            var b = document.createElement('button');
+            b.textContent = label;
+            b.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
+                (primary ? 'background:' + accent + ';color:' + (night ? '#122912' : '#ffffff') +
+                           ';border:1px solid transparent;font-weight:600;'
+                         : 'background:none;color:inherit;border:1px solid ' +
+                           (night ? '#3d403b' : '#e2e2da') + ';');
+            return b;
+        }
+        var cheer = btn('\\uD83C\\uDF89 Send a cheer', true);
+        cheer.addEventListener('click', function() {
+            back.remove();
+            if (typeof pycmd !== 'undefined') { pycmd(%s); }
+        });
+        var close = btn('Close', false);
+        close.addEventListener('click', function() { back.remove(); });
+        row.appendChild(cheer);
+        var spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        row.appendChild(spacer);
+        row.appendChild(close);
+        card.appendChild(row);
+        back.appendChild(card);
+        back.addEventListener('click', function(e) {
+            if (e.target === back) { back.remove(); }
+        });
+        document.addEventListener('keydown', function esc(e) {
+            if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
+        });
+        document.body.appendChild(back);
+    })();
+    """ % (inner, cheer_cmd)

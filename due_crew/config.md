@@ -13,6 +13,7 @@ Raw keys, for reference:
 | `theme` | auto / light / dark | auto follows Anki's night mode |
 | `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
+| `share_heatmap` | true/false | Heatmap on your profile card |
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 

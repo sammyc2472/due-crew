@@ -23,6 +23,13 @@ streak means what it says.
 - **Privacy controls** — choose which stats you share, or pause sharing
   entirely ("on a break"). Pausing hides your stats; your streak keeps
   counting as long as you keep studying.
+- **Friend profiles** — click a name for their half-year heatmap, streak,
+  and how many of the same days you've both studied. Shared only if they
+  keep "My heatmap" on.
+- **Crew Wrap and cheers-back** — a weekly together-total banner, streak
+  milestone toasts, and a cheer flurry you can answer with one click.
+- **Crew servers** — run your whole crew on your own free Firebase project.
+  One person does the setup; everyone else joins with a name and a code.
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only when
   Anki syncs or you click Refresh.
@@ -46,11 +53,25 @@ server-side by the [Firestore rules](firestore.rules) in this repo). Your
 email is used for sign-in only and is never shown to friends or stored in
 the database. Deleting your account removes your data.
 
-## Self-hosting
+## Run your own crew server
 
-Point the add-on at your own Firebase project: create one, enable
-Email/Password auth and Firestore, deploy `firestore.rules`, and replace
-`API_KEY` and `PROJECT_ID` in `due_crew/backend/firebase.py`.
+One person per crew does this once; everyone else just types a name and a
+code. About ten minutes:
+
+1. [console.firebase.google.com](https://console.firebase.google.com) →
+   Add project (any name, Analytics off).
+2. Build → Authentication → Get started → enable **Email/Password**.
+3. Build → Firestore Database → Create database (production mode) → Rules →
+   paste [firestore.rules](firestore.rules) → Publish.
+4. Project settings → Your apps → add a **Web app** → copy the `apiKey` and
+   `projectId` from the config it shows.
+5. In Anki: Tools → Due Crew → Settings → **Register your own…** → paste
+   both → Register. You get a server name (say it aloud) and a code (share
+   privately).
+
+Friends then use **Join a different crew server…** on the sign-in screen,
+pick the name, enter the code, and sign up as usual. Your crew now runs on
+your own free Firebase quota, fully independent of the default server.
 
 ## Development
 

@@ -51,6 +51,30 @@ service cloud.firestore {
       }
     }
 
+    // v1.4: crew-server directory — DEFAULT project only. Names are
+    // browsable; configs are get-only under an unguessable hash of
+    // name+code, and immutable so a code can never be repointed.
+    match /server_names/{name} {
+      allow get, list: if true;
+      allow create: if request.auth != null
+                    && name.size() >= 5 && name.size() <= 40
+                    && request.resource.data.keys().hasOnly(['createdAt']);
+      allow update, delete: if false;
+    }
+
+    match /servers/{key} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null
+                    && key.size() == 40
+                    && request.resource.data.keys().hasOnly(['apiKey', 'projectId', 'name', 'createdAt'])
+                    && request.resource.data.apiKey is string
+                    && request.resource.data.apiKey.size() < 100
+                    && request.resource.data.projectId is string
+                    && request.resource.data.projectId.size() < 100;
+      allow update, delete: if false;
+    }
+
     match /friend_codes/{code} {
       allow read: if isAuthenticated();
 

@@ -6,7 +6,8 @@ cleans up nested layouts correctly."""
 from aqt import mw
 from aqt.qt import (
     QCheckBox, QComboBox, QDialog, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QTabWidget, QVBoxLayout, QWidget,
+    QLineEdit, QMessageBox, QPushButton, QTabWidget, QTimer, QVBoxLayout,
+    QWidget,
 )
 from aqt.utils import tooltip
 
@@ -17,7 +18,8 @@ DEFAULTS = {
     "show_stale": True, "sync_notifications": True,
     "theme": "auto", "compact": False, "show_last_active": True,
     "highlight_me": True, "share_reviews": True, "share_time": True,
-    "share_retention": True, "share_streak": True, "paused": False,
+    "share_retention": True, "share_streak": True, "share_heatmap": True,
+    "paused": False,
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
@@ -27,7 +29,9 @@ THEMES = [("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")]
 
 class SettingsDialog(QDialog):
     def __init__(self, parent, client, config, on_saved, open_auth,
-                 open_friends, on_signed_out, open_decks):
+                 open_friends, on_signed_out, open_decks,
+                 server_label="", open_server_join=None,
+                 open_server_register=None):
         super().__init__(parent)
         self.client = client
         self.config = dict(config)
@@ -36,6 +40,9 @@ class SettingsDialog(QDialog):
         self.open_friends = open_friends
         self.on_signed_out = on_signed_out
         self.open_decks = open_decks
+        self.server_label = server_label
+        self.open_server_join = open_server_join
+        self.open_server_register = open_server_register
         self._binds = {}
         attach_alive(self)
         self._build()
@@ -90,6 +97,7 @@ class SettingsDialog(QDialog):
             sign_in.clicked.connect(self._sign_in)
             lay.addWidget(sign_in)
             lay.addStretch()
+            self._server_rows(lay)
             return
 
         self.who_label = QLabel(self._who_text())
@@ -118,10 +126,34 @@ class SettingsDialog(QDialog):
         lay.addWidget(note)
 
         lay.addStretch()
+        self._server_rows(lay)
         delete = QPushButton("Delete account…")
         delete.setStyleSheet("color: #d32f2f;")
         delete.clicked.connect(self._delete)
         lay.addWidget(delete)
+
+    def _server_rows(self, lay):
+        row = QHBoxLayout()
+        label = QLabel(f"Server: <b>{self.server_label or 'default'}</b>")
+        label.setStyleSheet("font-size: 12px;")
+        row.addWidget(label)
+        if self.open_server_join:
+            switch = QPushButton("Switch…")
+            switch.clicked.connect(lambda: self._server(self.open_server_join))
+            row.addWidget(switch)
+        if self.open_server_register:
+            register = QPushButton("Register your own…")
+            register.clicked.connect(
+                lambda: self._server(self.open_server_register))
+            row.addWidget(register)
+        row.addStretch()
+        lay.addLayout(row)
+
+    def _server(self, cb):
+        # server dialogs replace this dialog's client — close first
+        self.accept()
+        if cb:
+            QTimer.singleShot(0, cb)
 
     def _who_text(self):
         import html
@@ -263,6 +295,7 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_time", "Study time")
         self._check(lay, "share_retention", "Retention")
         self._check(lay, "share_streak", "Streak")
+        self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
         lay.addSpacing(8)
         self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
         note = QLabel("Takes effect on your next sync. Pausing hides your "
