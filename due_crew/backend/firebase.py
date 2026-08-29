@@ -9,10 +9,14 @@ Failure is never conflated with absence: batch_get and list_friends raise
 TransportError on any non-200, so callers keep their caches and their
 server-side state instead of treating an outage as "everything was deleted".
 
-All calls have a 10s timeout and must run off the main thread. Writes stay
-on self-owned documents, with one deliberate exception: send_cheer writes to
-the recipient's cheers/{sender} doc, which the deployed rules allow only for
-senders the recipient has added.
+All calls have a 10s timeout and must run off the main thread. Firestore
+requests retry once on a transport error — a pooled socket the server closed
+while idle resets on first use — which is safe because everything routed
+through _req is idempotent (batchGet is a read despite the POST). Auth calls
+never retry: sign-up isn't idempotent. Writes stay on self-owned documents,
+with one deliberate exception: send_cheer writes to the recipient's
+cheers/{sender} doc, which the deployed rules allow only for senders the
+recipient has added.
 """
 
 import datetime
@@ -288,6 +292,10 @@ class FirebaseClient:
         try:
             r = self.http.request(method, url, headers=headers, timeout=TIMEOUT, **kw)
         except requests.RequestException:
+            if retry:
+                # second attempt rides a fresh connection: urllib3 has
+                # already dropped the broken socket from the pool
+                return self._req(method, url, retry=False, **kw)
             raise TransportError(f"{method} failed")
         if r.status_code == 401 and retry and self._refresh():
             return self._req(method, url, retry=False, **kw)

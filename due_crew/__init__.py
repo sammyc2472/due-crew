@@ -27,7 +27,7 @@ from aqt.qt import QAction, QCursor, QMenu
 from aqt.utils import tooltip
 
 from . import board
-from .backend.firebase import FirebaseClient
+from .backend.firebase import FirebaseClient, TransportError
 from .stats import gather_stats
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
@@ -260,6 +260,11 @@ def refresh_board(upload_stats=None, shared_decks=None, heatmap=None, full=False
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
             mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))
+        except TransportError:
+            # expected when offline or flaky — stderr raises Anki's error
+            # dialog, so this stays off that channel; cache untouched and
+            # the board footer already says how old it is
+            print("due crew: refresh failed (network); keeping the cached board")
         except Exception:
             traceback.print_exc()  # cache stays untouched on failure
         finally:
