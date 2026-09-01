@@ -9,10 +9,9 @@ streak means what it says.
 ## What it does
 
 - **Board on the Decks screen** — reviews, study time, retention, and streak
-  for you and your crew. Today, Week, shared-deck progress — or Days, a
-  numbers-free view of who showed up. Friends who go quiet stay on the
-  board; that's when a cheer counts — and the day they're back, the board
-  says so.
+  for you and your crew. Today, Week, and shared-deck progress. Friends
+  who go quiet stay on the board; that's when a cheer counts — and the
+  day they're back, the board says so.
 - **Consent-based friendships** — swap 6-character codes. You see someone's
   stats only after they add your code, and vice versa. Remove someone and
   they stop seeing yours immediately.

@@ -35,7 +35,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak")
-PERIODS = ("today", "week", "days", "decks", "server")
+PERIODS = ("today", "week", "decks", "server")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
@@ -246,14 +246,9 @@ def _css(cfg):
     return f"""
     <style>
     {_theme_css(cfg)}
-    #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
+    #due-crew {{ margin: 18px auto 8px; max-width: 620px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
-    /* one radius language: board, cards, and overlays are 12px surfaces,
-       inset banners 10px, buttons 6px, data bars 2px, pills full-round —
-       controls are pills, data is rectangles */
-    #due-crew.dc-frame {{ background: var(--dc-bg); border: 1px solid var(--dc-line);
-      border-radius: 12px; padding: 16px 18px 10px;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
+    /* no frames, no outlines: the only lines are between rows */
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin-bottom: 10px; }}
     #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
@@ -305,24 +300,6 @@ def _css(cfg):
       margin-left: 5px; white-space: nowrap; }}
     #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
     #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
-    #due-crew .surow {{ display: flex; align-items: center; gap: 12px;
-      padding: {pad}px 0; font-size: 12.5px; }}
-    #due-crew .surow.me .sun {{ font-weight: 700; }}
-    #due-crew .surow.dim {{ color: var(--dc-faded); }}
-    #due-crew .sun {{ width: 100px; flex-shrink: 0; overflow: hidden;
-      text-overflow: ellipsis; white-space: nowrap; }}
-    #due-crew .sudots {{ display: flex; gap: 7px; flex: 1; align-items: center; }}
-    #due-crew .sudot {{ box-sizing: border-box; width: 11px; height: 11px;
-      border-radius: 50%; background: var(--dc-accent);
-      border: 1px solid transparent; flex-shrink: 0; }}
-    #due-crew .sudot.off {{ background: var(--dc-well); border-color: var(--dc-line); }}
-    #due-crew .sulet {{ width: 11px; text-align: center; font-size: 9px;
-      font-weight: 700; color: var(--dc-muted); flex-shrink: 0; }}
-    #due-crew .sulet.on {{ color: var(--dc-accent); }}
-    #due-crew .sucount {{ width: 34px; flex-shrink: 0; text-align: right;
-      font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dc-muted); }}
-    #due-crew .sunote {{ flex: 1; font-style: italic; font-size: 11.5px;
-      color: var(--dc-faded); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
@@ -338,8 +315,7 @@ def _css(cfg):
       color: var(--dc-muted); }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0;
       border-top: 1px solid var(--dc-line); }}
-    #due-crew .dc-card {{ padding: 16px; text-align: center; border: 1px solid var(--dc-line);
-      border-radius: 12px; background: var(--dc-bg); }}
+    #due-crew .dc-card {{ padding: 16px; text-align: center; }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
@@ -354,8 +330,7 @@ def _pycmd(cmd):
 def _head(period):
     pills = ""
     for key, label in (("today", "Today"), ("week", "Week"),
-                       ("days", "Days"), ("decks", "Decks"),
-                       ("server", "Server")):
+                       ("decks", "Decks"), ("server", "Server")):
         cls = "dc-pill on" if period == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
@@ -434,54 +409,6 @@ def _table_html(data, cfg, period):
     return f'<div class="dc-scroll"><table><tr>{heads}</tr>{body}</table></div>{solo}'
 
 
-def _days_html(data, cfg):
-    """The anti-leaderboard: who showed up, the last 7 days, no numbers.
-    You first, then alphabetical — the order never moves with effort."""
-    labels = data["labels"]
-    tomorrow = data.get("tomorrow", "")
-    cols = list(reversed(labels))  # oldest -> today, left to right
-    entries = data["entries"]
-    me = [e for e in entries if e["you"]]
-    others = sorted((e for e in entries if not e["you"]),
-                    key=lambda e: (bool(e["paused"]), str(e["name"]).lower()))
-    letters = ""
-    for lb in cols:
-        try:
-            letter = "MTWTFSS"[_date.fromisoformat(lb).weekday()]
-        except (TypeError, ValueError):
-            letter = "&middot;"
-        on = " on" if lb == (labels[0] if labels else "") else ""
-        letters += f'<span class="sulet{on}">{letter}</span>'
-    html = (f'<div class="surow"><span class="sun"></span>'
-            f'<div class="sudots">{letters}</div><span class="sucount"></span></div>')
-    for e in me + others:
-        name = _html.escape(str(e["name"]))
-        if e["paused"]:
-            html += (f'<div class="surow dim"><span class="sun">{name}</span>'
-                     f'<span class="sunote">on a break</span>'
-                     f'<span class="sucount"></span></div>')
-            continue
-        days = e.get("days") or {}
-        dots = ""
-        n = 0
-        for lb in cols:
-            doc = days.get(lb)
-            if labels and lb == labels[0]:
-                doc = days.get(tomorrow) or doc
-            on = _showed(doc)
-            n += 1 if on else 0
-            dots += f'<span class="sudot{"" if on else " off"}"></span>'
-        recent = (days.get(tomorrow) or (days.get(labels[0]) if labels else None)
-                  or (days.get(labels[1]) if len(labels) > 1 else None))
-        cls = "surow me" if e["you"] else ("surow" if recent else "surow dim")
-        html += (f'<div class="{cls}"><span class="sun">{name}</span>'
-                 f'<div class="sudots">{dots}</div>'
-                 f'<span class="sucount">{n}/{len(cols)}</span></div>')
-    html += ('<div class="dc-line" style="border-top: none;">'
-             'a dot = a day with at least one answered card</div>')
-    return html
-
-
 def _bar(name, is_me, d, delta=None):
     total = max(int(d.get("total") or 0), 1)
     seen_pct = min(100, round(100 * int(d.get("seen") or 0) / total))
@@ -529,11 +456,13 @@ def _server_html(view, cfg):
     state = view.get("state")
     label = _html.escape(str(view.get("server") or "this server"))
     if state == "optin":
-        return (f'<div class="dc-card"><b>The server board</b>'
-                f'<span>Everyone on {label} who&rsquo;s sharing &mdash; and the '
-                f'place to find new crew. Sharing goes both ways: turn it on in '
-                f'<a href="#" onclick="{_pycmd("settings")}">Privacy</a> '
-                f'to see the board and be on it.</span></div>')
+        return (f'<div style="text-align: center; padding: 18px 8px 14px; '
+                f'font-size: 12px; color: var(--dc-muted);">'
+                f'Everyone on {label} who&rsquo;s sharing &mdash; and the place '
+                f'to find new crew.<br>Sharing goes both ways: turn it on in '
+                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
+                f'text-decoration: none;" onclick="{_pycmd("settings")}">Privacy</a> '
+                f'to see the board and be on it.</div>')
     if state == "loading":
         return '<div class="dc-line" style="border-top: none;">Fetching the board&hellip;</div>'
     if state == "error":
@@ -588,7 +517,6 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if period not in PERIODS:
         period = "today"
     body = (_decks_html(data, deltas) if period == "decks"
-            else _days_html(data, cfg) if period == "days"
             else _server_html(server_view or {"state": "optin"}, cfg)
             if period == "server"
             else _table_html(data, cfg, period))
@@ -648,8 +576,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<span>Updated {ago} &middot; <a href="#" '
             f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
 
-    return (f'<div id="due-crew" class="dc-frame">'
-            f'{_css(cfg)}{_head(period)}{body}{foot}</div>')
+    return f'<div id="due-crew">{_css(cfg)}{_head(period)}{body}{foot}</div>' 
 
 
 def _card(cfg, title, body_html):

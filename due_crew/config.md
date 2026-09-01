@@ -6,7 +6,7 @@ Raw keys, for reference:
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `show_leaderboard` | true/false | Board on the Decks screen |
-| `period` | today / week / days / decks | Default view |
+| `period` | today / week / decks / server | Default view |
 | `sort` | reviews / time / retention / streak | Default sort |
 | `show_stale` | true/false | Show yesterday for friends who haven't synced today |
 | `sync_notifications` | true/false | Toast when a friend syncs |
