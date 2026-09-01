@@ -38,6 +38,10 @@ AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
 TOKEN_URL = "https://securetoken.googleapis.com/v1/token"
 TIMEOUT = 10
 KEEP_DAYS = 7
+# The rules generation this client needs. The deployed firestore.rules allow
+# `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
+# Bump together with the marker block in firestore.rules.
+RULES_MARKER = "rules-v2"
 
 
 def firestore_base(project_id):
@@ -332,10 +336,40 @@ class FirebaseClient:
         if not ok and label:
             print(f"due crew: {label} write rejected ({r.status_code}) at {path}"
                   " — if this persists, re-publish firestore.rules")
+            if r.status_code == 403:
+                # instant stale-rules hint; the daily probe can clear it
+                self.session["rules_stale_hint"] = True
+                self._save_session()
         return ok
 
     def delete_doc(self, path):
         return self._req("DELETE", f"{self.base}/{path}").status_code == 200
+
+    # ---- rules freshness ----
+
+    def check_rules(self, today_label):
+        """One background GET per day against the marker doc the deployed
+        rules expose. 404 = current (clears any hint), 403 = stale. Network
+        trouble changes nothing — yesterday's answer stands."""
+        cached = self.session.get("rules_check") or {}
+        if cached.get("day") == today_label:
+            return self.rules_stale
+        r = self._req("GET", f"{self.base}/meta/{RULES_MARKER}")
+        if r.status_code == 404:
+            self.session["rules_check"] = {"day": today_label, "stale": False}
+            self.session.pop("rules_stale_hint", None)
+        elif r.status_code == 403:
+            self.session["rules_check"] = {"day": today_label, "stale": True}
+        else:
+            return self.rules_stale  # inconclusive; don't cache
+        self._save_session()
+        return self.rules_stale
+
+    @property
+    def rules_stale(self):
+        """No network: the last probe's verdict, or any write-403 hint."""
+        return bool((self.session.get("rules_check") or {}).get("stale")
+                    or self.session.get("rules_stale_hint"))
 
     def batch_get(self, paths):
         """Many docs, one round trip. {path: fields-or-None(missing)}.

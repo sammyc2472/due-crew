@@ -16,9 +16,13 @@ maintainer. The repo is the source of truth; there is no build step.
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.
-2. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
-3. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
-4. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
+2. If `firestore.rules` changed: bump the `meta/{marker}` version there AND
+   `RULES_MARKER` in `backend/firebase.py`, copy the file to
+   `due_crew/firestore.rules` (the in-app rules dialog ships that copy), and
+   re-publish in the Firebase console.
+3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
+4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
+5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 
 ## Rules of the road

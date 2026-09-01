@@ -11,7 +11,8 @@ streak means what it says.
 - **Board on the Decks screen** — reviews, study time, retention, and streak
   for you and your crew. Today, Week, shared-deck progress — or Days, a
   numbers-free view of who showed up. Friends who go quiet stay on the
-  board; that's when a cheer counts.
+  board; that's when a cheer counts — and the day they're back, the board
+  says so.
 - **Consent-based friendships** — swap 6-character codes. You see someone's
   stats only after they add your code, and vice versa. Remove someone and
   they stop seeing yours immediately.
@@ -21,12 +22,15 @@ streak means what it says.
   (seen and mature counts). Decks match automatically by note fingerprint:
   AnKing and other imported decks pair up with no setup.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
-  and how many of the same days you've both studied. Click your own name
-  to see your card exactly as your crew sees it.
+  how many of the same days you've both studied, and your current run of
+  days studied together. Click your own name to see your card exactly as
+  your crew sees it.
 - **Exam flags** — share an exam date and 📖 sits by your name for the two
-  weeks before, so your crew knows when a 💪 matters most.
+  weeks before, so your crew knows when a 💪 matters most. On the eve, the
+  board offers the 💪 itself.
 - **Crew Wrap** — a weekly "together we did X" banner, plus streak
-  milestone toasts. One click copies it for the group chat.
+  milestones and all-time crew milestones ("250,000 reviews together").
+  One click copies it for the group chat.
 - **Privacy controls** — choose which stats you share (heatmap included),
   or pause sharing entirely ("on a break"). Pausing hides your stats; your
   streak keeps counting as long as you keep studying.
@@ -81,6 +85,10 @@ code. About ten minutes:
 
 Friends then pick **Join your crew**, enter the name and code, and sign up
 as usual. Your crew runs on your own free Firebase quota.
+
+If a later Due Crew version needs updated rules, the board shows "Server
+rules need an update" with a one-click copy of the new rules — re-do step 3
+and you're current.
 
 ## Development
 

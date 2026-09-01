@@ -1,3 +1,4 @@
+import datetime as _dt
 from dataclasses import dataclass
 from typing import Optional
 
@@ -23,6 +24,33 @@ def gather_stats(col, user_files_dir):
         accuracy=(correct / total * 100) if total else None,
         streak=StreakTracker(q, user_files_dir).current(),
     )
+
+
+def duet_runs(my_days, their_days, today_label):
+    """(current, best) runs of consecutive days BOTH studied, from two sets
+    of ISO day labels. Like a streak, today still counting is a bonus, not a
+    requirement: a current run measured through yesterday hasn't broken."""
+    both = my_days & their_days
+    if not both:
+        return 0, 0
+    try:
+        day = _dt.date.fromisoformat(today_label)
+    except (TypeError, ValueError):
+        return 0, 0
+    if today_label not in both:
+        day -= _dt.timedelta(days=1)
+    current = 0
+    while day.isoformat() in both:
+        current += 1
+        day -= _dt.timedelta(days=1)
+    best = run = 0
+    prev = None
+    for lb in sorted(both):
+        d = _dt.date.fromisoformat(lb)
+        run = run + 1 if prev is not None and (d - prev).days == 1 else 1
+        best = max(best, run)
+        prev = d
+    return current, best
 
 
 WEEK_WINDOW = 60  # bounds the per-sync scan; runs older than this are rare

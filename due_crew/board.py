@@ -168,6 +168,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "paused": e["paused"], "last_updated": e["last_updated"],
                "reviews": None, "time_ms": None, "retention": None,
                "streak": None, "stale": False, "quiet": False,
+               "back": bool(e.get("back")) and not e["paused"],
                "exam": "" if e["paused"] else
                        _exam_badge(e.get("exam_date"), today_lb)}
         if e["paused"]:
@@ -300,6 +301,10 @@ def _css(cfg):
       margin-left: 6px; }}
     #due-crew .exb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
       margin-left: 5px; white-space: nowrap; }}
+    #due-crew .bkb {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
+      margin-left: 5px; white-space: nowrap; }}
+    #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
+    #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
     #due-crew .surow {{ display: flex; align-items: center; gap: 12px;
       padding: {pad}px 0; font-size: 12.5px; }}
     #due-crew .surow.me .sun {{ font-weight: 700; }}
@@ -386,6 +391,9 @@ def _row_html(row, rank, cfg):
             if txt:
                 la = f'<span class="la {tone}">({txt})</span>'
     exam = row.get("exam") or ""
+    if row.get("back") and not row["quiet"]:
+        # the day a quiet friend returns, the board says so
+        exam = ' <span class="bkb">&#128075; back</span>' + exam
     if row["you"]:
         cheer = '<td class="chc"></td>'
         name = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
@@ -509,7 +517,8 @@ def _decks_html(data, deltas=None):
     return html
 
 
-def render(data, cfg, fetched_at, wrap=None, deltas=None):
+def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
+           rules_stale=False):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
@@ -523,6 +532,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None):
         if wrap.get("best_name"):
             extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
                       f'best week yet')
+        if wrap.get("milestone"):
+            extra += (f' &middot; and the crew just passed '
+                      f'<b>{_html.escape(str(wrap["milestone"]))} all-time</b>')
         body = (f'<div class="dc-wrap"><span>&#127881;</span>'
                 f'<span><b>Last week, together:</b> '
                 f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
@@ -530,6 +542,25 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None):
                 f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
                 f'<a class="wx" href="#" title="Dismiss" '
                 f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
+    if exam_eve and exam_eve.get("people"):
+        links = [f'<a class="dc-pl" href="#" title="Send a cheer" '
+                 f'onclick="{_pycmd("cheerpick:" + str(u))}">'
+                 f'<b>{_html.escape(str(n))}</b></a>'
+                 for u, n in exam_eve["people"]]
+        if len(links) == 1:
+            uid = exam_eve["people"][0][0]
+            line = (f'{links[0]}&rsquo;s exam is tomorrow. '
+                    f'A &#128170; tonight goes a long way.')
+            act = (f'<a class="wc" href="#" title="Send a cheer" '
+                   f'onclick="{_pycmd("cheerpick:" + str(uid))}">&#128170; Send one</a>')
+        else:
+            line = (" and ".join(links) + " have exams tomorrow. "
+                    "A &#128170; tonight goes a long way.")
+            act = ""
+        body = (f'<div class="dc-wrap eve"><span>&#128214;</span>'
+                f'<span>{line}</span>{act}'
+                f'<a class="wx" href="#" title="Dismiss" '
+                f'onclick="{_pycmd("evedismiss")}">&times;</a></div>') + body
 
     n_pending = len(data.get("pending", []))
     if n_pending:
@@ -538,6 +569,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None):
                 f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>')
     else:
         left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
+    if rules_stale:
+        left = (f'<span class="warn">&#9888;</span> <a href="#" '
+                f'onclick="{_pycmd("rules")}">Server rules need an update</a>'
+                f' &middot; ') + left
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
 
@@ -695,6 +730,29 @@ def profile_overlay_js(profile):
         grid = f'<div class="dchg">{col_html}</div>'
 
     lines = ""
+    duet = profile.get("duet")
+    if duet:
+        short = _html.escape(str(profile.get("name", "?")).split(" ")[0][:10])
+
+        def _drow(label, seq):
+            dots = "".join(f'<i class="dcd{"" if on else " off"}"></i>'
+                           for on in seq)
+            return (f'<div class="dcduet"><span class="dcdl">{label}</span>'
+                    f'<span>{dots}</span></div>')
+
+        if duet.get("mine_week") and duet.get("theirs_week"):
+            lines += (_drow("You", duet["mine_week"])
+                      + _drow(short, duet["theirs_week"]))
+        run, best = int(duet.get("run") or 0), int(duet.get("best") or 0)
+        if run > 0:
+            unit = "day" if run == 1 else "days"
+            tail = f" &mdash; best run: {best}." if best > run else "."
+            lines += (f'<div style="font-size: 12px; padding: 4px 0 2px;">'
+                      f'You two have studied <b>{run} {unit} in a row '
+                      f'together</b>{tail}</div>')
+        elif best > 1:
+            lines += (f'<div style="font-size: 12px; padding: 4px 0 2px;">'
+                      f'Best run together: <b>{best} days</b>.</div>')
     if profile.get("same_days") is not None:
         lines += (f'<div style="font-size: 12px; padding: 2px 0;">'
                   f'You&rsquo;ve studied on <b>{int(profile["same_days"])} of the '
@@ -737,7 +795,13 @@ def profile_overlay_js(profile):
             '.dchm.h2{background:' + accent + ';opacity:0.45;}' +
             '.dchm.h3{background:' + accent + ';opacity:0.7;}' +
             '.dchm.h4{background:' + accent + ';}' +
-            '.dcex{color:' + warn + ';}';
+            '.dcex{color:' + warn + ';}' +
+            '.dcduet{display:flex;align-items:center;gap:8px;padding:1px 0;}' +
+            '.dcdl{width:42px;flex-shrink:0;font-size:10px;opacity:0.65;' +
+            'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
+            '.dcd{width:9px;height:9px;border-radius:50%%;display:inline-block;' +
+            'margin-right:6px;background:' + accent + ';}' +
+            '.dcd.off{background:' + (night ? '#2b2d29' : '#f2f2ec') + ';}';
         card.appendChild(style);
         var body = document.createElement('div');
         body.innerHTML = %s;

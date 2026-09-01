@@ -28,12 +28,15 @@ from aqt.utils import tooltip
 
 from . import board
 from .backend.firebase import FirebaseClient, TransportError
-from .stats import gather_stats, gather_week
+from .stats import duet_runs, gather_stats, gather_week
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 
 CHEER_EMOJI = ("\U0001F389", "\U0001F4AA", "\U0001F525")  # party, muscle, fire
 STREAK_MILESTONES = (7, 30, 100, 365)
+CREW_REVIEW_MILESTONES = (100_000, 250_000, 500_000, 1_000_000)
+CREW_HOUR_MILESTONE_MS = 1000 * 3600 * 1000  # 1,000 hours
+RETURN_QUIET_DAYS = 7
 HEATMAP_DAYS = 182
 
 _client = None
@@ -159,10 +162,11 @@ def _week_key(label):
 
 
 def _update_wrap(entries, labels):
+    """New-week bookkeeping. Returns a milestone toast string, or None."""
     w = _wrap_data()
     week = _week_key(labels[0])
     if w.get("week") == week:
-        return
+        return None
     totals_r = totals_t = 0
     best = w.setdefault("best", {})
     best_name, best_gain = "", 0
@@ -183,7 +187,97 @@ def _update_wrap(entries, labels):
     w["dismissed"] = ""
     w["deck_base"] = {f"{e['user_id']}|{d.get('name', '')}": int(d.get("seen") or 0)
                       for e in entries for d in (e.get("decks") or [])}
+    toast = _accrue_milestones(w, totals_r, totals_t, labels[0])
     _save_wrap()
+    return toast
+
+
+def _accrue_milestones(w, week_reviews, week_time_ms, today_label):
+    """Lifetime crew totals, accrued weekly, celebrated at thresholds.
+    Local arithmetic only; "since" is when accrual began, never an estimate."""
+    life = w.setdefault("life", {"reviews": 0, "time_ms": 0,
+                                 "since": today_label})
+    life["reviews"] += int(week_reviews or 0)
+    life["time_ms"] += int(week_time_ms or 0)
+    done = w.setdefault("milestones_done", [])
+    crossed = None
+    for t in CREW_REVIEW_MILESTONES:
+        if life["reviews"] >= t and f"r{t}" not in done:
+            done.append(f"r{t}")
+            crossed = f"{t:,} reviews"
+    if life["time_ms"] >= CREW_HOUR_MILESTONE_MS and "h1000" not in done:
+        done.append("h1000")
+        crossed = crossed or "1,000 hours"
+    if not crossed:
+        return None
+    try:
+        since = datetime.date.fromisoformat(life["since"])
+        today = datetime.date.fromisoformat(today_label)
+        month = since.strftime("%B") if since.year == today.year \
+            else since.strftime("%b %Y")
+    except (TypeError, ValueError):
+        month = ""
+    w["banner"]["milestone"] = crossed
+    tail = f" together since {month}" if month else " together"
+    return f"\U0001F388 {crossed}{tail}"
+
+
+def _update_returns(entries, labels, tomorrow, c):
+    """The day a quiet friend's first sync lands, the board says so — once.
+    Spoken to the crew, never at the returner. Local state only."""
+    if not labels:
+        return []
+    w = _wrap_data()
+    last = w.setdefault("last_studied", {})   # uid -> newest studied label
+    rets = w.setdefault("returns", {})        # uid -> label of return day
+    today = labels[0]
+    toasts = []
+    seen_uids = set()
+    for e in entries:
+        if e["you"] or e["paused"]:
+            continue
+        uid = e["user_id"]
+        seen_uids.add(uid)
+        days = e.get("days") or {}
+        active = board._showed(days.get(tomorrow) or days.get(today))
+        prior = [lb for lb in labels[1:] if board._showed(days.get(lb))]
+        if active:
+            known = last.get(uid)
+            if known and not prior and rets.get(uid) != today:
+                try:
+                    gap = (datetime.date.fromisoformat(today)
+                           - datetime.date.fromisoformat(known)).days
+                except (TypeError, ValueError):
+                    gap = 0
+                if gap >= RETURN_QUIET_DAYS:
+                    rets[uid] = today
+                    if c.get("sync_notifications", True):
+                        toasts.append(
+                            f"\U0001F44B {html.escape(e['name'])} is back "
+                            f"— first study in {gap} days")
+        newest = today if active else (prior[0] if prior else None)
+        if newest and newest > str(last.get(uid) or ""):
+            last[uid] = newest
+        e["back"] = rets.get(uid) == today
+    for uid in [u for u in list(last) if u not in seen_uids]:
+        last.pop(uid, None)
+        rets.pop(uid, None)
+    _save_wrap()
+    return toasts
+
+
+def _exam_eve_info():
+    """People whose shared exam is tomorrow — one dismissible line's worth."""
+    labels = _state["labels"]
+    if not labels:
+        return None
+    today = labels[0]
+    if _wrap_data().get("eve_dismissed") == today:
+        return None
+    people = [(e["user_id"], e["name"]) for e in _state["entries"] or []
+              if not e["you"] and not e["paused"]
+              and board._exam_text(e.get("exam_date"), today) == "exam tomorrow"]
+    return {"people": people} if people else None
 
 
 def _wrap_info():
@@ -263,6 +357,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     cl.upload_heatmap(uid, heatmap)
                 elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
+            cl.check_rules(labels[0])  # cached: one real request per day
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
             mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))
@@ -343,7 +438,10 @@ def _commit(data, c, labels, tomorrow):
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time())
-    _update_wrap(data["entries"], labels)
+    toasts += _update_returns(data["entries"], labels, tomorrow, c)
+    milestone = _update_wrap(data["entries"], labels)
+    if milestone and c.get("sync_notifications", True):
+        toasts.append(milestone)
 
     if toasts:
         tooltip("<br>".join(toasts), period=5000)
@@ -392,7 +490,9 @@ def _on_render(deck_browser, content):
         else:
             _state["board_shown"] = True
             content.stats += board.render(_board_data(), c, _state["ts"],
-                                          wrap=_wrap_info(), deltas=_deck_deltas())
+                                          wrap=_wrap_info(), deltas=_deck_deltas(),
+                                          exam_eve=_exam_eve_info(),
+                                          rules_stale=client().rules_stale)
     except Exception:
         traceback.print_exc()
 
@@ -455,6 +555,13 @@ def _on_js(handled, message, context):
         _cheer_menu(parts[2])
     elif cmd == "profile" and len(parts) > 2:
         _open_profile(parts[2])
+    elif cmd == "evedismiss":
+        w = _wrap_data()
+        w["eve_dismissed"] = _state["labels"][0] if _state["labels"] else ""
+        _save_wrap()
+        _swap(c)
+    elif cmd == "rules":
+        open_rules()
     elif cmd == "wrapdismiss":
         w = _wrap_data()
         w["dismissed"] = w.get("week", "")
@@ -467,6 +574,8 @@ def _on_js(handled, message, context):
                     f"· {board._fmt_time(b.get('time_ms') or 0)}")
             if (b.get("full_days") or 0) >= 3:
                 text += f" · everyone showed up {b['full_days']} of 7 days"
+            if b.get("milestone"):
+                text += f" · just passed {b['milestone']} all-time"
             QApplication.clipboard().setText(text + " — Due Crew")
             tooltip("Copied.")
     elif cmd == "settings":
@@ -488,7 +597,9 @@ def _swap(c):
         _rerender()
         return
     html_out = board.render(_board_data(), c, _state["ts"],
-                            wrap=_wrap_info(), deltas=_deck_deltas())
+                            wrap=_wrap_info(), deltas=_deck_deltas(),
+                            exam_eve=_exam_eve_info(),
+                            rules_stale=client().rules_stale)
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -569,16 +680,26 @@ def _open_profile(uid):
         def show():
             if mw.state != "deckBrowser":
                 return
-            cells = same = None
+            cells = same = duet = None
             if counts is not None:
                 cells = [counts.get(lb, 0) for lb in reversed(my_labels)]
                 if not you:
-                    same = len(my_days & {lb for lb, n in counts.items() if n})
+                    their_days = {lb for lb, n in counts.items() if n}
+                    same = len(my_days & their_days)
+                    run, best = duet_runs(my_days, their_days, my_labels[0])
+                    mine_week = [lb in my_days for lb in reversed(labels)]
+                    theirs_week = [
+                        board._showed((days.get(tomorrow) or days.get(lb))
+                                      if lb == labels[0] else days.get(lb))
+                        for lb in reversed(labels)]
+                    duet = {"run": run, "best": best,
+                            "mine_week": mine_week, "theirs_week": theirs_week}
             mw.web.eval(board.profile_overlay_js({
                 "name": entry["name"], "streak": streak_val,
                 "last_active": entry["last_updated"], "cells": cells,
                 "same_days": same, "decks_line": decks_line, "uid": uid,
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
+                "duet": duet,
             }))
 
         mw.taskman.run_on_main(show)
@@ -666,6 +787,11 @@ def _on_decks_saved(changed):
         traceback.print_exc()
         decks = None
     refresh_board(shared_decks=decks)
+
+
+def open_rules():
+    from .ui.rules_dialog import RulesUpdateDialog
+    RulesUpdateDialog(mw, server_name()).exec()
 
 
 def open_settings():
