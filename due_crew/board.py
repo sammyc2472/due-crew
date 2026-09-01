@@ -262,20 +262,19 @@ def _css(cfg):
     #due-crew .dc-pill:first-child {{ border-radius: 99px 0 0 99px; }}
     #due-crew .dc-pill:last-child {{ border-radius: 0 99px 99px 0; }}
     #due-crew .dc-pill + .dc-pill {{ border-left: none; }}
-    #due-crew .dc-scroll {{ overflow-x: auto; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
     #due-crew th {{ padding: 2px 8px 6px; text-align: right; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
     #due-crew td {{ padding: {pad}px 8px; white-space: nowrap; }}
+    #due-crew td.nm {{ width: 100%; max-width: 0; overflow: hidden;
+      text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
     #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
     #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
     #due-crew a.dc-cheer:hover {{ opacity: 1; }}
     #due-crew tr.you td {{ {you_bg} }}
-    #due-crew tr.you td:first-child {{ border-radius: 7px 0 0 7px; }}
-    #due-crew tr.you td:last-child {{ border-radius: 0 7px 7px 0; }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
@@ -407,9 +406,8 @@ def _table_html(data, cfg, period):
     if len(data["entries"]) == 1 and not data.get("pending"):
         solo = ('<div class="dc-line">Just you so far &mdash; share your code '
                 'from the Friends screen.</div>')
-    # narrow windows scroll the table inside the frame instead of bleeding
-    # square content past the rounded border
-    return f'<div class="dc-scroll"><table><tr>{heads}</tr>{body}</table></div>{solo}'
+    # the name column ellipsizes, so the table can never outgrow the card
+    return f'<table><tr>{heads}</tr>{body}</table>{solo}'
 
 
 def _bar(name, is_me, d, delta=None):
@@ -510,8 +508,7 @@ def _server_html(view, cfg):
                 'on the board yet today.</div>')
     note = ('<div class="dc-line" style="border-top: none;">today only &middot; '
             'click a name to see their card &mdash; adding starts there</div>')
-    return (f'<div class="dc-scroll"><table><tr>{heads}</tr>{body}</table></div>'
-            f'{note}')
+    return f'<table><tr>{heads}</tr>{body}</table>{note}'
 
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
