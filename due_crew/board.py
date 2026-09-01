@@ -15,7 +15,7 @@ ahead of mine still renders as fresh.
 import html as _html
 import json as _json
 import time
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 
 from .stats.decks import sig_match
 
@@ -35,7 +35,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak")
-PERIODS = ("today", "week", "decks")
+PERIODS = ("today", "week", "days", "decks")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
@@ -107,6 +107,49 @@ def _week_row(days, labels):
             "retention": acc, "streak": streak}
 
 
+def _showed(doc):
+    """A day counts as showed-up when any shared metric proves answers."""
+    if not doc:
+        return False
+    return bool(doc.get("reviews") or doc.get("studyTimeMs") or "accuracy" in doc)
+
+
+def _full_crew_days(entries, labels):
+    """Days on which every non-paused member studied. 0 for solo boards."""
+    active = [e for e in entries if not e.get("paused")]
+    if len(active) < 2:
+        return 0
+    return sum(1 for lb in labels
+               if all(_showed((e.get("days") or {}).get(lb)) for e in active))
+
+
+def _exam_text(iso, today_label):
+    """"exam Fri" within the 14 days before the date; "" otherwise. The text
+    is client-built from a parsed date — a friend's doc can never inject."""
+    try:
+        d = _date.fromisoformat(str(iso))
+        t = _date.fromisoformat(str(today_label))
+    except (TypeError, ValueError):
+        return ""
+    delta = (d - t).days
+    if delta < 0 or delta > 14:
+        return ""
+    if delta == 0:
+        return "exam today"
+    if delta == 1:
+        return "exam tomorrow"
+    if delta < 7:
+        return f"exam {d.strftime('%a')}"
+    return f"exam {d.strftime('%b')} {d.day}"
+
+
+def _exam_badge(iso, today_label):
+    txt = _exam_text(iso, today_label)
+    if not txt:
+        return ""
+    return f' <span class="exb">&#128214; {_html.escape(txt)}</span>'
+
+
 def sort_key(cfg):
     key = cfg.get("sort", "reviews")
     return key if key in SORT_KEYS else "reviews"
@@ -115,12 +158,14 @@ def sort_key(cfg):
 def build_rows(entries, labels, tomorrow, period, cfg):
     today_lb = labels[0] if labels else ""
     yest_lb = labels[1] if len(labels) > 1 else ""
-    fresh, stale, paused = [], [], []
+    fresh, stale, quiet, paused = [], [], [], []
     for e in entries:
         row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
                "paused": e["paused"], "last_updated": e["last_updated"],
                "reviews": None, "time_ms": None, "retention": None,
-               "streak": None, "stale": False}
+               "streak": None, "stale": False, "quiet": False,
+               "exam": "" if e["paused"] else
+                       _exam_badge(e.get("exam_date"), today_lb)}
         if e["paused"]:
             paused.append(row)
             continue
@@ -130,6 +175,9 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             if agg is None:
                 if e["you"]:
                     fresh.append(row)
+                else:
+                    row["quiet"] = True
+                    quiet.append(row)
                 continue
             row.update(agg)
             fresh.append(row)
@@ -147,12 +195,17 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                 stale.append(row)
             elif e["you"]:
                 fresh.append(row)
+            else:
+                # a quiet friend stays on the board — that's when a cheer lands
+                row["quiet"] = True
+                quiet.append(row)
     field = {"reviews": "reviews", "time": "time_ms",
              "retention": "retention", "streak": "streak"}[sort_key(cfg)]
     order = lambda r: r[field] if r[field] is not None else -1
     fresh.sort(key=order, reverse=True)
     stale.sort(key=order, reverse=True)
-    return fresh, stale + paused  # dormant rows last
+    quiet.sort(key=lambda r: r["last_updated"] or "", reverse=True)
+    return fresh, stale + quiet + paused  # dormant rows last
 
 
 def build_deck_groups(entries):
@@ -225,10 +278,32 @@ def _css(cfg):
     #due-crew .dc-wrap {{ display: flex; align-items: center; gap: 10px;
       border: 1px solid var(--dc-accent); border-radius: 10px; padding: 8px 12px;
       font-size: 12px; margin-bottom: 10px; }}
-    #due-crew .dc-wrap .wx {{ margin-left: auto; color: var(--dc-muted);
+    #due-crew .dc-wrap .wc {{ margin-left: auto; color: var(--dc-accent);
+      text-decoration: none; font-weight: 700; font-size: 10.5px; }}
+    #due-crew .dc-wrap .wx {{ color: var(--dc-muted);
       text-decoration: none; font-weight: 700; }}
     #due-crew .dc-delta {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
       margin-left: 6px; }}
+    #due-crew .exb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
+      margin-left: 5px; white-space: nowrap; }}
+    #due-crew .surow {{ display: flex; align-items: center; gap: 12px;
+      padding: {pad}px 0; font-size: 12.5px; }}
+    #due-crew .surow.me .sun {{ font-weight: 700; }}
+    #due-crew .surow.dim {{ color: var(--dc-faded); }}
+    #due-crew .sun {{ width: 100px; flex-shrink: 0; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .sudots {{ display: flex; gap: 7px; flex: 1; align-items: center; }}
+    #due-crew .sudot {{ box-sizing: border-box; width: 11px; height: 11px;
+      border-radius: 50%; background: var(--dc-accent);
+      border: 1px solid transparent; flex-shrink: 0; }}
+    #due-crew .sudot.off {{ background: var(--dc-well); border-color: var(--dc-line); }}
+    #due-crew .sulet {{ width: 11px; text-align: center; font-size: 9px;
+      font-weight: 700; color: var(--dc-muted); flex-shrink: 0; }}
+    #due-crew .sulet.on {{ color: var(--dc-accent); }}
+    #due-crew .sucount {{ width: 34px; flex-shrink: 0; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .sunote {{ flex: 1; font-style: italic; font-size: 11.5px;
+      color: var(--dc-faded); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
@@ -258,7 +333,8 @@ def _pycmd(cmd):
 
 def _head(period):
     pills = ""
-    for key, label in (("today", "Today"), ("week", "This week"), ("decks", "Decks")):
+    for key, label in (("today", "Today"), ("week", "Week"),
+                       ("days", "Days"), ("decks", "Decks")):
         cls = "dc-pill on" if period == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
@@ -270,10 +346,18 @@ def _row_html(row, rank, cfg):
     name = _html.escape(str(row["name"]))
     cls = "you" if row["you"] else ""
     extra = ""
+    la = ""
     if row["paused"]:
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
         cells = '<td class="n">&mdash;</td>' * 4
+    elif row["quiet"]:
+        cls += " dim"
+        cells = '<td class="n">&mdash;</td>' * 4
+        # the chip is a quiet row's whole story, so it ignores show_last_active
+        txt, tone = _ago(row["last_updated"])
+        if txt:
+            la = f'<span class="la {tone}">({txt})</span>'
     else:
         if row["stale"]:
             cls += " dim"
@@ -282,20 +366,22 @@ def _row_html(row, rank, cfg):
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
                  f'<td class="n">{_cell(row["retention"], lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(row["streak"])}</td>')
-    la = ""
-    if cfg.get("show_last_active", True) and not row["paused"] and not row["stale"]:
-        txt, tone = _ago(row["last_updated"])
-        if txt:
-            la = f'<span class="la {tone}">({txt})</span>'
+        if cfg.get("show_last_active", True) and not row["stale"]:
+            txt, tone = _ago(row["last_updated"])
+            if txt:
+                la = f'<span class="la {tone}">({txt})</span>'
+    exam = row.get("exam") or ""
     if row["you"]:
         cheer = '<td class="chc"></td>'
+        name = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
+                f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     else:
         cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
                  f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
         name = (f'<a class="dc-pl" href="#" title="Open profile" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
-            f'<td class="nm">{name}{la}{extra}</td>{cells}{cheer}</tr>')
+            f'<td class="nm">{name}{exam}{la}{extra}</td>{cells}{cheer}</tr>')
 
 
 def _table_html(data, cfg, period):
@@ -320,6 +406,54 @@ def _table_html(data, cfg, period):
         solo = ('<div class="dc-line">Just you so far &mdash; share your code '
                 'from the Friends screen.</div>')
     return f'<table><tr>{heads}</tr>{body}</table>{solo}'
+
+
+def _days_html(data, cfg):
+    """The anti-leaderboard: who showed up, the last 7 days, no numbers.
+    You first, then alphabetical — the order never moves with effort."""
+    labels = data["labels"]
+    tomorrow = data.get("tomorrow", "")
+    cols = list(reversed(labels))  # oldest -> today, left to right
+    entries = data["entries"]
+    me = [e for e in entries if e["you"]]
+    others = sorted((e for e in entries if not e["you"]),
+                    key=lambda e: (bool(e["paused"]), str(e["name"]).lower()))
+    letters = ""
+    for lb in cols:
+        try:
+            letter = "MTWTFSS"[_date.fromisoformat(lb).weekday()]
+        except (TypeError, ValueError):
+            letter = "&middot;"
+        on = " on" if lb == (labels[0] if labels else "") else ""
+        letters += f'<span class="sulet{on}">{letter}</span>'
+    html = (f'<div class="surow"><span class="sun"></span>'
+            f'<div class="sudots">{letters}</div><span class="sucount"></span></div>')
+    for e in me + others:
+        name = _html.escape(str(e["name"]))
+        if e["paused"]:
+            html += (f'<div class="surow dim"><span class="sun">{name}</span>'
+                     f'<span class="sunote">on a break</span>'
+                     f'<span class="sucount"></span></div>')
+            continue
+        days = e.get("days") or {}
+        dots = ""
+        n = 0
+        for lb in cols:
+            doc = days.get(lb)
+            if labels and lb == labels[0]:
+                doc = days.get(tomorrow) or doc
+            on = _showed(doc)
+            n += 1 if on else 0
+            dots += f'<span class="sudot{"" if on else " off"}"></span>'
+        recent = (days.get(tomorrow) or (days.get(labels[0]) if labels else None)
+                  or (days.get(labels[1]) if len(labels) > 1 else None))
+        cls = "surow me" if e["you"] else ("surow" if recent else "surow dim")
+        html += (f'<div class="{cls}"><span class="sun">{name}</span>'
+                 f'<div class="sudots">{dots}</div>'
+                 f'<span class="sucount">{n}/{len(cols)}</span></div>')
+    html += ('<div class="dc-line" style="border-top: none;">'
+             'a dot = a day with at least one answered card</div>')
+    return html
 
 
 def _bar(name, is_me, d, delta=None):
@@ -363,15 +497,20 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None):
     if period not in PERIODS:
         period = "today"
     body = (_decks_html(data, deltas) if period == "decks"
+            else _days_html(data, cfg) if period == "days"
             else _table_html(data, cfg, period))
     if wrap:
-        best = ""
+        extra = ""
+        if (wrap.get("full_days") or 0) >= 3:
+            extra = f' &middot; everyone showed up {wrap["full_days"]} of 7 days'
         if wrap.get("best_name"):
-            best = (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
-                    f'best week yet')
+            extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
+                      f'best week yet')
         body = (f'<div class="dc-wrap"><span>&#127881;</span>'
-                f'<span><b>This past week, together:</b> '
-                f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{best}</span>'
+                f'<span><b>Last week, together:</b> '
+                f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
+                f'<a class="wc" href="#" title="Copy for the group chat" '
+                f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
                 f'<a class="wx" href="#" title="Dismiss" '
                 f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
 
@@ -482,13 +621,21 @@ def _heat_level(n):
 
 
 def profile_overlay_js(profile):
-    """Build the friend-profile overlay. `profile`:
+    """Build the profile overlay. `profile`:
       name, streak (int|None), last_active (str ts), cells (list of daily
-      counts oldest->newest, or None when their heatmap is private),
-      same_days (int|None), decks_line (str), uid.
-    Everything user-sourced is escaped here; the JS only injects the built
-    HTML and wires close/cheer."""
+      counts oldest->newest, or None when the heatmap is private),
+      same_days (int|None), decks_line (str), uid, you (bool),
+      paused (bool), exam (str, client-built text or "").
+    For your own card ("you") the overlay shows exactly what the crew sees,
+    and the cheer button becomes a Privacy shortcut. Everything user-sourced
+    is escaped here; the JS only injects the built HTML and wires buttons."""
+    you = bool(profile.get("you"))
     name = _html.escape(str(profile.get("name", "?")))
+    kicker = ""
+    if you:
+        kicker = ('<div style="font-size: 10px; font-weight: 700; '
+                  'letter-spacing: 0.09em; text-transform: uppercase; '
+                  'opacity: 0.6; margin-bottom: 6px;">As your crew sees it</div>')
     bits = [f'<span style="font-size: 15px; font-weight: 700;">{name}</span>']
     if profile.get("streak") is not None:
         bits.append(f'<span style="opacity: 0.7; font-size: 12px;">'
@@ -497,13 +644,21 @@ def profile_overlay_js(profile):
     if ago_txt:
         bits.append(f'<span style="opacity: 0.55; font-size: 11px; '
                     f'margin-left: auto;">({_html.escape(ago_txt)})</span>')
-    head = ('<div style="display: flex; align-items: baseline; gap: 8px;">'
+    head = (kicker + '<div style="display: flex; align-items: baseline; gap: 8px;">'
             + "".join(bits) + "</div>")
+    if profile.get("paused"):
+        head += ('<div style="font-size: 12px; font-style: italic; '
+                 'opacity: 0.7; padding: 4px 0 0;">on a break</div>')
+    if profile.get("exam"):
+        head += (f'<div class="dcex" style="font-size: 12px; font-weight: 700; '
+                 f'padding: 4px 0 0;">&#128214; '
+                 f'{_html.escape(str(profile["exam"]))}</div>')
 
     cells = profile.get("cells")
     if cells is None:
-        grid = ('<div style="font-size: 12px; opacity: 0.7; margin: 12px 0;">'
-                'Their heatmap is private.</div>')
+        private = "Your heatmap is private." if you else "Their heatmap is private."
+        grid = (f'<div style="font-size: 12px; opacity: 0.7; margin: 12px 0;">'
+                f'{private}</div>')
     else:
         cols = []
         week = []
@@ -527,11 +682,17 @@ def profile_overlay_js(profile):
                   f'You&rsquo;ve studied on <b>{int(profile["same_days"])} of the '
                   f'same days</b> this half-year.</div>')
     if profile.get("decks_line"):
+        prefix = "Shares with your crew: " if you else "Shares with you: "
         lines += (f'<div style="font-size: 12px; padding: 2px 0; opacity: 0.8;">'
-                  f'Shares with you: {_html.escape(str(profile["decks_line"]))}</div>')
+                  f'{prefix}{_html.escape(str(profile["decks_line"]))}</div>')
 
     inner = _json.dumps(head + grid + lines)
-    cheer_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
+    if you:
+        act_label, act_primary = _json.dumps("Privacy…"), "false"
+        act_cmd = _json.dumps("duecrew:settings")
+    else:
+        act_label, act_primary = _json.dumps("\U0001F389 Send a cheer"), "true"
+        act_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
     return """
     (function() {
         var old = document.getElementById('dc-profile');
@@ -539,6 +700,7 @@ def profile_overlay_js(profile):
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
         var accent = night ? '#7cc47f' : '#2e7d32';
+        var warn = night ? '#dda45c' : '#b26a00';
         var back = document.createElement('div');
         back.id = 'dc-profile';
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -556,7 +718,8 @@ def profile_overlay_js(profile):
             '.dchm.h1{background:' + accent + ';opacity:0.25;}' +
             '.dchm.h2{background:' + accent + ';opacity:0.45;}' +
             '.dchm.h3{background:' + accent + ';opacity:0.7;}' +
-            '.dchm.h4{background:' + accent + ';}';
+            '.dchm.h4{background:' + accent + ';}' +
+            '.dcex{color:' + warn + ';}';
         card.appendChild(style);
         var body = document.createElement('div');
         body.innerHTML = %s;
@@ -573,14 +736,14 @@ def profile_overlay_js(profile):
                            (night ? '#3d403b' : '#e2e2da') + ';');
             return b;
         }
-        var cheer = btn('\\uD83C\\uDF89 Send a cheer', true);
-        cheer.addEventListener('click', function() {
+        var act = btn(%s, %s);
+        act.addEventListener('click', function() {
             back.remove();
             if (typeof pycmd !== 'undefined') { pycmd(%s); }
         });
         var close = btn('Close', false);
         close.addEventListener('click', function() { back.remove(); });
-        row.appendChild(cheer);
+        row.appendChild(act);
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
         row.appendChild(spacer);
@@ -595,4 +758,4 @@ def profile_overlay_js(profile):
         });
         document.body.appendChild(back);
     })();
-    """ % (inner, cheer_cmd)
+    """ % (inner, act_label, act_primary, act_cmd)

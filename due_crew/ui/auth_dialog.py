@@ -1,6 +1,8 @@
 """Sign in / Join dialog. Network runs in the background; the dialog never
 blocks Anki. On success, self.user holds (user_id, display_name)."""
 
+import html
+
 from aqt.qt import (
     QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout,
     QTabWidget, QTimer, QWidget, Qt,
@@ -36,7 +38,8 @@ class AuthDialog(QDialog):
         root = QVBoxLayout(self)
 
         if self.server_label:
-            server = QLabel(f"Server: <b>{self.server_label}</b>")
+            # server names come from the directory: escape before rich text
+            server = QLabel(f"Server: <b>{html.escape(self.server_label)}</b>")
             server.setStyleSheet("font-size: 11px;")
             root.addWidget(server)
 

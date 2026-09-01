@@ -1,6 +1,11 @@
 """Crew-server dialogs. Join: browse names, enter name + code, switch.
 Register: paste a Firebase web config, get back a name + code to share.
-Both talk only to the directory on the default project."""
+Both talk only to the directory on the default project.
+
+The join code is kept in the saved server config (next to the apiKey it
+guards) so the Friends dialog can assemble a complete invite."""
+
+import html
 
 from aqt.qt import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -119,7 +124,7 @@ class JoinServerDialog(QDialog):
         root = QVBoxLayout(self)
 
         if self.current_name:
-            current = QLabel(f"Current server: <b>{self.current_name}</b>")
+            current = QLabel(f"Current server: <b>{html.escape(self.current_name)}</b>")
             current.setStyleSheet("font-size: 12px;")
             root.addWidget(current)
 
@@ -214,6 +219,7 @@ class JoinServerDialog(QDialog):
             if conf is None:
                 self.error.setText("No server matches that name and code.")
                 return
+            conf["code"] = code
             self.joined = True
             self.on_switch(conf)
             self.accept()
@@ -331,7 +337,7 @@ class RegisterServerDialog(QDialog):
                 return
             name, code = result
             self.result = (name, code, {"apiKey": api_key, "projectId": project,
-                                        "name": name})
+                                        "name": name, "code": code})
             self.status.setText("")
             self.result_box.setText(
                 f"<b>Registered.</b><br>Name (say it aloud): <b>{name}</b><br>"

@@ -9,7 +9,7 @@ access stays on the main thread, but never in one long freeze.
 from aqt import mw
 from aqt.qt import (
     QCheckBox, QDialog, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-    QTimer, QVBoxLayout, QWidget,
+    QTimer, QVBoxLayout, QWidget, Qt,
 )
 
 from . import attach_alive
@@ -68,6 +68,8 @@ class DecksDialog(QDialog):
             box.setChecked(int(row.id) in shared)
             line.addWidget(box)
             match = QLabel("checking…")
+            # friend names land here and QLabel auto-detects rich text
+            match.setTextFormat(Qt.TextFormat.PlainText)
             match.setStyleSheet("font-size: 11px;")
             line.addWidget(match)
             line.addStretch()

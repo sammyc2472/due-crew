@@ -18,11 +18,24 @@ from aqt.utils import tooltip
 from . import attach_alive, run_bg
 
 
+def invite_text(server_name, server_code, friend_code):
+    """One paste with everything a friend needs. The server line rides only
+    when both halves are known (custom servers store the code at join)."""
+    lines = ["Study with me on Due Crew — Anki add-on 2035408484."]
+    if server_name and server_code:
+        lines.append(f"Crew server: {server_name} · code {server_code}")
+    lines.append(f"My friend code: {friend_code}")
+    return "\n".join(lines)
+
+
 class FriendsDialog(QDialog):
-    def __init__(self, parent, client):
+    def __init__(self, parent, client, server=None):
         super().__init__(parent)
         self.client = client
         self.uid = client.user_id
+        conf = server or {}
+        self.server_name = str(conf.get("name") or "")
+        self.server_code = str(conf.get("code") or "")
         self.code = None
         self.friends = []      # [(fid, name, mutual)] — valid only when loaded
         self.loaded = False
@@ -47,6 +60,10 @@ class FriendsDialog(QDialog):
         copy = QPushButton("Copy")
         copy.clicked.connect(self._copy)
         code_row.addWidget(copy)
+        invite = QPushButton("Copy invite")
+        invite.setToolTip("Everything a friend needs, in one paste")
+        invite.clicked.connect(self._copy_invite)
+        code_row.addWidget(invite)
         code_row.addStretch()
         root.addLayout(code_row)
         hint = QLabel("You're crew once you've both added each other's codes.")
@@ -140,6 +157,12 @@ class FriendsDialog(QDialog):
             QApplication.clipboard().setText(self.code)
             tooltip("Copied.")
 
+    def _copy_invite(self):
+        if self.code:
+            QApplication.clipboard().setText(
+                invite_text(self.server_name, self.server_code, self.code))
+            tooltip("Invite copied.")
+
     def _add(self):
         if not self.loaded:
             return
@@ -181,13 +204,19 @@ class FriendsDialog(QDialog):
             tooltip("Pick someone in the list first.")
             return
         fid, name, _ = self.friends[row]
-        answer = QMessageBox.question(
-            self, "Remove?",
-            f"Remove {name}?\n\nThey leave your board and stop seeing your "
-            f"stats. You may still see theirs until they remove you too.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if answer != QMessageBox.StandardButton.Yes:
+        # plain text: names are server-sourced and QMessageBox auto-detects
+        # rich text, so markup in a name must never render
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Remove?")
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(f"Remove {name}?\n\nThey leave your board and stop seeing "
+                    f"your stats. You may still see theirs until they remove "
+                    f"you too.")
+        box.setStandardButtons(QMessageBox.StandardButton.Yes
+                               | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        if box.exec() != QMessageBox.StandardButton.Yes:
             return
         self._set_writable(False)
         remaining = [f for f, _, _ in self.friends if f != fid]

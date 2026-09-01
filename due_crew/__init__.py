@@ -23,7 +23,7 @@ import traceback
 
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
-from aqt.qt import QAction, QCursor, QMenu
+from aqt.qt import QAction, QApplication, QCursor, QMenu
 from aqt.utils import tooltip
 
 from . import board
@@ -177,7 +177,8 @@ def _update_wrap(entries, labels):
         if reviews > best.get(e["user_id"], 0):
             best[e["user_id"]] = reviews
     w["banner"] = {"reviews": totals_r, "time_ms": totals_t,
-                   "best_name": best_name}
+                   "best_name": best_name,
+                   "full_days": board._full_crew_days(entries, labels)}
     w["week"] = week
     w["dismissed"] = ""
     w["deck_base"] = {f"{e['user_id']}|{d.get('name', '')}": int(d.get("seen") or 0)
@@ -441,6 +442,17 @@ def _on_js(handled, message, context):
         w["dismissed"] = w.get("week", "")
         _save_wrap()
         _swap(c)
+    elif cmd == "wrapcopy":
+        b = _wrap_info() or {}
+        if b.get("reviews"):
+            text = (f"Last week, together: {b['reviews']:,} reviews "
+                    f"· {board._fmt_time(b.get('time_ms') or 0)}")
+            if (b.get("full_days") or 0) >= 3:
+                text += f" · everyone showed up {b['full_days']} of 7 days"
+            QApplication.clipboard().setText(text + " — Due Crew")
+            tooltip("Copied.")
+    elif cmd == "settings":
+        open_settings()
     elif cmd == "cheerback" and len(parts) > 3:
         uid, emoji = parts[2], parts[3]
         entry = next((e for e in (_state["entries"] or [])
@@ -510,9 +522,10 @@ def _open_profile(uid):
                   if e["user_id"] == uid), None)
     if entry is None or not mw.col:
         return
+    you = bool(entry.get("you"))
     q = StatsQueries(mw.col)
     my_labels = [q.day_label(i) for i in range(HEATMAP_DAYS)]
-    my_days = set(q.heatmap_counts(HEATMAP_DAYS))
+    my_days = set() if you else set(q.heatmap_counts(HEATMAP_DAYS))
     tomorrow = _state["tomorrow"]
     labels = _state["labels"]
     days = entry["days"]
@@ -522,10 +535,15 @@ def _open_profile(uid):
     groups, _extras = board.build_deck_groups(_state["entries"])
     decks_line = ", ".join(g["label"] for g in groups
                            if any(u == uid for _n, _m, _d, u in g["rows"]))
+    exam = board._exam_text(entry.get("exam_date", ""),
+                            labels[0] if labels else "")
+    exam = exam[:1].upper() + exam[1:] if exam else ""
     cl = client()
 
     def job():
         try:
+            # your own card fetches your own heatmap doc: the honest,
+            # as-uploaded state, not a local recomputation
             counts = cl.fetch_heatmap(uid)
         except Exception:
             counts = None
@@ -536,11 +554,13 @@ def _open_profile(uid):
             cells = same = None
             if counts is not None:
                 cells = [counts.get(lb, 0) for lb in reversed(my_labels)]
-                same = len(my_days & {lb for lb, n in counts.items() if n})
+                if not you:
+                    same = len(my_days & {lb for lb, n in counts.items() if n})
             mw.web.eval(board.profile_overlay_js({
                 "name": entry["name"], "streak": streak_val,
                 "last_active": entry["last_updated"], "cells": cells,
                 "same_days": same, "decks_line": decks_line, "uid": uid,
+                "you": you, "paused": bool(entry.get("paused")), "exam": exam,
             }))
 
         mw.taskman.run_on_main(show)
@@ -601,7 +621,7 @@ def open_friends():
         open_auth()
         return
     from .ui.friends_dialog import FriendsDialog
-    dlg = FriendsDialog(mw, client())
+    dlg = FriendsDialog(mw, client(), server=_server_config())
     dlg.exec()
     if dlg.changed:
         refresh_board(full=True)

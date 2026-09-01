@@ -9,7 +9,9 @@ streak means what it says.
 ## What it does
 
 - **Board on the Decks screen** — reviews, study time, retention, and streak
-  for you and your crew. Today, This week, or shared-deck progress.
+  for you and your crew. Today, Week, shared-deck progress — or Days, a
+  numbers-free view of who showed up. Friends who go quiet stay on the
+  board; that's when a cheer counts.
 - **Consent-based friendships** — swap 6-character codes. You see someone's
   stats only after they add your code, and vice versa. Remove someone and
   they stop seeing yours immediately.
@@ -19,9 +21,12 @@ streak means what it says.
   (seen and mature counts). Decks match automatically by note fingerprint:
   AnKing and other imported decks pair up with no setup.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
-  and how many of the same days you've both studied.
+  and how many of the same days you've both studied. Click your own name
+  to see your card exactly as your crew sees it.
+- **Exam flags** — share an exam date and 📖 sits by your name for the two
+  weeks before, so your crew knows when a 💪 matters most.
 - **Crew Wrap** — a weekly "together we did X" banner, plus streak
-  milestone toasts.
+  milestone toasts. One click copies it for the group chat.
 - **Privacy controls** — choose which stats you share (heatmap included),
   or pause sharing entirely ("on a break"). Pausing hides your stats; your
   streak keeps counting as long as you keep studying.
@@ -44,8 +49,8 @@ and double-click it. Anki 2.1.55+.
 
 1. Click Due Crew on the Decks screen: join your crew with the server name
    and code a friend sent you — or start a new crew.
-2. Friends → copy your code, send it to a friend. They add yours, you add
-   theirs — you're crew.
+2. Friends → Copy invite (or just your code), send it to a friend. They
+   add yours, you add theirs — you're crew.
 3. Study. Stats sync when Anki syncs.
 
 ## Privacy

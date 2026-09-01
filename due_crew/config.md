@@ -6,7 +6,7 @@ Raw keys, for reference:
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `show_leaderboard` | true/false | Board on the Decks screen |
-| `period` | today / week / decks | Default view |
+| `period` | today / week / days / decks | Default view |
 | `sort` | reviews / time / retention / streak | Default sort |
 | `show_stale` | true/false | Show yesterday for friends who haven't synced today |
 | `sync_notifications` | true/false | Toast when a friend syncs |
@@ -15,6 +15,7 @@ Raw keys, for reference:
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
 | `share_heatmap` | true/false | Heatmap on your profile card |
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
+| `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 
 Sign-in state (account, name, tokens) lives in `user_files/<profile>/`,

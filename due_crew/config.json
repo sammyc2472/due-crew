@@ -14,5 +14,6 @@
   "share_streak": true,
   "share_heatmap": true,
   "paused": false,
+  "exam_date": "",
   "shared_decks": []
 }

@@ -103,6 +103,16 @@ def _now_ts():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _exam_value(iso, today_label):
+    """The exam date to publish: a valid ISO date not yet passed, else None."""
+    try:
+        d = datetime.date.fromisoformat(str(iso))
+        t = datetime.date.fromisoformat(str(today_label))
+    except (TypeError, ValueError):
+        return None
+    return str(iso) if d >= t else None
+
+
 def _as_int(v):
     try:
         return int(v)
@@ -420,6 +430,7 @@ class FirebaseClient:
                 "you": u == uid,
                 "paused": bool(prof.get("paused")),
                 "last_updated": prof.get("lastUpdated", ""),
+                "exam_date": str(prof.get("examDate") or ""),
                 "days": {lb: _clean_day(docs.get(f"users/{u}/daily_stats/{lb}"))
                          for lb in want},
                 "decks": decks,  # None = not fetched this time
@@ -450,11 +461,18 @@ class FirebaseClient:
                ("accuracy", "share_retention"), ("streak", "share_streak"))
 
     def upload_today(self, uid, display_name, label, stats, cfg):
-        ok = self.patch_doc(f"users/{uid}", {
+        profile = {
             "displayName": display_name,
             "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
-        })
+        }
+        # examDate rides the always-in-the-mask pattern: unset, past, or
+        # paused thereby DELETES it server-side instead of leaving it stale
+        mask = list(profile) + ["examDate"]
+        exam = _exam_value(cfg.get("exam_date"), label)
+        if exam and not cfg.get("paused"):
+            profile["examDate"] = exam
+        ok = self.patch_doc(f"users/{uid}", profile, mask)
         if cfg.get("paused"):
             return ok
         values = {"reviews": int(stats.reviews),

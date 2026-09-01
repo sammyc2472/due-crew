@@ -3,11 +3,13 @@ can never clobber config changed by flows launched from inside it (sign-in,
 Shared decks). The Account tab rebuilds by swapping one child widget, which
 cleans up nested layouts correctly."""
 
+import html
+
 from aqt import mw
 from aqt.qt import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QTabWidget, QTimer, QVBoxLayout,
-    QWidget,
+    QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTabWidget,
+    QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
 
@@ -19,7 +21,7 @@ DEFAULTS = {
     "theme": "auto", "compact": False, "show_last_active": True,
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
-    "paused": False,
+    "paused": False, "exam_date": "",
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
@@ -134,7 +136,7 @@ class SettingsDialog(QDialog):
 
     def _server_rows(self, lay):
         row = QHBoxLayout()
-        label = QLabel(f"Server: <b>{self.server_label or 'default'}</b>")
+        label = QLabel(f"Server: <b>{html.escape(self.server_label) or 'default'}</b>")
         label.setStyleSheet("font-size: 12px;")
         row.addWidget(label)
         if self.open_server_join:
@@ -156,7 +158,6 @@ class SettingsDialog(QDialog):
             QTimer.singleShot(0, cb)
 
     def _who_text(self):
-        import html
         name = html.escape(self.client.display_name or "?")
         email = html.escape(self.client.email)
         return (f"Signed in as <b>{name}</b><br>"
@@ -297,6 +298,29 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_streak", "Streak")
         self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
         lay.addSpacing(8)
+        exam_row = QHBoxLayout()
+        self.exam_on = QCheckBox("Share an exam date")
+        exam_row.addWidget(self.exam_on)
+        self.exam_edit = QDateEdit()
+        self.exam_edit.setCalendarPopup(True)
+        stored = QDate.fromString(str(self.config.get("exam_date", "")),
+                                  Qt.DateFormat.ISODate)
+        if stored.isValid():
+            self.exam_on.setChecked(True)
+            self.exam_edit.setDate(stored)
+        else:
+            self.exam_edit.setDate(QDate.currentDate().addDays(7))
+        self.exam_edit.setEnabled(self.exam_on.isChecked())
+        self.exam_on.toggled.connect(self.exam_edit.setEnabled)
+        exam_row.addWidget(self.exam_edit)
+        exam_row.addStretch()
+        lay.addLayout(exam_row)
+        exam_note = QLabel("\U0001F4D6 shows by your name for the two weeks "
+                           "before the date, then clears itself.")
+        exam_note.setStyleSheet("font-size: 11px;")
+        exam_note.setWordWrap(True)
+        lay.addWidget(exam_note)
+        lay.addSpacing(8)
         self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
         note = QLabel("Takes effect on your next sync. Pausing hides your "
                       "stats; your streak keeps counting as long as you keep "
@@ -311,6 +335,7 @@ class SettingsDialog(QDialog):
     # ---- footer ----
 
     def _restore(self):
+        self.exam_on.setChecked(False)
         for key, widget in self._binds.items():
             if isinstance(widget, QCheckBox):
                 widget.setChecked(bool(DEFAULTS[key]))
@@ -327,5 +352,8 @@ class SettingsDialog(QDialog):
                 changed[key] = widget.isChecked()
             elif isinstance(widget, QComboBox):
                 changed[key] = widget.currentData()
+        changed["exam_date"] = (
+            self.exam_edit.date().toString(Qt.DateFormat.ISODate)
+            if self.exam_on.isChecked() else "")
         self.on_saved(changed)
         self.accept()
