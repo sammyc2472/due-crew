@@ -248,10 +248,20 @@ def _css(cfg):
     {_theme_css(cfg)}
     #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
-    /* the board is one white (or night) card; inside it, no rules at all —
-       rows separate by spacing and the you-row highlight, never by lines */
+    /* the board is one flat white (or night) surface; inside it, no rules
+       at all — rows separate by spacing and the you-row highlight */
     #due-crew.dc-frame {{ background: var(--dc-bg); border-radius: 12px;
-      padding: 16px 18px 10px; box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
+      padding: 16px 18px 10px; }}
+    /* the deck screen is shared with Anki's own styles and other add-ons
+       (AMBOSS, AnkiHub, Review Heatmap all inject CSS here). None of them
+       may redecorate this board: no borders, shadows, or radii on the
+       table, ever — and no horizontal scrollbar on the page; everything
+       of ours already fits any window (the name column ellipsizes). */
+    body {{ overflow-x: hidden !important; }}
+    #due-crew, #due-crew table, #due-crew tr, #due-crew th, #due-crew td {{
+      border: 0 !important; box-shadow: none !important; outline: 0 !important; }}
+    #due-crew table, #due-crew tr, #due-crew th, #due-crew td {{
+      border-radius: 0 !important; overflow: visible !important; }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin-bottom: 10px; }}
     #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
