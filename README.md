@@ -63,7 +63,9 @@ and double-click it. Anki 2.1.55+.
 
 ## Privacy
 
-Stats live in Firebase, readable only by people you've added — enforced
+Stats live in Firebase, readable only by people you've added — and, only
+if you opt into the server board, a single name-and-today's-numbers row
+readable by others who've opted in too. All of it is enforced
 server-side by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
 in this repo. Your email is used for sign-in only and is never shown to
@@ -76,8 +78,6 @@ code. About ten minutes:
 
 1. [console.firebase.google.com](https://console.firebase.google.com) →
    Add project (any name, Analytics off).
-   When registering, you can type your own crew name (3–40 characters,
-   lower-case letters, digits, dashes) — first come, first named.
 2. Build → Authentication → Get started → enable **Email/Password**.
 3. Build → Firestore Database → Create database (production mode) → Rules →
    paste
@@ -86,8 +86,10 @@ code. About ten minutes:
 4. Project settings → Your apps → add a **Web app** → copy the `apiKey` and
    `projectId` from the config it shows.
 5. In Anki: Due Crew → **Start a new crew** → Continue → paste both →
-   Register. You get a server name (say it aloud) and a code (share
-   privately) — then click **Use this server now** and sign up on it.
+   Register — typing your own crew name is optional (3–40 characters,
+   lower-case letters, digits, dashes; first come, first named). You get
+   the name (say it aloud) and a code (share privately) — then click
+   **Use this server now** and sign up on it.
 
 Friends then pick **Join your crew**, enter the name and code, and sign up
 as usual. Your crew runs on your own free Firebase quota.
