@@ -29,6 +29,9 @@ import threading
 
 import requests
 
+# A Firebase web API key is a public client identifier, not a secret: it
+# ships inside the add-on to every install, and access control lives entirely
+# in firestore.rules + Auth. Secret scanners will flag it; that is expected.
 DEFAULT_API_KEY = "AIzaSyBgXxrfGhuZ1Zrf_DURu4Sd3B9VZw42Q9I"
 DEFAULT_PROJECT_ID = "anki-leaderboard-f6691"
 AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
