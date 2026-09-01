@@ -135,6 +135,22 @@ def register_server(api_key, project_id, custom_name=None):
     raise TransportError("couldn't find a free name")
 
 
+def follow_rename(name):
+    """The founder can rename a crew: the console (owner-only — rules keep
+    clients create-only) adds `renamedTo` on the old server_names doc, and
+    every member's add-on follows it. Returns the new name, or None."""
+    r = _req("GET", f"{BASE}/server_names/{name.strip().lower()}")
+    if r.status_code != 200:
+        return None
+    target = _parse(r.json().get("fields")).get("renamedTo")
+    if not isinstance(target, str):
+        return None
+    target = target.strip().lower()
+    if target == name or not NAME_RE.fullmatch(target):
+        return None
+    return target
+
+
 def lookup_server(name, code):
     """{apiKey, projectId, name} or None when name+code match nothing."""
     r = _req("GET", f"{BASE}/servers/{_key(name, code)}")

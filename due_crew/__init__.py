@@ -108,6 +108,47 @@ def client():
     return _client
 
 
+def _follow_rename_daily(cl, today):
+    """Background thread. One directory read per day: if the founder renamed
+    the crew (renamedTo on the old server_names doc), adopt the new name —
+    the label, invites, and the server-board scope all follow it."""
+    name = server_name()
+    if not name or cl.session.get("rename_check") == today:
+        return
+    cl.session["rename_check"] = today
+    cl._save_session()
+    try:
+        from .backend import directory
+        current = name
+        for _ in range(3):  # renames can chain; follow a few hops
+            nxt = directory.follow_rename(current)
+            if not nxt:
+                break
+            current = nxt
+    except Exception:
+        return  # the directory is a nicety; never fail a refresh over it
+    if current != name:
+        mw.taskman.run_on_main(lambda: _adopt_rename(current))
+
+
+def _adopt_rename(new_name):
+    """Main thread (config write). The join code belonged to the old name,
+    so it's dropped — invites fall back to the short form until the founder
+    shares the new code."""
+    conf = _server_config()
+    if not conf or conf.get("name") == new_name:
+        return
+    conf["name"] = new_name
+    conf.pop("code", None)
+    try:
+        with open(os.path.join(_profile_files(), "server.json"), "w") as f:
+            json.dump(conf, f)
+    except OSError:
+        return
+    tooltip(f"Your crew server is now {html.escape(new_name)}.")
+    _rerender()
+
+
 def _switch_server(conf):
     """conf {} = back to the default server. Signs out locally, rebinds."""
     global _client
@@ -425,6 +466,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 elif not cl.session.get("board_row_deleted"):
                     cl.delete_board_row(uid)  # opted out, or paused
             cl.check_rules(labels[0])  # cached: one real request per day
+            _follow_rename_daily(cl, labels[0])
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
             mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))

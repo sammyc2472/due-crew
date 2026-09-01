@@ -97,6 +97,11 @@ If a later Due Crew version needs updated rules, the board shows "Server
 rules need an update" with a one-click copy of the new rules — re-do step 3
 and you're current.
 
+Renaming your crew: register the new name in Anki, then in the Firebase
+console open Firestore → `server_names` → your old name's doc and add a
+string field `renamedTo` with the new name. Every member follows the rename
+automatically within a day — only the project owner can write that field.
+
 ## Development
 
 Open source, MIT: https://github.com/sammyc2472/due-crew — issues and pull
