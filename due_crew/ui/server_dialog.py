@@ -257,6 +257,17 @@ class RegisterServerDialog(QDialog):
         self.project_input = QLineEdit()
         self.project_input.setPlaceholderText("my-crew-firebase")
         root.addWidget(self.project_input)
+        root.addWidget(QLabel("<b>Crew name</b> — optional"))
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("e.g. busm — blank for a generated name")
+        self.name_input.setMaxLength(40)
+        root.addWidget(self.name_input)
+        name_note = QLabel("3–40 characters: lower-case letters, digits, "
+                           "dashes. First come, first named — the code still "
+                           "gates joining.")
+        name_note.setStyleSheet("font-size: 11px;")
+        name_note.setWordWrap(True)
+        root.addWidget(name_note)
         if self.prefill and all(self.prefill):
             self.key_input.setText(self.prefill[0])
             self.project_input.setText(self.prefill[1])
@@ -324,12 +335,21 @@ class RegisterServerDialog(QDialog):
         if not api_key or not project:
             self.status.setText("Paste both fields first.")
             return
+        custom = self.name_input.text().strip().lower()
+        if custom and not directory.valid_custom_name(custom):
+            self.status.setText("Crew names are 3–40 characters: lower-case "
+                                "letters, digits, dashes.")
+            return
         self.go_btn.setEnabled(False)
         self.go_btn.setText("Registering…")
 
         def done(result, err):
             self.go_btn.setEnabled(True)
             self.go_btn.setText("Register")
+            if result == "TAKEN":
+                self.status.setText(f"\u201c{custom}\u201d is taken — "
+                                    f"pick another name.")
+                return
             if err or not result:
                 self.status.setText("Registration failed. Check your connection "
                                     "and that anonymous auth is enabled on the "
@@ -349,7 +369,14 @@ class RegisterServerDialog(QDialog):
             self.copy_btn.show()
             self.use_btn.show()
 
-        run_bg(self, lambda: directory.register_server(api_key, project), done)
+        def job():
+            try:
+                return directory.register_server(api_key, project,
+                                                 custom_name=custom or None)
+            except directory.NameTaken:
+                return "TAKEN"
+
+        run_bg(self, job, done)
 
     def _copy(self):
         if self.result:

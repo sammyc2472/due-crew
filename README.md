@@ -36,7 +36,11 @@ streak means what it says.
   streak keeps counting as long as you keep studying.
 - **Crew servers** — run your whole group on your own free Firebase
   project. One person does the setup; everyone else joins with a name and
-  a code.
+  a code — a name the founder can pick ("busm").
+- **Server board** — opt in (Privacy) to a Today-only board of everyone on
+  your server who's also sharing. No medals, no cheers — these aren't
+  necessarily people you know; weeks, days, decks, and heatmaps stay
+  crew-only. Tap a name, knock, and you're crew when they add back.
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.
@@ -72,6 +76,8 @@ code. About ten minutes:
 
 1. [console.firebase.google.com](https://console.firebase.google.com) →
    Add project (any name, Analytics off).
+   When registering, you can type your own crew name (3–40 characters,
+   lower-case letters, digits, dashes) — first come, first named.
 2. Build → Authentication → Get started → enable **Email/Password**.
 3. Build → Firestore Database → Create database (production mode) → Rules →
    paste

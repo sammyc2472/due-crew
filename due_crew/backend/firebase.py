@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v2"
+RULES_MARKER = "rules-v3"
 
 
 def firestore_base(project_id):
@@ -145,6 +145,21 @@ def _clean_day(doc):
     if isinstance(doc.get("studied"), bool):
         out["studied"] = doc["studied"]
     return out
+
+
+def _clean_board_row(uid, fields):
+    """Coerce a server_board row to a trusted shape; None if unusable."""
+    if not isinstance(fields, dict):
+        return None
+    day = fields.get("day")
+    if not isinstance(day, str):
+        return None
+    return {"user_id": str(uid),
+            "name": str(fields.get("name", "?")),
+            "day": day,
+            "reviews": _as_int(fields.get("reviews")) or 0,
+            "time_ms": _as_int(fields.get("studyTimeMs")) or 0,
+            "streak": _as_int(fields.get("streak")) or 0}
 
 
 def _clean_decks(value):
@@ -387,6 +402,27 @@ class FirebaseClient:
                 out[name[len(self.doc_root) + 1:]] = _parse(item["found"].get("fields"))
         return out
 
+    def run_query(self, collection, filters, page_size=300):
+        """Equality-only query on a root collection: [(field, value), ...].
+        No orderBy, so no composite index for founders to create. Returns
+        {doc_id: fields}; raises TransportError on failure."""
+        where = {"compositeFilter": {"op": "AND", "filters": [
+            {"fieldFilter": {"field": {"fieldPath": f},
+                             "op": "EQUAL", "value": _fv(v)}}
+            for f, v in filters]}}
+        query = {"structuredQuery": {
+            "from": [{"collectionId": collection}],
+            "where": where, "limit": page_size}}
+        r = self._req("POST", f"{self.base}:runQuery", json=query)
+        if r.status_code != 200:
+            raise TransportError(f"query failed: {r.status_code}")
+        out = {}
+        for item in r.json():
+            doc = item.get("document")
+            if doc:
+                out[doc["name"].rsplit("/", 1)[-1]] = _parse(doc.get("fields"))
+        return out
+
     # ---- friends ----
 
     def list_friends(self, uid):
@@ -487,7 +523,8 @@ class FirebaseClient:
                                "name": str(prof.get("displayName", "?")),
                                "emoji": str(doc.get("emoji")),
                                "at": str(doc.get("at", ""))})
-        return {"entries": entries, "pending": pending, "cheers": cheers}
+        return {"entries": entries, "pending": pending, "cheers": cheers,
+                "my_friends": [fid for fid, _p, _m in resolved]}
 
     def send_cheer(self, to_uid, from_uid, from_name, emoji):
         """One write; overwrites any previous cheer to the same person."""
@@ -540,12 +577,15 @@ class FirebaseClient:
             "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
         }
-        # examDate rides the always-in-the-mask pattern: unset, past, or
-        # paused thereby DELETES it server-side instead of leaving it stale
-        mask = list(profile) + ["examDate"]
+        # examDate and openBoard ride the always-in-the-mask pattern: unset,
+        # past, off, or paused thereby DELETES them server-side, never stale.
+        # openBoard is what the rules read to gate the server board both ways.
+        mask = list(profile) + ["examDate", "openBoard"]
         exam = _exam_value(cfg.get("exam_date"), label)
         if exam and not cfg.get("paused"):
             profile["examDate"] = exam
+        if cfg.get("server_board") and not cfg.get("paused"):
+            profile["openBoard"] = True
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
         if cfg.get("paused"):
             return ok
@@ -614,6 +654,60 @@ class FirebaseClient:
         self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
+    def upload_board_row(self, uid, row):
+        """Upsert my compact public row; skipped when unchanged."""
+        digest = hashlib.sha1(
+            json.dumps(row, sort_keys=True).encode()).hexdigest()
+        if self.session.get("board_row_hash") == digest:
+            return True
+        data = dict(row)
+        data["updatedAt"] = {"timestampValue": _now_ts()}
+        if not self.patch_doc(f"server_board/{uid}", data,
+                              mask=list(row) + ["updatedAt"],
+                              label="server board"):
+            return False
+        self.session["board_row_hash"] = digest
+        self.session.pop("board_row_deleted", None)
+        self._save_session()
+        return True
+
+    def delete_board_row(self, uid):
+        self.delete_doc(f"server_board/{uid}")
+        self.session.pop("board_row_hash", None)
+        self.session["board_row_deleted"] = True  # retract once, not per sync
+        self._save_session()
+
+    def fetch_server_board(self, server):
+        """All rows for my server (client filters days and sorts). One
+        equality-only query; raises TransportError on failure."""
+        docs = self.run_query("server_board", [("server", str(server))])
+        rows = [_clean_board_row(uid, fields) for uid, fields in docs.items()]
+        return [r for r in rows if r]
+
+    def send_knock(self, to_uid, from_uid, from_name):
+        """One write; overwrites my previous knock to the same person."""
+        return self.patch_doc(f"users/{to_uid}/knocks/{from_uid}", {
+            "name": from_name,
+            "at": {"timestampValue": _now_ts()},
+        }, label="knock")
+
+    def list_knocks(self, uid):
+        """[(sender_uid, sender_profile_name)] — names come from profiles,
+        not the knock docs, so senders can't spoof. Raises TransportError."""
+        r = self._req("GET", f"{self.base}/users/{uid}/knocks?pageSize=50")
+        if r.status_code != 200:
+            raise TransportError(f"knocks list failed: {r.status_code}")
+        senders = [doc["name"].rsplit("/", 1)[-1]
+                   for doc in r.json().get("documents", [])]
+        if not senders:
+            return []
+        profiles = self.batch_get([f"users/{u}" for u in senders])
+        return [(u, str((profiles.get(f"users/{u}") or {})
+                        .get("displayName", "?"))) for u in senders]
+
+    def delete_knock(self, uid, sender_uid):
+        return self.delete_doc(f"users/{uid}/knocks/{sender_uid}")
+
     def _cleanup(self, uid, today_label):
         """Blind-delete the stats docs that just aged out — doc ids are date
         labels, so no listing (and no reads) needed. Once per day."""
@@ -641,8 +735,10 @@ class FirebaseClient:
         self._save_session()
         self._delete_listed(f"users/{uid}/daily_stats")
         self._delete_listed(f"users/{uid}/cheers")
+        self._delete_listed(f"users/{uid}/knocks")
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
+        self.delete_doc(f"server_board/{uid}")  # the public row goes first
         if friend_code:
             self.delete_doc(f"friend_codes/{friend_code}")
         self.delete_doc(f"users/{uid}")

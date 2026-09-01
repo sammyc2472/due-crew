@@ -21,7 +21,7 @@ DEFAULTS = {
     "theme": "auto", "compact": False, "show_last_active": True,
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
-    "paused": False, "exam_date": "",
+    "server_board": False, "paused": False, "exam_date": "",
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
@@ -297,6 +297,18 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_retention", "Retention")
         self._check(lay, "share_streak", "Streak")
         self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
+        lay.addSpacing(8)
+        lay.addWidget(QLabel("<b>Server board</b>"))
+        self._check(lay, "server_board",
+                    "Share on the server board (off = hidden both ways)")
+        board_note = QLabel("Your name and today's numbers, visible to "
+                            "everyone on this server who's also sharing — "
+                            "and theirs to you. Adding someone from the "
+                            "board starts a knock; you're crew when they "
+                            "add back.")
+        board_note.setStyleSheet("font-size: 11px;")
+        board_note.setWordWrap(True)
+        lay.addWidget(board_note)
         lay.addSpacing(8)
         exam_row = QHBoxLayout()
         self.exam_on = QCheckBox("Share an exam date")

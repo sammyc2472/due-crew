@@ -11,7 +11,7 @@ import html
 from aqt import mw
 from aqt.qt import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QMessageBox, QPushButton, QTimer, QVBoxLayout, Qt,
+    QMessageBox, QPushButton, QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
 
@@ -29,15 +29,18 @@ def invite_text(server_name, server_code, friend_code):
 
 
 class FriendsDialog(QDialog):
-    def __init__(self, parent, client, server=None):
+    def __init__(self, parent, client, server=None, muted=None, on_mute=None):
         super().__init__(parent)
         self.client = client
         self.uid = client.user_id
         conf = server or {}
         self.server_name = str(conf.get("name") or "")
         self.server_code = str(conf.get("code") or "")
+        self.muted = set(muted or [])
+        self.on_mute = on_mute or (lambda uid: None)
         self.code = None
         self.friends = []      # [(fid, name, mutual)] — valid only when loaded
+        self.knocks = []       # [(sender_uid, name)] from the server board
         self.loaded = False
         self.changed = False
         attach_alive(self)
@@ -87,6 +90,12 @@ class FriendsDialog(QDialog):
         add_row.addWidget(self.add_btn)
         root.addLayout(add_row)
 
+        self.knocks_host = QWidget()
+        self.knocks_lay = QVBoxLayout(self.knocks_host)
+        self.knocks_lay.setContentsMargins(0, 8, 0, 0)
+        root.addWidget(self.knocks_host)
+        self.knocks_host.hide()
+
         root.addSpacing(8)
         root.addWidget(QLabel("<b>Your crew</b>"))
         self.list = QListWidget()
@@ -125,8 +134,12 @@ class FriendsDialog(QDialog):
         def job():
             own, resolved, _pending = self.client.list_friends(self.uid)
             code = self.client.ensure_friend_code(self.uid, own.get("friendCode"))
-            return code, [(fid, prof.get("displayName", "?"), mutual)
-                          for fid, prof, mutual in resolved]
+            try:
+                knocks = self.client.list_knocks(self.uid)
+            except Exception:
+                knocks = []  # knocks are a bonus; never fail the dialog
+            return (code, [(fid, prof.get("displayName", "?"), mutual)
+                           for fid, prof, mutual in resolved], knocks)
 
         def done(result, err):
             if err or result is None:
@@ -135,13 +148,89 @@ class FriendsDialog(QDialog):
                                   "Check your connection and retry.")
                 self.retry_btn.show()
                 return
-            self.code, self.friends = result
+            self.code, self.friends, knocks = result
+            have = {fid for fid, _n, _m in self.friends}
+            self.knocks = [(u, n) for u, n in knocks
+                           if u not in have and u not in self.muted]
             self.loaded = True
             self.code_label.setText(self.code or "?")
             self._set_writable(True)
+            self._render_knocks()
             self._render_list()
 
         run_bg(self, job, done)
+
+    def _render_knocks(self):
+        """From the server board: one row per knock, Add back or ignore."""
+        while self.knocks_lay.count():
+            item = self.knocks_lay.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                lay = item.layout()
+                while lay.count():
+                    sub = lay.takeAt(0)
+                    if sub.widget():
+                        sub.widget().deleteLater()
+        if not self.knocks:
+            self.knocks_host.hide()
+            return
+        title = QLabel("<b>Knocks</b>")
+        self.knocks_lay.addWidget(title)
+        for kuid, kname in self.knocks:
+            row = QHBoxLayout()
+            # server-sourced name: force plain text
+            label = QLabel()
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setText(f"{kname} — wants to be crew")
+            row.addWidget(label)
+            row.addStretch()
+            add = QPushButton("Add back")
+            add.clicked.connect(
+                lambda _=False, u=kuid, n=kname: self._add_back(u, n))
+            row.addWidget(add)
+            ignore = QPushButton("Ignore")
+            ignore.setFlat(True)
+            ignore.clicked.connect(
+                lambda _=False, u=kuid: self._ignore_knock(u))
+            row.addWidget(ignore)
+            self.knocks_lay.addLayout(row)
+        self.knocks_host.show()
+
+    def _add_back(self, kuid, kname):
+        if not self.loaded:
+            return
+        self._set_writable(False)
+        remaining = [f for f, _, _ in self.friends] + [kuid]
+
+        def done(ok, err):
+            self._set_writable(True)
+            if err or not ok:
+                tooltip("Couldn't save. Try again.")
+                return
+            # they knocked, so I'm already in their list: instantly mutual
+            self.friends.append((kuid, kname, True))
+            self.knocks = [(u, n) for u, n in self.knocks if u != kuid]
+            self.changed = True
+            self._render_knocks()
+            self._render_list()
+            tooltip(f"You and {html.escape(kname)} are crew.")
+
+        def job():
+            ok = self.client.set_friends(self.uid, remaining)
+            if ok:
+                self.client.delete_knock(self.uid, kuid)
+            return ok
+
+        run_bg(self, job, done)
+
+    def _ignore_knock(self, kuid):
+        self.knocks = [(u, n) for u, n in self.knocks if u != kuid]
+        self.muted.add(kuid)
+        self.on_mute(kuid)   # local mute: their re-knocks stay hidden
+        self._render_knocks()
+        run_bg(self, lambda: self.client.delete_knock(self.uid, kuid),
+               lambda _ok, _err: None)
 
     def _render_list(self):
         self.list.clear()

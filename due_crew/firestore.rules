@@ -49,6 +49,18 @@ service cloud.firestore {
                               && request.resource.data.keys().hasOnly(['emoji', 'name', 'at'])
                               && request.resource.data.emoji in ['🎉', '💪', '🔥'];
       }
+
+      // v1.8: knocks — "wants to be crew", one small doc per sender,
+      // allowed only between people showing themselves on the server
+      // board. Overwrite semantics: one outstanding knock per sender.
+      match /knocks/{senderId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if request.auth != null
+                              && request.auth.uid == senderId
+                              && get(/databases/$(database)/documents/users/$(userId)).data.openBoard == true
+                              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true
+                              && request.resource.data.keys().hasOnly(['name', 'at']);
+      }
     }
 
     // v1.4: crew-server directory — DEFAULT project only. Names are
@@ -79,14 +91,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // v1.7: rules-generation marker — no data ever lives here. The client
-    // GETs meta/rules-v2 once a day: 404 means these rules are deployed,
-    // 403 means the project's rules predate them and the board shows the
-    // "server rules need an update" notice. Bump the marker here and
-    // RULES_MARKER in backend/firebase.py together.
+    // Rules-generation markers — no data ever lives here. The client GETs
+    // meta/<its marker> once a day: 404 means these rules are current for
+    // it, 403 means the project's rules predate it and the board shows the
+    // "server rules need an update" notice. The list is CUMULATIVE (newer
+    // rules must still satisfy older clients' probes); add a version here
+    // and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker == 'rules-v2';
+      allow get: if marker in ['rules-v2', 'rules-v3'];
       allow list, create, update, delete: if false;
+    }
+
+    // v1.8: the server board — one compact, self-owned public row per
+    // sharer. Reading requires the reader to be sharing too (symmetric by
+    // rule, not by promise); pausing or opting out deletes the row.
+    match /server_board/{userId} {
+      allow read: if isAuthenticated()
+                  && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true;
+      allow create, update: if isOwner(userId)
+                  && request.resource.data.keys().hasOnly(
+                       ['name', 'server', 'day', 'reviews', 'studyTimeMs',
+                        'streak', 'updatedAt']);
+      allow delete: if isOwner(userId);
     }
 
     match /friend_codes/{code} {

@@ -94,18 +94,34 @@ def _create_doc(token, collection, doc_id, data):
     return r.status_code in (200, 201), r.status_code
 
 
-def register_server(api_key, project_id):
+NAME_RE = __import__("re").compile(r"[a-z0-9][a-z0-9-]{2,39}$")
+
+
+def valid_custom_name(name):
+    return bool(NAME_RE.fullmatch(name))
+
+
+class NameTaken(Exception):
+    """A custom name already exists — the founder picks another."""
+
+
+def register_server(api_key, project_id, custom_name=None):
     """Registers a founder's project. Returns (name, code).
-    Raises TransportError/AuthError on failure."""
+    Raises NameTaken for an occupied custom name,
+    TransportError/AuthError otherwise."""
     token = _anonymous_token()
     for _ in range(4):
-        name = generate_name()
+        name = custom_name or generate_name()
         code = generate_code()
-        ok, status = _create_doc(token, "server_names", name,
-                                 {"createdAt": {"timestampValue": _now_ts()}})
+        fields = {"createdAt": {"timestampValue": _now_ts()}}
+        if custom_name:
+            fields["custom"] = True
+        ok, status = _create_doc(token, "server_names", name, fields)
         if not ok:
             if status == 409:
-                continue  # name taken — new roll
+                if custom_name:
+                    raise NameTaken(name)
+                continue  # generated name taken — new roll
             raise TransportError(f"name registration failed: {status}")
         ok, status = _create_doc(token, "servers", _key(name, code), {
             "apiKey": api_key,

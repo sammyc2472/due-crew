@@ -15,5 +15,6 @@
   "share_heatmap": true,
   "paused": false,
   "exam_date": "",
-  "shared_decks": []
+  "shared_decks": [],
+  "server_board": false
 }

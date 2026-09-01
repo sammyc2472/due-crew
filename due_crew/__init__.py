@@ -45,6 +45,8 @@ _state = {
     "entries": None, "days": {}, "decks": {}, "labels": [], "tomorrow": "",
     "pending": [], "ts": 0.0, "prev_label": "", "prev_counts": {},
     "prev_streaks": {}, "board_shown": False,
+    "my_friends": [], "server_rows": None, "server_ts": 0.0,
+    "server_state": "loading",
 }
 _pending_cheers = []
 _wrap = {"profile": None, "data": {}}
@@ -130,7 +132,9 @@ def _switch_server(conf):
 def _reset_runtime():
     _state.update(entries=None, days={}, decks={}, labels=[], tomorrow="",
                   pending=[], ts=0.0, prev_label="", prev_counts={},
-                  prev_streaks={}, board_shown=False)
+                  prev_streaks={}, board_shown=False,
+                  my_friends=[], server_rows=None, server_ts=0.0,
+                  server_state="loading")
     _pending_cheers.clear()
 
 
@@ -303,6 +307,64 @@ def _deck_deltas():
     return out
 
 
+SERVER_CACHE_SECS = 300
+
+
+def _server_key():
+    return server_name() or "default"
+
+
+def _server_view():
+    """What board._server_html renders. Row decoration is cheap and local."""
+    c = cfg()
+    if not (c.get("server_board") and not c.get("paused")):
+        return {"state": "optin", "server": _server_key()}
+    rows = _state["server_rows"]
+    if rows is None:
+        return {"state": _state["server_state"], "server": _server_key()}
+    me = client().user_id
+    crew = {e["user_id"] for e in _state["entries"] or [] if not e["you"]}
+    added = set(_state["my_friends"])
+    keep_days = {_state["labels"][0] if _state["labels"] else "",
+                 _state["tomorrow"]}
+    out = []
+    for r in rows:
+        if r["day"] not in keep_days:
+            continue  # only people who studied today are on the board
+        out.append(dict(r, you=(r["user_id"] == me),
+                        crew=(r["user_id"] in crew),
+                        pending=(r["user_id"] in added
+                                 and r["user_id"] not in crew)))
+    return {"state": "ok", "rows": out, "server": _server_key()}
+
+
+def _fetch_server_rows(force=False):
+    """Lazy: one query when the view opens, cached a few minutes."""
+    if _state["server_rows"] is not None and not force \
+            and time.time() - _state["server_ts"] < SERVER_CACHE_SECS:
+        return
+    cl = client()
+    key = _server_key()
+
+    def job():
+        try:
+            rows = cl.fetch_server_board(key)
+            state = "ok"
+        except Exception:
+            rows, state = None, "error"
+
+        def commit():
+            if rows is not None:
+                _state["server_rows"] = rows
+                _state["server_ts"] = time.time()
+            _state["server_state"] = state
+            _swap(cfg())
+
+        mw.taskman.run_on_main(commit)
+
+    threading.Thread(target=job, daemon=True).start()
+
+
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
             "tomorrow": _state["tomorrow"], "pending": _state["pending"]}
@@ -311,7 +373,7 @@ def _board_data():
 # ---- refresh ----
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
-                  heatmap=None, full=False):
+                  heatmap=None, board_row=None, full=False):
     """Fetch (and optionally upload first) in the background. Main thread
     only. An upload is never dropped: only pure fetches dedup against an
     in-flight refresh. heatmap: dict to upload, "off" to retract, None to
@@ -357,6 +419,11 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     cl.upload_heatmap(uid, heatmap)
                 elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
+            if board_row is not None:
+                if isinstance(board_row, dict) and not c.get("paused"):
+                    cl.upload_board_row(uid, board_row)
+                elif not cl.session.get("board_row_deleted"):
+                    cl.delete_board_row(uid)  # opted out, or paused
             cl.check_rules(labels[0])  # cached: one real request per day
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
@@ -437,7 +504,8 @@ def _commit(data, c, labels, tomorrow):
         _pending_cheers.extend(fresh)
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
-                  pending=data["pending"], ts=time.time())
+                  pending=data["pending"], ts=time.time(),
+                  my_friends=list(data.get("my_friends") or []))
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -492,7 +560,8 @@ def _on_render(deck_browser, content):
             content.stats += board.render(_board_data(), c, _state["ts"],
                                           wrap=_wrap_info(), deltas=_deck_deltas(),
                                           exam_eve=_exam_eve_info(),
-                                          rules_stale=client().rules_stale)
+                                          rules_stale=client().rules_stale,
+                                          server_view=_server_view())
     except Exception:
         traceback.print_exc()
 
@@ -525,8 +594,16 @@ def _on_sync_done():
                 if c.get("share_heatmap", True) else "off")
     except Exception:
         traceback.print_exc()
+    row = "off"
+    if c.get("server_board") and stats is not None:
+        row = {"name": client().display_name or "Me",
+               "server": _server_key(),
+               "day": StatsQueries(mw.col).day_label(0),
+               "reviews": int(stats.reviews),
+               "studyTimeMs": int(stats.time_ms),
+               "streak": int(stats.streak)}
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat)
+                  heatmap=heat, board_row=row)
 
 
 def _on_js(handled, message, context):
@@ -543,8 +620,13 @@ def _on_js(handled, message, context):
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)
+        if parts[2] == "server" and c.get("server_board") \
+                and not c.get("paused"):
+            _fetch_server_rows()
     elif cmd == "refresh":
         refresh_board(full=True)
+        if c.get("period") == "server" and c.get("server_board"):
+            _fetch_server_rows(force=True)
     elif cmd == "friends":
         open_friends()
     elif cmd == "decks":
@@ -580,6 +662,10 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings()
+    elif cmd == "scard" and len(parts) > 2:
+        _open_server_card(parts[2])
+    elif cmd == "knock" and len(parts) > 2:
+        _send_knock(parts[2])
     elif cmd == "cheerback" and len(parts) > 3:
         uid, emoji = parts[2], parts[3]
         entry = next((e for e in (_state["entries"] or [])
@@ -599,7 +685,8 @@ def _swap(c):
     html_out = board.render(_board_data(), c, _state["ts"],
                             wrap=_wrap_info(), deltas=_deck_deltas(),
                             exam_eve=_exam_eve_info(),
-                            rules_stale=client().rules_stale)
+                            rules_stale=client().rules_stale,
+                            server_view=_server_view())
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -642,6 +729,64 @@ def _send_cheer(to_uid, to_name, emoji):
         mw.taskman.run_on_main(lambda: tooltip(msg))
 
     threading.Thread(target=job, daemon=True).start()
+
+
+# ---- server board: cards + knocks ----
+
+def _open_server_card(uid):
+    """Click a name on the server board. Crew and you get the full card;
+    everyone else gets the spare stranger card — Add lives there."""
+    if any(e["user_id"] == uid for e in _state["entries"] or []):
+        _open_profile(uid)
+        return
+    row = next((r for r in _state["server_rows"] or []
+                if r["user_id"] == uid), None)
+    if row is None:
+        return
+    pending = uid in _state["my_friends"]
+    mw.web.eval(board.stranger_card_js({
+        "uid": uid, "name": row["name"], "reviews": row["reviews"],
+        "time_ms": row["time_ms"], "streak": row["streak"],
+        "pending": pending,
+    }))
+
+
+def _send_knock(to_uid):
+    """Add from the board: they go in my list (my consent), and a knock
+    tells them (their turn). Crew once they add back."""
+    cl = client()
+    me = cl.user_id
+    if not to_uid or to_uid == me or to_uid in _state["my_friends"]:
+        return
+    friends = list(_state["my_friends"])
+    my_name = cl.display_name or "A friend"
+
+    def job():
+        try:
+            ok = cl.set_friends(me, friends + [to_uid])
+            ok = cl.send_knock(to_uid, me, my_name) and ok
+        except Exception:
+            ok = False
+
+        def done():
+            if ok:
+                _state["my_friends"] = friends + [to_uid]
+                tooltip("Knocked — you're crew when they add back.")
+                _swap(cfg())
+            else:
+                tooltip("Couldn't knock. Check your connection.")
+
+        mw.taskman.run_on_main(done)
+
+    threading.Thread(target=job, daemon=True).start()
+
+
+def _mute_knocker(uid):
+    w = _wrap_data()
+    muted = w.setdefault("muted_knocks", [])
+    if uid not in muted:
+        muted.append(uid)
+        _save_wrap()
 
 
 # ---- friend profile card ----
@@ -760,7 +905,9 @@ def open_friends():
         open_auth()
         return
     from .ui.friends_dialog import FriendsDialog
-    dlg = FriendsDialog(mw, client(), server=_server_config())
+    dlg = FriendsDialog(mw, client(), server=_server_config(),
+                        muted=list(_wrap_data().get("muted_knocks") or []),
+                        on_mute=_mute_knocker)
     dlg.exec()
     if dlg.changed:
         refresh_board(full=True)
@@ -803,7 +950,7 @@ def open_settings():
 
 
 SHARE_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
-              "share_heatmap", "paused", "exam_date")
+              "share_heatmap", "server_board", "paused", "exam_date")
 
 
 def _on_settings_saved(changed):

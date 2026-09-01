@@ -35,7 +35,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak")
-PERIODS = ("today", "week", "days", "decks")
+PERIODS = ("today", "week", "days", "decks", "server")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
@@ -354,7 +354,8 @@ def _pycmd(cmd):
 def _head(period):
     pills = ""
     for key, label in (("today", "Today"), ("week", "Week"),
-                       ("days", "Days"), ("decks", "Decks")):
+                       ("days", "Days"), ("decks", "Decks"),
+                       ("server", "Server")):
         cls = "dc-pill on" if period == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
@@ -517,13 +518,79 @@ def _decks_html(data, deltas=None):
     return html
 
 
+SERVER_SORTS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
+                ("streak", "&#128293; Streak"))
+
+
+def _server_html(view, cfg):
+    """The server board: everyone here chose to be. Plain ranks — no medals,
+    no cheers, no celebration surfaces; these aren't necessarily people you
+    know. Add lives on the person's card (click a name), not on the row."""
+    state = view.get("state")
+    label = _html.escape(str(view.get("server") or "this server"))
+    if state == "optin":
+        return (f'<div class="dc-card"><b>The server board</b>'
+                f'<span>Everyone on {label} who&rsquo;s sharing &mdash; and the '
+                f'place to find new crew. Sharing goes both ways: turn it on in '
+                f'<a href="#" onclick="{_pycmd("settings")}">Privacy</a> '
+                f'to see the board and be on it.</span></div>')
+    if state == "loading":
+        return '<div class="dc-line" style="border-top: none;">Fetching the board&hellip;</div>'
+    if state == "error":
+        return ('<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
+                'reach the board. Check your connection and Refresh.</div>')
+    rows = view.get("rows") or []
+    sort = sort_key(cfg)
+    field = {"reviews": "reviews", "time": "time_ms",
+             "streak": "streak"}.get(sort, "reviews")
+    rows = sorted(rows, key=lambda r: r.get(field) or 0, reverse=True)
+    heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
+             f'<span style="color: var(--dc-muted); font-size: 11px;">{label} &middot; {len(rows)} today</span></th>')
+    for key, htext in SERVER_SORTS:
+        on = "on" if key == sort or (key == "reviews" and field == "reviews"
+                                     and sort not in ("time", "streak")) else ""
+        arrow = " &#9662;" if on else ""
+        heads += (f'<th><a class="{on}" href="#" '
+                  f'onclick="{_pycmd("sort:" + key)}">{htext}{arrow}</a></th>')
+    body = ""
+    for i, r in enumerate(rows):
+        name = _html.escape(str(r["name"]))
+        uid = str(r["user_id"])
+        cls, note = "", ""
+        if r.get("you"):
+            cls = "you"
+            link = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
+                    f'onclick="{_pycmd("profile:" + uid)}">{name}</a>')
+        else:
+            if r.get("crew"):
+                note = ' <span class="la faded">&middot; crew</span>'
+            elif r.get("pending"):
+                note = ' <span class="la faded">&middot; knocked</span>'
+            link = (f'<a class="dc-pl" href="#" title="Open card" '
+                    f'onclick="{_pycmd("scard:" + uid)}">{name}</a>')
+        body += (f'<tr class="{cls}"><td class="rk">#{i + 1}</td>'
+                 f'<td class="nm">{link}{note}</td>'
+                 f'<td class="n">{format(r["reviews"], ",")}</td>'
+                 f'<td class="n">{_fmt_time(r["time_ms"])}</td>'
+                 f'<td class="n">{r["streak"]}</td></tr>')
+    if not body:
+        return ('<div class="dc-line" style="border-top: none;">No one&rsquo;s '
+                'on the board yet today.</div>')
+    note = ('<div class="dc-line" style="border-top: none;">today only &middot; '
+            'click a name to see their card &mdash; adding starts there</div>')
+    return (f'<div class="dc-scroll"><table><tr>{heads}</tr>{body}</table></div>'
+            f'{note}')
+
+
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
-           rules_stale=False):
+           rules_stale=False, server_view=None):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
     body = (_decks_html(data, deltas) if period == "decks"
             else _days_html(data, cfg) if period == "days"
+            else _server_html(server_view or {"state": "optin"}, cfg)
+            if period == "server"
             else _table_html(data, cfg, period))
     if wrap:
         extra = ""
@@ -660,6 +727,89 @@ def flurry_js(emojis, banner_text, back=None):
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
     """ % (back_cmd, banner, emoji_list)
+
+
+def stranger_card_js(info):
+    """Card for a server-board member who isn't crew. Deliberately spare —
+    no heatmap, no cheer, no celebration: we don't necessarily know them.
+    info: uid, name, reviews, time_ms, streak, pending (bool)."""
+    name = _html.escape(str(info.get("name", "?")))
+    stat = (f'{format(int(info.get("reviews") or 0), ",")} reviews today '
+            f'&middot; {_fmt_time(int(info.get("time_ms") or 0))} '
+            f'&middot; {int(info.get("streak") or 0)}-day streak')
+    inner = _json.dumps(
+        f'<div style="display: flex; align-items: baseline; gap: 8px;">'
+        f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
+        f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
+        f' letter-spacing: 0.08em;">on the server board</span></div>'
+        f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>'
+        f'<div style="font-size: 11.5px; opacity: 0.65; padding: 2px 0 0;">'
+        f'Crew see each other&rsquo;s weeks, days, decks, and heatmaps.</div>')
+    if info.get("pending"):
+        act_label = _json.dumps("\u23F3 Knocked — waiting for them")
+        act_cmd, act_primary = _json.dumps(None), "false"
+    else:
+        act_label = _json.dumps("\U0001F91D Add to crew")
+        act_cmd = _json.dumps(f"duecrew:knock:{info.get('uid', '')}")
+        act_primary = "true"
+    return """
+    (function() {
+        var old = document.getElementById('dc-profile');
+        if (old) { old.remove(); }
+        var night = /night/i.test(document.body.className) ||
+            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var accent = night ? '#7cc47f' : '#2e7d32';
+        var back = document.createElement('div');
+        back.id = 'dc-profile';
+        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
+            'display:flex;align-items:flex-start;justify-content:center;padding-top:16vh;';
+        var card = document.createElement('div');
+        card.style.cssText = 'min-width:300px;max-width:380px;border-radius:12px;padding:16px 20px;' +
+            'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
+            (night ? 'background:#23271f;color:#dfe1dc;border:1px solid #3d403b;'
+                   : 'background:#ffffff;color:#333333;border:1px solid #e2e2da;');
+        var body = document.createElement('div');
+        body.innerHTML = %s;
+        card.appendChild(body);
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:12px;';
+        var actCmd = %s;
+        var act = document.createElement('button');
+        act.textContent = %s;
+        var primary = %s;
+        act.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;' +
+            (primary ? 'background:' + accent + ';color:' + (night ? '#122912' : '#ffffff') +
+                       ';border:1px solid transparent;font-weight:600;cursor:pointer;'
+                     : 'background:none;color:inherit;opacity:0.7;border:1px solid ' +
+                       (night ? '#3d403b' : '#e2e2da') + ';cursor:default;');
+        if (actCmd) {
+            act.addEventListener('click', function() {
+                back.remove();
+                if (typeof pycmd !== 'undefined') { pycmd(actCmd); }
+            });
+        }
+        var close = document.createElement('button');
+        close.textContent = 'Close';
+        close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
+            'background:none;color:inherit;border:1px solid ' +
+            (night ? '#3d403b' : '#e2e2da') + ';';
+        close.addEventListener('click', function() { back.remove(); });
+        row.appendChild(act);
+        var spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        row.appendChild(spacer);
+        row.appendChild(close);
+        card.appendChild(row);
+        back.appendChild(card);
+        back.addEventListener('click', function(e) {
+            if (e.target === back) { back.remove(); }
+        });
+        document.addEventListener('keydown', function esc(e) {
+            if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
+        });
+        document.body.appendChild(back);
+    })();
+    """ % (inner, act_cmd, act_label, act_primary)
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
