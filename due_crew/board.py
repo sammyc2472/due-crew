@@ -246,9 +246,13 @@ def _css(cfg):
     return f"""
     <style>
     {_theme_css(cfg)}
-    #due-crew {{ margin: 18px auto 8px; max-width: 620px; color: var(--dc-ink);
+    #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
-    /* no frames, no outlines: the only lines are between rows */
+    /* the board is one white (or night) card; inside it, no rules at all —
+       rows separate by spacing and the you-row highlight, never by lines */
+    #due-crew.dc-frame {{ background: var(--dc-bg); border: 1px solid var(--dc-line);
+      border-radius: 12px; padding: 16px 18px 10px;
+      box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin-bottom: 10px; }}
     #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
@@ -260,11 +264,10 @@ def _css(cfg):
     #due-crew .dc-pill + .dc-pill {{ border-left: none; }}
     #due-crew .dc-scroll {{ overflow-x: auto; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
-    #due-crew th {{ border-bottom: 1px solid var(--dc-line); padding: 2px 8px 5px; text-align: right; }}
+    #due-crew th {{ padding: 2px 8px 6px; text-align: right; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
-    #due-crew td {{ padding: {pad}px 8px; border-bottom: 1px solid var(--dc-line); white-space: nowrap; }}
-    #due-crew tr:last-child td {{ border-bottom: none; }}
+    #due-crew td {{ padding: {pad}px 8px; white-space: nowrap; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
     #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
@@ -313,9 +316,9 @@ def _css(cfg):
     #due-crew .dc-count {{ width: 118px; flex-shrink: 0; text-align: right;
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
       color: var(--dc-muted); }}
-    #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0;
-      border-top: 1px solid var(--dc-line); }}
-    #due-crew .dc-card {{ padding: 16px; text-align: center; }}
+    #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
+    #due-crew .dc-card {{ padding: 16px; text-align: center; border: 1px solid var(--dc-line);
+      border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
@@ -576,7 +579,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<span>Updated {ago} &middot; <a href="#" '
             f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
 
-    return f'<div id="due-crew">{_css(cfg)}{_head(period)}{body}{foot}</div>' 
+    return (f'<div id="due-crew" class="dc-frame">'
+            f'{_css(cfg)}{_head(period)}{body}{foot}</div>')
 
 
 def _card(cfg, title, body_html):
