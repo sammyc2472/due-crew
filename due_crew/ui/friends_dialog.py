@@ -15,7 +15,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from . import attach_alive, run_bg
+from . import accent, attach_alive, run_bg
 
 
 def invite_text(server_name, server_code, friend_code):
@@ -55,7 +55,11 @@ class FriendsDialog(QDialog):
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code_label.setStyleSheet(
             "font-family: Menlo, monospace; font-size: 20px; font-weight: bold;"
-            "letter-spacing: 3px; padding: 6px 12px;")
+            "letter-spacing: 3px; padding: 6px 12px;"
+            # the one styled well in the Qt surfaces: palette roles track
+            # night mode on their own, the accent comes from the theme
+            f"color: {accent()}; background: palette(alternate-base);"
+            "border: 1px solid palette(mid); border-radius: 6px;")
         code_row.addWidget(self.code_label)
         copy = QPushButton("Copy")
         copy.clicked.connect(self._copy)

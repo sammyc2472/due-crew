@@ -27,15 +27,18 @@ class StatsQueries:
             "SELECT COUNT(*) FROM revlog WHERE id >= ? AND id < ? AND ease > 0",
             start, end) or 0
 
-    def study_time_ms_today(self):
-        start, end = self.day_bounds_ms(0)
+    def study_time_ms_for_day(self, days_ago=0):
+        start, end = self.day_bounds_ms(days_ago)
         return self.col.db.scalar(
             "SELECT SUM(time) FROM revlog WHERE id >= ? AND id < ? AND ease > 0",
             start, end) or 0
 
-    def accuracy_today(self):
+    def study_time_ms_today(self):
+        return self.study_time_ms_for_day(0)
+
+    def accuracy_for_day(self, days_ago=0):
         """(correct, total) over learn/review/relearn answers; Again = incorrect."""
-        start, end = self.day_bounds_ms(0)
+        start, end = self.day_bounds_ms(days_ago)
         row = self.col.db.first(
             "SELECT COUNT(CASE WHEN ease > 1 THEN 1 END), COUNT(*) FROM revlog "
             "WHERE id >= ? AND id < ? AND ease > 0 AND type IN (0, 1, 2)",
@@ -44,14 +47,19 @@ class StatsQueries:
             return 0, 0
         return row[0] or 0, row[1] or 0
 
-    def studied_days_ago(self):
+    def accuracy_today(self):
+        return self.accuracy_for_day(0)
+
+    def studied_days_ago(self, max_days=None):
         """Set of days-ago ints (0 = today) that have at least one answer.
-        One query, however long the history."""
+        One query; `max_days` bounds it to an index range scan so per-sync
+        callers stay cheap on huge collections."""
         cutoff = self._cutoff_s()
+        start_ms = 0 if max_days is None else (cutoff - max_days * 86400) * 1000
         rows = self.col.db.list(
             "SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) "
-            "FROM revlog WHERE ease > 0 AND id < ?",
-            cutoff - 1, cutoff * 1000)
+            "FROM revlog WHERE ease > 0 AND id >= ? AND id < ?",
+            cutoff - 1, start_ms, cutoff * 1000)
         return set(rows or [])
 
     def heatmap_counts(self, days=182):

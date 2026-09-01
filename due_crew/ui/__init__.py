@@ -15,6 +15,24 @@ from aqt import mw
 from ..backend.firebase import AuthError, TransportError
 
 
+def _night():
+    try:
+        from aqt.theme import theme_manager
+        return bool(theme_manager.night_mode)
+    except Exception:
+        return False
+
+
+def accent():
+    """Board green, readable on both of Anki's themes. Dialogs rebuild on
+    every open, so a theme change is picked up next time."""
+    return "#7cc47f" if _night() else "#2e7d32"
+
+
+def danger():
+    return "#ef8383" if _night() else "#d32f2f"
+
+
 def attach_alive(dialog):
     dialog._alive = True
     dialog.finished.connect(lambda _=0: setattr(dialog, "_alive", False))

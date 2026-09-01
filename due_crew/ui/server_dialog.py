@@ -13,7 +13,7 @@ from aqt.qt import (
 )
 from aqt.utils import openLink, tooltip
 
-from . import attach_alive, run_bg
+from . import accent, attach_alive, danger, run_bg
 from ..backend import directory
 
 WALKTHROUGH_URL = "https://github.com/sammyc2472/due-crew#run-your-own-crew-server"
@@ -44,7 +44,7 @@ class WelcomeDialog(QDialog):
         signin = QPushButton("Already have an account? Sign in")
         signin.setFlat(True)
         signin.setCursor(Qt.CursorShape.PointingHandCursor)
-        signin.setStyleSheet("color: #2e7d32; border: none; font-size: 11.5px;")
+        signin.setStyleSheet(f"color: {accent()}; border: none; font-size: 11.5px;")
         signin.clicked.connect(lambda: self._pick("signin"))
         root.addWidget(signin, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -87,7 +87,7 @@ class StartCrewDialog(QDialog):
         guide = QPushButton("Open the step-by-step walkthrough")
         guide.setFlat(True)
         guide.setCursor(Qt.CursorShape.PointingHandCursor)
-        guide.setStyleSheet("color: #2e7d32; border: none; text-align: left;")
+        guide.setStyleSheet(f"color: {accent()}; border: none; text-align: left;")
         guide.clicked.connect(lambda: openLink(WALKTHROUGH_URL))
         root.addWidget(guide, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -148,7 +148,7 @@ class JoinServerDialog(QDialog):
 
         self.error = QLabel("")
         self.error.setWordWrap(True)
-        self.error.setStyleSheet("color: #d32f2f; font-size: 12px;")
+        self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
         root.addWidget(self.error)
 
         buttons = QHBoxLayout()

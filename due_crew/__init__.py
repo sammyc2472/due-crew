@@ -28,7 +28,7 @@ from aqt.utils import tooltip
 
 from . import board
 from .backend.firebase import FirebaseClient, TransportError
-from .stats import gather_stats
+from .stats import gather_stats, gather_week
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 
@@ -216,15 +216,18 @@ def _board_data():
 
 # ---- refresh ----
 
-def refresh_board(upload_stats=None, shared_decks=None, heatmap=None, full=False):
+def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
+                  heatmap=None, full=False):
     """Fetch (and optionally upload first) in the background. Main thread
     only. An upload is never dropped: only pure fetches dedup against an
     in-flight refresh. heatmap: dict to upload, "off" to retract, None to
-    leave alone."""
+    leave alone. backfill: last week's studied days, hash-guarded so the
+    steady state stays one daily write per sync."""
     global _fetching
     if not mw.col or not client().signed_in:
         return
-    uploading = upload_stats is not None or shared_decks is not None
+    uploading = (upload_stats is not None or shared_decks is not None
+                 or backfill is not None)
     with _lock:
         if _fetching and not uploading:
             return
@@ -251,12 +254,14 @@ def refresh_board(upload_stats=None, shared_decks=None, heatmap=None, full=False
         try:
             if upload_stats is not None:
                 cl.upload_today(uid, name, labels[0], upload_stats, c)
+            if backfill is not None:
+                cl.upload_backfill(uid, backfill, c)
             if shared_decks is not None and not c.get("paused"):
                 cl.upload_shared(uid, shared_decks)
             if heatmap is not None:
                 if isinstance(heatmap, dict) and not c.get("paused"):
                     cl.upload_heatmap(uid, heatmap)
-                elif cl.session.get("heatmap_hash"):
+                elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
@@ -400,15 +405,28 @@ def _on_sync_done():
     if not mw.col or not client().signed_in:
         return
     c = cfg()
+    # independent try blocks: one gatherer failing must not silently stop
+    # the others from uploading (that failure mode is invisible in the UI)
+    stats = week = decks = heat = None
     try:
         stats = gather_stats(mw.col, _profile_files())
+    except Exception:
+        traceback.print_exc()
+    try:
+        week = gather_week(mw.col, _profile_files())
+    except Exception:
+        traceback.print_exc()
+    try:
         decks = gather_shared_decks(mw.col, c)
+    except Exception:
+        traceback.print_exc()
+    try:
         heat = (StatsQueries(mw.col).heatmap_counts(HEATMAP_DAYS)
                 if c.get("share_heatmap", True) else "off")
     except Exception:
         traceback.print_exc()
-        stats, decks, heat = None, None, None
-    refresh_board(upload_stats=stats, shared_decks=decks, heatmap=heat)
+    refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
+                  heatmap=heat)
 
 
 def _on_js(handled, message, context):
@@ -658,13 +676,21 @@ def open_settings():
     dlg.exec()
 
 
+SHARE_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
+              "share_heatmap", "paused", "exam_date")
+
+
 def _on_settings_saved(changed):
     """`changed` holds only the keys the dialog owns — never a stale
     snapshot of the whole config."""
     c = cfg()
+    push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     c.update(changed)
     save_cfg(c)
     _rerender()
+    if push:
+        # sharing choices apply now, not at whenever the next sync happens
+        _on_sync_done()
 
 
 def _on_signed_out():

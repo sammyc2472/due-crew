@@ -20,13 +20,13 @@ from datetime import date as _date, datetime, timezone
 from .stats.decks import sig_match
 
 LIGHT = {
-    "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
+    "bg": "#ffffff", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
     "accent": "#2e7d32", "accent-ink": "#ffffff", "you-bg": "#e9f2e9",
     "fresh": "#2e7d32", "hours": "#b26a00", "faded": "#aaaaa2",
     "well": "#f2f2ec",
 }
 DARK = {
-    "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
+    "bg": "#23271f", "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
     "accent": "#7cc47f", "accent-ink": "#122912", "you-bg": "#2c372b",
     "fresh": "#7cc47f", "hours": "#dda45c", "faded": "#6d726a",
     "well": "#2b2d29",
@@ -108,9 +108,13 @@ def _week_row(days, labels):
 
 
 def _showed(doc):
-    """A day counts as showed-up when any shared metric proves answers."""
+    """A day counts as showed-up. New docs say so outright (`studied`, the
+    numbers-free field); docs from older versions fall back to whichever
+    shared metric proves answers."""
     if not doc:
         return False
+    if "studied" in doc:
+        return bool(doc["studied"])
     return bool(doc.get("reviews") or doc.get("studyTimeMs") or "accuracy" in doc)
 
 
@@ -241,28 +245,38 @@ def _css(cfg):
     return f"""
     <style>
     {_theme_css(cfg)}
-    #due-crew {{ margin: 18px auto 8px; max-width: 620px; color: var(--dc-ink);
+    #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
+    /* one radius language: board, cards, and overlays are 12px surfaces,
+       inset banners 10px, buttons 6px, data bars 2px, pills full-round —
+       controls are pills, data is rectangles */
+    #due-crew.dc-frame {{ background: var(--dc-bg); border: 1px solid var(--dc-line);
+      border-radius: 12px; padding: 16px 18px 10px;
+      box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin-bottom: 10px; }}
     #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
     #due-crew .dc-pill {{ display: inline-block; font-size: 11px; font-weight: 700;
       padding: 1px 10px; border: 1px solid var(--dc-line); color: var(--dc-muted); text-decoration: none; }}
     #due-crew .dc-pill.on {{ background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }}
-    #due-crew .dc-pill:first-child {{ border-radius: 20px 0 0 20px; }}
-    #due-crew .dc-pill:last-child {{ border-radius: 0 20px 20px 0; }}
+    #due-crew .dc-pill:first-child {{ border-radius: 99px 0 0 99px; }}
+    #due-crew .dc-pill:last-child {{ border-radius: 0 99px 99px 0; }}
     #due-crew .dc-pill + .dc-pill {{ border-left: none; }}
+    #due-crew .dc-scroll {{ overflow-x: auto; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
     #due-crew th {{ border-bottom: 1px solid var(--dc-line); padding: 2px 8px 5px; text-align: right; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
     #due-crew td {{ padding: {pad}px 8px; border-bottom: 1px solid var(--dc-line); white-space: nowrap; }}
+    #due-crew tr:last-child td {{ border-bottom: none; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
     #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
     #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
     #due-crew a.dc-cheer:hover {{ opacity: 1; }}
     #due-crew tr.you td {{ {you_bg} }}
+    #due-crew tr.you td:first-child {{ border-radius: 7px 0 0 7px; }}
+    #due-crew tr.you td:last-child {{ border-radius: 0 7px 7px 0; }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
@@ -314,12 +328,13 @@ def _css(cfg):
     #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
     #due-crew .dtrack .fs {{ background: var(--dc-accent); opacity: 0.35; }}
     #due-crew .dtrack .fm {{ background: var(--dc-accent); }}
-    #due-crew .dc-count {{ width: 100px; flex-shrink: 0; text-align: right;
-      font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .dc-count {{ width: 118px; flex-shrink: 0; text-align: right;
+      white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
+      color: var(--dc-muted); }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0;
       border-top: 1px solid var(--dc-line); }}
     #due-crew .dc-card {{ padding: 16px; text-align: center; border: 1px solid var(--dc-line);
-      border-radius: 10px; }}
+      border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
@@ -405,7 +420,9 @@ def _table_html(data, cfg, period):
     if len(data["entries"]) == 1 and not data.get("pending"):
         solo = ('<div class="dc-line">Just you so far &mdash; share your code '
                 'from the Friends screen.</div>')
-    return f'<table><tr>{heads}</tr>{body}</table>{solo}'
+    # narrow windows scroll the table inside the frame instead of bleeding
+    # square content past the rounded border
+    return f'<div class="dc-scroll"><table><tr>{heads}</tr>{body}</table></div>{solo}'
 
 
 def _days_html(data, cfg):
@@ -529,7 +546,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None):
             f'<span>Updated {ago} &middot; <a href="#" '
             f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
 
-    return f'<div id="due-crew">{_css(cfg)}{_head(period)}{body}{foot}</div>'
+    return (f'<div id="due-crew" class="dc-frame">'
+            f'{_css(cfg)}{_head(period)}{body}{foot}</div>')
 
 
 def _card(cfg, title, body_html):

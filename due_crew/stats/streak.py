@@ -14,15 +14,19 @@ class StreakTracker:
         self.q = queries
         self.path = os.path.join(user_files_dir, "streak.json")
 
-    def current(self):
+    def base(self):
+        """Consecutive studied days ending yesterday; one full revlog pass
+        per day, cached after that."""
         today = self.q.day_label(0)
         cached = self._load()
         if cached.get("date") == today:
-            base = cached.get("base", 0)
-        else:
-            base = self._base_through_yesterday()
-            self._save({"date": today, "base": base})
-        return base + (1 if self.q.reviews_for_day(0) > 0 else 0)
+            return cached.get("base", 0)
+        base = self._base_through_yesterday()
+        self._save({"date": today, "base": base})
+        return base
+
+    def current(self):
+        return self.base() + (1 if self.q.reviews_for_day(0) > 0 else 0)
 
     def _base_through_yesterday(self):
         days = self.q.studied_days_ago()

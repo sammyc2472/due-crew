@@ -128,7 +128,7 @@ def _as_float(v):
 
 
 def _clean_day(doc):
-    """Coerce a daily_stats doc to trusted numeric types; None stays None."""
+    """Coerce a daily_stats doc to trusted types; None stays None."""
     if doc is None:
         return None
     out = {}
@@ -138,6 +138,8 @@ def _clean_day(doc):
             v = conv(doc[key])
             if v is not None:
                 out[key] = v
+    if isinstance(doc.get("studied"), bool):
+        out["studied"] = doc["studied"]
     return out
 
 
@@ -320,11 +322,17 @@ class FirebaseClient:
             return None, r.status_code
         return _parse(r.json().get("fields")), 200
 
-    def patch_doc(self, path, data, mask=None):
+    def patch_doc(self, path, data, mask=None, label=None):
+        """label: names the write in a console line when the server rejects
+        it — a silent False here once hid a rules gap for weeks."""
         mask_q = "&".join(f"updateMask.fieldPaths={k}" for k in (mask or data))
         r = self._req("PATCH", f"{self.base}/{path}?{mask_q}",
                       json={"fields": {k: _fv(v) for k, v in data.items()}})
-        return r.status_code in (200, 201)
+        ok = r.status_code in (200, 201)
+        if not ok and label:
+            print(f"due crew: {label} write rejected ({r.status_code}) at {path}"
+                  " — if this persists, re-publish firestore.rules")
+        return ok
 
     def delete_doc(self, path):
         return self._req("DELETE", f"{self.base}/{path}").status_code == 200
@@ -460,6 +468,38 @@ class FirebaseClient:
     METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
                ("accuracy", "share_retention"), ("streak", "share_streak"))
 
+    def _day_doc(self, label, values, cfg):
+        """(doc, mask) for one daily_stats write. Every field is always in
+        the mask, so a toggled-off (or absent) metric is DELETED server-side,
+        not left stale. `studied` is the numbers-free floor the Days view
+        stands on; it shares whenever sharing isn't paused."""
+        doc = {"date": label, "studied": bool(values.get("reviews"))}
+        mask = ["date", "studied"]
+        for field, share_key in self.METRICS:
+            mask.append(field)
+            if cfg.get(share_key, True) and values.get(field) is not None:
+                doc[field] = values[field]
+        return doc, mask
+
+    def _put_day(self, uid, label, values, cfg):
+        """Write one day's doc, skipped when identical to the last success.
+        The digest covers the post-toggle doc, so flipping a share toggle
+        (not just new reviews) re-writes the day."""
+        doc, mask = self._day_doc(label, values, cfg)
+        digest = hashlib.sha1(
+            json.dumps(doc, sort_keys=True).encode()).hexdigest()
+        hashes = self.session.setdefault("day_hashes", {})
+        if hashes.get(label) == digest:
+            return True
+        if not self.patch_doc(f"users/{uid}/daily_stats/{label}", doc, mask,
+                              label="daily stats"):
+            return False
+        hashes[label] = digest
+        for old in sorted(hashes)[:-(KEEP_DAYS + 1)]:
+            hashes.pop(old, None)
+        self._save_session()
+        return True
+
     def upload_today(self, uid, display_name, label, stats, cfg):
         profile = {
             "displayName": display_name,
@@ -472,23 +512,31 @@ class FirebaseClient:
         exam = _exam_value(cfg.get("exam_date"), label)
         if exam and not cfg.get("paused"):
             profile["examDate"] = exam
-        ok = self.patch_doc(f"users/{uid}", profile, mask)
+        ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
         if cfg.get("paused"):
             return ok
         values = {"reviews": int(stats.reviews),
                   "studyTimeMs": int(stats.time_ms),
                   "accuracy": None if stats.accuracy is None else float(stats.accuracy),
                   "streak": int(stats.streak)}
-        doc = {"date": label}
-        # every metric is always in the mask: a toggled-off (or absent) metric
-        # is thereby DELETED server-side, not left stale
-        mask = ["date"]
-        for field, share_key in self.METRICS:
-            mask.append(field)
-            if cfg.get(share_key, True) and values[field] is not None:
-                doc[field] = values[field]
-        ok = self.patch_doc(f"users/{uid}/daily_stats/{label}", doc, mask) and ok
+        ok = self._put_day(uid, label, values, cfg) and ok
         self._cleanup(uid, label)
+        return ok
+
+    def upload_backfill(self, uid, days, cfg):
+        """Fill the last week's studied days the server missed — a day only
+        exists server-side if a sync ran while it was 'today', which is how
+        a 40-day streak could sit next to a half-empty dot row. Hash-guarded:
+        steady state adds zero writes."""
+        if cfg.get("paused"):
+            return True
+        ok = True
+        for d in days or []:
+            values = {"reviews": int(d["reviews"]),
+                      "studyTimeMs": int(d["time_ms"]),
+                      "accuracy": None if d["accuracy"] is None else float(d["accuracy"]),
+                      "streak": int(d["streak"])}
+            ok = self._put_day(uid, d["label"], values, cfg) and ok
         return ok
 
     def upload_shared(self, uid, decks):
@@ -497,7 +545,8 @@ class FirebaseClient:
             json.dumps(decks, sort_keys=True).encode()).hexdigest()
         if self.session.get("shared_hash") == digest:
             return True
-        if not self.patch_doc(f"users/{uid}/shared/decks", {"decks": decks}):
+        if not self.patch_doc(f"users/{uid}/shared/decks", {"decks": decks},
+                              label="shared decks"):
             return False
         self.session["shared_hash"] = digest
         self._save_session()
@@ -509,9 +558,11 @@ class FirebaseClient:
             json.dumps(counts, sort_keys=True).encode()).hexdigest()
         if self.session.get("heatmap_hash") == digest:
             return True
-        if not self.patch_doc(f"users/{uid}/shared/heatmap", {"counts": counts}):
+        if not self.patch_doc(f"users/{uid}/shared/heatmap", {"counts": counts},
+                              label="heatmap"):
             return False
         self.session["heatmap_hash"] = digest
+        self.session.pop("heatmap_deleted", None)
         self._save_session()
         return True
 
@@ -526,6 +577,7 @@ class FirebaseClient:
     def delete_heatmap(self, uid):
         self.delete_doc(f"users/{uid}/shared/heatmap")
         self.session.pop("heatmap_hash", None)
+        self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
     def _cleanup(self, uid, today_label):

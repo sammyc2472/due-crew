@@ -13,7 +13,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from . import attach_alive, run_bg
+from . import attach_alive, danger, run_bg
 
 DEFAULTS = {
     "show_leaderboard": True, "period": "today", "sort": "reviews",
@@ -130,7 +130,7 @@ class SettingsDialog(QDialog):
         lay.addStretch()
         self._server_rows(lay)
         delete = QPushButton("Delete account…")
-        delete.setStyleSheet("color: #d32f2f;")
+        delete.setStyleSheet(f"color: {danger()};")
         delete.clicked.connect(self._delete)
         lay.addWidget(delete)
 
@@ -322,10 +322,10 @@ class SettingsDialog(QDialog):
         lay.addWidget(exam_note)
         lay.addSpacing(8)
         self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
-        note = QLabel("Takes effect on your next sync. Pausing hides your "
-                      "stats; your streak keeps counting as long as you keep "
-                      "studying. Turning a stat off removes what was already "
-                      "shared today.")
+        note = QLabel("Applies when you save. Pausing hides your stats; your "
+                      "streak keeps counting as long as you keep studying. "
+                      "Turning a stat off removes what was already shared "
+                      "this week.")
         note.setStyleSheet("font-size: 11px;")
         note.setWordWrap(True)
         lay.addWidget(note)

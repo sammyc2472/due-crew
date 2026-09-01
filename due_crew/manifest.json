@@ -2,8 +2,10 @@
   "package": "due_crew",
   "name": "Due Crew",
   "author": "Sammy Caplan",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "homepage": "",
-  "conflicts": ["leaderboard_sidebar"],
+  "conflicts": [
+    "leaderboard_sidebar"
+  ],
   "min_point_version": 55
 }

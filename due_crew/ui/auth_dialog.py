@@ -8,7 +8,7 @@ from aqt.qt import (
     QTabWidget, QTimer, QWidget, Qt,
 )
 
-from . import attach_alive, run_bg
+from . import accent, attach_alive, danger, run_bg
 
 ERRORS = {
     "INVALID_LOGIN_CREDENTIALS": "Email or password is incorrect.",
@@ -51,7 +51,7 @@ class AuthDialog(QDialog):
 
         self.error = QLabel("")
         self.error.setWordWrap(True)
-        self.error.setStyleSheet("color: #d32f2f; font-size: 12px;")
+        self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
         root.addWidget(self.error)
 
         buttons = QHBoxLayout()
@@ -59,7 +59,7 @@ class AuthDialog(QDialog):
             other = QPushButton("Use a different crew server…")
             other.setFlat(True)
             other.setCursor(Qt.CursorShape.PointingHandCursor)
-            other.setStyleSheet("color: #2e7d32; border: none; font-size: 11px;")
+            other.setStyleSheet(f"color: {accent()}; border: none; font-size: 11px;")
             other.clicked.connect(self._other_server)
             buttons.addWidget(other)
         buttons.addStretch()
@@ -97,7 +97,7 @@ class AuthDialog(QDialog):
         forgot = QPushButton("Forgot password?")
         forgot.setFlat(True)
         forgot.setCursor(Qt.CursorShape.PointingHandCursor)
-        forgot.setStyleSheet("color: #2e7d32; text-align: left; border: none;")
+        forgot.setStyleSheet(f"color: {accent()}; text-align: left; border: none;")
         forgot.clicked.connect(self._reset)
         lay.addWidget(forgot, alignment=Qt.AlignmentFlag.AlignLeft)
         lay.addStretch()
@@ -127,7 +127,7 @@ class AuthDialog(QDialog):
     def _submit(self):
         if not self.go.isEnabled():
             return  # returnPressed while a request is in flight
-        self.error.setStyleSheet("color: #d32f2f; font-size: 12px;")
+        self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
         self.error.setText("")
         joining = self.tabs.currentIndex() == 1
         if joining:
@@ -176,7 +176,7 @@ class AuthDialog(QDialog):
             if err:
                 self.error.setText(ERRORS.get(err, ERRORS["NETWORK"]))
             else:
-                self.error.setStyleSheet("color: #2e7d32; font-size: 12px;")
+                self.error.setStyleSheet(f"color: {accent()}; font-size: 12px;")
                 self.error.setText(f"Reset link sent to {email}.")
 
         run_bg(self, lambda: self.client.send_reset(email) or True, done)
