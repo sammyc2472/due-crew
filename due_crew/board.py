@@ -250,9 +250,8 @@ def _css(cfg):
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
     /* the board is one white (or night) card; inside it, no rules at all —
        rows separate by spacing and the you-row highlight, never by lines */
-    #due-crew.dc-frame {{ background: var(--dc-bg); border: 1px solid var(--dc-line);
-      border-radius: 12px; padding: 16px 18px 10px;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
+    #due-crew.dc-frame {{ background: var(--dc-bg); border-radius: 12px;
+      padding: 16px 18px 10px; box-shadow: 0 10px 32px rgba(0,0,0,0.10); }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin-bottom: 10px; }}
     #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
@@ -316,7 +315,7 @@ def _css(cfg):
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
       color: var(--dc-muted); }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
-    #due-crew .dc-card {{ padding: 16px; text-align: center; border: 1px solid var(--dc-line);
+    #due-crew .dc-card {{ padding: 16px; text-align: center;
       border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
