@@ -20,13 +20,13 @@ from datetime import date as _date, datetime, timezone
 from .stats.decks import sig_match
 
 LIGHT = {
-    "bg": "#ffffff", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
+    "bg": "transparent", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
     "accent": "#2e7d32", "accent-ink": "#ffffff", "you-bg": "#e9f2e9",
     "fresh": "#2e7d32", "hours": "#b26a00", "faded": "#aaaaa2",
     "well": "#f2f2ec",
 }
 DARK = {
-    "bg": "#23271f", "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
+    "bg": "transparent", "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
     "accent": "#7cc47f", "accent-ink": "#122912", "you-bg": "#2c372b",
     "fresh": "#7cc47f", "hours": "#dda45c", "faded": "#6d726a",
     "well": "#2b2d29",
@@ -248,8 +248,11 @@ def _css(cfg):
     {_theme_css(cfg)}
     #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
-    /* the board is one flat white (or night) surface; inside it, no rules
-       at all — rows separate by spacing and the you-row highlight */
+    /* the board is content on the Decks page, not a slab on it: the
+       surface is transparent in both themes (a white card on Anki's white
+       canvas was invisible anyway; a tinted card on the night canvas read
+       as a strange background), and inside it there are no rules at all —
+       rows separate by spacing and the you-row highlight */
     #due-crew.dc-frame {{ background: var(--dc-bg); border-radius: 12px;
       padding: 16px 18px 10px; }}
     /* the deck screen is shared with Anki's own styles and other add-ons
