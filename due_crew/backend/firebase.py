@@ -144,6 +144,10 @@ def _clean_day(doc):
                 out[key] = v
     if isinstance(doc.get("studied"), bool):
         out["studied"] = doc["studied"]
+    hours = doc.get("hours")
+    if (isinstance(hours, str) and len(hours) == 24
+            and all(c in "012" for c in hours)):
+        out["hours"] = hours
     return out
 
 
@@ -537,7 +541,8 @@ class FirebaseClient:
     # ---- upload ----
 
     METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
-               ("accuracy", "share_retention"), ("streak", "share_streak"))
+               ("accuracy", "share_retention"), ("streak", "share_streak"),
+               ("hours", "share_time"))  # 24-char intensity string, crew tape
 
     def _day_doc(self, label, values, cfg):
         """(doc, mask) for one daily_stats write. Every field is always in
@@ -549,7 +554,7 @@ class FirebaseClient:
         for field, share_key in self.METRICS:
             mask.append(field)
             if cfg.get(share_key, True) and values.get(field) is not None:
-                doc[field] = values[field]
+                doc[field] = values.get(field)
         return doc, mask
 
     def _put_day(self, uid, label, values, cfg):
@@ -589,10 +594,13 @@ class FirebaseClient:
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
         if cfg.get("paused"):
             return ok
+        from ..share import hour_levels, levels_str
+        hourly = getattr(stats, "hourly", None)
         values = {"reviews": int(stats.reviews),
                   "studyTimeMs": int(stats.time_ms),
                   "accuracy": None if stats.accuracy is None else float(stats.accuracy),
-                  "streak": int(stats.streak)}
+                  "streak": int(stats.streak),
+                  "hours": levels_str(hour_levels(hourly)) if hourly else None}
         ok = self._put_day(uid, label, values, cfg) and ok
         self._cleanup(uid, label)
         return ok

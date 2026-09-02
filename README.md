@@ -40,6 +40,10 @@ streak means what it says.
   your server who's also sharing. No medals, no cheers — these aren't
   necessarily people you know; weeks, days, decks, and heatmaps stay
   crew-only. Tap a name, knock, and you're crew when they add back.
+- **Share it** — paste-ready for the group chat: the crew's day as a
+  tape (everyone's study hours side by side, only those who showed up),
+  or your own day as a sparkline or tape, signed with the add-on code.
+  Copy from the Today view's footer or your own profile card.
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.

@@ -579,6 +579,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 f' &middot; ') + left
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
+    if period == "today":
+        left += (f' &middot; <a href="#" title="Copy the crew\'s day for the chat" '
+                 f'onclick="{_pycmd("sharecrew")}">Share today</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
     foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
@@ -848,6 +851,14 @@ def profile_overlay_js(profile):
         prefix = "Shares with your crew: " if you else "Shares with you: "
         lines += (f'<div style="font-size: 12px; padding: 2px 0; opacity: 0.8;">'
                   f'{prefix}{_html.escape(str(profile["decks_line"]))}</div>')
+
+    if you:
+        link = ('style="color: inherit; font-weight: 700; text-decoration: none; '
+                'border-bottom: 1px dotted currentColor;"')
+        lines += (f'<div style="font-size: 12px; padding: 8px 0 0; opacity: 0.85;">'
+                  f'Copy for the chat: <a href="#" {link} '
+                  f'onclick="{_pycmd("sharetoday")}">today</a> &middot; '
+                  f'<a href="#" {link} onclick="{_pycmd("sharetape")}">tape</a></div>')
 
     inner = _json.dumps(head + grid + lines)
     if you:

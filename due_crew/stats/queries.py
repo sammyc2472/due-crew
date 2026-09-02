@@ -62,6 +62,20 @@ class StatsQueries:
             cutoff - 1, start_ms, cutoff * 1000)
         return set(rows or [])
 
+    def hourly_counts_today(self):
+        """24 review counts by local wall-clock hour, for today's Anki day.
+        One query; the tape and sparkline shares read this."""
+        start, end = self.day_bounds_ms(0)
+        rows = self.col.db.all(
+            "SELECT CAST(strftime('%H', id / 1000, 'unixepoch', 'localtime') "
+            "AS INTEGER), COUNT(*) FROM revlog WHERE id >= ? AND id < ? "
+            "AND ease > 0 GROUP BY 1", start, end)
+        out = [0] * 24
+        for hour, n in rows or []:
+            if 0 <= int(hour) < 24:
+                out[int(hour)] = int(n)
+        return out
+
     def heatmap_counts(self, days=182):
         """{day_label: answer_count} for the last `days` days. One query."""
         cutoff = self._cutoff_s()

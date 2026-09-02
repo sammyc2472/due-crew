@@ -691,6 +691,8 @@ def _on_js(handled, message, context):
         w["dismissed"] = w.get("week", "")
         _save_wrap()
         _swap(c)
+    elif cmd in ("sharetoday", "sharetape", "sharecrew"):
+        _share(cmd)
     elif cmd == "wrapcopy":
         b = _wrap_info() or {}
         if b.get("reviews"):
@@ -739,6 +741,59 @@ def _swap(c):
     })();
     """ % json.dumps(html_out)
     mw.web.eval(js)
+
+
+# ---- shares (clipboard) ----
+
+def _share(kind):
+    """Main thread (collection access + clipboard). Builds one of the
+    paste-ready shares from local stats and the cached board."""
+    if not mw.col:
+        return
+    from . import share
+    try:
+        stats = gather_stats(mw.col, _profile_files())
+    except Exception:
+        traceback.print_exc()
+        return
+    if kind == "sharecrew":
+        text = _crew_share_text(stats)
+        if text is None:
+            tooltip("No one's studied yet today.")
+            return
+    elif kind == "sharetape":
+        text = share.my_today_tape(stats.reviews, stats.time_ms, stats.streak,
+                                   stats.accuracy, stats.hourly)
+    else:
+        text = share.my_today_spark(stats.reviews, stats.time_ms, stats.streak,
+                                    stats.accuracy, stats.hourly)
+    QApplication.clipboard().setText(text)
+    tooltip("Copied.")
+
+
+def _crew_share_text(stats):
+    """My row from local revlog (fresh); friends' rows from their uploaded
+    hours. Only people who studied today become rows."""
+    from . import share
+    labels, tomorrow = _state["labels"], _state["tomorrow"]
+    today = labels[0] if labels else ""
+    rows, cards = [], 0
+    for e in _state["entries"] or []:
+        if e.get("paused"):
+            continue
+        if e["you"]:
+            levels, n = share.hour_levels(stats.hourly), stats.reviews
+        else:
+            days = e.get("days") or {}
+            doc = days.get(tomorrow) or days.get(today) or {}
+            levels, n = share.levels_from_str(doc.get("hours")), doc.get("reviews")
+        if levels and any(levels):
+            rows.append((e["name"], levels))
+            cards += int(n or 0)
+    if not rows and stats.reviews:
+        rows.append((client().display_name or "Me", share.hour_levels(stats.hourly)))
+        cards = stats.reviews
+    return share.crew_today(server_name() or "Crew", rows, cards)
 
 
 # ---- cheers ----

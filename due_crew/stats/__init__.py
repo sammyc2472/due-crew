@@ -12,6 +12,7 @@ class UserStats:
     time_ms: int
     accuracy: Optional[float]  # None until the first answer of the day
     streak: int
+    hourly: Optional[list] = None  # 24 counts by wall-clock hour (shares)
 
 
 def gather_stats(col, user_files_dir):
@@ -23,6 +24,7 @@ def gather_stats(col, user_files_dir):
         time_ms=q.study_time_ms_today(),
         accuracy=(correct / total * 100) if total else None,
         streak=StreakTracker(q, user_files_dir).current(),
+        hourly=q.hourly_counts_today(),
     )
 
 
