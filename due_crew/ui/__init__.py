@@ -10,9 +10,44 @@ back on the main thread, only while the owner is still alive. error_code is
 an AuthError code, "NETWORK" for transport failures, or None.
 """
 
+import subprocess
+import sys
+
 from aqt import mw
+from aqt.qt import QApplication
 
 from ..backend.firebase import AuthError, TransportError
+
+
+def copy_text(text):
+    """Put text on the system clipboard, emoji and all.
+
+    Qt's macOS pasteboard also offers a legacy "traditional Mac plain text"
+    flavor, converted through Latin-1 with '?' for anything it can't encode
+    — and some apps paste that one, turning every emoji and block glyph
+    into '?' (and '·' into '∑'). pbcopy under a UTF-8 locale writes only
+    the UTF-8 flavor, so it goes first on macOS; Qt with explicit UTF-8
+    mime data is the fallback everywhere else."""
+    text = str(text)
+    if sys.platform == "darwin":
+        try:
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True,
+                           timeout=5, env={"LC_ALL": "en_US.UTF-8",
+                                           "LANG": "en_US.UTF-8",
+                                           "PATH": "/usr/bin:/bin"})
+            return True
+        except Exception:
+            pass  # fall through to Qt
+    clip = QApplication.clipboard()
+    try:
+        from aqt.qt import QMimeData
+        mime = QMimeData()
+        mime.setText(text)
+        mime.setData("text/plain;charset=utf-8", text.encode("utf-8"))
+        clip.setMimeData(mime)
+    except Exception:
+        clip.setText(text)
+    return True
 
 
 def _night():

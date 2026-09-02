@@ -13,7 +13,7 @@ from aqt.qt import (
 )
 from aqt.utils import openLink, tooltip
 
-from . import accent, attach_alive, danger, run_bg
+from . import accent, attach_alive, copy_text, danger, run_bg
 from ..backend import directory
 
 WALKTHROUGH_URL = "https://github.com/sammyc2472/due-crew#run-your-own-crew-server"
@@ -381,7 +381,7 @@ class RegisterServerDialog(QDialog):
     def _copy(self):
         if self.result:
             name, code, _conf = self.result
-            QApplication.clipboard().setText(f"Server: {name}\nCode: {code}")
+            copy_text(f"Server: {name}\nCode: {code}")
             tooltip("Copied.")
 
     def _use(self):

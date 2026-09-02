@@ -15,7 +15,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from . import accent, attach_alive, run_bg
+from . import accent, attach_alive, copy_text, run_bg
 
 
 def invite_text(server_name, server_code, friend_code):
@@ -247,13 +247,12 @@ class FriendsDialog(QDialog):
 
     def _copy(self):
         if self.code:
-            QApplication.clipboard().setText(self.code)
+            copy_text(self.code)
             tooltip("Copied.")
 
     def _copy_invite(self):
         if self.code:
-            QApplication.clipboard().setText(
-                invite_text(self.server_name, self.server_code, self.code))
+            copy_text(invite_text(self.server_name, self.server_code, self.code))
             tooltip("Invite copied.")
 
     def _add(self):

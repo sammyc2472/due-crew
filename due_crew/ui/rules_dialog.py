@@ -14,7 +14,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from . import attach_alive
+from . import attach_alive, copy_text
 
 CONSOLE_URL = "https://console.firebase.google.com"
 
@@ -82,5 +82,5 @@ class RulesUpdateDialog(QDialog):
     def _copy(self):
         text = rules_text()
         if text:
-            QApplication.clipboard().setText(text)
+            copy_text(text)
             tooltip("Rules copied — paste them into the Firebase console.")

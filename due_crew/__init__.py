@@ -31,6 +31,7 @@ from .backend.firebase import FirebaseClient, TransportError
 from .stats import duet_runs, gather_stats, gather_week
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
+from .ui import copy_text
 
 CHEER_EMOJI = ("\U0001F389", "\U0001F4AA", "\U0001F525")  # party, muscle, fire
 STREAK_MILESTONES = (7, 30, 100, 365)
@@ -702,7 +703,7 @@ def _on_js(handled, message, context):
                 text += f" · everyone showed up {b['full_days']} of 7 days"
             if b.get("milestone"):
                 text += f" · just passed {b['milestone']} all-time"
-            QApplication.clipboard().setText(text + " — Due Crew")
+            copy_text(text + " — Due Crew")
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings()
@@ -767,7 +768,7 @@ def _share(kind):
     else:
         text = share.my_today_spark(stats.reviews, stats.time_ms, stats.streak,
                                     stats.accuracy, stats.hourly)
-    QApplication.clipboard().setText(text)
+    copy_text(text)
     tooltip("Copied.")
 
 
