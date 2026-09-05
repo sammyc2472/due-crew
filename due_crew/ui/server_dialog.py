@@ -8,8 +8,8 @@ guards) so the Friends dialog can assemble a complete invite."""
 import html
 
 from aqt.qt import (
-    QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QPushButton, Qt, QTimer, QVBoxLayout,
+    QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QLineEdit,
+    QListWidget, QPushButton, Qt, QTimer, QVBoxLayout,
 )
 from aqt.utils import openLink, tooltip
 
@@ -220,6 +220,7 @@ class JoinServerDialog(QDialog):
                 self.error.setText("No server matches that name and code.")
                 return
             conf["code"] = code
+            conf.setdefault("key", directory.crew_key(name, code))
             self.joined = True
             self.on_switch(conf)
             self.accept()
@@ -228,10 +229,14 @@ class JoinServerDialog(QDialog):
 
 
 class RegisterServerDialog(QDialog):
-    def __init__(self, parent, on_switch, prefill=None):
+    def __init__(self, parent, on_switch, prefill=None, current_key="",
+                 current_name=""):
         super().__init__(parent)
         self.on_switch = on_switch
         self.prefill = prefill  # (api_key, project_id) of a custom server
+        self.current_key = current_key or ""  # my crew: offered as alias target
+        self.current_name = current_name or ""
+        self.alias_box = None
         self.result = None  # (name, code, config)
         self.used = False
         attach_alive(self)
@@ -268,6 +273,12 @@ class RegisterServerDialog(QDialog):
         name_note.setStyleSheet("font-size: 11px;")
         name_note.setWordWrap(True)
         root.addWidget(name_note)
+        if self.current_key:
+            self.alias_box = QCheckBox(
+                f"This is a new name for my current crew ({self.current_name}) — "
+                f"people who join with it share our board")
+            self.alias_box.setChecked(False)
+            root.addWidget(self.alias_box)
         if self.prefill and all(self.prefill):
             self.key_input.setText(self.prefill[0])
             self.project_input.setText(self.prefill[1])
@@ -356,8 +367,9 @@ class RegisterServerDialog(QDialog):
                                     "default project.")
                 return
             name, code = result
+            key = alias or directory.crew_key(name, code)
             self.result = (name, code, {"apiKey": api_key, "projectId": project,
-                                        "name": name, "code": code})
+                                        "name": name, "code": code, "key": key})
             self.status.setText("")
             self.result_box.setText(
                 f"<b>Registered.</b><br>Name (say it aloud): <b>{name}</b><br>"
@@ -369,10 +381,14 @@ class RegisterServerDialog(QDialog):
             self.copy_btn.show()
             self.use_btn.show()
 
+        alias = (self.current_key if self.alias_box is not None
+                 and self.alias_box.isChecked() else None)
+
         def job():
             try:
                 return directory.register_server(api_key, project,
-                                                 custom_name=custom or None)
+                                                 custom_name=custom or None,
+                                                 crew_key_alias=alias)
             except directory.NameTaken:
                 return "TAKEN"
 
@@ -389,3 +405,67 @@ class RegisterServerDialog(QDialog):
             self.used = True
             self.on_switch(self.result[2])
             self.accept()
+
+
+class CrewCodeDialog(QDialog):
+    """A member who joined before v1.6 never kept the crew code, and the
+    board now needs it (the crew key is derived from name + code). One
+    field; the directory confirms the pair before anything is stored."""
+
+    def __init__(self, parent, server_name):
+        super().__init__(parent)
+        self.server_name = server_name
+        self.code = None
+        attach_alive(self)
+        self.setWindowTitle("Due Crew — Crew code")
+        self.setMinimumWidth(360)
+        root = QVBoxLayout(self)
+        intro = QLabel()
+        intro.setTextFormat(Qt.TextFormat.PlainText)
+        intro.setWordWrap(True)
+        intro.setText(f"Enter the code for {server_name} once — the same "
+                      f"6-character code you joined with. It unlocks the "
+                      f"server board.")
+        root.addWidget(intro)
+        self.code_input = QLineEdit()
+        self.code_input.setPlaceholderText("6-character code")
+        self.code_input.setMaxLength(6)
+        self.code_input.returnPressed.connect(self._check)
+        root.addWidget(self.code_input)
+        self.error = QLabel("")
+        self.error.setStyleSheet("color: #d32f2f; font-size: 12px;")
+        self.error.setWordWrap(True)
+        root.addWidget(self.error)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        self.go_btn = QPushButton("Unlock")
+        self.go_btn.setDefault(True)
+        self.go_btn.clicked.connect(self._check)
+        buttons.addWidget(self.go_btn)
+        root.addLayout(buttons)
+
+    def _check(self):
+        if not self.go_btn.isEnabled():
+            return
+        code = self.code_input.text().strip().upper()
+        if len(code) != 6:
+            self.error.setText("Codes are 6 characters.")
+            return
+        self.go_btn.setEnabled(False)
+        self.error.setText("")
+
+        def done(conf, err):
+            self.go_btn.setEnabled(True)
+            if err:
+                self.error.setText("Can't reach the directory. Check your connection.")
+                return
+            if conf is None:
+                self.error.setText("That code doesn't match this crew.")
+                return
+            self.code = code
+            self.accept()
+
+        run_bg(self, lambda: directory.lookup_server(self.server_name, code), done)

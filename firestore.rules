@@ -21,6 +21,14 @@ service cloud.firestore {
              request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends;
     }
 
+    // v1.10: crew membership. A crew key is sha1(name:code) — the same
+    // capability the directory uses — and holding a membership doc under
+    // it is what makes someone "on this server". The path is the proof:
+    // you cannot create a membership under a key you cannot compute.
+    function isMember(crewKey, userId) {
+      return exists(/databases/$(database)/documents/servers/$(crewKey)/members/$(userId));
+    }
+
     match /users/{userId} {
       // Profiles are readable by any signed-in user. The client uses this to
       // show display names and to detect "did they add me back?".
@@ -50,16 +58,22 @@ service cloud.firestore {
                               && request.resource.data.emoji in ['🎉', '💪', '🔥'];
       }
 
-      // v1.8: knocks — "wants to be crew", one small doc per sender,
-      // allowed only between people showing themselves on the server
-      // board. Overwrite semantics: one outstanding knock per sender.
+      // v1.8: knocks — "wants to be crew", one small doc per sender.
+      // v1.10: allowed only between two people who both hold a membership
+      // in the crew the knock names (`crew` = the crew key) and are both
+      // showing themselves on that crew's board. Overwrite semantics: one
+      // outstanding knock per sender.
       match /knocks/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if request.auth != null
                               && request.auth.uid == senderId
+                              && request.resource.data.keys().hasOnly(['name', 'at', 'crew'])
+                              && request.resource.data.crew is string
+                              && request.resource.data.crew.size() == 40
+                              && isMember(request.resource.data.crew, senderId)
+                              && isMember(request.resource.data.crew, userId)
                               && get(/databases/$(database)/documents/users/$(userId)).data.openBoard == true
-                              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true
-                              && request.resource.data.keys().hasOnly(['name', 'at']);
+                              && get(/databases/$(database)/documents/users/$(senderId)).data.openBoard == true;
       }
     }
 
@@ -81,14 +95,45 @@ service cloud.firestore {
     match /servers/{key} {
       allow get: if true;
       allow list: if false;
+      // v1.10: an optional `crewKey` marks this name as an alias (rename)
+      // of an existing crew, so its joiners land on that crew's board.
       allow create: if request.auth != null
                     && key.size() == 40
-                    && request.resource.data.keys().hasOnly(['apiKey', 'projectId', 'name', 'createdAt'])
+                    && request.resource.data.keys().hasOnly(['apiKey', 'projectId', 'name', 'createdAt', 'crewKey'])
                     && request.resource.data.apiKey is string
                     && request.resource.data.apiKey.size() < 100
                     && request.resource.data.projectId is string
-                    && request.resource.data.projectId.size() < 100;
+                    && request.resource.data.projectId.size() < 100
+                    && (!('crewKey' in request.resource.data)
+                        || (request.resource.data.crewKey is string
+                            && request.resource.data.crewKey.size() == 40));
       allow update, delete: if false;
+
+      // v1.10: membership — one doc per member, self-owned, under the crew
+      // key. Creating it requires knowing the key (the join code), and it
+      // is the gate for everything below. Readable only by its owner.
+      match /members/{userId} {
+        allow get: if isOwner(userId);
+        allow list, update: if false;
+        allow create: if isOwner(userId)
+                      && request.resource.data.keys().hasOnly(['at']);
+        allow delete: if isOwner(userId);
+      }
+
+      // v1.10: the server board — one compact, self-owned row per sharer,
+      // scoped to the crew by path. Reading requires being a member AND
+      // sharing yourself (symmetric); writing your row requires membership.
+      match /board/{userId} {
+        allow read: if isAuthenticated()
+                    && isMember(key, request.auth.uid)
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true;
+        allow create, update: if isOwner(userId)
+                    && isMember(key, userId)
+                    && request.resource.data.keys().hasOnly(
+                         ['name', 'day', 'dayStart', 'reviews', 'studyTimeMs',
+                          'streak', 'updatedAt']);
+        allow delete: if isOwner(userId);
+      }
     }
 
     // Rules-generation markers — no data ever lives here. The client GETs
@@ -98,20 +143,16 @@ service cloud.firestore {
     // rules must still satisfy older clients' probes); add a version here
     // and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4'];
       allow list, create, update, delete: if false;
     }
 
-    // v1.8: the server board — one compact, self-owned public row per
-    // sharer. Reading requires the reader to be sharing too (symmetric by
-    // rule, not by promise); pausing or opting out deletes the row.
+    // v1.8–v1.9 server board: RETIRED in v1.10. Its rows were scoped only
+    // client-side, so any sharer on the project could read every crew's
+    // rows. Reads and writes are closed; owners may still delete their old
+    // row (the v1.10 client does so once).
     match /server_board/{userId} {
-      allow read: if isAuthenticated()
-                  && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true;
-      allow create, update: if isOwner(userId)
-                  && request.resource.data.keys().hasOnly(
-                       ['name', 'server', 'day', 'reviews', 'studyTimeMs',
-                        'streak', 'updatedAt']);
+      allow read, create, update: if false;
       allow delete: if isOwner(userId);
     }
 

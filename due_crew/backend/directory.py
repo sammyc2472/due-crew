@@ -42,6 +42,12 @@ def _key(name, code):
                         .encode()).hexdigest()
 
 
+def crew_key(name, code):
+    """The crew capability: sha1(name:code). Knowing it is what proves you
+    joined; memberships and board rows live under it (rules-v4)."""
+    return _key(name, code)
+
+
 def generate_name():
     return (f"{secrets.choice(ADJECTIVES)}-{secrets.choice(ANIMALS)}"
             f"-{secrets.randbelow(9000) + 1000}")
@@ -105,10 +111,11 @@ class NameTaken(Exception):
     """A custom name already exists — the founder picks another."""
 
 
-def register_server(api_key, project_id, custom_name=None):
+def register_server(api_key, project_id, custom_name=None, crew_key_alias=None):
     """Registers a founder's project. Returns (name, code).
-    Raises NameTaken for an occupied custom name,
-    TransportError/AuthError otherwise."""
+    `crew_key_alias`: register this name as an alias (rename) of an existing
+    crew — its joiners land on that crew's board. Raises NameTaken for an
+    occupied custom name, TransportError/AuthError otherwise."""
     token = _anonymous_token()
     for _ in range(4):
         name = custom_name or generate_name()
@@ -123,12 +130,15 @@ def register_server(api_key, project_id, custom_name=None):
                     raise NameTaken(name)
                 continue  # generated name taken — new roll
             raise TransportError(f"name registration failed: {status}")
-        ok, status = _create_doc(token, "servers", _key(name, code), {
+        config = {
             "apiKey": api_key,
             "projectId": project_id,
             "name": name,
             "createdAt": {"timestampValue": _now_ts()},
-        })
+        }
+        if crew_key_alias:
+            config["crewKey"] = str(crew_key_alias)
+        ok, status = _create_doc(token, "servers", _key(name, code), config)
         if not ok:
             raise TransportError(f"config registration failed: {status}")
         return name, code
@@ -152,8 +162,11 @@ def follow_rename(name):
 
 
 def lookup_server(name, code):
-    """{apiKey, projectId, name} or None when name+code match nothing."""
-    r = _req("GET", f"{BASE}/servers/{_key(name, code)}")
+    """{apiKey, projectId, name, key} or None when name+code match nothing.
+    `key` is the crew key to hold membership under: this name's own key,
+    or the crew it aliases when the founder registered it as a rename."""
+    own = _key(name, code)
+    r = _req("GET", f"{BASE}/servers/{own}")
     if r.status_code == 404:
         return None
     if r.status_code != 200:
@@ -161,8 +174,10 @@ def lookup_server(name, code):
     doc = _parse(r.json().get("fields"))
     if not doc.get("apiKey") or not doc.get("projectId"):
         return None
+    alias = doc.get("crewKey")
+    key = alias if isinstance(alias, str) and len(alias) == 40 else own
     return {"apiKey": str(doc["apiKey"]), "projectId": str(doc["projectId"]),
-            "name": str(doc.get("name") or name)}
+            "name": str(doc.get("name") or name), "key": key}
 
 
 def browse_names(limit=30):

@@ -12,14 +12,22 @@ maintainer. The repo is the source of truth; there is no build step.
   and the crew-server directory are enforced here.
 - `README.md` — doubles verbatim as the AnkiWeb listing description; keep
   them in sync when it changes.
+- `tests/` — `python3 tests/test_due_crew.py` (client behavior against a
+  fake Firestore; standard library only) and `tests/rules/` (the real
+  rules, in the Firestore emulator — needs firebase-tools + Java). See
+  `tests/README.md`. `docs/manual-anki-checklist.md` is the click-test.
 
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.
-2. If `firestore.rules` changed: bump the `meta/{marker}` version there AND
-   `RULES_MARKER` in `backend/firebase.py`, copy the file to
-   `due_crew/firestore.rules` (the in-app rules dialog ships that copy), and
-   re-publish in the Firebase console.
+2. If `firestore.rules` changed: add the new `meta/{marker}` version there
+   (the list is cumulative — older clients keep probing older markers) AND
+   bump `RULES_MARKER` in `backend/firebase.py`, copy the file to
+   `due_crew/firestore.rules` (the in-app rules dialog ships that copy),
+   run the emulator rules test, and re-publish in the Firebase console.
+   A rules change that closes a path older clients use (v1.10 closed
+   `server_board`) is a breaking change: say so in the release notes —
+   those clients' tripwire fires on their next rejected write.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
 4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the

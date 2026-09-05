@@ -253,17 +253,16 @@ def _css(cfg):
        spacing and the you-row highlight alone */
     #due-crew.dc-frame {{ background: var(--dc-bg); border-radius: 12px;
       padding: 16px 18px 10px; }}
-    /* the deck screen is shared with Anki's own styles and other add-ons
-       (AMBOSS, AnkiHub, Review Heatmap all inject CSS here). None of them
-       may redecorate this board: no borders, shadows, or radii on the
-       table, ever — and no horizontal scrollbar on the page; everything
-       of ours already fits any window (the name column ellipsizes). */
-    body {{ overflow-x: hidden !important; }}
+    /* the deck screen is shared with Anki's own styles (26.x paints
+       `.fancy table` with a glass fill) and other add-ons' CSS. None of
+       them may redecorate this board: no borders, shadows, radii, or fills
+       on the table — every rule below is scoped to #due-crew, and nothing
+       here touches the page. The table never needs to scroll or be
+       clipped: the name column absorbs the slack and ellipsizes. */
     #due-crew, #due-crew table, #due-crew tr, #due-crew th, #due-crew td {{
       border: 0 !important; box-shadow: none !important; outline: 0 !important; }}
     #due-crew table, #due-crew tr, #due-crew th, #due-crew td {{
-      border-radius: 0 !important; overflow: visible !important;
-      background: transparent !important; }}
+      border-radius: 0 !important; background: transparent !important; }}
     /* the one fill inside the card: your row (re-asserted after the reset) */
     #due-crew tr.you td {{ {you_bg.replace(";", " !important;") if you_bg else ""} }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
@@ -280,7 +279,7 @@ def _css(cfg):
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
     #due-crew td {{ padding: {pad}px 8px; white-space: nowrap; }}
-    #due-crew td.nm {{ width: 100%; max-width: 0; overflow: hidden;
+    #due-crew td.nm {{ width: 100%; max-width: 0; overflow: hidden !important;
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
@@ -477,11 +476,28 @@ def _server_html(view, cfg):
                 f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
                 f'text-decoration: none;" onclick="{_pycmd("settings")}">Privacy</a> '
                 f'to see the board and be on it.</div>')
+    if state == "nokey":
+        if view.get("named"):
+            return (f'<div style="text-align: center; padding: 18px 8px 14px; '
+                    f'font-size: 12px; color: var(--dc-muted);">'
+                    f'The board for {label} needs your crew code once &mdash; '
+                    f'the same code you joined with. '
+                    f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
+                    f'text-decoration: none;" onclick="{_pycmd("crewcode")}">'
+                    f'Enter it</a></div>')
+        return ('<div style="text-align: center; padding: 18px 8px 14px; '
+                'font-size: 12px; color: var(--dc-muted);">'
+                'The server board is for named crews. Join one from '
+                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
+                f'text-decoration: none;" onclick="{_pycmd("settings")}">Settings</a>.'
+                '</div>')
     if state == "loading":
         return '<div class="dc-line" style="border-top: none;">Fetching the board&hellip;</div>'
     if state == "error":
         return ('<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
-                'reach the board. Check your connection and Refresh.</div>')
+                'load the board. Check your connection and Refresh &mdash; or, '
+                'if this keeps happening, the crew&rsquo;s server rules may '
+                'predate this version of Due Crew.</div>')
     rows = view.get("rows") or []
     sort = sort_key(cfg)
     field = {"reviews": "reviews", "time": "time_ms",

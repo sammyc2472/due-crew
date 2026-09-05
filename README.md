@@ -37,13 +37,19 @@ streak means what it says.
   project. One person does the setup; everyone else joins with a name and
   a code — a name the founder can pick ("busm").
 - **Server board** — opt in (Privacy) to a Today-only board of everyone on
-  your server who's also sharing. No medals, no cheers — these aren't
+  your crew server who's also sharing. No medals, no cheers — these aren't
   necessarily people you know; weeks, days, decks, and heatmaps stay
-  crew-only. Tap a name, knock, and you're crew when they add back.
+  crew-only. Tap a name, knock, and you're crew when they add back. The
+  board is scoped to the crew you joined with a name and code: other crews,
+  even on the same Firebase project, can't see it or knock you.
 - **Share it** — paste-ready for the group chat: the crew's day as a
   tape (everyone's study hours side by side, only those who showed up),
   or your own day as a sparkline or tape, signed with the add-on code.
-  Copy from the Today view's footer or your own profile card.
+  Copy from the Today view's footer or your own profile card. Counts are
+  reviews (every answer counts); a day runs from your Anki rollover hour;
+  friends' hours sit on your clock, as of their last sync; anyone who
+  studied but doesn't share hours is counted as "not sharing hours", and a
+  total missing someone's hidden count says "(partial)".
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.
@@ -68,7 +74,9 @@ and double-click it. Anki 2.1.55+.
 
 Stats live in Firebase, readable only by people you've added — and, only
 if you opt into the server board, a single name-and-today's-numbers row
-readable by others who've opted in too. All of it is enforced
+readable by others on the same crew who've opted in too. "Same crew" means
+they joined with the same name and code (the code is the key; it is
+brute-forceable offline, so treat it like a password). All of it is enforced
 server-side by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
 in this repo. Your email is used for sign-in only and is never shown to
@@ -99,7 +107,8 @@ as usual. Your crew runs on your own free Firebase quota.
 
 If a later Due Crew version needs updated rules, the board shows "Server
 rules need an update" with a one-click copy of the new rules — re-do step 3
-and you're current.
+and you're current. v1.10's rules close the old unscoped server board, so
+members on older versions see that notice until they update the add-on.
 
 Renaming your crew: register the new name in Anki, then in the Firebase
 console open Firestore → `server_names` → your old name's doc and add a
@@ -110,7 +119,9 @@ automatically within a day — only the project owner can write that field.
 
 Open source, MIT: https://github.com/sammyc2472/due-crew — issues and pull
 requests welcome. The add-on is plain Python + Anki hooks, no build step.
-Package with:
+Tests: `python3 tests/test_due_crew.py` (no dependencies) and the emulator
+rules test in `tests/rules/` — see `tests/README.md`; the manual Anki
+checklist is in `docs/`. Package with:
 
     cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"
 

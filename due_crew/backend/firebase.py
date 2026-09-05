@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v3"
+RULES_MARKER = "rules-v4"
 
 
 def firestore_base(project_id):
@@ -144,6 +144,9 @@ def _clean_day(doc):
                 out[key] = v
     if isinstance(doc.get("studied"), bool):
         out["studied"] = doc["studied"]
+    day_start = _as_int(doc.get("dayStart"))
+    if day_start is not None and day_start > 0:
+        out["dayStart"] = day_start
     hours = doc.get("hours")
     if (isinstance(hours, str) and len(hours) == 24
             and all(c in "012" for c in hours)):
@@ -152,7 +155,7 @@ def _clean_day(doc):
 
 
 def _clean_board_row(uid, fields):
-    """Coerce a server_board row to a trusted shape; None if unusable."""
+    """Coerce a board row to a trusted shape; None if unusable."""
     if not isinstance(fields, dict):
         return None
     day = fields.get("day")
@@ -161,6 +164,7 @@ def _clean_board_row(uid, fields):
     return {"user_id": str(uid),
             "name": str(fields.get("name", "?")),
             "day": day,
+            "day_start": _as_int(fields.get("dayStart")),
             "reviews": _as_int(fields.get("reviews")) or 0,
             "time_ms": _as_int(fields.get("studyTimeMs")) or 0,
             "streak": _as_int(fields.get("streak")) or 0}
@@ -542,7 +546,8 @@ class FirebaseClient:
 
     METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
                ("accuracy", "share_retention"), ("streak", "share_streak"),
-               ("hours", "share_time"))  # 24-char intensity string, crew tape
+               ("hours", "share_time"),   # 24-char intensity string, crew tape
+               ("dayStart", "share_time"))  # epoch of the day start: anchors hours
 
     def _day_doc(self, label, values, cfg):
         """(doc, mask) for one daily_stats write. Every field is always in
@@ -596,11 +601,13 @@ class FirebaseClient:
             return ok
         from ..share import hour_levels, levels_str
         hourly = getattr(stats, "hourly", None)
+        day_start = getattr(stats, "day_start", None)
         values = {"reviews": int(stats.reviews),
                   "studyTimeMs": int(stats.time_ms),
                   "accuracy": None if stats.accuracy is None else float(stats.accuracy),
                   "streak": int(stats.streak),
-                  "hours": levels_str(hour_levels(hourly)) if hourly else None}
+                  "hours": levels_str(hour_levels(hourly)) if hourly else None,
+                  "dayStart": int(day_start) if (hourly and day_start) else None}
         ok = self._put_day(uid, label, values, cfg) and ok
         self._cleanup(uid, label)
         return ok
@@ -662,41 +669,84 @@ class FirebaseClient:
         self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
-    def upload_board_row(self, uid, row):
-        """Upsert my compact public row; skipped when unchanged."""
+    def ensure_membership(self, crew_key, uid):
+        """Hold a membership under the crew key (rules-v4): one create, ever,
+        per key — remembered in the session. The path is the capability."""
+        if self.session.get("member_key") == crew_key:
+            return True
+        if not self.patch_doc(f"servers/{crew_key}/members/{uid}",
+                              {"at": {"timestampValue": _now_ts()}},
+                              label="membership"):
+            return False
+        self.session["member_key"] = crew_key
+        self._save_session()
+        return True
+
+    def upload_board_row(self, crew_key, uid, row):
+        """Upsert my compact row under the crew key; skipped when unchanged.
+        Requires membership (rules enforce it; we make sure first)."""
+        if not self.ensure_membership(crew_key, uid):
+            return False
         digest = hashlib.sha1(
-            json.dumps(row, sort_keys=True).encode()).hexdigest()
+            json.dumps([crew_key, row], sort_keys=True).encode()).hexdigest()
         if self.session.get("board_row_hash") == digest:
             return True
         data = dict(row)
         data["updatedAt"] = {"timestampValue": _now_ts()}
-        if not self.patch_doc(f"server_board/{uid}", data,
+        if not self.patch_doc(f"servers/{crew_key}/board/{uid}", data,
                               mask=list(row) + ["updatedAt"],
                               label="server board"):
             return False
         self.session["board_row_hash"] = digest
+        self.session["board_row_key"] = crew_key
         self.session.pop("board_row_deleted", None)
         self._save_session()
         return True
 
-    def delete_board_row(self, uid):
-        self.delete_doc(f"server_board/{uid}")
+    def delete_board_row(self, uid, crew_key=None):
+        """Retract my row (opt-out, pause, or crew change). Deletes under
+        the key the row was written to; once, not per sync."""
+        key = crew_key or self.session.get("board_row_key")
+        if key:
+            self.delete_doc(f"servers/{key}/board/{uid}")
         self.session.pop("board_row_hash", None)
-        self.session["board_row_deleted"] = True  # retract once, not per sync
+        self.session.pop("board_row_key", None)
+        self.session["board_row_deleted"] = True
         self._save_session()
 
-    def fetch_server_board(self, server):
-        """All rows for my server (client filters days and sorts). One
-        equality-only query; raises TransportError on failure."""
-        docs = self.run_query("server_board", [("server", str(server))])
-        rows = [_clean_board_row(uid, fields) for uid, fields in docs.items()]
-        return [r for r in rows if r]
+    def retire_old_board_row(self, uid):
+        """v1.8–v1.9 wrote rows to the unscoped server_board collection.
+        rules-v4 closes it to reads and writes; owners may still delete.
+        Runs once per session file."""
+        if self.session.get("old_board_retired"):
+            return
+        self.delete_doc(f"server_board/{uid}")
+        self.session["old_board_retired"] = True
+        self._save_session()
 
-    def send_knock(self, to_uid, from_uid, from_name):
-        """One write; overwrites my previous knock to the same person."""
+    def fetch_server_board(self, crew_key):
+        """All rows of my crew (client filters days and sorts): one list of
+        the crew's board subcollection. Rules admit members who share.
+        Raises TransportError on failure — including 403, which means the
+        deployed rules predate v1.10 or I hold no membership."""
+        r = self._req("GET", f"{self.base}/servers/{crew_key}/board?pageSize=300")
+        if r.status_code != 200:
+            raise TransportError(f"board list failed: {r.status_code}")
+        rows = []
+        for doc in r.json().get("documents", []):
+            uid = doc["name"].rsplit("/", 1)[-1]
+            row = _clean_board_row(uid, _parse(doc.get("fields")))
+            if row:
+                rows.append(row)
+        return rows
+
+    def send_knock(self, to_uid, from_uid, from_name, crew_key):
+        """One write; overwrites my previous knock to the same person. The
+        knock names the crew we share; rules check both memberships."""
         return self.patch_doc(f"users/{to_uid}/knocks/{from_uid}", {
             "name": from_name,
             "at": {"timestampValue": _now_ts()},
+            "crew": str(crew_key),
         }, label="knock")
 
     def list_knocks(self, uid):
@@ -746,7 +796,11 @@ class FirebaseClient:
         self._delete_listed(f"users/{uid}/knocks")
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
-        self.delete_doc(f"server_board/{uid}")  # the public row goes first
+        self.delete_doc(f"server_board/{uid}")  # v1.8–1.9 row, if any
+        key = self.session.get("board_row_key") or self.session.get("member_key")
+        if key:
+            self.delete_doc(f"servers/{key}/board/{uid}")
+            self.delete_doc(f"servers/{key}/members/{uid}")
         if friend_code:
             self.delete_doc(f"friend_codes/{friend_code}")
         self.delete_doc(f"users/{uid}")

@@ -97,6 +97,45 @@ def server_name():
     return str(_server_config().get("name", ""))
 
 
+def _crew_key():
+    """The crew capability (rules-v4): sha1(name:code), stored in
+    server.json as `key`. Derived and persisted from name+code when an
+    older install only stored those. "" when unknown — e.g. a pre-v1.6 join
+    that never kept its code, or the default server (no crew at all)."""
+    conf = _server_config()
+    key = conf.get("key")
+    if isinstance(key, str) and len(key) == 40:
+        return key
+    if conf.get("name") and conf.get("code"):
+        from .backend import directory
+        key = directory.crew_key(conf["name"], conf["code"])
+        conf["key"] = key
+        _save_server_config(conf)
+        return key
+    return ""
+
+
+def _save_server_config(conf):
+    try:
+        with open(os.path.join(_profile_files(), "server.json"), "w") as f:
+            json.dump(conf, f)
+    except OSError:
+        pass
+
+
+def _store_crew_code(code):
+    """A member who joined before v1.6 never kept the code; entering it once
+    derives the crew key and unlocks the board. Main thread."""
+    from .backend import directory
+    conf = _server_config()
+    if not conf.get("name"):
+        return False
+    conf["code"] = code.strip().upper()
+    conf["key"] = directory.crew_key(conf["name"], conf["code"])
+    _save_server_config(conf)
+    return True
+
+
 def client():
     global _client, _client_profile
     key = _profile_key()
@@ -139,13 +178,12 @@ def _adopt_rename(new_name):
     conf = _server_config()
     if not conf or conf.get("name") == new_name:
         return
+    if not conf.get("key") and conf.get("name") and conf.get("code"):
+        from .backend import directory
+        conf["key"] = directory.crew_key(conf["name"], conf["code"])
     conf["name"] = new_name
-    conf.pop("code", None)
-    try:
-        with open(os.path.join(_profile_files(), "server.json"), "w") as f:
-            json.dump(conf, f)
-    except OSError:
-        return
+    conf.pop("code", None)  # it belonged to the old name; the key survives
+    _save_server_config(conf)
     tooltip(f"Your crew server is now {html.escape(new_name)}.")
     _rerender()
 
@@ -361,6 +399,9 @@ def _server_view():
     c = cfg()
     if not (c.get("server_board") and not c.get("paused")):
         return {"state": "optin", "server": _server_key()}
+    if not _crew_key():
+        return {"state": "nokey", "server": _server_key(),
+                "named": bool(server_name())}
     rows = _state["server_rows"]
     if rows is None:
         return {"state": _state["server_state"], "server": _server_key()}
@@ -386,10 +427,14 @@ def _fetch_server_rows(force=False):
             and time.time() - _state["server_ts"] < SERVER_CACHE_SECS:
         return
     cl = client()
-    key = _server_key()
+    key = _crew_key()
+    if not key:
+        return
+    uid = cl.user_id
 
     def job():
         try:
+            cl.ensure_membership(key, uid)   # no-op after the first time
             rows = cl.fetch_server_board(key)
             state = "ok"
         except Exception:
@@ -438,6 +483,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         cl = client()
         uid = cl.user_id
         name = cl.display_name or "Me"
+        crew_key = _crew_key()
         full = (full or _state["entries"] is None or not _state["labels"]
                 or _state["labels"][0] != labels[0])
     except Exception:
@@ -461,9 +507,13 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     cl.upload_heatmap(uid, heatmap)
                 elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
+            cl.retire_old_board_row(uid)  # v1.8–1.9 unscoped row, once
             if board_row is not None:
                 if isinstance(board_row, dict) and not c.get("paused"):
-                    cl.upload_board_row(uid, board_row)
+                    if crew_key:
+                        if cl.session.get("board_row_key") not in (None, crew_key):
+                            cl.delete_board_row(uid)  # crew changed
+                        cl.upload_board_row(crew_key, uid, board_row)
                 elif not cl.session.get("board_row_deleted"):
                     cl.delete_board_row(uid)  # opted out, or paused
             cl.check_rules(labels[0])  # cached: one real request per day
@@ -640,8 +690,8 @@ def _on_sync_done():
     row = "off"
     if c.get("server_board") and stats is not None:
         row = {"name": client().display_name or "Me",
-               "server": _server_key(),
                "day": StatsQueries(mw.col).day_label(0),
+               "dayStart": int(stats.day_start or 0),
                "reviews": int(stats.reviews),
                "studyTimeMs": int(stats.time_ms),
                "streak": int(stats.streak)}
@@ -694,6 +744,8 @@ def _on_js(handled, message, context):
         _swap(c)
     elif cmd in ("sharetoday", "sharetape", "sharecrew"):
         _share(cmd)
+    elif cmd == "crewcode":
+        _ask_crew_code()
     elif cmd == "wrapcopy":
         b = _wrap_info() or {}
         if b.get("reviews"):
@@ -774,27 +826,57 @@ def _share(kind):
 
 def _crew_share_text(stats):
     """My row from local revlog (fresh); friends' rows from their uploaded
-    hours. Only people who studied today become rows."""
+    hours, placed on MY day by absolute time. People who studied today but
+    share no hours are counted ("N not sharing hours"), never drawn as
+    idle; a total missing someone's hidden count says "(partial)"."""
     from . import share
     labels, tomorrow = _state["labels"], _state["tomorrow"]
     today = labels[0] if labels else ""
-    rows, cards = [], 0
+    my_start = stats.day_start
+    rows, reviews, unshared, partial = [], 0, 0, False
     for e in _state["entries"] or []:
         if e.get("paused"):
             continue
         if e["you"]:
-            levels, n = share.hour_levels(stats.hourly), stats.reviews
-        else:
-            days = e.get("days") or {}
-            doc = days.get(tomorrow) or days.get(today) or {}
-            levels, n = share.levels_from_str(doc.get("hours")), doc.get("reviews")
-        if levels and any(levels):
-            rows.append((e["name"], levels))
-            cards += int(n or 0)
+            rows.append((e["name"], share.hour_levels(stats.hourly)))
+            reviews += int(stats.reviews or 0)
+            continue
+        days = e.get("days") or {}
+        doc = days.get(tomorrow) or days.get(today) or {}
+        studied = board._showed(doc)
+        levels = share.levels_from_str(doc.get("hours"))
+        placed = share.project_levels(levels, doc.get("dayStart"), my_start)
+        if levels and doc.get("dayStart") and any(placed):
+            rows.append((e["name"], placed))
+            if "reviews" in doc:
+                reviews += int(doc["reviews"])
+            else:
+                partial = True
+        elif studied:
+            unshared += 1
     if not rows and stats.reviews:
         rows.append((client().display_name or "Me", share.hour_levels(stats.hourly)))
-        cards = stats.reviews
-    return share.crew_today(server_name() or "Crew", rows, cards)
+        reviews = int(stats.reviews)
+    return share.crew_today(server_name() or "Crew", rows, reviews,
+                            partial=partial, unshared=unshared)
+
+
+def _ask_crew_code():
+    """Main thread. A member without a stored code (joined before v1.6)
+    enters it once; the directory confirms name+code, the key is derived,
+    and the board unlocks on the next open."""
+    from .ui.server_dialog import CrewCodeDialog
+    name = server_name()
+    if not name:
+        tooltip("The server board is for named crews. Join one from Settings.")
+        return
+    dlg = CrewCodeDialog(mw, name)
+    if dlg.exec() and dlg.code:
+        if _store_crew_code(dlg.code):
+            _state["server_rows"] = None
+            _state["server_state"] = "loading"
+            _swap(cfg())
+            _fetch_server_rows(force=True)
 
 
 # ---- cheers ----
@@ -858,11 +940,14 @@ def _send_knock(to_uid):
         return
     friends = list(_state["my_friends"])
     my_name = cl.display_name or "A friend"
+    crew_key = _crew_key()
+    if not crew_key:
+        return
 
     def job():
         try:
             ok = cl.set_friends(me, friends + [to_uid])
-            ok = cl.send_knock(to_uid, me, my_name) and ok
+            ok = cl.send_knock(to_uid, me, my_name, crew_key) and ok
         except Exception:
             ok = False
 
@@ -964,7 +1049,9 @@ def open_server_register():
     from .ui.server_dialog import RegisterServerDialog
     conf = _server_config()
     prefill = (conf.get("apiKey"), conf.get("projectId")) if conf else None
-    dlg = RegisterServerDialog(mw, _switch_server, prefill=prefill)
+    dlg = RegisterServerDialog(mw, _switch_server, prefill=prefill,
+                               current_key=_crew_key(),
+                               current_name=server_name())
     dlg.exec()
     return dlg
 
