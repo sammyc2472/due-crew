@@ -57,7 +57,8 @@ In Anki: Tools → Add-ons → Get Add-ons → code **2035408484**
 ([AnkiWeb listing](https://ankiweb.net/shared/info/2035408484)) — or
 download `due_crew.ankiaddon` from
 [the releases page](https://github.com/sammyc2472/due-crew/releases)
-and double-click it. Anki 2.1.55+.
+and install it with Tools → Add-ons → Install from file. Anki 2.1.55+;
+restart Anki after installing.
 
 ## Getting started
 
@@ -66,6 +67,8 @@ and double-click it. Anki 2.1.55+.
 2. Friends → Copy invite (or just your code), send it to a friend. They
    add yours, you add theirs — you're crew.
 3. Study. Stats sync when Anki syncs.
+4. Optional: Settings → Privacy → **Share on the Everyone board** to see
+   everyone on Due Crew studying today, and be seen.
 
 ## Privacy
 
