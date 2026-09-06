@@ -120,8 +120,19 @@ service cloud.firestore {
                        resource.data.userId == request.auth.uid;
     }
 
-    // The v1.4–v1.9 crew-server directory (server_names, servers) is gone:
-    // no rule matches those paths any more, so nothing can read or write
-    // them. Delete the collections from the console after the rollout.
+    // v2.0.1 grace period: the v1.4–v1.9 crew-server directory stays
+    // READABLE so crews that registered on v1.x keep working (their v1.x
+    // clients look up name+code here on every join) until they move to the
+    // hosted backend. Nothing new can be registered: creation is closed here
+    // and anonymous auth is off. Delete both collections from the console
+    // once every such crew has moved.
+    match /server_names/{name} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+    match /servers/{key} {
+      allow get: if true;
+      allow list, create, update, delete: if false;
+    }
   }
 }
