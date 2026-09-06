@@ -16,5 +16,6 @@
   "paused": false,
   "exam_date": "",
   "shared_decks": [],
-  "server_board": false
+  "server_board": false,
+  "crew_label": "Crew"
 }

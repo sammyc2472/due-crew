@@ -33,15 +33,12 @@ streak means what it says.
 - **Privacy controls** — choose which stats you share (heatmap included),
   or pause sharing entirely ("on a break"). Pausing hides your stats; your
   streak keeps counting as long as you keep studying.
-- **Crew servers** — run your whole group on your own free Firebase
-  project. One person does the setup; everyone else joins with a name and
-  a code — a name the founder can pick ("busm").
-- **Server board** — opt in (Privacy) to a Today-only board of everyone on
-  your crew server who's also sharing. No medals, no cheers — these aren't
-  necessarily people you know; weeks, days, decks, and heatmaps stay
-  crew-only. Tap a name, knock, and you're crew when they add back. The
-  board is scoped to the crew you joined with a name and code: other crews,
-  even on the same Firebase project, can't see it or knock you.
+- **Everyone board** — opt in (Privacy) to a Today-only board of everyone
+  on Due Crew who's also sharing, worldwide: the top 50 by reviews, the
+  together number ("2,381 studying today · 1.2M reviews"), and your own
+  place in it. No medals, no cheers — these aren't necessarily people you
+  know; weeks, days, decks, and heatmaps stay crew-only. Tap a name, knock,
+  and you're crew when they add back.
 - **Share it** — paste-ready for the group chat: the crew's day as a
   tape (everyone's study hours side by side, only those who showed up),
   or your own day as a sparkline or tape, signed with the add-on code.
@@ -64,56 +61,22 @@ and double-click it. Anki 2.1.55+.
 
 ## Getting started
 
-1. Click Due Crew on the Decks screen: join your crew with the server name
-   and code a friend sent you — or start a new crew.
+1. Click Due Crew on the Decks screen and sign up (an email and a
+   display name).
 2. Friends → Copy invite (or just your code), send it to a friend. They
    add yours, you add theirs — you're crew.
 3. Study. Stats sync when Anki syncs.
 
 ## Privacy
 
-Stats live in Firebase, readable only by people you've added — and, only
-if you opt into the server board, a single name-and-today's-numbers row
-readable by others on the same crew who've opted in too. "Same crew" means
-they joined with the same name and code (the code is the key; it is
-brute-forceable offline, so treat it like a password). All of it is enforced
+Due Crew runs on one hosted backend (the maintainer pays for it). Stats
+live there, readable only by people you've added — and, only if you opt
+into the Everyone board, a single name-and-today's-numbers row readable by
+others who've opted in too, anywhere in the world. All of it is enforced
 server-side by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
 in this repo. Your email is used for sign-in only and is never shown to
 friends or stored in the database. Deleting your account removes your data.
-
-## Run your own crew server
-
-One person per crew does this once; everyone else just types a name and a
-code. About ten minutes:
-
-1. [console.firebase.google.com](https://console.firebase.google.com) →
-   Add project (any name, Analytics off).
-2. Build → Authentication → Get started → enable **Email/Password**.
-3. Build → Firestore Database → Create database (production mode) → Rules →
-   paste
-   [firestore.rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
-   → Publish.
-4. Project settings → Your apps → add a **Web app** → copy the `apiKey` and
-   `projectId` from the config it shows.
-5. In Anki: Due Crew → **Start a new crew** → Continue → paste both →
-   Register — typing your own crew name is optional (3–40 characters,
-   lower-case letters, digits, dashes; first come, first named). You get
-   the name (say it aloud) and a code (share privately) — then click
-   **Use this server now** and sign up on it.
-
-Friends then pick **Join your crew**, enter the name and code, and sign up
-as usual. Your crew runs on your own free Firebase quota.
-
-If a later Due Crew version needs updated rules, the board shows "Server
-rules need an update" with a one-click copy of the new rules — re-do step 3
-and you're current. v1.10's rules close the old unscoped server board, so
-members on older versions see that notice until they update the add-on.
-
-Renaming your crew: register the new name in Anki, then in the Firebase
-console open Firestore → `server_names` → your old name's doc and add a
-string field `renamedTo` with the new name. Every member follows the rename
-automatically within a day — only the project owner can write that field.
 
 ## Development
 
@@ -121,7 +84,8 @@ Open source, MIT: https://github.com/sammyc2472/due-crew — issues and pull
 requests welcome. The add-on is plain Python + Anki hooks, no build step.
 Tests: `python3 tests/test_due_crew.py` (no dependencies) and the emulator
 rules test in `tests/rules/` — see `tests/README.md`; the manual Anki
-checklist is in `docs/`. Package with:
+checklist is in `docs/`. The Firestore rules in `firestore.rules` are the
+ones deployed to the hosted backend. Package with:
 
     cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"
 

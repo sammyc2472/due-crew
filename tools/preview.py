@@ -93,12 +93,12 @@ SROWS = [
     {"user_id": "u3", "name": "Jordan", "day": L[0], "reviews": 302,
      "time_ms": 2400000, "streak": 9},
 ]
-sections.append("<h3>server (sharing)</h3>" + board.render(
-    DATA, {"period": "server"}, now_ts - 60,
-    server_view={"state": "ok", "rows": SROWS, "server": "busm"}))
-sections.append("<h3>server (not opted in)</h3>" + board.render(
-    DATA, {"period": "server"}, now_ts - 60,
-    server_view={"state": "optin", "server": "busm"}))
+sections.append("<h3>everyone (sharing)</h3>" + board.render(
+    DATA, {"period": "everyone"}, now_ts - 60,
+    everyone_view={"state": "ok", "rows": SROWS, "totals": {"people": 2381, "reviews": 1204411, "above": 411}, "my_rank": 412}))
+sections.append("<h3>everyone (not opted in)</h3>" + board.render(
+    DATA, {"period": "everyone"}, now_ts - 60,
+    everyone_view={"state": "optin"}))
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))
 
 profile_js = board.profile_overlay_js({

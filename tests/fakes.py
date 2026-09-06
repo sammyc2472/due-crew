@@ -101,6 +101,17 @@ def _check_value(v, path="$"):
             _check_value(x, f"{path}[{i}]")
 
 
+def _num(value):
+    """A Firestore Value -> number, or None."""
+    if not isinstance(value, dict):
+        return None
+    if "integerValue" in value:
+        return int(value["integerValue"])
+    if "doubleValue" in value:
+        return float(value["doubleValue"])
+    return None
+
+
 class FakeResponse:
     def __init__(self, status_code, payload=None):
         self.status_code = status_code
@@ -148,36 +159,12 @@ class FakeFirestore:
         return doc.get("openBoard", {}).get("booleanValue") is True
 
     MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4"),
-               "v3": ("rules-v2", "rules-v3"), "v2": ("rules-v2",),
-               "decks-only": ()}
+               "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
 
-    BOARD_FIELDS = {"name", "day", "dayStart", "reviews", "studyTimeMs",
-                    "streak", "updatedAt"}
-    OLD_BOARD_FIELDS = {"name", "server", "day", "reviews", "studyTimeMs",
-                        "streak", "updatedAt"}
-
-    def _is_member(self, key, uid):
-        return f"servers/{key}/members/{uid}" in self.docs
+    ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
+    DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
     def _can_write(self, path, uid, method="PATCH", fields=None):
-        fields = fields or {}
-        m = re.fullmatch(r"servers/([^/]+)/members/([^/]+)", path)
-        if m:
-            key, owner = m.groups()
-            if self.rules_mode != "repo":
-                return False
-            if method == "DELETE":
-                return uid == owner
-            return uid == owner and set(fields) <= {"at"}
-        m = re.fullmatch(r"servers/([^/]+)/board/([^/]+)", path)
-        if m:
-            key, owner = m.groups()
-            if self.rules_mode != "repo":
-                return False
-            if method == "DELETE":
-                return uid == owner
-            return (uid == owner and self._is_member(key, owner)
-                    and set(fields) <= self.BOARD_FIELDS)
         m = re.fullmatch(r"users/([^/]+)", path)
         if m:
             return uid == m.group(1)
@@ -196,26 +183,32 @@ class FakeFirestore:
         m = re.fullmatch(r"users/([^/]+)/knocks/([^/]+)", path)
         if m:
             owner, sender = m.groups()
-            if self.rules_mode not in ("repo", "v3"):
+            if self.rules_mode == "decks-only":
                 return False
-            if uid == owner and method == "DELETE":
-                return True  # owner delete
-            if uid != sender:
+            if method == "DELETE":
+                return uid == owner
+            return (uid == sender and self._open_board(owner)
+                    and self._open_board(sender)
+                    and set(fields or {}) <= {"name", "at"})
+        m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
+        if m:
+            day, owner = m.groups()
+            if self.rules_mode != "repo":
                 return False
-            if self.rules_mode == "v3":
-                return self._open_board(owner) and self._open_board(sender)
-            crew = fields.get("crew", {}).get("stringValue")
-            return (set(fields) <= {"name", "at", "crew"}
-                    and isinstance(crew, str) and len(crew) == 40
-                    and self._is_member(crew, sender)
-                    and self._is_member(crew, owner)
-                    and self._open_board(owner) and self._open_board(sender))
+            if method == "DELETE":
+                return uid == owner
+            reviews = (fields or {}).get("reviews", {})
+            return (uid == owner and self._open_board(owner)
+                    and bool(self.DAY_RE.fullmatch(day))
+                    and set(fields or {}) <= self.ROW_FIELDS
+                    and "integerValue" in reviews
+                    and int(reviews["integerValue"]) >= 0)
         m = re.fullmatch(r"server_board/([^/]+)", path)
         if m:
             if self.rules_mode == "repo":
                 return method == "DELETE" and uid == m.group(1)
-            return self.rules_mode == "v3" and uid == m.group(1)
-        if re.fullmatch(r"(friend_codes|server_names|servers)/[^/]+", path):
+            return uid == m.group(1)  # v3 rules: still owner-writable
+        if re.fullmatch(r"friend_codes/[^/]+", path):
             return uid is not None
         return False
 
@@ -232,23 +225,17 @@ class FakeFirestore:
             return uid == owner or uid in self._friends_of(owner)
         m = re.fullmatch(r"users/([^/]+)/(cheers|knocks)/[^/]+", path)
         if m:
-            if m.group(2) == "knocks" and self.rules_mode != "repo":
-                return False
             return uid == m.group(1)
         m = re.fullmatch(r"meta/(.+)", path)
         if m:
             return m.group(1) in self.MARKERS[self.rules_mode]
+        m = re.fullmatch(r"boards/[^/]+/rows/[^/]+", path)
+        if m:
+            return self.rules_mode == "repo" and self._open_board(uid)
         m = re.fullmatch(r"server_board/[^/]+", path)
         if m:
             return self.rules_mode == "v3" and self._open_board(uid)
-        m = re.fullmatch(r"servers/([^/]+)/board/[^/]+", path)
-        if m:
-            return (self.rules_mode == "repo" and uid is not None
-                    and self._is_member(m.group(1), uid) and self._open_board(uid))
-        m = re.fullmatch(r"servers/([^/]+)/members/([^/]+)", path)
-        if m:
-            return self.rules_mode == "repo" and uid == m.group(2)
-        if re.fullmatch(r"(friend_codes|server_names|servers)/[^/]+", path):
+        if re.fullmatch(r"friend_codes/[^/]+", path):
             return True
         return False
 
@@ -261,28 +248,62 @@ class FakeFirestore:
             return FakeResponse(404, {"error": {"message": "bad url"}})
         action, path, query = m.group(1), m.group(2), m.group(3) or ""
 
-        if action == "runQuery":
-            sq = json_body.get("structuredQuery", {})
+        # :runQuery / :runAggregationQuery may hang off a parent document
+        parent = ""
+        if action is None and ":" in path:
+            path, action = path.rsplit(":", 1)
+            parent = path
+        if action in ("runQuery", "runAggregationQuery"):
+            body = json_body or {}
+            sq = (body.get("structuredQuery")
+                  or body.get("structuredAggregationQuery", {}).get("structuredQuery", {}))
             coll = sq.get("from", [{}])[0].get("collectionId", "")
-            if coll == "server_board" and not (
-                    self.rules_mode == "v3" and self._open_board(uid)):
-                self.log.append((method, "runQuery:" + coll, 403))
+            prefix = f"{parent}/{coll}" if parent else coll
+            if not self._can_read(prefix + "/probe", uid):
+                self.log.append((method, action + ":" + prefix, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            filters = []
-            where = sq.get("where", {}).get("compositeFilter", {})
-            for f in where.get("filters", []):
-                ff = f.get("fieldFilter", {})
-                filters.append((ff["field"]["fieldPath"], ff["value"]))
-            out = []
+            matches = []
             for pth, fields in self.docs.items():
-                m2 = re.fullmatch(coll + r"/([^/]+)", pth)
-                if not m2:
+                if not re.fullmatch(re.escape(prefix) + r"/([^/]+)", pth):
                     continue
-                if all(fields.get(k) == v for k, v in filters):
-                    out.append({"document": {"name": f"{coll}/{pth.split('/')[-1]}",
-                                             "fields": fields}})
-            self.log.append((method, "runQuery:" + coll, 200))
-            return FakeResponse(200, out[:sq.get("limit", 300)])
+                ok = True
+                for f in sq.get("where", {}).get("compositeFilter", {}).get("filters", []):
+                    ff = f["fieldFilter"]
+                    fp = ff["field"]["fieldPath"]
+                    have, want = _num(fields.get(fp)), _num(ff["value"])
+                    op = ff["op"]
+                    if op == "EQUAL":
+                        ok = ok and fields.get(fp) == ff["value"]
+                    elif have is None or want is None:
+                        ok = False
+                    elif op == "GREATER_THAN":
+                        ok = ok and have > want
+                    elif op == "GREATER_THAN_OR_EQUAL":
+                        ok = ok and have >= want
+                    elif op == "LESS_THAN":
+                        ok = ok and have < want
+                if ok:
+                    matches.append((pth, fields))
+            if action == "runAggregationQuery":
+                result = {}
+                for agg in body["structuredAggregationQuery"].get("aggregations", []):
+                    if "count" in agg:
+                        result[agg["alias"]] = {"integerValue": str(len(matches))}
+                    else:
+                        field = agg["sum"]["field"]["fieldPath"]
+                        result[agg["alias"]] = {"integerValue": str(sum(
+                            _num(f.get(field)) or 0 for _p, f in matches))}
+                self.log.append((method, action + ":" + prefix, 200))
+                return FakeResponse(200, [{"result": {"aggregateFields": result}}])
+            order = (sq.get("orderBy") or [{}])[0]
+            if order:
+                field = order["field"]["fieldPath"]
+                matches.sort(key=lambda pf: _num(pf[1].get(field)) or 0,
+                             reverse=order.get("direction") == "DESCENDING")
+            out = [{"document": {"name": f"d/{pth}", "fields": fields}}
+                   for pth, fields in matches[:sq.get("limit", 300)]]
+            self.log.append((method, action + ":" + prefix, 200))
+            return FakeResponse(200, out)
 
         if method == "GET" and len(path.split("/")) % 2 == 1:
             # collection list (odd segment count): needs read on children
@@ -332,10 +353,6 @@ class FakeFirestore:
             if not self._can_write(path, uid, "PATCH", fields):
                 self.log.append((method, path, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            if (re.fullmatch(r"server_board/[^/]+", path)
-                    and not set(fields) <= self.OLD_BOARD_FIELDS):
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "hasOnly"}})
             mask = [p.split("=", 1)[1] for p in query.split("&")
                     if p.startswith("updateMask.fieldPaths=")]
             doc = self.docs.setdefault(path, {})

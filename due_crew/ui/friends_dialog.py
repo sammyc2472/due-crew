@@ -18,24 +18,17 @@ from aqt.utils import tooltip
 from . import accent, attach_alive, copy_text, run_bg
 
 
-def invite_text(server_name, server_code, friend_code):
-    """One paste with everything a friend needs. The server line rides only
-    when both halves are known (custom servers store the code at join)."""
-    lines = ["Study with me on Due Crew — Anki add-on 2035408484."]
-    if server_name and server_code:
-        lines.append(f"Crew server: {server_name} · code {server_code}")
-    lines.append(f"My friend code: {friend_code}")
-    return "\n".join(lines)
+def invite_text(friend_code):
+    """One paste with everything a friend needs."""
+    return ("Study with me on Due Crew — Anki add-on 2035408484.\n"
+            f"My friend code: {friend_code}")
 
 
 class FriendsDialog(QDialog):
-    def __init__(self, parent, client, server=None, muted=None, on_mute=None):
+    def __init__(self, parent, client, muted=None, on_mute=None):
         super().__init__(parent)
         self.client = client
         self.uid = client.user_id
-        conf = server or {}
-        self.server_name = str(conf.get("name") or "")
-        self.server_code = str(conf.get("code") or "")
         self.muted = set(muted or [])
         self.on_mute = on_mute or (lambda uid: None)
         self.code = None
@@ -252,7 +245,7 @@ class FriendsDialog(QDialog):
 
     def _copy_invite(self):
         if self.code:
-            copy_text(invite_text(self.server_name, self.server_code, self.code))
+            copy_text(invite_text(self.code))
             tooltip("Invite copied.")
 
     def _add(self):

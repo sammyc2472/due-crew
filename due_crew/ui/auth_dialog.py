@@ -23,11 +23,9 @@ ERRORS = {
 
 
 class AuthDialog(QDialog):
-    def __init__(self, parent, client, server_label="", on_join_server=None):
+    def __init__(self, parent, client):
         super().__init__(parent)
         self.client = client
-        self.server_label = server_label
-        self.on_join_server = on_join_server
         self.user = None
         attach_alive(self)
         self._build()
@@ -36,12 +34,6 @@ class AuthDialog(QDialog):
         self.setWindowTitle("Due Crew")
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
-
-        if self.server_label:
-            # server names come from the directory: escape before rich text
-            server = QLabel(f"Server: <b>{html.escape(self.server_label)}</b>")
-            server.setStyleSheet("font-size: 11px;")
-            root.addWidget(server)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._signin_tab(), "Sign in")
@@ -55,13 +47,6 @@ class AuthDialog(QDialog):
         root.addWidget(self.error)
 
         buttons = QHBoxLayout()
-        if self.on_join_server:
-            other = QPushButton("Use a different crew server…")
-            other.setFlat(True)
-            other.setCursor(Qt.CursorShape.PointingHandCursor)
-            other.setStyleSheet(f"color: {accent()}; border: none; font-size: 11px;")
-            other.clicked.connect(self._other_server)
-            buttons.addWidget(other)
         buttons.addStretch()
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
@@ -71,12 +56,6 @@ class AuthDialog(QDialog):
         self.go.clicked.connect(self._submit)
         buttons.addWidget(self.go)
         root.addLayout(buttons)
-
-    def _other_server(self):
-        cb = self.on_join_server
-        self.reject()
-        if cb:
-            QTimer.singleShot(0, cb)
 
     def _field(self, layout, label, placeholder, password=False):
         layout.addWidget(QLabel(label))

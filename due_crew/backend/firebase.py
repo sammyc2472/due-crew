@@ -155,16 +155,11 @@ def _clean_day(doc):
 
 
 def _clean_board_row(uid, fields):
-    """Coerce a board row to a trusted shape; None if unusable."""
+    """Coerce an Everyone-board row to a trusted shape; None if unusable."""
     if not isinstance(fields, dict):
-        return None
-    day = fields.get("day")
-    if not isinstance(day, str):
         return None
     return {"user_id": str(uid),
             "name": str(fields.get("name", "?")),
-            "day": day,
-            "day_start": _as_int(fields.get("dayStart")),
             "reviews": _as_int(fields.get("reviews")) or 0,
             "time_ms": _as_int(fields.get("studyTimeMs")) or 0,
             "streak": _as_int(fields.get("streak")) or 0}
@@ -193,10 +188,10 @@ def _clean_decks(value):
 
 
 class FirebaseClient:
-    def __init__(self, session_file, api_key=None, project_id=None):
+    def __init__(self, session_file):
         self.session_file = session_file
-        self.api_key = api_key or DEFAULT_API_KEY
-        self.project_id = project_id or DEFAULT_PROJECT_ID
+        self.api_key = DEFAULT_API_KEY
+        self.project_id = DEFAULT_PROJECT_ID
         self.base = firestore_base(self.project_id)
         self.doc_root = doc_root(self.project_id)
         self.http = requests.Session()
@@ -410,25 +405,65 @@ class FirebaseClient:
                 out[name[len(self.doc_root) + 1:]] = _parse(item["found"].get("fields"))
         return out
 
-    def run_query(self, collection, filters, page_size=300):
-        """Equality-only query on a root collection: [(field, value), ...].
-        No orderBy, so no composite index for founders to create. Returns
-        {doc_id: fields}; raises TransportError on failure."""
-        where = {"compositeFilter": {"op": "AND", "filters": [
-            {"fieldFilter": {"field": {"fieldPath": f},
-                             "op": "EQUAL", "value": _fv(v)}}
-            for f, v in filters]}}
-        query = {"structuredQuery": {
-            "from": [{"collectionId": collection}],
-            "where": where, "limit": page_size}}
-        r = self._req("POST", f"{self.base}:runQuery", json=query)
+    @staticmethod
+    def _structured(collection, filters=(), order_by=None, limit=None):
+        query = {"from": [{"collectionId": collection}]}
+        if filters:
+            query["where"] = {"compositeFilter": {"op": "AND", "filters": [
+                {"fieldFilter": {"field": {"fieldPath": f}, "op": op,
+                                 "value": _fv(v)}}
+                for f, op, v in filters]}}
+        if order_by:
+            field, direction = order_by
+            query["orderBy"] = [{"field": {"fieldPath": field},
+                                 "direction": direction}]
+        if limit:
+            query["limit"] = int(limit)
+        return query
+
+    def run_query(self, collection, filters=(), parent="", order_by=None,
+                  limit=300):
+        """filters: [(field, op, value)] with op in EQUAL/GREATER_THAN/...;
+        parent: document path whose subcollection is queried. orderBy on a
+        single field needs only the automatic single-field index. Returns
+        [(doc_id, fields)] in query order; raises TransportError."""
+        url = f"{self.base}/{parent}:runQuery" if parent else f"{self.base}:runQuery"
+        r = self._req("POST", url, json={"structuredQuery": self._structured(
+            collection, filters, order_by, limit)})
         if r.status_code != 200:
             raise TransportError(f"query failed: {r.status_code}")
-        out = {}
+        out = []
         for item in r.json():
             doc = item.get("document")
             if doc:
-                out[doc["name"].rsplit("/", 1)[-1]] = _parse(doc.get("fields"))
+                out.append((doc["name"].rsplit("/", 1)[-1],
+                            _parse(doc.get("fields"))))
+        return out
+
+    def run_aggregation(self, collection, parent, aggregations, filters=()):
+        """aggregations: {alias: "count"} or {alias: ("sum", field)}. One
+        billed read per 1,000 index entries, however many rows match.
+        Returns {alias: number}; raises TransportError."""
+        aggs = []
+        for alias, spec in aggregations.items():
+            if spec == "count":
+                aggs.append({"alias": alias, "count": {}})
+            else:
+                aggs.append({"alias": alias,
+                             "sum": {"field": {"fieldPath": spec[1]}}})
+        body = {"structuredAggregationQuery": {
+            "structuredQuery": self._structured(collection, filters),
+            "aggregations": aggs}}
+        url = (f"{self.base}/{parent}:runAggregationQuery" if parent
+               else f"{self.base}:runAggregationQuery")
+        r = self._req("POST", url, json=body)
+        if r.status_code != 200:
+            raise TransportError(f"aggregation failed: {r.status_code}")
+        out = {}
+        for item in r.json():
+            fields = (item.get("result") or {}).get("aggregateFields") or {}
+            for alias, value in fields.items():
+                out[alias] = _pv(value)
         return out
 
     # ---- friends ----
@@ -669,84 +704,78 @@ class FirebaseClient:
         self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
-    def ensure_membership(self, crew_key, uid):
-        """Hold a membership under the crew key (rules-v4): one create, ever,
-        per key — remembered in the session. The path is the capability."""
-        if self.session.get("member_key") == crew_key:
-            return True
-        if not self.patch_doc(f"servers/{crew_key}/members/{uid}",
-                              {"at": {"timestampValue": _now_ts()}},
-                              label="membership"):
-            return False
-        self.session["member_key"] = crew_key
-        self._save_session()
-        return True
+    EVERYONE_TOP = 50
 
-    def upload_board_row(self, crew_key, uid, row):
-        """Upsert my compact row under the crew key; skipped when unchanged.
-        Requires membership (rules enforce it; we make sure first)."""
-        if not self.ensure_membership(crew_key, uid):
-            return False
+    def upload_board_row(self, uid, day, row):
+        """Upsert my Everyone-board row for `day`; skipped when unchanged.
+        Rules require openBoard on my profile — upload_today sets it first."""
         digest = hashlib.sha1(
-            json.dumps([crew_key, row], sort_keys=True).encode()).hexdigest()
+            json.dumps([day, row], sort_keys=True).encode()).hexdigest()
         if self.session.get("board_row_hash") == digest:
             return True
         data = dict(row)
         data["updatedAt"] = {"timestampValue": _now_ts()}
-        if not self.patch_doc(f"servers/{crew_key}/board/{uid}", data,
+        if not self.patch_doc(f"boards/{day}/rows/{uid}", data,
                               mask=list(row) + ["updatedAt"],
-                              label="server board"):
+                              label="everyone board"):
             return False
         self.session["board_row_hash"] = digest
-        self.session["board_row_key"] = crew_key
+        self.session["board_row_day"] = day
         self.session.pop("board_row_deleted", None)
         self._save_session()
         return True
 
-    def delete_board_row(self, uid, crew_key=None):
-        """Retract my row (opt-out, pause, or crew change). Deletes under
-        the key the row was written to; once, not per sync."""
-        key = crew_key or self.session.get("board_row_key")
-        if key:
-            self.delete_doc(f"servers/{key}/board/{uid}")
+    def delete_board_row(self, uid, day=None):
+        """Retract my row (opt-out or pause): once, not per sync."""
+        day = day or self.session.get("board_row_day")
+        if day:
+            self.delete_doc(f"boards/{day}/rows/{uid}")
         self.session.pop("board_row_hash", None)
-        self.session.pop("board_row_key", None)
+        self.session.pop("board_row_day", None)
         self.session["board_row_deleted"] = True
         self._save_session()
 
     def retire_old_board_row(self, uid):
-        """v1.8–v1.9 wrote rows to the unscoped server_board collection.
-        rules-v4 closes it to reads and writes; owners may still delete.
-        Runs once per session file."""
+        """v1.8–v1.9 wrote rows to the unscoped server_board collection;
+        v2.0's rules close it, owners may still delete. Once per session."""
         if self.session.get("old_board_retired"):
             return
         self.delete_doc(f"server_board/{uid}")
         self.session["old_board_retired"] = True
         self._save_session()
 
-    def fetch_server_board(self, crew_key):
-        """All rows of my crew (client filters days and sorts): one list of
-        the crew's board subcollection. Rules admit members who share.
-        Raises TransportError on failure — including 403, which means the
-        deployed rules predate v1.10 or I hold no membership."""
-        r = self._req("GET", f"{self.base}/servers/{crew_key}/board?pageSize=300")
-        if r.status_code != 200:
-            raise TransportError(f"board list failed: {r.status_code}")
+    def fetch_everyone(self, day, limit=EVERYONE_TOP):
+        """Top `limit` rows of the day by reviews — never the whole board.
+        Raises TransportError (403 = not sharing, or rules predate v2.0)."""
         rows = []
-        for doc in r.json().get("documents", []):
-            uid = doc["name"].rsplit("/", 1)[-1]
-            row = _clean_board_row(uid, _parse(doc.get("fields")))
+        for uid, fields in self.run_query(
+                "rows", parent=f"boards/{day}",
+                order_by=("reviews", "DESCENDING"), limit=limit):
+            row = _clean_board_row(uid, fields)
             if row:
                 rows.append(row)
         return rows
 
-    def send_knock(self, to_uid, from_uid, from_name, crew_key):
-        """One write; overwrites my previous knock to the same person. The
-        knock names the crew we share; rules check both memberships."""
+    def everyone_totals(self, day, my_reviews):
+        """{people, reviews, above}: how many rows the day has, their review
+        sum, and how many out-rank my count — three aggregations, a read
+        or so each. Raises TransportError."""
+        parent = f"boards/{day}"
+        totals = self.run_aggregation("rows", parent, {
+            "people": "count", "reviews": ("sum", "reviews")})
+        above = self.run_aggregation("rows", parent, {"above": "count"},
+                                     filters=[("reviews", "GREATER_THAN",
+                                               int(my_reviews))])
+        return {"people": int(totals.get("people") or 0),
+                "reviews": int(totals.get("reviews") or 0),
+                "above": int(above.get("above") or 0)}
+
+    def send_knock(self, to_uid, from_uid, from_name):
+        """One write; overwrites my previous knock to the same person. Rules
+        require both of us to be on the Everyone board."""
         return self.patch_doc(f"users/{to_uid}/knocks/{from_uid}", {
             "name": from_name,
             "at": {"timestampValue": _now_ts()},
-            "crew": str(crew_key),
         }, label="knock")
 
     def list_knocks(self, uid):
@@ -775,6 +804,9 @@ class FirebaseClient:
         for offset in range(KEEP_DAYS + 1, KEEP_DAYS + 4):
             label = (base - datetime.timedelta(days=offset)).isoformat()
             self.delete_doc(f"users/{uid}/daily_stats/{label}")
+        for offset in (2, 3, 4):  # Everyone rows outlive their day by one
+            label = (base - datetime.timedelta(days=offset)).isoformat()
+            self.delete_doc(f"boards/{label}/rows/{uid}")
         self.session["cleaned"] = today_label
         self._save_session()
 
@@ -797,10 +829,10 @@ class FirebaseClient:
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
         self.delete_doc(f"server_board/{uid}")  # v1.8–1.9 row, if any
-        key = self.session.get("board_row_key") or self.session.get("member_key")
-        if key:
-            self.delete_doc(f"servers/{key}/board/{uid}")
-            self.delete_doc(f"servers/{key}/members/{uid}")
+        today = datetime.date.today()
+        for offset in (-1, 0, 1, 2):  # Everyone rows near today, any zone
+            label = (today - datetime.timedelta(days=offset)).isoformat()
+            self.delete_doc(f"boards/{label}/rows/{uid}")
         if friend_code:
             self.delete_doc(f"friend_codes/{friend_code}")
         self.delete_doc(f"users/{uid}")

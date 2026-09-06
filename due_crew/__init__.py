@@ -46,8 +46,9 @@ _state = {
     "entries": None, "days": {}, "decks": {}, "labels": [], "tomorrow": "",
     "pending": [], "ts": 0.0, "prev_label": "", "prev_counts": {},
     "prev_streaks": {}, "board_shown": False,
-    "my_friends": [], "server_rows": None, "server_ts": 0.0,
-    "server_state": "loading",
+    "my_friends": [],
+    "everyone": {"top": None, "totals": None, "day": "", "ts": 0.0,
+                 "state": "loading"},
 }
 _pending_cheers = []
 _wrap = {"profile": None, "data": {}}
@@ -84,137 +85,54 @@ def save_cfg(c):
     mw.addonManager.writeConfig(__name__, c)
 
 
-def _server_config():
-    try:
-        with open(os.path.join(_profile_files(), "server.json")) as f:
-            conf = json.load(f)
-        return conf if isinstance(conf, dict) else {}
-    except Exception:
-        return {}
 
 
-def server_name():
-    return str(_server_config().get("name", ""))
 
-
-def _crew_key():
-    """The crew capability (rules-v4): sha1(name:code), stored in
-    server.json as `key`. Derived and persisted from name+code when an
-    older install only stored those. "" when unknown — e.g. a pre-v1.6 join
-    that never kept its code, or the default server (no crew at all)."""
-    conf = _server_config()
-    key = conf.get("key")
-    if isinstance(key, str) and len(key) == 40:
-        return key
-    if conf.get("name") and conf.get("code"):
-        from .backend import directory
-        key = directory.crew_key(conf["name"], conf["code"])
-        conf["key"] = key
-        _save_server_config(conf)
-        return key
-    return ""
-
-
-def _save_server_config(conf):
-    try:
-        with open(os.path.join(_profile_files(), "server.json"), "w") as f:
-            json.dump(conf, f)
-    except OSError:
-        pass
-
-
-def _store_crew_code(code):
-    """A member who joined before v1.6 never kept the code; entering it once
-    derives the crew key and unlocks the board. Main thread."""
-    from .backend import directory
-    conf = _server_config()
-    if not conf.get("name"):
-        return False
-    conf["code"] = code.strip().upper()
-    conf["key"] = directory.crew_key(conf["name"], conf["code"])
-    _save_server_config(conf)
-    return True
 
 
 def client():
     global _client, _client_profile
     key = _profile_key()
     if _client is None or _client_profile != key:
-        conf = _server_config()
-        _client = FirebaseClient(os.path.join(_profile_files(), "session.json"),
-                                 api_key=conf.get("apiKey"),
-                                 project_id=conf.get("projectId"))
+        _client = FirebaseClient(os.path.join(_profile_files(), "session.json"))
         _client_profile = key
     return _client
 
 
-def _follow_rename_daily(cl, today):
-    """Background thread. One directory read per day: if the founder renamed
-    the crew (renamedTo on the old server_names doc), adopt the new name —
-    the label, invites, and the server-board scope all follow it."""
-    name = server_name()
-    if not name or cl.session.get("rename_check") == today:
-        return
-    cl.session["rename_check"] = today
-    cl._save_session()
-    try:
-        from .backend import directory
-        current = name
-        for _ in range(3):  # renames can chain; follow a few hops
-            nxt = directory.follow_rename(current)
-            if not nxt:
-                break
-            current = nxt
-    except Exception:
-        return  # the directory is a nicety; never fail a refresh over it
-    if current != name:
-        mw.taskman.run_on_main(lambda: _adopt_rename(current))
-
-
-def _adopt_rename(new_name):
-    """Main thread (config write). The join code belonged to the old name,
-    so it's dropped — invites fall back to the short form until the founder
-    shares the new code."""
-    conf = _server_config()
-    if not conf or conf.get("name") == new_name:
-        return
-    if not conf.get("key") and conf.get("name") and conf.get("code"):
-        from .backend import directory
-        conf["key"] = directory.crew_key(conf["name"], conf["code"])
-    conf["name"] = new_name
-    conf.pop("code", None)  # it belonged to the old name; the key survives
-    _save_server_config(conf)
-    tooltip(f"Your crew server is now {html.escape(new_name)}.")
-    _rerender()
-
-
-def _switch_server(conf):
-    """conf {} = back to the default server. Signs out locally, rebinds."""
-    global _client
-    if client().signed_in:
-        client().sign_out()
+def _migrate_server_json():
+    """v1.4–v1.9 kept a per-profile server.json (crew servers). v2.0 runs on
+    one hosted backend. A file pointing at the default project is simply
+    retired; one pointing elsewhere means this account lived on a custom
+    project that the add-on no longer talks to — sign out locally so the
+    board offers a fresh sign-in instead of failing quietly."""
     path = os.path.join(_profile_files(), "server.json")
+    if not os.path.exists(path):
+        return
     try:
-        if conf:
-            with open(path, "w") as f:
-                json.dump(conf, f)
-        elif os.path.exists(path):
-            os.remove(path)
+        with open(path) as f:
+            conf = json.load(f)
+    except Exception:
+        conf = {}
+    try:
+        os.remove(path)
     except OSError:
         pass
-    _client = None
-    _reset_runtime()
-    _rerender()
-    tooltip(f"Crew server: {html.escape(conf.get('name') or 'default')}. "
-            f"Sign in to continue.")
+    project = str((conf or {}).get("projectId") or "")
+    if project and project != client().project_id:
+        client().sign_out()
+        tooltip("Due Crew now runs on one server. Sign in again to continue.")
+
+
+
 
 
 def _reset_runtime():
     _state.update(entries=None, days={}, decks={}, labels=[], tomorrow="",
                   pending=[], ts=0.0, prev_label="", prev_counts={},
                   prev_streaks={}, board_shown=False,
-                  my_friends=[], server_rows=None, server_ts=0.0,
-                  server_state="loading")
+                  my_friends=[],
+                  everyone={"top": None, "totals": None, "day": "",
+                            "ts": 0.0, "state": "loading"})
     _pending_cheers.clear()
 
 
@@ -387,69 +305,86 @@ def _deck_deltas():
     return out
 
 
-SERVER_CACHE_SECS = 300
 
 
-def _server_key():
-    return server_name() or "default"
 
 
-def _server_view():
-    """What board._server_html renders. Row decoration is cheap and local."""
+
+EVERYONE_CACHE_SECS = 300
+
+
+def _board_view():
+    """What board._everyone_html renders. Decoration is cheap and local."""
     c = cfg()
     if not (c.get("server_board") and not c.get("paused")):
-        return {"state": "optin", "server": _server_key()}
-    if not _crew_key():
-        return {"state": "nokey", "server": _server_key(),
-                "named": bool(server_name())}
-    rows = _state["server_rows"]
-    if rows is None:
-        return {"state": _state["server_state"], "server": _server_key()}
+        return {"state": "optin"}
+    ev = _state["everyone"]
+    if ev["top"] is None:
+        return {"state": ev["state"]}
     me = client().user_id
     crew = {e["user_id"] for e in _state["entries"] or [] if not e["you"]}
     added = set(_state["my_friends"])
-    keep_days = {_state["labels"][0] if _state["labels"] else "",
-                 _state["tomorrow"]}
-    out = []
-    for r in rows:
-        if r["day"] not in keep_days:
-            continue  # only people who studied today are on the board
-        out.append(dict(r, you=(r["user_id"] == me),
-                        crew=(r["user_id"] in crew),
-                        pending=(r["user_id"] in added
-                                 and r["user_id"] not in crew)))
-    return {"state": "ok", "rows": out, "server": _server_key()}
+    rows = [dict(r, you=(r["user_id"] == me), crew=(r["user_id"] in crew),
+                 pending=(r["user_id"] in added and r["user_id"] not in crew))
+            for r in ev["top"]]
+    totals = ev["totals"] or {}
+    my_rank = next((i + 1 for i, r in enumerate(rows) if r["you"]), None)
+    if my_rank is None and totals:
+        my_rank = totals.get("above", 0) + 1
+    return {"state": "ok", "rows": rows, "totals": totals, "my_rank": my_rank,
+            "day": ev["day"]}
 
 
-def _fetch_server_rows(force=False):
-    """Lazy: one query when the view opens, cached a few minutes."""
-    if _state["server_rows"] is not None and not force \
-            and time.time() - _state["server_ts"] < SERVER_CACHE_SECS:
+def _fetch_everyone(force=False):
+    """Lazy: when the view opens, the day's top rows plus three aggregate
+    counts — never the whole board. Cached a few minutes."""
+    ev = _state["everyone"]
+    if not mw.col or not client().signed_in:
         return
+    day = _state["labels"][0] if _state["labels"] else StatsQueries(mw.col).day_label(0)
+    if (ev["top"] is not None and not force and ev["day"] == day
+            and time.time() - ev["ts"] < EVERYONE_CACHE_SECS):
+        return
+    try:
+        my_reviews = StatsQueries(mw.col).reviews_for_day(0)  # main thread
+    except Exception:
+        my_reviews = 0
     cl = client()
-    key = _crew_key()
-    if not key:
-        return
-    uid = cl.user_id
 
     def job():
         try:
-            cl.ensure_membership(key, uid)   # no-op after the first time
-            rows = cl.fetch_server_board(key)
+            top = cl.fetch_everyone(day)
+            totals = cl.everyone_totals(day, my_reviews)
             state = "ok"
         except Exception:
-            rows, state = None, "error"
+            top, totals, state = None, None, "error"
 
         def commit():
-            if rows is not None:
-                _state["server_rows"] = rows
-                _state["server_ts"] = time.time()
-            _state["server_state"] = state
+            if top is not None:
+                ev.update(top=top, totals=totals, day=day, ts=time.time())
+            ev["state"] = state
             _swap(cfg())
 
         mw.taskman.run_on_main(commit)
 
     threading.Thread(target=job, daemon=True).start()
+
+
+def _open_everyone_card(uid):
+    """Click a name on the Everyone board. Crew and you get the full card;
+    everyone else gets the spare stranger card — Add lives there."""
+    if any(e["user_id"] == uid for e in _state["entries"] or []):
+        _open_profile(uid)
+        return
+    row = next((r for r in _state["everyone"]["top"] or []
+                if r["user_id"] == uid), None)
+    if row is None:
+        return
+    mw.web.eval(board.stranger_card_js({
+        "uid": uid, "name": row["name"], "reviews": row["reviews"],
+        "time_ms": row["time_ms"], "streak": row["streak"],
+        "pending": uid in _state["my_friends"],
+    }))
 
 
 def _board_data():
@@ -483,7 +418,6 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         cl = client()
         uid = cl.user_id
         name = cl.display_name or "Me"
-        crew_key = _crew_key()
         full = (full or _state["entries"] is None or not _state["labels"]
                 or _state["labels"][0] != labels[0])
     except Exception:
@@ -510,14 +444,10 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
             cl.retire_old_board_row(uid)  # v1.8–1.9 unscoped row, once
             if board_row is not None:
                 if isinstance(board_row, dict) and not c.get("paused"):
-                    if crew_key:
-                        if cl.session.get("board_row_key") not in (None, crew_key):
-                            cl.delete_board_row(uid)  # crew changed
-                        cl.upload_board_row(crew_key, uid, board_row)
+                    cl.upload_board_row(uid, labels[0], board_row)
                 elif not cl.session.get("board_row_deleted"):
                     cl.delete_board_row(uid)  # opted out, or paused
             cl.check_rules(labels[0])  # cached: one real request per day
-            _follow_rename_daily(cl, labels[0])
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
             mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))
@@ -654,7 +584,7 @@ def _on_render(deck_browser, content):
                                           wrap=_wrap_info(), deltas=_deck_deltas(),
                                           exam_eve=_exam_eve_info(),
                                           rules_stale=client().rules_stale,
-                                          server_view=_server_view())
+                                          everyone_view=_board_view())
     except Exception:
         traceback.print_exc()
 
@@ -690,8 +620,6 @@ def _on_sync_done():
     row = "off"
     if c.get("server_board") and stats is not None:
         row = {"name": client().display_name or "Me",
-               "day": StatsQueries(mw.col).day_label(0),
-               "dayStart": int(stats.day_start or 0),
                "reviews": int(stats.reviews),
                "studyTimeMs": int(stats.time_ms),
                "streak": int(stats.streak)}
@@ -713,19 +641,19 @@ def _on_js(handled, message, context):
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)
-        if parts[2] == "server" and c.get("server_board") \
+        if parts[2] == "everyone" and c.get("server_board") \
                 and not c.get("paused"):
-            _fetch_server_rows()
+            _fetch_everyone()
     elif cmd == "refresh":
         refresh_board(full=True)
-        if c.get("period") == "server" and c.get("server_board"):
-            _fetch_server_rows(force=True)
+        if c.get("period") == "everyone" and c.get("server_board"):
+            _fetch_everyone(force=True)
     elif cmd == "friends":
         open_friends()
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
-        open_welcome()
+        open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
     elif cmd == "profile" and len(parts) > 2:
@@ -735,8 +663,6 @@ def _on_js(handled, message, context):
         w["eve_dismissed"] = _state["labels"][0] if _state["labels"] else ""
         _save_wrap()
         _swap(c)
-    elif cmd == "rules":
-        open_rules()
     elif cmd == "wrapdismiss":
         w = _wrap_data()
         w["dismissed"] = w.get("week", "")
@@ -744,8 +670,6 @@ def _on_js(handled, message, context):
         _swap(c)
     elif cmd in ("sharetoday", "sharetape", "sharecrew"):
         _share(cmd)
-    elif cmd == "crewcode":
-        _ask_crew_code()
     elif cmd == "wrapcopy":
         b = _wrap_info() or {}
         if b.get("reviews"):
@@ -759,8 +683,8 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings()
-    elif cmd == "scard" and len(parts) > 2:
-        _open_server_card(parts[2])
+    elif cmd == "ecard" and len(parts) > 2:
+        _open_everyone_card(parts[2])
     elif cmd == "knock" and len(parts) > 2:
         _send_knock(parts[2])
     elif cmd == "cheerback" and len(parts) > 3:
@@ -783,7 +707,7 @@ def _swap(c):
                             wrap=_wrap_info(), deltas=_deck_deltas(),
                             exam_eve=_exam_eve_info(),
                             rules_stale=client().rules_stale,
-                            server_view=_server_view())
+                            everyone_view=_board_view())
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -857,26 +781,10 @@ def _crew_share_text(stats):
     if not rows and stats.reviews:
         rows.append((client().display_name or "Me", share.hour_levels(stats.hourly)))
         reviews = int(stats.reviews)
-    return share.crew_today(server_name() or "Crew", rows, reviews,
+    label = str(cfg().get("crew_label") or "Crew").strip() or "Crew"
+    return share.crew_today(label, rows, reviews,
                             partial=partial, unshared=unshared)
 
-
-def _ask_crew_code():
-    """Main thread. A member without a stored code (joined before v1.6)
-    enters it once; the directory confirms name+code, the key is derived,
-    and the board unlocks on the next open."""
-    from .ui.server_dialog import CrewCodeDialog
-    name = server_name()
-    if not name:
-        tooltip("The server board is for named crews. Join one from Settings.")
-        return
-    dlg = CrewCodeDialog(mw, name)
-    if dlg.exec() and dlg.code:
-        if _store_crew_code(dlg.code):
-            _state["server_rows"] = None
-            _state["server_state"] = "loading"
-            _swap(cfg())
-            _fetch_server_rows(force=True)
 
 
 # ---- cheers ----
@@ -913,23 +821,6 @@ def _send_cheer(to_uid, to_name, emoji):
 
 # ---- server board: cards + knocks ----
 
-def _open_server_card(uid):
-    """Click a name on the server board. Crew and you get the full card;
-    everyone else gets the spare stranger card — Add lives there."""
-    if any(e["user_id"] == uid for e in _state["entries"] or []):
-        _open_profile(uid)
-        return
-    row = next((r for r in _state["server_rows"] or []
-                if r["user_id"] == uid), None)
-    if row is None:
-        return
-    pending = uid in _state["my_friends"]
-    mw.web.eval(board.stranger_card_js({
-        "uid": uid, "name": row["name"], "reviews": row["reviews"],
-        "time_ms": row["time_ms"], "streak": row["streak"],
-        "pending": pending,
-    }))
-
 
 def _send_knock(to_uid):
     """Add from the board: they go in my list (my consent), and a knock
@@ -940,14 +831,11 @@ def _send_knock(to_uid):
         return
     friends = list(_state["my_friends"])
     my_name = cl.display_name or "A friend"
-    crew_key = _crew_key()
-    if not crew_key:
-        return
 
     def job():
         try:
             ok = cl.set_friends(me, friends + [to_uid])
-            ok = cl.send_knock(to_uid, me, my_name, crew_key) and ok
+            ok = cl.send_knock(to_uid, me, my_name) and ok
         except Exception:
             ok = False
 
@@ -1037,46 +925,12 @@ def _open_profile(uid):
 
 # ---- dialogs ----
 
-def open_server_join():
-    from .ui.server_dialog import JoinServerDialog
-    dlg = JoinServerDialog(mw, server_name(), _switch_server,
-                           open_server_register)
-    dlg.exec()
-    return dlg
 
-
-def open_server_register():
-    from .ui.server_dialog import RegisterServerDialog
-    conf = _server_config()
-    prefill = (conf.get("apiKey"), conf.get("projectId")) if conf else None
-    dlg = RegisterServerDialog(mw, _switch_server, prefill=prefill,
-                               current_key=_crew_key(),
-                               current_name=server_name())
-    dlg.exec()
-    return dlg
-
-
-def open_welcome():
-    from .ui.server_dialog import StartCrewDialog, WelcomeDialog
-    dlg = WelcomeDialog(mw)
-    if not dlg.exec() or not dlg.choice:
-        return
-    if dlg.choice == "join":
-        joined = open_server_join()
-        if getattr(joined, "joined", False) and not client().signed_in:
-            open_auth()
-    elif dlg.choice == "start":
-        if StartCrewDialog(mw).exec():
-            registered = open_server_register()
-            if getattr(registered, "used", False) and not client().signed_in:
-                open_auth()
-    else:
-        open_auth()
 
 
 def open_auth():
     from .ui.auth_dialog import AuthDialog
-    dlg = AuthDialog(mw, client(), server_name(), open_server_join)
+    dlg = AuthDialog(mw, client())
     if dlg.exec() and dlg.user:
         _uid, name = dlg.user
         _reset_runtime()
@@ -1090,7 +944,7 @@ def open_friends():
         open_auth()
         return
     from .ui.friends_dialog import FriendsDialog
-    dlg = FriendsDialog(mw, client(), server=_server_config(),
+    dlg = FriendsDialog(mw, client(),
                         muted=list(_wrap_data().get("muted_knocks") or []),
                         on_mute=_mute_knocker)
     dlg.exec()
@@ -1121,16 +975,11 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-def open_rules():
-    from .ui.rules_dialog import RulesUpdateDialog
-    RulesUpdateDialog(mw, server_name()).exec()
-
 
 def open_settings():
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_welcome, open_friends, _on_signed_out, open_decks,
-                         server_name(), open_server_join, open_server_register)
+                         open_auth, open_friends, _on_signed_out, open_decks)
     dlg.exec()
 
 
@@ -1168,6 +1017,7 @@ def _on_profile_open():
         mw.addonManager.setConfigAction(__name__, open_settings)
     _reset_runtime()          # profile switch: nothing carries over
     client()                  # rebind to this profile's session
+    _migrate_server_json()    # v1.x crew-server config, if any
     refresh_board()
 
 

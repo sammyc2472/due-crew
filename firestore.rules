@@ -1,9 +1,11 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules.
+// Due Crew — Firestore rules (v2.0: one hosted backend).
 //
 // Model: friendship is consent-based. Your own `friends` array controls who
 // may read your daily stats. The client only ever writes documents it owns.
+// The Everyone board is opt-in and symmetric: `openBoard` on your profile
+// both publishes your row and lets you read others'.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -21,12 +23,8 @@ service cloud.firestore {
              request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends;
     }
 
-    // v1.10: crew membership. A crew key is sha1(name:code) — the same
-    // capability the directory uses — and holding a membership doc under
-    // it is what makes someone "on this server". The path is the proof:
-    // you cannot create a membership under a key you cannot compute.
-    function isMember(crewKey, userId) {
-      return exists(/databases/$(database)/documents/servers/$(crewKey)/members/$(userId));
+    function isSharing(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.openBoard == true;
     }
 
     match /users/{userId} {
@@ -42,7 +40,7 @@ service cloud.firestore {
         allow write: if isOwner(userId);
       }
 
-      // v1.2: shared-deck progress. Same consent gate as stats.
+      // v1.2: shared-deck progress and (v1.3) the heatmap. Same consent gate.
       match /shared/{doc} {
         allow read: if isOwner(userId) || isFriend(userId);
         allow write: if isOwner(userId);
@@ -58,102 +56,52 @@ service cloud.firestore {
                               && request.resource.data.emoji in ['🎉', '💪', '🔥'];
       }
 
-      // v1.8: knocks — "wants to be crew", one small doc per sender.
-      // v1.10: allowed only between two people who both hold a membership
-      // in the crew the knock names (`crew` = the crew key) and are both
-      // showing themselves on that crew's board. Overwrite semantics: one
-      // outstanding knock per sender.
+      // v1.8: knocks — "wants to be crew", one small doc per sender, only
+      // between people who are both on the Everyone board. Overwrite
+      // semantics: one outstanding knock per sender.
       match /knocks/{senderId} {
         allow read, delete: if isOwner(userId);
-        allow create, update: if request.auth != null
+        allow create, update: if isAuthenticated()
                               && request.auth.uid == senderId
-                              && request.resource.data.keys().hasOnly(['name', 'at', 'crew'])
-                              && request.resource.data.crew is string
-                              && request.resource.data.crew.size() == 40
-                              && isMember(request.resource.data.crew, senderId)
-                              && isMember(request.resource.data.crew, userId)
-                              && get(/databases/$(database)/documents/users/$(userId)).data.openBoard == true
-                              && get(/databases/$(database)/documents/users/$(senderId)).data.openBoard == true;
+                              && isSharing(userId)
+                              && isSharing(request.auth.uid)
+                              && request.resource.data.keys().hasOnly(['name', 'at']);
       }
     }
 
-    // v1.4: crew-server directory — DEFAULT project only. Names are
-    // browsable; configs are get-only under an unguessable hash of
-    // name+code, and immutable so a code can never be repointed.
-    // v1.7 provisioning: size floor drops to 3 and the charset is pinned so
-    // custom crew names ("busm") can ship client-side without another paste;
-    // the optional `custom` flag lets browse tell them apart later.
-    match /server_names/{name} {
-      allow get, list: if true;
-      allow create: if request.auth != null
-                    && name.size() >= 3 && name.size() <= 40
-                    && name.matches('[a-z0-9][a-z0-9-]*')
-                    && request.resource.data.keys().hasOnly(['createdAt', 'custom']);
-      allow update, delete: if false;
+    // v2.0: the Everyone board — one row per sharer per (local) day.
+    // Rows are partitioned by day so the client can ask for the top N by
+    // reviews with a single-field index and count its own rank with an
+    // aggregation, instead of reading every row. Reading requires the reader
+    // to be sharing too; writing requires the writer to be sharing.
+    match /boards/{day}/rows/{userId} {
+      allow read: if isAuthenticated() && isSharing(request.auth.uid);
+      allow create, update: if isOwner(userId)
+                            && isSharing(userId)
+                            && day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                            && request.resource.data.keys().hasOnly(
+                                 ['name', 'reviews', 'studyTimeMs', 'streak', 'updatedAt'])
+                            && request.resource.data.reviews is int
+                            && request.resource.data.reviews >= 0;
+      allow delete: if isOwner(userId);
     }
 
-    match /servers/{key} {
-      allow get: if true;
-      allow list: if false;
-      // v1.10: an optional `crewKey` marks this name as an alias (rename)
-      // of an existing crew, so its joiners land on that crew's board.
-      allow create: if request.auth != null
-                    && key.size() == 40
-                    && request.resource.data.keys().hasOnly(['apiKey', 'projectId', 'name', 'createdAt', 'crewKey'])
-                    && request.resource.data.apiKey is string
-                    && request.resource.data.apiKey.size() < 100
-                    && request.resource.data.projectId is string
-                    && request.resource.data.projectId.size() < 100
-                    && (!('crewKey' in request.resource.data)
-                        || (request.resource.data.crewKey is string
-                            && request.resource.data.crewKey.size() == 40));
-      allow update, delete: if false;
-
-      // v1.10: membership — one doc per member, self-owned, under the crew
-      // key. Creating it requires knowing the key (the join code), and it
-      // is the gate for everything below. Readable only by its owner.
-      match /members/{userId} {
-        allow get: if isOwner(userId);
-        allow list, update: if false;
-        allow create: if isOwner(userId)
-                      && request.resource.data.keys().hasOnly(['at']);
-        allow delete: if isOwner(userId);
-      }
-
-      // v1.10: the server board — one compact, self-owned row per sharer,
-      // scoped to the crew by path. Reading requires being a member AND
-      // sharing yourself (symmetric); writing your row requires membership.
-      match /board/{userId} {
-        allow read: if isAuthenticated()
-                    && isMember(key, request.auth.uid)
-                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.openBoard == true;
-        allow create, update: if isOwner(userId)
-                    && isMember(key, userId)
-                    && request.resource.data.keys().hasOnly(
-                         ['name', 'day', 'dayStart', 'reviews', 'studyTimeMs',
-                          'streak', 'updatedAt']);
-        allow delete: if isOwner(userId);
-      }
+    // Retired in v2.0: v1.8–v1.9 wrote unscoped rows here. Closed to reads
+    // and writes; owners may still delete their old row (the client does,
+    // once). Delete the collection from the console after the rollout.
+    match /server_board/{userId} {
+      allow read, create, update: if false;
+      allow delete: if isOwner(userId);
     }
 
     // Rules-generation markers — no data ever lives here. The client GETs
     // meta/<its marker> once a day: 404 means these rules are current for
-    // it, 403 means the project's rules predate it and the board shows the
-    // "server rules need an update" notice. The list is CUMULATIVE (newer
-    // rules must still satisfy older clients' probes); add a version here
-    // and bump RULES_MARKER in backend/firebase.py together.
+    // it, 403 means the deployed rules predate it. The list is CUMULATIVE
+    // (newer rules must still satisfy older clients' probes); add a version
+    // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
       allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4'];
       allow list, create, update, delete: if false;
-    }
-
-    // v1.8–v1.9 server board: RETIRED in v1.10. Its rows were scoped only
-    // client-side, so any sharer on the project could read every crew's
-    // rows. Reads and writes are closed; owners may still delete their old
-    // row (the v1.10 client does so once).
-    match /server_board/{userId} {
-      allow read, create, update: if false;
-      allow delete: if isOwner(userId);
     }
 
     match /friend_codes/{code} {
@@ -171,5 +119,9 @@ service cloud.firestore {
       allow delete: if isAuthenticated() &&
                        resource.data.userId == request.auth.uid;
     }
+
+    // The v1.4–v1.9 crew-server directory (server_names, servers) is gone:
+    // no rule matches those paths any more, so nothing can read or write
+    // them. Delete the collections from the console after the rollout.
   }
 }

@@ -35,7 +35,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak")
-PERIODS = ("today", "week", "decks", "server")
+PERIODS = ("today", "week", "decks", "everyone")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
@@ -344,7 +344,7 @@ def _pycmd(cmd):
 def _head(period):
     pills = ""
     for key, label in (("today", "Today"), ("week", "Week"),
-                       ("decks", "Decks"), ("server", "Server")):
+                       ("decks", "Decks"), ("everyone", "Everyone")):
         cls = "dc-pill on" if period == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
@@ -458,61 +458,49 @@ def _decks_html(data, deltas=None):
     return html
 
 
-SERVER_SORTS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
-                ("streak", "&#128293; Streak"))
+EVERYONE_SORTS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
+                  ("streak", "&#128293; Streak"))
 
 
-def _server_html(view, cfg):
-    """The server board: everyone here chose to be. Plain ranks — no medals,
-    no cheers, no celebration surfaces; these aren't necessarily people you
-    know. Add lives on the person's card (click a name), not on the row."""
+def _everyone_html(view, cfg):
+    """The Everyone board: everyone here chose to be. Top rows by reviews,
+    plain ranks — no medals, no cheers, no celebration surfaces; these
+    aren't necessarily people you know. Add lives on the person's card
+    (click a name), not on the row. The headline is the together number."""
     state = view.get("state")
-    label = _html.escape(str(view.get("server") or "this server"))
     if state == "optin":
         return (f'<div style="text-align: center; padding: 18px 8px 14px; '
                 f'font-size: 12px; color: var(--dc-muted);">'
-                f'Everyone on {label} who&rsquo;s sharing &mdash; and the place '
-                f'to find new crew.<br>Sharing goes both ways: turn it on in '
+                f'Everyone on Due Crew who&rsquo;s sharing today &mdash; and the '
+                f'place to find new crew.<br>Sharing goes both ways: turn it on in '
                 f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
                 f'text-decoration: none;" onclick="{_pycmd("settings")}">Privacy</a> '
                 f'to see the board and be on it.</div>')
-    if state == "nokey":
-        if view.get("named"):
-            return (f'<div style="text-align: center; padding: 18px 8px 14px; '
-                    f'font-size: 12px; color: var(--dc-muted);">'
-                    f'The board for {label} needs your crew code once &mdash; '
-                    f'the same code you joined with. '
-                    f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
-                    f'text-decoration: none;" onclick="{_pycmd("crewcode")}">'
-                    f'Enter it</a></div>')
-        return ('<div style="text-align: center; padding: 18px 8px 14px; '
-                'font-size: 12px; color: var(--dc-muted);">'
-                'The server board is for named crews. Join one from '
-                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
-                f'text-decoration: none;" onclick="{_pycmd("settings")}">Settings</a>.'
-                '</div>')
     if state == "loading":
         return '<div class="dc-line" style="border-top: none;">Fetching the board&hellip;</div>'
     if state == "error":
         return ('<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
-                'load the board. Check your connection and Refresh &mdash; or, '
-                'if this keeps happening, the crew&rsquo;s server rules may '
-                'predate this version of Due Crew.</div>')
+                'load the board. Check your connection and Refresh.</div>')
     rows = view.get("rows") or []
+    totals = view.get("totals") or {}
+    people = int(totals.get("people") or 0)
     sort = sort_key(cfg)
-    field = {"reviews": "reviews", "time": "time_ms",
-             "streak": "streak"}.get(sort, "reviews")
-    rows = sorted(rows, key=lambda r: r.get(field) or 0, reverse=True)
+    field = {"time": "time_ms", "streak": "streak"}.get(sort, "reviews")
+    shown = sorted(rows, key=lambda r: r.get(field) or 0, reverse=True)
+    if people:
+        headline = (f'{people:,} studying today &middot; '
+                    f'{int(totals.get("reviews") or 0):,} reviews together')
+    else:
+        headline = "studying today"
     heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
-             f'<span style="color: var(--dc-muted); font-size: 11px;">{label} &middot; {len(rows)} today</span></th>')
-    for key, htext in SERVER_SORTS:
-        on = "on" if key == sort or (key == "reviews" and field == "reviews"
-                                     and sort not in ("time", "streak")) else ""
+             f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
+    for key, htext in EVERYONE_SORTS:
+        on = "on" if {"time": "time_ms", "streak": "streak"}.get(key, "reviews") == field else ""
         arrow = " &#9662;" if on else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{htext}{arrow}</a></th>')
     body = ""
-    for i, r in enumerate(rows):
+    for i, r in enumerate(shown):
         name = _html.escape(str(r["name"]))
         uid = str(r["user_id"])
         cls, note = "", ""
@@ -526,7 +514,7 @@ def _server_html(view, cfg):
             elif r.get("pending"):
                 note = ' <span class="la faded">&middot; knocked</span>'
             link = (f'<a class="dc-pl" href="#" title="Open card" '
-                    f'onclick="{_pycmd("scard:" + uid)}">{name}</a>')
+                    f'onclick="{_pycmd("ecard:" + uid)}">{name}</a>')
         body += (f'<tr class="{cls}"><td class="rk">#{i + 1}</td>'
                  f'<td class="nm">{link}{note}</td>'
                  f'<td class="n">{format(r["reviews"], ",")}</td>'
@@ -535,19 +523,25 @@ def _server_html(view, cfg):
     if not body:
         return ('<div class="dc-line" style="border-top: none;">No one&rsquo;s '
                 'on the board yet today.</div>')
-    note = ('<div class="dc-line" style="border-top: none;">today only &middot; '
-            'click a name to see their card &mdash; adding starts there</div>')
-    return f'<table><tr>{heads}</tr>{body}</table>{note}'
+    my_rank = view.get("my_rank")
+    mine = ""
+    if my_rank and not any(r.get("you") for r in rows) and people:
+        mine = (f'<div class="dc-line" style="border-top: none;">'
+                f'you&rsquo;re <b>#{int(my_rank):,}</b> of {people:,} today</div>')
+    note = (f'<div class="dc-line" style="border-top: none;">top {len(shown)} by '
+            f'reviews &middot; today only &middot; click a name to see their card '
+            f'&mdash; adding starts there</div>')
+    return f'<table><tr>{heads}</tr>{body}</table>{mine}{note}'
 
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
-           rules_stale=False, server_view=None):
+           rules_stale=False, everyone_view=None):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
     body = (_decks_html(data, deltas) if period == "decks"
-            else _server_html(server_view or {"state": "optin"}, cfg)
-            if period == "server"
+            else _everyone_html(everyone_view or {"state": "optin"}, cfg)
+            if period == "everyone"
             else _table_html(data, cfg, period))
     if wrap:
         extra = ""
@@ -594,9 +588,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     else:
         left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
     if rules_stale:
-        left = (f'<span class="warn">&#9888;</span> <a href="#" '
-                f'onclick="{_pycmd("rules")}">Server rules need an update</a>'
-                f' &middot; ') + left
+        left = ('<span class="warn" title="Due Crew\'s server is behind this '
+                'version of the add-on; some sharing is paused until it catches '
+                'up. Nothing to do on your side.">&#9888; server catching up</span>'
+                ' &middot; ') + left
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
     if period == "today":
@@ -690,7 +685,7 @@ def flurry_js(emojis, banner_text, back=None):
 
 
 def stranger_card_js(info):
-    """Card for a server-board member who isn't crew. Deliberately spare —
+    """Card for an Everyone-board member who isn't crew. Deliberately spare —
     no heatmap, no cheer, no celebration: we don't necessarily know them.
     info: uid, name, reviews, time_ms, streak, pending (bool)."""
     name = _html.escape(str(info.get("name", "?")))
@@ -701,7 +696,7 @@ def stranger_card_js(info):
         f'<div style="display: flex; align-items: baseline; gap: 8px;">'
         f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
         f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
-        f' letter-spacing: 0.08em;">on the server board</span></div>'
+        f' letter-spacing: 0.08em;">on the Everyone board</span></div>'
         f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>'
         f'<div style="font-size: 11.5px; opacity: 0.65; padding: 2px 0 0;">'
         f'Crew see each other&rsquo;s weeks, days, decks, and heatmaps.</div>')

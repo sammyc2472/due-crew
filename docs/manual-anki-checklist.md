@@ -1,4 +1,4 @@
-# Manual Anki checklist (v1.10)
+# Manual Anki checklist (v2.0)
 
 Automated tests cover client logic against a fake backend; the rules test
 needs the emulator. None of them run inside Anki. Before a release, do this
@@ -12,18 +12,18 @@ installing — add-ons load at launch).
 - [ ] Narrow the window (~480 px): the table never scrolls sideways; a long display name ellipsizes instead of overlapping the numbers. Other add-ons' content on the page is unaffected (we no longer touch `body`).
 - [ ] Switch Today / Week / Decks / Server; pills stay one row or wrap cleanly.
 
-## Sharing and the server board
-- [ ] Settings → Privacy → "Share on the server board" on; sync; the Server pill shows your row.
-- [ ] If the board asks for the crew code (installs that joined before v1.6), enter it once; the board loads.
-- [ ] A second account on a **different** crew (different name + code, same project) cannot see your row; the board it sees is its own.
+## Sharing and the Everyone board
+- [ ] Settings → Privacy → "Share on the Everyone board" on; sync; the Everyone pill shows the top rows, the "N studying today · M reviews together" headline, and your rank line when you're outside the top 50.
+- [ ] A second account that is NOT sharing cannot see the board (opt-in text) and cannot be knocked.
 - [ ] Turn sharing off; sync; your row disappears for others (retracted), and the pill shows the opt-in text for you.
 - [ ] Pause sharing; same result. Un-pause; row returns after a sync.
-- [ ] Old add-on versions on the same server: their server board shows an error / "rules need an update" until they update — expected.
+- [ ] An install upgraded from v1.x with a leftover server.json: the file is removed silently (default project) or you're asked to sign in again (custom project).
+- [ ] Old add-on versions: their Server view errors until they update — expected. Their friends/cheers/decks keep working.
 
 ## Friend requests (knocks)
 - [ ] From the Server view, click a stranger's name → card → Add to crew. They see "wants to be crew — Add back" in Friends after their next sync.
 - [ ] Add back on their side → both boards show each other as crew.
-- [ ] A user on a different crew cannot knock you (verify with the rules test; not reproducible by hand without a second crew).
+- [ ] A user who isn't sharing cannot knock you (rules test covers it).
 - [ ] Ignore hides that person's future knocks locally.
 
 ## Clipboard output
@@ -32,5 +32,7 @@ installing — add-ons load at launch).
 - [ ] The crew tape lists only people who studied today; friends who don't share study time appear as "N not sharing hours", never as empty rows; totals say "(partial)" when someone hides their count.
 - [ ] Friends' rows sit on your clock: a friend in another time zone lands at the real hour on your day.
 
-## Rules deployment (founders)
-- [ ] After pasting the new rules: the footer notice "Server rules need an update" clears within a day (or on Refresh) for v1.10 clients.
+## Rules deployment (maintainer)
+- [ ] Rules published in the console BEFORE the add-on release; after it, no v2.0 client shows "server catching up" in the footer.
+- [ ] Console: delete the retired `server_board`, `server_names`, and `servers` collections once v1.x clients are gone.
+- [ ] Firebase budget alert is set.

@@ -21,8 +21,6 @@ import urllib.request
 HOST = os.environ.get("FIRESTORE_EMULATOR_HOST", "localhost:8080")
 PROJECT = os.environ.get("GCLOUD_PROJECT", "demo-due-crew")
 BASE = f"http://{HOST}/v1/projects/{PROJECT}/databases/(default)/documents"
-KEY_A = "a" * 40   # crew A's key (sha1 in real life; any 40 chars here)
-KEY_B = "b" * 40
 PASSED, FAILED = 0, 0
 
 
@@ -72,50 +70,59 @@ def check(name, cond):
 
 
 def main():
-    # -- seed as admin: three users; alice+bob share on crew A, carol on crew B
-    for u, friends in (("alice", []), ("bob", []), ("carol", []), ("dave", [])):
-        put(f"users/{u}", {"displayName": u.title(), "friends": friends, "openBoard": True}, "owner")
-    put("users/dave", {"displayName": "Dave", "friends": [], "openBoard": False}, "owner")
+    # -- seed as admin: alice, bob share; carol does not; dave is alice's friend
+    for u, friends, sharing in (("alice", ["dave"], True), ("bob", [], True),
+                                ("carol", [], False), ("dave", ["alice"], False)):
+        put(f"users/{u}", {"displayName": u.title(), "friends": friends, "openBoard": sharing}, "owner")
+    day = "2026-09-06"
+    row = {"name": "Alice", "reviews": 10, "studyTimeMs": 1000, "streak": 3}
 
-    # -- membership: only under a key you name, only for yourself
-    check("membership: create own", put(f"servers/{KEY_A}/members/alice", {"at": "t"}, "alice") in (200, 201))
-    check("membership: cannot create for someone else", put(f"servers/{KEY_A}/members/bob", {"at": "t"}, "alice") == 403)
-    put(f"servers/{KEY_A}/members/bob", {"at": "t"}, "bob")
-    put(f"servers/{KEY_B}/members/carol", {"at": "t"}, "carol")
-    put(f"servers/{KEY_A}/members/dave", {"at": "t"}, "dave")
+    # -- rows: sharers only, own row only, allowed shape only
+    check("row: sharer writes own row", put(f"boards/{day}/rows/alice", row, "alice") in (200, 201))
+    check("row: cannot write someone else's row", put(f"boards/{day}/rows/bob", row, "alice") == 403)
+    check("row: non-sharer cannot write a row", put(f"boards/{day}/rows/carol", row, "carol") == 403)
+    check("row: extra field rejected", put(f"boards/{day}/rows/bob", dict(row, server="x"), "bob") == 403)
+    check("row: negative reviews rejected", put(f"boards/{day}/rows/bob", dict(row, reviews=-1), "bob") == 403)
+    check("row: bad day id rejected", put("boards/not-a-day/rows/bob", row, "bob") == 403)
+    put(f"boards/{day}/rows/bob", dict(row, name="Bob", reviews=20), "bob")
 
-    # -- rows: members only, own row only, allowed fields only
-    row = {"name": "Alice", "day": "2026-09-05", "dayStart": 1, "reviews": 10, "studyTimeMs": 1000, "streak": 3}
-    check("row: member writes own row", put(f"servers/{KEY_A}/board/alice", row, "alice") in (200, 201))
-    check("row: non-member cannot write a row", put(f"servers/{KEY_B}/board/alice", row, "alice") == 403)
-    check("row: extra field rejected", put(f"servers/{KEY_A}/board/bob", dict(row, server="x"), "bob") == 403)
-    put(f"servers/{KEY_A}/board/bob", row, "bob")
-    put(f"servers/{KEY_B}/board/carol", row, "carol")
+    # -- reads: symmetric
+    check("board: sharer can list the day", call("GET", f"boards/{day}/rows", "bob")[0] == 200)
+    check("board: non-sharer cannot list", call("GET", f"boards/{day}/rows", "carol")[0] == 403)
+    check("board: non-sharer cannot get a row", call("GET", f"boards/{day}/rows/alice", "carol")[0] == 403)
+    q = {"structuredQuery": {"from": [{"collectionId": "rows"}],
+                             "orderBy": [{"field": {"fieldPath": "reviews"}, "direction": "DESCENDING"}],
+                             "limit": 1}}
+    status, body = call("POST", f"boards/{day}:runQuery", "bob", q)
+    check("board: top-N query allowed for sharers", status == 200)
+    status, _ = call("POST", f"boards/{day}:runQuery", "carol", q)
+    check("board: top-N query denied for non-sharers", status == 403)
+    agg = {"structuredAggregationQuery": {"structuredQuery": {"from": [{"collectionId": "rows"}]},
+                                          "aggregations": [{"alias": "n", "count": {}}]}}
+    check("board: aggregation allowed for sharers", call("POST", f"boards/{day}:runAggregationQuery", "bob", agg)[0] == 200)
+    check("board: aggregation denied for non-sharers", call("POST", f"boards/{day}:runAggregationQuery", "carol", agg)[0] == 403)
 
-    # -- reads: crew-scoped and symmetric
-    check("board: member who shares can list crew A", call("GET", f"servers/{KEY_A}/board", "alice")[0] == 200)
-    check("board: crew B member cannot list crew A", call("GET", f"servers/{KEY_A}/board", "carol")[0] == 403)
-    check("board: member who is NOT sharing cannot peek", call("GET", f"servers/{KEY_A}/board", "dave")[0] == 403)
-    check("board: outsider cannot get a single row", call("GET", f"servers/{KEY_A}/board/alice", "carol")[0] == 403)
-
-    # -- knocks: both memberships in the named crew + both sharing
-    knock = {"name": "Alice", "at": "t", "crew": KEY_A}
-    check("knock: same crew, both sharing", put("users/bob/knocks/alice", knock, "alice") in (200, 201))
-    check("knock: cross-crew rejected", put("users/carol/knocks/alice", knock, "alice") == 403)
-    check("knock: crew you don't belong to rejected", put("users/carol/knocks/alice", dict(knock, crew=KEY_B), "alice") == 403)
-    check("knock: recipient not sharing rejected", put("users/dave/knocks/alice", knock, "alice") == 403)
-    check("knock: missing crew field rejected", put("users/bob/knocks/alice", {"name": "Alice", "at": "t"}, "alice") == 403)
+    # -- knocks: both on the board
+    knock = {"name": "Alice", "at": "t"}
+    check("knock: sharer to sharer", put("users/bob/knocks/alice", knock, "alice") in (200, 201))
+    check("knock: to a non-sharer rejected", put("users/carol/knocks/alice", knock, "alice") == 403)
+    check("knock: from a non-sharer rejected", put("users/bob/knocks/carol", knock, "carol") == 403)
     check("knock: cannot forge sender id", put("users/bob/knocks/carol", knock, "alice") == 403)
+    check("knock: extra fields rejected", put("users/bob/knocks/alice", dict(knock, crew="x"), "alice") == 403)
 
-    # -- retraction: owner deletes row; row gone for everyone
-    check("retract: owner deletes own row", call("DELETE", f"servers/{KEY_A}/board/alice", "alice")[0] == 200)
-    check("retract: cannot delete someone else's row", call("DELETE", f"servers/{KEY_A}/board/bob", "alice")[0] == 403)
+    # -- friendship consent unchanged
+    put("users/alice/daily_stats/2026-09-06", {"reviews": 10}, "alice")
+    check("stats: friend reads", call("GET", "users/alice/daily_stats/2026-09-06", "dave")[0] == 200)
+    check("stats: stranger denied", call("GET", "users/alice/daily_stats/2026-09-06", "bob")[0] == 403)
 
-    # -- the retired collection is closed
+    # -- retraction and retired paths
+    check("retract: owner deletes own row", call("DELETE", f"boards/{day}/rows/alice", "alice")[0] == 200)
+    check("retract: cannot delete someone else's row", call("DELETE", f"boards/{day}/rows/bob", "alice")[0] == 403)
     put("server_board/alice", {"name": "x"}, "owner")
     check("retired: old rows unreadable", call("GET", "server_board/alice", "alice")[0] == 403)
     check("retired: old rows unwritable", put("server_board/alice", {"name": "y"}, "alice") == 403)
     check("retired: owner may delete old row", call("DELETE", "server_board/alice", "alice")[0] == 200)
+    check("retired: directory is gone", call("GET", "server_names/busm", "alice")[0] == 403)
 
     # -- markers cumulative
     for m in ("rules-v2", "rules-v3", "rules-v4"):

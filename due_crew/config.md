@@ -14,7 +14,8 @@ Raw keys, for reference:
 | `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
 | `share_heatmap` | true/false | Heatmap on your profile card |
-| `server_board` | true/false | Share on the server board; off hides it both ways |
+| `server_board` | true/false | Share on the Everyone board; off hides it both ways |
+| `crew_label` | text | The name your crew goes by in shares ("busm today") |
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
 | `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |

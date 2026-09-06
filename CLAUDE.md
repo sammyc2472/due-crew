@@ -8,8 +8,11 @@ maintainer. The repo is the source of truth; there is no build step.
 - `due_crew/` — the add-on. `__init__.py` (hooks/glue, main-thread rules in
   its docstring), `board.py` (pure HTML rendering), `backend/` (Firebase
   REST + server directory), `stats/` (local SQL), `ui/` (Qt dialogs).
-- `firestore.rules` — deployed to the Firebase project. Friendship consent
-  and the crew-server directory are enforced here.
+- `firestore.rules` — deployed to the one hosted Firebase project
+  (anki-leaderboard-f6691; Sam pays past the free tier). Friendship consent
+  and the opt-in Everyone board are enforced here. v2.0 removed crew
+  servers, the directory, and custom projects — nobody but Sam ever used
+  them.
 - `README.md` — doubles verbatim as the AnkiWeb listing description; keep
   them in sync when it changes.
 - `tests/` — `python3 tests/test_due_crew.py` (client behavior against a
@@ -24,10 +27,11 @@ maintainer. The repo is the source of truth; there is no build step.
    (the list is cumulative — older clients keep probing older markers) AND
    bump `RULES_MARKER` in `backend/firebase.py`, copy the file to
    `due_crew/firestore.rules` (the in-app rules dialog ships that copy),
-   run the emulator rules test, and re-publish in the Firebase console.
-   A rules change that closes a path older clients use (v1.10 closed
-   `server_board`) is a breaking change: say so in the release notes —
-   those clients' tripwire fires on their next rejected write.
+   run the emulator rules test, and re-publish in the Firebase console
+   BEFORE the add-on release (users can't fix rules; the footer shows
+   "server catching up" until the paste lands). A rules change that closes
+   a path older clients use (v2.0 closed `server_board` and the directory)
+   is a breaking change: say so in the release notes.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
 4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
@@ -37,8 +41,10 @@ maintainer. The repo is the source of truth; there is no build step.
 
 - Simplicity is the product rule. Friendship framing, never competition —
   "crew", no "compete/rivals". Copy is terse, no AI-speak.
-- Firebase is on the free plan: minimize document reads. The board loads in
-  3 requests; don't add polling or per-friend fetches.
+- Firebase reads cost money at scale: minimize document reads. The crew
+  board loads in 3 requests; the Everyone board is top-50 + three
+  aggregations, never a full listing. Don't add polling, per-friend
+  fetches, or unbounded queries.
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - Escape every server-sourced string before webviews, tooltips, or rich-text

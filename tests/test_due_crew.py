@@ -369,7 +369,7 @@ def test_exam_eve_and_rules_render():
           "exam is tomorrow" in html and "Priya &lt;x&gt;" in html
           and "cheerpick:p1" in html and "evedismiss" in html)
     check("rules: footer notice renders",
-          "Server rules need an update" in html and "duecrew:rules" in html)
+          "server catching up" in html and "duecrew:rules" not in html)
     two = b.render(data, {}, 0, exam_eve={"people": [("p1", "Priya"), ("p2", "Theo")]})
     check("exam eve: two exams merge into one line",
           two.count("dc-wrap eve") == 1 and "have exams tomorrow" in two)
@@ -385,174 +385,7 @@ ROW = {"name": "Sammy", "day": "2026-09-01", "dayStart": 1756717200,
        "reviews": 512, "studyTimeMs": 4320000, "streak": 12}
 
 
-def test_server_board_flow():
-    """Rows live under the crew key; reads are crew-scoped AND symmetric;
-    opt-out retracts; membership is created once, by path."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"},
-               {"sam": [], "dre": [], "eve": [], "zed": []})
-    for u in ("sam", "dre", "eve"):
-        _opt_in(store, u)
-    sam = new_client(store, "sam", "Sammy")
-    ok1 = sam.upload_board_row(KEY_A, "sam", ROW)
-    n0 = sum(1 for m, pth, st in store.log if pth == f"servers/{KEY_A}/board/sam" and m == "PATCH")
-    ok2 = sam.upload_board_row(KEY_A, "sam", ROW)
-    n1 = sum(1 for m, pth, st in store.log if pth == f"servers/{KEY_A}/board/sam" and m == "PATCH")
-    members = sum(1 for m, pth, st in store.log if "/members/" in pth and m == "PATCH")
-    check("board: row upserts once under the crew key, hash skips repeats",
-          ok1 and ok2 and n0 == 1 and n1 == 1 and members == 1)
-    dre = new_client(store, "dre", "Dre")
-    dre.ensure_membership(KEY_A, "dre")
-    rows = dre.fetch_server_board(KEY_A)
-    check("board: a sharing member of the same crew sees the row",
-          len(rows) == 1 and rows[0]["name"] == "Sammy" and rows[0]["day_start"] == ROW["dayStart"])
 
-    def denied(cl, key):
-        try:
-            cl.fetch_server_board(key)
-            return False
-        except firebase.TransportError:
-            return True
-    eve = new_client(store, "eve", "Eve")
-    eve.ensure_membership(KEY_B, "eve")            # sharing, but on crew B
-    check("board: a sharer on ANOTHER crew is denied crew A", denied(eve, KEY_A))
-    zed = new_client(store, "zed", "Zed")
-    zed.ensure_membership(KEY_A, "zed")            # member, but not sharing
-    check("board: a member who is not sharing cannot peek", denied(zed, KEY_A))
-    check("board: a non-member cannot write a row into crew A",
-          not zed.patch_doc(f"servers/{KEY_B}/board/zed", ROW, label="x"))
-    store.auth_uid = "sam"
-    sam.delete_board_row("sam")
-    check("board: opt-out deletes the row under the key it was written to",
-          f"servers/{KEY_A}/board/sam" not in store.docs
-          and f"servers/{KEY_A}/members/sam" in store.docs)
-
-
-def test_crew_scoping_by_path():
-    """Two crews on one project never see each other; membership can only
-    be created for yourself, and only under a key you can name."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "kim": "Kim"}, {"sam": [], "kim": []})
-    _opt_in(store, "sam"); _opt_in(store, "kim")
-    sam = new_client(store, "sam", "Sammy")
-    sam.upload_board_row(KEY_A, "sam", ROW)
-    kim = new_client(store, "kim", "Kim")
-    kim.upload_board_row(KEY_B, "kim", dict(ROW, name="Kim"))
-    a_rows = [r["name"] for r in kim.fetch_server_board(KEY_B)]
-    try:
-        kim.fetch_server_board(KEY_A)
-        crossed = True
-    except firebase.TransportError:
-        crossed = False
-    forged = kim.patch_doc(f"servers/{KEY_A}/members/sam",
-                           {"at": {"timestampValue": "t"}}, label="x")
-    check("scoping: each crew sees only itself", a_rows == ["Kim"] and not crossed)
-    check("scoping: cannot create a membership for someone else", not forged)
-
-
-def test_old_rules_new_client():
-    """A v1.10 client on a project still running the v1.8/1.9 rules: the
-    board fails closed and the tripwire says the rules are stale."""
-    store = fakes.FakeFirestore(rules_mode="v3")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
-    _opt_in(store, "sam")
-    sam = new_client(store, "sam", "Sammy")
-    wrote = sam.upload_board_row(KEY_A, "sam", ROW)
-    try:
-        sam.fetch_server_board(KEY_A)
-        read = True
-    except firebase.TransportError:
-        read = False
-    check("old rules: v1.10 cannot write or read the scoped board", not wrote and not read)
-    check("old rules: the v4 marker probe flags stale", sam.check_rules("2026-09-01") is True)
-
-
-def test_old_row_retirement():
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
-    store.docs["server_board/sam"] = {"name": fv_str("Sammy")}
-    sam = new_client(store, "sam", "Sammy")
-    sam.retire_old_board_row("sam")
-    sam.retire_old_board_row("sam")
-    deletes = sum(1 for m, pth, st in store.log if pth == "server_board/sam" and m == "DELETE")
-    check("retirement: the unscoped v1.8 row is deleted once",
-          "server_board/sam" not in store.docs and deletes == 1)
-
-
-def test_alias_and_key():
-    """Join lookups hand back the crew key — the name's own, or the crew it
-    was registered as an alias of — and keys normalize name/code."""
-    from due_crew.backend import directory
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    sys.modules["requests"].request = lambda m, u, **kw: fakes.FakeSession(
-        store).request(m, u, headers=kw.get("headers"), json=kw.get("json"))
-    k1 = directory.crew_key("busm", "ABC123")
-    check("key: normalizes case and whitespace",
-          k1 == directory.crew_key(" BUSM ", "abc123") and len(k1) == 40)
-    own = directory.crew_key("busm-2027", "ZZZ999")
-    store.docs[f"servers/{own}"] = {"apiKey": fv_str("k"), "projectId": fv_str("p"),
-                                   "name": fv_str("busm-2027"), "crewKey": fv_str(k1)}
-    conf = directory.lookup_server("busm-2027", "ZZZ999")
-    check("alias: joining the new name lands on the original crew's key",
-          conf and conf["key"] == k1 and conf["name"] == "busm-2027")
-    plain = directory.crew_key("solo", "111111")
-    store.docs[f"servers/{plain}"] = {"apiKey": fv_str("k"), "projectId": fv_str("p"),
-                                     "name": fv_str("solo")}
-    conf2 = directory.lookup_server("solo", "111111")
-    check("alias: a plain name keys itself", conf2 and conf2["key"] == plain)
-
-
-def test_knock_flow():
-    """Knocks need both memberships in the named crew and both sharing;
-    names come from profiles, not the doc."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "kim": "Kim"},
-               {"sam": [], "dre": [], "eve": [], "kim": []})
-    for u in ("sam", "dre", "eve", "kim"):
-        _opt_in(store, u)
-    for u, key in (("sam", KEY_A), ("dre", KEY_A), ("kim", KEY_B)):
-        c = new_client(store, u)
-        c.ensure_membership(key, u)
-    dre = new_client(store, "dre", "Dre")
-    ok = dre.send_knock("sam", "dre", "TOTALLY FAKE NAME", KEY_A)
-    kim = new_client(store, "kim", "Kim")
-    cross = kim.send_knock("sam", "kim", "Kim", KEY_B)      # kim's crew, sam isn't in it
-    cross2 = kim.send_knock("sam", "kim", "Kim", KEY_A)     # sam's crew, kim isn't in it
-    eve = new_client(store, "eve", "Eve")
-    nomember = eve.send_knock("sam", "eve", "Eve", KEY_A)   # sharing, no membership
-    sam = new_client(store, "sam", "Sammy")
-    knocks = sam.list_knocks("sam")
-    sam.delete_knock("sam", "dre")
-    left = sam.list_knocks("sam")
-    check("knock: same crew, both sharing -> allowed", ok)
-    check("knock: cross-crew and non-member knocks are rejected",
-          not cross and not cross2 and not nomember)
-    check("knock: names come from profiles (no spoofing)", knocks == [("dre", "Dre")], str(knocks))
-    check("knock: delete clears it", left == [])
-
-
-def test_marker_compat():
-    """Cumulative markers: old clients stay green on newer rules; a new
-    client flags older rules."""
-    v4 = fakes.FakeFirestore(rules_mode="repo")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v4)
-    seed_users(v4, {"sam": "Sammy"}, {"sam": []})
-    cl = new_client(v4, "sam", "Sammy")
-    check("markers: v4 client current on v4 rules", cl.check_rules("2026-09-01") is False)
-    check("markers: v1.7 (v2) and v1.8 (v3) probes still 404 on v4 rules",
-          cl._req("GET", f"{cl.base}/meta/rules-v2").status_code == 404
-          and cl._req("GET", f"{cl.base}/meta/rules-v3").status_code == 404)
-    v3 = fakes.FakeFirestore(rules_mode="v3")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v3)
-    seed_users(v3, {"sam": "Sammy"}, {"sam": []})
-    cl3 = new_client(v3, "sam", "Sammy")
-    check("markers: v4 client flags v3 rules as stale", cl3.check_rules("2026-09-01") is True)
 
 
 def test_server_view_html():
@@ -565,15 +398,15 @@ def test_server_view_html():
         {"user_id": "u2", "name": "Maya", "day": "2026-09-01",
          "reviews": 488, "time_ms": 3900000, "streak": 31, "pending": True},
     ]
-    html = b._server_html({"state": "ok", "rows": rows, "server": "busm"}, {})
-    optin = b._server_html({"state": "optin", "server": "busm"}, {})
+    html = b._everyone_html({"state": "ok", "rows": rows, "totals": {"people": 3, "reviews": 2412, "above": 0}, "my_rank": 2}, {})
+    optin = b._everyone_html({"state": "optin"}, {})
     check("server view: plain ranks, no medals, no cheers",
           "#1" in html and "&#129351;" not in html and "dc-cheer" not in html)
     check("server view: names escaped, card command wired, knocked note",
-          "StepQueen &lt;s&gt;" in html and "scard:u1" in html
+          "StepQueen &lt;s&gt;" in html and "ecard:u1" in html
           and "knocked" in html)
     check("server view: opt-in card gates non-sharers",
-          "Privacy" in optin and "scard" not in optin)
+          "Privacy" in optin and "ecard" not in optin)
 
 
 def test_stranger_card():
@@ -588,53 +421,6 @@ def test_stranger_card():
     check("stranger card: pending has no action command", '"duecrew:knock' not in pend)
 
 
-def test_deletion_sweep():
-    store = fakes.FakeFirestore()
-    real_post = fakes.FakeSession.post
-    fakes.FakeSession.post = lambda self, url, **kw: fakes.FakeResponse(200, {})
-    try:
-        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-        seed_users(store, {"sam": "Sammy", "dre": "Dre"},
-                   {"sam": ["dre"], "dre": ["sam"]})
-        _opt_in(store, "sam"); _opt_in(store, "dre")
-        sam = new_client(store, "sam", "Sammy")
-        sam.upload_board_row(KEY_A, "sam", ROW)
-        dre = new_client(store, "dre", "Dre")
-        dre.ensure_membership(KEY_A, "dre")
-        dre.send_knock("sam", "dre", "Dre", KEY_A)
-        store.auth_uid = "sam"
-        sam.delete_account("sam", None)
-        check("deletion: board row, membership, and knocks are swept",
-              f"servers/{KEY_A}/board/sam" not in store.docs
-              and f"servers/{KEY_A}/members/sam" not in store.docs
-              and not any(p.startswith("users/sam/knocks/") for p in store.docs))
-    finally:
-        fakes.FakeSession.post = real_post
-
-
-def test_rename_follow():
-    """Founder renames via console: members follow; junk targets don't."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    sys.modules["requests"].request = lambda m, u, **kw: fakes.FakeSession(
-        store).request(m, u, headers=kw.get("headers"), json=kw.get("json"))
-    from due_crew.backend import directory
-    store.docs["server_names/breezy-newt-6261"] = {
-        "createdAt": {"timestampValue": "t"},
-        "renamedTo": {"stringValue": "busm"}}
-    store.docs["server_names/busm"] = {"createdAt": {"timestampValue": "t"},
-                                       "custom": {"booleanValue": True}}
-    store.docs["server_names/oldname"] = {
-        "createdAt": {"timestampValue": "t"},
-        "renamedTo": {"stringValue": "BAD NAME!!"}}
-    check("rename: members follow the console rename",
-          directory.follow_rename("breezy-newt-6261") == "busm")
-    check("rename: no rename means None",
-          directory.follow_rename("busm") is None)
-    check("rename: invalid targets are ignored",
-          directory.follow_rename("oldname") is None)
-    check("rename: unknown server is None",
-          directory.follow_rename("nope") is None)
 
 
 def test_shares():
@@ -777,33 +563,158 @@ def test_copy_text():
     check("clipboard: fallback lands on Qt without raising", ok and seen, str(seen))
 
 
+def _opt_in(store, uid):
+    store.docs[f"users/{uid}"]["openBoard"] = {"booleanValue": True}
+
+
+def test_everyone_board():
+    """One row per sharer per day; top-N by reviews; rank and totals by
+    aggregation; symmetric denial; retraction; rules-shaped writes only."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"},
+               {"sam": [], "dre": [], "eve": [], "zed": []})
+    for u in ("sam", "dre", "zed"):
+        _opt_in(store, u)
+    day = TODAY.isoformat()
+    sam = new_client(store, "sam", "Sammy")
+    ok = sam.upload_board_row("sam", day, {"name": "Sammy", "reviews": 512,
+                                           "studyTimeMs": 4320000, "streak": 12})
+    n0 = sum(1 for m, pth, st in store.log if pth.startswith("boards/") and m == "PATCH")
+    sam.upload_board_row("sam", day, {"name": "Sammy", "reviews": 512,
+                                      "studyTimeMs": 4320000, "streak": 12})
+    n1 = sum(1 for m, pth, st in store.log if pth.startswith("boards/") and m == "PATCH")
+    check("everyone: row upserts once, hash skips repeats", ok and n0 == 1 and n1 == 1)
+    check("everyone: extra fields are rejected by rules",
+          not sam.patch_doc(f"boards/{day}/rows/sam", {"name": "x", "reviews": 1,
+                                                       "server": "busm"}))
+    check("everyone: not-sharing owner cannot write a row",
+          not new_client(store, "eve", "Eve").patch_doc(
+              f"boards/{day}/rows/eve", {"name": "Eve", "reviews": 5}))
+    dre = new_client(store, "dre", "Dre")
+    dre.upload_board_row("dre", day, {"name": "Dre", "reviews": 812,
+                                      "studyTimeMs": 7440000, "streak": 41})
+    zed = new_client(store, "zed", "Zed")
+    zed.upload_board_row("zed", day, {"name": "Zed", "reviews": 1000,
+                                      "studyTimeMs": 100, "streak": 1})
+    top = zed.fetch_everyone(day, limit=2)
+    check("everyone: top-N comes back by reviews, capped",
+          [r["name"] for r in top] == ["Zed", "Dre"], str(top))
+    totals = zed.everyone_totals(day, my_reviews=512)   # Sam's count
+    check("everyone: totals and rank come from aggregations",
+          totals == {"people": 3, "reviews": 2324, "above": 2}, str(totals))
+    store.auth_uid = "eve"
+    eve = new_client(store, "eve", "Eve")
+    try:
+        eve.fetch_everyone(day)
+        eve_denied = False
+    except firebase.TransportError:
+        eve_denied = True
+    check("everyone: non-sharers are denied (symmetric by rule)", eve_denied)
+    store.auth_uid = "sam"
+    sam.delete_board_row("sam")
+    check("everyone: opt-out retracts the row and remembers it",
+          f"boards/{day}/rows/sam" not in store.docs
+          and sam.session.get("board_row_deleted") is True)
+    sam.retire_old_board_row("sam")
+    store.docs["server_board/sam"] = {"name": fv_str("x")}
+    sam.session.pop("old_board_retired", None)
+    sam.retire_old_board_row("sam")
+    check("everyone: the v1.8 row is retired once", "server_board/sam" not in store.docs)
+
+
+def test_knocks_global():
+    """Knocks need both people on the Everyone board; names come from
+    profiles, not the doc."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve"},
+               {"sam": [], "dre": [], "eve": []})
+    _opt_in(store, "sam"); _opt_in(store, "dre")
+    dre = new_client(store, "dre", "Dre")
+    ok = dre.send_knock("sam", "dre", "TOTALLY FAKE NAME")
+    eve = new_client(store, "eve", "Eve")
+    eve_ok = eve.send_knock("sam", "eve", "Eve")
+    sam = new_client(store, "sam", "Sammy")
+    knocks = sam.list_knocks("sam")
+    sam.delete_knock("sam", "dre")
+    check("knock: sharers can knock, non-sharers cannot", ok and not eve_ok)
+    check("knock: names come from profiles (no spoofing)", knocks == [("dre", "Dre")], str(knocks))
+    check("knock: delete clears it", sam.list_knocks("sam") == [])
+
+
+def test_marker_compat():
+    """Cumulative markers: old clients stay green on newer rules; a v2.0
+    client on v1.9-era rules sees the board denied and the probe stale."""
+    v4 = fakes.FakeFirestore(rules_mode="repo")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(v4)
+    seed_users(v4, {"sam": "Sammy"}, {"sam": []})
+    cl = new_client(v4, "sam", "Sammy")
+    check("markers: v2.0 client current on v4 rules", cl.check_rules(TODAY.isoformat()) is False)
+    check("markers: v1.7 client still green on v4 rules",
+          cl._req("GET", f"{cl.base}/meta/rules-v2").status_code == 404)
+    v3 = fakes.FakeFirestore(rules_mode="v3")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(v3)
+    seed_users(v3, {"sam": "Sammy"}, {"sam": []})
+    _opt_in(v3, "sam")
+    cl3 = new_client(v3, "sam", "Sammy")
+    try:
+        cl3.fetch_everyone(TODAY.isoformat())
+        denied = False
+    except firebase.TransportError:
+        denied = True
+    check("markers: v2.0 client on v3 rules — board denied, probe stale",
+          denied and cl3.check_rules(TODAY.isoformat()) is True)
+
+
+def test_deletion_sweep():
+    store = fakes.FakeFirestore()
+    real_post = fakes.FakeSession.post
+    fakes.FakeSession.post = lambda self, url, **kw: fakes.FakeResponse(200, {})
+    try:
+        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+        seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+        _opt_in(store, "sam"); _opt_in(store, "dre")
+        sam = new_client(store, "sam", "Sammy")
+        today = datetime.date.today().isoformat()
+        sam.upload_board_row("sam", today, {"name": "Sammy", "reviews": 1,
+                                            "studyTimeMs": 1, "streak": 1})
+        store.docs["server_board/sam"] = {"name": fv_str("x")}
+        dre = new_client(store, "dre", "Dre")
+        dre.send_knock("sam", "dre", "Dre")
+        store.auth_uid = "sam"
+        sam.delete_account("sam", None)
+        check("deletion: board rows, old row, and knocks are swept",
+              f"boards/{today}/rows/sam" not in store.docs
+              and "server_board/sam" not in store.docs
+              and not any(p.startswith("users/sam/knocks/") for p in store.docs))
+    finally:
+        fakes.FakeSession.post = real_post
+
+
+def test_projection_and_totals():
+    """Friends' hours land on the viewer's clock; missing is never zero."""
+    from due_crew import share
+    levels = [0] * 24
+    levels[3] = 2   # 3 hours after THEIR day began
+    placed = share.project_levels(levels, their_start=1_000_000 + 3 * 3600,
+                                  my_start=1_000_000)
+    check("projection: a friend 3h ahead lands 3h later on my day",
+          placed[6] == 2 and sum(placed) == 2, str(placed))
+    dropped = share.project_levels(levels, their_start=1_000_000 + 23 * 3600,
+                                   my_start=1_000_000)
+    check("projection: hours outside my day are dropped, not misplaced",
+          sum(dropped) == 0)
+    lv = [0] * 24; lv[5] = 2
+    text = share.crew_today("busm", [("A", lv)], 100, partial=True, unshared=2)
+    tail = text.split("\n")[-2]
+    check("totals: partial and unshared are stated",
+          tail == "we covered 1 hour · 100 reviews (partial) · 2 not sharing hours", tail)
+
 def main():
-    test_payload_shapes()
-    test_rules_drift_reproduces_live_state()
-    test_dots_gap()
-    test_backfill_costs()
-    test_studied_field_privacy()
-    test_heatmap_roundtrip()
-    test_heatmap_retraction()
-    test_rules_probe()
-    test_duet_runs()
-    test_welcome_back()
-    test_milestones()
-    test_exam_eve_and_rules_render()
-    test_server_board_flow()
-    test_crew_scoping_by_path()
-    test_old_rules_new_client()
-    test_old_row_retirement()
-    test_alias_and_key()
-    test_knock_flow()
-    test_marker_compat()
-    test_server_view_html()
-    test_stranger_card()
-    test_deletion_sweep()
-    test_rename_follow()
-    test_shares()
-    test_hours_upload()
-    test_copy_text()
+    names = [n for n in list(globals()) if n.startswith("test_")]
+    for n in names:
+        globals()[n]()
     bad = [c for c in CHECKS if not c[1]]
     print(f"\n{len(CHECKS) - len(bad)}/{len(CHECKS)} checks passed")
     sys.exit(1 if bad else 0)

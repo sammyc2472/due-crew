@@ -22,6 +22,7 @@ DEFAULTS = {
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
     "server_board": False, "paused": False, "exam_date": "",
+    "crew_label": "Crew",
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
@@ -31,9 +32,7 @@ THEMES = [("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")]
 
 class SettingsDialog(QDialog):
     def __init__(self, parent, client, config, on_saved, open_auth,
-                 open_friends, on_signed_out, open_decks,
-                 server_label="", open_server_join=None,
-                 open_server_register=None):
+                 open_friends, on_signed_out, open_decks):
         super().__init__(parent)
         self.client = client
         self.config = dict(config)
@@ -42,9 +41,6 @@ class SettingsDialog(QDialog):
         self.open_friends = open_friends
         self.on_signed_out = on_signed_out
         self.open_decks = open_decks
-        self.server_label = server_label
-        self.open_server_join = open_server_join
-        self.open_server_register = open_server_register
         self._binds = {}
         attach_alive(self)
         self._build()
@@ -99,7 +95,6 @@ class SettingsDialog(QDialog):
             sign_in.clicked.connect(self._sign_in)
             lay.addWidget(sign_in)
             lay.addStretch()
-            self._server_rows(lay)
             return
 
         self.who_label = QLabel(self._who_text())
@@ -128,34 +123,10 @@ class SettingsDialog(QDialog):
         lay.addWidget(note)
 
         lay.addStretch()
-        self._server_rows(lay)
         delete = QPushButton("Delete account…")
         delete.setStyleSheet(f"color: {danger()};")
         delete.clicked.connect(self._delete)
         lay.addWidget(delete)
-
-    def _server_rows(self, lay):
-        row = QHBoxLayout()
-        label = QLabel(f"Server: <b>{html.escape(self.server_label) or 'default'}</b>")
-        label.setStyleSheet("font-size: 12px;")
-        row.addWidget(label)
-        if self.open_server_join:
-            switch = QPushButton("Switch…")
-            switch.clicked.connect(lambda: self._server(self.open_server_join))
-            row.addWidget(switch)
-        if self.open_server_register:
-            register = QPushButton("Register your own…")
-            register.clicked.connect(
-                lambda: self._server(self.open_server_register))
-            row.addWidget(register)
-        row.addStretch()
-        lay.addLayout(row)
-
-    def _server(self, cb):
-        # server dialogs replace this dialog's client — close first
-        self.accept()
-        if cb:
-            QTimer.singleShot(0, cb)
 
     def _who_text(self):
         name = html.escape(self.client.display_name or "?")
@@ -249,6 +220,18 @@ class SettingsDialog(QDialog):
         lay.addWidget(box)
         self._binds[key] = box
 
+    def _text(self, lay, key, label, placeholder=""):
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label))
+        edit = QLineEdit()
+        edit.setPlaceholderText(placeholder)
+        edit.setMaxLength(24)
+        edit.setText(str(self.config.get(key, DEFAULTS[key]) or ""))
+        row.addWidget(edit)
+        row.addStretch()
+        lay.addLayout(row)
+        self._binds[key] = edit
+
     def _combo(self, lay, key, label, options):
         row = QHBoxLayout()
         row.addWidget(QLabel(label))
@@ -270,6 +253,7 @@ class SettingsDialog(QDialog):
         self._combo(lay, "sort", "Sort by", SORTS)
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
         self._check(lay, "sync_notifications", "Toast when a friend syncs")
+        self._text(lay, "crew_label", "Crew name in shares", "Crew")
         note = QLabel("The board refreshes when Anki syncs, or when you "
                       "click Refresh on it.")
         note.setStyleSheet("font-size: 11px;")
@@ -298,14 +282,14 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_streak", "Streak")
         self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
         lay.addSpacing(8)
-        lay.addWidget(QLabel("<b>Server board</b>"))
+        lay.addWidget(QLabel("<b>Everyone board</b>"))
         self._check(lay, "server_board",
-                    "Share on the server board (off = hidden both ways)")
+                    "Share on the Everyone board (off = hidden both ways)")
         board_note = QLabel("Your name and today's numbers, visible to "
-                            "everyone on this server who's also sharing — "
-                            "and theirs to you. Adding someone from the "
-                            "board starts a knock; you're crew when they "
-                            "add back.")
+                            "everyone on Due Crew who's also sharing — "
+                            "worldwide — and theirs to you. Adding someone "
+                            "from the board starts a knock; you're crew when "
+                            "they add back.")
         board_note.setStyleSheet("font-size: 11px;")
         board_note.setWordWrap(True)
         lay.addWidget(board_note)
@@ -356,6 +340,8 @@ class SettingsDialog(QDialog):
                     if widget.itemData(i) == DEFAULTS[key]:
                         widget.setCurrentIndex(i)
                         break
+            elif isinstance(widget, QLineEdit):
+                widget.setText(str(DEFAULTS[key]))
 
     def _save(self):
         changed = {}
@@ -364,6 +350,8 @@ class SettingsDialog(QDialog):
                 changed[key] = widget.isChecked()
             elif isinstance(widget, QComboBox):
                 changed[key] = widget.currentData()
+            elif isinstance(widget, QLineEdit):
+                changed[key] = widget.text().strip()[:24]
         changed["exam_date"] = (
             self.exam_edit.date().toString(Qt.DateFormat.ISODate)
             if self.exam_on.isChecked() else "")
