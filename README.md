@@ -42,11 +42,11 @@ streak means what it says.
 - **Share it** — paste-ready for the group chat: the crew's day as a
   tape (everyone's study hours side by side, only those who showed up),
   or your own day as a sparkline or tape, signed with the add-on code.
-  Copy from the Today view's footer or your own profile card. Counts are
-  reviews (every answer counts); a day runs from your Anki rollover hour;
-  friends' hours sit on your clock, as of their last sync; anyone who
-  studied but doesn't share hours is counted as "not sharing hours", and a
-  total missing someone's hidden count says "(partial)".
+  Copy from the Today view's footer or your own profile card. Honest by
+  design: counts are reviews (every answer counts), a day runs from your
+  Anki rollover hour, friends' hours sit on your clock as of their last
+  sync, and people who studied but don't share hours are counted, never
+  drawn as idle.
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.
