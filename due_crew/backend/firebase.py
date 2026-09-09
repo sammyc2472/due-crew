@@ -144,13 +144,6 @@ def _clean_day(doc):
                 out[key] = v
     if isinstance(doc.get("studied"), bool):
         out["studied"] = doc["studied"]
-    day_start = _as_int(doc.get("dayStart"))
-    if day_start is not None and day_start > 0:
-        out["dayStart"] = day_start
-    hours = doc.get("hours")
-    if (isinstance(hours, str) and len(hours) == 24
-            and all(c in "012" for c in hours)):
-        out["hours"] = hours
     return out
 
 
@@ -580,9 +573,7 @@ class FirebaseClient:
     # ---- upload ----
 
     METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
-               ("accuracy", "share_retention"), ("streak", "share_streak"),
-               ("hours", "share_time"),   # 24-char intensity string, crew tape
-               ("dayStart", "share_time"))  # epoch of the day start: anchors hours
+               ("accuracy", "share_retention"), ("streak", "share_streak"))
 
     def _day_doc(self, label, values, cfg):
         """(doc, mask) for one daily_stats write. Every field is always in
@@ -634,15 +625,10 @@ class FirebaseClient:
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
         if cfg.get("paused"):
             return ok
-        from ..share import hour_levels, levels_str
-        hourly = getattr(stats, "hourly", None)
-        day_start = getattr(stats, "day_start", None)
         values = {"reviews": int(stats.reviews),
                   "studyTimeMs": int(stats.time_ms),
                   "accuracy": None if stats.accuracy is None else float(stats.accuracy),
-                  "streak": int(stats.streak),
-                  "hours": levels_str(hour_levels(hourly)) if hourly else None,
-                  "dayStart": int(day_start) if (hourly and day_start) else None}
+                  "streak": int(stats.streak)}
         ok = self._put_day(uid, label, values, cfg) and ok
         self._cleanup(uid, label)
         return ok

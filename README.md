@@ -39,14 +39,16 @@ streak means what it says.
   place in it. No medals, no cheers — these aren't necessarily people you
   know; weeks, days, decks, and heatmaps stay crew-only. Tap a name, knock,
   and you're crew when they add back.
-- **Share it** — paste-ready for the group chat: the crew's day as a
-  tape (everyone's study hours side by side, only those who showed up),
-  or your own day as a sparkline or tape, signed with the add-on code.
-  Copy from the Today view's footer or your own profile card. Honest by
-  design: counts are reviews (every answer counts), a day runs from your
-  Anki rollover hour, friends' hours sit on your clock as of their last
-  sync, and people who studied but don't share hours are counted, never
-  drawn as idle.
+- **Share it** — paste-ready for the group chat: your week as seven
+  squares (🟩🟩🟩⬜🟩🟩🟩 6 of 7 days), the crew's week as a row per
+  person, or today's numbers in one line — each signed with the add-on
+  code. Copy from the Today and Week footers or your own profile card.
+  Counts are reviews (every answer counts), and a crewmate who hasn't
+  synced since mid-week is marked "as of" their last sync rather than
+  shown as absent.
+- **Your colors** — six accent colors (Settings → Appearance), each tuned
+  for light and dark mode; the whole board, your row highlight, and the
+  cards follow it.
 - **Light on everything** — the whole board loads in 3 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.

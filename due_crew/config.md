@@ -11,6 +11,7 @@ Raw keys, for reference:
 | `show_stale` | true/false | Show yesterday for friends who haven't synced today |
 | `sync_notifications` | true/false | Toast when a friend syncs |
 | `theme` | auto / light / dark | auto follows Anki's night mode |
+| `accent` | green / blue / purple / teal / amber / rose | Accent color, light and dark variants |
 | `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
 | `share_heatmap` | true/false | Heatmap on your profile card |

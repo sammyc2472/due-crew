@@ -4,6 +4,7 @@ Mimics Anki's deck browser context: same body font scale, a theme toggle
 that flips the nightMode class, and buttons that run the real overlay JS.
 """
 
+import html
 import datetime
 import json
 import sys
@@ -99,6 +100,21 @@ sections.append("<h3>everyone (sharing)</h3>" + board.render(
 sections.append("<h3>everyone (not opted in)</h3>" + board.render(
     DATA, {"period": "everyone"}, now_ts - 60,
     everyone_view={"state": "optin"}))
+# Each board styles `#due-crew`; on one page the last <style> would win for
+# all of them, so every accent gets its own document via srcdoc.
+def _framed(markup, dark):
+    page = ("<body class='%s' style='margin:0;padding:12px;background:%s'>%s</body>"
+            % ("night_mode" if dark else "", "#2a2a2a" if dark else "#ececec", markup))
+    return ("<iframe class='dc-acc' data-theme='%s' style='width:470px;height:430px;border:0;margin:0 6px 6px 0' "
+            "srcdoc=\"%s\"></iframe>" % ("dark" if dark else "light", html.escape(page, quote=True)))
+
+
+for accent in board.ACCENTS:
+    frames = "".join(
+        _framed(board.render(DATA, {"period": "today", "accent": accent, "theme": theme},
+                             now_ts - 60), theme == "dark")
+        for theme in ("light", "dark"))
+    sections.append(f"<h3>accent: {accent}</h3><div style='display:flex;flex-wrap:wrap'>{frames}</div>")
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))
 
 profile_js = board.profile_overlay_js({

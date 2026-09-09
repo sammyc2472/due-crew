@@ -668,7 +668,7 @@ def _on_js(handled, message, context):
         w["dismissed"] = w.get("week", "")
         _save_wrap()
         _swap(c)
-    elif cmd in ("sharetoday", "sharetape", "sharecrew"):
+    elif cmd in ("sharetoday", "shareweek", "sharecrewweek"):
         _share(cmd)
     elif cmd == "wrapcopy":
         b = _wrap_info() or {}
@@ -728,63 +728,84 @@ def _share(kind):
     if not mw.col:
         return
     from . import share
+    q = StatsQueries(mw.col)
     try:
         stats = gather_stats(mw.col, _profile_files())
     except Exception:
         traceback.print_exc()
         return
-    if kind == "sharecrew":
-        text = _crew_share_text(stats)
-        if text is None:
-            tooltip("No one's studied yet today.")
-            return
-    elif kind == "sharetape":
-        text = share.my_today_tape(stats.reviews, stats.time_ms, stats.streak,
-                                   stats.accuracy, stats.hourly)
+    labels = list(_state["labels"]) or [q.day_label(i) for i in range(7)]
+    if kind == "sharetoday":
+        text = share.my_today(labels[0], stats.reviews, stats.time_ms,
+                              stats.accuracy, stats.streak)
+    elif kind == "shareweek":
+        text = _my_week_text(q, stats, labels)
     else:
-        text = share.my_today_spark(stats.reviews, stats.time_ms, stats.streak,
-                                    stats.accuracy, stats.hourly)
+        text = _crew_week_text(q, stats, labels)
+        if text is None:
+            tooltip("No one in the crew has studied this week yet.")
+            return
     copy_text(text)
     tooltip("Copied.")
 
 
-def _crew_share_text(stats):
-    """My row from local revlog (fresh); friends' rows from their uploaded
-    hours, placed on MY day by absolute time. People who studied today but
-    share no hours are counted ("N not sharing hours"), never drawn as
-    idle; a total missing someone's hidden count says "(partial)"."""
+def _my_week(q):
+    """(flags oldest->today, reviews, time_ms) for the last 7 days, from
+    the local revlog — always fresh, never waiting on a sync."""
+    studied = q.studied_days_ago(7)
+    flags = [ago in studied for ago in range(6, -1, -1)]
+    reviews = sum(q.reviews_for_day(i) for i in range(7))
+    time_ms = sum(q.study_time_ms_for_day(i) for i in range(7))
+    return flags, reviews, time_ms
+
+
+def _my_week_text(q, stats, labels):
     from . import share
-    labels, tomorrow = _state["labels"], _state["tomorrow"]
-    today = labels[0] if labels else ""
-    my_start = stats.day_start
-    rows, reviews, unshared, partial = [], 0, 0, False
+    flags, reviews, time_ms = _my_week(q)
+    return share.my_week(list(reversed(labels[:7])), flags, reviews, time_ms,
+                         stats.streak)
+
+
+def _as_of(last_updated, labels):
+    """'Tue' when a friend's last sync is older than yesterday — their later
+    squares are unknown, not empty. '' otherwise."""
+    try:
+        dt = datetime.datetime.fromisoformat(str(last_updated).replace("Z", "+00:00"))
+        day = dt.astimezone().date().isoformat()
+    except Exception:
+        return ""
+    if len(labels) > 1 and day < labels[1]:
+        return datetime.date.fromisoformat(day).strftime("%a")
+    return ""
+
+
+def _crew_week_text(q, stats, labels):
+    """My row from local revlog (fresh); friends' rows from their uploaded
+    days. Absence is silent: no row without at least one studied day."""
+    from . import share
+    week = list(reversed(labels[:7]))  # oldest -> today
+    rows, reviews, time_ms = [], 0, 0
     for e in _state["entries"] or []:
         if e.get("paused"):
             continue
         if e["you"]:
-            rows.append((e["name"], share.hour_levels(stats.hourly)))
-            reviews += int(stats.reviews or 0)
+            flags, r, t = _my_week(q)
+            rows.append((e["name"], flags, ""))
+            reviews += r
+            time_ms += t
             continue
         days = e.get("days") or {}
-        doc = days.get(tomorrow) or days.get(today) or {}
-        studied = board._showed(doc)
-        levels = share.levels_from_str(doc.get("hours"))
-        placed = share.project_levels(levels, doc.get("dayStart"), my_start)
-        if levels and doc.get("dayStart") and any(placed):
-            rows.append((e["name"], placed))
-            if "reviews" in doc:
-                reviews += int(doc["reviews"])
-            else:
-                partial = True
-        elif studied:
-            unshared += 1
-    if not rows and stats.reviews:
-        rows.append((client().display_name or "Me", share.hour_levels(stats.hourly)))
-        reviews = int(stats.reviews)
+        flags = [board._showed(days.get(lb)) for lb in week]
+        agg = board._week_row(days, labels) or {}
+        reviews += int(agg.get("reviews") or 0)
+        time_ms += int(agg.get("time_ms") or 0)
+        rows.append((e["name"], flags, _as_of(e.get("last_updated"), labels)))
+    if not rows:
+        flags, r, t = _my_week(q)
+        rows.append((client().display_name or "Me", flags, ""))
+        reviews, time_ms = r, t
     label = str(cfg().get("crew_label") or "Crew").strip() or "Crew"
-    return share.crew_today(label, rows, reviews,
-                            partial=partial, unshared=unshared)
-
+    return share.crew_week(label, week, rows, reviews, time_ms)
 
 
 # ---- cheers ----

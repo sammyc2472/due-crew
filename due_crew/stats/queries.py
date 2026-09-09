@@ -62,27 +62,6 @@ class StatsQueries:
             cutoff - 1, start_ms, cutoff * 1000)
         return set(rows or [])
 
-    def day_start_s(self, days_ago=0):
-        """Epoch seconds when this Anki day began (the rollover moment)."""
-        return self.day_bounds_ms(days_ago)[0] // 1000
-
-    def hourly_counts_today(self):
-        """24 review counts for today's Anki day, bucketed by hours SINCE
-        THE DAY BEGAN (slot 0 = the rollover hour, 4 AM by default). Anchoring
-        on the rollover, not midnight, keeps a 1 AM session inside today
-        and lets friends' buckets be placed on one shared timeline via
-        day_start_s(). One query; the tape and sparkline shares read this.
-        On a DST-change day the 25th hour, if any, folds into the last."""
-        start, end = self.day_bounds_ms(0)
-        rows = self.col.db.all(
-            "SELECT (id / 1000 - ?) / 3600, COUNT(*) FROM revlog "
-            "WHERE id >= ? AND id < ? AND ease > 0 GROUP BY 1",
-            start // 1000, start, end)
-        out = [0] * 24
-        for slot, n in rows or []:
-            out[min(23, max(0, int(slot)))] += int(n)
-        return out
-
     def heatmap_counts(self, days=182):
         """{day_label: answer_count} for the last `days` days. One query."""
         cutoff = self._cutoff_s()

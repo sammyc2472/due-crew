@@ -27,10 +27,13 @@ installing — add-ons load at launch).
 - [ ] Ignore hides that person's future knocks locally.
 
 ## Clipboard output
-- [ ] Your card → "Copy for the chat: today" → paste into Messages/WhatsApp/Notes: emoji and block glyphs intact (no `?`, no `∑`).
-- [ ] Same for "tape" and for the Today view's "Share today".
-- [ ] The crew tape lists only people who studied today; friends who don't share study time appear as "N not sharing hours", never as empty rows; totals say "(partial)" when someone hides their count.
-- [ ] Friends' rows sit on your clock: a friend in another time zone lands at the real hour on your day.
+- [ ] Your card → "Copy for the chat: today" → paste into Messages/WhatsApp/Notes: emoji intact (no `?`, no `∑`); one line of numbers under "Today · <date>".
+- [ ] Your card → "week" → seven squares, "N of 7 days", totals, footer.
+- [ ] Week view footer → "Share week" → one row per crewmate who studied, most days first; a crewmate who hasn't synced since mid-week reads "· as of <day>"; nobody with zero days appears.
+- [ ] Today view footer → "Share today" → the same today line.
+
+## Accent colors
+- [ ] Settings → Appearance → Accent: each of the six recolors the pills, links, your-row highlight, and the profile/stranger cards' buttons; check one in light and one in dark mode.
 
 ## Rules deployment (maintainer)
 - [ ] Rules published in the console BEFORE the add-on release; after it, no v2.0 client shows "server catching up" in the footer.

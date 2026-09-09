@@ -17,5 +17,6 @@
   "exam_date": "",
   "shared_decks": [],
   "server_board": false,
-  "crew_label": "Crew"
+  "crew_label": "Crew",
+  "accent": "green"
 }

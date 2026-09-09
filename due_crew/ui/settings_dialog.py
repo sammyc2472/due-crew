@@ -22,12 +22,14 @@ DEFAULTS = {
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
     "server_board": False, "paused": False, "exam_date": "",
-    "crew_label": "Crew",
+    "crew_label": "Crew", "accent": "green",
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
          ("retention", "Retention"), ("streak", "Streak")]
 THEMES = [("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")]
+ACCENTS = [("green", "Green"), ("blue", "Blue"), ("purple", "Purple"),
+           ("teal", "Teal"), ("amber", "Amber"), ("rose", "Rose")]
 
 
 class SettingsDialog(QDialog):
@@ -266,6 +268,7 @@ class SettingsDialog(QDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         self._combo(lay, "theme", "Colors", THEMES)
+        self._combo(lay, "accent", "Accent", ACCENTS)
         self._check(lay, "compact", "Compact rows")
         self._check(lay, "show_last_active", 'Show "last active" next to names')
         self._check(lay, "highlight_me", "Highlight my row")

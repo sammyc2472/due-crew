@@ -381,11 +381,6 @@ def _opt_in(store, uid):
 
 KEY_A = "a" * 40
 KEY_B = "b" * 40
-ROW = {"name": "Sammy", "day": "2026-09-01", "dayStart": 1756717200,
-       "reviews": 512, "studyTimeMs": 4320000, "streak": 12}
-
-
-
 
 
 def test_server_view_html():
@@ -423,100 +418,6 @@ def test_stranger_card():
 
 
 
-def test_shares():
-    """The three paste-ready shares, exact text — reviews, not cards."""
-    from due_crew import share
-    hourly = [0] * 24
-    hourly[7], hourly[8], hourly[12], hourly[20], hourly[21] = 40, 22, 5, 30, 60
-    tape = share.my_today_tape(512, 4320000, 17, 91.6, hourly)
-    spark = share.my_today_spark(512, 4320000, 17, 91.6, hourly)
-    check("share: tape has the stat split, AM/PM rows, footer, 'reviews'",
-          tape.split("\n") == [
-              "Today 📚 512 reviews · 1h 12m",
-              "🌅 ⬜⬜⬜⬜⬜⬜⬜🟩🟩⬜⬜⬜",
-              "🌙 🟨⬜⬜⬜⬜⬜⬜⬜🟩🟩⬜⬜",
-              "🔥17 · 🎯 91.6%",
-              share.FOOTER], tape)
-    line = spark.split("\n")[1]
-    body = line[len("🕐 "):]
-    check("share: sparkline is 24 slots, ░ idle, █ at the peak",
-          line.startswith("🕐 ") and len(body) == 24 and body[0] == "░"
-          and body[7] == "▆" and body[8] == "▄" and body[12] in "▁▂"
-          and body[21] == "█" and body[23] == "░", line)
-    check("share: no retention -> streak only",
-          share.my_today_spark(3, 60000, 1, None, hourly).split("\n")[2] == "🔥1")
-
-    # crew: rows already on my timeline; one order, honest totals
-    lv_a = share.hour_levels(hourly)
-    lv_b = [0] * 24; lv_b[2] = 2; lv_b[3] = 2
-    lv_c = [0] * 24; lv_c[14] = 1
-    crew = share.crew_today("busm", [("sammy", lv_a), ("igk <b>\nx", lv_b),
-                                     ("Ameya", lv_c), ("Quiet", [0] * 24)], 2841)
-    rows = crew.split("\n")
-    check("share: crew rows only for people with hours, ordered by first hour",
-          rows[0] == "busm today 🕐" and len(rows) == 6
-          and rows[1].endswith(" igk <b> x") and rows[2].endswith(" sammy")
-          and rows[3].endswith(" Ameya"), crew)
-    check("share: crew tape merges hour pairs and counts covered hours",
-          rows[1].startswith("⬜🟩⬜") and rows[3].startswith("⬜⬜⬜⬜⬜⬜⬜🟨")
-          and rows[4] == "we covered 8 hours · 2,841 reviews", crew)
-    honest = share.crew_today("busm", [("sammy", lv_a)], 512, partial=True, unshared=2)
-    check("share: missing data is named, never drawn as idle",
-          honest.split("\n")[2] == "we covered 5 hours · 512 reviews (partial) · 2 not sharing hours",
-          honest)
-    check("share: nobody with hours -> None",
-          share.crew_today("busm", [("a", [0] * 24)], 0) is None)
-    check("share: malformed hours strings are rejected",
-          share.levels_from_str("0" * 24) == [0] * 24
-          and share.levels_from_str("3" * 24) is None
-          and share.levels_from_str("01") is None)
-
-    # projection: a friend three hours ahead lands three slots later on my day
-    theirs = [0] * 24; theirs[0] = 2; theirs[22] = 1
-    mine_start = 1_000_000
-    placed = share.project_levels(theirs, mine_start + 3 * 3600, mine_start)
-    check("share: friends' hours are placed by absolute time on my day",
-          placed[3] == 2 and sum(placed) == 2 and placed[22] == 0 and placed[23] == 0, str(placed))
-    check("share: unknown day start -> nothing is placed (never faked as zero)",
-          share.project_levels(theirs, None, mine_start) == [0] * 24)
-
-
-def test_hours_upload():
-    """hours rides the daily doc under share_time; off deletes it."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    conn = sqlite3.connect(":memory:")
-    fakes.make_collection(conn)
-    for hour, n in ((7, 20), (21, 3)):
-        base = int(datetime.datetime.combine(TODAY, datetime.time(hour)).timestamp() * 1000)
-        for i in range(n):
-            fakes.add_review(conn, base + i * 1000, ease=3)
-    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
-    sam = new_client(store, "sam", "Sammy")
-    files = tempfile.mkdtemp()
-    sync_once(store, sam, col, files, {}, TODAY)
-    doc = store.docs.get(f"users/sam/daily_stats/{TODAY.isoformat()}", {})
-    hours = doc.get("hours", {}).get("stringValue")
-    day_start = doc.get("dayStart", {}).get("integerValue")
-    expected_start = fakes.day_cutoff_for(TODAY) - 86400
-    check("hours: 24 levels anchored on the 4 AM rollover (7am -> slot 3, 9pm -> slot 17)",
-          hours is not None and len(hours) == 24 and hours[3] == "2"
-          and hours[17] == "1" and hours[7] == "0", str(hours))
-    check("hours: the day start rides along so friends can place the hours",
-          day_start is not None and int(day_start) == expected_start, str(day_start))
-    sync_once(store, sam, col, files, {"share_time": False}, TODAY)
-    doc = store.docs.get(f"users/sam/daily_stats/{TODAY.isoformat()}", {})
-    check("hours: share_time off removes it server-side", "hours" not in doc)
-    store.auth_uid = "sam"
-    sync_once(store, sam, col, files, {}, TODAY)   # share_time back on
-    dre = new_client(store, "dre", "Dre")          # switches auth to dre
-    data, labels, _t = fetch_as(store, dre, make_user_col([TODAY]))
-    sam_entry = next(e for e in data["entries"] if e["user_id"] == "sam")
-    got = (sam_entry["days"].get(labels[0]) or {}).get("hours") or ""
-    ds = (sam_entry["days"].get(labels[0]) or {}).get("dayStart")
-    check("hours: friends receive hours + dayStart cleaned",
-          len(got) == 24 and got[3] == "2" and isinstance(ds, int) and ds > 0, got)
 
 
 def test_copy_text():
@@ -692,24 +593,87 @@ def test_deletion_sweep():
         fakes.FakeSession.post = real_post
 
 
-def test_projection_and_totals():
-    """Friends' hours land on the viewer's clock; missing is never zero."""
+
+def test_shares_v21():
+    """Week squares, the today line, crew rows, and the honesty rules."""
     from due_crew import share
-    levels = [0] * 24
-    levels[3] = 2   # 3 hours after THEIR day began
-    placed = share.project_levels(levels, their_start=1_000_000 + 3 * 3600,
-                                  my_start=1_000_000)
-    check("projection: a friend 3h ahead lands 3h later on my day",
-          placed[6] == 2 and sum(placed) == 2, str(placed))
-    dropped = share.project_levels(levels, their_start=1_000_000 + 23 * 3600,
-                                   my_start=1_000_000)
-    check("projection: hours outside my day are dropped, not misplaced",
-          sum(dropped) == 0)
-    lv = [0] * 24; lv[5] = 2
-    text = share.crew_today("busm", [("A", lv)], 100, partial=True, unshared=2)
-    tail = text.split("\n")[-2]
-    check("totals: partial and unshared are stated",
-          tail == "we covered 1 hour · 100 reviews (partial) · 2 not sharing hours", tail)
+    labels = [(datetime.date(2026, 9, 1) + datetime.timedelta(days=i)).isoformat()
+              for i in range(7)]
+    flags = [True, True, True, False, True, True, True]
+    mine = share.my_week(labels, flags, 3412, 28920000, 17)
+    check("share: my week", mine.split("\n") == [
+        "This week · Sep 1–7", "🟩🟩🟩⬜🟩🟩🟩 6 of 7 days",
+        "3,412 reviews · 8h 02m · 🔥 17", share.FOOTER], mine)
+    today = share.my_today("2026-09-09", 512, 4320000, 91.6, 17)
+    check("share: today line", today.split("\n") == [
+        "Today · Sep 9", "📚 512 reviews · ⏱ 1h 12m · 🎯 91.6% · 🔥 17", share.FOOTER], today)
+    check("share: today without retention",
+          share.my_today("2026-09-09", 3, 60000, None, 1).split("\n")[1]
+          == "📚 3 reviews · ⏱ 1m · 🔥 1")
+    crew = share.crew_week("busm", labels, [
+        ("sammy", flags, ""),
+        ("igk <b>\nx", [True] * 7, ""),
+        ("Ameya", [True, False, True, True, False, True, True], "Tue"),
+        ("Quiet", [False] * 7, ""),
+    ], 21430, 148320000)
+    rows = crew.split("\n")
+    check("share: crew week header, order (most days first), absence silent",
+          rows[0] == "busm · Sep 1–7" and len(rows) == 6
+          and rows[1].endswith(" igk <b> x") and rows[2].endswith(" sammy")
+          and rows[3] == "🟩⬜🟩🟩⬜🟩🟩 Ameya · as of Tue", crew)
+    check("share: crew totals line",
+          rows[4] == "21,430 reviews · 41h 12m together")
+    check("share: nobody studied -> None",
+          share.crew_week("busm", labels, [("a", [False] * 7, "")], 0, 0) is None)
+    check("share: month-crossing range",
+          share.date_range(["2026-08-30", "2026-09-05"]) == "Aug 30 – Sep 5")
+    js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
+    check("share: own card offers today and week",
+          "duecrew:sharetoday" in js and "duecrew:shareweek" in js)
+    foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
+                              "pending": []}, {"period": "week"}, 0)
+    check("share: Week view footer offers the crew week",
+          "sharecrewweek" in foot_week and "Share week" in foot_week)
+
+
+def _luminance(hex_color):
+    def chan(c):
+        c = int(c, 16) / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (chan(hex_color[i:i + 2]) for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(a, b):
+    la, lb = _luminance(a), _luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_accents():
+    """Every accent clears WCAG AA both as text on its card and as the pill
+    fill behind its ink; the theme CSS and overlays follow the choice."""
+    worst = []
+    for name, themes in board.ACCENTS.items():
+        for theme, (accent, ink, you) in themes.items():
+            bg = board.LIGHT["bg"] if theme == "light" else board.DARK["bg"]
+            worst.append((name, theme, "text", round(_contrast(accent, bg), 2)))
+            worst.append((name, theme, "pill", round(_contrast(ink, accent), 2)))
+            worst.append((name, theme, "you-row-vs-card", round(_contrast(you, bg), 2)))
+    fails = [w for w in worst if w[2] in ("text", "pill") and w[3] < 4.5]
+    check("accents: all six pass AA for text and pill ink (light and dark)",
+          not fails, str(fails))
+    subtle = [w for w in worst if w[2] == "you-row-vs-card" and not (1.03 <= w[3] <= 1.6)]
+    check("accents: your-row fills stay subtle against the card", not subtle, str(subtle))
+    css = board._theme_css({"accent": "blue"})
+    check("accents: theme CSS carries the chosen accent in both palettes",
+          "#1e5fb4" in css and "#7fb2f0" in css and "#2e7d32" not in css)
+    check("accents: unknown accent falls back to green",
+          "#2e7d32" in board._theme_css({"accent": "plaid"}))
+    js = board.profile_overlay_js({"name": "Dre", "you": False, "cells": None})
+    check("accents: overlays read --dc-accent instead of hard-coding green",
+          "--dc-accent" in js and "--dc-accent-ink" in js
+          and "duecrew:cheerpick" in js)
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

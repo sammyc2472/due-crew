@@ -21,16 +21,32 @@ from .stats.decks import sig_match
 
 LIGHT = {
     "bg": "#ffffff", "ink": "#333333", "muted": "#7a7a72", "line": "#e2e2da",
-    "accent": "#2e7d32", "accent-ink": "#ffffff", "you-bg": "#e9f2e9",
-    "fresh": "#2e7d32", "hours": "#b26a00", "faded": "#aaaaa2",
-    "well": "#f2f2ec",
+    "hours": "#b26a00", "faded": "#aaaaa2", "well": "#f2f2ec",
 }
 DARK = {
     "bg": "#1c1c1c", "ink": "#dfe1dc", "muted": "#989c92", "line": "#3d403b",
-    "accent": "#7cc47f", "accent-ink": "#122912", "you-bg": "#2c372b",
-    "fresh": "#7cc47f", "hours": "#dda45c", "faded": "#6d726a",
-    "well": "#2b2d29",
+    "hours": "#dda45c", "faded": "#6d726a", "well": "#2b2d29",
 }
+# Accent choices: (accent, ink-on-accent, your-row fill) per theme. Every
+# accent clears WCAG AA (4.5:1) as text on its card and as the pill fill
+# behind its ink — tests/test_due_crew.py checks the arithmetic.
+ACCENTS = {
+    "green":  {"light": ("#2e7d32", "#ffffff", "#e9f2e9"), "dark": ("#7cc47f", "#122912", "#2c372b")},
+    "blue":   {"light": ("#1e5fb4", "#ffffff", "#e8f0fb"), "dark": ("#7fb2f0", "#0b1f3a", "#263244")},
+    "purple": {"light": ("#6b3fb5", "#ffffff", "#f0eafb"), "dark": ("#b89cf0", "#22143d", "#322a46")},
+    "teal":   {"light": ("#0f766e", "#ffffff", "#e5f4f2"), "dark": ("#7dd3c8", "#0b2a28", "#22383a")},
+    "amber":  {"light": ("#a35f00", "#ffffff", "#fbf1e2"), "dark": ("#e0a458", "#2d1d05", "#3d3323")},
+    "rose":   {"light": ("#b03052", "#ffffff", "#fbe9ee"), "dark": ("#f08fa8", "#3a1220", "#3f2a31")},
+}
+DEFAULT_ACCENT = "green"
+
+
+def palette(theme, accent=DEFAULT_ACCENT):
+    """Neutral tokens for the theme plus the chosen accent's trio."""
+    base = dict(LIGHT if theme == "light" else DARK)
+    a, ink, you = ACCENTS.get(accent, ACCENTS[DEFAULT_ACCENT])[theme]
+    base.update({"accent": a, "accent-ink": ink, "you-bg": you, "fresh": a})
+    return base
 NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
@@ -47,14 +63,16 @@ def _token_block(palette):
 
 def _theme_css(cfg):
     theme = cfg.get("theme", "auto")
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    light, dark = palette("light", accent), palette("dark", accent)
     if theme == "light":
-        return f"#due-crew {{ {_token_block(LIGHT)} }}"
+        return f"#due-crew {{ {_token_block(light)} }}"
     if theme == "dark":
-        return f"#due-crew {{ {_token_block(DARK)} }}"
+        return f"#due-crew {{ {_token_block(dark)} }}"
     night = ", ".join(f"{sel} #due-crew" for sel in NIGHT_SELECTORS)
-    return (f"#due-crew {{ {_token_block(LIGHT)} }}\n"
-            f"    @media (prefers-color-scheme: dark) {{ #due-crew {{ {_token_block(DARK)} }} }}\n"
-            f"    {night} {{ {_token_block(DARK)} }}")
+    return (f"#due-crew {{ {_token_block(light)} }}\n"
+            f"    @media (prefers-color-scheme: dark) {{ #due-crew {{ {_token_block(dark)} }} }}\n"
+            f"    {night} {{ {_token_block(dark)} }}")
 
 
 def _fmt_time(ms):
@@ -595,8 +613,11 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
     if period == "today":
-        left += (f' &middot; <a href="#" title="Copy the crew\'s day for the chat" '
-                 f'onclick="{_pycmd("sharecrew")}">Share today</a>')
+        left += (f' &middot; <a href="#" title="Copy your day for the chat" '
+                 f'onclick="{_pycmd("sharetoday")}">Share today</a>')
+    if period == "week":
+        left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
+                 f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
     foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
@@ -643,8 +664,10 @@ def flurry_js(emojis, banner_text, back=None):
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
             'text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
-            (night ? 'background:#262b24;color:#dfe1dc;border:1px solid #7cc47f;'
-                   : 'background:#ffffff;color:#23281f;border:1px solid #2e7d32;');
+            (night ? 'background:#262b24;color:#dfe1dc;' : 'background:#ffffff;color:#23281f;') +
+            'border:1px solid ' + ((document.getElementById('due-crew') &&
+                getComputedStyle(document.getElementById('due-crew')).getPropertyValue('--dc-accent').trim())
+                || (night ? '#7cc47f' : '#2e7d32')) + ';';
         var linger = 2600;
         if (backCmd && typeof pycmd !== 'undefined') {
             linger = 5000;
@@ -713,7 +736,10 @@ def stranger_card_js(info):
         if (old) { old.remove(); }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        var accent = night ? '#7cc47f' : '#2e7d32';
+        var dcBoard = document.getElementById('due-crew');
+        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+        var accent = (dcStyle && dcStyle.getPropertyValue('--dc-accent').trim()) || (night ? '#7cc47f' : '#2e7d32');
+        var accentInk = (dcStyle && dcStyle.getPropertyValue('--dc-accent-ink').trim()) || (night ? '#122912' : '#ffffff');
         var back = document.createElement('div');
         back.id = 'dc-profile';
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -733,7 +759,7 @@ def stranger_card_js(info):
         act.textContent = %s;
         var primary = %s;
         act.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;' +
-            (primary ? 'background:' + accent + ';color:' + (night ? '#122912' : '#ffffff') +
+            (primary ? 'background:' + accent + ';color:' + accentInk +
                        ';border:1px solid transparent;font-weight:600;cursor:pointer;'
                      : 'background:none;color:inherit;opacity:0.7;border:1px solid ' +
                        (night ? '#3d403b' : '#e2e2da') + ';cursor:default;');
@@ -873,7 +899,7 @@ def profile_overlay_js(profile):
         lines += (f'<div style="font-size: 12px; padding: 8px 0 0; opacity: 0.85;">'
                   f'Copy for the chat: <a href="#" {link} '
                   f'onclick="{_pycmd("sharetoday")}">today</a> &middot; '
-                  f'<a href="#" {link} onclick="{_pycmd("sharetape")}">tape</a></div>')
+                  f'<a href="#" {link} onclick="{_pycmd("shareweek")}">week</a></div>')
 
     inner = _json.dumps(head + grid + lines)
     if you:
@@ -888,7 +914,10 @@ def profile_overlay_js(profile):
         if (old) { old.remove(); }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        var accent = night ? '#7cc47f' : '#2e7d32';
+        var dcBoard = document.getElementById('due-crew');
+        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+        var accent = (dcStyle && dcStyle.getPropertyValue('--dc-accent').trim()) || (night ? '#7cc47f' : '#2e7d32');
+        var accentInk = (dcStyle && dcStyle.getPropertyValue('--dc-accent-ink').trim()) || (night ? '#122912' : '#ffffff');
         var warn = night ? '#dda45c' : '#b26a00';
         var back = document.createElement('div');
         back.id = 'dc-profile';
@@ -925,7 +954,7 @@ def profile_overlay_js(profile):
             var b = document.createElement('button');
             b.textContent = label;
             b.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
-                (primary ? 'background:' + accent + ';color:' + (night ? '#122912' : '#ffffff') +
+                (primary ? 'background:' + accent + ';color:' + accentInk +
                            ';border:1px solid transparent;font-weight:600;'
                          : 'background:none;color:inherit;border:1px solid ' +
                            (night ? '#3d403b' : '#e2e2da') + ';');
