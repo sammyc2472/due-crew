@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v4"
+RULES_MARKER = "rules-v5"
 
 
 def firestore_base(project_id):
@@ -117,6 +117,40 @@ def _exam_value(iso, today_label):
     return str(iso) if d >= t else None
 
 
+NOTE_MAX = 80
+
+
+def clean_note(text, limit=NOTE_MAX):
+    """One printable line, at most `limit` chars; '' for anything else.
+    Used for cheer notes and statuses in both directions."""
+    if not isinstance(text, str):
+        return ""
+    one_line = " ".join(text.split())
+    return "".join(ch for ch in one_line if ch.isprintable())[:limit]
+
+
+def away_range(cfg):
+    """(from, to) dates of a configured away spell, or None."""
+    try:
+        a = datetime.date.fromisoformat(str(cfg.get("away_from") or ""))
+        b = datetime.date.fromisoformat(str(cfg.get("away_to") or ""))
+    except ValueError:
+        return None
+    return (a, b) if a <= b else (b, a)
+
+
+def away_on(label, cfg):
+    """The spell's last day (ISO) when `label` falls inside it, else None."""
+    rng = away_range(cfg)
+    if not rng:
+        return None
+    try:
+        d = datetime.date.fromisoformat(str(label))
+    except ValueError:
+        return None
+    return rng[1].isoformat() if rng[0] <= d <= rng[1] else None
+
+
 def _as_int(v):
     try:
         return int(v)
@@ -144,6 +178,15 @@ def _clean_day(doc):
                 out[key] = v
     if isinstance(doc.get("studied"), bool):
         out["studied"] = doc["studied"]
+    status = clean_note(doc.get("status"))
+    if status:
+        out["status"] = status
+    if doc.get("away") is True:
+        out["away"] = True
+        try:
+            out["awayTo"] = datetime.date.fromisoformat(str(doc.get("awayTo"))).isoformat()
+        except ValueError:
+            pass
     return out
 
 
@@ -558,17 +601,28 @@ class FirebaseClient:
                                # profile name, not the doc's: senders can't spoof
                                "name": str(prof.get("displayName", "?")),
                                "emoji": str(doc.get("emoji")),
-                               "at": str(doc.get("at", ""))})
+                               "at": str(doc.get("at", "")),
+                               "note": clean_note(doc.get("note"))})
         return {"entries": entries, "pending": pending, "cheers": cheers,
                 "my_friends": [fid for fid, _p, _m in resolved]}
 
-    def send_cheer(self, to_uid, from_uid, from_name, emoji):
-        """One write; overwrites any previous cheer to the same person."""
-        return self.patch_doc(f"users/{to_uid}/cheers/{from_uid}", {
-            "emoji": emoji,
-            "name": from_name,
-            "at": {"timestampValue": _now_ts()},
-        })
+    def send_cheer(self, to_uid, from_uid, from_name, emoji, note=None):
+        """One write; overwrites any previous cheer to the same person.
+        A note needs rules-v5: if the server still runs older rules the
+        cheer goes again without it and the result is "no-note", so the
+        sender hears that the words stayed behind."""
+        path = f"users/{to_uid}/cheers/{from_uid}"
+        data = {"emoji": emoji, "name": from_name,
+                "at": {"timestampValue": _now_ts()}}
+        # note is always in the mask: a bare cheer must not re-deliver the
+        # words from the last one (the doc is overwritten, not replaced)
+        mask = list(data) + ["note"]
+        note = clean_note(note)
+        if note:
+            if self.patch_doc(path, dict(data, note=note), mask, label="cheer note"):
+                return True
+            return "no-note" if self.patch_doc(path, data, mask) else False
+        return self.patch_doc(path, data, mask)
 
     # ---- upload ----
 
@@ -586,6 +640,16 @@ class FirebaseClient:
             mask.append(field)
             if cfg.get(share_key, True) and values.get(field) is not None:
                 doc[field] = values.get(field)
+        # v2.2: the status bubble (today's doc only — callers pass it) and
+        # the away flag; both always in the mask, so clearing them clears.
+        mask += ["status", "away", "awayTo"]
+        status = clean_note(values.get("status"))
+        if status:
+            doc["status"] = status
+        away_to = away_on(label, cfg)
+        if away_to:
+            doc["away"] = True
+            doc["awayTo"] = away_to
         return doc, mask
 
     def _put_day(self, uid, label, values, cfg):
@@ -628,9 +692,54 @@ class FirebaseClient:
         values = {"reviews": int(stats.reviews),
                   "studyTimeMs": int(stats.time_ms),
                   "accuracy": None if stats.accuracy is None else float(stats.accuracy),
-                  "streak": int(stats.streak)}
+                  "streak": int(stats.streak),
+                  "status": cfg.get("status")}
         ok = self._put_day(uid, label, values, cfg) and ok
+        ok = self.sync_away(uid, label, cfg) and ok
         self._cleanup(uid, label)
+        return ok
+
+    def sync_away(self, uid, today_label, cfg):
+        """Flag the days of an away spell so the crew sees the plane while
+        the person is, by definition, not syncing: the coming 30 days plus
+        the past week (today rides the day doc). Session-guarded, so the
+        steady state adds zero writes; shrinking or clearing the spell
+        unflags what it had flagged (future days lose their doc, past days
+        keep their numbers)."""
+        rng = away_range(cfg)
+        base = datetime.date.fromisoformat(today_label)
+        want = []
+        if rng and not cfg.get("paused"):
+            d = max(rng[0], base - datetime.timedelta(days=6))
+            hi = min(rng[1], base + datetime.timedelta(days=30))
+            while d <= hi:
+                if d != base:
+                    want.append(d.isoformat())
+                d += datetime.timedelta(days=1)
+        state = self.session.get("away") or {}
+        key = [rng[0].isoformat(), rng[1].isoformat()] if rng else []
+        written = set(state.get("labels") or [])
+        ok = True
+        if state.get("range") != key:
+            for lb in sorted(written - set(want)):
+                path = f"users/{uid}/daily_stats/{lb}"
+                if lb > today_label:
+                    ok = self.delete_doc(path) and ok
+                else:
+                    ok = self.patch_doc(path, {}, ["away", "awayTo"], label="away") and ok
+            written &= set(want)
+        for lb in want:
+            if lb in written:
+                continue
+            if self.patch_doc(f"users/{uid}/daily_stats/{lb}",
+                              {"away": True, "awayTo": rng[1].isoformat()},
+                              label="away"):
+                written.add(lb)
+            else:
+                ok = False
+        if state.get("range") != key or set(state.get("labels") or []) != written:
+            self.session["away"] = {"range": key, "labels": sorted(written)}
+            self._save_session()
         return ok
 
     def upload_backfill(self, uid, days, cfg):

@@ -110,6 +110,16 @@ def main():
     check("knock: cannot forge sender id", put("users/bob/knocks/carol", knock, "alice") == 403)
     check("knock: extra fields rejected", put("users/bob/knocks/alice", dict(knock, crew="x"), "alice") == 403)
 
+    # -- cheers: friends only, three emoji, optional note <= 80 (rules-v5)
+    cheer = {"emoji": "🔥", "name": "Dave", "at": "t"}
+    check("cheer: friend sends", put("users/alice/cheers/dave", cheer, "dave") in (200, 201))
+    check("cheer: with a note", put("users/alice/cheers/dave", dict(cheer, note="you're on fire"), "dave") in (200, 201))
+    check("cheer: note over 80 chars rejected", put("users/alice/cheers/dave", dict(cheer, note="x" * 81), "dave") == 403)
+    check("cheer: note must be a string", put("users/alice/cheers/dave", dict(cheer, note=5), "dave") == 403)
+    check("cheer: extra field rejected", put("users/alice/cheers/dave", dict(cheer, link="http://x"), "dave") == 403)
+    check("cheer: non-friend rejected", put("users/alice/cheers/bob", cheer, "bob") == 403)
+    check("cheer: only the owner reads", call("GET", "users/alice/cheers/dave", "dave")[0] == 403)
+
     # -- friendship consent unchanged
     put("users/alice/daily_stats/2026-09-06", {"reviews": 10}, "alice")
     check("stats: friend reads", call("GET", "users/alice/daily_stats/2026-09-06", "dave")[0] == 200)
@@ -125,7 +135,7 @@ def main():
     check("retired: directory is gone", call("GET", "server_names/busm", "alice")[0] == 403)
 
     # -- markers cumulative
-    for m in ("rules-v2", "rules-v3", "rules-v4"):
+    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
     check("marker rules-v9: not provisioned (403)", call("GET", "meta/rules-v9", "alice")[0] == 403)
 

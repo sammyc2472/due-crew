@@ -12,6 +12,7 @@ data["tomorrow"] is my next label, so a friend whose day already rolled over
 ahead of mine still renders as fresh.
 """
 
+import datetime as _dt
 import html as _html
 import json as _json
 import time
@@ -177,6 +178,27 @@ def sort_key(cfg):
     return key if key in SORT_KEYS else "reviews"
 
 
+def _away_text(doc, today_lb):
+    """Badge text for a day doc flagged away: when they're back, if known."""
+    try:
+        back = _dt.date.fromisoformat(str((doc or {}).get("awayTo"))) + _dt.timedelta(days=1)
+        today = _dt.date.fromisoformat(str(today_lb))
+    except (TypeError, ValueError):
+        return "away"
+    if back <= today:
+        return "away"
+    if back == today + _dt.timedelta(days=1):
+        return "back tomorrow"
+    return f"back {back:%b} {back.day}"
+
+
+def _day_flags(doc, today_lb):
+    """The Today-only extras a day doc carries: the status bubble and the
+    away badge (v2.2). Both are shown only for the day being displayed."""
+    return {"status": str(doc.get("status") or ""),
+            "away": _away_text(doc, today_lb) if doc.get("away") else ""}
+
+
 def build_rows(entries, labels, tomorrow, period, cfg):
     today_lb = labels[0] if labels else ""
     yest_lb = labels[1] if len(labels) > 1 else ""
@@ -187,6 +209,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "reviews": None, "time_ms": None, "retention": None,
                "streak": None, "stale": False, "quiet": False,
                "back": bool(e.get("back")) and not e["paused"],
+               "status": "", "away": "",
                "exam": "" if e["paused"] else
                        _exam_badge(e.get("exam_date"), today_lb)}
         if e["paused"]:
@@ -211,9 +234,11 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             yesterday = days.get(yest_lb)
             if today:
                 row.update(_day_metrics(today))
+                row.update(_day_flags(today, today_lb))
                 fresh.append(row)
             elif yesterday and cfg.get("show_stale", True) and not e["you"]:
                 row.update(_day_metrics(yesterday))
+                row.update(_day_flags(yesterday, today_lb))
                 row["stale"] = True
                 stale.append(row)
             elif e["you"]:
@@ -330,6 +355,18 @@ def _css(cfg):
       margin-left: 5px; white-space: nowrap; }}
     #due-crew .bkb {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
       margin-left: 5px; white-space: nowrap; }}
+    #due-crew .awb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
+      margin-left: 5px; white-space: nowrap; }}
+    #due-crew .dc-stw {{ position: relative; display: block; max-width: 100%;
+      margin: 2px 0 1px; padding-top: 4px; overflow: hidden; line-height: 0; }}
+    #due-crew .dc-stw::before {{ content: ""; position: absolute; top: 0; left: 9px;
+      border: 4px solid transparent; border-top: 0; border-bottom-color: var(--dc-well); }}
+    #due-crew .dc-st {{ display: inline-block; max-width: 100%; box-sizing: border-box;
+      padding: 2px 8px; border-radius: 10px; background: var(--dc-well);
+      color: var(--dc-muted); font-size: 11px; font-weight: 400; line-height: 1.4;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }}
+    #due-crew tr.you .dc-stw::before {{ border-bottom-color: var(--dc-bg); }}
+    #due-crew tr.you .dc-st {{ background: var(--dc-bg); font-weight: 400; }}
     #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
     #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
@@ -402,6 +439,12 @@ def _row_html(row, rank, cfg):
     if row.get("back") and not row["quiet"]:
         # the day a quiet friend returns, the board says so
         exam = ' <span class="bkb">&#128075; back</span>' + exam
+    if row.get("away"):
+        exam += f' <span class="awb">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
+    status = ""
+    if row.get("status"):
+        st = _html.escape(str(row["status"]))
+        status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{st}</span></div>'
     if row["you"]:
         cheer = '<td class="chc"></td>'
         name = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
@@ -412,7 +455,7 @@ def _row_html(row, rank, cfg):
         name = (f'<a class="dc-pl" href="#" title="Open profile" '
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
-            f'<td class="nm">{name}{exam}{la}{extra}</td>{cells}{cheer}</tr>')
+            f'<td class="nm">{name}{exam}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 
 
 def _table_html(data, cfg, period):
@@ -643,13 +686,15 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
-def flurry_js(emojis, banner_text, back=None):
+def flurry_js(emojis, banner_text, back=None, notes=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner picks its colors from the page's night classes. When `back` is
     (uid, emoji) — a single sender — the banner is clickable to return the
-    cheer, and stays up a little longer."""
+    cheer, and stays up a little longer. `notes`: sender-written lines shown
+    under the title (textContent: never markup), which also buy time."""
     emoji_list = _json.dumps(emojis)
     banner = _json.dumps(banner_text)
+    notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
     back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
     return """
     (function() {
@@ -661,6 +706,13 @@ def flurry_js(emojis, banner_text, back=None):
         var title = document.createElement('div');
         title.textContent = %s;
         banner.appendChild(title);
+        var notes = %s;
+        for (var n = 0; n < notes.length; n++) {
+            var line = document.createElement('div');
+            line.textContent = '\u201c' + notes[n] + '\u201d';
+            line.style.cssText = 'font-size:13px;font-weight:400;margin-top:4px;opacity:0.9;max-width:60vw;';
+            banner.appendChild(line);
+        }
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
             'text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
@@ -668,7 +720,7 @@ def flurry_js(emojis, banner_text, back=None):
             'border:1px solid ' + ((document.getElementById('due-crew') &&
                 getComputedStyle(document.getElementById('due-crew')).getPropertyValue('--dc-accent').trim())
                 || (night ? '#7cc47f' : '#2e7d32')) + ';';
-        var linger = 2600;
+        var linger = 2600 + (notes.length ? 2500 : 0);
         if (backCmd && typeof pycmd !== 'undefined') {
             linger = 5000;
             banner.style.cursor = 'pointer';
@@ -704,7 +756,7 @@ def flurry_js(emojis, banner_text, back=None):
         document.body.appendChild(wrap);
         setTimeout(function() { wrap.remove(); }, 3800);
     })();
-    """ % (back_cmd, banner, emoji_list)
+    """ % (back_cmd, banner, notes_json, emoji_list)
 
 
 def stranger_card_js(info):
@@ -809,7 +861,8 @@ def profile_overlay_js(profile):
       name, streak (int|None), last_active (str ts), cells (list of daily
       counts oldest->newest, or None when the heatmap is private),
       same_days (int|None), decks_line (str), uid, you (bool),
-      paused (bool), exam (str, client-built text or "").
+      paused (bool), exam (str, client-built text or ""), away (str, text
+      or ""), status (str or "").
     For your own card ("you") the overlay shows exactly what the crew sees,
     and the cheer button becomes a Privacy shortcut. Everything user-sourced
     is escaped here; the JS only injects the built HTML and wires buttons."""
@@ -837,6 +890,21 @@ def profile_overlay_js(profile):
         head += (f'<div class="dcex" style="font-size: 12px; font-weight: 700; '
                  f'padding: 4px 0 0;">&#128214; '
                  f'{_html.escape(str(profile["exam"]))}</div>')
+    if profile.get("away"):
+        head += (f'<div class="dcex" style="font-size: 12px; font-weight: 700; '
+                 f'padding: 4px 0 0;">&#9992;&#65039; '
+                 f'{_html.escape(str(profile["away"]))}</div>')
+    status = str(profile.get("status") or "")
+    if status or you:
+        edit = ""
+        if you:
+            link = ('style="color: inherit; text-decoration: none; '
+                    'border-bottom: 1px dotted currentColor;"')
+            edit = (f' <a href="#" {link} onclick="{_pycmd("status")}">'
+                    f'{"edit" if status else "Set a status"}</a>')
+        quoted = f'&ldquo;{_html.escape(status)}&rdquo;' if status else ""
+        head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
+                 f'{quoted}{edit}</div>')
 
     cells = profile.get("cells")
     if cells is None:

@@ -675,6 +675,158 @@ def test_accents():
           "--dc-accent" in js and "--dc-accent-ink" in js
           and "duecrew:cheerpick" in js)
 
+def _render(data, labels, tomorrow, period):
+    return board.render({"entries": data["entries"], "labels": labels,
+                         "tomorrow": tomorrow, "pending": [], "decks": {},
+                         "my_friends": []}, {"period": period}, 0)
+
+
+def test_cheer_notes():
+    """v2.2: a cheer may carry a note (rules-v5); the fake caps it like the
+    rules; on older rules the cheer still lands, without the note."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    dre = new_client(store, "dre", "Dre")
+    fire = "\U0001F525"
+    ok = dre.send_cheer("sam", "dre", "Dre", fire, "you're on fire  this\nweek")
+    doc = store.docs.get("users/sam/cheers/dre") or {}
+    check("cheer note: stored as one line", ok is True
+          and doc.get("note") == fv_str("you're on fire this week"), str(doc))
+    long = dre.send_cheer("sam", "dre", "Dre", fire, "x" * 200)
+    check("cheer note: client trims to 80 before sending", long is True
+          and len(store.docs["users/sam/cheers/dre"]["note"]["stringValue"]) == 80)
+    bare = dre.send_cheer("sam", "dre", "Dre", "\U0001F389")
+    check("cheer note: no note, no field", bare is True
+          and "note" not in store.docs["users/sam/cheers/dre"])
+    dre.send_cheer("sam", "dre", "Dre", "\U0001F4AA", "big day")
+    sam = new_client(store, "sam", "Sammy")
+    data, _labels, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    ch = (data["cheers"] or [{}])[0]
+    check("cheer note: arrives with the cheer, name from the profile",
+          ch.get("note") == "big day" and ch.get("name") == "Dre"
+          and ch.get("emoji") == "\U0001F4AA", str(data["cheers"]))
+    old = fakes.FakeFirestore(rules_mode="v3")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
+    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    dre_old = new_client(old, "dre", "Dre")
+    res = dre_old.send_cheer("sam", "dre", "Dre", fire, "hello")
+    check("cheer note: older rules -> cheer lands without the note, sender told",
+          res == "no-note" and "note" not in old.docs["users/sam/cheers/dre"]
+          and old.docs["users/sam/cheers/dre"]["emoji"] == fv_str(fire), str(res))
+    js = board.flurry_js([fire], "Dre sent cheers", back=("dre", fire),
+                         notes=["you're on fire <b>now</b>"])
+    check("cheer note: flurry shows the note as text, longer linger",
+          "you're on fire <b>now</b>" in js and "'\u201c' + notes[n]" in js
+          and "notes.length ? 2500" in js)
+
+
+def test_status_bubble():
+    """v2.2: a one-line status rides today's doc (crew-only by the same
+    rules as stats), shows as a bubble under the name on Today only, and
+    clears when emptied."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    col = make_user_col([TODAY])
+    files = tempfile.mkdtemp()
+    dre = new_client(store, "dre", "Dre")
+    labels = sync_once(store, dre, col, files,
+                       {"status": "coffee, then <b>400</b> cards\nnow"}, TODAY)
+    doc = store.docs["users/dre/daily_stats/" + labels[0]]
+    check("status: uploaded as one line",
+          doc.get("status") == fv_str("coffee, then <b>400</b> cards now"), str(doc))
+    sam = new_client(store, "sam", "Sammy")
+    data, labels, tomorrow = fetch_as(store, sam, col)
+    entry = next(e for e in data["entries"] if e["user_id"] == "dre")
+    check("status: a crewmate receives it",
+          entry["days"][labels[0]].get("status") == "coffee, then <b>400</b> cards now")
+    today_html = _render(data, labels, tomorrow, "today")
+    check("status: bubble under the name on Today, escaped",
+          'class="dc-st"' in today_html and "&lt;b&gt;400&lt;/b&gt;" in today_html
+          and "<b>400</b>" not in today_html)
+    check("status: nothing on Week", 'class="dc-st"' not in _render(data, labels, tomorrow, "week"))
+    store.auth_uid = "dre"  # the fake signs requests as the last client made
+    sync_once(store, dre, col, files, {"status": ""}, TODAY)
+    check("status: emptied -> removed server-side",
+          "status" not in store.docs["users/dre/daily_stats/" + labels[0]])
+    js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
+    check("status: own card offers to set one", "duecrew:status" in js and "Set a status" in js)
+    js = board.profile_overlay_js({"name": "Dre", "you": False, "cells": None,
+                                   "status": "hi <i>there</i>"})
+    check("status: friend's card shows it escaped, no edit link",
+          "hi &lt;i&gt;there&lt;/i&gt;" in js and "duecrew:status" not in js)
+    junk = firebase._clean_day({"status": 5, "away": "yes", "awayTo": "soon"})
+    good = firebase._clean_day({"status": "  hi\n there ", "away": True, "awayTo": "2026-09-04"})
+    check("status/away: junk from the server is dropped",
+          "status" not in junk and "away" not in junk
+          and good == {"status": "hi there", "away": True, "awayTo": "2026-09-04"}, str((junk, good)))
+
+
+def test_away_flag():
+    """v2.2: away dates flag day docs (friend-gated like stats) — the
+    coming days ahead of time, so the crew sees the plane while the person
+    isn't syncing; shrinking or clearing unflags; week shares show planes
+    and still count only studied days."""
+    import due_crew
+    from due_crew import share
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    col = make_user_col([TODAY, TODAY - datetime.timedelta(days=2)])
+    files = tempfile.mkdtemp()
+    dre = new_client(store, "dre", "Dre")
+    d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
+    path = lambda n: f"users/dre/daily_stats/{d(n)}"
+    on = {"booleanValue": True}
+    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(3)}, TODAY)
+    docs = store.docs
+    check("away: today's doc carries the flag and the end date",
+          docs[path(0)].get("away") == on and docs[path(0)].get("awayTo") == fv_str(d(3))
+          and "reviews" in docs[path(0)], str(docs.get(path(0))))
+    check("away: the coming days are flagged ahead of time, nothing beyond",
+          all(docs.get(path(n), {}).get("away") == on for n in (1, 2, 3))
+          and path(4) not in docs)
+    check("away: yesterday (unstudied) flagged, no numbers invented",
+          docs.get(path(-1), {}).get("away") == on and "reviews" not in docs.get(path(-1), {}))
+    check("away: a studied day outside the spell is untouched",
+          "away" not in docs[path(-2)] and "reviews" in docs[path(-2)])
+    snapshot = {k: dict(v) for k, v in docs.items()}
+    dre.sync_away("dre", d(0), {"away_from": d(-1), "away_to": d(3)})
+    check("away: steady state changes nothing", snapshot == {k: dict(v) for k, v in docs.items()})
+    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(1)}, TODAY)
+    check("away: shrinking the spell drops the future docs it made",
+          path(2) not in docs and path(3) not in docs
+          and docs[path(1)].get("away") == on and docs[path(0)].get("awayTo") == fv_str(d(1)))
+    sync_once(store, dre, col, files, {}, TODAY)
+    check("away: clearing unflags everything (numbers stay)",
+          path(1) not in docs and "away" not in docs[path(0)] and "reviews" in docs[path(0)]
+          and "away" not in docs.get(path(-1), {}))
+    sync_once(store, dre, col, files, {"away_from": d(0), "away_to": d(0)}, TODAY)
+    sam = new_client(store, "sam", "Sammy")
+    data, labels, tomorrow = fetch_as(store, sam, col)
+    today_html = _render(data, labels, tomorrow, "today")
+    check("away: Today row says when they're back",
+          'class="awb"' in today_html and "back tomorrow" in today_html, today_html[-600:])
+    doc3 = {"away": True, "awayTo": d(3)}
+    check("away: badge names the return day",
+          board._away_text(doc3, d(0)) == f"back {TODAY + datetime.timedelta(days=4):%b} {(TODAY + datetime.timedelta(days=4)).day}"
+          and board._away_text({"away": True}, d(0)) == "away")
+    check("away: day flags are three-state",
+          due_crew._day_flag({"studied": True, "away": True}) is True
+          and due_crew._day_flag({"away": True}) == "away"
+          and due_crew._day_flag({}) is False and due_crew._day_flag(None) is False)
+    week = [(datetime.date(2026, 9, 1) + datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    mine = share.my_week(week, [True, True, "away", "away", True, False, True], 900, 600000, 3)
+    check("share: my week shows planes and counts studied days only",
+          mine.split("\n")[1] == "🟩🟩✈️✈️🟩⬜🟩 4 of 7 days", mine)
+    crew = share.crew_week("busm", week, [
+        ("Ameya", ["away"] * 7, ""), ("igk", [True, "away", "away", True, True, True, True], "")],
+        100, 60000)
+    check("share: away-only week gets no row; planes in rows",
+          crew is not None and crew.count("\n") == 3 and "🟩✈️✈️🟩🟩🟩🟩 igk" in crew, str(crew))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

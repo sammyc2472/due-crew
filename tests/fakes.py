@@ -130,7 +130,7 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v4: markers v2+v3+v4,
+      "repo"        — current repository rules (rules-v5: markers v2..v5,
                       crew-scoped board + knocks under servers/{key}/...,
                       server_board retired)
       "v3"          — the previous paste: markers v2+v3, the UNSCOPED
@@ -158,7 +158,8 @@ class FakeFirestore:
         doc = self.docs.get(f"users/{uid}", {})
         return doc.get("openBoard", {}).get("booleanValue") is True
 
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4"),
+    CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}
+    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
 
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
@@ -179,7 +180,18 @@ class FakeFirestore:
         m = re.fullmatch(r"users/([^/]+)/cheers/([^/]+)", path)
         if m:
             owner, sender = m.groups()
-            return uid == sender and uid in self._friends_of(owner)
+            if method == "DELETE":
+                return uid == owner
+            f = fields or {}
+            allowed = {"emoji", "name", "at"}
+            if self.rules_mode == "repo":
+                allowed.add("note")  # rules-v5: optional, <= 80 chars
+            note = (f.get("note") or {}).get("stringValue")
+            return (uid == sender and uid in self._friends_of(owner)
+                    and set(f) <= allowed
+                    and (f.get("emoji") or {}).get("stringValue") in self.CHEERS
+                    and ("note" not in f
+                         or (isinstance(note, str) and len(note) <= 80)))
         m = re.fullmatch(r"users/([^/]+)/knocks/([^/]+)", path)
         if m:
             owner, sender = m.groups()

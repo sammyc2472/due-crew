@@ -25,9 +25,8 @@ maintainer. The repo is the source of truth; there is no build step.
 1. Bump `due_crew/manifest.json` version.
 2. If `firestore.rules` changed: add the new `meta/{marker}` version there
    (the list is cumulative — older clients keep probing older markers) AND
-   bump `RULES_MARKER` in `backend/firebase.py`, copy the file to
-   `due_crew/firestore.rules` (the in-app rules dialog ships that copy),
-   run the emulator rules test, and re-publish in the Firebase console
+   bump `RULES_MARKER` in `backend/firebase.py`, run the emulator rules
+   test, and re-publish in the Firebase console
    BEFORE the add-on release (users can't fix rules; the footer shows
    "server catching up" until the paste lands). A rules change that closes
    a path older clients use (v2.0 closed `server_board` and the directory)

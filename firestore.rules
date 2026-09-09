@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules (v2.0: one hosted backend).
+// Due Crew — Firestore rules (v2.2: cheer notes; v2.0: one hosted backend).
 //
 // Model: friendship is consent-based. Your own `friends` array controls who
 // may read your daily stats. The client only ever writes documents it owns.
@@ -47,13 +47,17 @@ service cloud.firestore {
       }
 
       // v1.2: cheers. Only people the owner added may send, one doc per
-      // sender (the doc id), only the three emoji, nothing else in the doc.
+      // sender (the doc id), only the three emoji and — since v2.2 — an
+      // optional note of at most 80 characters. Nothing else in the doc.
       match /cheers/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isFriend(userId)
                               && request.auth.uid == senderId
-                              && request.resource.data.keys().hasOnly(['emoji', 'name', 'at'])
-                              && request.resource.data.emoji in ['🎉', '💪', '🔥'];
+                              && request.resource.data.keys().hasOnly(['emoji', 'name', 'at', 'note'])
+                              && request.resource.data.emoji in ['🎉', '💪', '🔥']
+                              && (!('note' in request.resource.data)
+                                  || (request.resource.data.note is string
+                                      && request.resource.data.note.size() <= 80));
       }
 
       // v1.8: knocks — "wants to be crew", one small doc per sender, only
@@ -100,7 +104,7 @@ service cloud.firestore {
     // (newer rules must still satisfy older clients' probes); add a version
     // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5'];
       allow list, create, update, delete: if false;
     }
 

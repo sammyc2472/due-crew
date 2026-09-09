@@ -69,6 +69,13 @@ ENTRIES = [
      "last_updated": ago(days=2), "exam_date": "", "days": {}, "decks": []},
 ]
 
+# v2.2: statuses ride today's doc; an away spell flags days ahead of time.
+ENTRIES[0]["days"][L[0]]["status"] = "coffee, then 400 cards"
+ENTRIES[2]["days"][L[0]]["status"] = ("Step 2 in 30 days, send help and also snacks, "
+                                       "this is a long one to test the ellipsis")
+ENTRIES[4]["days"][L[0]] = {"away": True,
+                             "awayTo": (TODAY + datetime.timedelta(days=4)).isoformat()}
+
 DATA = {"entries": ENTRIES, "labels": L, "tomorrow": TOMORROW, "pending": ["Jules"]}
 WRAP = {"reviews": 21430, "time_ms": 148320000, "best_name": "Marisa K.", "full_days": 5}
 DELTAS = {("sam", "AnKing Step 1"): 124}

@@ -18,5 +18,8 @@
   "shared_decks": [],
   "server_board": false,
   "crew_label": "Crew",
-  "accent": "green"
+  "accent": "green",
+  "status": "",
+  "away_from": "",
+  "away_to": ""
 }

@@ -23,6 +23,7 @@ DEFAULTS = {
     "share_retention": True, "share_streak": True, "share_heatmap": True,
     "server_board": False, "paused": False, "exam_date": "",
     "crew_label": "Crew", "accent": "green",
+    "away_from": "", "away_to": "",
 }
 
 SORTS = [("reviews", "Reviews"), ("time", "Study time"),
@@ -319,6 +320,36 @@ class SettingsDialog(QDialog):
         exam_note.setStyleSheet("font-size: 11px;")
         exam_note.setWordWrap(True)
         lay.addWidget(exam_note)
+        away_row = QHBoxLayout()
+        self.away_on = QCheckBox("Share when I'm away")
+        away_row.addWidget(self.away_on)
+        self.away_from = QDateEdit()
+        self.away_to = QDateEdit()
+        start = QDate.fromString(str(self.config.get("away_from", "")),
+                                 Qt.DateFormat.ISODate)
+        end = QDate.fromString(str(self.config.get("away_to", "")),
+                               Qt.DateFormat.ISODate)
+        if start.isValid() and end.isValid():
+            self.away_on.setChecked(True)
+            self.away_from.setDate(start)
+            self.away_to.setDate(end)
+        else:
+            self.away_from.setDate(QDate.currentDate().addDays(1))
+            self.away_to.setDate(QDate.currentDate().addDays(7))
+        for w in (self.away_from, self.away_to):
+            w.setCalendarPopup(True)
+            w.setEnabled(self.away_on.isChecked())
+            self.away_on.toggled.connect(w.setEnabled)
+        away_row.addWidget(self.away_from)
+        away_row.addWidget(QLabel("to"))
+        away_row.addWidget(self.away_to)
+        away_row.addStretch()
+        lay.addLayout(away_row)
+        away_note = QLabel("\u2708\ufe0f shows by your name on those days, and "
+                           "they read as away — not missed — in week shares.")
+        away_note.setStyleSheet("font-size: 11px;")
+        away_note.setWordWrap(True)
+        lay.addWidget(away_note)
         lay.addSpacing(8)
         self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
         note = QLabel("Applies when you save. Pausing hides your stats; your "
@@ -358,5 +389,13 @@ class SettingsDialog(QDialog):
         changed["exam_date"] = (
             self.exam_edit.date().toString(Qt.DateFormat.ISODate)
             if self.exam_on.isChecked() else "")
+        if self.away_on.isChecked():
+            start, end = self.away_from.date(), self.away_to.date()
+            if end < start:
+                start, end = end, start
+            changed["away_from"] = start.toString(Qt.DateFormat.ISODate)
+            changed["away_to"] = end.toString(Qt.DateFormat.ISODate)
+        else:
+            changed["away_from"] = changed["away_to"] = ""
         self.on_saved(changed)
         self.accept()

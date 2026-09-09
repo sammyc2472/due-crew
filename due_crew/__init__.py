@@ -23,11 +23,11 @@ import traceback
 
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
-from aqt.qt import QAction, QApplication, QCursor, QMenu
+from aqt.qt import QAction, QApplication
 from aqt.utils import tooltip
 
 from . import board
-from .backend.firebase import FirebaseClient, TransportError
+from .backend.firebase import FirebaseClient, TransportError, away_on
 from .stats import duet_runs, gather_stats, gather_week
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
@@ -560,7 +560,9 @@ def _play_cheers():
     else:
         text = f"{' '.join(dict.fromkeys(emojis))} {' and '.join(names)} sent cheers"
     back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
-    mw.web.eval(board.flurry_js(emojis, text, back=back))
+    notes = [ch["note"] if len(cheers) == 1 else f"{ch['name']}: {ch['note']}"
+             for ch in cheers if ch.get("note")]
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes))
 
 
 # ---- hooks ----
@@ -656,6 +658,8 @@ def _on_js(handled, message, context):
         open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif cmd == "status":
+        _edit_status()
     elif cmd == "profile" and len(parts) > 2:
         _open_profile(parts[2])
     elif cmd == "evedismiss":
@@ -749,11 +753,17 @@ def _share(kind):
     tooltip("Copied.")
 
 
-def _my_week(q):
+def _my_week(q, labels):
     """(flags oldest->today, reviews, time_ms) for the last 7 days, from
-    the local revlog — always fresh, never waiting on a sync."""
+    the local revlog — always fresh, never waiting on a sync. A day inside
+    my away spell that I didn't study reads "away", not missed."""
+    c = cfg()
     studied = q.studied_days_ago(7)
-    flags = [ago in studied for ago in range(6, -1, -1)]
+    flags = []
+    for ago in range(6, -1, -1):
+        lb = labels[ago] if ago < len(labels) else q.day_label(ago)
+        flags.append(True if ago in studied
+                     else ("away" if away_on(lb, c) else False))
     reviews = sum(q.reviews_for_day(i) for i in range(7))
     time_ms = sum(q.study_time_ms_for_day(i) for i in range(7))
     return flags, reviews, time_ms
@@ -761,9 +771,16 @@ def _my_week(q):
 
 def _my_week_text(q, stats, labels):
     from . import share
-    flags, reviews, time_ms = _my_week(q)
+    flags, reviews, time_ms = _my_week(q, labels)
     return share.my_week(list(reversed(labels[:7])), flags, reviews, time_ms,
                          stats.streak)
+
+
+def _day_flag(doc):
+    """True (studied), "away" (flagged, no answers), or False."""
+    if board._showed(doc):
+        return True
+    return "away" if (doc or {}).get("away") else False
 
 
 def _as_of(last_updated, labels):
@@ -789,19 +806,19 @@ def _crew_week_text(q, stats, labels):
         if e.get("paused"):
             continue
         if e["you"]:
-            flags, r, t = _my_week(q)
+            flags, r, t = _my_week(q, labels)
             rows.append((e["name"], flags, ""))
             reviews += r
             time_ms += t
             continue
         days = e.get("days") or {}
-        flags = [board._showed(days.get(lb)) for lb in week]
+        flags = [_day_flag(days.get(lb)) for lb in week]
         agg = board._week_row(days, labels) or {}
         reviews += int(agg.get("reviews") or 0)
         time_ms += int(agg.get("time_ms") or 0)
         rows.append((e["name"], flags, _as_of(e.get("last_updated"), labels)))
     if not rows:
-        flags, r, t = _my_week(q)
+        flags, r, t = _my_week(q, labels)
         rows.append((client().display_name or "Me", flags, ""))
         reviews, time_ms = r, t
     label = str(cfg().get("crew_label") or "Crew").strip() or "Crew"
@@ -815,29 +832,63 @@ def _cheer_menu(to_uid):
                   if e["user_id"] == to_uid), None)
     if entry is None:
         return
-    menu = QMenu(mw)
-    for emoji in CHEER_EMOJI:
-        action = menu.addAction(f"{emoji}  Cheer {entry['name']}")
-        action.triggered.connect(
-            lambda _=False, em=emoji: _send_cheer(to_uid, entry["name"], em))
-    menu.exec(QCursor.pos())
+    from .ui.cheer_dialog import CheerDialog
+    dlg = CheerDialog(mw, entry["name"], CHEER_EMOJI)
+    if dlg.exec() and dlg.emoji in CHEER_EMOJI:
+        _send_cheer(to_uid, entry["name"], dlg.emoji, dlg.note)
 
 
-def _send_cheer(to_uid, to_name, emoji):
+def _send_cheer(to_uid, to_name, emoji, note=""):
     cl = client()
     uid = cl.user_id
     my_name = cl.display_name or "A friend"
 
     def job():
         try:
-            ok = cl.send_cheer(to_uid, uid, my_name, emoji)
+            ok = cl.send_cheer(to_uid, uid, my_name, emoji, note or None)
         except Exception:
             ok = False
-        msg = (f"Sent {emoji} to {html.escape(to_name)}." if ok
-               else "Couldn't send. Check your connection.")
+        if ok == "no-note":
+            msg = (f"Sent {emoji} to {html.escape(to_name)} without the note "
+                   "— the server needs a rules update for notes.")
+        elif ok:
+            msg = f"Sent {emoji} to {html.escape(to_name)}."
+        else:
+            msg = "Couldn't send. Check your connection."
         mw.taskman.run_on_main(lambda: tooltip(msg))
 
     threading.Thread(target=job, daemon=True).start()
+
+
+def _edit_status():
+    """Own card → "Set a status" / "edit". One line, crew-only, pushed
+    right away (it rides today's stats doc). Empty clears it."""
+    from aqt.qt import QInputDialog
+    c = cfg()
+    current = str(c.get("status") or "")
+    text, ok = QInputDialog.getText(
+        mw, "Status",
+        "One line under your name on Today, for your crew.\n"
+        "Leave it empty to clear it.", text=current)
+    if not ok:
+        return
+    text = " ".join(str(text).split())[:80]
+    if text == current:
+        return
+    c["status"] = text
+    save_cfg(c)
+    lb = _state["labels"][0] if _state["labels"] else None
+    for e in _state["entries"] or []:  # show it now; the upload confirms it
+        if e["you"] and lb and e["days"].get(lb):
+            doc = dict(e["days"][lb])
+            if text:
+                doc["status"] = text
+            else:
+                doc.pop("status", None)
+            e["days"][lb] = doc
+    _rerender()
+    _on_sync_done()
+    tooltip("Status set." if text else "Status cleared.")
 
 
 # ---- server board: cards + knocks ----
@@ -904,6 +955,12 @@ def _open_profile(uid):
     exam = board._exam_text(entry.get("exam_date", ""),
                             labels[0] if labels else "")
     exam = exam[:1].upper() + exam[1:] if exam else ""
+    status = (str(cfg().get("status") or "") if you
+              else str((doc or {}).get("status") or ""))
+    today_doc = days.get(tomorrow) or (days.get(labels[0]) if labels else None)
+    away = (board._away_text(today_doc, labels[0])
+            if labels and today_doc and today_doc.get("away") else "")
+    away = away[:1].upper() + away[1:] if away else ""
     cl = client()
 
     def job():
@@ -936,7 +993,7 @@ def _open_profile(uid):
                 "last_active": entry["last_updated"], "cells": cells,
                 "same_days": same, "decks_line": decks_line, "uid": uid,
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
-                "duet": duet,
+                "duet": duet, "status": status, "away": away,
             }))
 
         mw.taskman.run_on_main(show)
@@ -1005,7 +1062,8 @@ def open_settings():
 
 
 SHARE_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
-              "share_heatmap", "server_board", "paused", "exam_date")
+              "share_heatmap", "server_board", "paused", "exam_date",
+              "away_from", "away_to")
 
 
 def _on_settings_saved(changed):

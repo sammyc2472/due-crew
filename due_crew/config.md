@@ -12,6 +12,8 @@ Raw keys, for reference:
 | `sync_notifications` | true/false | Toast when a friend syncs |
 | `theme` | auto / light / dark | auto follows Anki's night mode |
 | `accent` | green / blue / purple / teal / amber / rose | Accent color, light and dark variants |
+| `status` | text, up to 80 chars | One line under your name on Today, crew-only. Set it by clicking your own name |
+| `away_from`, `away_to` | YYYY-MM-DD or empty | Away dates: ✈️ by your name, ✈️ squares in week shares |
 | `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
 | `share_heatmap` | true/false | Heatmap on your profile card |

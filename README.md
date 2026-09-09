@@ -16,7 +16,11 @@ streak means what it says.
   stats only after they add your code, and vice versa. Remove someone and
   they stop seeing yours immediately.
 - **Cheers** — send 🎉 💪 🔥 and your friend gets a full-screen flurry with
-  your name on it after their next sync. Click a flurry to cheer back.
+  your name on it after their next sync. Add a short note and it rides
+  along. Click a flurry to cheer back.
+- **Status** — click your own name and set one line ("coffee, then 400
+  cards"). It sits in a bubble under your name on Today, for your crew and
+  no one else.
 - **Shared decks** — progress bars through decks you have in common
   (seen and mature counts). Decks match automatically by note fingerprint:
   AnKing and other imported decks pair up with no setup.
@@ -24,9 +28,11 @@ streak means what it says.
   how many of the same days you've both studied, and your current run of
   days studied together. Click your own name to see your card exactly as
   your crew sees it.
-- **Exam flags** — share an exam date and 📖 sits by your name for the two
-  weeks before, so your crew knows when a 💪 matters most. On the eve, the
-  board offers the 💪 itself.
+- **Exam and away flags** — share an exam date and 📖 sits by your name
+  for the two weeks before, so your crew knows when a 💪 matters most. On
+  the eve, the board offers the 💪 itself. Share away dates and ✈️ sits by
+  your name for those days, with ✈️ squares in week shares, so a gap reads
+  as a trip, not a slip.
 - **Crew Wrap** — a weekly "together we did X" banner, plus streak
   milestones and all-time crew milestones ("250,000 reviews together").
   One click copies it for the group chat.

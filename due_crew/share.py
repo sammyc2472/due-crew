@@ -17,7 +17,7 @@ import datetime as _dt
 from .board import _fmt_time
 
 FOOTER = "— Due Crew · Anki add-on 2035408484"
-ON, OFF = "🟩", "⬜"
+ON, OFF, AWAY = "🟩", "⬜", "✈️"
 NAME_MAX = 24
 
 
@@ -53,7 +53,13 @@ def date_range(labels_oldest_first):
 
 
 def week_squares(flags):
-    return "".join(ON if f else OFF for f in flags)
+    """flags: True (studied), "away", or anything else (nothing)."""
+    return "".join(ON if f is True else AWAY if f == "away" else OFF
+                   for f in flags)
+
+
+def _studied(flags):
+    return sum(1 for f in flags if f is True)
 
 
 def my_today(label, reviews, time_ms, retention, streak):
@@ -66,7 +72,7 @@ def my_today(label, reviews, time_ms, retention, streak):
 
 
 def my_week(labels_oldest_first, flags, reviews, time_ms, streak):
-    n = sum(1 for f in flags if f)
+    n = _studied(flags)
     head = "This week" + (f" · {date_range(labels_oldest_first)}"
                          if date_range(labels_oldest_first) else "")
     return "\n".join([
@@ -77,14 +83,15 @@ def my_week(labels_oldest_first, flags, reviews, time_ms, streak):
 
 
 def crew_week(label, labels_oldest_first, rows, reviews, time_ms):
-    """rows: [(name, flags7, as_of)] — as_of is '' or a weekday ('Tue')
-    meaning the person's last sync was that day, so later squares are
-    unknown, not empty. Only people with at least one day get a row,
-    most days first, then by name. None when nobody has a row."""
-    active = [(n, f, a) for n, f, a in rows if any(f)]
+    """rows: [(name, flags7, as_of)] — flags are True / "away" / False;
+    as_of is '' or a weekday ('Tue') meaning the person's last sync was
+    that day, so later squares are unknown, not empty. Only people with
+    at least one studied day get a row, most days first, then by name.
+    None when nobody has a row."""
+    active = [(n, f, a) for n, f, a in rows if _studied(f)]
     if not active:
         return None
-    active.sort(key=lambda r: (-sum(1 for f in r[1] if f), clean_name(r[0]).lower()))
+    active.sort(key=lambda r: (-_studied(r[1]), clean_name(r[0]).lower()))
     head = str(label or "Crew") + (f" · {date_range(labels_oldest_first)}"
                                    if date_range(labels_oldest_first) else "")
     lines = [head]
