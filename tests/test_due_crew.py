@@ -800,6 +800,12 @@ def test_squad_view_html():
     check("squad view: founder controls and the shared footer",
           "squadlock" in html and ">Open<" in html and "squadinvite" in html
           and "squadleave" in html)
+    by_streak = board._squads_html(view, {"sort": "streak"})
+    check("squad view: headers are the crew's sort links; sorting reorders ranks",
+          'onclick="pycmd(\'duecrew:sort:retention\')' in html
+          and by_streak.index("StepQueen") < by_streak.index("Maya")
+          and by_streak.index("Maya") < by_streak.index("Sammy")
+          and "&#128293; Streak &#9662;" in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
           'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})

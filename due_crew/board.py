@@ -524,8 +524,8 @@ def _decks_html(data, deltas=None):
     return html
 
 
-SQUAD_HEADS = (("reviews", "&#128218; Reviews"), ("time_ms", "&#9201; Time"),
-               ("retention", "&#127919; Ret."), ("streak", "&#128293; Streak"))
+SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
+                "retention": "retention", "streak": "streak"}
 
 
 def _switcher(view):
@@ -561,8 +561,11 @@ def _squads_html(view, cfg):
                 f'onclick="{_pycmd("squaddrop:" + str(view.get("current", "")))}">Remove</a></div>')
     rows = view.get("rows") or []
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
+    sort = sort_key(cfg)  # the crew table's sort, same headers, same links
+    field = SQUAD_FIELDS[sort]
     live = sorted([r for r in rows if r.get("day") == day],
-                  key=lambda r: r.get("reviews") or 0, reverse=True)
+                  key=lambda r: r.get(field) if r.get(field) is not None else -1,
+                  reverse=True)
     rest = sorted([r for r in rows if r.get("day") != day],
                   key=lambda r: r.get("day") or "", reverse=True)
     people = int(view.get("people") or len(rows))
@@ -574,8 +577,11 @@ def _squads_html(view, cfg):
                      f'{int(view.get("reviews") or 0):,} reviews together')
     heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
              f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
-    for _key, htext in SQUAD_HEADS:
-        heads += f"<th>{htext}</th>"
+    for key, label in HEADERS:
+        on = "on" if key == sort else ""
+        arrow = " &#9662;" if key == sort else ""
+        heads += (f'<th><a class="{on}" href="#" '
+                  f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
     body = ""
     for i, r in enumerate(live + rest):
         pname = _html.escape(str(r["name"]))
