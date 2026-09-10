@@ -52,5 +52,7 @@ maintainer. The repo is the source of truth; there is no build step.
   labels.
 - Process: propose features as mockups on the design-spec artifact first
   (ask Sam for the link if needed), build after sign-off.
-- Code changes are compile- and logic-tested here; flows still deserve a
-  click-test in a live Anki, which only Sam can do.
+- Code changes are compile- and logic-tested here; anything under
+  `due_crew/ui/` also gets `tools/dialogs.py` (offscreen PyQt6 render of
+  every dialog, see tests/README.md); flows still deserve a click-test in
+  a live Anki, which only Sam can do.

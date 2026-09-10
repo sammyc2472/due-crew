@@ -20,3 +20,15 @@ Neither layer replaces a click-test in a running Anki: see
 `tools/preview.html` (gitignored) for browser-side CSS verification. It
 simulates Anki's night classes and, since v1.10, Anki 26's `.fancy table`
 glass fill — it is a stand-in for the webview, not the webview.
+
+## Dialogs (Qt)
+
+The suite above runs without Qt, so it cannot see the dialogs. Render every
+dialog offscreen against the fake Firestore and get a PNG of each, or just
+a non-zero exit if one fails to build:
+
+    QT_QPA_PLATFORM=offscreen <python with PyQt6> tools/dialogs.py OUT_DIR
+
+Both crashes shipped on 2026-09-10 (a PyQt6 enum mix and a shadowed tab
+widget) fail here in under a second. Run it before any release that
+touches `due_crew/ui/`.

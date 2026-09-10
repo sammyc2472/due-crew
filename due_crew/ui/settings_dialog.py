@@ -35,7 +35,7 @@ ACCENTS = [("green", "Green"), ("blue", "Blue"), ("purple", "Purple"),
 
 class SettingsDialog(QDialog):
     def __init__(self, parent, client, config, on_saved, open_auth,
-                 open_friends, on_signed_out, open_decks):
+                 open_friends, on_signed_out, open_decks, open_squads=None):
         super().__init__(parent)
         self.client = client
         self.config = dict(config)
@@ -44,6 +44,7 @@ class SettingsDialog(QDialog):
         self.open_friends = open_friends
         self.on_signed_out = on_signed_out
         self.open_decks = open_decks
+        self.open_squads = open_squads
         self._binds = {}
         attach_alive(self)
         self._build()
@@ -55,7 +56,7 @@ class SettingsDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self._account_tab(), "Account")
-        tabs.addTab(self._board_tab(), "Leaderboard")
+        tabs.addTab(self._board_tab(), "Board")
         tabs.addTab(self._look_tab(), "Appearance")
         tabs.addTab(self._privacy_tab(), "Privacy")
         root.addWidget(tabs)
@@ -100,36 +101,41 @@ class SettingsDialog(QDialog):
             lay.addStretch()
             return
 
+        who = QHBoxLayout()
         self.who_label = QLabel(self._who_text())
-        lay.addWidget(self.who_label)
-
-        row = QHBoxLayout()
+        who.addWidget(self.who_label)
+        who.addStretch()
         rename = QPushButton("Change name…")
         rename.clicked.connect(self._rename)
-        row.addWidget(rename)
-        friends = QPushButton("Friends…")
-        friends.clicked.connect(lambda: self.open_friends())
-        row.addWidget(friends)
-        decks = QPushButton("Shared decks…")
-        decks.clicked.connect(lambda: self.open_decks())
-        row.addWidget(decks)
+        who.addWidget(rename)
+        lay.addLayout(who)
+
+        lay.addSpacing(12)
+        lay.addWidget(QLabel("<b>Crew</b>"))
+        row = QHBoxLayout()
+        for label, opener in (("Friends…", self.open_friends),
+                              ("Squads…", self.open_squads),
+                              ("Shared decks…", self.open_decks)):
+            if opener is None:
+                continue
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda _=False, f=opener: f())
+            row.addWidget(btn)
         row.addStretch()
         lay.addLayout(row)
 
-        out = QPushButton("Sign out")
-        out.clicked.connect(self._sign_out)
-        lay.addWidget(out)
-        note = QLabel("Sign out stops syncing on this device. "
-                      "Your account and stats stay.")
-        note.setStyleSheet("font-size: 11px;")
-        note.setWordWrap(True)
-        lay.addWidget(note)
-
         lay.addStretch()
+        bottom = QHBoxLayout()
+        out = QPushButton("Sign out")
+        out.setToolTip("Stops syncing on this device. Your account and stats stay.")
+        out.clicked.connect(self._sign_out)
+        bottom.addWidget(out)
+        bottom.addStretch()
         delete = QPushButton("Delete account…")
         delete.setStyleSheet(f"color: {danger()};")
         delete.clicked.connect(self._delete)
-        lay.addWidget(delete)
+        bottom.addWidget(delete)
+        lay.addLayout(bottom)
 
     def _who_text(self):
         name = html.escape(self.client.display_name or "?")
@@ -258,10 +264,10 @@ class SettingsDialog(QDialog):
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._combo(lay, "sort", "Sort by", SORTS)
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
-        self._check(lay, "sync_notifications", "Toast when a friend syncs")
+        self._check(lay, "sync_notifications", "Notify me when a friend syncs")
+        lay.addSpacing(8)
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
-        note = QLabel("The board refreshes when Anki syncs, or when you "
-                      "click Refresh on it.")
+        note = QLabel("Refreshes when Anki syncs, or with Refresh on the board.")
         note.setStyleSheet("font-size: 11px;")
         note.setWordWrap(True)
         lay.addWidget(note)
@@ -271,7 +277,7 @@ class SettingsDialog(QDialog):
     def _look_tab(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        self._combo(lay, "theme", "Colors", THEMES)
+        self._combo(lay, "theme", "Theme", THEMES)
         self._combo(lay, "accent", "Accent", ACCENTS)
         self._check(lay, "compact", "Compact rows")
         self._check(lay, "show_last_active", 'Show "last active" next to names')
@@ -306,8 +312,7 @@ class SettingsDialog(QDialog):
         exam_row.addWidget(self.exam_edit)
         exam_row.addStretch()
         lay.addLayout(exam_row)
-        exam_note = QLabel("\U0001F4D6 shows by your name for the two weeks "
-                           "before the date, then clears itself.")
+        exam_note = QLabel("\U0001F4D6 by your name for the two weeks before.")
         exam_note.setStyleSheet("font-size: 11px;")
         exam_note.setWordWrap(True)
         lay.addWidget(exam_note)
@@ -336,16 +341,15 @@ class SettingsDialog(QDialog):
         away_row.addWidget(self.away_to)
         away_row.addStretch()
         lay.addLayout(away_row)
-        away_note = QLabel("\u2708\ufe0f shows by your name on those days, and "
-                           "they read as away — not missed — in week shares.")
+        away_note = QLabel("\u2708\ufe0f by your name on those days, and in "
+                           "week shares instead of a gap.")
         away_note.setStyleSheet("font-size: 11px;")
         away_note.setWordWrap(True)
         lay.addWidget(away_note)
         lay.addSpacing(8)
         self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
-        note = QLabel("Applies when you save. Pausing hides your stats; your "
-                      "streak keeps counting as long as you keep studying. "
-                      "Turning a stat off removes what was already shared "
+        note = QLabel("Pausing hides your stats; your streak keeps counting. "
+                      "Turning a stat off also removes what's already shared "
                       "this week.")
         note.setStyleSheet("font-size: 11px;")
         note.setWordWrap(True)

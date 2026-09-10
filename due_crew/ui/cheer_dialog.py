@@ -7,6 +7,8 @@ from aqt.qt import (
     QVBoxLayout,
 )
 
+from . import accent
+
 NOTE_MAX = 80
 
 
@@ -14,6 +16,7 @@ class CheerDialog(QDialog):
     def __init__(self, parent, name, emojis):
         super().__init__(parent)
         self.setWindowTitle(f"Cheer {name}")
+        self.setMinimumWidth(320)
         self.emoji = None
         self.note = ""
         self._emojis = list(emojis)
@@ -23,7 +26,11 @@ class CheerDialog(QDialog):
         for em in self._emojis:
             b = QPushButton(em)
             b.setCheckable(True)
-            b.setStyleSheet("font-size: 20px; padding: 6px 14px;")
+            b.setMinimumSize(64, 44)
+            b.setStyleSheet(
+                "QPushButton { font-size: 22px; padding: 4px 12px; border-radius: 8px;"
+                " border: 2px solid transparent; }"
+                f"QPushButton:checked {{ border-color: {accent()}; }}")
             b.clicked.connect(lambda _=False, e=em: self._pick(e))
             row.addWidget(b)
             self._buttons.append(b)
@@ -33,7 +40,7 @@ class CheerDialog(QDialog):
         self.note_edit.setPlaceholderText("Add a note (optional)")
         self.note_edit.setMaxLength(NOTE_MAX)
         lay.addWidget(self.note_edit)
-        hint = QLabel(f"They see it after their next sync. Up to {NOTE_MAX} characters.")
+        hint = QLabel("Lands after their next sync.")
         hint.setStyleSheet("font-size: 11px;")
         lay.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
