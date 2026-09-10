@@ -327,10 +327,10 @@ class SettingsDialog(QDialog):
         else:
             self.away_from.setDate(QDate.currentDate().addDays(1))
             self.away_to.setDate(QDate.currentDate().addDays(7))
-        for w in (self.away_from, self.away_to):
-            w.setCalendarPopup(True)
-            w.setEnabled(self.away_on.isChecked())
-            self.away_on.toggled.connect(w.setEnabled)
+        for edit in (self.away_from, self.away_to):  # not `w`: that's the tab
+            edit.setCalendarPopup(True)
+            edit.setEnabled(self.away_on.isChecked())
+            self.away_on.toggled.connect(edit.setEnabled)
         away_row.addWidget(self.away_from)
         away_row.addWidget(QLabel("to"))
         away_row.addWidget(self.away_to)
