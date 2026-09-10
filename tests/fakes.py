@@ -131,8 +131,8 @@ class FakeFirestore:
 
     rules_mode:
       "repo"        — current repository rules (rules-v6: markers v2..v6,
-                      squads with member rows, knocks between squadmates,
-                      boards/ and server_board retired)
+                      squads with member rows, knocks between squadmates;
+                      boards/, server_board, and the directory are gone)
       "v3"          — the previous paste: markers v2+v3, the UNSCOPED
                       server_board, knocks gated only on openBoard
       "v2"          — marker v2 only, no board/knocks
@@ -238,14 +238,11 @@ class FakeFirestore:
                     and self._member(squad, owner))
         m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
         if m:
-            _day, owner = m.groups()
-            # retired in v2.3: owners may still delete their rows
-            return self.rules_mode == "repo" and method == "DELETE" and uid == owner
+            # v2.0–v2.2 Everyone rows: no rule at all since v2.3.1
+            return False
         m = re.fullmatch(r"server_board/([^/]+)", path)
         if m:
-            if self.rules_mode == "repo":
-                return method == "DELETE" and uid == m.group(1)
-            return uid == m.group(1)  # v3 rules: still owner-writable
+            return self.rules_mode == "v3" and uid == m.group(1)  # v1.8–1.9 only
         m = re.fullmatch(r"squads/([^/]+)", path)
         if m:
             if self.rules_mode != "repo" or uid is None:

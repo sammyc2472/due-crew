@@ -830,15 +830,6 @@ class FirebaseClient:
         self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
-    def retire_old_board_row(self, uid):
-        """v1.8–v1.9 wrote rows to the unscoped server_board collection;
-        v2.0's rules close it, owners may still delete. Once per session."""
-        if self.session.get("old_board_retired"):
-            return
-        self.delete_doc(f"server_board/{uid}")
-        self.session["old_board_retired"] = True
-        self._save_session()
-
     # ---- squads ----
 
     def create_squad(self, uid, name, my_name):
@@ -978,9 +969,6 @@ class FirebaseClient:
         for offset in range(KEEP_DAYS + 1, KEEP_DAYS + 4):
             label = (base - datetime.timedelta(days=offset)).isoformat()
             self.delete_doc(f"users/{uid}/daily_stats/{label}")
-        for offset in (2, 3, 4):  # Everyone rows outlive their day by one
-            label = (base - datetime.timedelta(days=offset)).isoformat()
-            self.delete_doc(f"boards/{label}/rows/{uid}")
         self.session["cleaned"] = today_label
         self._save_session()
 
@@ -1002,13 +990,8 @@ class FirebaseClient:
         self._delete_listed(f"users/{uid}/knocks")
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
-        self.delete_doc(f"server_board/{uid}")  # v1.8–1.9 row, if any
         for sid in squad_ids:
             self.delete_doc(f"squads/{sid}/members/{uid}")
-        today = datetime.date.today()
-        for offset in (-1, 0, 1, 2):  # Everyone rows near today, any zone
-            label = (today - datetime.timedelta(days=offset)).isoformat()
-            self.delete_doc(f"boards/{label}/rows/{uid}")
         if friend_code:
             self.delete_doc(f"friend_codes/{friend_code}")
         self.delete_doc(f"users/{uid}")

@@ -145,17 +145,12 @@ def main():
     check("stats: friend reads", call("GET", "users/alice/daily_stats/2026-09-06", "dave")[0] == 200)
     check("stats: stranger denied", call("GET", "users/alice/daily_stats/2026-09-06", "bob")[0] == 403)
 
-    # -- retired paths
+    # -- retired paths: no rule at all, so everything is denied
     day = "2026-09-06"
     put(f"boards/{day}/rows/alice", {"name": "Alice", "reviews": 1}, "owner")
     check("retired: Everyone rows unreadable", call("GET", f"boards/{day}/rows/alice", "alice")[0] == 403)
     check("retired: Everyone rows unwritable", put(f"boards/{day}/rows/alice", {"name": "x"}, "alice") == 403)
-    check("retired: owner may delete an Everyone row", call("DELETE", f"boards/{day}/rows/alice", "alice")[0] == 200)
-    check("retired: cannot delete someone else's", call("DELETE", f"boards/{day}/rows/bob", "alice")[0] == 403)
-    put("server_board/alice", {"name": "x"}, "owner")
-    check("retired: old rows unreadable", call("GET", "server_board/alice", "alice")[0] == 403)
-    check("retired: old rows unwritable", put("server_board/alice", {"name": "y"}, "alice") == 403)
-    check("retired: owner may delete old row", call("DELETE", "server_board/alice", "alice")[0] == 200)
+    check("retired: old server_board unwritable", put("server_board/alice", {"name": "y"}, "alice") == 403)
     check("retired: directory is gone", call("GET", "server_names/busm", "alice")[0] == 403)
 
     # -- markers cumulative

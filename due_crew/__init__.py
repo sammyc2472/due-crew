@@ -655,7 +655,6 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     cl.upload_heatmap(uid, heatmap)
                 elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
-            cl.retire_old_board_row(uid)  # v1.8–1.9 unscoped row, once
             gone = []
             if squad_row is not None and squads and not c.get("paused"):
                 gone = cl.upload_squad_rows(uid, dict(squad_row, day=labels[0]),

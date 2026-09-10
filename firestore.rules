@@ -127,22 +127,6 @@ service cloud.firestore {
       }
     }
 
-    // Retired in v2.3: the v2.0–v2.2 Everyone board. Closed to reads and
-    // writes; owners may still delete their rows (the client sweeps its own
-    // for a few days). Delete the collection from the console afterwards.
-    match /boards/{day}/rows/{userId} {
-      allow read, create, update: if false;
-      allow delete: if isOwner(userId);
-    }
-
-    // Retired in v2.0: v1.8–v1.9 wrote unscoped rows here. Closed to reads
-    // and writes; owners may still delete their old row (the client does,
-    // once). Delete the collection from the console after the rollout.
-    match /server_board/{userId} {
-      allow read, create, update: if false;
-      allow delete: if isOwner(userId);
-    }
-
     // Rules-generation markers — no data ever lives here. The client GETs
     // meta/<its marker> once a day: 404 means these rules are current for
     // it, 403 means the deployed rules predate it. The list is CUMULATIVE
@@ -167,21 +151,6 @@ service cloud.firestore {
 
       allow delete: if isAuthenticated() &&
                        resource.data.userId == request.auth.uid;
-    }
-
-    // v2.0.1 grace period: the v1.4–v1.9 crew-server directory stays
-    // READABLE so crews that registered on v1.x keep working (their v1.x
-    // clients look up name+code here on every join) until they move to the
-    // hosted backend. Nothing new can be registered: creation is closed here
-    // and anonymous auth is off. Delete both collections from the console
-    // once every such crew has moved.
-    match /server_names/{name} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
-    }
-    match /servers/{key} {
-      allow get: if true;
-      allow list, create, update, delete: if false;
     }
   }
 }

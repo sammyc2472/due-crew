@@ -30,7 +30,9 @@ maintainer. The repo is the source of truth; there is no build step.
    BEFORE the add-on release (users can't fix rules; the footer shows
    "server catching up" until the paste lands). A rules change that closes
    a path older clients use (v2.0 closed `server_board` and the directory)
-   is a breaking change: say so in the release notes.
+   is a breaking change: say so in the release notes. A removal-only
+   change (dropping a retired path) needs no marker bump: no client
+   depends on it.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
 4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the

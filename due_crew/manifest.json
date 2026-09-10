@@ -2,7 +2,7 @@
   "package": "due_crew",
   "name": "Due Crew",
   "author": "Sammy Caplan",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "homepage": "",
   "conflicts": [
     "leaderboard_sidebar"

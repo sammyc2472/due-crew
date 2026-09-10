@@ -858,12 +858,10 @@ def test_deletion_sweep():
         dre = new_client(store, "dre", "Dre")
         dre.join_squad("dre", sid, "Dre")
         dre.send_knock("sam", "dre", "Dre", sid)
-        store.docs["server_board/sam"] = {"name": fv_str("x")}
         store.auth_uid = "sam"
         sam.delete_account("sam", None, [sid])
-        check("deletion: squad membership, old row, and knocks are swept",
+        check("deletion: squad membership and knocks are swept",
               f"squads/{sid}/members/sam" not in store.docs
-              and "server_board/sam" not in store.docs
               and not any(p.startswith("users/sam/knocks/") for p in store.docs))
     finally:
         fakes.FakeSession.post = real_post
