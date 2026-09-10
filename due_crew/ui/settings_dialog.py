@@ -8,8 +8,8 @@ import html
 from aqt import mw
 from aqt.qt import (
     QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTabWidget,
-    QTimer, QVBoxLayout, QWidget, Qt,
+    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSizePolicy,
+    QTabWidget, QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
 
@@ -60,6 +60,10 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._look_tab(), "Appearance")
         tabs.addTab(self._privacy_tab(), "Privacy")
         root.addWidget(tabs)
+        self.tabs = tabs
+        # size to the tab on screen, not to the tallest one
+        tabs.currentChanged.connect(self._fit_tab)
+        self._fit_tab(tabs.currentIndex())
 
         buttons = QHBoxLayout()
         restore = QPushButton("Restore Defaults")
@@ -74,6 +78,22 @@ class SettingsDialog(QDialog):
         save.clicked.connect(self._save)
         buttons.addWidget(save)
         root.addLayout(buttons)
+
+    def _fit_tab(self, index):
+        for i in range(self.tabs.count()):
+            page = self.tabs.widget(i)
+            page.setSizePolicy(
+                QSizePolicy.Policy.Preferred,
+                QSizePolicy.Policy.Preferred if i == index
+                else QSizePolicy.Policy.Ignored)
+        QTimer.singleShot(0, self._shrink)
+
+    def _shrink(self):
+        # QTabWidget's sizeHint still spans every page; its minimum hint
+        # follows the Ignored policies above, so size to that
+        self.layout().activate()
+        # +12: wrapped notes report a hint a hair short of their last line
+        self.resize(self.width(), self.minimumSizeHint().height() + 12)
 
     # ---- account ----
 
@@ -124,7 +144,7 @@ class SettingsDialog(QDialog):
         row.addStretch()
         lay.addLayout(row)
 
-        lay.addStretch()
+        lay.addSpacing(16)
         bottom = QHBoxLayout()
         out = QPushButton("Sign out")
         out.setToolTip("Stops syncing on this device. Your account and stats stay.")

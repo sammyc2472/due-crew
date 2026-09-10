@@ -159,8 +159,6 @@ def settle(ms=400):
 def shoot(dlg, path):
     dlg.show()
     settle()
-    dlg.adjustSize()
-    app.processEvents()
     pix = dlg.grab()
     pix.save(path)
     print(f"{os.path.basename(path)}: {pix.width()}x{pix.height()}")

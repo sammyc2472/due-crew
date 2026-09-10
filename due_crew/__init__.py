@@ -1304,7 +1304,8 @@ def _on_decks_saved(changed):
 def open_settings():
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_auth, open_friends, _on_signed_out, open_decks)
+                         open_auth, open_friends, _on_signed_out, open_decks,
+                         open_squads)
     dlg.exec()
 
 
@@ -1337,7 +1338,7 @@ def _on_profile_open():
     global _menu_done
     if not _menu_done:
         _menu_done = True
-        action = QAction("Due Crew", mw)
+        action = QAction("Due Crew…", mw)
         action.triggered.connect(open_settings)
         mw.form.menuTools.addAction(action)
         mw.addonManager.setConfigAction(__name__, open_settings)
