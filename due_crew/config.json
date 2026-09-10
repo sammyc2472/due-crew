@@ -16,10 +16,11 @@
   "paused": false,
   "exam_date": "",
   "shared_decks": [],
-  "server_board": false,
   "crew_label": "Crew",
   "accent": "green",
   "status": "",
   "away_from": "",
-  "away_to": ""
+  "away_to": "",
+  "squads": [],
+  "squad": ""
 }

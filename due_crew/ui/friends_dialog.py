@@ -33,7 +33,7 @@ class FriendsDialog(QDialog):
         self.on_mute = on_mute or (lambda uid: None)
         self.code = None
         self.friends = []      # [(fid, name, mutual)] — valid only when loaded
-        self.knocks = []       # [(sender_uid, name)] from the server board
+        self.knocks = []       # [(sender_uid, name)] from squads
         self.loaded = False
         self.changed = False
         attach_alive(self)
@@ -143,8 +143,8 @@ class FriendsDialog(QDialog):
                 return
             self.code, self.friends, knocks = result
             have = {fid for fid, _n, _m in self.friends}
-            self.knocks = [(u, n) for u, n in knocks
-                           if u not in have and u not in self.muted]
+            self.knocks = [(k[0], k[1]) for k in knocks
+                           if k[0] not in have and k[0] not in self.muted]
             self.loaded = True
             self.code_label.setText(self.code or "?")
             self._set_writable(True)
@@ -154,7 +154,7 @@ class FriendsDialog(QDialog):
         run_bg(self, job, done)
 
     def _render_knocks(self):
-        """From the server board: one row per knock, Add back or ignore."""
+        """From squads: one row per knock, Add back or ignore."""
         while self.knocks_lay.count():
             item = self.knocks_lay.takeAt(0)
             if item.widget():

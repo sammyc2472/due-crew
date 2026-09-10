@@ -10,7 +10,7 @@ maintainer. The repo is the source of truth; there is no build step.
   REST + server directory), `stats/` (local SQL), `ui/` (Qt dialogs).
 - `firestore.rules` — deployed to the one hosted Firebase project
   (anki-leaderboard-f6691; Sam pays past the free tier). Friendship consent
-  and the opt-in Everyone board are enforced here. v2.0 removed crew
+  and squads (private boards behind an invite code) are enforced here. v2.0 removed crew
   servers, the directory, and custom projects — nobody but Sam ever used
   them.
 - `README.md` — doubles verbatim as the AnkiWeb listing description; keep
@@ -41,8 +41,8 @@ maintainer. The repo is the source of truth; there is no build step.
 - Simplicity is the product rule. Friendship framing, never competition —
   "crew", no "compete/rivals". Copy is terse, no AI-speak.
 - Firebase reads cost money at scale: minimize document reads. The crew
-  board loads in 3 requests; the Everyone board is top-50 + three
-  aggregations, never a full listing. Don't add polling, per-friend
+  board loads in 4 requests (profiles, stats, cheers, knocks); a squad
+  board is one get plus one query, a read per member, fetched lazily. Don't add polling, per-friend
   fetches, or unbounded queries.
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.

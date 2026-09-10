@@ -5,6 +5,7 @@ Run: python3 test_due_crew.py
 
 import datetime
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -375,50 +376,6 @@ def test_exam_eve_and_rules_render():
           two.count("dc-wrap eve") == 1 and "have exams tomorrow" in two)
 
 
-def _opt_in(store, uid):
-    store.docs[f"users/{uid}"]["openBoard"] = {"booleanValue": True}
-
-
-KEY_A = "a" * 40
-KEY_B = "b" * 40
-
-
-def test_server_view_html():
-    from due_crew import board as b
-    rows = [
-        {"user_id": "u1", "name": "StepQueen <s>", "day": "2026-09-01",
-         "reviews": 1412, "time_ms": 10920000, "streak": 88},
-        {"user_id": "sam", "name": "Sammy", "day": "2026-09-01",
-         "reviews": 512, "time_ms": 4320000, "streak": 12, "you": True},
-        {"user_id": "u2", "name": "Maya", "day": "2026-09-01",
-         "reviews": 488, "time_ms": 3900000, "streak": 31, "pending": True},
-    ]
-    html = b._everyone_html({"state": "ok", "rows": rows, "totals": {"people": 3, "reviews": 2412, "above": 0}, "my_rank": 2}, {})
-    optin = b._everyone_html({"state": "optin"}, {})
-    check("server view: plain ranks, no medals, no cheers",
-          "#1" in html and "&#129351;" not in html and "dc-cheer" not in html)
-    check("server view: names escaped, card command wired, knocked note",
-          "StepQueen &lt;s&gt;" in html and "ecard:u1" in html
-          and "knocked" in html)
-    check("server view: opt-in card gates non-sharers",
-          "Privacy" in optin and "ecard" not in optin)
-
-
-def test_stranger_card():
-    from due_crew import board as b
-    js = b.stranger_card_js({"uid": "u1", "name": "Maya <m>", "reviews": 488,
-                             "time_ms": 3900000, "streak": 31, "pending": False})
-    pend = b.stranger_card_js({"uid": "u1", "name": "Maya", "reviews": 488,
-                               "time_ms": 3900000, "streak": 31, "pending": True})
-    check("stranger card: escaped, Add knocks, no cheer/heatmap",
-          "Maya \\u003cm\\u003e" in js or "Maya &lt;m&gt;" in js)
-    check("stranger card: Add wired to knock", "duecrew:knock:u1" in js)
-    check("stranger card: pending has no action command", '"duecrew:knock' not in pend)
-
-
-
-
-
 
 def test_copy_text():
     """Shares reach the clipboard as UTF-8: pbcopy on macOS, Qt fallback."""
@@ -462,135 +419,6 @@ def test_copy_text():
         subprocess.run = real_run
         dc_ui.sys.platform = real_platform
     check("clipboard: fallback lands on Qt without raising", ok and seen, str(seen))
-
-
-def _opt_in(store, uid):
-    store.docs[f"users/{uid}"]["openBoard"] = {"booleanValue": True}
-
-
-def test_everyone_board():
-    """One row per sharer per day; top-N by reviews; rank and totals by
-    aggregation; symmetric denial; retraction; rules-shaped writes only."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"},
-               {"sam": [], "dre": [], "eve": [], "zed": []})
-    for u in ("sam", "dre", "zed"):
-        _opt_in(store, u)
-    day = TODAY.isoformat()
-    sam = new_client(store, "sam", "Sammy")
-    ok = sam.upload_board_row("sam", day, {"name": "Sammy", "reviews": 512,
-                                           "studyTimeMs": 4320000, "streak": 12})
-    n0 = sum(1 for m, pth, st in store.log if pth.startswith("boards/") and m == "PATCH")
-    sam.upload_board_row("sam", day, {"name": "Sammy", "reviews": 512,
-                                      "studyTimeMs": 4320000, "streak": 12})
-    n1 = sum(1 for m, pth, st in store.log if pth.startswith("boards/") and m == "PATCH")
-    check("everyone: row upserts once, hash skips repeats", ok and n0 == 1 and n1 == 1)
-    check("everyone: extra fields are rejected by rules",
-          not sam.patch_doc(f"boards/{day}/rows/sam", {"name": "x", "reviews": 1,
-                                                       "server": "busm"}))
-    check("everyone: not-sharing owner cannot write a row",
-          not new_client(store, "eve", "Eve").patch_doc(
-              f"boards/{day}/rows/eve", {"name": "Eve", "reviews": 5}))
-    dre = new_client(store, "dre", "Dre")
-    dre.upload_board_row("dre", day, {"name": "Dre", "reviews": 812,
-                                      "studyTimeMs": 7440000, "streak": 41})
-    zed = new_client(store, "zed", "Zed")
-    zed.upload_board_row("zed", day, {"name": "Zed", "reviews": 1000,
-                                      "studyTimeMs": 100, "streak": 1})
-    top = zed.fetch_everyone(day, limit=2)
-    check("everyone: top-N comes back by reviews, capped",
-          [r["name"] for r in top] == ["Zed", "Dre"], str(top))
-    totals = zed.everyone_totals(day, my_reviews=512)   # Sam's count
-    check("everyone: totals and rank come from aggregations",
-          totals == {"people": 3, "reviews": 2324, "above": 2}, str(totals))
-    store.auth_uid = "eve"
-    eve = new_client(store, "eve", "Eve")
-    try:
-        eve.fetch_everyone(day)
-        eve_denied = False
-    except firebase.TransportError:
-        eve_denied = True
-    check("everyone: non-sharers are denied (symmetric by rule)", eve_denied)
-    store.auth_uid = "sam"
-    sam.delete_board_row("sam")
-    check("everyone: opt-out retracts the row and remembers it",
-          f"boards/{day}/rows/sam" not in store.docs
-          and sam.session.get("board_row_deleted") is True)
-    sam.retire_old_board_row("sam")
-    store.docs["server_board/sam"] = {"name": fv_str("x")}
-    sam.session.pop("old_board_retired", None)
-    sam.retire_old_board_row("sam")
-    check("everyone: the v1.8 row is retired once", "server_board/sam" not in store.docs)
-
-
-def test_knocks_global():
-    """Knocks need both people on the Everyone board; names come from
-    profiles, not the doc."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve"},
-               {"sam": [], "dre": [], "eve": []})
-    _opt_in(store, "sam"); _opt_in(store, "dre")
-    dre = new_client(store, "dre", "Dre")
-    ok = dre.send_knock("sam", "dre", "TOTALLY FAKE NAME")
-    eve = new_client(store, "eve", "Eve")
-    eve_ok = eve.send_knock("sam", "eve", "Eve")
-    sam = new_client(store, "sam", "Sammy")
-    knocks = sam.list_knocks("sam")
-    sam.delete_knock("sam", "dre")
-    check("knock: sharers can knock, non-sharers cannot", ok and not eve_ok)
-    check("knock: names come from profiles (no spoofing)", knocks == [("dre", "Dre")], str(knocks))
-    check("knock: delete clears it", sam.list_knocks("sam") == [])
-
-
-def test_marker_compat():
-    """Cumulative markers: old clients stay green on newer rules; a v2.0
-    client on v1.9-era rules sees the board denied and the probe stale."""
-    v4 = fakes.FakeFirestore(rules_mode="repo")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v4)
-    seed_users(v4, {"sam": "Sammy"}, {"sam": []})
-    cl = new_client(v4, "sam", "Sammy")
-    check("markers: v2.0 client current on v4 rules", cl.check_rules(TODAY.isoformat()) is False)
-    check("markers: v1.7 client still green on v4 rules",
-          cl._req("GET", f"{cl.base}/meta/rules-v2").status_code == 404)
-    v3 = fakes.FakeFirestore(rules_mode="v3")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v3)
-    seed_users(v3, {"sam": "Sammy"}, {"sam": []})
-    _opt_in(v3, "sam")
-    cl3 = new_client(v3, "sam", "Sammy")
-    try:
-        cl3.fetch_everyone(TODAY.isoformat())
-        denied = False
-    except firebase.TransportError:
-        denied = True
-    check("markers: v2.0 client on v3 rules — board denied, probe stale",
-          denied and cl3.check_rules(TODAY.isoformat()) is True)
-
-
-def test_deletion_sweep():
-    store = fakes.FakeFirestore()
-    real_post = fakes.FakeSession.post
-    fakes.FakeSession.post = lambda self, url, **kw: fakes.FakeResponse(200, {})
-    try:
-        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-        seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-        _opt_in(store, "sam"); _opt_in(store, "dre")
-        sam = new_client(store, "sam", "Sammy")
-        today = datetime.date.today().isoformat()
-        sam.upload_board_row("sam", today, {"name": "Sammy", "reviews": 1,
-                                            "studyTimeMs": 1, "streak": 1})
-        store.docs["server_board/sam"] = {"name": fv_str("x")}
-        dre = new_client(store, "dre", "Dre")
-        dre.send_knock("sam", "dre", "Dre")
-        store.auth_uid = "sam"
-        sam.delete_account("sam", None)
-        check("deletion: board rows, old row, and knocks are swept",
-              f"boards/{today}/rows/sam" not in store.docs
-              and "server_board/sam" not in store.docs
-              and not any(p.startswith("users/sam/knocks/") for p in store.docs))
-    finally:
-        fakes.FakeSession.post = real_post
 
 
 
@@ -826,6 +654,219 @@ def test_away_flag():
     check("share: away-only week gets no row; planes in rows",
           crew is not None and crew.count("\n") == 3 and "🟩✈️✈️🟩🟩🟩🟩 igk" in crew, str(crew))
 
+
+
+def _squad_fixture():
+    """Sam founds busm; Dre, Eve, and Zed exist and aren't members yet."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"},
+               {"sam": [], "dre": [], "eve": [], "zed": []})
+    sam = new_client(store, "sam", "Sammy")
+    squad = sam.create_squad("sam", "  busm  <b> ", "Sammy")
+    return store, sam, squad
+
+
+def _denied(fn):
+    try:
+        fn()
+        return False
+    except firebase.TransportError:
+        return True
+
+
+def test_squads():
+    """The door: create, peek, join while open, lock, remove, leave. The
+    board: members read every row (with retention), nobody else does."""
+    store, sam, squad = _squad_fixture()
+    sid = squad["id"]
+    check("squad: create makes the doc and the founder's member row",
+          bool(squad) and squad["name"] == "busm <b>"
+          and f"squads/{sid}" in store.docs
+          and f"squads/{sid}/members/sam" in store.docs, str(squad))
+    check("squad: code is 8 safe chars; any spelling of it derives the id",
+          len(squad["code"]) == 8
+          and all(ch in firebase.SQUAD_ALPHABET for ch in squad["code"])
+          and firebase.squad_id(squad["code"].lower() + "--") == sid)
+    check("squad: squads cannot be listed",
+          sam._req("GET", f"{sam.base}/squads?pageSize=50").status_code == 403)
+    dre = new_client(store, "dre", "Dre")
+    info, status = dre.peek_squad(squad["code"])
+    check("squad: peek shows name, founder, open",
+          bool(info) and info["name"] == "busm <b>" and info["founder"] == "sam"
+          and info["open"], str((info, status)))
+    check("squad: unknown code is a 404, not an error",
+          dre.peek_squad("ZZZZZZZZ") == (None, 404))
+    check("squad: join while open", dre.join_squad("dre", sid, "Dre") in (200, 201))
+    eve = new_client(store, "eve", "Eve")
+    check("squad: non-member cannot read the board",
+          _denied(lambda: eve.fetch_squad(sid)))
+    day = TODAY.isoformat()
+    row = {"name": "Dre", "reviews": 812, "studyTimeMs": 7440000,
+           "accuracy": 91.25, "streak": 41}
+    store.auth_uid = "dre"
+    before = sum(1 for m, pth, st in store.log
+                 if pth == f"squads/{sid}/members/dre" and m == "PATCH")
+    gone = dre.upload_squad_rows("dre", dict(row, day=day), [sid])
+    dre.upload_squad_rows("dre", dict(row, day=day), [sid])
+    after = sum(1 for m, pth, st in store.log
+                if pth == f"squads/{sid}/members/dre" and m == "PATCH")
+    check("squad: row upserts once, hash skips repeats", gone == [] and after - before == 1)
+    check("squad: extra fields rejected by rules",
+          dre._patch_status(f"squads/{sid}/members/dre", {"name": "Dre", "server": "x"}) == 403)
+    check("squad: negative reviews rejected",
+          dre._patch_status(f"squads/{sid}/members/dre", {"name": "Dre", "reviews": -1}) == 403)
+    check("squad: cannot write someone else's row",
+          dre._patch_status(f"squads/{sid}/members/sam", {"name": "x"}) == 403)
+    store.auth_uid = "sam"
+    data = sam.fetch_squad(sid)
+    dre_row = next((r for r in data["rows"] if r["user_id"] == "dre"), None)
+    check("squad: members read every row, retention included",
+          sorted(r["name"] for r in data["rows"]) == ["Dre", "Sammy"]
+          and dre_row and dre_row["retention"] == 91.25 and dre_row["day"] == day
+          and data["open"] and data["founder"] == "sam", str(data))
+    check("squad: founder locks", sam.set_squad_open(sid, False))
+    zed = new_client(store, "zed", "Zed")
+    check("squad: join refused while locked", zed.join_squad("zed", sid, "Zed") == 403)
+    store.auth_uid = "dre"
+    check("squad: existing member still writes while locked",
+          dre._patch_status(f"squads/{sid}/members/dre", {"reviews": 900}, ["reviews"]) == 200)
+    check("squad: non-founder cannot lock or remove",
+          not dre.set_squad_open(sid, True) and not dre.remove_member(sid, "sam"))
+    store.auth_uid = "sam"
+    check("squad: founder removes a member",
+          sam.remove_member(sid, "dre") and f"squads/{sid}/members/dre" not in store.docs)
+    store.auth_uid = "dre"
+    check("squad: a removed member's next row write reports the squad gone",
+          dre.upload_squad_rows("dre", dict(row, day=day, reviews=1), [sid]) == [sid]
+          and _denied(lambda: dre.fetch_squad(sid)))
+    store.auth_uid = "sam"
+    check("squad: leave deletes my member doc",
+          sam.leave_squad("sam", sid) and f"squads/{sid}/members/sam" not in store.docs)
+
+
+def test_knocks_squad():
+    """Knocks need a squad both people are in; names come from profiles."""
+    store, sam, squad = _squad_fixture()
+    sid = squad["id"]
+    dre = new_client(store, "dre", "Dre")
+    dre.join_squad("dre", sid, "Dre")
+    ok = dre.send_knock("sam", "dre", "TOTALLY FAKE NAME", sid)
+    check("knock: needs a squad both are in",
+          not dre.send_knock("eve", "dre", "Dre", sid))
+    check("knock: extra fields rejected",
+          not dre.patch_doc("users/sam/knocks/dre", {"name": "Dre", "squad": sid, "crew": "x"}))
+    eve = new_client(store, "eve", "Eve")
+    eve_ok = eve.send_knock("sam", "eve", "Eve", sid)
+    check("knock: squadmates can knock, outsiders cannot", ok and not eve_ok)
+    store.auth_uid = "sam"
+    knocks = sam.list_knocks("sam")
+    check("knock: names from profiles (no spoofing), squad id carried",
+          knocks == [("dre", "Dre", sid)], str(knocks))
+    sam.delete_knock("sam", "dre")
+    check("knock: delete clears it", sam.list_knocks("sam") == [])
+
+
+def test_squad_view_html():
+    rows = [
+        {"user_id": "u1", "name": "StepQueen <s>", "day": "2026-09-01", "reviews": 1412,
+         "time_ms": 10920000, "retention": 92.1, "streak": 88},
+        {"user_id": "sam", "name": "Sammy", "day": "2026-09-01", "reviews": 512,
+         "time_ms": 4320000, "retention": None, "streak": 12, "you": True},
+        {"user_id": "u2", "name": "Maya", "day": "2026-09-01", "reviews": 488,
+         "time_ms": 3900000, "retention": 89.0, "streak": 31, "pending": True},
+        {"user_id": "u3", "name": "Marcus", "day": "2026-08-31", "reviews": 220,
+         "time_ms": 1860000, "retention": 87.4, "streak": 0},
+        {"user_id": "u4", "name": "Priya", "day": "2026-09-01", "reviews": 301,
+         "time_ms": 2400000, "retention": 94.2, "streak": 2, "knocked_me": True},
+    ]
+    view = {"state": "ok", "squads": [{"id": "abc", "name": "busm"},
+                                      {"id": "def", "name": "MS2 <x>"}],
+            "current": "abc", "name": "busm", "open": False, "founder_me": True,
+            "rows": rows, "day": "2026-09-01", "yesterday": "2026-08-31",
+            "people": 5, "studying": 4, "reviews": 2713}
+    html = board._squads_html(view, {})
+    check("squad view: plain ranks, no medals, no cheers",
+          "#1" in html and "&#129351;" not in html and "dc-cheer" not in html)
+    check("squad view: names escaped, card command wired, notes",
+          "StepQueen &lt;s&gt;" in html and "ecard:u1" in html
+          and "knocked" in html and "added you" in html and "&middot; crew" not in html)
+    check("squad view: retention column and headline",
+          "92.1%" in html and "5 in busm &middot; locked &middot; 4 studying today "
+          "&middot; 2,713 reviews together" in html, html)
+    check("squad view: yesterday's row is dim, unranked, and last",
+          html.index("Marcus") > html.index("Priya") and "&middot; yesterday" in html
+          and re.search(r'<td class="rk"></td><td class="nm"><a[^>]*ecard:u3', html) is not None)
+    check("squad view: founder controls and the shared footer",
+          "squadlock" in html and ">Open<" in html and "squadinvite" in html
+          and "squadleave" in html)
+    check("squad view: switcher marks the current squad and escapes names",
+          'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
+    none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
+    check("squad view: no squads yet offers join or create",
+          "squadadd" in none and "<table>" not in none)
+    gone = board._squads_html({"state": "gone", "squads": [{"id": "abc", "name": "busm"}],
+                               "current": "abc", "name": "busm"}, {})
+    check("squad view: removed -> Remove link", "squaddrop:abc" in gone)
+    page = board.render({"entries": [], "labels": ["2026-09-01"], "tomorrow": "",
+                         "pending": []}, {"period": "today"}, 0,
+                        knocks=[{"uid": "u4", "name": "Priya <p>", "squad": "busm"}])
+    check("knock banner: escaped name, Add back and Not now wired",
+          "Priya &lt;p&gt;" in page and "added you from busm" in page
+          and "addback:u4" in page and "knockmute:u4" in page)
+    js = board.stranger_card_js({
+        "uid": "u4", "name": "Priya <p>", "reviews": 301, "time_ms": 2400000,
+        "retention": 94.2, "streak": 2, "rank": 4, "squad": "busm", "today": True,
+        "pending": False, "knocked_me": True, "founder_me": True})
+    check("squad card: retention, rank, Add back, founder Remove",
+          "94.2% retention" in js and "#4 in busm today" in js
+          and "duecrew:addback:u4" in js and "duecrew:squadkick:u4" in js)
+    plain = board.stranger_card_js({
+        "uid": "u1", "name": "Q", "reviews": 1, "time_ms": 1, "retention": None,
+        "streak": 1, "rank": None, "squad": "busm", "today": False,
+        "pending": False, "knocked_me": False, "founder_me": False})
+    check("squad card: plain member gets Add, no Remove, no retention line",
+          "duecrew:knock:u1" in plain and "squadkick" not in plain
+          and "retention" not in plain)
+
+
+def test_marker_compat():
+    """Cumulative markers: old clients stay green on newer rules; a v2.3
+    client on v1.9-era rules sees squads denied and the probe stale."""
+    v6 = fakes.FakeFirestore(rules_mode="repo")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(v6)
+    seed_users(v6, {"sam": "Sammy"}, {"sam": []})
+    cl = new_client(v6, "sam", "Sammy")
+    check("markers: v2.3 client current on v6 rules", cl.check_rules(TODAY.isoformat()) is False)
+    check("markers: v1.7 client still green on v6 rules",
+          cl._req("GET", f"{cl.base}/meta/rules-v2").status_code == 404)
+    v3 = fakes.FakeFirestore(rules_mode="v3")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(v3)
+    seed_users(v3, {"sam": "Sammy"}, {"sam": []})
+    cl3 = new_client(v3, "sam", "Sammy")
+    check("markers: v2.3 client on v3 rules — squads denied, probe stale",
+          _denied(lambda: cl3.fetch_squad("a" * 24))
+          and cl3.check_rules(TODAY.isoformat()) is True)
+
+
+def test_deletion_sweep():
+    store, sam, squad = _squad_fixture()
+    real_post = fakes.FakeSession.post
+    fakes.FakeSession.post = lambda self, url, **kw: fakes.FakeResponse(200, {})
+    try:
+        sid = squad["id"]
+        dre = new_client(store, "dre", "Dre")
+        dre.join_squad("dre", sid, "Dre")
+        dre.send_knock("sam", "dre", "Dre", sid)
+        store.docs["server_board/sam"] = {"name": fv_str("x")}
+        store.auth_uid = "sam"
+        sam.delete_account("sam", None, [sid])
+        check("deletion: squad membership, old row, and knocks are swept",
+              f"squads/{sid}/members/sam" not in store.docs
+              and "server_board/sam" not in store.docs
+              and not any(p.startswith("users/sam/knocks/") for p in store.docs))
+    finally:
+        fakes.FakeSession.post = real_post
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

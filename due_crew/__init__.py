@@ -24,7 +24,7 @@ import traceback
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
 from aqt.qt import QAction, QApplication
-from aqt.utils import tooltip
+from aqt.utils import askUser, tooltip
 
 from . import board
 from .backend.firebase import FirebaseClient, TransportError, away_on
@@ -47,8 +47,8 @@ _state = {
     "pending": [], "ts": 0.0, "prev_label": "", "prev_counts": {},
     "prev_streaks": {}, "board_shown": False,
     "my_friends": [],
-    "everyone": {"top": None, "totals": None, "day": "", "ts": 0.0,
-                 "state": "loading"},
+    "squad": {"id": "", "data": None, "day": "", "ts": 0.0, "state": "loading"},
+    "knocks": [],   # [(sender_uid, name, squad_id)] awaiting my add
 }
 _pending_cheers = []
 _wrap = {"profile": None, "data": {}}
@@ -131,8 +131,9 @@ def _reset_runtime():
                   pending=[], ts=0.0, prev_label="", prev_counts={},
                   prev_streaks={}, board_shown=False,
                   my_friends=[],
-                  everyone={"top": None, "totals": None, "day": "",
-                            "ts": 0.0, "state": "loading"})
+                  squad={"id": "", "data": None, "day": "", "ts": 0.0,
+                         "state": "loading"},
+                  knocks=[])
     _pending_cheers.clear()
 
 
@@ -310,59 +311,91 @@ def _deck_deltas():
 
 
 
-EVERYONE_CACHE_SECS = 300
+SQUAD_CACHE_SECS = 300
 
 
-def _board_view():
-    """What board._everyone_html renders. Decoration is cheap and local."""
-    c = cfg()
-    if not (c.get("server_board") and not c.get("paused")):
-        return {"state": "optin"}
-    ev = _state["everyone"]
-    if ev["top"] is None:
-        return {"state": ev["state"]}
+def _my_squads():
+    """Squads from config: [{id, code, name, founder}]. Live config dicts."""
+    return [sq for sq in (cfg().get("squads") or [])
+            if isinstance(sq, dict) and sq.get("id")]
+
+
+def _current_squad():
+    squads = _my_squads()
+    if not squads:
+        return None
+    sel = cfg().get("squad") or ""
+    return next((sq for sq in squads if sq["id"] == sel), squads[0])
+
+
+def _squad_view():
+    """What board._squads_html renders. Decoration is cheap and local."""
+    squads = _my_squads()
+    cur = _current_squad()
+    base = {"squads": [{"id": sq["id"], "name": sq.get("name") or "?"} for sq in squads],
+            "current": cur["id"] if cur else ""}
+    if cur is None:
+        return dict(base, state="none")
+    sq = _state["squad"]
+    if sq["id"] != cur["id"] or sq["data"] is None:
+        state = sq["state"] if sq["id"] == cur["id"] else "loading"
+        return dict(base, state=state, name=cur.get("name") or "?")
+    data = sq["data"]
     me = client().user_id
     crew = {e["user_id"] for e in _state["entries"] or [] if not e["you"]}
     added = set(_state["my_friends"])
+    knocked_me = {k[0] for k in _state["knocks"]}
     rows = [dict(r, you=(r["user_id"] == me), crew=(r["user_id"] in crew),
-                 pending=(r["user_id"] in added and r["user_id"] not in crew))
-            for r in ev["top"]]
-    totals = ev["totals"] or {}
-    my_rank = next((i + 1 for i, r in enumerate(rows) if r["you"]), None)
-    if my_rank is None and totals:
-        my_rank = totals.get("above", 0) + 1
-    return {"state": "ok", "rows": rows, "totals": totals, "my_rank": my_rank,
-            "day": ev["day"]}
+                 pending=(r["user_id"] in added and r["user_id"] not in crew),
+                 knocked_me=(r["user_id"] in knocked_me))
+            for r in data["rows"]]
+    labels = _state["labels"]
+    day = sq["day"]
+    live = [r for r in rows if r["day"] == day]
+    return dict(base, state="ok", name=data["name"], open=data["open"],
+                founder_me=(data["founder"] == me), rows=rows, day=day,
+                yesterday=labels[1] if len(labels) > 1 else "",
+                people=len(rows), studying=len(live),
+                reviews=sum(int(r["reviews"] or 0) for r in live))
 
 
-def _fetch_everyone(force=False):
-    """Lazy: when the view opens, the day's top rows plus three aggregate
-    counts — never the whole board. Cached a few minutes."""
-    ev = _state["everyone"]
-    if not mw.col or not client().signed_in:
+def _fetch_squad(force=False):
+    """Lazy: when the view opens. One get plus one query (a read per
+    member), cached a few minutes."""
+    cur = _current_squad()
+    sq = _state["squad"]
+    if cur is None or not mw.col or not client().signed_in:
         return
     day = _state["labels"][0] if _state["labels"] else StatsQueries(mw.col).day_label(0)
-    if (ev["top"] is not None and not force and ev["day"] == day
-            and time.time() - ev["ts"] < EVERYONE_CACHE_SECS):
+    if (sq["id"] == cur["id"] and sq["data"] is not None and not force
+            and sq["day"] == day and time.time() - sq["ts"] < SQUAD_CACHE_SECS):
         return
-    try:
-        my_reviews = StatsQueries(mw.col).reviews_for_day(0)  # main thread
-    except Exception:
-        my_reviews = 0
+    if sq["id"] != cur["id"]:
+        sq.update(id=cur["id"], data=None, state="loading")
     cl = client()
+    sid = cur["id"]
 
     def job():
         try:
-            top = cl.fetch_everyone(day)
-            totals = cl.everyone_totals(day, my_reviews)
-            state = "ok"
+            data = cl.fetch_squad(sid)
+            state = "ok" if data is not None else "gone"
+        except TransportError as e:
+            data, state = None, ("gone" if "403" in str(e) else "error")
         except Exception:
-            top, totals, state = None, None, "error"
+            traceback.print_exc()
+            data, state = None, "error"
 
         def commit():
-            if top is not None:
-                ev.update(top=top, totals=totals, day=day, ts=time.time())
-            ev["state"] = state
+            if sq["id"] != sid:
+                return  # switched meanwhile
+            if data is not None:
+                sq.update(data=data, day=day, ts=time.time())
+                c = cfg()
+                for entry in c.get("squads") or []:
+                    if entry.get("id") == sid and entry.get("name") != data["name"]:
+                        entry["name"] = data["name"]
+                        save_cfg(c)
+            sq["state"] = state
             _swap(cfg())
 
         mw.taskman.run_on_main(commit)
@@ -370,21 +403,201 @@ def _fetch_everyone(force=False):
     threading.Thread(target=job, daemon=True).start()
 
 
-def _open_everyone_card(uid):
-    """Click a name on the Everyone board. Crew and you get the full card;
-    everyone else gets the spare stranger card — Add lives there."""
+def _open_squad_card(uid):
+    """Click a name on a squad board. Crew and you get the full card;
+    everyone else gets the spare squadmate card — Add lives there."""
     if any(e["user_id"] == uid for e in _state["entries"] or []):
         _open_profile(uid)
         return
-    row = next((r for r in _state["everyone"]["top"] or []
-                if r["user_id"] == uid), None)
+    view = _squad_view()
+    rows = view.get("rows") or []
+    row = next((r for r in rows if r["user_id"] == uid), None)
     if row is None:
         return
+    live = sorted([r for r in rows if r["day"] == view.get("day")],
+                  key=lambda r: r["reviews"] or 0, reverse=True)
+    rank = next((i + 1 for i, r in enumerate(live) if r["user_id"] == uid), None)
     mw.web.eval(board.stranger_card_js({
         "uid": uid, "name": row["name"], "reviews": row["reviews"],
-        "time_ms": row["time_ms"], "streak": row["streak"],
-        "pending": uid in _state["my_friends"],
+        "time_ms": row["time_ms"], "retention": row["retention"],
+        "streak": row["streak"], "rank": rank, "squad": view.get("name") or "",
+        "today": row["day"] == view.get("day"), "pending": row["pending"],
+        "knocked_me": row["knocked_me"], "founder_me": bool(view.get("founder_me")),
     }))
+
+
+def _visible_knocks():
+    """Knocks worth a banner: not muted, not already crew. Newest few."""
+    muted = set(_wrap_data().get("muted_knocks") or [])
+    crew = {e["user_id"] for e in _state["entries"] or []}
+    names = {sq["id"]: sq.get("name") or "" for sq in _my_squads()}
+    return [{"uid": u, "name": n, "squad": names.get(sid, "")}
+            for u, n, sid in _state["knocks"] if u not in muted and u not in crew][:3]
+
+
+def _add_back(uid):
+    """They added me; my add makes it mutual. The knock is done either way."""
+    cl = client()
+    me = cl.user_id
+    friends = list(_state["my_friends"])
+    already = uid in friends
+
+    def job():
+        try:
+            ok = already or cl.set_friends(me, friends + [uid])
+            cl.delete_knock(me, uid)
+        except Exception:
+            ok = False
+
+        def done():
+            _state["knocks"] = [k for k in _state["knocks"] if k[0] != uid]
+            if ok:
+                if not already:
+                    _state["my_friends"] = friends + [uid]
+                tooltip("You're crew.")
+                refresh_board(full=True)
+            else:
+                tooltip("Couldn't add them. Check your connection.")
+                _swap(cfg())
+
+        mw.taskman.run_on_main(done)
+
+    threading.Thread(target=job, daemon=True).start()
+
+
+def _dismiss_knock(uid):
+    _mute_knocker(uid)
+    _state["knocks"] = [k for k in _state["knocks"] if k[0] != uid]
+    cl = client()
+    me = cl.user_id
+    threading.Thread(target=lambda: cl.delete_knock(me, uid), daemon=True).start()
+    _swap(cfg())
+
+
+# ---- squads: join, create, leave, lock, remove ----
+
+def _select_squad(sid):
+    c = cfg()
+    c["squad"] = sid
+    save_cfg(c)
+    _swap(c)
+    _fetch_squad()
+
+
+def open_squads():
+    from .ui.squad_dialog import SquadDialog
+    dlg = SquadDialog(mw, client(), _on_squad_joined)
+    dlg.exec()
+
+
+def _on_squad_joined(squad):
+    """Main thread. squad: {id, code, name, founder}."""
+    c = cfg()
+    squads = [sq for sq in (c.get("squads") or []) if sq.get("id") != squad["id"]]
+    squads.append(dict(squad))
+    c["squads"] = squads
+    c["squad"] = squad["id"]
+    c["period"] = "squads"
+    save_cfg(c)
+    _state["squad"].update(id=squad["id"], data=None, state="loading")
+    _swap(c)
+    _fetch_squad(force=True)
+    _on_sync_done()  # my row lands now, not at the next sync
+
+
+def _drop_squad(sid, swap=True):
+    """Forget a squad locally (left, removed, or deleted)."""
+    c = cfg()
+    squads = [sq for sq in (c.get("squads") or []) if sq.get("id") != sid]
+    c["squads"] = squads
+    if c.get("squad") == sid:
+        c["squad"] = squads[0]["id"] if squads else ""
+    save_cfg(c)
+    if _state["squad"]["id"] == sid:
+        _state["squad"].update(id="", data=None, state="loading")
+    if swap:
+        _swap(c)
+        _fetch_squad()
+
+
+def _copy_invite():
+    cur = _current_squad()
+    if cur is None:
+        return
+    from .ui.squad_dialog import invite_text
+    code = str(cur.get("code") or "")
+    if not code:
+        tooltip("No code on this device.")
+        return
+    copy_text(invite_text(cur.get("name") or "my squad", code))
+    tooltip("Copied.")
+
+
+def _leave_squad():
+    cur = _current_squad()
+    if cur is None or not askUser(f"Leave {cur.get('name') or 'this squad'}?"):
+        return
+    cl = client()
+    me, sid = cl.user_id, cur["id"]
+    threading.Thread(target=lambda: cl.leave_squad(me, sid), daemon=True).start()
+    _drop_squad(sid)
+
+
+def _toggle_squad_lock():
+    cur = _current_squad()
+    sq = _state["squad"]
+    if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
+        return
+    new_open = not sq["data"]["open"]
+    cl = client()
+
+    def job():
+        try:
+            ok = cl.set_squad_open(cur["id"], new_open)
+        except Exception:
+            ok = False
+
+        def done():
+            if ok:
+                sq["data"]["open"] = new_open
+                tooltip("Open." if new_open else "Locked.")
+                _swap(cfg())
+            else:
+                tooltip("Couldn't change that.")
+
+        mw.taskman.run_on_main(done)
+
+    threading.Thread(target=job, daemon=True).start()
+
+
+def _kick_member(uid):
+    cur = _current_squad()
+    sq = _state["squad"]
+    if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
+        return
+    row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
+    if row is None or not askUser(
+            f"Remove {row['name']} from {cur.get('name') or 'the squad'}?"):
+        return
+    cl = client()
+
+    def job():
+        try:
+            ok = cl.remove_member(cur["id"], uid)
+        except Exception:
+            ok = False
+
+        def done():
+            if ok:
+                sq["data"]["rows"] = [r for r in sq["data"]["rows"]
+                                      if r["user_id"] != uid]
+                _swap(cfg())
+            else:
+                tooltip("Couldn't remove them.")
+
+        mw.taskman.run_on_main(done)
+
+    threading.Thread(target=job, daemon=True).start()
 
 
 def _board_data():
@@ -395,7 +608,7 @@ def _board_data():
 # ---- refresh ----
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
-                  heatmap=None, board_row=None, full=False):
+                  heatmap=None, squad_row=None, full=False):
     """Fetch (and optionally upload first) in the background. Main thread
     only. An upload is never dropped: only pure fetches dedup against an
     in-flight refresh. heatmap: dict to upload, "off" to retract, None to
@@ -420,6 +633,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         name = cl.display_name or "Me"
         full = (full or _state["entries"] is None or not _state["labels"]
                 or _state["labels"][0] != labels[0])
+        squads = [sq["id"] for sq in _my_squads()]
     except Exception:
         with _lock:
             _fetching = False
@@ -442,15 +656,19 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 elif not cl.session.get("heatmap_deleted"):
                     cl.delete_heatmap(uid)  # share turned off, or paused
             cl.retire_old_board_row(uid)  # v1.8–1.9 unscoped row, once
-            if board_row is not None:
-                if isinstance(board_row, dict) and not c.get("paused"):
-                    cl.upload_board_row(uid, labels[0], board_row)
-                elif not cl.session.get("board_row_deleted"):
-                    cl.delete_board_row(uid)  # opted out, or paused
+            gone = []
+            if squad_row is not None and squads and not c.get("paused"):
+                gone = cl.upload_squad_rows(uid, dict(squad_row, day=labels[0]),
+                                            squads)
             cl.check_rules(labels[0])  # cached: one real request per day
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
                                   include_shared=full)
-            mw.taskman.run_on_main(lambda: _commit(data, c, labels, tomorrow))
+            try:
+                knocks = cl.list_knocks(uid)  # one list request
+            except TransportError:
+                knocks = None
+            mw.taskman.run_on_main(
+                lambda: _commit(data, c, labels, tomorrow, knocks, gone))
         except TransportError:
             # expected when offline or flaky — stderr raises Anki's error
             # dialog, so this stays off that channel; cache untouched and
@@ -465,7 +683,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     threading.Thread(target=job, daemon=True).start()
 
 
-def _commit(data, c, labels, tomorrow):
+def _commit(data, c, labels, tomorrow, knocks=None, gone=()):
     """Main thread. The only writer of _state and _pending_cheers."""
     keep = set(labels) | {tomorrow}
     day_store = _state["days"]
@@ -525,6 +743,13 @@ def _commit(data, c, labels, tomorrow):
         client().session["cheers_seen_ts"] = max(ch["at"] for ch in fresh)
         client()._save_session()
         _pending_cheers.extend(fresh)
+
+    if knocks is not None:
+        _state["knocks"] = [tuple(k) for k in knocks]
+    for sid in gone or ():
+        name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
+        _drop_squad(sid, swap=False)
+        tooltip(f"You're no longer in {name or 'a squad'}.")
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time(),
@@ -586,7 +811,7 @@ def _on_render(deck_browser, content):
                                           wrap=_wrap_info(), deltas=_deck_deltas(),
                                           exam_eve=_exam_eve_info(),
                                           rules_stale=client().rules_stale,
-                                          everyone_view=_board_view())
+                                          squad_view=_squad_view(), knocks=_visible_knocks())
     except Exception:
         traceback.print_exc()
 
@@ -619,14 +844,16 @@ def _on_sync_done():
                 if c.get("share_heatmap", True) else "off")
     except Exception:
         traceback.print_exc()
-    row = "off"
-    if c.get("server_board") and stats is not None:
+    row = None
+    if stats is not None:
         row = {"name": client().display_name or "Me",
                "reviews": int(stats.reviews),
                "studyTimeMs": int(stats.time_ms),
                "streak": int(stats.streak)}
+        if stats.accuracy is not None:
+            row["accuracy"] = float(stats.accuracy)
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat, board_row=row)
+                  heatmap=heat, squad_row=row)
 
 
 def _on_js(handled, message, context):
@@ -643,13 +870,12 @@ def _on_js(handled, message, context):
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)
-        if parts[2] == "everyone" and c.get("server_board") \
-                and not c.get("paused"):
-            _fetch_everyone()
+        if parts[2] == "squads":
+            _fetch_squad()
     elif cmd == "refresh":
         refresh_board(full=True)
-        if c.get("period") == "everyone" and c.get("server_board"):
-            _fetch_everyone(force=True)
+        if c.get("period") == "squads":
+            _fetch_squad(force=True)
     elif cmd == "friends":
         open_friends()
     elif cmd == "decks":
@@ -688,7 +914,25 @@ def _on_js(handled, message, context):
     elif cmd == "settings":
         open_settings()
     elif cmd == "ecard" and len(parts) > 2:
-        _open_everyone_card(parts[2])
+        _open_squad_card(parts[2])
+    elif cmd == "squad" and len(parts) > 2:
+        _select_squad(parts[2])
+    elif cmd == "squadadd":
+        open_squads()
+    elif cmd == "squadinvite":
+        _copy_invite()
+    elif cmd == "squadlock":
+        _toggle_squad_lock()
+    elif cmd == "squadleave":
+        _leave_squad()
+    elif cmd == "squadkick" and len(parts) > 2:
+        _kick_member(parts[2])
+    elif cmd == "squaddrop" and len(parts) > 2:
+        _drop_squad(parts[2])
+    elif cmd == "addback" and len(parts) > 2:
+        _add_back(parts[2])
+    elif cmd == "knockmute" and len(parts) > 2:
+        _dismiss_knock(parts[2])
     elif cmd == "knock" and len(parts) > 2:
         _send_knock(parts[2])
     elif cmd == "cheerback" and len(parts) > 3:
@@ -711,7 +955,7 @@ def _swap(c):
                             wrap=_wrap_info(), deltas=_deck_deltas(),
                             exam_eve=_exam_eve_info(),
                             rules_stale=client().rules_stale,
-                            everyone_view=_board_view())
+                            squad_view=_squad_view(), knocks=_visible_knocks())
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -891,7 +1135,7 @@ def _edit_status():
     tooltip("Status set." if text else "Status cleared.")
 
 
-# ---- server board: cards + knocks ----
+# ---- squads: knocks ----
 
 
 def _send_knock(to_uid):
@@ -901,13 +1145,17 @@ def _send_knock(to_uid):
     me = cl.user_id
     if not to_uid or to_uid == me or to_uid in _state["my_friends"]:
         return
+    cur = _current_squad()
+    if cur is None:
+        return
+    sid = cur["id"]
     friends = list(_state["my_friends"])
     my_name = cl.display_name or "A friend"
 
     def job():
         try:
             ok = cl.set_friends(me, friends + [to_uid])
-            ok = cl.send_knock(to_uid, me, my_name) and ok
+            ok = cl.send_knock(to_uid, me, my_name, sid) and ok
         except Exception:
             ok = False
 
@@ -1062,7 +1310,7 @@ def open_settings():
 
 
 SHARE_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
-              "share_heatmap", "server_board", "paused", "exam_date",
+              "share_heatmap", "paused", "exam_date",
               "away_from", "away_to")
 
 

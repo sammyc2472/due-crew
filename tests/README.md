@@ -5,7 +5,7 @@ Two layers, deliberately separate:
 | Layer | Command | What it proves | What it cannot prove |
 | --- | --- | --- | --- |
 | Unit + behavior (`test_due_crew.py`) | `python3 tests/test_due_crew.py` | Client behavior against an in-memory Firestore fake: upload shapes, backfill costs, privacy toggles, share text, board rendering, rename-follow, clipboard paths. | Anything about the **real** rules — the fake *restates* `firestore.rules`; it is a model of intent, not evidence of enforcement. |
-| Rules (`rules/`) | `firebase emulators:exec --only firestore "python3 tests/rules/emulator_rules_test.py"` | That the deployed rules text actually enforces friendship consent, the symmetric opt-in Everyone board, row shape, knocks between sharers, opt-out retraction, and the retired collections. | Live Anki behavior. |
+| Rules (`rules/`) | `firebase emulators:exec --only firestore "python3 tests/rules/emulator_rules_test.py"` | That the deployed rules text actually enforces friendship consent, squads (the invite-derived id, open/locked joins, member-only reads, founder removal), member row shape, knocks between squadmates, and the retired collections. | Live Anki behavior. |
 
 Requirements: Python 3.9+ and the standard library only for the first layer
 (`sqlite3` backs the fake collection). The rules layer needs

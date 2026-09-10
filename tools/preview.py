@@ -93,20 +93,28 @@ SROWS = [
     {"user_id": "u1", "name": "StepQueen", "day": L[0], "reviews": 1412,
      "time_ms": 10920000, "streak": 88},
     {"user_id": "dre", "name": "Dre", "day": L[0], "reviews": 812,
-     "time_ms": 7440000, "streak": 41, "crew": True},
+     "time_ms": 7440000, "retention": 92.1, "streak": 41, "crew": True},
     {"user_id": "sam", "name": "Sammy", "day": L[0], "reviews": 512,
-     "time_ms": 4320000, "streak": 12, "you": True},
+     "time_ms": 4320000, "retention": 91.6, "streak": 12, "you": True},
     {"user_id": "u2", "name": "Maya R.", "day": L[0], "reviews": 488,
-     "time_ms": 3900000, "streak": 31, "pending": True},
+     "time_ms": 3900000, "retention": 89.0, "streak": 31, "pending": True},
     {"user_id": "u3", "name": "Jordan", "day": L[0], "reviews": 302,
-     "time_ms": 2400000, "streak": 9},
+     "time_ms": 2400000, "retention": 94.2, "streak": 9, "knocked_me": True},
+    {"user_id": "u4", "name": "Marcus", "day": L[1], "reviews": 220,
+     "time_ms": 1860000, "retention": 87.4, "streak": 0},
 ]
-sections.append("<h3>everyone (sharing)</h3>" + board.render(
-    DATA, {"period": "everyone"}, now_ts - 60,
-    everyone_view={"state": "ok", "rows": SROWS, "totals": {"people": 2381, "reviews": 1204411, "above": 411}, "my_rank": 412}))
-sections.append("<h3>everyone (not opted in)</h3>" + board.render(
-    DATA, {"period": "everyone"}, now_ts - 60,
-    everyone_view={"state": "optin"}))
+SQUAD_VIEW = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}, {"id": "def", "name": "MS2"}],
+              "current": "abc", "name": "busm", "open": True, "founder_me": True,
+              "rows": SROWS, "day": L[0], "yesterday": L[1], "people": 5, "studying": 4,
+              "reviews": 2114}
+KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "busm"}]
+sections.append("<h3>squads (founder view)</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60, squad_view=SQUAD_VIEW))
+sections.append("<h3>squads (none yet)</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60,
+    squad_view={"state": "none", "squads": [], "current": ""}))
+sections.append("<h3>today with a knock banner</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, knocks=KNOCKS))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):
@@ -136,7 +144,10 @@ profile_js = board.profile_overlay_js({
 flurry = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001F389"))
 stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "reviews": 488, "time_ms": 3900000,
-                                      "streak": 31, "pending": False})
+                                      "retention": 89.0, "streak": 31, "rank": 3,
+                                      "squad": "busm", "today": True,
+                                      "pending": False, "knocked_me": False,
+                                      "founder_me": True})
 
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>

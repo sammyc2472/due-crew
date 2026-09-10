@@ -21,7 +21,7 @@ DEFAULTS = {
     "theme": "auto", "compact": False, "show_last_active": True,
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
-    "server_board": False, "paused": False, "exam_date": "",
+    "paused": False, "exam_date": "",
     "crew_label": "Crew", "accent": "green",
     "away_from": "", "away_to": "",
 }
@@ -195,7 +195,10 @@ class SettingsDialog(QDialog):
             if password:
                 self.client.sign_in(email, password)
             own, _ = self.client.get_doc(f"users/{uid}")
-            self.client.delete_account(uid, (own or {}).get("friendCode"))
+            self.client.delete_account(
+                uid, (own or {}).get("friendCode"),
+                [sq.get("id") for sq in (self.config.get("squads") or [])
+                 if isinstance(sq, dict) and sq.get("id")])
             return True
 
         run_bg(self, job, self._delete_done)
@@ -285,18 +288,6 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_retention", "Retention")
         self._check(lay, "share_streak", "Streak")
         self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
-        lay.addSpacing(8)
-        lay.addWidget(QLabel("<b>Everyone board</b>"))
-        self._check(lay, "server_board",
-                    "Share on the Everyone board (off = hidden both ways)")
-        board_note = QLabel("Your name and today's numbers, visible to "
-                            "everyone on Due Crew who's also sharing — "
-                            "worldwide — and theirs to you. Adding someone "
-                            "from the board starts a knock; you're crew when "
-                            "they add back.")
-        board_note.setStyleSheet("font-size: 11px;")
-        board_note.setWordWrap(True)
-        lay.addWidget(board_note)
         lay.addSpacing(8)
         exam_row = QHBoxLayout()
         self.exam_on = QCheckBox("Share an exam date")

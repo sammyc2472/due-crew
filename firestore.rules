@@ -1,11 +1,14 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules (v2.2: cheer notes; v2.0: one hosted backend).
+// Due Crew — Firestore rules (v2.3: squads; v2.2: cheer notes; v2.0: one
+// hosted backend).
 //
 // Model: friendship is consent-based. Your own `friends` array controls who
 // may read your daily stats. The client only ever writes documents it owns.
-// The Everyone board is opt-in and symmetric: `openBoard` on your profile
-// both publishes your row and lets you read others'.
+// Squads are private boards with a door: the squad id is derived from its
+// invite code, so holding the id is the invite — nothing is listed or
+// searchable. A member's doc doubles as their row; reading a squad needs
+// your own membership doc to exist, joining needs the door open.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -23,8 +26,28 @@ service cloud.firestore {
              request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends;
     }
 
-    function isSharing(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.openBoard == true;
+    function isSquadMember(squadId) {
+      return exists(/databases/$(database)/documents/squads/$(squadId)/members/$(request.auth.uid));
+    }
+
+    function squadDoc(squadId) {
+      return get(/databases/$(database)/documents/squads/$(squadId)).data;
+    }
+
+    function squadShape(data) {
+      return data.keys().hasOnly(['name', 'founder', 'open', 'createdAt'])
+             && data.name is string
+             && data.name.size() >= 1
+             && data.name.size() <= 24
+             && data.open is bool;
+    }
+
+    function memberShape(data) {
+      return data.keys().hasOnly(['name', 'joinedAt', 'day', 'reviews', 'studyTimeMs',
+                                  'accuracy', 'streak', 'updatedAt'])
+             && data.name is string
+             && (!('reviews' in data) || (data.reviews is int && data.reviews >= 0))
+             && (!('day' in data) || data.day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}'));
     }
 
     match /users/{userId} {
@@ -47,8 +70,8 @@ service cloud.firestore {
       }
 
       // v1.2: cheers. Only people the owner added may send, one doc per
-      // sender (the doc id), only the three emoji and — since v2.2 — an
-      // optional note of at most 80 characters. Nothing else in the doc.
+      // sender (the doc id), only the three emoji and, since v2.2, an
+      // optional note of at most 80 characters.
       match /cheers/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isFriend(userId)
@@ -60,33 +83,55 @@ service cloud.firestore {
                                       && request.resource.data.note.size() <= 80));
       }
 
-      // v1.8: knocks — "wants to be crew", one small doc per sender, only
-      // between people who are both on the Everyone board. Overwrite
-      // semantics: one outstanding knock per sender.
+      // v2.3: knocks — "wants to be crew", one small doc per sender, only
+      // between two members of the same squad. Overwrite semantics: one
+      // outstanding knock per sender.
       match /knocks/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isAuthenticated()
                               && request.auth.uid == senderId
-                              && isSharing(userId)
-                              && isSharing(request.auth.uid)
-                              && request.resource.data.keys().hasOnly(['name', 'at']);
+                              && request.resource.data.keys().hasOnly(['name', 'at', 'squad'])
+                              && request.resource.data.squad is string
+                              && isSquadMember(request.resource.data.squad)
+                              && exists(/databases/$(database)/documents/squads/$(request.resource.data.squad)/members/$(userId));
       }
     }
 
-    // v2.0: the Everyone board — one row per sharer per (local) day.
-    // Rows are partitioned by day so the client can ask for the top N by
-    // reviews with a single-field index and count its own rank with an
-    // aggregation, instead of reading every row. Reading requires the reader
-    // to be sharing too; writing requires the writer to be sharing.
+    // v2.3: squads. The id is sha1 of the invite code — unguessable, never
+    // listed. Anyone signed in may GET a squad they hold the id of (the join
+    // preview); only the founder may change it (name, lock) or delete it.
+    match /squads/{squadId} {
+      allow get: if isAuthenticated();
+      allow list: if false;
+      allow create: if isAuthenticated()
+                    && request.resource.data.founder == request.auth.uid
+                    && squadShape(request.resource.data);
+      allow update: if isAuthenticated()
+                    && resource.data.founder == request.auth.uid
+                    && request.resource.data.founder == resource.data.founder
+                    && squadShape(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.founder == request.auth.uid;
+
+      // A member's doc is their row: name plus today's numbers. Members read
+      // the whole collection (one query, one read per member); you write only
+      // your own; joining needs the door open; the founder may remove anyone.
+      match /members/{userId} {
+        allow read: if isAuthenticated() && isSquadMember(squadId);
+        allow create: if isOwner(userId)
+                      && squadDoc(squadId).open == true
+                      && memberShape(request.resource.data);
+        allow update: if isOwner(userId)
+                      && memberShape(request.resource.data);
+        allow delete: if isOwner(userId)
+                      || (isAuthenticated() && squadDoc(squadId).founder == request.auth.uid);
+      }
+    }
+
+    // Retired in v2.3: the v2.0–v2.2 Everyone board. Closed to reads and
+    // writes; owners may still delete their rows (the client sweeps its own
+    // for a few days). Delete the collection from the console afterwards.
     match /boards/{day}/rows/{userId} {
-      allow read: if isAuthenticated() && isSharing(request.auth.uid);
-      allow create, update: if isOwner(userId)
-                            && isSharing(userId)
-                            && day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
-                            && request.resource.data.keys().hasOnly(
-                                 ['name', 'reviews', 'studyTimeMs', 'streak', 'updatedAt'])
-                            && request.resource.data.reviews is int
-                            && request.resource.data.reviews >= 0;
+      allow read, create, update: if false;
       allow delete: if isOwner(userId);
     }
 
@@ -104,7 +149,7 @@ service cloud.firestore {
     // (newer rules must still satisfy older clients' probes); add a version
     // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6'];
       allow list, create, update, delete: if false;
     }
 

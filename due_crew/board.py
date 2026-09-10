@@ -52,7 +52,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak")
-PERIODS = ("today", "week", "decks", "everyone")
+PERIODS = ("today", "week", "decks", "squads")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
@@ -383,6 +383,11 @@ def _css(cfg):
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
       color: var(--dc-muted); }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
+    #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
+    #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
+    #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700;
+      border-bottom: 1px dotted currentColor; }}
+    #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
     #due-crew .dc-card {{ padding: 16px; text-align: center;
       border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
@@ -399,7 +404,7 @@ def _pycmd(cmd):
 def _head(period):
     pills = ""
     for key, label in (("today", "Today"), ("week", "Week"),
-                       ("decks", "Decks"), ("everyone", "Everyone")):
+                       ("decks", "Decks"), ("squads", "Squads")):
         cls = "dc-pill on" if period == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
@@ -519,91 +524,123 @@ def _decks_html(data, deltas=None):
     return html
 
 
-EVERYONE_SORTS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
-                  ("streak", "&#128293; Streak"))
+SQUAD_HEADS = (("reviews", "&#128218; Reviews"), ("time_ms", "&#9201; Time"),
+               ("retention", "&#127919; Ret."), ("streak", "&#128293; Streak"))
 
 
-def _everyone_html(view, cfg):
-    """The Everyone board: everyone here chose to be. Top rows by reviews,
-    plain ranks — no medals, no cheers, no celebration surfaces; these
-    aren't necessarily people you know. Add lives on the person's card
-    (click a name), not on the row. The headline is the together number."""
+def _switcher(view):
+    parts = []
+    for sq in view.get("squads") or []:
+        on = ' class="on"' if sq["id"] == view.get("current") else ""
+        parts.append(f'<a{on} href="#" onclick="{_pycmd("squad:" + str(sq["id"]))}">'
+                     f'{_html.escape(str(sq["name"]))}</a>')
+    parts.append(f'<a class="add" href="#" onclick="{_pycmd("squadadd")}">'
+                 f'+ join or create</a>')
+    return '<div class="dc-sw">' + "".join(parts) + "</div>"
+
+
+def _squads_html(view, cfg):
+    """A squad board: everyone here holds the same invite. Plain ranks — no
+    medals, no cheers; these aren't necessarily people you know. Add lives
+    on the person's card (click a name), not on the row."""
     state = view.get("state")
-    if state == "optin":
-        return (f'<div style="text-align: center; padding: 18px 8px 14px; '
-                f'font-size: 12px; color: var(--dc-muted);">'
-                f'Everyone on Due Crew who&rsquo;s sharing today &mdash; and the '
-                f'place to find new crew.<br>Sharing goes both ways: turn it on in '
-                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
-                f'text-decoration: none;" onclick="{_pycmd("settings")}">Privacy</a> '
-                f'to see the board and be on it.</div>')
+    sw = _switcher(view)
+    name = _html.escape(str(view.get("name") or "?"))
+    if state == "none":
+        return (sw + '<div class="dc-line" style="border-top: none;">A private board '
+                'for any group. Join with a code, or create one.</div>')
     if state == "loading":
-        return '<div class="dc-line" style="border-top: none;">Fetching the board&hellip;</div>'
+        return sw + '<div class="dc-line" style="border-top: none;">Fetching&hellip;</div>'
     if state == "error":
-        return ('<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
-                'load the board. Check your connection and Refresh.</div>')
+        return (sw + '<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
+                'load. Check your connection and Refresh.</div>')
+    if state == "gone":
+        return (sw + f'<div class="dc-line" style="border-top: none;">You&rsquo;re no '
+                f'longer in {name}. <a href="#" style="color: var(--dc-accent); '
+                f'font-weight: 700; text-decoration: none;" '
+                f'onclick="{_pycmd("squaddrop:" + str(view.get("current", "")))}">Remove</a></div>')
     rows = view.get("rows") or []
-    totals = view.get("totals") or {}
-    people = int(totals.get("people") or 0)
-    sort = sort_key(cfg)
-    field = {"time": "time_ms", "streak": "streak"}.get(sort, "reviews")
-    shown = sorted(rows, key=lambda r: r.get(field) or 0, reverse=True)
-    if people:
-        headline = (f'{people:,} studying today &middot; '
-                    f'{int(totals.get("reviews") or 0):,} reviews together')
-    else:
-        headline = "studying today"
+    day, yesterday = view.get("day", ""), view.get("yesterday", "")
+    live = sorted([r for r in rows if r.get("day") == day],
+                  key=lambda r: r.get("reviews") or 0, reverse=True)
+    rest = sorted([r for r in rows if r.get("day") != day],
+                  key=lambda r: r.get("day") or "", reverse=True)
+    people = int(view.get("people") or len(rows))
+    headline = f'{people:,} in {name}'
+    if view.get("open") is False:
+        headline += " &middot; locked"
+    if live:
+        headline += (f' &middot; {len(live):,} studying today &middot; '
+                     f'{int(view.get("reviews") or 0):,} reviews together')
     heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
              f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
-    for key, htext in EVERYONE_SORTS:
-        on = "on" if {"time": "time_ms", "streak": "streak"}.get(key, "reviews") == field else ""
-        arrow = " &#9662;" if on else ""
-        heads += (f'<th><a class="{on}" href="#" '
-                  f'onclick="{_pycmd("sort:" + key)}">{htext}{arrow}</a></th>')
+    for _key, htext in SQUAD_HEADS:
+        heads += f"<th>{htext}</th>"
     body = ""
-    for i, r in enumerate(shown):
-        name = _html.escape(str(r["name"]))
+    for i, r in enumerate(live + rest):
+        pname = _html.escape(str(r["name"]))
         uid = str(r["user_id"])
         cls, note = "", ""
         if r.get("you"):
             cls = "you"
             link = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
-                    f'onclick="{_pycmd("profile:" + uid)}">{name}</a>')
+                    f'onclick="{_pycmd("profile:" + uid)}">{pname}</a>')
         else:
             if r.get("crew"):
                 note = ' <span class="la faded">&middot; crew</span>'
+            elif r.get("knocked_me"):
+                note = ' <span class="la fresh">&middot; added you</span>'
             elif r.get("pending"):
                 note = ' <span class="la faded">&middot; knocked</span>'
             link = (f'<a class="dc-pl" href="#" title="Open card" '
-                    f'onclick="{_pycmd("ecard:" + uid)}">{name}</a>')
-        body += (f'<tr class="{cls}"><td class="rk">#{i + 1}</td>'
+                    f'onclick="{_pycmd("ecard:" + uid)}">{pname}</a>')
+        if r.get("day") != day:
+            cls += " dim"
+            when = "yesterday" if r.get("day") == yesterday else "quiet"
+            note += f' <span class="la faded">&middot; {when}</span>'
+            rank = ""
+        else:
+            rank = f"#{i + 1}"
+        body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                  f'<td class="nm">{link}{note}</td>'
-                 f'<td class="n">{format(r["reviews"], ",")}</td>'
-                 f'<td class="n">{_fmt_time(r["time_ms"])}</td>'
-                 f'<td class="n">{r["streak"]}</td></tr>')
+                 f'<td class="n">{_cell(r.get("reviews"), lambda v: format(v, ","))}</td>'
+                 f'<td class="n">{_cell(r.get("time_ms"), _fmt_time)}</td>'
+                 f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
+                 f'<td class="n">{_cell(r.get("streak"))}</td></tr>')
+    link_css = 'style="color: var(--dc-accent); font-weight: 700; text-decoration: none;"'
+    acts = [f'<a href="#" {link_css} onclick="{_pycmd("squadinvite")}">Copy invite</a>']
+    if view.get("founder_me"):
+        acts.append(f'<a href="#" {link_css} onclick="{_pycmd("squadlock")}">'
+                    f'{"Open" if view.get("open") is False else "Lock"}</a>')
+    acts.append(f'<a href="#" {link_css} onclick="{_pycmd("squadleave")}">Leave</a>')
+    foot = ('<div class="dc-line" style="border-top: none;">'
+            + " &middot; ".join(acts) + "</div>")
     if not body:
-        return ('<div class="dc-line" style="border-top: none;">No one&rsquo;s '
-                'on the board yet today.</div>')
-    my_rank = view.get("my_rank")
-    mine = ""
-    if my_rank and not any(r.get("you") for r in rows) and people:
-        mine = (f'<div class="dc-line" style="border-top: none;">'
-                f'you&rsquo;re <b>#{int(my_rank):,}</b> of {people:,} today</div>')
-    note = (f'<div class="dc-line" style="border-top: none;">top {len(shown)} by '
-            f'reviews &middot; today only &middot; click a name to see their card '
-            f'&mdash; adding starts there</div>')
-    return f'<table><tr>{heads}</tr>{body}</table>{mine}{note}'
+        return (sw + '<div class="dc-line" style="border-top: none;">No one&rsquo;s '
+                'synced yet.</div>' + foot)
+    return f"{sw}<table><tr>{heads}</tr>{body}</table>{foot}"
 
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
-           rules_stale=False, everyone_view=None):
+           rules_stale=False, squad_view=None, knocks=None):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
     body = (_decks_html(data, deltas) if period == "decks"
-            else _everyone_html(everyone_view or {"state": "optin"}, cfg)
-            if period == "everyone"
+            else _squads_html(squad_view or {"state": "none"}, cfg)
+            if period == "squads"
             else _table_html(data, cfg, period))
+    for k in (knocks or [])[:3]:
+        # someone in a squad added me: my add makes it mutual
+        who = _html.escape(str(k.get("name", "?")))
+        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad") else "")
+        uid = str(k.get("uid", ""))
+        body = (f'<div class="dc-wrap knock"><span>&#128075;</span>'
+                f'<span><b>{who}</b> added you{where}</span>'
+                f'<a class="wc" href="#" title="Add back" '
+                f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
+                f'<a class="wx" href="#" title="Not now" '
+                f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>') + body
     if wrap:
         extra = ""
         if (wrap.get("full_days") or 0) >= 3:
@@ -760,28 +797,41 @@ def flurry_js(emojis, banner_text, back=None, notes=None):
 
 
 def stranger_card_js(info):
-    """Card for an Everyone-board member who isn't crew. Deliberately spare —
-    no heatmap, no cheer, no celebration: we don't necessarily know them.
-    info: uid, name, reviews, time_ms, streak, pending (bool)."""
+    """Card for a squadmate who isn't crew. Deliberately spare — no heatmap,
+    no cheer, no celebration: we don't necessarily know them. info: uid,
+    name, reviews, time_ms, retention, streak, rank, squad, today (bool),
+    pending, knocked_me, founder_me."""
     name = _html.escape(str(info.get("name", "?")))
-    stat = (f'{format(int(info.get("reviews") or 0), ",")} reviews today '
-            f'&middot; {_fmt_time(int(info.get("time_ms") or 0))} '
-            f'&middot; {int(info.get("streak") or 0)}-day streak')
+    squad = _html.escape(str(info.get("squad") or "squad"))
+    where = (f'#{int(info["rank"])} in {squad} today' if info.get("rank")
+             else f'in {squad}')
+    when = "today" if info.get("today") else "last sync"
+    bits = [f'{format(int(info.get("reviews") or 0), ",")} reviews {when}',
+            _fmt_time(int(info.get("time_ms") or 0))]
+    if info.get("retention") is not None:
+        bits.append(f'{float(info["retention"]):.1f}% retention')
+    bits.append(f'{int(info.get("streak") or 0)}-day streak')
+    stat = " &middot; ".join(bits)
     inner = _json.dumps(
         f'<div style="display: flex; align-items: baseline; gap: 8px;">'
         f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
         f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
-        f' letter-spacing: 0.08em;">on the Everyone board</span></div>'
-        f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>'
-        f'<div style="font-size: 11.5px; opacity: 0.65; padding: 2px 0 0;">'
-        f'Crew see each other&rsquo;s weeks, days, decks, and heatmaps.</div>')
-    if info.get("pending"):
-        act_label = _json.dumps("\u23F3 Knocked — waiting for them")
+        f' letter-spacing: 0.08em;">{where}</span></div>'
+        f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
+    uid = str(info.get("uid", ""))
+    if info.get("knocked_me"):
+        act_label = _json.dumps("\U0001F91D Add back")
+        act_cmd, act_primary = _json.dumps(f"duecrew:addback:{uid}"), "true"
+    elif info.get("pending"):
+        act_label = _json.dumps("\u23F3 Knocked")
         act_cmd, act_primary = _json.dumps(None), "false"
     else:
-        act_label = _json.dumps("\U0001F91D Add to crew")
-        act_cmd = _json.dumps(f"duecrew:knock:{info.get('uid', '')}")
-        act_primary = "true"
+        act_label = _json.dumps("\U0001F91D Add")
+        act_cmd, act_primary = _json.dumps(f"duecrew:knock:{uid}"), "true"
+    if info.get("founder_me"):
+        extra_cmd, extra_label = _json.dumps(f"duecrew:squadkick:{uid}"), _json.dumps("Remove")
+    else:
+        extra_cmd, extra_label = _json.dumps(None), _json.dumps("")
     return """
     (function() {
         var old = document.getElementById('dc-profile');
@@ -828,6 +878,19 @@ def stranger_card_js(info):
             (night ? '#3d403b' : '#e2e2da') + ';';
         close.addEventListener('click', function() { back.remove(); });
         row.appendChild(act);
+        var extraCmd = %s;
+        if (extraCmd) {
+            var extra = document.createElement('button');
+            extra.textContent = %s;
+            extra.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
+                'background:none;color:inherit;opacity:0.8;border:1px solid ' +
+                (night ? '#3d403b' : '#e2e2da') + ';';
+            extra.addEventListener('click', function() {
+                back.remove();
+                if (typeof pycmd !== 'undefined') { pycmd(extraCmd); }
+            });
+            row.appendChild(extra);
+        }
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
         row.appendChild(spacer);
@@ -842,7 +905,7 @@ def stranger_card_js(info):
         });
         document.body.appendChild(back);
     })();
-    """ % (inner, act_cmd, act_label, act_primary)
+    """ % (inner, act_cmd, act_label, act_primary, extra_cmd, extra_label)
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))

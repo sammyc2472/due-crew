@@ -39,12 +39,13 @@ streak means what it says.
 - **Privacy controls** — choose which stats you share (heatmap included),
   or pause sharing entirely ("on a break"). Pausing hides your stats; your
   streak keeps counting as long as you keep studying.
-- **Everyone board** — opt in (Privacy) to a Today-only board of everyone
-  on Due Crew who's also sharing, worldwide: the top 50 by reviews, the
-  together number ("2,381 studying today · 1.2M reviews"), and your own
-  place in it. No medals, no cheers — these aren't necessarily people you
-  know; weeks, days, decks, and heatmaps stay crew-only. Tap a name, knock,
-  and you're crew when they add back.
+- **Squads** — a private board for any group: a class, a Discord, a
+  study group. Join with an invite code, or create one and share yours.
+  Squadmates see your name and today's reviews, time, retention, and
+  streak, nothing more. Plain ranks, everyone in the squad, Today only.
+  The founder can lock the door and remove people; anyone can leave. Tap a
+  name to add someone; you're crew when they add back, and the board tells
+  you when someone adds you.
 - **Share it** — paste-ready for the group chat: your week as seven
   squares (🟩🟩🟩⬜🟩🟩🟩 6 of 7 days), the crew's week as a row per
   person, or today's numbers in one line — each signed with the add-on
@@ -75,16 +76,17 @@ restart Anki after installing.
 2. Friends → Copy invite (or just your code), send it to a friend. They
    add yours, you add theirs — you're crew.
 3. Study. Stats sync when Anki syncs.
-4. Optional: Settings → Privacy → **Share on the Everyone board** to see
-   everyone on Due Crew studying today, and be seen.
+4. Optional: Squads → **+ join or create**. Share the invite code with
+   your class or group chat.
 
 ## Privacy
 
 Due Crew runs on one hosted backend (the maintainer pays for it). Stats
-live there, readable only by people you've added — and, only if you opt
-into the Everyone board, a single name-and-today's-numbers row readable by
-others who've opted in too, anywhere in the world. All of it is enforced
-server-side by the
+live there, readable only by people you've added — and, in any squad you
+join, a single name-and-today's-numbers row readable by that squad's
+members. Squads have no directory: only people holding the invite code can
+find one, and the founder can lock it. All of it is enforced server-side
+by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
 in this repo. Your email is used for sign-in only and is never shown to
 friends or stored in the database. Deleting your account removes your data.

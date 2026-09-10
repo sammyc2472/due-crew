@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v5"
+RULES_MARKER = "rules-v6"
 
 
 def firestore_base(project_id):
@@ -190,17 +190,6 @@ def _clean_day(doc):
     return out
 
 
-def _clean_board_row(uid, fields):
-    """Coerce an Everyone-board row to a trusted shape; None if unusable."""
-    if not isinstance(fields, dict):
-        return None
-    return {"user_id": str(uid),
-            "name": str(fields.get("name", "?")),
-            "reviews": _as_int(fields.get("reviews")) or 0,
-            "time_ms": _as_int(fields.get("studyTimeMs")) or 0,
-            "streak": _as_int(fields.get("streak")) or 0}
-
-
 def _clean_decks(value):
     """Validate a friend's shared-decks payload down to a known shape."""
     if not isinstance(value, list):
@@ -221,6 +210,50 @@ def _clean_decks(value):
             "mature": _as_int(d.get("mature")) or 0,
         })
     return out
+
+
+SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
+SQUAD_CODE_LEN = 8
+SQUAD_NAME_MAX = 24
+
+
+def new_squad_code():
+    return "".join(secrets.choice(SQUAD_ALPHABET) for _ in range(SQUAD_CODE_LEN))
+
+
+def normalize_code(code):
+    """What a person typed -> the code: uppercase, alphabet only."""
+    return "".join(ch for ch in str(code or "").upper() if ch in SQUAD_ALPHABET)
+
+
+def squad_id(code):
+    """The squad's document id derives from its invite code. Knowing the
+    code is knowing the id, and the id is the only way in: no directory."""
+    return hashlib.sha1(f"due-crew-squad:{normalize_code(code)}".encode()).hexdigest()[:24]
+
+
+def clean_squad_name(name):
+    one_line = " ".join(str(name or "").split())
+    return "".join(ch for ch in one_line if ch.isprintable())[:SQUAD_NAME_MAX]
+
+
+def _clean_member(uid, fields):
+    """Coerce a squad member doc to a trusted row; None if unusable."""
+    if not isinstance(fields, dict):
+        return None
+    day = str(fields.get("day") or "")
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        day = ""
+    acc = _as_float(fields.get("accuracy"))
+    return {"user_id": str(uid),
+            "name": str(fields.get("name", "?")),
+            "day": day,
+            "reviews": _as_int(fields.get("reviews")),
+            "time_ms": _as_int(fields.get("studyTimeMs")),
+            "retention": acc if acc is not None and 0 <= acc <= 100 else None,
+            "streak": _as_int(fields.get("streak"))}
 
 
 class FirebaseClient:
@@ -677,15 +710,13 @@ class FirebaseClient:
             "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
         }
-        # examDate and openBoard ride the always-in-the-mask pattern: unset,
-        # past, off, or paused thereby DELETES them server-side, never stale.
-        # openBoard is what the rules read to gate the server board both ways.
+        # examDate rides the always-in-the-mask pattern: unset, past, or
+        # paused thereby DELETES it server-side, never stale. openBoard (the
+        # v2.0–2.2 Everyone flag) is cleared the same way.
         mask = list(profile) + ["examDate", "openBoard"]
         exam = _exam_value(cfg.get("exam_date"), label)
         if exam and not cfg.get("paused"):
             profile["examDate"] = exam
-        if cfg.get("server_board") and not cfg.get("paused"):
-            profile["openBoard"] = True
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
         if cfg.get("paused"):
             return ok
@@ -799,37 +830,6 @@ class FirebaseClient:
         self.session["heatmap_deleted"] = True  # retract once, not per sync
         self._save_session()
 
-    EVERYONE_TOP = 50
-
-    def upload_board_row(self, uid, day, row):
-        """Upsert my Everyone-board row for `day`; skipped when unchanged.
-        Rules require openBoard on my profile — upload_today sets it first."""
-        digest = hashlib.sha1(
-            json.dumps([day, row], sort_keys=True).encode()).hexdigest()
-        if self.session.get("board_row_hash") == digest:
-            return True
-        data = dict(row)
-        data["updatedAt"] = {"timestampValue": _now_ts()}
-        if not self.patch_doc(f"boards/{day}/rows/{uid}", data,
-                              mask=list(row) + ["updatedAt"],
-                              label="everyone board"):
-            return False
-        self.session["board_row_hash"] = digest
-        self.session["board_row_day"] = day
-        self.session.pop("board_row_deleted", None)
-        self._save_session()
-        return True
-
-    def delete_board_row(self, uid, day=None):
-        """Retract my row (opt-out or pause): once, not per sync."""
-        day = day or self.session.get("board_row_day")
-        if day:
-            self.delete_doc(f"boards/{day}/rows/{uid}")
-        self.session.pop("board_row_hash", None)
-        self.session.pop("board_row_day", None)
-        self.session["board_row_deleted"] = True
-        self._save_session()
-
     def retire_old_board_row(self, uid):
         """v1.8–v1.9 wrote rows to the unscoped server_board collection;
         v2.0's rules close it, owners may still delete. Once per session."""
@@ -839,53 +839,132 @@ class FirebaseClient:
         self.session["old_board_retired"] = True
         self._save_session()
 
-    def fetch_everyone(self, day, limit=EVERYONE_TOP):
-        """Top `limit` rows of the day by reviews — never the whole board.
-        Raises TransportError (403 = not sharing, or rules predate v2.0)."""
+    # ---- squads ----
+
+    def create_squad(self, uid, name, my_name):
+        """A squad doc under the id its invite code derives, plus my own
+        member doc. Retries a fresh code if the id is somehow taken."""
+        name = clean_squad_name(name)
+        if not name:
+            return None
+        for _ in range(3):
+            code = new_squad_code()
+            sid = squad_id(code)
+            if not self.patch_doc(f"squads/{sid}", {
+                    "name": name, "founder": uid, "open": True,
+                    "createdAt": {"timestampValue": _now_ts()}}):
+                continue
+            self.patch_doc(f"squads/{sid}/members/{uid}", {
+                "name": my_name, "joinedAt": {"timestampValue": _now_ts()}})
+            self.session.setdefault("squad_hashes", {}).pop(sid, None)
+            self._save_session()
+            return {"id": sid, "code": code, "name": name, "founder": uid}
+        return None
+
+    def peek_squad(self, code):
+        """The join preview: (info-or-None, status). 404 = no such squad."""
+        sid = squad_id(code)
+        doc, status = self.get_doc(f"squads/{sid}")
+        if doc is None:
+            return None, status
+        return {"id": sid, "code": normalize_code(code),
+                "name": clean_squad_name(doc.get("name")) or "?",
+                "founder": str(doc.get("founder") or ""),
+                "open": doc.get("open") is True}, status
+
+    def join_squad(self, uid, sid, my_name):
+        """One write; rules refuse it when the door is locked (403)."""
+        return self._patch_status(f"squads/{sid}/members/{uid}", {
+            "name": my_name, "joinedAt": {"timestampValue": _now_ts()}})
+
+    def leave_squad(self, uid, sid):
+        self.session.get("squad_hashes", {}).pop(sid, None)
+        self._save_session()
+        return self.delete_doc(f"squads/{sid}/members/{uid}")
+
+    def remove_member(self, sid, member_uid):
+        """Founder only, by rule."""
+        return self.delete_doc(f"squads/{sid}/members/{member_uid}")
+
+    def set_squad_open(self, sid, is_open):
+        """Founder only, by rule. Locked = no new members, existing stay."""
+        return self.patch_doc(f"squads/{sid}", {"open": bool(is_open)}, ["open"],
+                              label="squad lock")
+
+    def fetch_squad(self, sid):
+        """The squad doc plus every member's row — one read each; squads are
+        the size of a class, not the world. None when the squad is gone.
+        Raises TransportError (403 = not a member any more)."""
+        doc, status = self.get_doc(f"squads/{sid}")
+        if doc is None:
+            if status == 404:
+                return None
+            raise TransportError(f"squad get failed: {status}")
         rows = []
-        for uid, fields in self.run_query(
-                "rows", parent=f"boards/{day}",
-                order_by=("reviews", "DESCENDING"), limit=limit):
-            row = _clean_board_row(uid, fields)
+        for uid, fields in self.run_query("members", parent=f"squads/{sid}",
+                                          limit=1000):
+            row = _clean_member(uid, fields)
             if row:
                 rows.append(row)
-        return rows
+        return {"id": sid, "name": clean_squad_name(doc.get("name")) or "?",
+                "founder": str(doc.get("founder") or ""),
+                "open": doc.get("open") is True, "rows": rows}
 
-    def everyone_totals(self, day, my_reviews):
-        """{people, reviews, above}: how many rows the day has, their review
-        sum, and how many out-rank my count — three aggregations, a read
-        or so each. Raises TransportError."""
-        parent = f"boards/{day}"
-        totals = self.run_aggregation("rows", parent, {
-            "people": "count", "reviews": ("sum", "reviews")})
-        above = self.run_aggregation("rows", parent, {"above": "count"},
-                                     filters=[("reviews", "GREATER_THAN",
-                                               int(my_reviews))])
-        return {"people": int(totals.get("people") or 0),
-                "reviews": int(totals.get("reviews") or 0),
-                "above": int(above.get("above") or 0)}
+    def upload_squad_rows(self, uid, row, squad_ids):
+        """My row into every squad I'm in: the member doc gets today's
+        numbers (joinedAt stays). Hash-guarded per squad. Returns the ids
+        whose write came back 403 — I was removed, or the squad is gone."""
+        gone = []
+        hashes = self.session.setdefault("squad_hashes", {})
+        data = dict(row)
+        data["updatedAt"] = {"timestampValue": _now_ts()}
+        digest = hashlib.sha1(json.dumps(row, sort_keys=True).encode()).hexdigest()
+        for sid in squad_ids:
+            if hashes.get(sid) == digest:
+                continue
+            status = self._patch_status(f"squads/{sid}/members/{uid}", data,
+                                        mask=list(row) + ["updatedAt"])
+            if status in (200, 201):
+                hashes[sid] = digest
+            elif status == 403:
+                gone.append(sid)
+        for sid in list(hashes):
+            if sid not in squad_ids:
+                hashes.pop(sid)
+        self._save_session()
+        return gone
 
-    def send_knock(self, to_uid, from_uid, from_name):
+    def _patch_status(self, path, data, mask=None):
+        """patch_doc without the rules-stale hint: a squad 403 means "not a
+        member", not "rules drifted"."""
+        mask_q = "&".join(f"updateMask.fieldPaths={k}" for k in (mask or data))
+        r = self._req("PATCH", f"{self.base}/{path}?{mask_q}",
+                      json={"fields": {k: _fv(v) for k, v in data.items()}})
+        return r.status_code
+
+    def send_knock(self, to_uid, from_uid, from_name, squad):
         """One write; overwrites my previous knock to the same person. Rules
-        require both of us to be on the Everyone board."""
+        require both of us to be members of `squad`."""
         return self.patch_doc(f"users/{to_uid}/knocks/{from_uid}", {
             "name": from_name,
+            "squad": str(squad),
             "at": {"timestampValue": _now_ts()},
         }, label="knock")
 
     def list_knocks(self, uid):
-        """[(sender_uid, sender_profile_name)] — names come from profiles,
-        not the knock docs, so senders can't spoof. Raises TransportError."""
+        """[(sender_uid, sender_profile_name, squad_id)] — names come from
+        profiles, not the knock docs, so senders can't spoof. One list
+        request per refresh. Raises TransportError."""
         r = self._req("GET", f"{self.base}/users/{uid}/knocks?pageSize=50")
         if r.status_code != 200:
             raise TransportError(f"knocks list failed: {r.status_code}")
-        senders = [doc["name"].rsplit("/", 1)[-1]
-                   for doc in r.json().get("documents", [])]
-        if not senders:
+        docs = {doc["name"].rsplit("/", 1)[-1]: _parse(doc.get("fields"))
+                for doc in r.json().get("documents", [])}
+        if not docs:
             return []
-        profiles = self.batch_get([f"users/{u}" for u in senders])
-        return [(u, str((profiles.get(f"users/{u}") or {})
-                        .get("displayName", "?"))) for u in senders]
+        profiles = self.batch_get([f"users/{u}" for u in docs])
+        return [(u, str((profiles.get(f"users/{u}") or {}).get("displayName", "?")),
+                 str(docs[u].get("squad") or "")) for u in docs]
 
     def delete_knock(self, uid, sender_uid):
         return self.delete_doc(f"users/{uid}/knocks/{sender_uid}")
@@ -913,7 +992,7 @@ class FirebaseClient:
             for doc in r.json().get("documents", []):
                 self.delete_doc(f"{collection_path}/{doc['name'].rsplit('/', 1)[-1]}")
 
-    def delete_account(self, uid, friend_code):
+    def delete_account(self, uid, friend_code, squad_ids=()):
         """Raises AuthError(CREDENTIAL_TOO_OLD_LOGIN_AGAIN) if Firebase wants
         a fresh sign-in; caller reauths and retries (the sweep is idempotent)."""
         self.session.pop("shared_hash", None)  # server docs are going away
@@ -924,6 +1003,8 @@ class FirebaseClient:
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
         self.delete_doc(f"server_board/{uid}")  # v1.8–1.9 row, if any
+        for sid in squad_ids:
+            self.delete_doc(f"squads/{sid}/members/{uid}")
         today = datetime.date.today()
         for offset in (-1, 0, 1, 2):  # Everyone rows near today, any zone
             label = (today - datetime.timedelta(days=offset)).isoformat()

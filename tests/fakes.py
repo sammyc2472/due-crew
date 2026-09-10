@@ -130,9 +130,9 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v5: markers v2..v5,
-                      crew-scoped board + knocks under servers/{key}/...,
-                      server_board retired)
+      "repo"        — current repository rules (rules-v6: markers v2..v6,
+                      squads with member rows, knocks between squadmates,
+                      boards/ and server_board retired)
       "v3"          — the previous paste: markers v2+v3, the UNSCOPED
                       server_board, knocks gated only on openBoard
       "v2"          — marker v2 only, no board/knocks
@@ -158,8 +158,37 @@ class FakeFirestore:
         doc = self.docs.get(f"users/{uid}", {})
         return doc.get("openBoard", {}).get("booleanValue") is True
 
+    SQUAD_FIELDS = {"name", "founder", "open", "createdAt"}
+    MEMBER_FIELDS = {"name", "joinedAt", "day", "reviews", "studyTimeMs",
+                     "accuracy", "streak", "updatedAt"}
+
+    def _founder(self, sid):
+        return (self.docs.get(f"squads/{sid}", {}).get("founder") or {}).get("stringValue")
+
+    def _member(self, sid, uid):
+        return uid is not None and f"squads/{sid}/members/{uid}" in self.docs
+
+    def _squad_shape(self, f):
+        name = (f.get("name") or {}).get("stringValue")
+        return (set(f) <= self.SQUAD_FIELDS and isinstance(name, str)
+                and 1 <= len(name) <= 24
+                and isinstance((f.get("open") or {}).get("booleanValue"), bool))
+
+    def _member_shape(self, f):
+        if not set(f) <= self.MEMBER_FIELDS:
+            return False
+        if not isinstance((f.get("name") or {}).get("stringValue"), str):
+            return False
+        if "reviews" in f:
+            r = f["reviews"] or {}
+            if "integerValue" not in r or int(r["integerValue"]) < 0:
+                return False
+        if "day" in f and not self.DAY_RE.fullmatch((f["day"] or {}).get("stringValue", "")):
+            return False
+        return True
+
     CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5"),
+    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
 
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
@@ -199,32 +228,59 @@ class FakeFirestore:
                 return False
             if method == "DELETE":
                 return uid == owner
-            return (uid == sender and self._open_board(owner)
-                    and self._open_board(sender)
-                    and set(fields or {}) <= {"name", "at"})
+            f = fields or {}
+            if self.rules_mode != "repo":  # v1.8–2.2: both on the Everyone board
+                return (uid == sender and self._open_board(owner)
+                        and self._open_board(sender) and set(f) <= {"name", "at"})
+            squad = (f.get("squad") or {}).get("stringValue")
+            return (uid == sender and set(f) <= {"name", "at", "squad"}
+                    and isinstance(squad, str) and self._member(squad, sender)
+                    and self._member(squad, owner))
         m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
         if m:
-            day, owner = m.groups()
-            if self.rules_mode != "repo":
-                return False
-            if method == "DELETE":
-                return uid == owner
-            reviews = (fields or {}).get("reviews", {})
-            return (uid == owner and self._open_board(owner)
-                    and bool(self.DAY_RE.fullmatch(day))
-                    and set(fields or {}) <= self.ROW_FIELDS
-                    and "integerValue" in reviews
-                    and int(reviews["integerValue"]) >= 0)
+            _day, owner = m.groups()
+            # retired in v2.3: owners may still delete their rows
+            return self.rules_mode == "repo" and method == "DELETE" and uid == owner
         m = re.fullmatch(r"server_board/([^/]+)", path)
         if m:
             if self.rules_mode == "repo":
                 return method == "DELETE" and uid == m.group(1)
             return uid == m.group(1)  # v3 rules: still owner-writable
+        m = re.fullmatch(r"squads/([^/]+)", path)
+        if m:
+            if self.rules_mode != "repo" or uid is None:
+                return False
+            f = fields or {}
+            existing = self.docs.get(path)
+            if method == "DELETE":
+                return existing is not None and self._founder(m.group(1)) == uid
+            if existing is None:
+                return ((f.get("founder") or {}).get("stringValue") == uid
+                        and self._squad_shape(f))
+            merged = dict(existing, **f)
+            return (self._founder(m.group(1)) == uid
+                    and (merged.get("founder") or {}).get("stringValue") == uid
+                    and self._squad_shape(merged))
+        m = re.fullmatch(r"squads/([^/]+)/members/([^/]+)", path)
+        if m:
+            sid, member = m.groups()
+            if self.rules_mode != "repo":
+                return False
+            if method == "DELETE":
+                return uid == member or (uid is not None and self._founder(sid) == uid)
+            if uid != member:
+                return False
+            existing = self.docs.get(path)
+            if existing is None:
+                sq = self.docs.get(f"squads/{sid}")
+                if not sq or (sq.get("open") or {}).get("booleanValue") is not True:
+                    return False
+            return self._member_shape(dict(existing or {}, **(fields or {})))
         if re.fullmatch(r"friend_codes/[^/]+", path):
             return uid is not None
         return False
 
-    def _can_read(self, path, uid):
+    def _can_read(self, path, uid, listing=False):
         m = re.fullmatch(r"users/([^/]+)", path)
         if m:
             return uid is not None
@@ -243,7 +299,13 @@ class FakeFirestore:
             return m.group(1) in self.MARKERS[self.rules_mode]
         m = re.fullmatch(r"boards/[^/]+/rows/[^/]+", path)
         if m:
-            return self.rules_mode == "repo" and self._open_board(uid)
+            return False  # retired in v2.3
+        m = re.fullmatch(r"squads/([^/]+)", path)
+        if m:
+            return self.rules_mode == "repo" and uid is not None and not listing
+        m = re.fullmatch(r"squads/([^/]+)/members/[^/]+", path)
+        if m:
+            return self.rules_mode == "repo" and self._member(m.group(1), uid)
         m = re.fullmatch(r"server_board/[^/]+", path)
         if m:
             return self.rules_mode == "v3" and self._open_board(uid)
@@ -271,7 +333,7 @@ class FakeFirestore:
                   or body.get("structuredAggregationQuery", {}).get("structuredQuery", {}))
             coll = sq.get("from", [{}])[0].get("collectionId", "")
             prefix = f"{parent}/{coll}" if parent else coll
-            if not self._can_read(prefix + "/probe", uid):
+            if not self._can_read(prefix + "/probe", uid, listing=True):
                 self.log.append((method, action + ":" + prefix, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
             matches = []
@@ -319,7 +381,7 @@ class FakeFirestore:
 
         if method == "GET" and len(path.split("/")) % 2 == 1:
             # collection list (odd segment count): needs read on children
-            if not self._can_read(path + "/probe", uid):
+            if not self._can_read(path + "/probe", uid, listing=True):
                 self.log.append((method, path, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
             docs = [{"name": f"d/{pth}", "fields": fields}
@@ -438,6 +500,7 @@ def install_fake_aqt():
         setattr(qt, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
     utils = types.ModuleType("aqt.utils")
     utils.tooltip = lambda *a, **k: None
+    utils.askUser = lambda *a, **k: True
     sys.modules["aqt"] = aqt
     sys.modules["aqt.gui_hooks"] = hooks
     sys.modules["aqt.deckbrowser"] = deckbrowser

@@ -12,20 +12,17 @@ installing — add-ons load at launch).
 - [ ] Narrow the window (~480 px): the table never scrolls sideways; a long display name ellipsizes instead of overlapping the numbers. Other add-ons' content on the page is unaffected (we no longer touch `body`).
 - [ ] Switch Today / Week / Decks / Server; pills stay one row or wrap cleanly.
 
-## Sharing and the Everyone board
-- [ ] Settings → Privacy → "Share on the Everyone board" on; sync; the Everyone pill shows the top rows, the "N studying today · M reviews together" headline, and your rank line when you're outside the top 50.
-- [ ] A second account that is NOT sharing cannot see the board (opt-in text) and cannot be knocked.
-- [ ] Turn sharing off; sync; your row disappears for others (retracted), and the pill shows the opt-in text for you.
-- [ ] Pause sharing; same result. Un-pause; row returns after a sync.
-- [ ] An install upgraded from v1.x with a leftover server.json: the file is removed silently (default project) or you're asked to sign in again (custom project).
-- [ ] Old add-on versions: their Server view errors until they update — expected. Their friends/cheers/decks keep working.
-
+## Squads
+- [ ] Squads pill → "+ join or create" → Create "busm": the code appears, the invite lands on the clipboard, your row shows after the next sync.
+- [ ] A second account joins with the code: the preview shows the name, founder, and "open"; after Join both boards list both people with reviews, time, retention, and streak; plain ranks, no medals.
+- [ ] Founder → Lock: a third account's Join reads "Locked."; existing members still update. Open again works.
+- [ ] Tap a non-crew squadmate → Add sends a knock; the founder also sees Remove.
+- [ ] Leave removes you from the board on both sides; the switcher moves to the next squad or shows "join or create".
+- [ ] A wrong code says "No squad with that code."; squads never appear anywhere you didn't paste a code.
 ## Friend requests (knocks)
-- [ ] From the Server view, click a stranger's name → card → Add to crew. They see "wants to be crew — Add back" in Friends after their next sync.
-- [ ] Add back on their side → both boards show each other as crew.
-- [ ] A user who isn't sharing cannot knock you (rules test covers it).
-- [ ] Ignore hides that person's future knocks locally.
-
+- [ ] After a squadmate taps Add on you, your board shows "👋 <name> added you from <squad> · Add back"; Add back makes you crew and the banner goes; × mutes that person.
+- [ ] The Friends dialog lists the same knock with Add back / Ignore.
+- [ ] Someone who shares no squad with you cannot knock you (rules test covers it).
 ## Clipboard output
 - [ ] Your card → "Copy for the chat: today" → paste into Messages/WhatsApp/Notes: emoji intact (no `?`, no `∑`); one line of numbers under "Today · <date>".
 - [ ] Your card → "week" → seven squares, "N of 7 days", totals, footer.
