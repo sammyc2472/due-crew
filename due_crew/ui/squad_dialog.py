@@ -5,7 +5,7 @@ import threading
 
 from aqt import mw
 from aqt.qt import (
-    QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
+    QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, Qt,
 )
 
 from ..backend.firebase import SQUAD_CODE_LEN, SQUAD_NAME_MAX, normalize_code
@@ -66,7 +66,7 @@ class SquadDialog(QDialog):
         self.made_label = QLabel("")
         self.made_label.setWordWrap(True)
         self.made_label.setTextInteractionFlags(
-            self.made_label.textInteractionFlags() | 0x1)  # selectable
+            Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.made_label)
 
         note = QLabel("Squadmates see your name and today's reviews, time, "
