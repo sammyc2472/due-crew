@@ -56,7 +56,7 @@ streak means what it says.
 - **Your colors** — six accent colors (Settings → Appearance), each tuned
   for light and dark mode; the whole board, your row highlight, and the
   cards follow it.
-- **Light on everything** — the whole board loads in 3 HTTP requests, all
+- **Light on everything** — the whole board loads in 4 HTTP requests, all
   network runs off the main thread with timeouts, and it refreshes only
   when Anki syncs or you click Refresh.
 
