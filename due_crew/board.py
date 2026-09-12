@@ -510,7 +510,7 @@ def _decks_html(data, deltas=None):
     if not groups and not extras:
         return ('<div class="dc-line" style="border-top: none;">No shared decks yet. '
                 f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a> '
-                '&mdash; decks you and your crew both study match automatically.</div>')
+                '&mdash; matching decks pair up on their own.</div>')
     html = ""
     for g in groups:
         label = _html.escape(str(g["label"]))
@@ -674,13 +674,11 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                  for u, n in exam_eve["people"]]
         if len(links) == 1:
             uid = exam_eve["people"][0][0]
-            line = (f'{links[0]}&rsquo;s exam is tomorrow. '
-                    f'A &#128170; tonight goes a long way.')
+            line = f'{links[0]}&rsquo;s exam is tomorrow.'
             act = (f'<a class="wc" href="#" title="Send a cheer" '
                    f'onclick="{_pycmd("cheerpick:" + str(uid))}">&#128170; Send one</a>')
         else:
-            line = (" and ".join(links) + " have exams tomorrow. "
-                    "A &#128170; tonight goes a long way.")
+            line = " and ".join(links) + " have exams tomorrow."
             act = ""
         body = (f'<div class="dc-wrap eve"><span>&#128214;</span>'
                 f'<span>{line}</span>{act}'
@@ -695,9 +693,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     else:
         left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
     if rules_stale:
-        left = ('<span class="warn" title="Due Crew\'s server is behind this '
-                'version of the add-on; some sharing is paused until it catches '
-                'up. Nothing to do on your side.">&#9888; server catching up</span>'
+        left = ('<span class="warn" title="The server is behind this version; '
+                'some sharing is paused until it catches up.">'
+                '&#9888; server catching up</span>'
                 ' &middot; ') + left
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'

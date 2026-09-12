@@ -38,7 +38,7 @@ class AuthDialog(QDialog):
         root = QVBoxLayout(self)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._signin_tab(), "Sign in")
+        self.tabs.addTab(self._signin_tab(), "Sign In")
         self.tabs.addTab(self._join_tab(), "Join")
         self.tabs.currentChanged.connect(self._tab_changed)
         root.addWidget(self.tabs)
@@ -53,7 +53,7 @@ class AuthDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        self.go = QPushButton("Sign in")
+        self.go = QPushButton("Sign In")
         self.go.setDefault(True)
         self.go.clicked.connect(self._submit)
         buttons.addWidget(self.go)
@@ -95,7 +95,7 @@ class AuthDialog(QDialog):
 
     def _tab_changed(self, i):
         self.error.setText("")
-        self.go.setText("Sign in" if i == 0 else "Join")
+        self.go.setText("Sign In" if i == 0 else "Join")
 
     # ---- actions ----
 
@@ -133,7 +133,7 @@ class AuthDialog(QDialog):
                else (lambda: self.client.sign_in(email, pw)))
 
         def done(result, err):
-            self._busy(False, "Join" if joining else "Sign in")
+            self._busy(False, "Join" if joining else "Sign In")
             if err:
                 self.error.setText(
                     ERRORS.get(err, err.replace("_", " ").capitalize()))
@@ -148,7 +148,7 @@ class AuthDialog(QDialog):
             return
         email = self.in_email.text().strip()
         if "@" not in email:
-            self.error.setText("Enter your email first, then tap Forgot password.")
+            self.error.setText("Enter your email first.")
             return
         self._busy(True)
 

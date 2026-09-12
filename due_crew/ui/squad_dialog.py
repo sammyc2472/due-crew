@@ -35,7 +35,7 @@ class SquadDialog(QDialog):
         self.code_edit.setMaxLength(12)
         self.code_edit.textChanged.connect(self._code_changed)
         self.code_edit.returnPressed.connect(self._look_up)
-        self.look_btn = QPushButton("Look up")
+        self.look_btn = QPushButton("Look Up")
         self.look_btn.clicked.connect(self._look_up)
         row.addWidget(self.code_edit)
         row.addWidget(self.look_btn)
@@ -70,7 +70,7 @@ class SquadDialog(QDialog):
         lay.addWidget(self.made_label)
 
         note = QLabel("Squadmates see your name and today's reviews, time, "
-                      "retention, and streak. Leave anytime.")
+                      "retention, and streak.")
         note.setStyleSheet("font-size: 11px;")
         note.setWordWrap(True)
         lay.addWidget(note)

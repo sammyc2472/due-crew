@@ -1087,8 +1087,8 @@ def _send_cheer(to_uid, to_name, emoji, note=""):
 
     def done(ok):
         if ok == "no-note":
-            tooltip(f"Sent {emoji} to {html.escape(to_name)} without the note "
-                    "— the server needs a rules update for notes.")
+            tooltip(f"Sent {emoji} to {html.escape(to_name)}. "
+                    "The note needs a server update.")
         elif ok:
             tooltip(f"Sent {emoji} to {html.escape(to_name)}.")
         else:
@@ -1105,8 +1105,8 @@ def _edit_status():
     current = str(c.get("status") or "")
     text, ok = QInputDialog.getText(
         mw, "Status",
-        "One line under your name on Today, for your crew.\n"
-        "Leave it empty to clear it.", text=current)
+        "One line under your name, for your crew. Empty clears it.",
+        text=current)
     if not ok:
         return
     text = " ".join(str(text).split())[:80]

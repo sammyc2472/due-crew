@@ -41,7 +41,7 @@ class FriendsDialog(QDialog):
         QTimer.singleShot(0, self._load)
 
     def _build(self):
-        self.setWindowTitle("Due Crew — Friends")
+        self.setWindowTitle("Friends")
         self.setMinimumWidth(420)
         root = QVBoxLayout(self)
 
@@ -60,7 +60,7 @@ class FriendsDialog(QDialog):
         copy = QPushButton("Copy")
         copy.clicked.connect(self._copy)
         code_row.addWidget(copy)
-        invite = QPushButton("Copy invite")
+        invite = QPushButton("Copy Invite")
         invite.setToolTip("Everything a friend needs, in one paste")
         invite.clicked.connect(self._copy_invite)
         code_row.addWidget(invite)
@@ -178,7 +178,7 @@ class FriendsDialog(QDialog):
             label.setText(f"{kname} — wants to be crew")
             row.addWidget(label)
             row.addStretch()
-            add = QPushButton("Add back")
+            add = QPushButton("Add Back")
             add.clicked.connect(
                 lambda _=False, u=kuid, n=kname: self._add_back(u, n))
             row.addWidget(add)
@@ -234,7 +234,7 @@ class FriendsDialog(QDialog):
             if mutual:
                 self.list.addItem(f"✓ {name}")
             else:
-                self.list.addItem(f"⏳ {name} — waiting for them to add you")
+                self.list.addItem(f"⏳ {name} — pending")
 
     # ---- actions ----
 
@@ -296,8 +296,7 @@ class FriendsDialog(QDialog):
         box.setWindowTitle("Remove?")
         box.setTextFormat(Qt.TextFormat.PlainText)
         box.setText(f"Remove {name}?\n\nThey leave your board and stop seeing "
-                    f"your stats. You may still see theirs until they remove "
-                    f"you too.")
+                    f"your stats.")
         box.setStandardButtons(QMessageBox.StandardButton.Yes
                                | QMessageBox.StandardButton.No)
         box.setDefaultButton(QMessageBox.StandardButton.No)

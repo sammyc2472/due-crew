@@ -50,7 +50,7 @@ class SettingsDialog(QDialog):
         self._build()
 
     def _build(self):
-        self.setWindowTitle("Due Crew — Settings")
+        self.setWindowTitle("Due Crew Settings")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
 
@@ -115,7 +115,7 @@ class SettingsDialog(QDialog):
 
         if not self.client.signed_in:
             lay.addWidget(QLabel("Not signed in."))
-            sign_in = QPushButton("Sign in…")
+            sign_in = QPushButton("Sign In…")
             sign_in.clicked.connect(self._sign_in)
             lay.addWidget(sign_in)
             lay.addStretch()
@@ -125,7 +125,7 @@ class SettingsDialog(QDialog):
         self.who_label = QLabel(self._who_text())
         who.addWidget(self.who_label)
         who.addStretch()
-        rename = QPushButton("Change name…")
+        rename = QPushButton("Change Name…")
         rename.clicked.connect(self._rename)
         who.addWidget(rename)
         lay.addLayout(who)
@@ -135,7 +135,7 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         for label, opener in (("Friends…", self.open_friends),
                               ("Squads…", self.open_squads),
-                              ("Shared decks…", self.open_decks)):
+                              ("Shared Decks…", self.open_decks)):
             if opener is None:
                 continue
             btn = QPushButton(label)
@@ -146,12 +146,12 @@ class SettingsDialog(QDialog):
 
         lay.addSpacing(16)
         bottom = QHBoxLayout()
-        out = QPushButton("Sign out")
+        out = QPushButton("Sign Out")
         out.setToolTip("Stops syncing on this device. Your account and stats stay.")
         out.clicked.connect(self._sign_out)
         bottom.addWidget(out)
         bottom.addStretch()
-        delete = QPushButton("Delete account…")
+        delete = QPushButton("Delete Account…")
         delete.setStyleSheet(f"color: {danger()};")
         delete.clicked.connect(self._delete)
         bottom.addWidget(delete)

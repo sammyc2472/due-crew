@@ -37,7 +37,7 @@ class DecksDialog(QDialog):
         return names
 
     def _build(self):
-        self.setWindowTitle("Due Crew — Shared decks")
+        self.setWindowTitle("Shared Decks")
         self.setMinimumWidth(460)
         self.setMinimumHeight(380)
         root = QVBoxLayout(self)
