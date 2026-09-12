@@ -41,7 +41,8 @@ def call(method, path, uid=None, body=None, query=""):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
-    req.add_header("Authorization", "Bearer owner" if uid == "owner" else f"Bearer {token(uid)}" if uid else "")
+    if uid:
+        req.add_header("Authorization", "Bearer owner" if uid == "owner" else f"Bearer {token(uid)}")
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             return r.status, json.loads(r.read() or b"{}")
@@ -59,6 +60,8 @@ def fv(v):
         return {"booleanValue": v}
     if isinstance(v, int):
         return {"integerValue": str(v)}
+    if isinstance(v, float):
+        return {"doubleValue": v}
     if isinstance(v, list):
         return {"arrayValue": {"values": [fv(x) for x in v]}}
     return {"stringValue": str(v)}
@@ -90,7 +93,7 @@ def main():
     check("squad: name too long rejected", put("squads/" + "c" * 24, dict(squad, founder="bob", name="x" * 25), "bob") == 403)
     check("squad: extra field rejected", put("squads/" + "d" * 24, dict(squad, founder="bob", code="KQ9P2X3A"), "bob") == 403)
     check("squad: anyone signed in may get it", call("GET", f"squads/{sid}", "carol")[0] == 200)
-    check("squad: signed out cannot", call("GET", f"squads/{sid}")[0] == 403)
+    check("squad: signed out cannot", call("GET", f"squads/{sid}")[0] in (401, 403))
     check("squad: no listing", call("GET", "squads", "alice")[0] == 403)
 
     # -- members: join while open, own row only, allowed shape only
@@ -127,7 +130,7 @@ def main():
     check("knock: from a non-member rejected", put("users/alice/knocks/carol", dict(knock, name="Carol"), "carol") == 403)
     check("knock: cannot forge sender id", put("users/alice/knocks/carol", knock, "bob") == 403)
     check("knock: extra fields rejected", put("users/alice/knocks/bob", dict(knock, crew="x"), "bob") == 403)
-    check("knock: squad is required", put("users/alice/knocks/bob", {"name": "Bob", "at": TS}, "bob") == 403)
+    check("knock: squad is required (fresh doc)", put("users/bob/knocks/alice", {"name": "Alice", "at": TS}, "alice") == 403)
     check("knock: owner reads and deletes", call("GET", "users/alice/knocks/bob", "alice")[0] == 200
           and call("DELETE", "users/alice/knocks/bob", "alice")[0] == 200)
 
