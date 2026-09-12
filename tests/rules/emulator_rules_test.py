@@ -1,14 +1,17 @@
 """Rules tests against the Firestore EMULATOR — the only kind that proves
 what firestore.rules enforces. Run from the repo root:
 
-    cd tests/rules && firebase emulators:exec --only firestore \
-        --project demo-due-crew "python3 emulator_rules_test.py"
+    firebase emulators:exec --only firestore --project demo-due-crew \
+        "python3 tests/rules/emulator_rules_test.py"
+
+(firebase.json at the repo root points the emulator at firestore.rules; the
+emulator refuses rules files outside its project directory.)
 
 The emulator accepts unsigned JWTs and uses their claims for request.auth,
 so each actor below is just a bearer token with a `sub`. Admin writes (to
 seed state the client could never write itself) use `Bearer owner`.
 
-NOT EXECUTED where this file was written (no firebase-tools / Java there).
+Runs in CI on every push (.github/workflows/tests.yml).
 """
 
 import base64

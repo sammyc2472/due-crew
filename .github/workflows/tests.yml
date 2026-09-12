@@ -50,5 +50,4 @@ jobs:
         with:
           node-version: "20"
       - run: npm install -g firebase-tools
-      - run: firebase emulators:exec --only firestore --project demo-due-crew "python3 emulator_rules_test.py"
-        working-directory: tests/rules
+      - run: firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"
