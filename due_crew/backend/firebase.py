@@ -1,9 +1,9 @@
 """Firebase REST client for Due Crew.
 
-Call budget is the design constraint: the whole board loads in 3 requests
+Call budget is the design constraint: the whole board loads in 4 requests
 (own profile, all friend profiles, one batchGet for stats + shared decks +
-cheers). Stats are only requested for people who added you back, so a
-pending invite can never fail the batch.
+cheers, one list of my knocks). Stats are only requested for people who
+added you back, so a pending invite can never fail the batch.
 
 Failure is never conflated with absence: batch_get and list_friends raise
 TransportError on any non-200, so callers keep their caches and their
@@ -62,7 +62,12 @@ class AuthError(Exception):
 
 
 class TransportError(Exception):
-    """Request failed (network, 5xx, 429, auth) — the data may still exist."""
+    """Request failed (network, 5xx, 429, auth) — the data may still exist.
+    `status` is the HTTP status when there was a response, else None."""
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 def _fv(v):
@@ -284,6 +289,7 @@ class FirebaseClient:
                 tmp = self.session_file + ".tmp"
                 with open(tmp, "w") as f:
                     json.dump(dict(self.session), f)
+                os.chmod(tmp, 0o600)  # holds the refresh token
                 os.replace(tmp, self.session_file)
             except OSError:
                 pass
@@ -413,6 +419,12 @@ class FirebaseClient:
             return None, r.status_code
         return _parse(r.json().get("fields")), 200
 
+    # Writes to my own documents can only be refused by rules drift; a 403
+    # on any of these flips the footer's "server catching up" hint. Social
+    # writes (cheers, knocks, squad admin) are refused by design in normal
+    # use and must not.
+    HINT_LABELS = ("profile", "daily stats", "shared decks", "heatmap", "away")
+
     def patch_doc(self, path, data, mask=None, label=None):
         """label: names the write in a console line when the server rejects
         it — a silent False here once hid a rules gap for weeks."""
@@ -423,7 +435,7 @@ class FirebaseClient:
         if not ok and label:
             print(f"due crew: {label} write rejected ({r.status_code}) at {path}"
                   " — if this persists, re-publish firestore.rules")
-            if r.status_code == 403:
+            if r.status_code == 403 and label in self.HINT_LABELS:
                 # instant stale-rules hint; the daily probe can clear it
                 self.session["rules_stale_hint"] = True
                 self._save_session()
@@ -467,7 +479,7 @@ class FirebaseClient:
         r = self._req("POST", f"{self.base}:batchGet",
                       json={"documents": [f"{self.doc_root}/{p}" for p in paths]})
         if r.status_code != 200:
-            raise TransportError(f"batchGet failed: {r.status_code}")
+            raise TransportError(f"batchGet failed: {r.status_code}", r.status_code)
         for item in r.json():
             if "found" in item:
                 name = item["found"]["name"]
@@ -500,7 +512,7 @@ class FirebaseClient:
         r = self._req("POST", url, json={"structuredQuery": self._structured(
             collection, filters, order_by, limit)})
         if r.status_code != 200:
-            raise TransportError(f"query failed: {r.status_code}")
+            raise TransportError(f"query failed: {r.status_code}", r.status_code)
         out = []
         for item in r.json():
             doc = item.get("document")
@@ -527,7 +539,7 @@ class FirebaseClient:
                else f"{self.base}:runAggregationQuery")
         r = self._req("POST", url, json=body)
         if r.status_code != 200:
-            raise TransportError(f"aggregation failed: {r.status_code}")
+            raise TransportError(f"aggregation failed: {r.status_code}", r.status_code)
         out = {}
         for item in r.json():
             fields = (item.get("result") or {}).get("aggregateFields") or {}
@@ -543,7 +555,7 @@ class FirebaseClient:
         so callers never mistake an outage for an empty crew."""
         own, status = self.get_doc(f"users/{uid}")
         if own is None:
-            raise TransportError(f"own profile unavailable: {status}")
+            raise TransportError(f"own profile unavailable: {status}", status)
         friends = [f for f in (own.get("friends") or []) if isinstance(f, str)]
         profiles = self.batch_get([f"users/{f}" for f in friends])
         resolved, pending = [], []
@@ -890,7 +902,7 @@ class FirebaseClient:
         if doc is None:
             if status == 404:
                 return None
-            raise TransportError(f"squad get failed: {status}")
+            raise TransportError(f"squad get failed: {status}", status)
         rows = []
         for uid, fields in self.run_query("members", parent=f"squads/{sid}",
                                           limit=1000):
@@ -948,7 +960,7 @@ class FirebaseClient:
         request per refresh. Raises TransportError."""
         r = self._req("GET", f"{self.base}/users/{uid}/knocks?pageSize=50")
         if r.status_code != 200:
-            raise TransportError(f"knocks list failed: {r.status_code}")
+            raise TransportError(f"knocks list failed: {r.status_code}", r.status_code)
         docs = {doc["name"].rsplit("/", 1)[-1]: _parse(doc.get("fields"))
                 for doc in r.json().get("documents", [])}
         if not docs:

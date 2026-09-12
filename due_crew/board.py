@@ -15,6 +15,7 @@ ahead of mine still renders as fresh.
 import datetime as _dt
 import html as _html
 import json as _json
+import re as _re
 import time
 from datetime import date as _date, datetime, timezone
 
@@ -398,7 +399,9 @@ def _css(cfg):
 
 
 def _pycmd(cmd):
-    return f"pycmd('duecrew:{cmd}'); return false;"
+    """Only ids and keys ride in commands; anything else is dropped so a
+    server-sourced id could never close the quote it sits in."""
+    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_-]', '', str(cmd))}'); return false;"
 
 
 def _head(period):

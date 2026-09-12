@@ -32,3 +32,13 @@ a non-zero exit if one fails to build:
 Both crashes shipped on 2026-09-10 (a PyQt6 enum mix and a shadowed tab
 widget) fail here in under a second. Run it before any release that
 touches `due_crew/ui/`.
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs on every push and pull request:
+
+| Job | What it proves |
+| --- | --- |
+| `suite` | `python3 tests/test_due_crew.py` on a clean Python 3.12. |
+| `dialogs` | Every Qt dialog builds under PyQt6 offscreen; the PNGs are attached as an artifact so you can look at them. |
+| `rules` | `firestore.rules` enforced by the real Firestore emulator (firebase-tools + Java on the runner) — the check this machine cannot run. |

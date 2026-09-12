@@ -177,11 +177,16 @@ class FakeFirestore:
     def _member_shape(self, f):
         if not set(f) <= self.MEMBER_FIELDS:
             return False
-        if not isinstance((f.get("name") or {}).get("stringValue"), str):
+        if not self._str_ok(f, "name", 60) or "name" not in f:
             return False
-        if "reviews" in f:
-            r = f["reviews"] or {}
-            if "integerValue" not in r or int(r["integerValue"]) < 0:
+        for key in ("reviews", "studyTimeMs", "streak"):
+            if key in f:
+                r = f[key] or {}
+                if "integerValue" not in r or int(r["integerValue"]) < 0:
+                    return False
+        if "accuracy" in f:
+            a = _num(f["accuracy"])
+            if a is None or not 0 <= a <= 100:
                 return False
         if "day" in f and not self.DAY_RE.fullmatch((f["day"] or {}).get("stringValue", "")):
             return False
@@ -194,10 +199,21 @@ class FakeFirestore:
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
     DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
+    @staticmethod
+    def _str_ok(f, key, limit):
+        if key not in f:
+            return True
+        v = (f[key] or {}).get("stringValue")
+        return isinstance(v, str) and len(v) <= limit
+
     def _can_write(self, path, uid, method="PATCH", fields=None):
         m = re.fullmatch(r"users/([^/]+)", path)
         if m:
-            return uid == m.group(1)
+            f = fields or {}
+            friends = (f.get("friends") or {}).get("arrayValue", {}).get("values", [])
+            return (uid == m.group(1) and self._str_ok(f, "displayName", 60)
+                    and ("friends" not in f or ("arrayValue" in f["friends"]
+                                                and len(friends) <= 500)))
         m = re.fullmatch(r"users/([^/]+)/daily_stats/[^/]+", path)
         if m:
             return uid == m.group(1)
@@ -219,6 +235,8 @@ class FakeFirestore:
             return (uid == sender and uid in self._friends_of(owner)
                     and set(f) <= allowed
                     and (f.get("emoji") or {}).get("stringValue") in self.CHEERS
+                    and self._str_ok(f, "name", 60)
+                    and "timestampValue" in (f.get("at") or {})
                     and ("note" not in f
                          or (isinstance(note, str) and len(note) <= 80)))
         m = re.fullmatch(r"users/([^/]+)/knocks/([^/]+)", path)
@@ -234,7 +252,10 @@ class FakeFirestore:
                         and self._open_board(sender) and set(f) <= {"name", "at"})
             squad = (f.get("squad") or {}).get("stringValue")
             return (uid == sender and set(f) <= {"name", "at", "squad"}
-                    and isinstance(squad, str) and self._member(squad, sender)
+                    and isinstance(squad, str) and len(squad) <= 40
+                    and self._str_ok(f, "name", 60)
+                    and "timestampValue" in (f.get("at") or {})
+                    and self._member(squad, sender)
                     and self._member(squad, owner))
         m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
         if m:
@@ -280,7 +301,7 @@ class FakeFirestore:
     def _can_read(self, path, uid, listing=False):
         m = re.fullmatch(r"users/([^/]+)", path)
         if m:
-            return uid is not None
+            return uid is not None and not listing
         m = re.fullmatch(r"users/([^/]+)/(daily_stats|shared)/([^/]+)", path)
         if m:
             owner = m.group(1)
@@ -307,7 +328,7 @@ class FakeFirestore:
         if m:
             return self.rules_mode == "v3" and self._open_board(uid)
         if re.fullmatch(r"friend_codes/[^/]+", path):
-            return True
+            return not listing
         return False
 
     # -- request handling --------------------------------------------------

@@ -46,7 +46,12 @@ def call(method, path, uid=None, body=None, query=""):
         return e.code, {}
 
 
+TS = {"timestampValue": "2026-09-10T12:00:00Z"}
+
+
 def fv(v):
+    if isinstance(v, dict):
+        return v  # pre-encoded, e.g. TS
     if isinstance(v, bool):
         return {"booleanValue": v}
     if isinstance(v, int):
@@ -74,7 +79,7 @@ def main():
     for u, friends in (("alice", ["dave"]), ("bob", []), ("carol", []), ("dave", ["alice"])):
         put(f"users/{u}", {"displayName": u.title(), "friends": friends}, "owner")
     sid = "a" * 24
-    squad = {"name": "busm", "founder": "alice", "open": True, "createdAt": "t"}
+    squad = {"name": "busm", "founder": "alice", "open": True, "createdAt": TS}
 
     # -- squads: the id is the invite; only the founder shapes it
     check("squad: founder creates", put(f"squads/{sid}", squad, "alice") in (200, 201))
@@ -86,7 +91,7 @@ def main():
     check("squad: no listing", call("GET", "squads", "alice")[0] == 403)
 
     # -- members: join while open, own row only, allowed shape only
-    member = {"name": "Alice", "joinedAt": "t"}
+    member = {"name": "Alice", "joinedAt": TS}
     check("member: founder joins own squad", put(f"squads/{sid}/members/alice", member, "alice") in (200, 201))
     check("member: bob joins while open", put(f"squads/{sid}/members/bob", dict(member, name="Bob"), "bob") in (200, 201))
     check("member: cannot join as someone else", put(f"squads/{sid}/members/carol", member, "bob") == 403)
@@ -113,13 +118,13 @@ def main():
     check("lock: founder cannot be handed off", put(f"squads/{sid}", {"founder": "bob"}, "alice") == 403)
 
     # -- knocks: both in the same squad
-    knock = {"name": "Bob", "at": "t", "squad": sid}
+    knock = {"name": "Bob", "at": TS, "squad": sid}
     check("knock: squadmate to squadmate", put("users/alice/knocks/bob", knock, "bob") in (200, 201))
     check("knock: to a non-member rejected", put("users/carol/knocks/bob", knock, "bob") == 403)
     check("knock: from a non-member rejected", put("users/alice/knocks/carol", dict(knock, name="Carol"), "carol") == 403)
     check("knock: cannot forge sender id", put("users/alice/knocks/carol", knock, "bob") == 403)
     check("knock: extra fields rejected", put("users/alice/knocks/bob", dict(knock, crew="x"), "bob") == 403)
-    check("knock: squad is required", put("users/alice/knocks/bob", {"name": "Bob", "at": "t"}, "bob") == 403)
+    check("knock: squad is required", put("users/alice/knocks/bob", {"name": "Bob", "at": TS}, "bob") == 403)
     check("knock: owner reads and deletes", call("GET", "users/alice/knocks/bob", "alice")[0] == 200
           and call("DELETE", "users/alice/knocks/bob", "alice")[0] == 200)
 
@@ -131,7 +136,7 @@ def main():
     check("board: after leaving, reads are denied", call("GET", f"squads/{sid}/members", "bob")[0] == 403)
 
     # -- cheers: friends only, three emoji, optional note <= 80 (rules-v5)
-    cheer = {"emoji": "🔥", "name": "Dave", "at": "t"}
+    cheer = {"emoji": "🔥", "name": "Dave", "at": TS}
     check("cheer: friend sends", put("users/alice/cheers/dave", cheer, "dave") in (200, 201))
     check("cheer: with a note", put("users/alice/cheers/dave", dict(cheer, note="you're on fire"), "dave") in (200, 201))
     check("cheer: note over 80 chars rejected", put("users/alice/cheers/dave", dict(cheer, note="x" * 81), "dave") == 403)
@@ -139,6 +144,16 @@ def main():
     check("cheer: extra field rejected", put("users/alice/cheers/dave", dict(cheer, link="http://x"), "dave") == 403)
     check("cheer: non-friend rejected", put("users/alice/cheers/bob", cheer, "bob") == 403)
     check("cheer: only the owner reads", call("GET", "users/alice/cheers/dave", "dave")[0] == 403)
+
+    # -- v2.4 hardening: no listing of people or codes; bounded strings
+    check("profile: get by uid allowed", call("GET", "users/alice", "bob")[0] == 200)
+    check("profile: listing users denied", call("GET", "users", "bob")[0] == 403)
+    check("profile: listing friend codes denied", call("GET", "friend_codes", "bob")[0] == 403)
+    check("profile: 61-char display name rejected", put("users/bob", {"displayName": "x" * 61}, "bob") == 403)
+    check("profile: 60-char display name allowed", put("users/bob", {"displayName": "x" * 60}, "bob") == 200)
+    check("cheer: at must be a timestamp", put("users/alice/cheers/dave", {"emoji": "🔥", "name": "Dave", "at": "t"}, "dave") == 403)
+    check("member: negative study time rejected", put(f"squads/{sid}/members/alice", {"studyTimeMs": -5}, "alice") == 403)
+    check("member: retention over 100 rejected", put(f"squads/{sid}/members/alice", {"accuracy": 101.5}, "alice") == 403)
 
     # -- friendship consent unchanged
     put("users/alice/daily_stats/2026-09-06", {"reviews": 10}, "alice")

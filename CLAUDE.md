@@ -19,6 +19,10 @@ maintainer. The repo is the source of truth; there is no build step.
   fake Firestore; standard library only) and `tests/rules/` (the real
   rules, in the Firestore emulator — needs firebase-tools + Java). See
   `tests/README.md`. `docs/manual-anki-checklist.md` is the click-test.
+- `.github/workflows/tests.yml` runs all three on every push: the suite,
+  the offscreen dialog build, and the rules in the emulator. Check the
+  Actions tab before a release; the rules job is the only place the
+  deployed rules text is ever proven.
 
 ## Releasing
 
@@ -31,8 +35,9 @@ maintainer. The repo is the source of truth; there is no build step.
    "server catching up" until the paste lands). A rules change that closes
    a path older clients use (v2.0 closed `server_board` and the directory)
    is a breaking change: say so in the release notes. A removal-only
-   change (dropping a retired path) needs no marker bump: no client
-   depends on it.
+   change (dropping a retired path) or a tightening no shipped client
+   trips (bounds, `get` instead of `read`) needs no marker bump: no
+   client depends on it — but it still needs the console paste.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
 4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the

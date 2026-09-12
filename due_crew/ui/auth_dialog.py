@@ -12,8 +12,10 @@ from . import accent, attach_alive, danger, run_bg
 
 ERRORS = {
     "INVALID_LOGIN_CREDENTIALS": "Email or password is incorrect.",
-    "INVALID_PASSWORD": "Incorrect password.",
-    "EMAIL_NOT_FOUND": "No account for that email.",
+    # both say the same thing: a sign-in form must not confirm whether an
+    # email has an account
+    "INVALID_PASSWORD": "Email or password is incorrect.",
+    "EMAIL_NOT_FOUND": "Email or password is incorrect.",
     "EMAIL_EXISTS": "That email already has an account. Sign in instead.",
     "WEAK_PASSWORD": "Password needs at least 6 characters.",
     "INVALID_EMAIL": "That doesn't look like an email address.",

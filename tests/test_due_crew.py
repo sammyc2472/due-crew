@@ -872,6 +872,46 @@ def test_deletion_sweep():
     finally:
         fakes.FakeSession.post = real_post
 
+
+def test_hardening_v24():
+    """The audit fixes that have a pure edge: command whitelist, error
+    status, and per-sender cheer bookkeeping."""
+    import due_crew
+    check("pycmd: ids and keys pass, quote-breakers are dropped",
+          board._pycmd("profile:abc_1-2") == "pycmd('duecrew:profile:abc_1-2'); return false;"
+          and "'" not in board._pycmd("x:a')alert(1)//").replace("pycmd('duecrew:", "", 1)[:-len("'); return false;")])
+    err = firebase.TransportError("query failed: 403", 403)
+    check("transport error carries its status", err.status == 403 and str(err) == "query failed: 403")
+    a1 = {"from": "a", "at": "2026-09-10T10:00:00Z", "emoji": "🔥", "name": "A", "note": ""}
+    b_far = {"from": "b", "at": "9999-01-01T00:00:00Z", "emoji": "🎉", "name": "B", "note": ""}
+    fresh, seen = due_crew._fresh_cheers([a1, b_far], None, "")
+    check("cheers: first run plays everything and marks per sender",
+          [c["from"] for c in fresh] == ["a", "b"] and seen == {"a": a1["at"], "b": b_far["at"]})
+    a2 = dict(a1, at="2026-09-10T11:00:00Z")
+    fresh2, seen2 = due_crew._fresh_cheers([a2, b_far], seen, "")
+    check("cheers: a forged far-future stamp from B cannot hide A's next cheer",
+          [c["from"] for c in fresh2] == ["a"] and seen2["a"] == a2["at"])
+    fresh3, seen3 = due_crew._fresh_cheers([a2], seen2, "")
+    check("cheers: nothing new plays nothing; departed senders are forgotten",
+          fresh3 == [] and seen3 == {"a": a2["at"]})
+    fresh4, _ = due_crew._fresh_cheers([a1, a2], None, a1["at"])
+    check("cheers: migration folds the old global mark in (older stays quiet)",
+          [c["at"] for c in fresh4] == [a2["at"]])
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    cl = new_client(store, "sam", "Sammy")
+    check("rules: users and codes cannot be listed",
+          cl._req("GET", f"{cl.base}/users?pageSize=50").status_code == 403
+          and cl._req("GET", f"{cl.base}/friend_codes?pageSize=50").status_code == 403)
+    check("rules: a 61-char display name is refused, 60 is fine",
+          not cl.patch_doc("users/sam", {"displayName": "x" * 61})
+          and cl.patch_doc("users/sam", {"displayName": "x" * 60}))
+    check("hint: a refused social write does not flip the rules-stale hint",
+          not cl.patch_doc("users/zed/knocks/sam", {"name": "S", "squad": "x",
+                                                    "at": {"timestampValue": "t"}}, label="knock")
+          and not cl.session.get("rules_stale_hint"))
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
