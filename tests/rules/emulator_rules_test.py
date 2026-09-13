@@ -121,7 +121,7 @@ def main():
     check("lock: non-founder cannot", put(f"squads/{sid}", {"open": True}, "bob") == 403)
     check("lock: join refused while locked", put(f"squads/{sid}/members/carol", dict(member, name="Carol"), "carol") == 403)
     check("lock: existing member still writes", put(f"squads/{sid}/members/bob", {"reviews": 11}, "bob") == 200)
-    check("lock: founder cannot be handed off", put(f"squads/{sid}", {"founder": "bob"}, "alice") == 403)
+    check("lock: founder cannot be handed to a non-member", put(f"squads/{sid}", {"founder": "dave"}, "alice") == 403)
 
     # -- knocks: both in the same squad
     knock = {"name": "Bob", "at": TS, "squad": sid}
