@@ -161,6 +161,34 @@ def main():
     check("member: negative study time rejected", put(f"squads/{sid}/members/alice", {"studyTimeMs": -5}, "alice") == 403)
     check("member: retention over 100 rejected", put(f"squads/{sid}/members/alice", {"accuracy": 101.5}, "alice") == 403)
 
+    # -- v2.5: friend edges, emoji, week, ban list, founder handoff
+    check("edge: owner creates", put("users/alice/friends/carol", {"at": TS}, "alice") in (200, 201))
+    check("edge: extra field rejected", put("users/alice/friends/bob", {"at": TS, "note": "x"}, "alice") == 403)
+    check("edge: cannot write someone else's", put("users/bob/friends/alice", {"at": TS}, "alice") == 403)
+    check("edge: the named friend may get it", call("GET", "users/alice/friends/carol", "carol")[0] == 200)
+    check("edge: a third person may not", call("GET", "users/alice/friends/carol", "bob")[0] == 403)
+    check("edge: only the owner lists", call("GET", "users/alice/friends", "carol")[0] == 403
+          and call("GET", "users/alice/friends", "alice")[0] == 200)
+    put("users/alice/daily_stats/2026-09-13", {"reviews": 3}, "alice")
+    check("edge: grants stats like the array does", call("GET", "users/alice/daily_stats/2026-09-13", "carol")[0] == 200)
+    check("edge: owner deletes", call("DELETE", "users/alice/friends/carol", "alice")[0] == 200)
+    check("edge: stats close with it", call("GET", "users/alice/daily_stats/2026-09-13", "carol")[0] == 403)
+    check("profile: emoji within bounds", put("users/bob", {"emoji": "🦊"}, "bob") == 200)
+    check("profile: 17-char emoji field rejected", put("users/bob", {"emoji": "x" * 17}, "bob") == 403)
+    check("member: week and emoji accepted", put(f"squads/{sid}/members/alice", {"week": 5, "emoji": "🐢"}, "alice") == 200)
+    check("member: week over 7 rejected", put(f"squads/{sid}/members/alice", {"week": 8}, "alice") == 403)
+    put(f"squads/{sid}", {"open": True}, "alice")
+    put(f"squads/{sid}/members/bob", dict(member, name="Bob"), "owner")
+    check("ban: founder sets the list", put(f"squads/{sid}", {"banned": ["bob"]}, "alice") == 200)
+    check("ban: non-founder cannot", put(f"squads/{sid}", {"banned": ["alice"]}, "bob") == 403)
+    call("DELETE", f"squads/{sid}/members/bob", "alice")
+    check("ban: a blocked person cannot rejoin an open squad", put(f"squads/{sid}/members/bob", dict(member, name="Bob"), "bob") == 403)
+    check("ban: others still can", put(f"squads/{sid}/members/carol", dict(member, name="Carol"), "carol") in (200, 201))
+    check("handoff: to a non-member rejected", put(f"squads/{sid}", {"founder": "dave"}, "alice") == 403)
+    check("handoff: to a member allowed", put(f"squads/{sid}", {"founder": "carol"}, "alice") == 200)
+    check("handoff: the old founder lost the keys", put(f"squads/{sid}", {"open": False}, "alice") == 403)
+    check("handoff: the new founder has them", put(f"squads/{sid}", {"open": False}, "carol") == 200)
+
     # -- friendship consent unchanged
     put("users/alice/daily_stats/2026-09-06", {"reviews": 10}, "alice")
     check("stats: friend reads", call("GET", "users/alice/daily_stats/2026-09-06", "dave")[0] == 200)
@@ -175,7 +203,7 @@ def main():
     check("retired: directory is gone", call("GET", "server_names/busm", "alice")[0] == 403)
 
     # -- markers cumulative
-    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6"):
+    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
     check("marker rules-v9: not provisioned (403)", call("GET", "meta/rules-v9", "alice")[0] == 403)
 

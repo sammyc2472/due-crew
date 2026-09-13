@@ -4,6 +4,7 @@ Run: python3 test_due_crew.py
 """
 
 import datetime
+import json
 import os
 import re
 import sqlite3
@@ -911,6 +912,142 @@ def test_hardening_v24():
           not cl.patch_doc("users/zed/knocks/sam", {"name": "S", "squad": "x",
                                                     "at": {"timestampValue": "t"}}, label="knock")
           and not cl.session.get("rules_stale_hint"))
+
+
+def test_v25_edges_emoji_week():
+    """2.5: friend edges mirror the array (and vouch for add-backs on their
+    own), crew emoji, the squad week count, block list, founder handoff."""
+    from due_crew import share, shares
+    from due_crew.stats import week_days
+    ce = firebase.clean_emoji
+    check("emoji: one glyph passes, with skin tone and joiners; text does not",
+          ce("🦊") == "🦊" and ce(" 🐢 ") == "🐢" and ce("👍🏽") == "👍🏽"
+          and ce("👩‍💻") == "👩‍💻" and ce("🇺🇸") == "🇺🇸" and ce("🦊🐢") == "🦊"
+          and ce("A") == "" and ce("<b>") == "" and ce("") == "" and ce(None) == "")
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve"},
+               {"sam": ["dre"], "dre": [], "eve": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    col = make_user_col([TODAY])
+    files = tempfile.mkdtemp()
+    stats = gather_stats(col, files)
+    sam.upload_today("sam", "Sammy", TODAY.isoformat(), stats, {"emoji": "🦊"})
+    check("edges: first upload mirrors the existing array once, and the emoji lands",
+          "users/sam/friends/dre" in store.docs
+          and store.docs["users/sam"]["emoji"] == {"stringValue": "🦊"}
+          and sam.session["friend_edges"] == {"uid": "sam", "ids": ["dre"]})
+    n0 = len(store.log)
+    sam.upload_today("sam", "Sammy", TODAY.isoformat(), stats, {"emoji": "🦊"})
+    check("edges: steady state writes no edge",
+          not any(p.startswith("users/sam/friends/") for m, p, st in store.log[n0:] if m == "PATCH"))
+    sam.set_friends("sam", ["dre", "eve"])
+    check("edges: adding writes one edge; the array stays for older clients",
+          "users/sam/friends/eve" in store.docs
+          and [v["stringValue"] for v in store.docs["users/sam"]["friends"]["arrayValue"]["values"]] == ["dre", "eve"])
+    sam.set_friends("sam", ["eve"])
+    check("edges: removing deletes the edge", "users/sam/friends/dre" not in store.docs)
+    # eve added sam by array only (an older client); dre will add sam by edge only (a 2.6 client)
+    store.docs["users/dre"]["friends"] = fakes.fv_str("") if False else store.docs["users/dre"]["friends"]
+    store.docs["users/dre"]["friends"] = {"arrayValue": {"values": []}}
+    store.docs["users/dre/friends/sam"] = {"at": {"timestampValue": "t"}}
+    sam.set_friends("sam", ["dre", "eve"])
+    _own, resolved, pending = sam.list_friends("sam", check_edges=True)
+    mutual = {fid: m for fid, _p, m in resolved}
+    check("edges: an add-back is seen through the edge alone, or the array alone",
+          mutual == {"dre": True, "eve": True} and pending == [], str(mutual))
+    _own, resolved, _p = sam.list_friends("sam", check_edges=False)
+    check("edges: without the edge check, an edge-only add-back reads pending (cheap path)",
+          {fid: m for fid, _p, m in resolved} == {"dre": False, "eve": True})
+    store.auth_uid = "eve"
+    eve = new_client(store, "eve", "Eve")
+    check("edges: only the two people on an edge can read it",
+          eve._req("GET", f"{eve.base}/users/sam/friends/eve").status_code == 200
+          and eve._req("GET", f"{eve.base}/users/sam/friends/dre").status_code == 403
+          and eve._req("GET", f"{eve.base}/users/sam/friends?pageSize=50").status_code == 403)
+    # rules: isFriend honours the edge — dre reads sam's stats via the edge, eve via the array
+    store.auth_uid = "dre"
+    dre = new_client(store, "dre", "Dre")
+    check("edges: rules grant stats to an edge friend",
+          dre._req("GET", f"{dre.base}/users/sam/daily_stats/{TODAY.isoformat()}").status_code == 200)
+
+    # ---- squads: week + emoji on rows, block, handoff ----
+    store.auth_uid = "sam"
+    squad = sam.create_squad("sam", "busm", "Sammy")
+    sid = squad["id"]
+    store.auth_uid = "dre"
+    dre.join_squad("dre", sid, "Dre")
+    row = {"name": "Dre", "reviews": 10, "studyTimeMs": 1000, "streak": 1, "week": 5, "emoji": "🐢"}
+    check("squad row: week and emoji ride along", dre.upload_squad_rows("dre", dict(row, day=TODAY.isoformat()), [sid]) == [])
+    check("squad row: week outside 0..7 is refused",
+          dre._patch_status(f"squads/{sid}/members/dre", {"week": 9}, ["week"]) == 403)
+    check("week_days counts the last seven days from the revlog",
+          week_days(StatsQueries(make_user_col([TODAY, TODAY - datetime.timedelta(days=1),
+                                                TODAY - datetime.timedelta(days=9)]))) == 2)
+    store.auth_uid = "sam"
+    data = sam.fetch_squad(sid)
+    drow = next(r for r in data["rows"] if r["user_id"] == "dre")
+    check("squad fetch: week, emoji, and the ban list come back",
+          drow["week"] == 5 and drow["emoji"] == "🐢" and data["banned"] == [])
+    store.auth_uid = "dre"
+    check("block: non-founder cannot", not dre.block_member(sid, "sam", []))
+    store.auth_uid = "sam"
+    check("block: founder blocks; the member is gone",
+          sam.block_member(sid, "dre", data["banned"]) and f"squads/{sid}/members/dre" not in store.docs)
+    store.auth_uid = "dre"
+    check("block: rejoining is refused even with the door open",
+          dre.join_squad("dre", sid, "Dre") == 403)
+    store.auth_uid = "eve"
+    eve.join_squad("eve", sid, "Eve")
+    store.auth_uid = "sam"
+    check("handoff: only to a member",
+          not sam.set_founder(sid, "dre") and sam.set_founder(sid, "eve")
+          and store.docs[f"squads/{sid}"]["founder"] == {"stringValue": "eve"})
+    check("handoff: the old founder can no longer lock", not sam.set_squad_open(sid, False))
+
+    # ---- rendering + shares ----
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    rows = [{"user_id": "u1", "name": "igk", "emoji": "🐢", "day": labels[0], "reviews": 1412,
+             "time_ms": 10920000, "retention": 92.1, "streak": 88, "week": 7},
+            {"user_id": "sam", "name": "Sammy", "emoji": "🦊", "day": labels[0], "reviews": 512,
+             "time_ms": 4320000, "retention": 91.6, "streak": 17, "week": 6, "you": True},
+            {"user_id": "u3", "name": "Priya", "emoji": "", "day": labels[0], "reviews": 301,
+             "time_ms": 2400000, "retention": 94.2, "streak": 2, "week": None}]
+    view = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}], "current": "abc",
+            "name": "busm", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
+            "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
+    html = board._squads_html(view, {"sort": "week"})
+    check("squad board: emoji in front of names, a Week column, sortable by it",
+          "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
+          and "&#128197; Week &#9662;" in html and "squadshare" in html
+          and html.index("igk") < html.index("Sammy") < html.index("Priya"))
+    crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
+                                       "paused": False, "last_updated": "", "exam_date": "",
+                                       "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
+                         "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week"}, 0)
+    check("crew board: emoji by the name; the squads-only sort falls back to reviews",
+          "🦊 Sammy" in crew and "&#128218; Reviews &#9662;" in crew)
+    js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
+    esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
+    check("own card: emoji by the name and a link to change it",
+          esc("🦊 Sammy") in js and "duecrew:emoji" in js and "Change emoji" in js)
+    card = board.stranger_card_js({"uid": "u1", "name": "igk", "emoji": "🐢", "reviews": 1,
+                                   "time_ms": 1, "retention": None, "streak": 1, "rank": 1,
+                                   "squad": "busm", "today": True, "pending": False,
+                                   "knocked_me": False, "founder_me": True})
+    check("squadmate card: founder sees Remove, Block, Make founder",
+          "duecrew:squadkick:u1" in card and "duecrew:squadblock:u1" in card
+          and "duecrew:squadfounder:u1" in card and esc("🐢 igk") in card)
+    text = share.squad_today("busm", labels[0], [("igk", "🐢", 1412), ("Sammy", "🦊", 512),
+                                                 ("Priya", "", 301), ("Zed", "", 5)], 4, 2230)
+    check("squad share: headline, together line, top three with emoji",
+          text.split("\n")[1] == "4 studying · 2,230 reviews together"
+          and text.split("\n")[2] == "🟩 🐢 igk 1,412 · 🦊 Sammy 512 · Priya 301", text)
+    week = list(reversed(labels))
+    crew_txt = share.crew_week("busm", week, [("Sammy", [True] * 7, "", "🦊"), ("igk", [True] * 7, "")], 1, 1)
+    check("crew week share: emoji rows, plain rows unchanged",
+          "🟩🟩🟩🟩🟩🟩🟩 🦊 Sammy" in crew_txt and "🟩🟩🟩🟩🟩🟩🟩 igk" in crew_txt)
+    check("share module still has the four builders", callable(shares._crew_week_text))
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

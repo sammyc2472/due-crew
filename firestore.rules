@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules (v2.4: hardening — no listing of users or
-// codes, bounded strings and numbers; v2.3: squads; v2.2: cheer notes;
-// v2.0: one hosted backend).
+// Due Crew — Firestore rules (v2.5: friend edges, crew emoji, squad week
+// counts, block list and founder handoff; v2.4: hardening; v2.3: squads;
+// v2.2: cheer notes; v2.0: one hosted backend).
 //
 // Model: friendship is consent-based. Your own `friends` array controls who
 // may read your daily stats. The client only ever writes documents it owns.
@@ -22,9 +22,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // v2.5: a friendship is an edge doc users/{owner}/friends/{friend} that
+    // only the two of them can see. The profile's `friends` array is still
+    // honoured during the changeover (older clients write only that).
     function isFriend(userId) {
-      return isAuthenticated() &&
-             request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends;
+      return isAuthenticated()
+             && (exists(/databases/$(database)/documents/users/$(userId)/friends/$(request.auth.uid))
+                 || ('friends' in get(/databases/$(database)/documents/users/$(userId)).data
+                     && request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.friends));
     }
 
     function isSquadMember(squadId) {
@@ -42,22 +47,30 @@ service cloud.firestore {
     function profileShape(data) {
       return (!('displayName' in data)
               || (data.displayName is string && data.displayName.size() <= 60))
-             && (!('friends' in data) || (data.friends is list && data.friends.size() <= 500));
+             && (!('friends' in data) || (data.friends is list && data.friends.size() <= 500))
+             && (!('emoji' in data) || (data.emoji is string && data.emoji.size() <= 16));
     }
 
     function squadShape(data) {
-      return data.keys().hasOnly(['name', 'founder', 'open', 'createdAt'])
+      return data.keys().hasOnly(['name', 'founder', 'open', 'createdAt', 'banned'])
              && data.name is string
              && data.name.size() >= 1
              && data.name.size() <= 24
-             && data.open is bool;
+             && data.open is bool
+             && (!('banned' in data) || (data.banned is list && data.banned.size() <= 200));
+    }
+
+    function isBanned(squadId) {
+      return 'banned' in squadDoc(squadId) && request.auth.uid in squadDoc(squadId).banned;
     }
 
     function memberShape(data) {
       return data.keys().hasOnly(['name', 'joinedAt', 'day', 'reviews', 'studyTimeMs',
-                                  'accuracy', 'streak', 'updatedAt'])
+                                  'accuracy', 'streak', 'updatedAt', 'week', 'emoji'])
              && data.name is string
              && data.name.size() <= 60
+             && (!('week' in data) || (data.week is int && data.week >= 0 && data.week <= 7))
+             && (!('emoji' in data) || (data.emoji is string && data.emoji.size() <= 16))
              && (!('reviews' in data) || (data.reviews is int && data.reviews >= 0))
              && (!('studyTimeMs' in data) || (data.studyTimeMs is int && data.studyTimeMs >= 0))
              && (!('streak' in data) || (data.streak is int && data.streak >= 0))
@@ -72,6 +85,17 @@ service cloud.firestore {
 
       allow create, update: if isOwner(userId) && profileShape(request.resource.data);
       allow delete: if isOwner(userId);
+
+      // v2.5: one doc per person I've added. Readable by me and by that
+      // person (so they can tell I added them back); never listable by
+      // anyone else, so nobody can read off a friend graph.
+      match /friends/{friendId} {
+        allow get: if isOwner(userId) || (isAuthenticated() && request.auth.uid == friendId);
+        allow list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && request.resource.data.keys().hasOnly(['at']);
+        allow delete: if isOwner(userId);
+      }
 
       match /daily_stats/{statsId} {
         // Stats are readable only by the owner and people the owner added.
@@ -129,9 +153,11 @@ service cloud.firestore {
       allow create: if isAuthenticated()
                     && request.resource.data.founder == request.auth.uid
                     && squadShape(request.resource.data);
+      // the founder may hand the squad to a current member (v2.5)
       allow update: if isAuthenticated()
                     && resource.data.founder == request.auth.uid
-                    && request.resource.data.founder == resource.data.founder
+                    && (request.resource.data.founder == resource.data.founder
+                        || exists(/databases/$(database)/documents/squads/$(squadId)/members/$(request.resource.data.founder)))
                     && squadShape(request.resource.data);
       allow delete: if isAuthenticated() && resource.data.founder == request.auth.uid;
 
@@ -142,6 +168,7 @@ service cloud.firestore {
         allow read: if isAuthenticated() && isSquadMember(squadId);
         allow create: if isOwner(userId)
                       && squadDoc(squadId).open == true
+                      && !isBanned(squadId)
                       && memberShape(request.resource.data);
         allow update: if isOwner(userId)
                       && memberShape(request.resource.data);
@@ -156,7 +183,7 @@ service cloud.firestore {
     // (newer rules must still satisfy older clients' probes); add a version
     // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6', 'rules-v7'];
       allow list, create, update, delete: if false;
     }
 

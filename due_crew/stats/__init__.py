@@ -53,6 +53,12 @@ def duet_runs(my_days, their_days, today_label):
     return current, best
 
 
+def week_days(q):
+    """How many of the last 7 days (today included) had at least one answer.
+    The squad board's "Week" column: one honest int, no per-day docs."""
+    return len({d for d in q.studied_days_ago(7) if 0 <= d <= 6})
+
+
 WEEK_WINDOW = 60  # bounds the per-sync scan; runs older than this are rare
 
 

@@ -150,17 +150,22 @@ class FakeFirestore:
 
     # -- rules ------------------------------------------------------------
     def _friends_of(self, uid):
+        """Who `uid` has added: the profile array (clients to 2.4) plus the
+        edge docs (2.5+) — the rules honour both during the changeover."""
         doc = self.docs.get(f"users/{uid}", {})
         arr = doc.get("friends", {}).get("arrayValue", {}).get("values", [])
-        return [v.get("stringValue") for v in arr]
+        ids = [v.get("stringValue") for v in arr]
+        prefix = f"users/{uid}/friends/"
+        ids += [p[len(prefix):] for p in self.docs if p.startswith(prefix) and p.count("/") == 3]
+        return ids
 
     def _open_board(self, uid):
         doc = self.docs.get(f"users/{uid}", {})
         return doc.get("openBoard", {}).get("booleanValue") is True
 
-    SQUAD_FIELDS = {"name", "founder", "open", "createdAt"}
+    SQUAD_FIELDS = {"name", "founder", "open", "createdAt", "banned"}
     MEMBER_FIELDS = {"name", "joinedAt", "day", "reviews", "studyTimeMs",
-                     "accuracy", "streak", "updatedAt"}
+                     "accuracy", "streak", "updatedAt", "week", "emoji"}
 
     def _founder(self, sid):
         return (self.docs.get(f"squads/{sid}", {}).get("founder") or {}).get("stringValue")
@@ -170,9 +175,15 @@ class FakeFirestore:
 
     def _squad_shape(self, f):
         name = (f.get("name") or {}).get("stringValue")
+        banned = (f.get("banned") or {}).get("arrayValue", {}).get("values", [])
         return (set(f) <= self.SQUAD_FIELDS and isinstance(name, str)
                 and 1 <= len(name) <= 24
-                and isinstance((f.get("open") or {}).get("booleanValue"), bool))
+                and isinstance((f.get("open") or {}).get("booleanValue"), bool)
+                and ("banned" not in f or ("arrayValue" in f["banned"] and len(banned) <= 200)))
+
+    def _banned(self, sid):
+        arr = (self.docs.get(f"squads/{sid}", {}).get("banned") or {}).get("arrayValue", {}).get("values", [])
+        return [v.get("stringValue") for v in arr]
 
     def _member_shape(self, f):
         if not set(f) <= self.MEMBER_FIELDS:
@@ -188,12 +199,18 @@ class FakeFirestore:
             a = _num(f["accuracy"])
             if a is None or not 0 <= a <= 100:
                 return False
+        if "week" in f:
+            w = f["week"] or {}
+            if "integerValue" not in w or not 0 <= int(w["integerValue"]) <= 7:
+                return False
+        if not self._str_ok(f, "emoji", 16):
+            return False
         if "day" in f and not self.DAY_RE.fullmatch((f["day"] or {}).get("stringValue", "")):
             return False
         return True
 
     CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6"),
+    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
 
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
@@ -212,8 +229,14 @@ class FakeFirestore:
             f = fields or {}
             friends = (f.get("friends") or {}).get("arrayValue", {}).get("values", [])
             return (uid == m.group(1) and self._str_ok(f, "displayName", 60)
+                    and self._str_ok(f, "emoji", 16)
                     and ("friends" not in f or ("arrayValue" in f["friends"]
                                                 and len(friends) <= 500)))
+        m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
+        if m:
+            if self.rules_mode != "repo" or uid != m.group(1):
+                return False
+            return method == "DELETE" or set(fields or {}) <= {"at"}
         m = re.fullmatch(r"users/([^/]+)/daily_stats/[^/]+", path)
         if m:
             return uid == m.group(1)
@@ -276,8 +299,9 @@ class FakeFirestore:
                 return ((f.get("founder") or {}).get("stringValue") == uid
                         and self._squad_shape(f))
             merged = dict(existing, **f)
+            new_founder = (merged.get("founder") or {}).get("stringValue")
             return (self._founder(m.group(1)) == uid
-                    and (merged.get("founder") or {}).get("stringValue") == uid
+                    and (new_founder == uid or self._member(m.group(1), new_founder))
                     and self._squad_shape(merged))
         m = re.fullmatch(r"squads/([^/]+)/members/([^/]+)", path)
         if m:
@@ -293,6 +317,8 @@ class FakeFirestore:
                 sq = self.docs.get(f"squads/{sid}")
                 if not sq or (sq.get("open") or {}).get("booleanValue") is not True:
                     return False
+                if uid in self._banned(sid):
+                    return False
             return self._member_shape(dict(existing or {}, **(fields or {})))
         if re.fullmatch(r"friend_codes/[^/]+", path):
             return uid is not None
@@ -302,6 +328,14 @@ class FakeFirestore:
         m = re.fullmatch(r"users/([^/]+)", path)
         if m:
             return uid is not None and not listing
+        m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
+        if m:
+            owner, friend = m.groups()
+            if self.rules_mode != "repo":
+                return False
+            if listing:
+                return uid == owner
+            return uid == owner or uid == friend
         m = re.fullmatch(r"users/([^/]+)/(daily_stats|shared)/([^/]+)", path)
         if m:
             owner = m.group(1)

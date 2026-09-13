@@ -95,7 +95,7 @@ def _crew_week_text(q, stats, labels):
             continue
         if e["you"]:
             flags, r, t = _my_week(q, labels)
-            rows.append((e["name"], flags, ""))
+            rows.append((e["name"], flags, "", e.get("emoji") or ""))
             reviews += r
             time_ms += t
             continue
@@ -104,7 +104,8 @@ def _crew_week_text(q, stats, labels):
         agg = board._week_row(days, labels) or {}
         reviews += int(agg.get("reviews") or 0)
         time_ms += int(agg.get("time_ms") or 0)
-        rows.append((e["name"], flags, _as_of(e.get("last_updated"), labels)))
+        rows.append((e["name"], flags, _as_of(e.get("last_updated"), labels),
+                     e.get("emoji") or ""))
     if not rows:
         flags, r, t = _my_week(q, labels)
         rows.append((client().display_name or "Me", flags, ""))

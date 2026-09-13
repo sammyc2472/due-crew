@@ -52,7 +52,7 @@ def palette(theme, accent=DEFAULT_ACCENT):
 NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
-SORT_KEYS = ("reviews", "time", "retention", "streak")
+SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads")
 HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
            ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
@@ -179,6 +179,12 @@ def sort_key(cfg):
     return key if key in SORT_KEYS else "reviews"
 
 
+def _label(name, emoji=""):
+    """Escaped name, with the person's emoji in front when they have one."""
+    out = _html.escape(str(name))
+    return f"{_html.escape(str(emoji))} {out}" if emoji else out
+
+
 def _away_text(doc, today_lb):
     """Badge text for a day doc flagged away: when they're back, if known."""
     try:
@@ -206,6 +212,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
     fresh, stale, quiet, paused = [], [], [], []
     for e in entries:
         row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
+               "emoji": e.get("emoji") or "",
                "paused": e["paused"], "last_updated": e["last_updated"],
                "reviews": None, "time_ms": None, "retention": None,
                "streak": None, "stale": False, "quiet": False,
@@ -248,8 +255,8 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                 # a quiet friend stays on the board — that's when a cheer lands
                 row["quiet"] = True
                 quiet.append(row)
-    field = {"reviews": "reviews", "time": "time_ms",
-             "retention": "retention", "streak": "streak"}[sort_key(cfg)]
+    field = {"reviews": "reviews", "time": "time_ms", "retention": "retention",
+             "streak": "streak", "week": "reviews"}[sort_key(cfg)]
     order = lambda r: r[field] if r[field] is not None else -1
     fresh.sort(key=order, reverse=True)
     stale.sort(key=order, reverse=True)
@@ -416,7 +423,7 @@ def _head(period):
 
 
 def _row_html(row, rank, cfg):
-    name = _html.escape(str(row["name"]))
+    name = _label(row["name"], row.get("emoji"))
     cls = "you" if row["you"] else ""
     extra = ""
     la = ""
@@ -471,6 +478,8 @@ def _table_html(data, cfg, period):
     fresh, dormant = build_rows(data["entries"], data["labels"],
                                 data.get("tomorrow", ""), period, cfg)
     heads = "<th></th><th></th>"
+    if sort == "week":
+        sort = "reviews"
     for key, label in HEADERS:
         on = "on" if key == sort else ""
         arrow = " &#9662;" if key == sort else ""
@@ -528,7 +537,8 @@ def _decks_html(data, deltas=None):
 
 
 SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
-                "retention": "retention", "streak": "streak"}
+                "retention": "retention", "streak": "streak", "week": "week"}
+SQUAD_HEADERS = HEADERS + (("week", "&#128197; Week"),)
 
 
 def _switcher(view):
@@ -580,14 +590,14 @@ def _squads_html(view, cfg):
                      f'{int(view.get("reviews") or 0):,} reviews together')
     heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
              f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
-    for key, label in HEADERS:
+    for key, label in SQUAD_HEADERS:
         on = "on" if key == sort else ""
         arrow = " &#9662;" if key == sort else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
     body = ""
     for i, r in enumerate(live + rest):
-        pname = _html.escape(str(r["name"]))
+        pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
         cls, note = "", ""
         if r.get("you"):
@@ -615,9 +625,12 @@ def _squads_html(view, cfg):
                  f'<td class="n">{_cell(r.get("reviews"), lambda v: format(v, ","))}</td>'
                  f'<td class="n">{_cell(r.get("time_ms"), _fmt_time)}</td>'
                  f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
-                 f'<td class="n">{_cell(r.get("streak"))}</td></tr>')
+                 f'<td class="n">{_cell(r.get("streak"))}</td>'
+                 f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
     link_css = 'style="color: var(--dc-accent); font-weight: 700; text-decoration: none;"'
-    acts = [f'<a href="#" {link_css} onclick="{_pycmd("squadinvite")}">Copy invite</a>']
+    acts = [f'<a href="#" {link_css} onclick="{_pycmd("squadinvite")}">Copy invite</a>',
+            f'<a href="#" {link_css} title="Copy today for the chat" '
+            f'onclick="{_pycmd("squadshare")}">Share</a>']
     if view.get("founder_me"):
         acts.append(f'<a href="#" {link_css} onclick="{_pycmd("squadlock")}">'
                     f'{"Open" if view.get("open") is False else "Lock"}</a>')
@@ -808,7 +821,7 @@ def stranger_card_js(info):
     no cheer, no celebration: we don't necessarily know them. info: uid,
     name, reviews, time_ms, retention, streak, rank, squad, today (bool),
     pending, knocked_me, founder_me."""
-    name = _html.escape(str(info.get("name", "?")))
+    name = _label(info.get("name", "?"), info.get("emoji"))
     squad = _html.escape(str(info.get("squad") or "squad"))
     where = (f'#{int(info["rank"])} in {squad} today' if info.get("rank")
              else f'in {squad}')
@@ -835,10 +848,12 @@ def stranger_card_js(info):
     else:
         act_label = _json.dumps("\U0001F91D Add")
         act_cmd, act_primary = _json.dumps(f"duecrew:knock:{uid}"), "true"
+    extras = []
     if info.get("founder_me"):
-        extra_cmd, extra_label = _json.dumps(f"duecrew:squadkick:{uid}"), _json.dumps("Remove")
-    else:
-        extra_cmd, extra_label = _json.dumps(None), _json.dumps("")
+        extras = [("Remove", f"duecrew:squadkick:{uid}"),
+                  ("Block", f"duecrew:squadblock:{uid}"),
+                  ("Make founder", f"duecrew:squadfounder:{uid}")]
+    extras_json = _json.dumps(extras)
     return """
     (function() {
         var old = document.getElementById('dc-profile');
@@ -862,7 +877,7 @@ def stranger_card_js(info):
         body.innerHTML = %s;
         card.appendChild(body);
         var row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:8px;margin-top:12px;';
+        row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;';
         var actCmd = %s;
         var act = document.createElement('button');
         act.textContent = %s;
@@ -885,19 +900,19 @@ def stranger_card_js(info):
             (night ? '#3d403b' : '#e2e2da') + ';';
         close.addEventListener('click', function() { back.remove(); });
         row.appendChild(act);
-        var extraCmd = %s;
-        if (extraCmd) {
+        var extras = %s;
+        extras.forEach(function(pair) {
             var extra = document.createElement('button');
-            extra.textContent = %s;
+            extra.textContent = pair[0];
             extra.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
                 'background:none;color:inherit;opacity:0.8;border:1px solid ' +
                 (night ? '#3d403b' : '#e2e2da') + ';';
             extra.addEventListener('click', function() {
                 back.remove();
-                if (typeof pycmd !== 'undefined') { pycmd(extraCmd); }
+                if (typeof pycmd !== 'undefined') { pycmd(pair[1]); }
             });
             row.appendChild(extra);
-        }
+        });
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
         row.appendChild(spacer);
@@ -912,7 +927,7 @@ def stranger_card_js(info):
         });
         document.body.appendChild(back);
     })();
-    """ % (inner, act_cmd, act_label, act_primary, extra_cmd, extra_label)
+    """ % (inner, act_cmd, act_label, act_primary, extras_json)
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
@@ -937,7 +952,7 @@ def profile_overlay_js(profile):
     and the cheer button becomes a Privacy shortcut. Everything user-sourced
     is escaped here; the JS only injects the built HTML and wires buttons."""
     you = bool(profile.get("you"))
-    name = _html.escape(str(profile.get("name", "?")))
+    name = _label(profile.get("name", "?"), profile.get("emoji"))
     kicker = ""
     if you:
         kicker = ('<div style="font-size: 10px; font-weight: 700; '
@@ -975,6 +990,12 @@ def profile_overlay_js(profile):
         quoted = f'&ldquo;{_html.escape(status)}&rdquo;' if status else ""
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
                  f'{quoted}{edit}</div>')
+    if you:
+        link = ('style="color: inherit; text-decoration: none; '
+                'border-bottom: 1px dotted currentColor;"')
+        head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
+                 f'<a href="#" {link} onclick="{_pycmd("emoji")}">'
+                 f'{"Change emoji" if profile.get("emoji") else "Pick an emoji"}</a></div>')
 
     cells = profile.get("cells")
     if cells is None:

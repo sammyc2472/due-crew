@@ -30,12 +30,14 @@ from .app import (CHEER_EMOJI, HEATMAP_DAYS, STREAK_MILESTONES, _migrate_server_
                   save_cfg)
 from .backend.firebase import TransportError
 from .shares import _share
-from .social import (_cheer_menu, _edit_status, _fresh_cheers, _open_profile, _play_cheers,
-                     _send_cheer)
-from .squads import (_add_back, _copy_invite, _dismiss_knock, _drop_squad, _fetch_squad,
-                     _kick_member, _leave_squad, _my_squads, _open_squad_card, _select_squad,
-                     _send_knock, _squad_view, _toggle_squad_lock, _visible_knocks, open_squads)
-from .stats import gather_stats, gather_week
+from .backend.firebase import clean_emoji
+from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
+                     _play_cheers, _send_cheer)
+from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
+                     _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
+                     _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
+                     _toggle_squad_lock, _visible_knocks, open_squads)
+from .stats import gather_stats, gather_week, week_days
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
@@ -247,7 +249,10 @@ def _on_did_render(deck_browser):
     _play_cheers()
 
 
-def _on_sync_done():
+def _on_sync_done(full=False):
+    """Upload everything that changed, then fetch. Anki's sync hook and the
+    board's Refresh both land here, so Refresh never leaves your own row
+    behind; Refresh asks for the full week."""
     if not mw.col or not client().signed_in:
         return
     c = cfg()
@@ -279,8 +284,15 @@ def _on_sync_done():
                "streak": int(stats.streak)}
         if stats.accuracy is not None:
             row["accuracy"] = float(stats.accuracy)
+        try:
+            row["week"] = week_days(StatsQueries(mw.col))
+        except Exception:
+            traceback.print_exc()
+        emoji = clean_emoji(c.get("emoji"))
+        if emoji:
+            row["emoji"] = emoji
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat, squad_row=row)
+                  heatmap=heat, squad_row=row, full=full)
 
 
 def _on_js(handled, message, context):
@@ -300,7 +312,7 @@ def _on_js(handled, message, context):
         if parts[2] == "squads":
             _fetch_squad()
     elif cmd == "refresh":
-        refresh_board(full=True)
+        _on_sync_done(full=True)  # push my own numbers too, then fetch the week
         if c.get("period") == "squads":
             _fetch_squad(force=True)
     elif cmd == "friends":
@@ -313,6 +325,8 @@ def _on_js(handled, message, context):
         _cheer_menu(parts[2])
     elif cmd == "status":
         _edit_status()
+    elif cmd == "emoji":
+        _edit_emoji()
     elif cmd == "profile" and len(parts) > 2:
         _open_profile(parts[2])
     elif cmd == "evedismiss":
@@ -354,6 +368,12 @@ def _on_js(handled, message, context):
         _leave_squad()
     elif cmd == "squadkick" and len(parts) > 2:
         _kick_member(parts[2])
+    elif cmd == "squadblock" and len(parts) > 2:
+        _block_member(parts[2])
+    elif cmd == "squadfounder" and len(parts) > 2:
+        _make_founder(parts[2])
+    elif cmd == "squadshare":
+        _share_squad()
     elif cmd == "squaddrop" and len(parts) > 2:
         _drop_squad(parts[2])
     elif cmd == "addback" and len(parts) > 2:

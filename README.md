@@ -24,6 +24,8 @@ streak means what it says.
 - **Shared decks** — progress bars through decks you have in common
   (seen and mature counts). Decks match automatically by note fingerprint:
   AnKing and other imported decks pair up with no setup.
+- **Crew emoji** — pick one emoji from your own card and it sits in front
+  of your name on the board, on cards, and in shares.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
   how many of the same days you've both studied, and your current run of
   days studied together. Click your own name to see your card exactly as
@@ -42,10 +44,11 @@ streak means what it says.
 - **Squads** — a private board for any group: a class, a Discord, a
   study group. Join with an invite code, or create one and share yours.
   Squadmates see your name and today's reviews, time, retention, and
-  streak, nothing more. Plain ranks, everyone in the squad, Today only.
-  The founder can lock the door and remove people; anyone can leave. Tap a
-  name to add someone; you're crew when they add back, and the board tells
-  you when someone adds you.
+  streak, plus how many of the last seven days they studied. Plain ranks,
+  everyone in the squad, Today only. The founder can lock the door, remove
+  or block people, and hand the squad on; anyone can leave. Tap a name to
+  add someone; you're crew when they add back, and the board tells you when
+  someone adds you. Share copies the day's headline for the group chat.
 - **Share it** — paste-ready for the group chat: your week as seven
   squares (🟩🟩🟩⬜🟩🟩🟩 6 of 7 days), the crew's week as a row per
   person, or today's numbers in one line — each signed with the add-on
@@ -82,9 +85,9 @@ restart Anki after installing.
 ## Privacy
 
 Due Crew runs on one hosted backend (the maintainer pays for it). Stats
-live there, readable only by people you've added — and, in any squad you
-join, a single name-and-today's-numbers row readable by that squad's
-members. Squads have no directory: only people holding the invite code can
+live there, readable only by people you've added, and who you've added is
+visible only to you and to them — and, in any squad you join, a single
+name-and-today's-numbers row readable by that squad's members. Squads have no directory: only people holding the invite code can
 find one, and the founder can lock it. All of it is enforced server-side
 by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)

@@ -117,7 +117,8 @@ def _open_squad_card(uid):
                   key=lambda r: r[field] if r[field] is not None else -1, reverse=True)
     rank = next((i + 1 for i, r in enumerate(live) if r["user_id"] == uid), None)
     mw.web.eval(board.stranger_card_js({
-        "uid": uid, "name": row["name"], "reviews": row["reviews"],
+        "uid": uid, "name": row["name"], "emoji": row.get("emoji") or "",
+        "reviews": row["reviews"],
         "time_ms": row["time_ms"], "retention": row["retention"],
         "streak": row["streak"], "rank": rank, "squad": view.get("name") or "",
         "today": row["day"] == view.get("day"), "pending": row["pending"],
@@ -254,6 +255,82 @@ def _toggle_squad_lock():
             tooltip("Couldn't change that.")
 
     _bg(lambda: cl.set_squad_open(cur["id"], new_open), done)
+
+
+def _block_member(uid):
+    """Founder: remove and keep them out, even with the code and an open
+    door. The list rides the squad doc (rules-v7)."""
+    cur = _current_squad()
+    sq = _state["squad"]
+    if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
+        return
+    row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
+    if row is None or not askUser(
+            f"Block {html.escape(row['name'])}? They leave "
+            f"{html.escape(cur.get('name') or 'the squad')} and can't rejoin."):
+        return
+    cl = client()
+    banned = list(sq["data"].get("banned") or [])
+
+    def done(ok):
+        if ok:
+            sq["data"]["rows"] = [r for r in sq["data"]["rows"] if r["user_id"] != uid]
+            sq["data"]["banned"] = sorted(set(banned) | {uid})
+            tooltip("Blocked.")
+            app.swap(cfg())
+        else:
+            tooltip("Couldn't block them.")
+
+    _bg(lambda: cl.block_member(cur["id"], uid, banned), done)
+
+
+def _make_founder(uid):
+    """Founder: hand the squad to a member. Lock and remove move with it;
+    you stay a member."""
+    cur = _current_squad()
+    sq = _state["squad"]
+    if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
+        return
+    row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
+    if row is None or not askUser(
+            f"Make {html.escape(row['name'])} the founder of "
+            f"{html.escape(cur.get('name') or 'the squad')}? You can't undo this."):
+        return
+    cl = client()
+
+    def done(ok):
+        if ok:
+            sq["data"]["founder"] = uid
+            c = cfg()
+            for entry in c.get("squads") or []:
+                if entry.get("id") == cur["id"]:
+                    entry["founder"] = uid
+            save_cfg(c)
+            tooltip(f"{html.escape(row['name'])} is the founder now.")
+            app.swap(cfg())
+        else:
+            tooltip("Couldn't hand it off.")
+
+    _bg(lambda: cl.set_founder(cur["id"], uid), done)
+
+
+def _share_squad():
+    """Squad footer → Share: today's headline for the group chat, from the
+    cached rows."""
+    from . import share
+    view = _squad_view()
+    if view.get("state") != "ok":
+        return
+    live = sorted([r for r in view.get("rows") or [] if r.get("day") == view.get("day")],
+                  key=lambda r: r.get("reviews") or 0, reverse=True)
+    text = share.squad_today(view.get("name") or "Squad", view.get("day", ""),
+                             [(r["name"], r.get("emoji") or "", r.get("reviews")) for r in live],
+                             len(live), view.get("reviews") or 0)
+    if text is None:
+        tooltip("No one's studied yet today.")
+        return
+    copy_text(text)
+    tooltip("Copied.")
 
 
 def _kick_member(uid):

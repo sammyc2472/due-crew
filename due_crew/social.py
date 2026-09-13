@@ -9,6 +9,7 @@ from aqt.utils import tooltip
 
 from . import app, board
 from .app import CHEER_EMOJI, HEATMAP_DAYS, _bg, _pending_cheers, _state, cfg, client, save_cfg
+from .backend.firebase import clean_emoji
 from .stats import duet_runs
 from .stats.queries import StatsQueries
 
@@ -102,6 +103,33 @@ def _edit_status():
     tooltip("Status set." if text else "Status cleared.")
 
 
+def _edit_emoji():
+    """Own card → "Pick an emoji" / "Change emoji". One glyph, in front of
+    your name everywhere your crew sees it. Empty removes it."""
+    from aqt.qt import QInputDialog
+    c = cfg()
+    current = str(c.get("emoji") or "")
+    text, ok = QInputDialog.getText(
+        mw, "Emoji", "One emoji, shown in front of your name. Empty removes it.",
+        text=current)
+    if not ok:
+        return
+    emoji = clean_emoji(text)
+    if text.strip() and not emoji:
+        tooltip("That isn't an emoji.")
+        return
+    if emoji == current:
+        return
+    c["emoji"] = emoji
+    save_cfg(c)
+    for e in _state["entries"] or []:  # show it now; the upload confirms it
+        if e["you"]:
+            e["emoji"] = emoji
+    app.rerender()
+    app.sync()
+    tooltip("Emoji set." if emoji else "Emoji removed.")
+
+
 def _open_profile(uid):
     entry = next((e for e in (_state["entries"] or [])
                   if e["user_id"] == uid), None)
@@ -155,6 +183,7 @@ def _open_profile(uid):
                 "same_days": same, "decks_line": decks_line, "uid": uid,
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
                 "duet": duet, "status": status, "away": away,
+                "emoji": entry.get("emoji") or "",
             }))
 
     # your own card fetches your own heatmap doc: the honest, as-uploaded

@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v6"
+RULES_MARKER = "rules-v7"
 
 
 def firestore_base(project_id):
@@ -132,6 +132,33 @@ def clean_note(text, limit=NOTE_MAX):
         return ""
     one_line = " ".join(text.split())
     return "".join(ch for ch in one_line if ch.isprintable())[:limit]
+
+
+EMOJI_MAX = 16  # code points: one emoji, with its modifiers and joiners
+
+
+def clean_emoji(text):
+    """One emoji (a single grapheme, joiners and modifiers included) or ''.
+    Letters, digits, and punctuation never pass — this is a face, not a
+    second name field."""
+    if not isinstance(text, str):
+        return ""
+    text = text.strip()
+    if not text:
+        return ""
+    first = ord(text[0])
+    if first < 0x2190 or not text[0].isprintable():
+        return ""
+    out = ""
+    for i, ch in enumerate(text):
+        code = ord(ch)
+        joiner = code in (0x200D, 0xFE0F) or 0x1F3FB <= code <= 0x1F3FF or 0x1F1E6 <= code <= 0x1F1FF
+        if i > 0 and not joiner and ord(text[i - 1]) != 0x200D:
+            break
+        out += ch
+        if len(out) >= EMOJI_MAX:
+            break
+    return out
 
 
 def away_range(cfg):
@@ -252,13 +279,16 @@ def _clean_member(uid, fields):
     except ValueError:
         day = ""
     acc = _as_float(fields.get("accuracy"))
+    week = _as_int(fields.get("week"))
     return {"user_id": str(uid),
             "name": str(fields.get("name", "?")),
+            "emoji": clean_emoji(fields.get("emoji")),
             "day": day,
             "reviews": _as_int(fields.get("reviews")),
             "time_ms": _as_int(fields.get("studyTimeMs")),
             "retention": acc if acc is not None and 0 <= acc <= 100 else None,
-            "streak": _as_int(fields.get("streak"))}
+            "streak": _as_int(fields.get("streak")),
+            "week": week if week is not None and 0 <= week <= 7 else None}
 
 
 class FirebaseClient:
@@ -423,7 +453,7 @@ class FirebaseClient:
     # on any of these flips the footer's "server catching up" hint. Social
     # writes (cheers, knocks, squad admin) are refused by design in normal
     # use and must not.
-    HINT_LABELS = ("profile", "daily stats", "shared decks", "heatmap", "away")
+    HINT_LABELS = ("profile", "daily stats", "shared decks", "heatmap", "away", "friend")
 
     def patch_doc(self, path, data, mask=None, label=None):
         """label: names the write in a console line when the server rejects
@@ -549,25 +579,64 @@ class FirebaseClient:
 
     # ---- friends ----
 
-    def list_friends(self, uid):
+    def list_friends(self, uid, check_edges=False):
         """(own_fields, [(fid, prof, mutual)], pending_names).
-        Raises TransportError on any failure, including a missing own profile,
-        so callers never mistake an outage for an empty crew."""
+        Mutual = they added me back: their profile array says so (clients up
+        to 2.4) or their edge doc users/{fid}/friends/{me} exists (2.5+).
+        The edge check is one batchGet, only for people the array can't
+        vouch for, and only when asked (full fetches) — a read per pending
+        friend per day. Raises TransportError on any failure, including a
+        missing own profile, so callers never mistake an outage for an
+        empty crew."""
         own, status = self.get_doc(f"users/{uid}")
         if own is None:
             raise TransportError(f"own profile unavailable: {status}", status)
         friends = [f for f in (own.get("friends") or []) if isinstance(f, str)]
         profiles = self.batch_get([f"users/{f}" for f in friends])
+        by_array = {fid for fid in friends
+                    if uid in ((profiles.get(f"users/{fid}") or {}).get("friends") or [])}
+        by_edge = set()
+        unsure = [fid for fid in friends if fid not in by_array
+                  and profiles.get(f"users/{fid}") is not None]
+        if check_edges and unsure:
+            edges = self.batch_get([f"users/{fid}/friends/{uid}" for fid in unsure])
+            by_edge = {fid for fid in unsure if edges.get(f"users/{fid}/friends/{uid}") is not None}
         resolved, pending = [], []
         for fid in friends:
             prof = profiles.get(f"users/{fid}")
             if prof is None:
                 continue  # deleted account; skip quietly
-            mutual = uid in (prof.get("friends") or [])
+            mutual = fid in by_array or fid in by_edge
             resolved.append((fid, prof, mutual))
             if not mutual:
                 pending.append(prof.get("displayName", "?"))
         return own, resolved, pending
+
+    def sync_friend_edges(self, uid, friends):
+        """Mirror my friends list as edge docs (users/{me}/friends/{fid}), the
+        shape 2.5+ clients read for "did they add me back". Session-guarded:
+        the steady state writes nothing; adding or removing a friend writes
+        or deletes one doc. Returns True when the mirror matches."""
+        want = sorted({f for f in friends if isinstance(f, str)})
+        state = self.session.get("friend_edges") or {}
+        have = set(state.get("ids") or [])
+        if state.get("uid") == uid and sorted(have) == want:
+            return True
+        ok = True
+        for fid in sorted(set(want) - have):
+            if self.patch_doc(f"users/{uid}/friends/{fid}",
+                              {"at": {"timestampValue": _now_ts()}}, label="friend"):
+                have.add(fid)
+            else:
+                ok = False
+        for fid in sorted(have - set(want)):
+            if self.delete_doc(f"users/{uid}/friends/{fid}"):
+                have.discard(fid)
+            else:
+                ok = False
+        self.session["friend_edges"] = {"uid": uid, "ids": sorted(have)}
+        self._save_session()
+        return ok
 
     def ensure_friend_code(self, uid, existing):
         if existing:
@@ -593,14 +662,18 @@ class FirebaseClient:
         prof, _ = self.get_doc(f"users/{fid}")
         if prof is None:
             return None, "That code doesn't match anyone."
-        if not self.patch_doc(f"users/{uid}", {"friends": own_friends + [fid]}):
+        if not self.set_friends(uid, own_friends + [fid]):
             return None, "Couldn't save. Try again."
         return {"user_id": fid,
                 "name": prof.get("displayName", "?"),
                 "mutual": uid in (prof.get("friends") or [])}, None
 
     def set_friends(self, uid, friends):
-        return self.patch_doc(f"users/{uid}", {"friends": friends})
+        """The array (what every client reads today) and the edge mirror."""
+        ok = self.patch_doc(f"users/{uid}", {"friends": friends})
+        if ok:
+            self.sync_friend_edges(uid, friends)
+        return ok
 
     # ---- board ----
 
@@ -609,7 +682,7 @@ class FirebaseClient:
         label) is fetched too so friends ahead of my timezone stay live.
         Shared-deck docs only ride along when include_shared (full fetches).
         Raises TransportError on failure — the caller keeps its cache."""
-        own, resolved, pending = self.list_friends(uid)
+        own, resolved, pending = self.list_friends(uid, check_edges=include_shared)
         mutual = [(fid, prof) for fid, prof, m in resolved if m]
         people = [(uid, own)] + mutual
 
@@ -629,6 +702,7 @@ class FirebaseClient:
             entries.append({
                 "user_id": u,
                 "name": str(prof.get("displayName", "?")),
+                "emoji": clean_emoji(prof.get("emoji")),
                 "you": u == uid,
                 "paused": bool(prof.get("paused")),
                 "last_updated": prof.get("lastUpdated", ""),
@@ -725,11 +799,17 @@ class FirebaseClient:
         # examDate rides the always-in-the-mask pattern: unset, past, or
         # paused thereby DELETES it server-side, never stale. openBoard (the
         # v2.0–2.2 Everyone flag) is cleared the same way.
-        mask = list(profile) + ["examDate", "openBoard"]
+        mask = list(profile) + ["examDate", "openBoard", "emoji"]
         exam = _exam_value(cfg.get("exam_date"), label)
         if exam and not cfg.get("paused"):
             profile["examDate"] = exam
+        emoji = clean_emoji(cfg.get("emoji"))
+        if emoji:
+            profile["emoji"] = emoji
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
+        own, _status = self.get_doc(f"users/{uid}") if not self.session.get("friend_edges") else (None, 0)
+        if own is not None:  # first run on 2.5: mirror the existing list once
+            self.sync_friend_edges(uid, [f for f in (own.get("friends") or []) if isinstance(f, str)])
         if cfg.get("paused"):
             return ok
         values = {"reviews": int(stats.reviews),
@@ -889,6 +969,20 @@ class FirebaseClient:
         """Founder only, by rule."""
         return self.delete_doc(f"squads/{sid}/members/{member_uid}")
 
+    def block_member(self, sid, member_uid, banned):
+        """Founder only, by rule: add to the ban list, then remove. `banned`
+        is the current list (from the last fetch); the write replaces it."""
+        new = sorted(set(banned or []) | {member_uid})[:200]
+        if not self.patch_doc(f"squads/{sid}", {"banned": new}, ["banned"], label="squad block"):
+            return False
+        self.delete_doc(f"squads/{sid}/members/{member_uid}")
+        return True
+
+    def set_founder(self, sid, member_uid):
+        """Founder only, by rule; the new founder must already be a member."""
+        return self.patch_doc(f"squads/{sid}", {"founder": member_uid}, ["founder"],
+                              label="squad founder")
+
     def set_squad_open(self, sid, is_open):
         """Founder only, by rule. Locked = no new members, existing stay."""
         return self.patch_doc(f"squads/{sid}", {"open": bool(is_open)}, ["open"],
@@ -911,7 +1005,9 @@ class FirebaseClient:
                 rows.append(row)
         return {"id": sid, "name": clean_squad_name(doc.get("name")) or "?",
                 "founder": str(doc.get("founder") or ""),
-                "open": doc.get("open") is True, "rows": rows}
+                "open": doc.get("open") is True,
+                "banned": [b for b in (doc.get("banned") or []) if isinstance(b, str)],
+                "rows": rows}
 
     def upload_squad_rows(self, uid, row, squad_ids):
         """My row into every squad I'm in: the member doc gets today's
@@ -926,7 +1022,7 @@ class FirebaseClient:
             if hashes.get(sid) == digest:
                 continue
             status = self._patch_status(f"squads/{sid}/members/{uid}", data,
-                                        mask=list(row) + ["updatedAt"])
+                                        mask=sorted(set(row) | {"updatedAt", "emoji", "week"}))
             if status in (200, 201):
                 hashes[sid] = digest
             elif status == 403:
@@ -1000,6 +1096,7 @@ class FirebaseClient:
         self._delete_listed(f"users/{uid}/daily_stats")
         self._delete_listed(f"users/{uid}/cheers")
         self._delete_listed(f"users/{uid}/knocks")
+        self._delete_listed(f"users/{uid}/friends")
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
         for sid in squad_ids:

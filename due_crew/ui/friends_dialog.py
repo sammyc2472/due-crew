@@ -17,6 +17,13 @@ from aqt.utils import tooltip
 from . import accent, attach_alive, copy_text, run_bg
 
 
+def _with_emoji(prof):
+    from ..backend.firebase import clean_emoji
+    name = str(prof.get("displayName", "?"))
+    emoji = clean_emoji(prof.get("emoji"))
+    return f"{emoji} {name}" if emoji else name
+
+
 def invite_text(friend_code):
     """One paste with everything a friend needs."""
     return ("Study with me on Due Crew — Anki add-on 2035408484.\n"
@@ -130,7 +137,7 @@ class FriendsDialog(QDialog):
                 knocks = self.client.list_knocks(self.uid)
             except Exception:
                 knocks = []  # knocks are a bonus; never fail the dialog
-            return (code, [(fid, prof.get("displayName", "?"), mutual)
+            return (code, [(fid, _with_emoji(prof), mutual)
                            for fid, prof, mutual in resolved], knocks)
 
         def done(result, err):

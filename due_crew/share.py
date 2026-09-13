@@ -88,18 +88,35 @@ def crew_week(label, labels_oldest_first, rows, reviews, time_ms):
     that day, so later squares are unknown, not empty. Only people with
     at least one studied day get a row, most days first, then by name.
     None when nobody has a row."""
-    active = [(n, f, a) for n, f, a in rows if _studied(f)]
+    active = [r for r in rows if _studied(r[1])]
     if not active:
         return None
     active.sort(key=lambda r: (-_studied(r[1]), clean_name(r[0]).lower()))
     head = str(label or "Crew") + (f" · {date_range(labels_oldest_first)}"
                                    if date_range(labels_oldest_first) else "")
     lines = [head]
-    for name, flags, as_of in active:
-        line = f"{week_squares(flags)} {clean_name(name)}"
+    for row in active:
+        name, flags, as_of = row[0], row[1], row[2]
+        emoji = row[3] if len(row) > 3 and row[3] else ""
+        line = f"{week_squares(flags)} {emoji + ' ' if emoji else ''}{clean_name(name)}"
         if as_of:
             line += f" · as of {as_of}"
         lines.append(line)
     lines.append(f"{int(reviews):,} reviews · {_fmt_time(int(time_ms or 0))} together")
     lines.append(FOOTER)
     return "\n".join(lines)
+
+
+def squad_today(name, label, rows, studying, reviews):
+    """rows: [(name, emoji, reviews)] for people who studied today, best
+    first; the top three are named. None when nobody has."""
+    if not rows:
+        return None
+    head = clean_name(name) + (f" · {day_text(label)}" if day_text(label) else "")
+    who = " · ".join(f"{(e + ' ') if e else ''}{clean_name(n)} {int(r or 0):,}"
+                     for n, e, r in rows[:3])
+    return "\n".join([
+        head,
+        f"{int(studying):,} studying · {int(reviews):,} reviews together",
+        f"🟩 {who}",
+        FOOTER])

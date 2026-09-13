@@ -20,9 +20,13 @@ maintainer. The repo is the source of truth; there is no build step.
   rules, in the Firestore emulator — needs firebase-tools + Java). See
   `tests/README.md`. `docs/manual-anki-checklist.md` is the click-test.
 - `.github/workflows/tests.yml` runs all three on every push: the suite,
-  the offscreen dialog build, and the rules in the emulator. Check the
-  Actions tab before a release; the rules job is the only place the
-  deployed rules text is ever proven.
+  the offscreen dialog build, and the rules in the emulator. Green on all
+  three is the release gate; the rules job is the only place the deployed
+  rules text is ever proven.
+- Friendship data lives twice during the 2.5 changeover: the profile's
+  `friends` array (what clients up to 2.4 read) and edge docs
+  `users/{me}/friends/{fid}` (what 2.5+ reads for add-backs, and what the
+  rules honour). 2.6 stops writing the array once the crew is on 2.5.
 
 ## Releasing
 
@@ -39,7 +43,9 @@ maintainer. The repo is the source of truth; there is no build step.
    trips (bounds, `get` instead of `read`) needs no marker bump: no
    client depends on it — but it still needs the console paste.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
-4. Commit, push, `gh release create vX.Y.Z due_crew.ankiaddon`.
+4. Commit, push, wait for the Actions run: all three jobs green (suite,
+   dialogs, rules in the emulator) is the release gate — no zip goes out
+   on a red run. Then `gh release create vX.Y.Z due_crew.ankiaddon`.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 

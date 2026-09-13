@@ -17,6 +17,7 @@ Raw keys, for reference:
 | `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew sees |
 | `share_heatmap` | true/false | Heatmap on your profile card |
+| `emoji` | one emoji | Shown in front of your name; set from your own card |
 | `squads`, `squad` | list, id | Squads you've joined (with their invite codes) and the one shown; managed from the board |
 | `crew_label` | text | The name your crew goes by in shares ("busm today") |
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
