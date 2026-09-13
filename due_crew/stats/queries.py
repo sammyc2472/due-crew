@@ -62,6 +62,21 @@ class StatsQueries:
             cutoff - 1, start_ms, cutoff * 1000)
         return set(rows or [])
 
+    def daily_totals(self, days):
+        """{day_label: (answers, time_ms, correct, graded)} for the last
+        `days` days. One query; graded = learn/review/relearn answers, the
+        ones retention is measured on."""
+        cutoff = self._cutoff_s()
+        start_ms = (cutoff - days * 86400) * 1000
+        rows = self.col.db.all(
+            "SELECT CAST((? - id / 1000) / 86400 AS INTEGER), COUNT(*), SUM(time), "
+            "COUNT(CASE WHEN ease > 1 AND type IN (0, 1, 2) THEN 1 END), "
+            "COUNT(CASE WHEN type IN (0, 1, 2) THEN 1 END) "
+            "FROM revlog WHERE ease > 0 AND id >= ? AND id < ? GROUP BY 1",
+            cutoff - 1, start_ms, cutoff * 1000)
+        return {self.day_label(int(ago)): (int(n), int(t or 0), int(c or 0), int(g or 0))
+                for ago, n, t, c, g in rows or []}
+
     def heatmap_counts(self, days=182):
         """{day_label: answer_count} for the last `days` days. One query."""
         cutoff = self._cutoff_s()

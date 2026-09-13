@@ -59,6 +59,45 @@ def week_days(q):
     return len({d for d in q.studied_days_ago(7) if 0 <= d <= 6})
 
 
+def period_review(q, start, end):
+    """Everything a personal month or year review says, from one revlog pass
+    over the days `start`..`end` (dates, inclusive; the end is clamped to
+    today). None when the range is empty. Numbers are the person's own,
+    exact even for months before the add-on was installed."""
+    today = _dt.date.fromisoformat(q.day_label(0))
+    end = min(end, today)
+    if end < start:
+        return None
+    totals = q.daily_totals((today - start).days + 1)
+    lo, hi = start.isoformat(), end.isoformat()
+    per_day = {lb: v for lb, v in totals.items() if lo <= lb <= hi and v[0]}
+    reviews = sum(v[0] for v in per_day.values())
+    graded = sum(v[3] for v in per_day.values())
+    correct = sum(v[2] for v in per_day.values())
+    months = {}
+    for lb, v in per_day.items():
+        months[lb[:7]] = months.get(lb[:7], 0) + v[0]
+    run = best_run = 0
+    prev = None
+    for lb in sorted(per_day):
+        d = _dt.date.fromisoformat(lb)
+        run = run + 1 if prev is not None and (d - prev).days == 1 else 1
+        best_run = max(best_run, run)
+        prev = d
+    # ties go to the earliest day/month: max() keeps the first of equals
+    best_day = max(sorted(per_day.items()), key=lambda kv: kv[1][0], default=None)
+    best_month = max(sorted(months.items()), key=lambda kv: kv[1], default=None)
+    return {"start": start, "end": end,
+            "reviews": reviews,
+            "time_ms": sum(v[1] for v in per_day.values()),
+            "days": len(per_day),
+            "span": (end - start).days + 1,
+            "best_day": (best_day[0], best_day[1][0]) if best_day else None,
+            "best_month": best_month,
+            "longest_run": best_run,
+            "retention": (correct / graded * 100) if graded else None}
+
+
 WEEK_WINDOW = 60  # bounds the per-sync scan; runs older than this are rare
 
 

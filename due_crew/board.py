@@ -643,8 +643,31 @@ def _squads_html(view, cfg):
     return f"{sw}<table><tr>{heads}</tr>{body}</table>{foot}"
 
 
+def _review_banner(kind, info):
+    """Personal month or year review, above the board. Local numbers only."""
+    r = info["review"]
+    if kind == "month":
+        icon, title = "&#128197;", f'Your {_html.escape(str(info["name"]))}:'
+        cmd_copy, cmd_x = "monthcopy", "monthdismiss"
+    else:
+        icon, title = "&#127881;", f'Your {_html.escape(str(info["key"]))}:'
+        cmd_copy, cmd_x = "yearcopy", "yeardismiss"
+    bits = [f'{int(r["reviews"]):,} reviews', _fmt_time(int(r["time_ms"] or 0)),
+            f'{int(r["days"])} of {int(r["span"])} days']
+    if kind == "month" and r.get("best_day"):
+        bits.append(f'best day {int(r["best_day"][1]):,}')
+    if kind == "year" and int(r.get("longest_run") or 0) > 1:
+        bits.append(f'&#128293; {int(r["longest_run"])}-day run')
+    return (f'<div class="dc-wrap"><span>{icon}</span>'
+            f'<span><b>{title}</b> {" &middot; ".join(bits)}</span>'
+            f'<a class="wc" href="#" title="Copy for the chat" '
+            f'onclick="{_pycmd(cmd_copy)}">Copy</a>'
+            f'<a class="wx" href="#" title="Dismiss" '
+            f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
+
+
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
-           rules_stale=False, squad_view=None, knocks=None):
+           rules_stale=False, squad_view=None, knocks=None, reviews=None):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
@@ -652,6 +675,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
             else _table_html(data, cfg, period))
+    for kind in ("year", "month"):
+        if reviews and reviews.get(kind):
+            body = _review_banner(kind, reviews[kind]) + body
     for k in (knocks or [])[:3]:
         # someone in a squad added me: my add makes it mutual
         who = _html.escape(str(k.get("name", "?")))
@@ -1058,7 +1084,9 @@ def profile_overlay_js(profile):
         lines += (f'<div style="font-size: 12px; padding: 8px 0 0; opacity: 0.85;">'
                   f'Copy for the chat: <a href="#" {link} '
                   f'onclick="{_pycmd("sharetoday")}">today</a> &middot; '
-                  f'<a href="#" {link} onclick="{_pycmd("shareweek")}">week</a></div>')
+                  f'<a href="#" {link} onclick="{_pycmd("shareweek")}">week</a> &middot; '
+                  f'<a href="#" {link} onclick="{_pycmd("sharemonth")}">month</a> &middot; '
+                  f'<a href="#" {link} onclick="{_pycmd("shareyear")}">year</a></div>')
 
     inner = _json.dumps(head + grid + lines)
     if you:

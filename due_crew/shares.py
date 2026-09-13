@@ -10,9 +10,10 @@ from aqt.utils import tooltip
 from . import board
 from .app import _profile_files, _state, cfg, client
 from .backend.firebase import away_on
-from .stats import gather_stats
+from .stats import gather_stats, period_review
 from .stats.queries import StatsQueries
 from .ui import copy_text
+from .wrap import _wrap_data
 
 def _share(kind):
     """Main thread (collection access + clipboard). Builds one of the
@@ -32,6 +33,16 @@ def _share(kind):
                               stats.accuracy, stats.streak)
     elif kind == "shareweek":
         text = _my_week_text(q, stats, labels)
+    elif kind in ("sharemonth", "monthcopy"):
+        text = _month_text(q, last=(kind == "monthcopy"))
+        if text is None:
+            tooltip("No reviews that month.")
+            return
+    elif kind in ("shareyear", "yearcopy"):
+        text = _year_text(q, complete=(kind == "yearcopy"))
+        if text is None:
+            tooltip("No reviews that year.")
+            return
     else:
         text = _crew_week_text(q, stats, labels)
         if text is None:
@@ -112,3 +123,76 @@ def _crew_week_text(q, stats, labels):
         reviews, time_ms = r, t
     label = str(cfg().get("crew_label") or "Crew").strip() or "Crew"
     return share.crew_week(label, week, rows, reviews, time_ms)
+
+
+# ---- personal month and year reviews (revlog only, nothing shared) ----
+
+def _month_bounds(today, last=False):
+    """(first, last, name) for this month, or the previous one."""
+    first = today.replace(day=1)
+    if last:
+        end = first - datetime.timedelta(days=1)
+        first = end.replace(day=1)
+    else:
+        nxt = (first + datetime.timedelta(days=32)).replace(day=1)
+        end = nxt - datetime.timedelta(days=1)
+    return first, end, first.strftime("%B")
+
+
+def _month_text(q, last=False):
+    from . import share
+    today = datetime.date.fromisoformat(q.day_label(0))
+    first, end, name = _month_bounds(today, last)
+    review = period_review(q, first, end)
+    return share.my_month(review, name, so_far=(not last and today < end))
+
+
+def _year_text(q, complete=False):
+    from . import share
+    today = datetime.date.fromisoformat(q.day_label(0))
+    year = today.year - 1 if (complete and today.month == 1) else today.year
+    review = period_review(q, datetime.date(year, 1, 1), datetime.date(year, 12, 31))
+    so_far = not complete and today < datetime.date(year, 12, 31)
+    return share.my_year(review, year, so_far=so_far)
+
+
+_review_cache = {"label": None, "banners": {}}
+
+
+def review_banners():
+    """Banners for the board, from the local revlog: last month's review
+    during the first week of a month, the year's from Dec 20 to Jan 7.
+    Each is dismissable (wrap.json) and computed once per day."""
+    if not mw.col:
+        return {}
+    q = StatsQueries(mw.col)
+    label = q.day_label(0)
+    w = _wrap_data()
+    if _review_cache["label"] != label:
+        today = datetime.date.fromisoformat(label)
+        banners = {}
+        if today.day <= 7:
+            first, end, name = _month_bounds(today, last=True)
+            review = period_review(q, first, end)
+            if review and review["reviews"]:
+                banners["month"] = {"key": first.strftime("%Y-%m"), "name": name,
+                                    "review": review}
+        if (today.month == 12 and today.day >= 20) or (today.month == 1 and today.day <= 7):
+            year = today.year if today.month == 12 else today.year - 1
+            review = period_review(q, datetime.date(year, 1, 1), datetime.date(year, 12, 31))
+            if review and review["reviews"]:
+                banners["year"] = {"key": str(year), "review": review}
+        _review_cache.update(label=label, banners=banners)
+    out = {}
+    for kind, info in _review_cache["banners"].items():
+        if w.get(f"{kind}_dismissed") != info["key"]:
+            out[kind] = info
+    return out
+
+
+def dismiss_review(kind):
+    info = _review_cache["banners"].get(kind)
+    if info:
+        _wrap_data()[f"{kind}_dismissed"] = info["key"]
+        from .wrap import _save_wrap
+        _save_wrap()

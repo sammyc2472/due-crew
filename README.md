@@ -51,8 +51,11 @@ streak means what it says.
   someone adds you. Share copies the day's headline for the group chat.
 - **Share it** — paste-ready for the group chat: your week as seven
   squares (🟩🟩🟩⬜🟩🟩🟩 6 of 7 days), the crew's week as a row per
-  person, or today's numbers in one line — each signed with the add-on
-  code. Copy from the Today and Week footers or your own profile card.
+  person, today's numbers in one line, or your month and your year (exact,
+  from your own review history) — each signed with the add-on code. Copy
+  from the Today and Week footers or your own profile card. In the first
+  week of a month the board offers last month's review; from December 20
+  it offers the year's.
   Counts are reviews (every answer counts), and a crewmate who hasn't
   synced since mid-week is marked "as of" their last sync rather than
   shown as absent.

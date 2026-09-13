@@ -29,7 +29,7 @@ from .app import (CHEER_EMOJI, HEATMAP_DAYS, STREAK_MILESTONES, _migrate_server_
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
 from .backend.firebase import TransportError
-from .shares import _share
+from .shares import _share, dismiss_review, review_banners
 from .backend.firebase import clean_emoji
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer)
@@ -240,7 +240,8 @@ def _on_render(deck_browser, content):
                                           wrap=_wrap_info(), deltas=_deck_deltas(),
                                           exam_eve=_exam_eve_info(),
                                           rules_stale=client().rules_stale,
-                                          squad_view=_squad_view(), knocks=_visible_knocks())
+                                          squad_view=_squad_view(), knocks=_visible_knocks(),
+                                          reviews=review_banners())
     except Exception:
         traceback.print_exc()
 
@@ -339,8 +340,12 @@ def _on_js(handled, message, context):
         w["dismissed"] = w.get("week", "")
         _save_wrap()
         _swap(c)
-    elif cmd in ("sharetoday", "shareweek", "sharecrewweek"):
+    elif cmd in ("sharetoday", "shareweek", "sharecrewweek", "sharemonth", "shareyear",
+                 "monthcopy", "yearcopy"):
         _share(cmd)
+    elif cmd in ("monthdismiss", "yeardismiss"):
+        dismiss_review(cmd[:-7])
+        _swap(c)
     elif cmd == "wrapcopy":
         b = _wrap_info() or {}
         if b.get("reviews"):
@@ -402,7 +407,8 @@ def _swap(c):
                             wrap=_wrap_info(), deltas=_deck_deltas(),
                             exam_eve=_exam_eve_info(),
                             rules_stale=client().rules_stale,
-                            squad_view=_squad_view(), knocks=_visible_knocks())
+                            squad_view=_squad_view(), knocks=_visible_knocks(),
+                            reviews=review_banners())
     js = """
     (function() {
         var el = document.getElementById('due-crew');

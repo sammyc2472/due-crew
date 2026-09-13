@@ -120,3 +120,63 @@ def squad_today(name, label, rows, studying, reviews):
         f"{int(studying):,} studying · {int(reviews):,} reviews together",
         f"🟩 {who}",
         FOOTER])
+
+
+MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+          "August", "September", "October", "November", "December")
+
+
+def month_name(key):
+    """'September' from '2026-09'."""
+    try:
+        return MONTHS[int(str(key)[5:7]) - 1]
+    except (ValueError, IndexError):
+        return str(key)
+
+
+def _ret(review):
+    r = review.get("retention")
+    return f" · 🎯 {float(r):.1f}%" if r is not None else ""
+
+
+def my_month(review, name, so_far=False):
+    """Personal. review: period_review(); name: 'September'. None when the
+    month has no reviews."""
+    if not review or not review.get("reviews"):
+        return None
+    best = review.get("best_day")
+    lines = [f"My {name}" + (" so far" if so_far else ""),
+             f"{int(review['reviews']):,} reviews · {_fmt_time(int(review['time_ms'] or 0))}"
+             f" · {int(review['days'])} of {int(review['span'])} days"]
+    if best:
+        lines.append(f"best day {day_text(best[0])} ({int(best[1]):,})" + _ret(review))
+    elif _ret(review):
+        lines.append(_ret(review)[3:])
+    lines.append(FOOTER)
+    return "\n".join(lines)
+
+
+def my_year(review, year, so_far=False):
+    """Personal. Exact from the revlog, so even months before the add-on
+    count. None when the year has no reviews."""
+    if not review or not review.get("reviews"):
+        return None
+    lines = [f"My {year}" + (" so far" if so_far else ""),
+             f"{int(review['reviews']):,} reviews · {_fmt_time(int(review['time_ms'] or 0))}"
+             f" · {int(review['days'])} of {int(review['span'])} days"]
+    bm, bd = review.get("best_month"), review.get("best_day")
+    bits = []
+    if bm:
+        bits.append(f"best month {month_name(bm[0])} ({int(bm[1]):,})")
+    if bd:
+        bits.append(f"best day {day_text(bd[0])} ({int(bd[1]):,})")
+    if bits:
+        lines.append(" · ".join(bits))
+    run = int(review.get("longest_run") or 0)
+    tail = (f"🔥 longest run {run} days" if run > 1 else "") + _ret(review)
+    if tail.startswith(" · "):
+        tail = tail[3:]
+    if tail:
+        lines.append(tail)
+    lines.append(FOOTER)
+    return "\n".join(lines)

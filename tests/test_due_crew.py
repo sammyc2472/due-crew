@@ -1049,6 +1049,53 @@ def test_v25_edges_emoji_week():
           "🟩🟩🟩🟩🟩🟩🟩 🦊 Sammy" in crew_txt and "🟩🟩🟩🟩🟩🟩🟩 igk" in crew_txt)
     check("share module still has the four builders", callable(shares._crew_week_text))
 
+
+def test_personal_reviews():
+    """Month and year reviews: one revlog pass, exact numbers, honest
+    labels, and the board banners that carry them."""
+    from due_crew import share, shares
+    from due_crew.stats import period_review
+    today = datetime.date(2026, 9, 13)
+    studied = [datetime.date(2026, 9, 1), datetime.date(2026, 9, 2), datetime.date(2026, 9, 3),
+               datetime.date(2026, 9, 10), datetime.date(2026, 8, 30), datetime.date(2026, 3, 3)]
+    col = make_user_col(studied, today=today)   # 3 answers a day, one Again each
+    q = StatsQueries(col)
+    sept = period_review(q, datetime.date(2026, 9, 1), datetime.date(2026, 9, 30))
+    check("month review: clamps to today, counts days and reviews, finds the best run",
+          sept["span"] == 13 and sept["days"] == 4 and sept["reviews"] == 12
+          and sept["longest_run"] == 3 and sept["best_day"][1] == 3
+          and round(sept["retention"], 1) == 66.7, str(sept))
+    year = period_review(q, datetime.date(2026, 1, 1), datetime.date(2026, 12, 31))
+    check("year review: best month, six studied days, span to today",
+          year["best_month"] == ("2026-09", 12) and year["days"] == 6 and year["span"] == 256, str(year))
+    check("empty period is None, zero-review period shares nothing",
+          period_review(q, datetime.date(2027, 1, 1), datetime.date(2027, 1, 31)) is None
+          and share.my_month(period_review(q, datetime.date(2026, 5, 1), datetime.date(2026, 5, 31)), "May") is None)
+    m = share.my_month(sept, "September", so_far=True)
+    check("month share text", m.split("\n")[:3] == [
+        "My September so far", "12 reviews · 1m · 4 of 13 days",
+        "best day Sep 1 (3) · 🎯 66.7%"], m)
+    y = share.my_year(year, 2026, so_far=True)
+    check("year share text", y.split("\n")[:4] == [
+        "My 2026 so far", "18 reviews · 1m · 6 of 256 days",
+        "best month September (12) · best day Mar 3 (3)",
+        "🔥 longest run 3 days · 🎯 66.7%"], y)
+    first, end, name = shares._month_bounds(today, last=True)
+    check("month bounds: last month is August 1–31",
+          (first, end, name) == (datetime.date(2026, 8, 1), datetime.date(2026, 8, 31), "August"))
+    first, end, name = shares._month_bounds(datetime.date(2026, 12, 5))
+    check("month bounds: this month ends on the 31st across the year edge",
+          (first, end, name) == (datetime.date(2026, 12, 1), datetime.date(2026, 12, 31), "December"))
+    banners = {"month": {"key": "2026-08", "name": "August", "review": sept},
+               "year": {"key": "2026", "review": year}}
+    html = board.render({"entries": [], "labels": [today.isoformat()], "tomorrow": "", "pending": []},
+                        {"period": "today"}, 0, reviews=banners)
+    check("board: month and year banners with Copy and dismiss",
+          "Your August:" in html and "Your 2026:" in html and "monthcopy" in html
+          and "yeardismiss" in html and "&#128293; 3-day run" in html and "best day 3" in html)
+    js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
+    check("own card offers month and year", "duecrew:sharemonth" in js and "duecrew:shareyear" in js)
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
