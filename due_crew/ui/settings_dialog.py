@@ -5,7 +5,6 @@ cleans up nested layouts correctly."""
 
 import html
 
-from aqt import mw
 from aqt.qt import (
     QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSizePolicy,

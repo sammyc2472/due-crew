@@ -1,11 +1,9 @@
 """Sign in / Join dialog. Network runs in the background; the dialog never
 blocks Anki. On success, self.user holds (user_id, display_name)."""
 
-import html
-
 from aqt.qt import (
     QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout,
-    QTabWidget, QTimer, QWidget, Qt,
+    QTabWidget, QWidget, Qt,
 )
 
 from . import accent, attach_alive, danger, run_bg

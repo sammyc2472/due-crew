@@ -307,12 +307,13 @@ def test_duet_runs():
 
 
 def _patched_due_crew():
-    import due_crew
+    """The wrap module with its per-profile files pointed at a temp dir."""
+    from due_crew import wrap
     tmp = tempfile.mkdtemp()
-    due_crew._profile_files = lambda: tmp
-    due_crew._wrap["profile"] = None
-    due_crew._wrap["data"] = {}
-    return due_crew
+    wrap._profile_files = lambda: tmp
+    wrap._wrap["profile"] = None
+    wrap._wrap["data"] = {}
+    return wrap
 
 
 def test_welcome_back():
@@ -596,8 +597,7 @@ def test_away_flag():
     coming days ahead of time, so the crew sees the plane while the person
     isn't syncing; shrinking or clearing unflags; week shares show planes
     and still count only studied days."""
-    import due_crew
-    from due_crew import share
+    from due_crew import share, shares
     store = fakes.FakeFirestore()
     sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
     seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
@@ -641,9 +641,9 @@ def test_away_flag():
           board._away_text(doc3, d(0)) == f"back {TODAY + datetime.timedelta(days=4):%b} {(TODAY + datetime.timedelta(days=4)).day}"
           and board._away_text({"away": True}, d(0)) == "away")
     check("away: day flags are three-state",
-          due_crew._day_flag({"studied": True, "away": True}) is True
-          and due_crew._day_flag({"away": True}) == "away"
-          and due_crew._day_flag({}) is False and due_crew._day_flag(None) is False)
+          shares._day_flag({"studied": True, "away": True}) is True
+          and shares._day_flag({"away": True}) == "away"
+          and shares._day_flag({}) is False and shares._day_flag(None) is False)
     week = [(datetime.date(2026, 9, 1) + datetime.timedelta(days=i)).isoformat() for i in range(7)]
     mine = share.my_week(week, [True, True, "away", "away", True, False, True], 900, 600000, 3)
     check("share: my week shows planes and counts studied days only",
@@ -876,7 +876,7 @@ def test_deletion_sweep():
 def test_hardening_v24():
     """The audit fixes that have a pure edge: command whitelist, error
     status, and per-sender cheer bookkeeping."""
-    import due_crew
+    from due_crew import social
     check("pycmd: ids and keys pass, quote-breakers are dropped",
           board._pycmd("profile:abc_1-2") == "pycmd('duecrew:profile:abc_1-2'); return false;"
           and "'" not in board._pycmd("x:a')alert(1)//").replace("pycmd('duecrew:", "", 1)[:-len("'); return false;")])
@@ -884,17 +884,17 @@ def test_hardening_v24():
     check("transport error carries its status", err.status == 403 and str(err) == "query failed: 403")
     a1 = {"from": "a", "at": "2026-09-10T10:00:00Z", "emoji": "🔥", "name": "A", "note": ""}
     b_far = {"from": "b", "at": "9999-01-01T00:00:00Z", "emoji": "🎉", "name": "B", "note": ""}
-    fresh, seen = due_crew._fresh_cheers([a1, b_far], None, "")
+    fresh, seen = social._fresh_cheers([a1, b_far], None, "")
     check("cheers: first run plays everything and marks per sender",
           [c["from"] for c in fresh] == ["a", "b"] and seen == {"a": a1["at"], "b": b_far["at"]})
     a2 = dict(a1, at="2026-09-10T11:00:00Z")
-    fresh2, seen2 = due_crew._fresh_cheers([a2, b_far], seen, "")
+    fresh2, seen2 = social._fresh_cheers([a2, b_far], seen, "")
     check("cheers: a forged far-future stamp from B cannot hide A's next cheer",
           [c["from"] for c in fresh2] == ["a"] and seen2["a"] == a2["at"])
-    fresh3, seen3 = due_crew._fresh_cheers([a2], seen2, "")
+    fresh3, seen3 = social._fresh_cheers([a2], seen2, "")
     check("cheers: nothing new plays nothing; departed senders are forgotten",
           fresh3 == [] and seen3 == {"a": a2["at"]})
-    fresh4, _ = due_crew._fresh_cheers([a1, a2], None, a1["at"])
+    fresh4, _ = social._fresh_cheers([a1, a2], None, a1["at"])
     check("cheers: migration folds the old global mark in (older stays quiet)",
           [c["at"] for c in fresh4] == [a2["at"]])
     store = fakes.FakeFirestore()

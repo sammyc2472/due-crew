@@ -8,9 +8,8 @@ friends array. self.changed tells the caller to refresh the board.
 
 import html
 
-from aqt import mw
 from aqt.qt import (
-    QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QMessageBox, QPushButton, QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
