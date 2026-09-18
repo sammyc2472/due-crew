@@ -172,15 +172,13 @@ def _first_grapheme(text):
 
 
 def emoji_fits(emoji):
-    """The rules cap the field at size() <= 16 and I have not been able to
-    confirm which unit Firestore counts. So the client holds itself to the
-    strictest reading — code points, UTF-16 units, AND UTF-8 bytes — and a
-    long joined emoji is refused here rather than truncated into a broken
-    glyph or, worse, sent and rejected (a rejected squad row used to read
-    as "you were removed")."""
-    return (len(emoji) <= EMOJI_MAX
-            and len(emoji.encode("utf-16-le")) // 2 <= EMOJI_MAX
-            and len(emoji.encode("utf-8")) <= EMOJI_MAX)
+    """The rules cap the field at size() <= 16, and rules size() counts
+    UTF-16 units — measured in the emulator on 2026-09-18 (5 astral chars,
+    10 units, accepted; 9 astral chars, 18 units, refused), not assumed.
+    Python's len() counts code points, so the cap is checked in the rules'
+    own unit. Too long is refused whole: never truncated into a broken
+    glyph, never sent to be rejected."""
+    return len(emoji.encode("utf-16-le")) // 2 <= EMOJI_MAX
 
 
 def emoji_too_long(text):

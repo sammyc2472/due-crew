@@ -485,8 +485,10 @@ class FakeFirestore:
                 self.log.append((method, path, 400))
                 return FakeResponse(400, {"error": {"message": f"INVALID_ARGUMENT: {e}"}})
             if "currentDocument.exists=true" in query and path not in self.docs:
-                self.log.append((method, path, 404))
-                return FakeResponse(404, {"error": {"message": "NOT_FOUND: no document to update"}})
+                # 403, as the real emulator answers (observed 2026-09-18): the
+                # rules see an update of nothing and refuse before NOT_FOUND
+                self.log.append((method, path, 403))
+                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
             if not self._can_write(path, uid, "PATCH", fields):
                 self.log.append((method, path, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})

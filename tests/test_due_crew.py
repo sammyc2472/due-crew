@@ -1152,12 +1152,17 @@ def test_sync_reliability_v251():
           dre.upload_squad_rows("dre", good, [sid]) == [sid])
 
     ce, too_long = firebase.clean_emoji, firebase.emoji_too_long
-    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
-    check("emoji: a 25-byte joined emoji is refused whole, never truncated or sent",
-          ce(family) == "" and too_long(family) and not too_long("abc") and not too_long("🦊"))
-    check("emoji: everything the client accepts fits 16 by bytes, UTF-16 units, and code points",
-          all(ce(e) == e and len(e.encode("utf-8")) <= 16
-              for e in ("🦊", "🇺🇸", "👍🏽", "👩‍💻", "🧑🏽‍💻", "❤️‍🔥")))
+    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"   # 11 UTF-16 units
+    monster = "\U0001F468" + "\u200d\U0001F469" * 6                            # 20 units
+    units = lambda t: len(t.encode("utf-16-le")) // 2
+    check("emoji: the cap is the rules' own unit (UTF-16), so a family emoji passes",
+          ce(family) == family and units(family) == 11 and not too_long(family))
+    check("emoji: past 16 units it is refused whole, never truncated or sent",
+          units(monster) == 20 and ce(monster) == "" and too_long(monster)
+          and not too_long("abc") and not too_long("🦊"))
+    check("emoji: everything the client accepts fits the rules' 16 units",
+          all(ce(e) == e and units(e) <= 16
+              for e in ("🦊", "🇺🇸", "👍🏽", "👩‍💻", "🧑🏽‍💻", "❤️‍🔥", family)))
 
     check("stale: an old board with no recent attempt refreshes",
           due_crew._is_stale(1000, 0, 0, 900))

@@ -163,7 +163,7 @@ def _push_if_stale():
     if not _is_stale(now, _state["ts"], _last_attempt):
         return
     _last_attempt = now  # claim it now: a second redraw must not double up
-    QTimer.singleShot(0, _on_sync_done)  # after this paint, not during it
+    QTimer.singleShot(0, lambda: _on_sync_done(light=True))  # after this paint
 
 
 def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
@@ -290,10 +290,13 @@ def _on_did_render(deck_browser):
     _play_cheers()
 
 
-def _on_sync_done(full=False):
+def _on_sync_done(full=False, light=False):
     """Upload everything that changed, then fetch. Anki's sync hook and the
     board's Refresh both land here, so Refresh never leaves your own row
-    behind; Refresh asks for the full week."""
+    behind; Refresh asks for the full week. light: the automatic pushes
+    (on open, on a stale board) send today's numbers only — decks, heatmap,
+    and backfill move slowly and cost main-thread SQL, so they wait for a
+    real sync or a Refresh."""
     global _last_attempt
     if not mw.col or not client().signed_in:
         return
@@ -306,19 +309,20 @@ def _on_sync_done(full=False):
         stats = gather_stats(mw.col, _profile_files())
     except Exception:
         traceback.print_exc()
-    try:
-        week = gather_week(mw.col, _profile_files())
-    except Exception:
-        traceback.print_exc()
-    try:
-        decks = gather_shared_decks(mw.col, c)
-    except Exception:
-        traceback.print_exc()
-    try:
-        heat = (StatsQueries(mw.col).heatmap_counts(HEATMAP_DAYS)
-                if c.get("share_heatmap", True) else "off")
-    except Exception:
-        traceback.print_exc()
+    if not light:
+        try:
+            week = gather_week(mw.col, _profile_files())
+        except Exception:
+            traceback.print_exc()
+        try:
+            decks = gather_shared_decks(mw.col, c)
+        except Exception:
+            traceback.print_exc()
+        try:
+            heat = (StatsQueries(mw.col).heatmap_counts(HEATMAP_DAYS)
+                    if c.get("share_heatmap", True) else "off")
+        except Exception:
+            traceback.print_exc()
     row = None
     if stats is not None:
         row = {"name": client().display_name or "Me",
