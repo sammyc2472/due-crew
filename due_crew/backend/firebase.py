@@ -260,13 +260,26 @@ def _clean_decks(value):
         total = _as_int(d.get("total"))
         if not isinstance(sig, list) or not total:
             continue
-        out.append({
+        seen = min(max(_as_int(d.get("seen")) or 0, 0), total)
+        entry = {
             "name": str(d.get("name", "?")),
             "sig": [str(s) for s in sig if isinstance(s, str)],
             "total": total,
-            "seen": _as_int(d.get("seen")) or 0,
-            "mature": _as_int(d.get("mature")) or 0,
-        })
+            "seen": seen,
+            "mature": min(max(_as_int(d.get("mature")) or 0, 0), seen),
+        }
+        # v2.6 extras, each optional: older clients simply don't send them
+        opened = _as_int(d.get("open"))
+        if opened is not None:
+            entry["open"] = min(max(opened, seen), total)
+        today = _as_int(d.get("today"))
+        day = str(d.get("day") or "")
+        if today is not None and today >= 0 and len(day) == 10:
+            entry["today"], entry["day"] = today, day
+        ret = _as_float(d.get("ret"))
+        if ret is not None and 0 <= ret <= 100:
+            entry["ret"] = ret
+        out.append(entry)
     return out
 
 
@@ -631,11 +644,21 @@ class FirebaseClient:
         friend per day. Raises TransportError on any failure, including a
         missing own profile, so callers never mistake an outage for an
         empty crew."""
-        own, status = self.get_doc(f"users/{uid}")
+        # One round trip, not two: my profile and my friends' ride one
+        # batchGet, using the friend list remembered from last time. Anyone
+        # added since (on another device, say) costs a second, smaller batch.
+        cached = [f for f in (self.session.get("friend_ids") or []) if isinstance(f, str)]
+        profiles = self.batch_get([f"users/{uid}"] + [f"users/{f}" for f in cached])
+        own = profiles.pop(f"users/{uid}", None)
         if own is None:
-            raise TransportError(f"own profile unavailable: {status}", status)
+            raise TransportError("own profile unavailable: 404", 404)
         friends = [f for f in (own.get("friends") or []) if isinstance(f, str)]
-        profiles = self.batch_get([f"users/{f}" for f in friends])
+        unseen = [f for f in friends if f not in cached]
+        if unseen:
+            profiles.update(self.batch_get([f"users/{f}" for f in unseen]))
+        if friends != cached:
+            self.session["friend_ids"] = friends
+            self._save_session()
         by_array = {fid for fid in friends
                     if uid in ((profiles.get(f"users/{fid}") or {}).get("friends") or [])}
         by_edge = set()
@@ -720,12 +743,21 @@ class FirebaseClient:
 
     # ---- board ----
 
-    def fetch_board(self, uid, labels, tomorrow=None, include_shared=True):
+    def fetch_decks(self, uids):
+        """{uid: decks} for the Decks tab, fetched when someone looks rather
+        than on every refresh. One batchGet, one read per person."""
+        docs = self.batch_get([f"users/{u}/shared/decks" for u in uids])
+        return {u: _clean_decks((docs.get(f"users/{u}/shared/decks") or {}).get("decks"))
+                for u in uids}
+
+    def fetch_board(self, uid, labels, tomorrow=None, include_shared=True, check_edges=None):
         """labels: day labels to fetch, newest-first. `tomorrow` (my next
         label) is fetched too so friends ahead of my timezone stay live.
         Shared-deck docs only ride along when include_shared (full fetches).
         Raises TransportError on failure — the caller keeps its cache."""
-        own, resolved, pending = self.list_friends(uid, check_edges=include_shared)
+        if check_edges is None:
+            check_edges = include_shared
+        own, resolved, pending = self.list_friends(uid, check_edges=check_edges)
         mutual = [(fid, prof) for fid, prof, m in resolved if m]
         people = [(uid, own)] + mutual
 
@@ -766,7 +798,8 @@ class FirebaseClient:
                                "at": str(doc.get("at", "")),
                                "note": clean_note(doc.get("note"))})
         return {"entries": entries, "pending": pending, "cheers": cheers,
-                "my_friends": [fid for fid, _p, _m in resolved]}
+                "my_friends": [fid for fid, _p, _m in resolved],
+                "my_code": str(own.get("friendCode") or "")}
 
     def send_cheer(self, to_uid, from_uid, from_name, emoji, note=None):
         """One write; overwrites any previous cheer to the same person.
@@ -854,6 +887,8 @@ class FirebaseClient:
         if emoji:
             profile["emoji"] = emoji
         ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
+        if ok:
+            self.session["last_ok"] = _now_ts()  # Settings: "Synced 2m ago"
         own, _status = self.get_doc(f"users/{uid}") if not self.session.get("friend_edges") else (None, 0)
         if own is not None:  # first run on 2.5: mirror the existing list once
             self.sync_friend_edges(uid, [f for f in (own.get("friends") or []) if isinstance(f, str)])

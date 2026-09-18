@@ -58,3 +58,14 @@ installing — add-ons load at launch).
 - [ ] Turn Wi-Fi off and click Refresh: the footer reads "Couldn't sync · Updated …". Turn it back on and Refresh: the warning goes.
 - [ ] Two accounts, an OPEN squad: founder removes the other person; that person syncs; they do NOT reappear on the founder's board, and their own board says "You're no longer in …".
 - [ ] Your card → emoji: a long joined emoji (e.g. a family) is refused with "That one's too long."
+
+## 2.6: decks, calendar weeks, sync status
+- [ ] Decks tab: each bar shows a hatched "unlocked" span after seen and mature; suspend a batch of new cards and sync, and your hatched span shrinks while "seen / total" stays.
+- [ ] Decks tab in dark mode: the legend (solid / faded / hatched) still describes the bars.
+- [ ] Hover a bar: exact seen, mature, unlocked, total, this week, and 7-day retention. Study in a shared deck, Refresh: "+N today" appears on your row.
+- [ ] Privacy → turn off Retention: your deck rows lose the % for your crew after the next sync.
+- [ ] Week view on a Wednesday sums Monday–Wednesday only; "Share week" shows three squares, "3 of 3 days".
+- [ ] On a Monday the "Last week, together" banner covers the previous Monday–Sunday, even if you first open Anki on Tuesday.
+- [ ] Settings → Account shows "Synced … · v2.6.0"; with Wi-Fi off after a failed Refresh it still shows the last ACCEPTED sync.
+- [ ] A one-person board offers "Copy invite".
+- [ ] Shared Decks: a deck you already share says "matches <friend>", never your own name.

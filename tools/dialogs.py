@@ -59,34 +59,29 @@ class _Taskman:
         f()  # synchronous: the fake store answers instantly
 
 
-class _Decks:
-    def all_names_and_ids(self):
-        return [types.SimpleNamespace(id=1, name="AnKing Step 1"),
-                types.SimpleNamespace(id=2, name="Pharm::Antibiotics")]
-
-    def name(self, did):
-        return {1: "AnKing Step 1", 2: "Pharm::Antibiotics"}.get(did, "?")
-
-    def get(self, did, default=True):
-        return {"id": did, "name": self.name(did)}
-
-    def deck_and_child_ids(self, did):
-        return [did]
-
-
-class _Db:
-    def scalar(self, *a, **k):
-        return 0
-
-    def list(self, *a, **k):
-        return []
-
-    def all(self, *a, **k):
-        return []
+def _collection():
+    """A real in-memory collection, from the builders the suite uses. The
+    stub this replaces answered every query with nothing, so Shared Decks
+    only ever rendered "No decks with cards yet" — and the populated state,
+    with its counts and match labels, is where a crash would be. sqlite's
+    same-thread check is left on: a dialog touching the collection off the
+    main thread raises here, as the main-thread rule says it should."""
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cid = 0
+    for did, cards, seen in ((1, 9, 6), (3, 4, 2), (2, 5, 0)):
+        for i in range(cards):
+            cid += 1
+            fakes.add_card(conn, cid, did=did, ctype=2 if i < seen else 0,
+                           queue=2 if i < seen else 0, ivl=30 if i % 2 == 0 else 3)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
+    col.decks = fakes.FakeDecks({1: "AnKing Step 1", 3: "AnKing Step 1::Cardio",
+                                 2: "Pharm::Antibiotics"})
+    return col
 
 
-aqt.mw.col = types.SimpleNamespace(decks=_Decks(), db=_Db(),
-                                   find_cards=lambda *a, **k: [], find_notes=lambda *a, **k: [])
+aqt.mw.col = _collection()
 aqt.mw.taskman = _Taskman()
 utils = types.ModuleType("aqt.utils")
 utils.tooltip = lambda *a, **k: None
@@ -126,7 +121,9 @@ STORE.docs["friend_codes/SAM123"] = {"userId": fv("sam")}
 STORE.auth_uid = "sam"
 CLIENT = firebase.FirebaseClient(os.path.join(os.environ.get("TMPDIR", "/tmp"), "dc-dialogs-session.json"))
 CLIENT.session = {"user_id": "sam", "id_token": "t-sam", "refresh_token": "r",
-                  "display_name": "Sammy", "email": "sam@example.com"}
+                  "display_name": "Sammy", "email": "sam@example.com",
+                  "last_ok": (datetime.datetime.now(datetime.timezone.utc)
+                              - datetime.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")}
 SQUAD = CLIENT.create_squad("sam", "busm", "Sammy")
 STORE.docs[f"squads/{SQUAD['id']}/members/priya"] = {"name": fv("Priya"), "joinedAt": fv("t")}
 STORE.auth_uid = "priya"
@@ -144,8 +141,11 @@ CONFIG = {
     "shared_decks": [1], "squads": [SQUAD, {"id": "b" * 24, "code": "MS2XXXXX", "name": "MS2", "founder": "x"}],
     "squad": SQUAD["id"],
 }
-CREW = [{"user_id": "sam", "name": "Sammy", "you": True, "decks": [{"name": "AnKing Step 1", "sig": "s1"}]},
-        {"user_id": "igk", "name": "igk", "you": False, "decks": [{"name": "AnKing Step 1", "sig": "s1"}]}]
+# fingerprints are note guids; these overlap the AnKing subtree built in
+# _collection(), so the Shared Decks dialog has a real match to show
+_SIG = [f"guid{n:06d}" for n in range(1, 13)]
+CREW = [{"user_id": "sam", "name": "Sammy", "you": True, "decks": [{"name": "AnKing Step 1", "sig": _SIG}]},
+        {"user_id": "igk", "name": "igk", "you": False, "decks": [{"name": "AnKing Step 1", "sig": _SIG[:10]}]}]
 
 
 def settle(ms=400):

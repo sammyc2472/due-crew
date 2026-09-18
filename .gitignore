@@ -4,7 +4,8 @@ __pycache__/
 due_crew/user_files/
 *.ankiaddon
 
-# local preview harness output
+# local preview harness output (dialog-shots/ is tools/dialogs.py's default)
+dialog-shots/
 .claude/preview/
 .claude/launch.json
 .claude/harness/

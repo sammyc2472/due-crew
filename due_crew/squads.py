@@ -16,24 +16,29 @@ from .stats.queries import StatsQueries
 from .ui import copy_text
 from .wrap import _mute_knocker, _wrap_data
 
-def _my_squads():
-    """Squads from config: [{id, code, name, founder}]. Live config dicts."""
-    return [sq for sq in (cfg().get("squads") or [])
+def _my_squads(c=None):
+    """Squads from config: [{id, code, name, founder}]. Live config dicts.
+    Pass `c` when you already hold the config: Anki's getConfig re-reads and
+    re-parses two JSON files on every call."""
+    c = cfg() if c is None else c
+    return [sq for sq in (c.get("squads") or [])
             if isinstance(sq, dict) and sq.get("id")]
 
 
-def _current_squad():
-    squads = _my_squads()
+def _current_squad(c=None):
+    c = cfg() if c is None else c
+    squads = _my_squads(c)
     if not squads:
         return None
-    sel = cfg().get("squad") or ""
+    sel = c.get("squad") or ""
     return next((sq for sq in squads if sq["id"] == sel), squads[0])
 
 
-def _squad_view():
+def _squad_view(c=None):
     """What board._squads_html renders. Decoration is cheap and local."""
-    squads = _my_squads()
-    cur = _current_squad()
+    c = cfg() if c is None else c
+    squads = _my_squads(c)
+    cur = _current_squad(c)
     base = {"squads": [{"id": sq["id"], "name": sq.get("name") or "?"} for sq in squads],
             "current": cur["id"] if cur else ""}
     if cur is None:
@@ -126,11 +131,11 @@ def _open_squad_card(uid):
     }))
 
 
-def _visible_knocks():
+def _visible_knocks(c=None):
     """Knocks worth a banner: not muted, not already crew. Newest few."""
     muted = set(_wrap_data().get("muted_knocks") or [])
     crew = {e["user_id"] for e in _state["entries"] or []}
-    names = {sq["id"]: sq.get("name") or "" for sq in _my_squads()}
+    names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     return [{"uid": u, "name": n, "squad": names.get(sid, "")}
             for u, n, sid in _state["knocks"] if u not in muted and u not in crew][:3]
 

@@ -110,6 +110,22 @@ def _day_metrics(doc):
             "streak": doc.get("streak")}
 
 
+def week_labels(labels):
+    """The labels inside the calendar week (Monday to Sunday) of labels[0],
+    newest first like `labels`. "Week" means this week, not a rolling seven
+    days: it is what people mean by the word, it gives the crew one shared
+    finish line, and it matches the "Last week" banner. Always a subset of
+    the seven days already fetched, so it costs nothing."""
+    if not labels:
+        return []
+    try:
+        today = _date.fromisoformat(str(labels[0]))
+    except ValueError:
+        return list(labels)
+    monday = (today - _dt.timedelta(days=today.weekday())).isoformat()
+    return [lb for lb in labels if lb >= monday]
+
+
 def _week_row(days, labels):
     found = [days.get(lb) for lb in labels if days.get(lb)]
     if not found:
@@ -225,7 +241,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             continue
         days = e.get("days") or {}
         if period == "week":
-            agg = _week_row(days, labels)
+            agg = _week_row(days, week_labels(labels))
             if agg is None:
                 if e["you"]:
                     fresh.append(row)
@@ -382,14 +398,18 @@ def _css(cfg):
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
     #due-crew .dr.me .dn {{ font-weight: 700; }}
     #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
-    #due-crew .dtrack {{ position: relative; flex: 1; height: 12px; background: var(--dc-well);
+    #due-crew .dtrack {{ position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
       border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
     #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
+    #due-crew .dtrack .fo {{ opacity: 0.5; background: repeating-linear-gradient(
+      135deg, var(--dc-accent) 0 1.5px, transparent 1.5px 5px); }}
     #due-crew .dtrack .fs {{ background: var(--dc-accent); opacity: 0.35; }}
     #due-crew .dtrack .fm {{ background: var(--dc-accent); }}
-    #due-crew .dc-count {{ width: 118px; flex-shrink: 0; text-align: right;
+    #due-crew .dc-count {{ min-width: 118px; flex-shrink: 0; display: flex;
+      flex-direction: column; align-items: flex-end; line-height: 1.25;
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
       color: var(--dc-muted); }}
+    #due-crew .dc-count .dc-delta {{ margin-left: 0; }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
@@ -494,27 +514,63 @@ def _table_html(data, cfg, period):
         body += _row_html(row, "&mdash;", cfg)
     solo = ""
     if len(data["entries"]) == 1 and not data.get("pending"):
-        solo = ('<div class="dc-line">Just you so far &mdash; share your code '
-                'from the Friends screen.</div>')
+        solo = ('<div class="dc-line">Just you so far. '
+                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
+                f'text-decoration: none;" onclick="{_pycmd("copyinvite")}">Copy invite</a>'
+                ' and send it to a friend.</div>')
     # the name column ellipsizes, so the table can never outgrow the card
     return f'<table><tr>{heads}</tr>{body}</table>{solo}'
 
 
-def _bar(name, is_me, d, delta=None):
+def _bar(name, is_me, d, delta=None, today_labels=()):
+    """One person's progress through one shared deck. Three fills on one
+    track: mature (solid), seen (faded), then unlocked-but-unseen (hatched) —
+    so a deck worked through by unsuspending it a topic at a time shows how
+    much is in play, not just a sliver of the whole. Everything is a percent
+    of the person's own copy. The row's tooltip carries the exact numbers."""
     total = max(int(d.get("total") or 0), 1)
-    seen_pct = min(100, round(100 * int(d.get("seen") or 0) / total))
-    mature_pct = min(100, round(100 * int(d.get("mature") or 0) / total))
-    counts = f'{int(d.get("seen") or 0):,} / {int(d.get("total") or 0):,}'
-    chip = f'<span class="dc-delta">+{delta:,} wk</span>' if delta else ""
-    return (f'<div class="dr{" me" if is_me else ""}">'
+    seen, mature = int(d.get("seen") or 0), int(d.get("mature") or 0)
+    pct = lambda n: min(100, round(100 * n / total))
+    opened = d.get("open")
+    open_html = ""
+    if opened is not None:
+        # the hatch starts where "seen" ends rather than lying under it: the
+        # seen fill is translucent, and a hatch beneath it shows through
+        # (caught by eye in the preview; the string tests couldn't see it)
+        start = pct(seen)
+        span = max(pct(int(opened)) - start, 0)
+        open_html = f'<i class="fo" style="left:{start}%;width:{span}%;"></i>'
+    counts = f'{seen:,} / {int(d.get("total") or 0):,}'
+    ret = d.get("ret")
+    if ret is not None:
+        counts += f' &middot; {float(ret):.0f}%'
+    chips = []
+    # "today" is only true on the day it was written
+    if d.get("today") and d.get("day") in today_labels:
+        chips.append(f'+{int(d["today"]):,} today')
+    if delta:
+        chips.append(f'+{delta:,} wk')
+    chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else "")
+    tip = [f'{seen:,} seen', f'{mature:,} mature']
+    if opened is not None:
+        tip.append(f'{int(opened):,} unlocked')
+    tip.append(f'{int(d.get("total") or 0):,} total')
+    if delta:
+        tip.append(f'+{delta:,} this week')
+    if ret is not None:
+        tip.append(f'{float(ret):.1f}% retention, last 7 days')
+    return (f'<div class="dr{" me" if is_me else ""}" title="{_html.escape(" · ".join(tip))}">'
             f'<span class="dn">{_html.escape(str(name))}</span>'
-            f'<div class="dtrack"><i class="fs" style="width:{seen_pct}%;"></i>'
-            f'<i class="fm" style="width:{mature_pct}%;"></i></div>'
-            f'<span class="dc-count">{counts}{chip}</span></div>')
+            f'<div class="dtrack">{open_html}<i class="fs" style="width:{pct(seen)}%;"></i>'
+            f'<i class="fm" style="width:{pct(mature)}%;"></i></div>'
+            f'<span class="dc-count"><span>{counts}</span>{chip_html}</span></div>')
 
 
 def _decks_html(data, deltas=None):
     deltas = deltas or {}
+    labels = data.get("labels") or []
+    # a friend ahead of my timezone writes my "tomorrow" as their today
+    today_labels = tuple(lb for lb in (labels[0] if labels else "", data.get("tomorrow")) if lb)
     groups, extras = build_deck_groups(data["entries"])
     if not groups and not extras:
         return ('<div class="dc-line" style="border-top: none;">No shared decks yet. '
@@ -524,7 +580,7 @@ def _decks_html(data, deltas=None):
     for g in groups:
         label = _html.escape(str(g["label"]))
         rows = "".join(
-            _bar(n, me, d, deltas.get((uid, d.get("name", ""))))
+            _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     for who, deck in extras[:3]:
@@ -532,13 +588,19 @@ def _decks_html(data, deltas=None):
                  f'&ldquo;{_html.escape(str(deck))}&rdquo; &mdash; '
                  f'<a href="#" onclick="{_pycmd("decks")}">open Shared decks</a> to join.</div>')
     html += ('<div class="dc-line" style="border-top: none; padding-top: 2px;">'
-             'light = seen &middot; dark = mature &middot; % of each person&rsquo;s own copy</div>')
+             # named by texture, not by light/dark: in dark mode the mature fill
+             # is the bright one, and "dark = mature" read backwards there
+             'solid = mature &middot; faded = seen &middot; hatched = unlocked &middot; '
+             '% of each person&rsquo;s own copy &middot; hover for numbers</div>')
     return html
 
 
 SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
                 "retention": "retention", "streak": "streak", "week": "week"}
-SQUAD_HEADERS = HEADERS + (("week", "&#128197; Week"),)
+# squads stay Today-only, so this column is a rolling count ("studied 5 of
+# the last 7 days"), one int per member. Labelled for what it is: the crew's
+# Week view is the calendar week, and the two must not share a word.
+SQUAD_HEADERS = HEADERS + (("week", "&#128197; 7 days"),)
 
 
 def _switcher(view):
@@ -697,6 +759,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
         if wrap.get("best_name"):
             extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
                       f'best week yet')
+        if 0 < int(wrap.get("days_known") or 7) < 7:
+            extra += f' &middot; from {int(wrap["days_known"])} of its 7 days'
         if wrap.get("milestone"):
             extra += (f' &middot; and the crew just passed '
                       f'<b>{_html.escape(str(wrap["milestone"]))} all-time</b>')

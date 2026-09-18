@@ -27,7 +27,13 @@ maintainer. The repo is the source of truth; there is no build step.
 - Friendship data lives twice during the 2.5 changeover: the profile's
   `friends` array (what clients up to 2.4 read) and edge docs
   `users/{me}/friends/{fid}` (what 2.5+ reads for add-backs, and what the
-  rules honour). 2.6 stops writing the array once the crew is on 2.5.
+  rules honour). A later release stops writing the array once the crew
+  is on 2.5+ (check `clientVersion` on their profiles first).
+- "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
+  The squad board's "7 days" column is the one rolling count, and is
+  labelled as such. Crew totals accrue through the per-day ledger in
+  wrap.json: a day is added to the all-time total exactly once, when it
+  leaves the seven-day window. Never accrue from a rolling sum.
 
 ## Releasing
 

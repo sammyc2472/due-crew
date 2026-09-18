@@ -21,6 +21,12 @@ ON, OFF, AWAY = "🟩", "⬜", "✈️"
 NAME_MAX = 24
 
 
+def friend_invite(friend_code):
+    """One paste with everything a friend needs."""
+    return ("Study with me on Due Crew — Anki add-on 2035408484.\n"
+            f"My friend code: {friend_code}")
+
+
 def clean_name(name):
     one_line = " ".join(str(name).split())
     text = "".join(ch for ch in one_line if ch.isprintable())

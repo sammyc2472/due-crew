@@ -21,9 +21,11 @@ streak means what it says.
 - **Status** — click your own name and set one line ("coffee, then 400
   cards"). It sits in a bubble under your name on Today, for your crew and
   no one else.
-- **Shared decks** — progress bars through decks you have in common
-  (seen and mature counts). Decks match automatically by note fingerprint:
-  AnKing and other imported decks pair up with no setup.
+- **Shared decks** — progress bars through decks you have in common:
+  how much of the deck each person has unlocked, seen, and matured, what
+  they've done in it today and this week, and how well it's sticking. Hover
+  a bar for the exact numbers. Decks match automatically by note
+  fingerprint: AnKing and other imported decks pair up with no setup.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
   of your name on the board, on cards, and in shares.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
@@ -49,8 +51,8 @@ streak means what it says.
   or block people, and hand the squad on; anyone can leave. Tap a name to
   add someone; you're crew when they add back, and the board tells you when
   someone adds you. Share copies the day's headline for the group chat.
-- **Share it** — paste-ready for the group chat: your week as seven
-  squares (🟩🟩🟩⬜🟩🟩🟩 6 of 7 days), the crew's week as a row per
+- **Share it** — paste-ready for the group chat: your week so far as
+  squares (🟩🟩🟩⬜🟩 4 of 5 days, Monday to today), the crew's week as a row per
   person, today's numbers in one line, or your month and your year (exact,
   from your own review history) — each signed with the add-on code. Copy
   from the Today and Week footers or your own profile card. In the first

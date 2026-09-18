@@ -25,7 +25,8 @@ from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (ADDON_VERSION, CHEER_EMOJI, HEATMAP_DAYS, STALE_SECS, STREAK_MILESTONES,
+from .app import (_bg, ADDON_VERSION, CHEER_EMOJI, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
+                  STREAK_MILESTONES,
                   _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
@@ -81,7 +82,12 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         name = cl.display_name or "Me"
         full = (full or _state["entries"] is None or not _state["labels"]
                 or _state["labels"][0] != labels[0])
-        squads = [sq["id"] for sq in _my_squads()]
+        squads = [sq["id"] for sq in _my_squads(c)]
+        # shared-deck docs ride along once a day (the week's baseline, the
+        # profile card, and the Shared Decks dialog read them); after that
+        # the Decks tab fetches its own when someone actually looks. They
+        # used to ride EVERY full fetch, a read per person per Refresh.
+        with_decks = full and _state["decks_day"] != labels[0]
     except Exception:
         with _lock:
             _fetching = False
@@ -110,12 +116,21 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 gone = cl.upload_squad_rows(uid, dict(squad_row, day=labels[0]),
                                             squads)
             cl.check_rules(labels[0])  # cached: one real request per day
+            # knocks don't depend on the board, so they go alongside it
+            box = {}
+
+            def _knocks():
+                try:
+                    box["knocks"] = cl.list_knocks(uid)  # one list request
+                except Exception:
+                    box["knocks"] = None
+
+            side = threading.Thread(target=_knocks, daemon=True)
+            side.start()
             data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
-                                  include_shared=full)
-            try:
-                knocks = cl.list_knocks(uid)  # one list request
-            except TransportError:
-                knocks = None
+                                  include_shared=with_decks, check_edges=full)
+            side.join(25)
+            knocks = box.get("knocks")
             failed = not pushed
             mw.taskman.run_on_main(
                 lambda: _commit(data, c, labels, tomorrow, knocks, gone, failed))
@@ -166,6 +181,42 @@ def _push_if_stale():
     QTimer.singleShot(0, lambda: _on_sync_done(light=True))  # after this paint
 
 
+def _fetch_decks(force=False):
+    """The Decks tab's own fetch: fresh numbers when someone looks, cached a
+    few minutes. One batchGet, a read per person."""
+    entries = _state["entries"]
+    if not entries or not mw.col or not client().signed_in or client().session_dead:
+        return
+    if not force and time.time() - _state["decks_ts"] < SQUAD_CACHE_SECS:
+        return
+    _state["decks_ts"] = time.time()
+    cl = client()
+    uids = [e["user_id"] for e in entries]
+
+    def done(decks):
+        if not decks:
+            return
+        for e in _state["entries"] or []:
+            if e["user_id"] in decks:
+                e["decks"] = decks[e["user_id"]]
+                _state["decks"][e["user_id"]] = decks[e["user_id"]]
+        if cfg().get("period") == "decks":
+            _swap(cfg())
+
+    _bg(lambda: cl.fetch_decks(uids), done)
+
+
+def _copy_friend_invite():
+    """The solo board's Copy invite. No code yet means the Friends dialog
+    has never been opened on this account; it makes one."""
+    from .share import friend_invite
+    if not _state["my_code"]:
+        open_friends()
+        return
+    copy_text(friend_invite(_state["my_code"]))
+    tooltip("Invite copied.")
+
+
 def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     """Main thread. The only writer of _state and _pending_cheers."""
     keep = set(labels) | {tomorrow}
@@ -182,6 +233,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
             e["decks"] = _state["decks"].get(uid, [])
         else:
             _state["decks"][uid] = e["decks"]
+            _state["decks_day"] = labels[0]
     for uid in list(day_store):
         if uid not in seen:
             day_store.pop(uid, None)
@@ -239,6 +291,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time(), sync_error=bool(failed),
+                  my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
@@ -278,7 +331,7 @@ def _on_render(deck_browser, content):
                                           wrap=_wrap_info(), deltas=_deck_deltas(),
                                           exam_eve=_exam_eve_info(),
                                           rules_stale=client().rules_stale,
-                                          squad_view=_squad_view(), knocks=_visible_knocks(),
+                                          squad_view=_squad_view(c), knocks=_visible_knocks(c),
                                           reviews=review_banners(),
                                           sync_error=_state["sync_error"])
             _push_if_stale()
@@ -358,12 +411,18 @@ def _on_js(handled, message, context):
         _swap(c)
         if parts[2] == "squads":
             _fetch_squad()
+        elif parts[2] == "decks":
+            _fetch_decks()
     elif cmd == "refresh":
         _on_sync_done(full=True)  # push my own numbers too, then fetch the week
         if c.get("period") == "squads":
             _fetch_squad(force=True)
+        elif c.get("period") == "decks":
+            _fetch_decks(force=True)
     elif cmd == "friends":
         open_friends()
+    elif cmd == "copyinvite":
+        _copy_friend_invite()
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
@@ -399,6 +458,8 @@ def _on_js(handled, message, context):
                     f"· {board._fmt_time(b.get('time_ms') or 0)}")
             if (b.get("full_days") or 0) >= 3:
                 text += f" · everyone showed up {b['full_days']} of 7 days"
+            if 0 < int(b.get("days_known") or 7) < 7:
+                text += f" · from {int(b['days_known'])} of its 7 days"
             if b.get("milestone"):
                 text += f" · just passed {b['milestone']} all-time"
             copy_text(text + " — Due Crew")
@@ -453,7 +514,7 @@ def _swap(c):
                             wrap=_wrap_info(), deltas=_deck_deltas(),
                             exam_eve=_exam_eve_info(),
                             rules_stale=client().rules_stale,
-                            squad_view=_squad_view(), knocks=_visible_knocks(),
+                            squad_view=_squad_view(c), knocks=_visible_knocks(c),
                             reviews=review_banners(), sync_error=_state["sync_error"])
     js = """
     (function() {

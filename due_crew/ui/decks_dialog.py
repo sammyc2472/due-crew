@@ -13,7 +13,7 @@ from aqt.qt import (
 )
 
 from . import attach_alive
-from ..stats.decks import all_deck_counts, deck_signature, sig_match, subtree_counts
+from ..stats.decks import all_deck_counts, crew_matches, deck_signature, subtree_counts
 
 
 class DecksDialog(QDialog):
@@ -26,15 +26,6 @@ class DecksDialog(QDialog):
         attach_alive(self)
         self._build()
         QTimer.singleShot(0, self._next_match)
-
-    def _crew_matches(self, sig):
-        names = []
-        for e in self.crew:
-            for d in e.get("decks") or []:
-                if sig_match(sig, d.get("sig")):
-                    names.append(e["name"])
-                    break
-        return names
 
     def _build(self):
         self.setWindowTitle("Shared Decks")
@@ -102,7 +93,7 @@ class DecksDialog(QDialog):
         did, _box, label = self.rows[self._match_index]
         self._match_index += 1
         try:
-            names = self._crew_matches(deck_signature(mw.col, did))
+            names = crew_matches(deck_signature(mw.col, did), self.crew)
             label.setText("matches " + ", ".join(names) if names
                           else "no matches in your crew yet")
         except Exception:

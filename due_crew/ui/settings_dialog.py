@@ -160,7 +160,19 @@ class SettingsDialog(QDialog):
         name = html.escape(self.client.display_name or "?")
         email = html.escape(self.client.email)
         return (f"Signed in as <b>{name}</b><br>"
-                f"<span style='font-size: 11px;'>{email}</span>")
+                f"<span style='font-size: 11px;'>{email}<br>{html.escape(self._sync_text())}</span>")
+
+    def _sync_text(self):
+        """"Is it syncing for me?" answered where people look for it. The
+        time is the last upload the server ACCEPTED, not the last attempt."""
+        from ..app import ADDON_VERSION
+        from ..board import _ago
+        if self.client.session_dead:
+            state = "Sign-in expired"
+        else:
+            ago, _tone = _ago(self.client.session.get("last_ok", ""))
+            state = f"Synced {ago}" if ago else "Not synced yet"
+        return f"{state} · v{ADDON_VERSION}" if ADDON_VERSION else state
 
     def _sign_in(self):
         self.open_auth()

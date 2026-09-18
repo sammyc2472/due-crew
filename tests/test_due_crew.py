@@ -1017,9 +1017,9 @@ def test_v25_edges_emoji_week():
             "name": "busm", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
             "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
     html = board._squads_html(view, {"sort": "week"})
-    check("squad board: emoji in front of names, a Week column, sortable by it",
+    check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
           "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
-          and "&#128197; Week &#9662;" in html and "squadshare" in html
+          and "&#128197; 7 days &#9662;" in html and "squadshare" in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
@@ -1211,6 +1211,250 @@ def test_remove_sticks():
     store.auth_uid = "dre"
     check("a deliberate rejoin with the code still works — Block is what stops that",
           dre.join_squad("dre", sid, "Dre") in (200, 201))
+
+
+def _deck_col():
+    """AnKing (1) with a Cardio subdeck (2), an unrelated deck (3), and one
+    card sitting in a filtered deck (99) whose home is Cardio. By hand, for
+    the AnKing subtree: 6 cards, 4 seen, 2 mature, 5 unlocked."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=1, ctype=2, queue=2, ivl=30)     # seen, mature
+    fakes.add_card(conn, 2, did=2, ctype=2, queue=2, ivl=5)      # seen, young
+    fakes.add_card(conn, 3, did=2, ctype=0, queue=0)             # new, unlocked
+    fakes.add_card(conn, 4, did=1, ctype=0, queue=-1)            # new, suspended: locked
+    fakes.add_card(conn, 5, did=1, ctype=2, queue=-1, ivl=40)    # seen+mature, then suspended
+    fakes.add_card(conn, 6, did=99, odid=2, ctype=2, queue=2, ivl=3)  # in a filtered deck
+    fakes.add_card(conn, 7, did=3, ctype=2, queue=2, ivl=50)     # another deck entirely
+    noon = lambda d: int(datetime.datetime.combine(d, datetime.time(12)).timestamp() * 1000)
+    t = noon(TODAY)
+    fakes.add_review(conn, t, ease=3, rtype=1, cid=1)
+    fakes.add_review(conn, t + 1000, ease=1, rtype=1, cid=2)     # Again: graded, wrong
+    fakes.add_review(conn, t + 2000, ease=3, rtype=1, cid=6)     # credited to its home deck
+    fakes.add_review(conn, t + 3000, ease=3, rtype=3, cid=2)     # early review: an answer, not graded
+    fakes.add_review(conn, t + 4000, ease=0, rtype=1, cid=1)     # a manual op, not an answer
+    fakes.add_review(conn, t + 5000, ease=3, rtype=1, cid=7)     # the other deck
+    fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=3)), ease=3, rtype=1, cid=1)
+    fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=10)), ease=1, rtype=1, cid=1)  # too old
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({1: "AnKing", 2: "AnKing::Cardio", 3: "Other"})
+    return col
+
+
+def test_decks():
+    """The Decks screen had no tests before 2.6. Its SQL runs here against a
+    real (in-memory) database, so the JOIN and every CASE are exercised."""
+    from due_crew.stats import decks as dk
+    col = _deck_col()
+    table = dk.all_deck_counts(col)
+    check("decks: per-deck counts, filtered cards credited home, suspended-but-seen is unlocked",
+          table[1] == [3, 2, 2, 2] and table[2] == [3, 2, 0, 3] and table[3] == [1, 1, 1, 1], str(table))
+    check("decks: subtree roll-up", dk.subtree_counts(col, 1, table) == (6, 4, 2))
+    act = dk.deck_activity(col)
+    check("decks: activity credits home decks; manual ops and old reviews are out",
+          act == {1: [1, 2, 2], 2: [3, 1, 2], 3: [1, 1, 1]}, str(act))
+    check("decks: subtree extras (unlocked, today, correct, graded)",
+          dk.subtree_extra(col, 1, table, act) == (5, 4, 3, 4))
+    payload = dk.gather_shared_decks(col, {"shared_decks": [1]})
+    d = payload[0]
+    check("decks: the upload carries unlocked, today, retention, and its day",
+          (d["name"], d["total"], d["seen"], d["mature"], d["open"], d["today"], d["ret"], d["day"])
+          == ("AnKing", 6, 4, 2, 5, 4, 75.0, TODAY.isoformat()), str(d))
+    private = dk.gather_shared_decks(col, {"shared_decks": [1], "share_reviews": False,
+                                           "share_retention": False})[0]
+    check("decks: the privacy switches cover the new fields",
+          "today" not in private and "ret" not in private and private["open"] == 5)
+    clean = firebase._clean_decks
+    check("decks: a friend's payload round-trips",
+          clean(payload)[0] == dict(d, sig=d["sig"]))
+    bad = dict(d, open=1, ret=140, mature=99)
+    check("decks: nonsense from a friend is bounded, not trusted",
+          clean([bad])[0]["open"] == 4 and "ret" not in clean([bad])[0] and clean([bad])[0]["mature"] == 4)
+    check("decks: `today` without a valid day is dropped; an old client's payload still reads",
+          "today" not in clean([dict(d, day="")])[0]
+          and clean([{"name": "x", "sig": ["a"], "total": 10, "seen": 3, "mature": 1}])[0]
+          == {"name": "x", "sig": ["a"], "total": 10, "seen": 3, "mature": 1})
+
+    today, other = TODAY.isoformat(), (TODAY - datetime.timedelta(days=1)).isoformat()
+    bar = board._bar("Ameya <a>", False, clean(payload)[0], delta=12, today_labels=(today,))
+    check("bar: mature and seen from the left; the hatch starts where seen ends, never under it",
+          'class="fo" style="left:67%;width:16%;"' in bar and 'class="fs" style="width:67%;"' in bar
+          and 'class="fm" style="width:33%;"' in bar)
+    done = board._bar("x", False, {"name": "d", "sig": [], "total": 10, "seen": 10, "mature": 4, "open": 10})
+    check("bar: a fully seen deck has no hatch left to draw",
+          'class="fo" style="left:100%;width:0%;"' in done)
+    check("bar: hover has the exact numbers; the name is escaped",
+          "4 seen · 2 mature · 5 unlocked · 6 total · +12 this week · 75.0% retention, last 7 days" in bar
+          and "Ameya &lt;a&gt;" in bar)
+    check("bar: today and week chips, and retention beside the count",
+          "+4 today &middot; +12 wk" in bar and "4 / 6 &middot; 75%" in bar)
+    stale = board._bar("Ameya", False, clean(payload)[0], today_labels=(other,))
+    check("bar: yesterday's 'today' is not shown as today", "today" not in stale.split("title=")[0]
+          and "+4 today" not in stale)
+    old = board._bar("igk", False, {"name": "x", "sig": [], "total": 10, "seen": 3, "mature": 1})
+    check("bar: an older client's deck renders without the unlocked fill",
+          'class="fo"' not in old and "3 / 10" in old and "unlocked" not in old)
+    # the Shared Decks dialog's "matches …" label. My own entry carries the
+    # decks I already share, so through 2.5.1 a shared deck matched its owner.
+    sig = [f"g{n}" for n in range(12)]
+    crew = [{"user_id": "me", "name": "Sam", "you": True, "decks": [{"name": "A", "sig": sig}]},
+            {"user_id": "f1", "name": "igk", "you": False, "decks": [{"name": "A", "sig": sig[:9]}]},
+            {"user_id": "f2", "name": "Dre", "you": False, "decks": [{"name": "B", "sig": sig[:3]}]},
+            {"user_id": "f3", "name": "Jo", "you": False}]
+    check("deck matches: crewmates past the overlap bar, never yourself",
+          dk.crew_matches(sig, crew) == ["igk"] and dk.crew_matches(sig, None) == []
+          and dk.crew_matches([], crew) == [])
+
+    # through 2.5.1 the legend said "light = seen, dark = mature", which is
+    # backwards in dark mode, where the mature fill is the bright one
+    legend = board._decks_html({"labels": [today], "entries": [
+        {"user_id": "me", "name": "Sam", "you": True, "decks": clean(payload)}]})
+    check("decks legend: names the fills by texture, which holds in both themes",
+          "solid = mature" in legend and "faded = seen" in legend and "hatched = unlocked" in legend
+          and "light =" not in legend and "dark =" not in legend)
+
+
+def test_calendar_weeks_and_ledger():
+    """2.6: "Week" is Monday-to-Sunday, and the numbers behind the "Last
+    week" banner and the all-time milestones come from a per-day ledger.
+    Before this, both were a rolling seven-day sum taken whenever Anki was
+    first opened in a week: only "last week" if that was a Monday, and the
+    all-time total double-counted or skipped days as the open-day moved."""
+    D = datetime.date
+    span = lambda end: [(end - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    check("week labels: Wednesday sees Monday..Wednesday",
+          board.week_labels(span(D(2026, 9, 16))) == ["2026-09-16", "2026-09-15", "2026-09-14"])
+    check("week labels: Monday is a week of one, Sunday a week of seven",
+          board.week_labels(span(D(2026, 9, 14))) == ["2026-09-14"]
+          and len(board.week_labels(span(D(2026, 9, 20)))) == 7)
+
+    def crew(labels):
+        """Sam and Dre, every day: 100 each through Sep 13, then Dre does 150."""
+        def day(lb, uid):
+            n = 150 if (uid == "dre" and lb >= "2026-09-14") else 100
+            return {"studied": True, "reviews": n, "studyTimeMs": 60000}
+        return [{"user_id": u, "name": nm, "you": u == "sam", "paused": False,
+                 "last_updated": "", "exam_date": "", "decks": [],
+                 "days": {lb: day(lb, u) for lb in labels}}
+                for u, nm in (("sam", "Sammy"), ("dre", "Dre"))]
+
+    wed = span(D(2026, 9, 16))
+    fresh, _dormant = board.build_rows(crew(wed), wed, "", "week", {})
+    check("board: the Week view sums this week only (3 days), not the last seven",
+          {r["name"]: r["reviews"] for r in fresh} == {"Sammy": 300, "Dre": 450})
+
+    wrap = _patched_due_crew()
+    keep = dict(wrap._state)
+    try:
+        def open_anki(day):
+            labels = span(day)
+            entries = crew(labels)
+            wrap._state.update(labels=labels, entries=entries)
+            wrap._update_wrap(entries, labels)
+            return wrap._wrap_data(), wrap._wrap_info()
+
+        w, banner = open_anki(D(2026, 9, 7))     # a Monday, first run ever
+        check("ledger: first run folds nothing (the old accrual owned the past)",
+              (w.get("life") or {}).get("reviews", 0) == 0)
+        check("banner: last week from the six of its days the board has seen",
+              banner["reviews"] == 1200 and banner["days_known"] == 6)
+
+        w, banner = open_anki(D(2026, 9, 16))    # next open is a WEDNESDAY, nine days on
+        check("ledger: a day joins the all-time total once, when it leaves the window",
+              w["life"]["reviews"] == 200)       # Sep 7 only; Sep 8-9 were never seen
+        check("banner: last week is Sep 7-13 exactly, and admits it saw 5 of 7 days",
+              banner["reviews"] == 1000 and banner["days_known"] == 5 and banner["best_name"] == "")
+        page = board.render({"entries": [], "labels": wed, "tomorrow": "", "pending": []},
+                            {}, 0, wrap=banner)
+        check("banner: the partial week is said out loud", "from 5 of its 7 days" in page)
+
+        w, _b = open_anki(D(2026, 9, 17))        # Thursday
+        check("ledger: opening again the next day adds just the one day that left",
+              w["life"]["reviews"] == 400)
+
+        w, banner = open_anki(D(2026, 9, 21))    # Monday again
+        check("ledger: shifting open-days neither double-count nor skip (Sep 7,10-14 = 1,250)",
+              w["life"]["reviews"] == 1250)
+        check("banner: a whole last week, Mon-Sun, however late it is first opened",
+              banner["reviews"] == 1750 and banner["days_known"] == 7 and banner["full_days"] == 7)
+        check("banner: best week is judged against settled weeks before last",
+              banner["best_name"] == "Dre" and w["best"] == {"sam": 600, "dre": 600})
+        full = board.render({"entries": [], "labels": span(D(2026, 9, 21)), "tomorrow": "",
+                             "pending": []}, {}, 0, wrap=banner)
+        check("banner: a complete week says nothing about coverage", "of its 7 days" not in full)
+        w["dismissed"] = wrap._week_key("2026-09-21")
+        check("banner: dismissing lasts the week", wrap._wrap_info() is None)
+    finally:
+        wrap._state.clear()
+        wrap._state.update(keep)
+
+
+def test_wrap_file_is_durable():
+    """wrap.json is read inside the deck browser's render hook, so a bad one
+    must not raise there; and it holds the all-time totals, so a write that
+    dies halfway must not take them with it."""
+    wrap = _patched_due_crew()
+    path = os.path.join(wrap._profile_files(), "wrap.json")
+    keep = dict(wrap._state)
+    try:
+        good = {"r": 10, "t": 5, "all": False, "p": {"sam": 10}, "folded": False}
+        for label, ledger in (("a list", []), ("a null day", {"2026-09-14": None}),
+                              ("a day without counts", {"2026-09-14": {"p": {}}}),
+                              ("text for a person's count", {"2026-09-14": dict(good, p={"sam": "x"})})):
+            with open(path, "w") as f:
+                json.dump({"ledger": ledger, "life": {"reviews": 900, "time_ms": 1, "since": "2026-01-01"},
+                           "muted_knocks": ["u1"]}, f)
+            wrap._wrap["profile"] = None
+            w = wrap._wrap_data()
+            wrap._state.update(labels=["2026-09-21"], entries=[])
+            try:
+                wrap._wrap_info()
+                raised = False
+            except Exception:
+                raised = True
+            check(f"wrap.json: a ledger that is {label} is dropped, the rest kept, nothing raises",
+                  "ledger" not in w and w["life"]["reviews"] == 900 and w["muted_knocks"] == ["u1"]
+                  and not raised)
+        with open(path, "w") as f:
+            json.dump(["not", "ours"], f)
+        wrap._wrap["profile"] = None
+        check("wrap.json: not even a dict loads as empty", wrap._wrap_data() == {})
+        with open(path, "w") as f:
+            json.dump({"ledger": {"2026-09-14": good}}, f)
+        wrap._wrap["profile"] = None
+        check("wrap.json: a ledger in our own shape is kept as it is",
+              wrap._wrap_data()["ledger"] == {"2026-09-14": good})
+
+        wrap._wrap["data"] = {"life": {"reviews": 1234}}
+        wrap._save_wrap()
+        with open(path) as f:
+            saved = json.load(f)
+        check("wrap.json: saved whole, no temp file left", saved == {"life": {"reviews": 1234}}
+              and os.listdir(wrap._profile_files()) == ["wrap.json"])
+
+        real_dump = wrap.json.dump
+
+        def dies_halfway(obj, f):
+            f.write('{"life": {"rev')
+            raise OSError("disk full")
+
+        wrap.json.dump = dies_halfway
+        try:
+            wrap._wrap["data"] = {"life": {"reviews": 0}}
+            wrap._save_wrap()
+        finally:
+            wrap.json.dump = real_dump
+        with open(path) as f:
+            after = json.load(f)
+        check("wrap.json: a write that dies halfway leaves the last good file in place",
+              after == {"life": {"reviews": 1234}}
+              and os.listdir(wrap._profile_files()) == ["wrap.json"])
+    finally:
+        wrap._state.clear()
+        wrap._state.update(keep)
+        wrap._wrap["profile"] = None
+        wrap._wrap["data"] = {}
+
 
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]

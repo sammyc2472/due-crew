@@ -31,7 +31,13 @@ a non-zero exit if one fails to build:
 
 Both crashes shipped on 2026-09-10 (a PyQt6 enum mix and a shadowed tab
 widget) fail here in under a second. Run it before any release that
-touches `due_crew/ui/`.
+touches `due_crew/ui/`. Without OUT_DIR it writes `dialog-shots/` in the
+working directory (gitignored; CI uploads it as an artifact).
+
+`mw.col` here is a real in-memory collection from the suite's builders.
+Until 2.6 it was a stub that answered every query with nothing, so Shared
+Decks only ever rendered its empty state. A dialog is only covered in the
+states the harness puts it in: when one grows a new state, seed it here.
 
 ## Continuous integration
 

@@ -25,9 +25,8 @@ def _with_emoji(prof):
 
 
 def invite_text(friend_code):
-    """One paste with everything a friend needs."""
-    return ("Study with me on Due Crew — Anki add-on 2035408484.\n"
-            f"My friend code: {friend_code}")
+    from ..share import friend_invite   # one wording, also used by the board
+    return friend_invite(friend_code)
 
 
 class FriendsDialog(QDialog):

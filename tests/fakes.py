@@ -46,17 +46,50 @@ class FakeCol:
 
 
 def make_collection(conn):
+    """The slices of Anki's schema the add-on queries: revlog (with cid, so
+    reviews can be credited to a deck), cards, and notes."""
     conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, ease INTEGER, "
-                 "time INTEGER, type INTEGER)")
+                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
+                 "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
+                 "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT)")
     return conn
 
 
-def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1):
+def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0):
     # revlog ids are epoch-ms and must be unique
     while conn.execute("SELECT 1 FROM revlog WHERE id=?", (ts_ms,)).fetchone():
         ts_ms += 1
-    conn.execute("INSERT INTO revlog VALUES (?,?,?,?)", (ts_ms, ease, time_ms, rtype))
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid) VALUES (?,?,?,?,?)",
+                 (ts_ms, ease, time_ms, rtype, cid))
     return ts_ms
+
+
+def add_card(conn, cid, did, ctype=0, queue=0, ivl=0, odid=0):
+    """ctype 0 new / 2 review; queue -1 suspended; ivl >= 21 is mature."""
+    conn.execute("INSERT INTO notes (id, guid) VALUES (?, ?)", (cid, f"guid{cid:06d}"))
+    conn.execute("INSERT INTO cards (id, nid, did, odid, type, queue, ivl) VALUES (?,?,?,?,?,?,?)",
+                 (cid, cid, did, odid, ctype, queue, ivl))
+
+
+class FakeDecks:
+    """{did: name}, children by the "Parent::Child" naming Anki uses."""
+    def __init__(self, names):
+        self.names = dict(names)
+
+    def get(self, did, default=True):
+        return {"id": did, "name": self.names[did], "dyn": 0} if did in self.names else False
+
+    def name(self, did):
+        return self.names.get(did, "?")
+
+    def deck_and_child_ids(self, did):
+        root = self.names.get(did, "\0")
+        return [d for d, n in self.names.items() if d == did or n.startswith(root + "::")]
+
+    def all_names_and_ids(self):
+        return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]
 
 
 # ------------------------------------------------------------ fake firestore

@@ -75,7 +75,10 @@ _state = {
     "my_friends": [],
     "squad": {"id": "", "data": None, "day": "", "ts": 0.0, "state": "loading"},
     "knocks": [],
-    "sync_error": False,   # the last upload/fetch failed; the footer says so   # [(sender_uid, name, squad_id)] awaiting my add
+    "sync_error": False,   # the last upload/fetch failed; the footer says so
+    "decks_day": "",       # the day shared-deck docs last rode a board fetch
+    "decks_ts": 0.0,       # when the Decks tab last fetched them itself
+    "my_code": "",         # my friend code, for Copy invite on a solo board   # [(sender_uid, name, squad_id)] awaiting my add
 }
 
 
@@ -153,7 +156,7 @@ def _reset_runtime():
                   my_friends=[],
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
-                  knocks=[], sync_error=False)
+                  knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="")
     _pending_cheers.clear()
 
 

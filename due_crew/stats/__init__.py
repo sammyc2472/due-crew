@@ -110,6 +110,7 @@ def gather_week(col, user_files_dir, days=7):
     q = StatsQueries(col)
     studied = q.studied_days_ago(WEEK_WINDOW)
     base = StreakTracker(q, user_files_dir).base()
+    totals = q.daily_totals(days)  # one pass; this was three queries per day
     out = []
     for ago in range(1, days):
         if ago not in studied:
@@ -122,12 +123,13 @@ def gather_week(col, user_files_dir, days=7):
             while day in studied:  # a short, already-broken run
                 streak += 1
                 day += 1
-        correct, total = q.accuracy_for_day(ago)
+        label = q.day_label(ago)
+        answers, time_ms, correct, graded = totals.get(label, (0, 0, 0, 0))
         out.append({
-            "label": q.day_label(ago),
-            "reviews": q.reviews_for_day(ago),
-            "time_ms": q.study_time_ms_for_day(ago),
-            "accuracy": (correct / total * 100) if total else None,
+            "label": label,
+            "reviews": answers,
+            "time_ms": time_ms,
+            "accuracy": (correct / graded * 100) if graded else None,
             "streak": streak,
         })
     return out

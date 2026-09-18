@@ -53,26 +53,29 @@ def _share(kind):
 
 
 def _my_week(q, labels):
-    """(flags oldest->today, reviews, time_ms) for the last 7 days, from
-    the local revlog — always fresh, never waiting on a sync. A day inside
-    my away spell that I didn't study reads "away", not missed."""
+    """(flags Monday->today, reviews, time_ms) for THIS calendar week, from
+    the local revlog — always fresh, never waiting on a sync. Only days that
+    have happened get a square, so an unfinished week never shows tomorrow as
+    missed. A day inside my away spell that I didn't study reads "away"."""
     c = cfg()
+    days = len(board.week_labels(labels)) or 1      # Monday..today
     studied = q.studied_days_ago(7)
+    totals = q.daily_totals(days)                    # one pass
     flags = []
-    for ago in range(6, -1, -1):
+    for ago in range(days - 1, -1, -1):
         lb = labels[ago] if ago < len(labels) else q.day_label(ago)
         flags.append(True if ago in studied
                      else ("away" if away_on(lb, c) else False))
-    reviews = sum(q.reviews_for_day(i) for i in range(7))
-    time_ms = sum(q.study_time_ms_for_day(i) for i in range(7))
+    reviews = sum(v[0] for v in totals.values())
+    time_ms = sum(v[1] for v in totals.values())
     return flags, reviews, time_ms
 
 
 def _my_week_text(q, stats, labels):
     from . import share
     flags, reviews, time_ms = _my_week(q, labels)
-    return share.my_week(list(reversed(labels[:7])), flags, reviews, time_ms,
-                         stats.streak)
+    return share.my_week(list(reversed(board.week_labels(labels))), flags, reviews,
+                         time_ms, stats.streak)
 
 
 def _day_flag(doc):
@@ -99,7 +102,8 @@ def _crew_week_text(q, stats, labels):
     """My row from local revlog (fresh); friends' rows from their uploaded
     days. Absence is silent: no row without at least one studied day."""
     from . import share
-    week = list(reversed(labels[:7]))  # oldest -> today
+    this_week = board.week_labels(labels)
+    week = list(reversed(this_week))  # Monday -> today
     rows, reviews, time_ms = [], 0, 0
     for e in _state["entries"] or []:
         if e.get("paused"):
@@ -112,7 +116,7 @@ def _crew_week_text(q, stats, labels):
             continue
         days = e.get("days") or {}
         flags = [_day_flag(days.get(lb)) for lb in week]
-        agg = board._week_row(days, labels) or {}
+        agg = board._week_row(days, this_week) or {}
         reviews += int(agg.get("reviews") or 0)
         time_ms += int(agg.get("time_ms") or 0)
         rows.append((e["name"], flags, _as_of(e.get("last_updated"), labels),
