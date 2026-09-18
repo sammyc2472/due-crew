@@ -5,6 +5,19 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    name: undefined names (pyflakes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyflakes
+      # the suite never imports most of the glue, so this is the only thing
+      # that catches a NameError there before a user does
+      - run: python -m pyflakes due_crew tests tools
+
   suite:
     name: client suite (fake Firestore)
     runs-on: ubuntu-latest

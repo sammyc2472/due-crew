@@ -21,11 +21,12 @@ import traceback
 
 from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
-from aqt.qt import QAction
+from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (CHEER_EMOJI, HEATMAP_DAYS, STREAK_MILESTONES, _migrate_server_json,
+from .app import (ADDON_VERSION, CHEER_EMOJI, HEATMAP_DAYS, STALE_SECS, STREAK_MILESTONES,
+                  _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
 from .backend.firebase import TransportError
@@ -47,6 +48,7 @@ from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _upd
 _lock = threading.Lock()
 _fetching = False
 _menu_done = False
+_last_attempt = 0.0   # when a push was last STARTED, success or not
 
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
@@ -61,8 +63,8 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     leave alone. backfill: last week's studied days, hash-guarded so the
     steady state stays one daily write per sync."""
     global _fetching
-    if not mw.col or not client().signed_in:
-        return
+    if not mw.col or not client().signed_in or client().session_dead:
+        return  # a refused token can't be retried into working
     uploading = (upload_stats is not None or shared_decks is not None
                  or backfill is not None)
     with _lock:
@@ -90,8 +92,10 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     def job():
         global _fetching
         try:
+            pushed = True
             if upload_stats is not None:
-                cl.upload_today(uid, name, labels[0], upload_stats, c)
+                pushed = cl.upload_today(uid, name, labels[0], upload_stats, c,
+                                         version=ADDON_VERSION)
             if backfill is not None:
                 cl.upload_backfill(uid, backfill, c)
             if shared_decks is not None and not c.get("paused"):
@@ -112,13 +116,15 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 knocks = cl.list_knocks(uid)  # one list request
             except TransportError:
                 knocks = None
+            failed = not pushed
             mw.taskman.run_on_main(
-                lambda: _commit(data, c, labels, tomorrow, knocks, gone))
+                lambda: _commit(data, c, labels, tomorrow, knocks, gone, failed))
         except TransportError:
             # expected when offline or flaky — stderr raises Anki's error
-            # dialog, so this stays off that channel; cache untouched and
-            # the board footer already says how old it is
+            # dialog, so this stays off that channel; the cache is untouched
+            # and the footer now SAYS the sync failed instead of just aging
             print("due crew: refresh failed (network); keeping the cached board")
+            mw.taskman.run_on_main(_sync_failed)
         except Exception:
             traceback.print_exc()  # cache stays untouched on failure
         finally:
@@ -128,7 +134,39 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     threading.Thread(target=job, daemon=True).start()
 
 
-def _commit(data, c, labels, tomorrow, knocks=None, gone=()):
+def _sync_failed():
+    """Main thread. Either the network is down (footer: Couldn't sync) or the
+    server refused my sign-in for good (the card asks me back in)."""
+    _state["sync_error"] = True
+    if client().session_dead:
+        _state["board_shown"] = False
+        _rerender()
+    elif _state["board_shown"] and mw.state == "deckBrowser":
+        _swap(cfg())
+
+
+def _is_stale(now, fetched_at, last_attempt, limit=STALE_SECS):
+    """Refresh when the board is old AND we haven't just tried. The second
+    half matters offline: without it every redraw would fire a request."""
+    return now - fetched_at > limit and now - last_attempt > limit
+
+
+def _push_if_stale():
+    """Uploads used to ride Anki's sync hook alone, so anyone who studied and
+    closed Anki without syncing shared nothing. Now opening Anki, and coming
+    back to a stale deck screen, push too. Hash guards keep an unchanged day
+    at zero writes; the fetch is capped by STALE_SECS."""
+    global _last_attempt
+    if not mw.col or not client().signed_in or client().session_dead:
+        return
+    now = time.time()
+    if not _is_stale(now, _state["ts"], _last_attempt):
+        return
+    _last_attempt = now  # claim it now: a second redraw must not double up
+    QTimer.singleShot(0, _on_sync_done)  # after this paint, not during it
+
+
+def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     """Main thread. The only writer of _state and _pending_cheers."""
     keep = set(labels) | {tomorrow}
     day_store = _state["days"]
@@ -200,7 +238,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=()):
         tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
-                  pending=data["pending"], ts=time.time(),
+                  pending=data["pending"], ts=time.time(), sync_error=bool(failed),
                   my_friends=list(data.get("my_friends") or []))
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
@@ -227,9 +265,9 @@ def _on_render(deck_browser, content):
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
             return
-        if not client().signed_in:
+        if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
-            content.stats += board.signed_out_card(c)
+            content.stats += board.signed_out_card(c, expired=client().session_dead)
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)
@@ -241,7 +279,9 @@ def _on_render(deck_browser, content):
                                           exam_eve=_exam_eve_info(),
                                           rules_stale=client().rules_stale,
                                           squad_view=_squad_view(), knocks=_visible_knocks(),
-                                          reviews=review_banners())
+                                          reviews=review_banners(),
+                                          sync_error=_state["sync_error"])
+            _push_if_stale()
     except Exception:
         traceback.print_exc()
 
@@ -254,8 +294,10 @@ def _on_sync_done(full=False):
     """Upload everything that changed, then fetch. Anki's sync hook and the
     board's Refresh both land here, so Refresh never leaves your own row
     behind; Refresh asks for the full week."""
+    global _last_attempt
     if not mw.col or not client().signed_in:
         return
+    _last_attempt = time.time()
     c = cfg()
     # independent try blocks: one gatherer failing must not silently stop
     # the others from uploading (that failure mode is invisible in the UI)
@@ -408,7 +450,7 @@ def _swap(c):
                             exam_eve=_exam_eve_info(),
                             rules_stale=client().rules_stale,
                             squad_view=_squad_view(), knocks=_visible_knocks(),
-                            reviews=review_banners())
+                            reviews=review_banners(), sync_error=_state["sync_error"])
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -510,7 +552,10 @@ def _on_profile_open():
     _reset_runtime()          # profile switch: nothing carries over
     client()                  # rebind to this profile's session
     _migrate_server_json()    # v1.x crew-server config, if any
-    refresh_board()
+    refresh_board()           # the board, right away
+    # ...and my own numbers a few seconds later, unless Anki's own sync got
+    # there first (it pushes on finish, and it may have pulled phone reviews)
+    QTimer.singleShot(8000, _push_if_stale)
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)

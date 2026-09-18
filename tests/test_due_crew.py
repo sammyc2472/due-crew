@@ -1096,6 +1096,117 @@ def test_personal_reviews():
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
     check("own card offers month and year", "duecrew:sharemonth" in js and "duecrew:shareyear" in js)
 
+
+def test_sync_reliability_v251():
+    """2.5.1: a refused sign-in is detected (and only a REFUSED one — offline
+    is not signed out), the build number rides the profile, a refused squad
+    row isn't mistaken for removal, and staleness has a retry guard."""
+    import due_crew
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": [], "dre": []})
+    cl = new_client(store, "sam", "Sammy")
+    check("session: alive to begin with", cl.signed_in and not cl.session_dead)
+
+    store.force_401 = True
+    store.token_reply = "network"
+    _doc, status = cl.get_doc("users/sam")
+    check("session: offline during refresh is NOT signed out", status == 401 and not cl.session_dead)
+    store.token_reply = (503, {})
+    cl.get_doc("users/sam")
+    check("session: a 5xx from the token endpoint is NOT signed out", not cl.session_dead)
+    store.token_reply = (400, {"error": {"message": "API key not valid. Please pass a valid API key."}})
+    cl.get_doc("users/sam")
+    check("session: an unrelated 400 is NOT signed out", not cl.session_dead)
+    store.token_reply = (400, {"error": {"message": "TOKEN_EXPIRED"}})
+    cl.get_doc("users/sam")
+    check("session: a refused refresh token marks the session dead", cl.session_dead and cl.signed_in)
+    cl2 = new_client(store, "sam", "Sammy")
+    cl2.session["auth_dead"] = True
+    cl2._store_tokens({"localId": "sam", "idToken": "t-sam", "refreshToken": "r"}, "s@example.com")
+    check("session: signing in again clears it", not cl2.session_dead)
+    store.force_401 = False
+    store.token_reply = None
+
+    col = make_user_col([TODAY])
+    cl3 = new_client(store, "sam", "Sammy")
+    cl3.upload_today("sam", "Sammy", TODAY.isoformat(), gather_stats(col, tempfile.mkdtemp()), {}, version="2.5.1")
+    check("profile carries the client version",
+          store.docs["users/sam"].get("clientVersion") == {"stringValue": "2.5.1"})
+
+    squad = cl3.create_squad("sam", "busm", "Sammy")
+    sid = squad["id"]
+    store.auth_uid = "dre"
+    dre = new_client(store, "dre", "Dre")
+    dre.join_squad("dre", sid, "Dre")
+    bad = {"name": "Dre", "reviews": 1, "studyTimeMs": 1, "streak": 1, "week": 9, "day": TODAY.isoformat()}
+    gone = dre.upload_squad_rows("dre", bad, [sid])
+    check("squad: a row the rules refuse is NOT read as removal; it raises the rules hint",
+          gone == [] and dre.session.get("rules_stale_hint") is True
+          and f"squads/{sid}/members/dre" in store.docs)
+    store.auth_uid = "sam"
+    cl3.remove_member(sid, "dre")
+    store.auth_uid = "dre"
+    good = dict(bad, week=3)
+    check("squad: once actually removed, the same 403 does mean gone",
+          dre.upload_squad_rows("dre", good, [sid]) == [sid])
+
+    ce, too_long = firebase.clean_emoji, firebase.emoji_too_long
+    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
+    check("emoji: a 25-byte joined emoji is refused whole, never truncated or sent",
+          ce(family) == "" and too_long(family) and not too_long("abc") and not too_long("🦊"))
+    check("emoji: everything the client accepts fits 16 by bytes, UTF-16 units, and code points",
+          all(ce(e) == e and len(e.encode("utf-8")) <= 16
+              for e in ("🦊", "🇺🇸", "👍🏽", "👩‍💻", "🧑🏽‍💻", "❤️‍🔥")))
+
+    check("stale: an old board with no recent attempt refreshes",
+          due_crew._is_stale(1000, 0, 0, 900))
+    check("stale: a fresh board does not", not due_crew._is_stale(1000, 500, 0, 900))
+    check("stale: an old board we JUST tried (offline) does not hammer",
+          not due_crew._is_stale(1000, 0, 500, 900))
+
+    card = board.signed_out_card({}, expired=True)
+    check("board: an expired sign-in asks you back in, plainly",
+          "Your sign-in expired." in card and "Sign in again" in card and "duecrew:setup" in card
+          and "Join your crew" not in card)
+    base = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
+    check("board: the footer admits a failed sync, and only then",
+          "Couldn&rsquo;t sync" in board.render(base, {}, 0, sync_error=True)
+          and "Couldn&rsquo;t sync" not in board.render(base, {}, 0))
+
+
+def test_remove_sticks():
+    """Found 2026-09-18: on an OPEN squad, Remove undid itself. Clients PATCH
+    their daily row; a PATCH to a missing doc is an insert; so the removed
+    person's next sync re-created their membership. The 2.3 test missed it by
+    locking the squad first. Two layers now: rules demand joinedAt on a
+    create, and 2.5.1 row writes are update-only."""
+    store, sam, squad = _squad_fixture()
+    sid = squad["id"]
+    path = f"squads/{sid}/members/dre"
+    store.auth_uid = "dre"
+    dre = new_client(store, "dre", "Dre")
+    check("join: a join without joinedAt is refused",
+          dre._patch_status(path, {"name": "Dre"}) == 403)
+    check("join: the real join works", dre.join_squad("dre", sid, "Dre") in (200, 201))
+    row = {"name": "Dre", "reviews": 5, "studyTimeMs": 1, "streak": 1, "day": TODAY.isoformat()}
+    check("row: a member's sync still lands", dre.upload_squad_rows("dre", row, [sid]) == []
+          and store.docs[path]["reviews"] == {"integerValue": "5"})
+    store.auth_uid = "sam"
+    sam.remove_member(sid, "dre")            # the squad is OPEN — never locked
+    store.auth_uid = "dre"
+    check("remove sticks: a 2.5.1 sync reports gone and re-creates nothing",
+          dre.upload_squad_rows("dre", dict(row, reviews=6), [sid]) == [sid] and path not in store.docs)
+    old_client = dict(row, reviews=7, updatedAt={"timestampValue": "2026-09-18T10:00:00Z"})
+    check("remove sticks: an old client's plain PATCH is refused by the rules",
+          dre._patch_status(path, old_client) == 403 and path not in store.docs)
+    store.auth_uid = "sam"
+    check("remove sticks: the founder's board no longer lists them",
+          sorted(r["name"] for r in sam.fetch_squad(sid)["rows"]) == ["Sammy"])
+    store.auth_uid = "dre"
+    check("a deliberate rejoin with the code still works — Block is what stops that",
+          dre.join_squad("dre", sid, "Dre") in (200, 201))
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

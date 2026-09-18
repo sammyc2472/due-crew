@@ -164,11 +164,19 @@ service cloud.firestore {
       // A member's doc is their row: name plus today's numbers. Members read
       // the whole collection (one query, one read per member); you write only
       // your own; joining needs the door open; the founder may remove anyone.
+      //
+      // A join must carry joinedAt. Clients write their daily row with a
+      // PATCH, and a PATCH to a missing doc is an INSERT — so without this,
+      // someone the founder removed was re-created by their own next sync
+      // and "Remove" undid itself on any open squad (2.3.0–2.5.0). A real
+      // join always sends joinedAt; a row update never does.
       match /members/{userId} {
         allow read: if isAuthenticated() && isSquadMember(squadId);
         allow create: if isOwner(userId)
                       && squadDoc(squadId).open == true
                       && !isBanned(squadId)
+                      && 'joinedAt' in request.resource.data
+                      && request.resource.data.joinedAt is timestamp
                       && memberShape(request.resource.data);
         allow update: if isOwner(userId)
                       && memberShape(request.resource.data);

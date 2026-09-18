@@ -67,9 +67,11 @@ def fv(v):
     return {"stringValue": str(v)}
 
 
-def put(path, fields, uid, mask=None):
+def put(path, fields, uid, mask=None, must_exist=False):
     keys = mask or list(fields)
     q = "?" + "&".join(f"updateMask.fieldPaths={k}" for k in keys)
+    if must_exist:
+        q += "&currentDocument.exists=true"
     return call("PATCH", path, uid, {"fields": {k: fv(v) for k, v in fields.items()}}, q)[0]
 
 
@@ -201,6 +203,36 @@ def main():
     check("retired: Everyone rows unwritable", put(f"boards/{day}/rows/alice", {"name": "x"}, "alice") == 403)
     check("retired: old server_board unwritable", put("server_board/alice", {"name": "y"}, "alice") == 403)
     check("retired: directory is gone", call("GET", "server_names/busm", "alice")[0] == 403)
+
+    # -- v2.5.1: a row update must never become a join. Found 2026-09-18:
+    # clients PATCH their daily row, a PATCH to a missing doc is an insert,
+    # so a removed member rejoined any OPEN squad on their next sync.
+    s2 = "e" * 24
+    put(f"squads/{s2}", {"name": "open", "founder": "alice", "open": True, "createdAt": TS}, "alice")
+    put(f"squads/{s2}/members/alice", {"name": "Alice", "joinedAt": TS}, "alice")
+    check("join: refused without joinedAt", put(f"squads/{s2}/members/dave", {"name": "Dave"}, "dave") == 403)
+    check("join: joinedAt must be a timestamp", put(f"squads/{s2}/members/dave", {"name": "Dave", "joinedAt": "t"}, "dave") == 403)
+    check("join: accepted with joinedAt", put(f"squads/{s2}/members/dave", {"name": "Dave", "joinedAt": TS}, "dave") in (200, 201))
+    check("row: a member's update needs no joinedAt in the request", put(f"squads/{s2}/members/dave", {"reviews": 7, "updatedAt": TS}, "dave") == 200)
+    check("row: and works as an update-only write too", put(f"squads/{s2}/members/dave", {"reviews": 8}, "dave", must_exist=True) == 200)
+    check("remove: founder removes dave from an OPEN squad", call("DELETE", f"squads/{s2}/members/dave", "alice")[0] == 200)
+    check("remove: an old client's next row sync cannot re-create him",
+          put(f"squads/{s2}/members/dave", {"name": "Dave", "reviews": 9, "updatedAt": TS}, "dave") == 403)
+    check("remove: he is really gone", call("GET", f"squads/{s2}/members/dave", "alice")[0] == 404)
+    st = put(f"squads/{s2}/members/dave", {"reviews": 10}, "dave", must_exist=True)
+    check("remove: a 2.5.1 update-only write is refused and creates nothing",
+          st not in (200, 201) and call("GET", f"squads/{s2}/members/dave", "alice")[0] == 404)
+    print(f"    [observed] update-only PATCH on a missing doc returns {st}")
+    check("remove: a deliberate rejoin with the code still works (Block is what stops that)",
+          put(f"squads/{s2}/members/dave", {"name": "Dave", "joinedAt": TS}, "dave") in (200, 201))
+
+    # -- which unit does size() count? The client caps emoji at 16 by bytes,
+    # UTF-16 units AND code points because I could not find out. This says.
+    check("emoji: 16 UTF-8 bytes, the client's ceiling, is accepted", put("users/bob", {"emoji": "😀" * 4}, "bob") == 200)
+    r5, r9 = put("users/bob", {"emoji": "😀" * 5}, "bob"), put("users/bob", {"emoji": "😀" * 9}, "bob")
+    unit = "UTF-8 BYTES" if r5 == 403 else "UTF-16 UNITS" if r9 == 403 else "CODE POINTS (or looser)"
+    print(f"    [observed] rules string size() counts {unit}: 5 astral chars -> {r5}, 9 -> {r9}")
+    put("users/bob", {"emoji": "🦊"}, "bob")
 
     # -- markers cumulative
     for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"):

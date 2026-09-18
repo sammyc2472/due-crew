@@ -667,7 +667,8 @@ def _review_banner(kind, info):
 
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
-           rules_stale=False, squad_view=None, knocks=None, reviews=None):
+           rules_stale=False, squad_view=None, knocks=None, reviews=None,
+           sync_error=False):
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
@@ -746,8 +747,11 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                  f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
+    failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
+              'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
+              ' &middot; ') if sync_error else ""
     foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
-            f'<span>Updated {ago} &middot; <a href="#" '
+            f'<span>{failed}Updated {ago} &middot; <a href="#" '
             f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
@@ -759,7 +763,11 @@ def _card(cfg, title, body_html):
             f'<b>{title}</b><span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg):
+def signed_out_card(cfg, expired=False):
+    if expired:
+        return _card(cfg, "Due Crew",
+                     f'Your sign-in expired. '
+                     f'<a href="#" onclick="{_pycmd("setup")}">Sign in again</a>')
     return _card(cfg, "Due Crew",
                  f'Your studying, alongside your friends\'. '
                  f'<a href="#" onclick="{_pycmd("setup")}">Join your crew</a>')

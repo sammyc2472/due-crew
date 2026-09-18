@@ -42,6 +42,11 @@ KEEP_DAYS = 7
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
 RULES_MARKER = "rules-v7"
+# The token endpoint's verdicts that mean "this sign-in is over" — as opposed
+# to a network failure or a 5xx, which must NEVER sign anyone out: going
+# offline is not the same as being signed out.
+TERMINAL_AUTH = ("TOKEN_EXPIRED", "USER_DISABLED", "USER_NOT_FOUND",
+                 "INVALID_REFRESH_TOKEN")
 
 
 def firestore_base(project_id):
@@ -146,19 +151,42 @@ def clean_emoji(text):
     text = text.strip()
     if not text:
         return ""
-    first = ord(text[0])
-    if first < 0x2190 or not text[0].isprintable():
+    out = _first_grapheme(text)
+    return out if out and emoji_fits(out) else ""
+
+
+def _first_grapheme(text):
+    """The first emoji cluster of `text` (joiners, variation selectors, skin
+    tones, flag pairs), or '' when it doesn't start with one."""
+    text = str(text or "").strip()
+    if not text or ord(text[0]) < 0x2190 or not text[0].isprintable():
         return ""
     out = ""
-    for i, ch in enumerate(text):
+    for i, ch in enumerate(text[:32]):
         code = ord(ch)
         joiner = code in (0x200D, 0xFE0F) or 0x1F3FB <= code <= 0x1F3FF or 0x1F1E6 <= code <= 0x1F1FF
         if i > 0 and not joiner and ord(text[i - 1]) != 0x200D:
             break
         out += ch
-        if len(out) >= EMOJI_MAX:
-            break
     return out
+
+
+def emoji_fits(emoji):
+    """The rules cap the field at size() <= 16 and I have not been able to
+    confirm which unit Firestore counts. So the client holds itself to the
+    strictest reading — code points, UTF-16 units, AND UTF-8 bytes — and a
+    long joined emoji is refused here rather than truncated into a broken
+    glyph or, worse, sent and rejected (a rejected squad row used to read
+    as "you were removed")."""
+    return (len(emoji) <= EMOJI_MAX
+            and len(emoji.encode("utf-16-le")) // 2 <= EMOJI_MAX
+            and len(emoji.encode("utf-8")) <= EMOJI_MAX)
+
+
+def emoji_too_long(text):
+    """True when `text` starts with a real emoji that just doesn't fit."""
+    g = _first_grapheme(text)
+    return bool(g) and not emoji_fits(g)
 
 
 def away_range(cfg):
@@ -329,6 +357,13 @@ class FirebaseClient:
         return bool(self.session.get("refresh_token"))
 
     @property
+    def session_dead(self):
+        """The server refused my refresh token outright. Until 2.5.1 this
+        looked like a network blip forever: every upload and fetch failed
+        quietly and the board just aged. Cleared by signing in again."""
+        return bool(self.session.get("auth_dead"))
+
+    @property
     def user_id(self):
         return self.session.get("user_id", "")
 
@@ -371,6 +406,7 @@ class FirebaseClient:
             "id_token": data["idToken"],
             "refresh_token": data["refreshToken"],
         })
+        self.session.pop("auth_dead", None)
         self._save_session()
 
     def sign_up(self, email, password, display_name):
@@ -418,12 +454,21 @@ class FirebaseClient:
                                          "refresh_token": rt},
                                    timeout=TIMEOUT)
             except requests.RequestException:
-                return False
+                return False  # offline is not signed out
             if r.status_code != 200:
+                if 400 <= r.status_code < 500:
+                    try:
+                        msg = str((r.json().get("error") or {}).get("message") or "")
+                    except Exception:
+                        msg = ""
+                    if msg.split(" ")[0].rstrip(":") in TERMINAL_AUTH:
+                        self.session["auth_dead"] = True
+                        self._save_session()
                 return False
             data = r.json()
             self.session["id_token"] = data["id_token"]
             self.session["refresh_token"] = data.get("refresh_token", rt)
+            self.session.pop("auth_dead", None)
             self._save_session()
             return True
 
@@ -790,12 +835,16 @@ class FirebaseClient:
         self._save_session()
         return True
 
-    def upload_today(self, uid, display_name, label, stats, cfg):
+    def upload_today(self, uid, display_name, label, stats, cfg, version=None):
         profile = {
             "displayName": display_name,
             "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
         }
+        if version:
+            # so "is this person on a broken build?" is one read, not a
+            # conversation. Not a secret, not shown to anyone in the UI.
+            profile["clientVersion"] = str(version)[:20]
         # examDate rides the always-in-the-mask pattern: unset, past, or
         # paused thereby DELETES it server-side, never stale. openBoard (the
         # v2.0–2.2 Everyone flag) is cleared the same way.
@@ -1021,22 +1070,39 @@ class FirebaseClient:
         for sid in squad_ids:
             if hashes.get(sid) == digest:
                 continue
+            # must_exist: a row update may never CREATE membership. Until
+            # 2.5.1 it could — a PATCH to a missing doc is an insert, so a
+            # member the founder had removed rejoined an open squad on their
+            # very next sync, and "Remove" quietly undid itself.
             status = self._patch_status(f"squads/{sid}/members/{uid}", data,
-                                        mask=sorted(set(row) | {"updatedAt", "emoji", "week"}))
+                                        mask=sorted(set(row) | {"updatedAt", "emoji", "week"}),
+                                        must_exist=True)
             if status in (200, 201):
                 hashes[sid] = digest
-            elif status == 403:
-                gone.append(sid)
+            elif 400 <= status < 500:
+                # refused: either I'm out, or the rules disliked this row's
+                # SHAPE. Only the first should forget the squad. My own member
+                # doc is readable exactly while I'm a member, so ask.
+                _doc, mine = self.get_doc(f"squads/{sid}/members/{uid}")
+                if mine == 200:
+                    print(f"due crew: squad row refused (403) at squads/{sid} but "
+                          "membership stands — rules and client disagree on the row")
+                    self.session["rules_stale_hint"] = True
+                elif mine in (403, 404):
+                    gone.append(sid)
         for sid in list(hashes):
             if sid not in squad_ids:
                 hashes.pop(sid)
         self._save_session()
         return gone
 
-    def _patch_status(self, path, data, mask=None):
+    def _patch_status(self, path, data, mask=None, must_exist=False):
         """patch_doc without the rules-stale hint: a squad 403 means "not a
-        member", not "rules drifted"."""
+        member", not "rules drifted". must_exist turns the upsert into a
+        pure update (Firestore's currentDocument precondition)."""
         mask_q = "&".join(f"updateMask.fieldPaths={k}" for k in (mask or data))
+        if must_exist:
+            mask_q += "&currentDocument.exists=true"
         r = self._req("PATCH", f"{self.base}/{path}?{mask_q}",
                       json={"fields": {k: _fv(v) for k, v in data.items()}})
         return r.status_code

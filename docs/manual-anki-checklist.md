@@ -52,3 +52,9 @@ installing — add-ons load at launch).
 - [ ] Two accounts: after one adds the other, the Friends dialog shows ⏳ pending, and after the add-back both show ✓, with the second account never having synced its profile array (2.5 edges vouch alone).
 - [ ] Your card → "month" / "year": copies "My September so far …" / "My 2026 so far …" with numbers matching Anki's Stats screen for the same range.
 - [ ] Between the 1st and 7th: a "Your <last month>:" banner with Copy and ×; × hides it for that month only.
+
+## 2.5.1: sync reliability
+- [ ] Study a few cards, do NOT sync, go back to the Decks screen after 15+ minutes (or restart Anki and wait ~10 s): your row updates on its own.
+- [ ] Turn Wi-Fi off and click Refresh: the footer reads "Couldn't sync · Updated …". Turn it back on and Refresh: the warning goes.
+- [ ] Two accounts, an OPEN squad: founder removes the other person; that person syncs; they do NOT reappear on the founder's board, and their own board says "You're no longer in …".
+- [ ] Your card → emoji: a long joined emoji (e.g. a family) is refused with "That one's too long."

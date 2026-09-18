@@ -147,6 +147,9 @@ class FakeFirestore:
         self.auth_uid = None    # uid the bearer token maps to
         self.log = []           # (method, path, status)
         self.rules_mode = rules_mode
+        self.force_401 = False  # every Firestore call says "token expired"
+        self.token_reply = None  # (status, payload) from the token endpoint,
+                                 # or "network" to make the refresh call fail
 
     # -- rules ------------------------------------------------------------
     def _friends_of(self, uid):
@@ -319,6 +322,9 @@ class FakeFirestore:
                     return False
                 if uid in self._banned(sid):
                     return False
+                # a join carries joinedAt; a row update turned insert does not
+                if "timestampValue" not in ((fields or {}).get("joinedAt") or {}):
+                    return False
             return self._member_shape(dict(existing or {}, **(fields or {})))
         if re.fullmatch(r"friend_codes/[^/]+", path):
             return uid is not None
@@ -367,6 +373,8 @@ class FakeFirestore:
 
     # -- request handling --------------------------------------------------
     def handle(self, method, url, headers=None, json_body=None):
+        if self.force_401:
+            return FakeResponse(401, {"error": {"message": "UNAUTHENTICATED"}})
         uid = self.auth_uid if (headers or {}).get("Authorization", "").startswith("Bearer t-") else None
         m = re.match(r"https://firestore\.googleapis\.com/v1/projects/[^/]+/"
                      r"databases/\(default\)/documents(?::(\w+))?/?([^?]*)(?:\?(.*))?$", url)
@@ -476,6 +484,9 @@ class FakeFirestore:
             except ValueError as e:
                 self.log.append((method, path, 400))
                 return FakeResponse(400, {"error": {"message": f"INVALID_ARGUMENT: {e}"}})
+            if "currentDocument.exists=true" in query and path not in self.docs:
+                self.log.append((method, path, 404))
+                return FakeResponse(404, {"error": {"message": "NOT_FOUND: no document to update"}})
             if not self._can_write(path, uid, "PATCH", fields):
                 self.log.append((method, path, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
@@ -511,6 +522,11 @@ class FakeSession:
         return self.store.handle(method, url, headers=headers, json_body=kw.get("json"))
 
     def post(self, url, params=None, json=None, data=None, timeout=None):
+        reply = self.store.token_reply
+        if "securetoken" in url and reply is not None:
+            if reply == "network":
+                raise RequestException("offline")
+            return FakeResponse(*reply)
         raise RequestException("auth endpoints not faked")
 
 
@@ -550,6 +566,8 @@ def install_fake_aqt():
     qt = types.ModuleType("aqt.qt")
     for name in ("QAction", "QApplication", "QCursor", "QMenu"):
         setattr(qt, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
+    # deferred calls are recorded, never run: tests drive the glue directly
+    qt.QTimer = type("QTimer", (), {"singleShot": staticmethod(lambda ms, fn: None)})
     utils = types.ModuleType("aqt.utils")
     utils.tooltip = lambda *a, **k: None
     utils.askUser = lambda *a, **k: True

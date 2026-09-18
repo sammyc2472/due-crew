@@ -14,6 +14,18 @@ from aqt.utils import tooltip
 
 from .backend.firebase import FirebaseClient
 
+
+def _read_version():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "manifest.json")) as f:
+            return str(json.load(f).get("version") or "")
+    except Exception:
+        return ""
+
+
+ADDON_VERSION = _read_version()   # written to my profile so a stuck build shows
+STALE_SECS = 900                  # a board older than this refreshes itself
+
 CHEER_EMOJI = ("\U0001F389", "\U0001F4AA", "\U0001F525")  # party, muscle, fire
 
 
@@ -62,7 +74,8 @@ _state = {
     "prev_streaks": {}, "board_shown": False,
     "my_friends": [],
     "squad": {"id": "", "data": None, "day": "", "ts": 0.0, "state": "loading"},
-    "knocks": [],   # [(sender_uid, name, squad_id)] awaiting my add
+    "knocks": [],
+    "sync_error": False,   # the last upload/fetch failed; the footer says so   # [(sender_uid, name, squad_id)] awaiting my add
 }
 
 
@@ -140,7 +153,7 @@ def _reset_runtime():
                   my_friends=[],
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
-                  knocks=[])
+                  knocks=[], sync_error=False)
     _pending_cheers.clear()
 
 

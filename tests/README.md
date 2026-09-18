@@ -39,6 +39,7 @@ touches `due_crew/ui/`.
 
 | Job | What it proves |
 | --- | --- |
+| `lint` | pyflakes over the add-on, tests, and tools. The suite never imports most of the glue, so this is what catches a NameError there. |
 | `suite` | `python3 tests/test_due_crew.py` on a clean Python 3.12. |
 | `dialogs` | Every Qt dialog builds under PyQt6 offscreen; the PNGs are attached as an artifact so you can look at them. |
 | `rules` | `firestore.rules` enforced by the real Firestore emulator (firebase-tools + Java on the runner) — the check this machine cannot run. |

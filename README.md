@@ -63,8 +63,9 @@ streak means what it says.
   for light and dark mode; the whole board, your row highlight, and the
   cards follow it.
 - **Light on everything** — the whole board loads in 4 HTTP requests, all
-  network runs off the main thread with timeouts, and it refreshes only
-  when Anki syncs or you click Refresh.
+  network runs off the main thread with timeouts, and it syncs when Anki
+  opens or syncs, when you come back to a board more than 15 minutes old,
+  or when you click Refresh. If a sync fails, the board says so.
 
 ## Install
 

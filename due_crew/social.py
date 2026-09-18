@@ -9,7 +9,7 @@ from aqt.utils import tooltip
 
 from . import app, board
 from .app import CHEER_EMOJI, HEATMAP_DAYS, _bg, _pending_cheers, _state, cfg, client, save_cfg
-from .backend.firebase import clean_emoji
+from .backend.firebase import clean_emoji, emoji_too_long
 from .stats import duet_runs
 from .stats.queries import StatsQueries
 
@@ -116,7 +116,8 @@ def _edit_emoji():
         return
     emoji = clean_emoji(text)
     if text.strip() and not emoji:
-        tooltip("That isn't an emoji.")
+        tooltip("That one's too long. Try a simpler emoji." if emoji_too_long(text)
+                else "That isn't an emoji.")
         return
     if emoji == current:
         return
