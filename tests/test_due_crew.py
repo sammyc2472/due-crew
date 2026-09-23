@@ -1644,6 +1644,53 @@ def test_reads_diet():
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
 
 
+def test_row_cap():
+    """2.7: past ten rows a view scrolls inside the card instead of growing
+    the page, with the header pinned; a small crew is untouched. And the
+    Decks tab no longer repeats "X shares Y" — the dialog shows that."""
+    lb = TODAY.isoformat()
+    mk = lambda n: [{"user_id": f"u{i}", "name": f"U{i}", "you": i == 0, "paused": False,
+                     "last_updated": "", "exam_date": "",
+                     "days": {lb: {"studied": True, "reviews": 900 - i}}, "decks": []}
+                    for i in range(n)]
+    base = {"labels": [lb], "tomorrow": "", "pending": []}
+    small = board.render(dict(base, entries=mk(10)), {"period": "today"}, 0)
+    big = board.render(dict(base, entries=mk(14)), {"period": "today"}, 0)
+    check("cap: ten rows stand as before; eleven or more scroll inside the card",
+          'class="dc-scroll"' not in small and 'class="dc-scroll"' in big
+          and small.count("<tr class=") == 10 and big.count("<tr class=") == 14)
+    check("cap: the header is pinned and given the card's fill, so rows slide under it",
+          ".dc-scroll th { position: sticky" in big and "background: var(--dc-bg) !important" in big)
+    check("cap: the box is about ten and a half rows tall, and follows compact mode",
+          "max-height: 329px" in big
+          and "max-height: 266px" in board.render(dict(base, entries=mk(14)), {"period": "today", "compact": True}, 0))
+    sig = [f"g{i}" for i in range(10)]  # eight shared guids make a match
+    decks = [{"name": "A", "sig": sig, "total": 10, "seen": 5, "mature": 2}]
+    many = [dict(e, decks=decks) for e in mk(12)]
+    d = board._decks_html(dict(base, entries=many))
+    legend = '<div class="dc-line" style="border-top: none; padding-top: 2px;">'
+    check("cap: the Decks tab scrolls its bars, legend outside the box",
+          d.count('class="dc-scroll"') == 1 and d.count('class="dr') == 12
+          and "</div></div>" + legend in d)
+    few = board._decks_html(dict(base, entries=many[:3]))
+    check("cap: three bars stand as before", "dc-scroll" not in few and "</div>" + legend in few)
+    other = dict(mk(2)[1], decks=[{"name": "Only theirs", "sig": ["z"], "total": 5, "seen": 1, "mature": 0}])
+    d2 = board._decks_html(dict(base, entries=[mk(1)[0], other]))
+    check("decks: a deck only a friend shares is no longer announced on the tab",
+          "shares" not in d2 and "open Shared decks" not in d2)
+    rows = [{"user_id": f"s{i}", "name": f"S{i}", "day": lb, "reviews": 500 - i, "time_ms": 1000,
+             "retention": 90.0, "streak": 3, "you": i == 12} for i in range(14)]
+    view = {"state": "ok", "squads": [{"id": "x", "name": "busm"}], "current": "x", "name": "busm",
+            "open": True, "founder_me": False, "rows": rows, "day": lb, "yesterday": "", "people": 14,
+            "studying": 14, "reviews": 1}
+    sq = board.render(dict(base, entries=mk(1)), {"period": "squads"}, 0, squad_view=view)
+    check("cap: a squad table scrolls too, actions outside the box",
+          'class="dc-scroll"' in sq and sq.index("Copy invite") > sq.index("dc-scroll"))
+    js = board.keep_me_in_view_js()
+    check("cap: after a render the you-row is scrolled into view, and only when it is out of view",
+          "'#due-crew .dc-scroll'" in js and "tr.you" in js and ".dr.me" in js and "if (want > 0)" in js)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

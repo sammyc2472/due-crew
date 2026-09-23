@@ -407,6 +407,7 @@ def _on_render(deck_browser, content):
 
 
 def _on_did_render(deck_browser):
+    mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
 
 
@@ -592,7 +593,7 @@ def _swap(c):
         tmp.innerHTML = %s;
         el.parentNode.replaceChild(tmp.firstElementChild, el);
     })();
-    """ % json.dumps(html_out)
+    """ % json.dumps(html_out) + board.keep_me_in_view_js()
     mw.web.eval(js)
 
 

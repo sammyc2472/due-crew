@@ -84,3 +84,6 @@ installing — add-ons load at launch).
 - [ ] Add a friend on another device: they appear after Refresh or the next day's first open, not on an automatic refresh (profiles are read once a day).
 - [ ] A crewmate in a far time zone still shows their live numbers in the evening (their profile now carries `tz` and `rollover`).
 - [ ] Close Anki: the closing sync still uploads (console `lastUpdated`), and nothing is fetched.
+- [ ] With more than ten crewmates: Today and Week scroll inside the card, the header stays while scrolling, and the board opens with your own row in view. Ten or fewer: unchanged.
+- [ ] Same on a squad of more than ten, and on Decks when the bars pass ten (legend stays below the box).
+- [ ] Decks tab: no more "X shares Y — open Shared decks" lines; the dialog still says "matches …".

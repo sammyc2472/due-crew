@@ -77,6 +77,19 @@ ENTRIES[4]["days"][L[0]] = {"away": True,
                              "awayTo": (TODAY + datetime.timedelta(days=4)).isoformat()}
 
 DATA = {"entries": ENTRIES, "labels": L, "tomorrow": TOMORROW, "pending": ["Jules"]}
+
+# a crew past the row cap: the table scrolls inside the card and opens
+# with your row in view (Sammy lands mid-table here)
+MANY = ENTRIES + [
+    {"user_id": f"m{i}", "name": n, "you": False, "paused": False,
+     "last_updated": ago(minutes=5 + i), "exam_date": "",
+     "days": {L[0]: day(980 - i * 41, 3000000 - i * 90000, 85.0 + i * 0.4, 20 - i)},
+     "decks": [{"name": "AnKing Step 1", "sig": SIG, "total": 32104,
+                "seen": 900 * (i + 1), "mature": 400 * (i + 1), "open": 1200 * (i + 1)}]}
+    for i, n in enumerate(["Riley", "Sasha", "Jun", "Tomás", "Nia", "Owen", "Zara",
+                           "Kai", "Lena", "Mateo", "Inés", "Yara", "Bo", "Eli"])
+]
+DATA_MANY = {"entries": MANY, "labels": L, "tomorrow": TOMORROW, "pending": []}
 WRAP = {"reviews": 21430, "time_ms": 148320000, "best_name": "Marisa K.", "full_days": 5}
 DELTAS = {("sam", "AnKing Step 1"): 124}
 
@@ -108,6 +121,22 @@ SQUAD_VIEW = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}, {"id": "d
               "rows": SROWS, "day": L[0], "yesterday": L[1], "people": 5, "studying": 4,
               "reviews": 2114}
 KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "busm"}]
+for period in ("today", "decks"):
+    sections.append(f"<h3>{period}, 21 in the crew (the row cap)</h3>"
+                    + board.render(DATA_MANY, {"period": period}, now_ts - 60))
+SROWS_MANY = SROWS + [
+    {"user_id": f"s{i}", "name": n, "day": L[0], "reviews": 700 - i * 15,
+     "time_ms": 5000000 - i * 100000, "retention": 90.0 - i * 0.3, "streak": 30 - i}
+    for i, n in enumerate(["Riley", "Sasha", "Jun", "Tomás", "Nia", "Owen", "Zara",
+                           "Kai", "Lena", "Mateo", "Inés", "Yara"])]
+sections.append("<h3>squad of 18 (the row cap)</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60,
+    squad_view=dict(SQUAD_VIEW, rows=SROWS_MANY, people=18, studying=17)))
+# the preview holds many boards; the add-on runs this once, for its one
+sections.append("<script>" + board.keep_me_in_view_js().replace(
+    "var box = document.querySelector('#due-crew .dc-scroll');\n        if (!box) { return; }",
+    "document.querySelectorAll('#due-crew .dc-scroll').forEach(function(box) {")
+    .replace("if (want > 0) { box.scrollTop = want; }\n    })();", "if (want > 0) { box.scrollTop = want; }\n    }); })();") + "</script>")
 sections.append("<h3>squads (founder view)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60, squad_view=SQUAD_VIEW))
 sections.append("<h3>squads (none yet)</h3>" + board.render(

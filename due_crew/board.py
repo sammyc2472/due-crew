@@ -282,7 +282,8 @@ def build_rows(entries, labels, tomorrow, period, cfg):
 
 def build_deck_groups(entries):
     """Groups anchored on your shared decks; extras are crew decks that match
-    none of yours (a pointer to the Shared decks dialog)."""
+    none of yours. The Shared Decks dialog shows those against your own
+    decks ("matches igk"); the board stopped repeating them in 2.7."""
     me = next((e for e in entries if e["you"]), None)
     others = [e for e in entries if not e["you"]]
     groups, matched = [], set()
@@ -341,6 +342,15 @@ def _css(cfg):
     #due-crew .dc-pill:first-child {{ border-radius: 99px 0 0 99px; }}
     #due-crew .dc-pill:last-child {{ border-radius: 0 99px 99px 0; }}
     #due-crew .dc-pill + .dc-pill {{ border-left: none; }}
+    /* the row cap: ten rows, then the view scrolls inside the card. A row
+       is the 13px line box (17px in Chromium) plus its padding, the header
+       25px — measured in the preview, not assumed. The half row past the
+       cap is the cue that there is more. The header stays put and needs a
+       fill of its own, since rows slide under it. */
+    #due-crew .dc-scroll {{ max-height: {25 + ROW_CAP * (17 + 2 * pad) + (17 + 2 * pad) // 2}px;
+      overflow-y: auto; position: relative; }}
+    #due-crew .dc-scroll th {{ position: sticky; top: 0; z-index: 1;
+      background: var(--dc-bg) !important; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
     #due-crew th {{ padding: 2px 8px 6px; text-align: right; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
@@ -518,8 +528,36 @@ def _table_html(data, cfg, period):
                 f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
                 f'text-decoration: none;" onclick="{_pycmd("copyinvite")}">Copy invite</a>'
                 ' and send it to a friend.</div>')
-    # the name column ellipsizes, so the table can never outgrow the card
-    return f'<table><tr>{heads}</tr>{body}</table>{solo}'
+    # the name column ellipsizes, so the table can never outgrow the card;
+    # past the row cap it scrolls inside it
+    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
+
+
+ROW_CAP = 10
+
+
+def _scroll(html, rows):
+    """Past ROW_CAP rows a view scrolls inside the card instead of growing
+    the page: the header stays put and, after a render, the you-row is
+    scrolled into view (keep_me_in_view_js). Under the cap nothing wraps,
+    so small crews are untouched."""
+    return f'<div class="dc-scroll">{html}</div>' if rows > ROW_CAP else html
+
+
+def keep_me_in_view_js():
+    """Run after the board is drawn or swapped: a capped view starts with
+    your own row in view, wherever it ranks. Nothing happens under the
+    cap, or when you are already visible."""
+    return """
+    (function() {
+        var box = document.querySelector('#due-crew .dc-scroll');
+        if (!box) { return; }
+        var me = box.querySelector('tr.you') || box.querySelector('.dr.me');
+        if (!me) { return; }
+        var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
+        if (want > 0) { box.scrollTop = want; }
+    })();
+    """
 
 
 def _bar(name, is_me, d, delta=None, today_labels=()):
@@ -583,10 +621,7 @@ def _decks_html(data, deltas=None):
             _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
-    for who, deck in extras[:3]:
-        html += (f'<div class="dc-line">{_html.escape(str(who))} shares '
-                 f'&ldquo;{_html.escape(str(deck))}&rdquo; &mdash; '
-                 f'<a href="#" onclick="{_pycmd("decks")}">open Shared decks</a> to join.</div>')
+    html = _scroll(html, sum(len(g["rows"]) for g in groups))
     html += ('<div class="dc-line" style="border-top: none; padding-top: 2px;">'
              # named by texture, not by light/dark: in dark mode the mature fill
              # is the bright one, and "dark = mature" read backwards there
@@ -702,7 +737,7 @@ def _squads_html(view, cfg):
     if not body:
         return (sw + '<div class="dc-line" style="border-top: none;">No one&rsquo;s '
                 'synced yet.</div>' + foot)
-    return f"{sw}<table><tr>{heads}</tr>{body}</table>{foot}"
+    return sw + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
 
 
 def _review_banner(kind, info):
