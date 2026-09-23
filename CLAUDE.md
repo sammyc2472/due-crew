@@ -60,10 +60,15 @@ maintainer. The repo is the source of truth; there is no build step.
 
 - Simplicity is the product rule. Friendship framing, never competition —
   "crew", no "compete/rivals". Copy is terse, no AI-speak.
-- Firebase reads cost money at scale: minimize document reads. The crew
-  board loads in 4 requests (profiles, stats, cheers, knocks); a squad
-  board is one get plus one query, a read per member, fetched lazily. Don't add polling, per-friend
-  fetches, or unbounded queries.
+- Firebase reads cost money at scale: minimize document reads. A light
+  refresh is one day doc per friend plus two owner-only lists (cheers,
+  knocks): profiles are read once a day, my own row comes from my own
+  uploads (`session.own_days`), and a friend's profile clock (`tz`,
+  `rollover`) says which one doc they are writing right now. A squad
+  board is one get plus one query, a read per member, fetched lazily.
+  `test_reads_diet` pins the reads per operation; changing a number there
+  is changing what the add-on costs per user, and must be deliberate.
+  Don't add polling, per-friend fetches, or unbounded queries.
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - A PATCH to a missing Firestore doc is an INSERT. Any write meant as an

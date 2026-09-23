@@ -13,6 +13,7 @@ other refreshes fetch only today (plus my next label, so friends whose day
 already rolled over ahead of my timezone stay live).
 """
 
+import datetime
 import html
 import json
 import threading
@@ -25,14 +26,14 @@ from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (_bg, ADDON_VERSION, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
+from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
                   STREAK_MILESTONES,
                   _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
 from .backend.firebase import TransportError
 from .shares import _share, dismiss_review, review_banners
-from .backend.firebase import clean_emoji
+from .backend.firebase import _clean_day, clean_emoji
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer, cheer_allowed)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
@@ -50,19 +51,73 @@ _lock = threading.Lock()
 _fetching = False
 _menu_done = False
 _last_attempt = 0.0   # when a push was last STARTED, success or not
+_closing = False      # profile_will_close: uploads still go, fetches don't
 
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
             "tomorrow": _state["tomorrow"], "pending": _state["pending"]}
 
 
+def _wants_fetch(uploading, have_board, age, closing, fetch=None):
+    """Whether a refresh reads the board after its uploads. A pure fetch
+    always does. After an upload the board is read again only when it is
+    older than FRESH_SECS: opening Anki used to read it three times inside a
+    minute (the open, the push, Anki's own sync). Never while Anki is
+    closing — the upload matters, a board nobody will see doesn't."""
+    if closing:
+        return False
+    if fetch is not None:
+        return fetch
+    return (not uploading) or (not have_board) or age > FRESH_SECS
+
+
+def _open_push_due(now, last_attempt):
+    """The push a few seconds after opening goes unless something already
+    pushed. In 2.5.1 it asked whether the BOARD was stale, and the open's own
+    fetch had just made it fresh, so online it never went at all."""
+    return now - last_attempt > STALE_SECS
+
+
+def _clock():
+    """My clock, for the profile: minutes east of UTC and the hour the day
+    rolls over. A friend's client uses it to tell which day label I'm on
+    and skip reading the docs I can't have written yet."""
+    try:
+        roll = datetime.datetime.fromtimestamp(mw.col.sched.day_cutoff).hour
+    except Exception:
+        roll = 4
+    tz = int(datetime.datetime.now().astimezone().utcoffset().total_seconds() // 60)
+    return {"tz": tz, "rollover": roll}
+
+
+def _after_push(pushed, labels, gone=()):
+    """Main thread. An upload that skipped the fetch: my own row follows
+    what was just written, and the footer learns whether it went."""
+    _state["sync_error"] = not pushed
+    cl = client()
+    own = (cl.session.get("own_days") or {}).get(labels[0])
+    if own and _state["entries"]:
+        days = _state["days"].setdefault(cl.user_id, {})
+        days[labels[0]] = _clean_day(own)
+        for e in _state["entries"]:
+            if e["user_id"] == cl.user_id:
+                e["days"] = days
+    for sid in gone or ():
+        name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
+        _drop_squad(sid, swap=False)
+        tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
+    if _state["board_shown"] and mw.state == "deckBrowser":
+        _swap(cfg())
+
+
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
-                  heatmap=None, squad_row=None, full=False):
+                  heatmap=None, squad_row=None, full=False, fetch=None):
     """Fetch (and optionally upload first) in the background. Main thread
     only. An upload is never dropped: only pure fetches dedup against an
     in-flight refresh. heatmap: dict to upload, "off" to retract, None to
     leave alone. backfill: last week's studied days, hash-guarded so the
-    steady state stays one daily write per sync."""
+    steady state stays one daily write per sync. fetch: read the board
+    after the uploads (None: see _wants_fetch)."""
     global _fetching
     if not mw.col or not client().signed_in or client().session_dead:
         return  # a refused token can't be retried into working
@@ -88,12 +143,19 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         # the Decks tab fetches its own when someone actually looks. They
         # used to ride EVERY full fetch, a read per person per Refresh.
         with_decks = full and _state["decks_day"] != labels[0]
+        fetch = _wants_fetch(uploading, _state["entries"] is not None,
+                             time.time() - _state["ts"], _closing, fetch)
+        clock = _clock()
+        own_days = None if c.get("paused") else dict(cl.session.get("own_days") or {})
     except Exception:
         with _lock:
             _fetching = False
         traceback.print_exc()
         return
-    fetch_labels = labels if full else labels[:1]
+    if not uploading and not fetch:
+        with _lock:
+            _fetching = False
+        return
 
     def job():
         global _fetching
@@ -101,9 +163,9 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
             pushed = True
             if upload_stats is not None:
                 pushed = cl.upload_today(uid, name, labels[0], upload_stats, c,
-                                         version=ADDON_VERSION)
+                                         version=ADDON_VERSION, clock=clock)
             if backfill is not None:
-                cl.upload_backfill(uid, backfill, c)
+                cl.upload_backfill(uid, backfill, c, labels=labels)
             if shared_decks is not None and not c.get("paused"):
                 cl.upload_shared(uid, shared_decks)
             if heatmap is not None:
@@ -116,6 +178,9 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 gone = cl.upload_squad_rows(uid, dict(squad_row, day=labels[0]),
                                             squads)
             cl.check_rules(labels[0])  # cached: one real request per day
+            if not fetch:
+                mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone))
+                return
             # knocks don't depend on the board, so they go alongside it
             box = {}
 
@@ -127,8 +192,10 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
 
             side = threading.Thread(target=_knocks, daemon=True)
             side.start()
-            data = cl.fetch_board(uid, fetch_labels, tomorrow=tomorrow,
-                                  include_shared=with_decks, check_edges=full)
+            data = cl.fetch_board(uid, labels, tomorrow=tomorrow,
+                                  include_shared=with_decks, check_edges=full,
+                                  light=not full, own_days=own_days,
+                                  cached_people=not full)
             side.join(25)
             knocks = box.get("knocks")
             failed = not pushed
@@ -343,7 +410,7 @@ def _on_did_render(deck_browser):
     _play_cheers()
 
 
-def _on_sync_done(full=False, light=False):
+def _on_sync_done(full=False, light=False, fetch=None):
     """Upload everything that changed, then fetch. Anki's sync hook and the
     board's Refresh both land here, so Refresh never leaves your own row
     behind; Refresh asks for the full week. light: the automatic pushes
@@ -392,7 +459,7 @@ def _on_sync_done(full=False, light=False):
         if emoji:
             row["emoji"] = emoji
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat, squad_row=row, full=full)
+                  heatmap=heat, squad_row=row, full=full, fetch=fetch)
 
 
 def _on_js(handled, message, context):
@@ -414,7 +481,7 @@ def _on_js(handled, message, context):
         elif parts[2] == "decks":
             _fetch_decks()
     elif cmd == "refresh":
-        _on_sync_done(full=True)  # push my own numbers too, then fetch the week
+        _on_sync_done(full=True, fetch=True)  # push my own numbers too, then fetch the week
         if c.get("period") == "squads":
             _fetch_squad(force=True)
         elif c.get("period") == "decks":
@@ -608,7 +675,7 @@ def _on_signed_out():
 
 
 def _on_profile_open():
-    global _menu_done
+    global _menu_done, _closing, _last_attempt
     if not _menu_done:
         _menu_done = True
         action = QAction("Due Crew…", mw)
@@ -616,12 +683,29 @@ def _on_profile_open():
         mw.form.menuTools.addAction(action)
         mw.addonManager.setConfigAction(__name__, open_settings)
     _reset_runtime()          # profile switch: nothing carries over
+    _closing = False
+    _last_attempt = 0.0
     client()                  # rebind to this profile's session
     _migrate_server_json()    # v1.x crew-server config, if any
     refresh_board()           # the board, right away
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)
-    QTimer.singleShot(8000, _push_if_stale)
+    QTimer.singleShot(8000, _push_on_open)
+
+
+def _push_on_open():
+    global _last_attempt
+    if not mw.col or not client().signed_in or client().session_dead:
+        return
+    if not _open_push_due(time.time(), _last_attempt):
+        return
+    _last_attempt = time.time()
+    _on_sync_done(light=True, fetch=False)  # the open just drew the board
+
+
+def _on_profile_close():
+    global _closing
+    _closing = True
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)
@@ -637,6 +721,9 @@ gui_hooks.webview_did_receive_js_message.append(_on_js)
 
 
 gui_hooks.profile_did_open.append(_on_profile_open)
+
+
+gui_hooks.profile_will_close.append(_on_profile_close)
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

@@ -71,7 +71,7 @@ def sync_once(store, cl, col, files_dir, cfg, today):
     cl.upload_today(cl.user_id, cl.display_name or "Me", labels[0], stats, cfg)
     if hasattr(firebase.FirebaseClient, "upload_backfill"):
         week = gather_week(col, files_dir)
-        cl.upload_backfill(cl.user_id, week, cfg)
+        cl.upload_backfill(cl.user_id, week, cfg, labels=labels)
     heat = q.heatmap_counts(182)
     if cfg.get("share_heatmap", True) and not cfg.get("paused"):
         cl.upload_heatmap(cl.user_id, heat)
@@ -1489,7 +1489,8 @@ def test_cheer_any_emoji():
     sam = new_client(store, "sam", "Sammy")
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
     check("any emoji: a doc that isn't one emoji is dropped on receive", data["cheers"] == [])
-    store.docs[path]["emoji"] = fv_str(thumbs)
+    check("any emoji: a delivered cheer's doc is gone", path not in store.docs)
+    store.docs[path] = {"emoji": fv_str(thumbs), "name": fv_str("Dre"), "at": ts}
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
     check("any emoji: a real one arrives intact", [c["emoji"] for c in data["cheers"]] == [thumbs])
 
@@ -1510,6 +1511,137 @@ def test_cheer_any_emoji():
           and social.cheer_allowed(party, True) == ""
           and social.cheer_allowed("\U0001F525", True) == "\U0001F525"
           and social.cheer_allowed("lol", False) == "")
+
+
+def test_reads_diet():
+    """2.7: fewer reads per refresh, and the numbers pinned. Cheers come
+    from one list and their docs go once delivered; profiles are read once
+    a day; my own row comes from my own uploads; a friend's clock says which
+    day doc to read. The numbers below are the budget: a change here is a
+    change in what the add-on costs per user, and must be deliberate."""
+    import due_crew  # the glue: _wants_fetch, _open_push_due
+    from due_crew.backend.firebase import _clock_label, _wanted
+    N = 11
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    friends = [f"f{i}" for i in range(N)]
+    seed_users(store, {"sam": "Sammy", **{f: f.upper() for f in friends}},
+               {"sam": friends, **{f: ["sam"] for f in friends}})
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    for f in friends:  # 2.7 clients, on my clock
+        store.docs[f"users/{f}"].update(tz={"integerValue": "0"}, rollover={"integerValue": "4"})
+        for lb in labels:
+            store.docs[f"users/{f}/daily_stats/{lb}"] = {"studied": {"booleanValue": True},
+                                                          "reviews": {"integerValue": "100"}}
+    reads = {"n": 0}
+    orig = store.handle
+
+    def counting(method, url, headers=None, json_body=None):
+        resp = orig(method, url, headers=headers, json_body=json_body)
+        if url.endswith(":batchGet"):
+            reads["n"] += len(json_body["documents"])
+        elif url.endswith(":runQuery"):
+            reads["n"] += max(1, sum(1 for i in resp.json() if "document" in i))
+        elif method == "GET" and "?" in url:
+            reads["n"] += max(1, len((resp.json() or {}).get("documents", [])))
+        elif method == "GET":
+            reads["n"] += 1
+        return resp
+    store.handle = counting
+    noon = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)  # TODAY, on a tz-0 clock
+    sam = new_client(store, "sam", "Sammy")
+
+    def count(fn):
+        reads["n"] = 0
+        fn()
+        return reads["n"]
+    first = count(lambda: (sam.check_rules(labels[0]), sam.list_knocks("sam"),
+                           sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=True,
+                                           check_edges=True, now_utc=noon)))
+    check("reads: first open, nothing cached = marker 1 + profiles 12 + days 7x12 + decks 12 + cheers 1 + knocks 1",
+          first == 1 + 12 + 84 + 12 + 1 + 1, str(first))
+    sync_once(store, sam, make_user_col([TODAY]), tempfile.mkdtemp(), {}, TODAY)
+    own = sam.session.get("own_days") or {}
+    check("reads: my uploads are remembered by label (empty days as empty), with when they changed",
+          set(labels) <= set(own) and own[labels[0]].get("studied") is True
+          and own[labels[3]] is None
+          and str(own[labels[0]].get("updatedAt", "")).endswith("Z"))
+    light = count(lambda: (sam.list_knocks("sam"),
+                           sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                                           check_edges=False, light=True, own_days=own,
+                                           cached_people=True, now_utc=noon)))
+    check("reads: a light refresh = one day doc per friend + cheers list + knocks list = 13",
+          light == N + 2, str(light))
+    full = count(lambda: (sam.list_knocks("sam"),
+                          sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                                          check_edges=True, own_days=own, now_utc=noon)))
+    check("reads: Refresh = profiles 12 + 7 days x 11 friends + cheers 1 + knocks 1 = 91",
+          full == 12 + 77 + 2, str(full))
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
+                           cached_people=True, now_utc=noon)
+    me = next(e for e in data["entries"] if e["you"])
+    check("own row: today from my own upload, not read back",
+          me["days"].get(labels[0], {}).get("studied") is True and "updatedAt" not in me["days"][labels[0]])
+
+    # a friend's clock decides which doc is live for them
+    store.docs["users/f1"].update(tz={"integerValue": "600"})     # ten hours ahead
+    store.docs["users/f2"].pop("tz"); store.docs["users/f2"].pop("rollover")  # a 2.6 client
+    store.docs["users/f3"].update(tz={"integerValue": "-600"})    # ten hours behind
+    sam._people = None
+    evening = datetime.datetime(2026, 9, 1, 20, 0, tzinfo=datetime.timezone.utc)
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own, now_utc=evening)
+    keys = {e["user_id"]: sorted(e["days"]) for e in data["entries"]}
+    check("clock: a friend ten hours ahead is read on my tomorrow only",
+          keys["f1"] == [tomorrow], str(keys["f1"]))
+    check("clock: a friend on an older client is read on today and tomorrow, as before",
+          keys["f2"] == sorted([labels[0], tomorrow]), str(keys["f2"]))
+    morning = datetime.datetime(2026, 9, 1, 6, 0, tzinfo=datetime.timezone.utc)
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own, now_utc=morning)
+    keys = {e["user_id"]: sorted(e["days"]) for e in data["entries"]}
+    check("clock: a friend ten hours behind is read on my yesterday, the day they are writing",
+          keys["f3"] == [labels[1]] and keys["f0"] == [labels[0]], f'{keys["f3"]} {keys["f0"]}')
+    check("clock: label from tz and rollover; nonsense means unknown",
+          _clock_label({"tz": 0, "rollover": 4}, noon) == labels[0]
+          and _clock_label({"tz": 600, "rollover": 4}, evening) == tomorrow
+          and _clock_label({}, noon) is None and _clock_label({"tz": 5000}, noon) is None
+          and _clock_label({"tz": 0, "rollover": 99}, noon) == labels[0])
+    check("clock: a full fetch reads the week, plus tomorrow only for a clock that may be there",
+          _wanted({"tz": 0, "rollover": 4}, labels, tomorrow, noon, light=False) == labels
+          and _wanted({}, labels, tomorrow, noon, light=False) == labels + [tomorrow]
+          and _wanted({"tz": 600, "rollover": 4}, labels, tomorrow, evening, light=False) == labels + [tomorrow])
+
+    # cheers: one list, delivered once, then gone
+    store.auth_uid = "f0"
+    f0 = new_client(store, "f0", "F0")
+    f0.send_cheer("sam", "f0", "F0", "\U0001F525")
+    store.auth_uid = "sam"
+    got = count(lambda: sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                                        check_edges=False, light=True, own_days=own,
+                                        cached_people=True, now_utc=noon))
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
+                           cached_people=True, now_utc=noon)
+    # f2 is back on a 2.6 client since the clock checks: two docs for them
+    check("cheers: one read to find it, delivered, and its doc is gone before the next fetch",
+          got == N + 1 + 1 and "users/sam/cheers/f0" not in store.docs and data["cheers"] == [], str(got))
+
+    # profiles cached for the day: someone removing me is noticed, once, not an outage
+    store.docs["users/f4"]["friends"] = {"arrayValue": {"values": []}}
+    store.docs.pop("users/f4/friends/sam", None)
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
+                           cached_people=True, now_utc=noon)
+    check("profiles: a friend who removed me drops off the board on the next light refresh, no error",
+          "f4" not in {e["user_id"] for e in data["entries"]} and "F4" in data["pending"])
+
+    check("fetch after upload: only when the board is old, never while closing, always for a pure fetch",
+          due_crew._wants_fetch(True, True, 30, False) is False
+          and due_crew._wants_fetch(True, True, 300, False) is True
+          and due_crew._wants_fetch(True, False, 0, False) is True
+          and due_crew._wants_fetch(False, True, 0, False) is True
+          and due_crew._wants_fetch(False, True, 9999, True) is False
+          and due_crew._wants_fetch(True, True, 0, False, fetch=True) is True)
+    check("push on open: goes unless something already pushed; the open's fetch is not a push",
+          due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
 
 
 def main():

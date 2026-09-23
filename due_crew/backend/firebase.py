@@ -223,6 +223,38 @@ def _as_float(v):
         return None
 
 
+def _clock_label(prof, now_utc):
+    """The day label a friend's client is on right now, from the clock its
+    profile carries since 2.7 (`tz`: minutes east of UTC, `rollover`: the
+    hour the day rolls over), or None for an older client. A fetch can then
+    skip the docs that client cannot have written yet."""
+    tz = _as_int(prof.get("tz"))
+    if tz is None or not -900 <= tz <= 900:
+        return None
+    roll = _as_int(prof.get("rollover"))
+    if roll is None or not 0 <= roll <= 23:
+        roll = 4
+    local = now_utc + datetime.timedelta(minutes=tz) - datetime.timedelta(hours=roll)
+    return local.date().isoformat()
+
+
+def _wanted(prof, labels, tomorrow, now_utc, light):
+    """Which of a friend's day docs to read. A full fetch reads the week,
+    plus tomorrow when their clock (or an unknown one) may already be
+    there. A light fetch reads the one doc they are writing right now:
+    their current label when their clock says which, else today and
+    tomorrow, as every fetch did before 2.7."""
+    label = _clock_label(prof, now_utc)
+    extra = [tomorrow] if tomorrow and (label is None or label > labels[0]) else []
+    if not light:
+        return list(labels) + extra
+    if label is None:
+        return [labels[0]] + extra
+    if label == tomorrow:
+        return [tomorrow]
+    return [label] if label in labels else [labels[0]]
+
+
 def _clean_day(doc):
     """Coerce a daily_stats doc to trusted types; None stays None."""
     if doc is None:
@@ -341,6 +373,7 @@ class FirebaseClient:
         self._session_lock = threading.Lock()
         self._refresh_lock = threading.Lock()
         self.session = self._load_session()
+        self._people = None  # the day's profiles, for light refreshes
 
     # ---- local session ----
 
@@ -750,46 +783,108 @@ class FirebaseClient:
         return {u: _clean_decks((docs.get(f"users/{u}/shared/decks") or {}).get("decks"))
                 for u in uids}
 
-    def fetch_board(self, uid, labels, tomorrow=None, include_shared=True, check_edges=None):
-        """labels: day labels to fetch, newest-first. `tomorrow` (my next
-        label) is fetched too so friends ahead of my timezone stay live.
-        Shared-deck docs only ride along when include_shared (full fetches).
-        Raises TransportError on failure — the caller keeps its cache."""
+    def list_cheers(self, uid):
+        """{sender_uid: fields}: one list request, one read when empty.
+        Until 2.7 every refresh batch-read a cheers path per friend, present
+        or not. Raises TransportError."""
+        r = self._req("GET", f"{self.base}/users/{uid}/cheers?pageSize=100")
+        if r.status_code != 200:
+            raise TransportError(f"cheers list failed: {r.status_code}", r.status_code)
+        return {doc["name"].rsplit("/", 1)[-1]: _parse(doc.get("fields"))
+                for doc in r.json().get("documents", [])}
+
+    def delete_cheers(self, uid, senders):
+        """A cheer is delivered once, then its doc goes, so the collection is
+        empty in the steady state. A delete that fails leaves the doc for
+        next time; the per-sender seen marks keep it from playing twice."""
+        for sender in senders:
+            self.delete_doc(f"users/{uid}/cheers/{sender}")
+
+    def fetch_board(self, uid, labels, tomorrow=None, include_shared=True, check_edges=None,
+                    light=False, own_days=None, cached_people=False, now_utc=None):
+        """labels: the week's day labels, newest first. light: read only the
+        doc each person is writing right now (see _wanted) instead of the
+        week. own_days: my own uploads by label, kept by the session — those
+        docs are never read back. cached_people: reuse the day's profiles
+        instead of reading them again; a 403 on the stats batch then means
+        someone removed me, and the profiles are read once more. Shared-deck
+        docs ride along when include_shared. Raises TransportError on
+        failure — the caller keeps its cache."""
         if check_edges is None:
             check_edges = include_shared
-        own, resolved, pending = self.list_friends(uid, check_edges=check_edges)
-        mutual = [(fid, prof) for fid, prof, m in resolved if m]
-        people = [(uid, own)] + mutual
+        now_utc = now_utc or datetime.datetime.now(datetime.timezone.utc)
+        day = labels[0] if labels else ""
+        own_days = own_days or {}
 
-        want = list(labels) + ([tomorrow] if tomorrow else [])
-        paths = [f"users/{u}/daily_stats/{lb}" for u, _ in people for lb in want]
-        if include_shared:
-            paths += [f"users/{u}/shared/decks" for u, _ in people]
-        paths += [f"users/{uid}/cheers/{fid}" for fid, _ in mutual]
-        docs = self.batch_get(paths)
+        def people(fresh):
+            cache = self._people
+            if (not fresh and cached_people and cache
+                    and cache["uid"] == uid and cache["day"] == day):
+                return cache["own"], cache["resolved"], cache["pending"], False
+            own, resolved, pending = self.list_friends(uid, check_edges=check_edges)
+            self._people = {"uid": uid, "day": day, "own": own,
+                            "resolved": resolved, "pending": pending}
+            return own, resolved, pending, True
+
+        def plan(own, resolved):
+            mutual = [(fid, prof) for fid, prof, m in resolved if m]
+            everyone = [(uid, own)] + mutual
+            want, paths = {}, []
+            for u, prof in everyone:
+                if u == uid:
+                    want[u] = [labels[0]] if light else list(labels)
+                    paths += [f"users/{u}/daily_stats/{lb}" for lb in want[u] if lb not in own_days]
+                else:
+                    want[u] = _wanted(prof, labels, tomorrow, now_utc, light)
+                    paths += [f"users/{u}/daily_stats/{lb}" for lb in want[u]]
+            if include_shared:
+                paths += [f"users/{u}/shared/decks" for u, _ in everyone]
+            return mutual, everyone, want, paths
+
+        own, resolved, pending, fresh = people(fresh=False)
+        mutual, everyone, want, paths = plan(own, resolved)
+        try:
+            docs = self.batch_get(paths)
+        except TransportError as e:
+            if fresh or e.status != 403:
+                raise
+            own, resolved, pending, fresh = people(fresh=True)
+            mutual, everyone, want, paths = plan(own, resolved)
+            docs = self.batch_get(paths)
+        cheer_docs = self.list_cheers(uid)
 
         entries = []
-        for u, prof in people:
+        for u, prof in everyone:
             decks = None
             if include_shared:
                 decks = _clean_decks(
                     (docs.get(f"users/{u}/shared/decks") or {}).get("decks"))
+            days, stamps = {}, [str(prof.get("lastUpdated") or "")]
+            for lb in want[u]:
+                raw = own_days.get(lb) if u == uid else docs.get(f"users/{u}/daily_stats/{lb}")
+                if u == uid and raw is None:
+                    raw = docs.get(f"users/{u}/daily_stats/{lb}")
+                days[lb] = _clean_day(raw)
+                stamps.append(str((raw or {}).get("updatedAt") or ""))
+            if u == uid:
+                stamps.append(str(self.session.get("last_ok") or ""))
             entries.append({
                 "user_id": u,
                 "name": str(prof.get("displayName", "?")),
                 "emoji": clean_emoji(prof.get("emoji")),
                 "you": u == uid,
                 "paused": bool(prof.get("paused")),
-                "last_updated": prof.get("lastUpdated", ""),
+                # a profile may be a day old now; a day doc says when its
+                # numbers last changed, which is what "last active" means
+                "last_updated": max(stamps),
                 "exam_date": str(prof.get("examDate") or ""),
-                "days": {lb: _clean_day(docs.get(f"users/{u}/daily_stats/{lb}"))
-                         for lb in want},
+                "days": days,
                 "decks": decks,  # None = not fetched this time
             })
 
         cheers = []
         for fid, prof in mutual:
-            doc = docs.get(f"users/{uid}/cheers/{fid}")
+            doc = cheer_docs.get(fid)
             # v2.7: any one emoji. What isn't one is dropped, whatever the
             # rules let through; the flurry never rains text.
             emoji = clean_emoji((doc or {}).get("emoji"))
@@ -800,6 +895,8 @@ class FirebaseClient:
                                "emoji": emoji,
                                "at": str(doc.get("at", "")),
                                "note": clean_note(doc.get("note"))})
+        if cheer_docs:
+            self.delete_cheers(uid, list(cheer_docs))  # delivered, or junk: either way done
         return {"entries": entries, "pending": pending, "cheers": cheers,
                 "my_friends": [fid for fid, _p, _m in resolved],
                 "my_code": str(own.get("friendCode") or "")}
@@ -861,23 +958,41 @@ class FirebaseClient:
         digest = hashlib.sha1(
             json.dumps(doc, sort_keys=True).encode()).hexdigest()
         hashes = self.session.setdefault("day_hashes", {})
+        # v2.7: what I uploaded, by label, so the board never reads my own
+        # docs back (a session from before 2.7 learns them as it goes)
+        mine = self.session.setdefault("own_days", {})
         if hashes.get(label) == digest:
+            if label not in mine:
+                mine[label] = doc
+                self._save_session()
             return True
-        if not self.patch_doc(f"users/{uid}/daily_stats/{label}", doc, mask,
-                              label="daily stats"):
+        # outside the digest: it says when the numbers last changed, and
+        # must not itself be a change
+        stamp = _now_ts()
+        if not self.patch_doc(f"users/{uid}/daily_stats/{label}",
+                              dict(doc, updatedAt={"timestampValue": stamp}),
+                              mask + ["updatedAt"], label="daily stats"):
             return False
         hashes[label] = digest
+        mine[label] = dict(doc, updatedAt=stamp)
         for old in sorted(hashes)[:-(KEEP_DAYS + 1)]:
             hashes.pop(old, None)
+        for old in sorted(mine)[:-(KEEP_DAYS + 2)]:
+            mine.pop(old, None)
         self._save_session()
         return True
 
-    def upload_today(self, uid, display_name, label, stats, cfg, version=None):
+    def upload_today(self, uid, display_name, label, stats, cfg, version=None, clock=None):
         profile = {
             "displayName": display_name,
             "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
         }
+        if clock:
+            # v2.7: my clock, so a friend's client can tell which day label
+            # I'm on and skip reading the docs I can't have written yet
+            profile["tz"] = int(clock.get("tz", 0))
+            profile["rollover"] = int(clock.get("rollover", 4))
         if version:
             # so "is this person on a broken build?" is one read, not a
             # conversation. Not a secret, not shown to anyone in the UI.
@@ -953,11 +1068,13 @@ class FirebaseClient:
             self._save_session()
         return ok
 
-    def upload_backfill(self, uid, days, cfg):
+    def upload_backfill(self, uid, days, cfg, labels=None):
         """Fill the last week's studied days the server missed — a day only
         exists server-side if a sync ran while it was 'today', which is how
         a 40-day streak could sit next to a half-empty dot row. Hash-guarded:
-        steady state adds zero writes."""
+        steady state adds zero writes. labels: the window the days came
+        from; its other days had nothing to write, and my own row can know
+        they are empty without reading the server for them."""
         if cfg.get("paused"):
             return True
         ok = True
@@ -967,6 +1084,13 @@ class FirebaseClient:
                       "accuracy": None if d["accuracy"] is None else float(d["accuracy"]),
                       "streak": int(d["streak"])}
             ok = self._put_day(uid, d["label"], values, cfg) and ok
+        mine = self.session.setdefault("own_days", {})
+        written = {d["label"] for d in days or []}
+        empty = [lb for lb in (labels or [])[1:] if lb not in written and lb not in mine]
+        for lb in empty:
+            mine[lb] = None  # known empty: nothing to read back
+        if empty:
+            self._save_session()
         return ok
 
     def upload_shared(self, uid, decks):

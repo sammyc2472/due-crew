@@ -51,6 +51,10 @@ HEATMAP_DAYS = 182
 SQUAD_CACHE_SECS = 300
 
 
+# after an upload, the board is read again only if it is older than this
+FRESH_SECS = 120
+
+
 _client = None
 
 
