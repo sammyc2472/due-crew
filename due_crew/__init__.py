@@ -25,7 +25,7 @@ from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (_bg, ADDON_VERSION, CHEER_EMOJI, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
+from .app import (_bg, ADDON_VERSION, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
                   STREAK_MILESTONES,
                   _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
@@ -34,7 +34,7 @@ from .backend.firebase import TransportError
 from .shares import _share, dismiss_review, review_banners
 from .backend.firebase import clean_emoji
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
-                     _play_cheers, _send_cheer)
+                     _play_cheers, _send_cheer, cheer_allowed)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
@@ -498,7 +498,8 @@ def _on_js(handled, message, context):
         uid, emoji = parts[2], parts[3]
         entry = next((e for e in (_state["entries"] or [])
                       if e["user_id"] == uid), None)
-        if entry and emoji in CHEER_EMOJI:
+        emoji = cheer_allowed(emoji, client().rules_stale)
+        if entry and emoji:
             _send_cheer(uid, entry["name"], emoji)
     else:
         print(f"due crew: unknown command {message!r}")

@@ -1456,6 +1456,62 @@ def test_wrap_file_is_durable():
         wrap._wrap["data"] = {}
 
 
+def test_cheer_any_emoji():
+    """v2.7: a cheer carries any one emoji (rules-v8). The fake restates the
+    shape rule; the client keeps one cluster on send and on receive, and
+    offers only the classic three while the server is on older rules."""
+    from due_crew import social
+    from due_crew.app import CHEER_CLASSIC, CHEER_QUICK
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    dre = new_client(store, "dre", "Dre")
+    path = "users/sam/cheers/dre"
+    party, thumbs = "\U0001F973", "\U0001F44D\U0001F3FD"
+    check("any emoji: a new one lands", dre.send_cheer("sam", "dre", "Dre", party) is True
+          and store.docs[path]["emoji"] == fv_str(party))
+    check("any emoji: a skin tone rides along as one cluster",
+          dre.send_cheer("sam", "dre", "Dre", thumbs) is True
+          and store.docs[path]["emoji"] == fv_str(thumbs))
+    check("any emoji: the client sends one cluster, whatever it was handed",
+          dre.send_cheer("sam", "dre", "Dre", party + "\U0001F389 yay") is True
+          and store.docs[path]["emoji"] == fv_str(party))
+    check("any emoji: text never leaves the client",
+          dre.send_cheer("sam", "dre", "Dre", "lol") is False
+          and store.docs[path]["emoji"] == fv_str(party))
+    ts = {"timestampValue": "2026-09-01T00:00:00Z"}
+    probe = new_client(store, "dre", "Dre")  # past the client's cleaner, straight at the rules
+    refused = [probe.patch_doc(path, {"emoji": bad, "name": "Dre", "at": ts}, ["emoji", "name", "at"])
+               for bad in ("lol", "\U0001F525x", "\U0001F389" * 9, "", "\U0001F389 ")]
+    check("fake rules: letters, a trailing letter, 18 units, empty, and a space are refused",
+          refused == [False] * 5 and store.docs[path]["emoji"] == fv_str(party), str(refused))
+    store.docs[path]["emoji"] = fv_str("hello")  # as if the rules had let it through
+    sam = new_client(store, "sam", "Sammy")
+    data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    check("any emoji: a doc that isn't one emoji is dropped on receive", data["cheers"] == [])
+    store.docs[path]["emoji"] = fv_str(thumbs)
+    data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    check("any emoji: a real one arrives intact", [c["emoji"] for c in data["cheers"]] == [thumbs])
+
+    old = fakes.FakeFirestore(rules_mode="v7")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
+    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    dre_old = new_client(old, "dre", "Dre")
+    check("older rules: the classic three still land",
+          dre_old.send_cheer("sam", "dre", "Dre", "\U0001F525") is True)
+    check("older rules: a new emoji is refused by the server",
+          dre_old.send_cheer("sam", "dre", "Dre", party) is False)
+    dre_old.check_rules(TODAY.isoformat())
+    check("older rules: the client knows; the picker shrinks to the three, no other box",
+          dre_old.rules_stale is True and social.cheer_choices(True) == (CHEER_CLASSIC, False)
+          and social.cheer_choices(False) == (CHEER_QUICK, True))
+    check("cheer gate: one cluster; a new emoji held back while stale; text never",
+          social.cheer_allowed(party + "\U0001F389", False) == party
+          and social.cheer_allowed(party, True) == ""
+          and social.cheer_allowed("\U0001F525", True) == "\U0001F525"
+          and social.cheer_allowed("lol", False) == "")
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

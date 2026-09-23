@@ -143,7 +143,7 @@ def main():
     check("member: leaves", call("DELETE", f"squads/{sid}/members/bob", "bob")[0] == 200)
     check("board: after leaving, reads are denied", call("GET", f"squads/{sid}/members", "bob")[0] == 403)
 
-    # -- cheers: friends only, three emoji, optional note <= 80 (rules-v5)
+    # -- cheers: friends only, one emoji, optional note <= 80 (rules-v5)
     cheer = {"emoji": "🔥", "name": "Dave", "at": TS}
     check("cheer: friend sends", put("users/alice/cheers/dave", cheer, "dave") in (200, 201))
     check("cheer: with a note", put("users/alice/cheers/dave", dict(cheer, note="you're on fire"), "dave") in (200, 201))
@@ -152,6 +152,14 @@ def main():
     check("cheer: extra field rejected", put("users/alice/cheers/dave", dict(cheer, link="http://x"), "dave") == 403)
     check("cheer: non-friend rejected", put("users/alice/cheers/bob", cheer, "bob") == 403)
     check("cheer: only the owner reads", call("GET", "users/alice/cheers/dave", "dave")[0] == 403)
+
+    # -- v2.7: any one emoji (rules-v8) — a shape, not a list
+    for label, em in (("a new emoji", "🥳"), ("a skin tone, 4 units", "👍🏽"), ("a family, 8 units", "👨‍👩‍👧")):
+        check(f"cheer: {label} accepted", put("users/alice/cheers/dave", dict(cheer, emoji=em), "dave") in (200, 201))
+    for label, em in (("letters", "lol"), ("an emoji then a letter (whole-string match)", "🔥x"),
+                      ("nine emoji, 18 units", "🎉" * 9), ("empty", ""), ("a trailing space", "🎉 ")):
+        check(f"cheer: {label} rejected", put("users/alice/cheers/dave", dict(cheer, emoji=em), "dave") == 403)
+    check("cheer: emoji must be a string", put("users/alice/cheers/dave", dict(cheer, emoji=7), "dave") == 403)
 
     # -- v2.4 hardening: no listing of people or codes; bounded strings
     check("profile: get by uid allowed", call("GET", "users/alice", "bob")[0] == 200)
@@ -235,7 +243,7 @@ def main():
     put("users/bob", {"emoji": "🦊"}, "bob")
 
     # -- markers cumulative
-    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"):
+    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
     check("marker rules-v9: not provisioned (403)", call("GET", "meta/rules-v9", "alice")[0] == 403)
 

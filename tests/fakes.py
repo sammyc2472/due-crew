@@ -163,10 +163,12 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v6: markers v2..v6,
-                      squads with member rows, knocks between squadmates;
-                      boards/, server_board, and the directory are gone)
-      "v3"          — the previous paste: markers v2+v3, the UNSCOPED
+      "repo"        — current repository rules (rules-v8: v7 plus any one
+                      emoji in a cheer, checked by shape)
+      "v7"          — the paste before it (v2.5–v2.6): squads with member
+                      rows, friend edges, knocks between squadmates, cheers
+                      limited to the three classic emoji
+      "v3"          — an old paste: markers v2+v3, the UNSCOPED
                       server_board, knocks gated only on openBoard
       "v2"          — marker v2 only, no board/knocks
       "decks-only"  — ancient drift: shared/decks literal, no markers
@@ -245,9 +247,11 @@ class FakeFirestore:
             return False
         return True
 
-    CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
+    CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}  # all that rules before v8 accept
+    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
+               "v7": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
+    MODERN = ("repo", "v7")  # everything v2.5 brought is in both
 
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
     DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
@@ -270,7 +274,7 @@ class FakeFirestore:
                                                 and len(friends) <= 500)))
         m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
         if m:
-            if self.rules_mode != "repo" or uid != m.group(1):
+            if self.rules_mode not in self.MODERN or uid != m.group(1):
                 return False
             return method == "DELETE" or set(fields or {}) <= {"at"}
         m = re.fullmatch(r"users/([^/]+)/daily_stats/[^/]+", path)
@@ -288,12 +292,21 @@ class FakeFirestore:
                 return uid == owner
             f = fields or {}
             allowed = {"emoji", "name", "at"}
-            if self.rules_mode == "repo":
+            if self.rules_mode in self.MODERN:
                 allowed.add("note")  # rules-v5: optional, <= 80 chars
             note = (f.get("note") or {}).get("stringValue")
+            emoji = (f.get("emoji") or {}).get("stringValue")
+            if self.rules_mode == "repo":
+                # rules-v8: any one emoji, by shape — no letters, digits or
+                # spaces, at most 16 UTF-16 units (the unit size() counts)
+                emoji_ok = (isinstance(emoji, str)
+                            and len(emoji.encode("utf-16-le")) // 2 <= 16
+                            and re.fullmatch(r"[^A-Za-z0-9 ]+", emoji) is not None)
+            else:
+                emoji_ok = emoji in self.CHEERS
             return (uid == sender and uid in self._friends_of(owner)
                     and set(f) <= allowed
-                    and (f.get("emoji") or {}).get("stringValue") in self.CHEERS
+                    and emoji_ok
                     and self._str_ok(f, "name", 60)
                     and "timestampValue" in (f.get("at") or {})
                     and ("note" not in f
@@ -306,7 +319,7 @@ class FakeFirestore:
             if method == "DELETE":
                 return uid == owner
             f = fields or {}
-            if self.rules_mode != "repo":  # v1.8–2.2: both on the Everyone board
+            if self.rules_mode not in self.MODERN:  # v1.8–2.2: both on the Everyone board
                 return (uid == sender and self._open_board(owner)
                         and self._open_board(sender) and set(f) <= {"name", "at"})
             squad = (f.get("squad") or {}).get("stringValue")
@@ -325,7 +338,7 @@ class FakeFirestore:
             return self.rules_mode == "v3" and uid == m.group(1)  # v1.8–1.9 only
         m = re.fullmatch(r"squads/([^/]+)", path)
         if m:
-            if self.rules_mode != "repo" or uid is None:
+            if self.rules_mode not in self.MODERN or uid is None:
                 return False
             f = fields or {}
             existing = self.docs.get(path)
@@ -342,7 +355,7 @@ class FakeFirestore:
         m = re.fullmatch(r"squads/([^/]+)/members/([^/]+)", path)
         if m:
             sid, member = m.groups()
-            if self.rules_mode != "repo":
+            if self.rules_mode not in self.MODERN:
                 return False
             if method == "DELETE":
                 return uid == member or (uid is not None and self._founder(sid) == uid)
@@ -370,7 +383,7 @@ class FakeFirestore:
         m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
         if m:
             owner, friend = m.groups()
-            if self.rules_mode != "repo":
+            if self.rules_mode not in self.MODERN:
                 return False
             if listing:
                 return uid == owner
@@ -393,10 +406,10 @@ class FakeFirestore:
             return False  # retired in v2.3
         m = re.fullmatch(r"squads/([^/]+)", path)
         if m:
-            return self.rules_mode == "repo" and uid is not None and not listing
+            return self.rules_mode in self.MODERN and uid is not None and not listing
         m = re.fullmatch(r"squads/([^/]+)/members/[^/]+", path)
         if m:
-            return self.rules_mode == "repo" and self._member(m.group(1), uid)
+            return self.rules_mode in self.MODERN and self._member(m.group(1), uid)
         m = re.fullmatch(r"server_board/[^/]+", path)
         if m:
             return self.rules_mode == "v3" and self._open_board(uid)

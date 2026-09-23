@@ -8,7 +8,8 @@ from aqt import mw
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import CHEER_EMOJI, HEATMAP_DAYS, _bg, _pending_cheers, _state, cfg, client, save_cfg
+from .app import (CHEER_CLASSIC, CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers, _state,
+                  cfg, client, save_cfg)
 from .backend.firebase import clean_emoji, emoji_too_long
 from .stats import duet_runs
 from .stats.queries import StatsQueries
@@ -44,15 +45,35 @@ def _play_cheers():
     mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes))
 
 
+def cheer_choices(stale):
+    """(quick picks, any-emoji box?) for the picker. A server still on rules
+    before v8 accepts only the classic three, so that is all the dialog
+    offers then; the footer already says the server is behind."""
+    return (CHEER_CLASSIC, False) if stale else (CHEER_QUICK, True)
+
+
+def cheer_allowed(emoji, stale):
+    """The one emoji to send, or ''. The same gate for the dialog and for
+    a cheer-back click, whose emoji rides in from the page."""
+    emoji = clean_emoji(emoji)
+    if stale and emoji not in CHEER_CLASSIC:
+        return ""
+    return emoji
+
+
 def _cheer_menu(to_uid):
     entry = next((e for e in (_state["entries"] or [])
                   if e["user_id"] == to_uid), None)
     if entry is None:
         return
     from .ui.cheer_dialog import CheerDialog
-    dlg = CheerDialog(mw, entry["name"], CHEER_EMOJI)
-    if dlg.exec() and dlg.emoji in CHEER_EMOJI:
-        _send_cheer(to_uid, entry["name"], dlg.emoji, dlg.note)
+    stale = client().rules_stale
+    quick, any_emoji = cheer_choices(stale)
+    dlg = CheerDialog(mw, entry["name"], quick, any_emoji=any_emoji)
+    if dlg.exec():
+        emoji = cheer_allowed(dlg.emoji, stale)
+        if emoji:
+            _send_cheer(to_uid, entry["name"], emoji, dlg.note)
 
 
 def _send_cheer(to_uid, to_name, emoji, note=""):
@@ -62,10 +83,10 @@ def _send_cheer(to_uid, to_name, emoji, note=""):
 
     def done(ok):
         if ok == "no-note":
-            tooltip(f"Sent {emoji} to {html.escape(to_name)}. "
+            tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}. "
                     "The note needs a server update.")
         elif ok:
-            tooltip(f"Sent {emoji} to {html.escape(to_name)}.")
+            tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}.")
         else:
             tooltip("Couldn't send. Check your connection.")
 

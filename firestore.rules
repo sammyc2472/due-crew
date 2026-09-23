@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules (v2.5: friend edges, crew emoji, squad week
+// Due Crew — Firestore rules (v2.7: any one emoji in a cheer; v2.5: friend edges, crew emoji, squad week
 // counts, block list and founder handoff; v2.4: hardening; v2.3: squads;
 // v2.2: cheer notes; v2.0: one hosted backend).
 //
@@ -110,14 +110,20 @@ service cloud.firestore {
       }
 
       // v1.2: cheers. Only people the owner added may send, one doc per
-      // sender (the doc id), only the three emoji and, since v2.2, an
-      // optional note of at most 80 characters.
+      // sender (the doc id), one emoji (any, since v2.7) and, since v2.2,
+      // an optional note of at most 80 characters.
       match /cheers/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isFriend(userId)
                               && request.auth.uid == senderId
                               && request.resource.data.keys().hasOnly(['emoji', 'name', 'at', 'note'])
-                              && request.resource.data.emoji in ['🎉', '💪', '🔥']
+                              // v2.7: any one emoji. Rules can't see graphemes; the shape
+                              // is "no letters, digits or spaces, at most 16 UTF-16 units"
+                              // (the unit size() counts — measured), and the client keeps
+                              // exactly one cluster on send and on receive.
+                              && request.resource.data.emoji is string
+                              && request.resource.data.emoji.size() <= 16
+                              && request.resource.data.emoji.matches('^[^A-Za-z0-9 ]+$')
                               && request.resource.data.name is string
                               && request.resource.data.name.size() <= 60
                               && request.resource.data.at is timestamp
@@ -191,7 +197,7 @@ service cloud.firestore {
     // (newer rules must still satisfy older clients' probes); add a version
     // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6', 'rules-v7'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6', 'rules-v7', 'rules-v8'];
       allow list, create, update, delete: if false;
     }
 

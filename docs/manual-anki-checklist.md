@@ -69,3 +69,12 @@ installing — add-ons load at launch).
 - [ ] Settings → Account shows "Synced … · v2.6.0"; with Wi-Fi off after a failed Refresh it still shows the last ACCEPTED sync.
 - [ ] A one-person board offers "Copy invite".
 - [ ] Shared Decks: a deck you already share says "matches <friend>", never your own name.
+
+## 2.7: any emoji in cheers (rules-v8)
+- [ ] Cheer a friend: six quick picks, the first preselected; Send delivers it and the tooltip names it.
+- [ ] Click "other": the system emoji palette opens (Mac). Pick one: it lands in the box with the green border, no quick pick checked; Send delivers that one.
+- [ ] Pick a second emoji from the palette: it replaces the first. The box never holds two.
+- [ ] Paste "hello" into the box: it vanishes and the first quick pick is selected again.
+- [ ] Receiving: a crewmate on 2.6 sees a 2.7 client's new emoji as a normal flurry; their "click to send one back" does nothing for it (expected until they update).
+- [ ] With the footer saying "server catching up" (rules-v8 not pasted yet): the picker shows only 🎉 💪 🔥 and no "other" box.
+- [ ] Windows (not tested by me): "other" should open the Win-period emoji panel; if it doesn't, typing or pasting an emoji into the box still works.

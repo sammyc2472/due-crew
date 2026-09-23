@@ -50,6 +50,55 @@ def copy_text(text):
     return True
 
 
+def open_emoji_picker(edit):
+    """Open the system emoji palette over a text field: on macOS the one
+    Ctrl-Cmd-Space opens, asked for through AppKit; on Windows the Win-period
+    panel, by pressing the keys for the user. Both type the pick into the
+    focused field. False where there is no palette (Linux), and the field
+    takes a typed or pasted emoji instead. Never raises."""
+    edit.setFocus()
+    try:
+        if sys.platform == "darwin":
+            return _mac_character_palette()
+        if sys.platform == "win32":
+            return _win_emoji_panel()
+    except Exception:
+        pass
+    return False
+
+
+def _mac_character_palette():
+    import ctypes
+    objc = ctypes.cdll.LoadLibrary("/usr/lib/libobjc.dylib")
+    ctypes.cdll.LoadLibrary("/System/Library/Frameworks/AppKit.framework/AppKit")
+    objc.objc_getClass.restype = ctypes.c_void_p
+    objc.objc_getClass.argtypes = [ctypes.c_char_p]
+    objc.sel_registerName.restype = ctypes.c_void_p
+    objc.sel_registerName.argtypes = [ctypes.c_char_p]
+    # objc_msgSend is variadic; a fixed prototype per arity is what makes the
+    # arguments land on arm64 (a wrong one here is a crash, not an exception:
+    # checked in a real Qt process on an Apple Silicon Mac, 2026-09-23)
+    send0 = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
+        ("objc_msgSend", objc))
+    send1 = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
+        ("objc_msgSend", objc))
+    cls = objc.objc_getClass(b"NSApplication")
+    nsapp = send0(cls, objc.sel_registerName(b"sharedApplication")) if cls else None
+    if not nsapp:
+        return False
+    send1(nsapp, objc.sel_registerName(b"orderFrontCharacterPalette:"), None)
+    return True
+
+
+def _win_emoji_panel():
+    import ctypes
+    user32 = ctypes.windll.user32
+    lwin, period, keyup = 0x5B, 0xBE, 0x0002
+    for key, flags in ((lwin, 0), (period, 0), (period, keyup), (lwin, keyup)):
+        user32.keybd_event(key, 0, flags, 0)
+    return True
+
+
 def _night():
     try:
         from aqt.theme import theme_manager

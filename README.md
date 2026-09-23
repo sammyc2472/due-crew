@@ -15,9 +15,10 @@ streak means what it says.
 - **Consent-based friendships** — swap 6-character codes. You see someone's
   stats only after they add your code, and vice versa. Remove someone and
   they stop seeing yours immediately.
-- **Cheers** — send 🎉 💪 🔥 and your friend gets a full-screen flurry with
-  your name on it after their next sync. Add a short note and it rides
-  along. Click a flurry to cheer back.
+- **Cheers** — send an emoji (six quick picks, or any one from your emoji
+  picker) and your friend gets a full-screen flurry with your name on it
+  after their next sync. Add a short note and it rides along. Click a
+  flurry to cheer back.
 - **Status** — click your own name and set one line ("coffee, then 400
   cards"). It sits in a bubble under your name on Today, for your crew and
   no one else.

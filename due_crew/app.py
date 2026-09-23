@@ -26,7 +26,11 @@ def _read_version():
 ADDON_VERSION = _read_version()   # written to my profile so a stuck build shows
 STALE_SECS = 900                  # a board older than this refreshes itself
 
-CHEER_EMOJI = ("\U0001F389", "\U0001F4AA", "\U0001F525")  # party, muscle, fire
+# the cheer picker's quick row. The first three are all that rules before v8
+# accept, and all a client offers while the server is still on them.
+CHEER_QUICK = ("\U0001F389", "\U0001F4AA", "\U0001F525",   # party, muscle, fire
+               "\U0001F44F", "\U0001F680", "\u2615")       # clap, rocket, coffee
+CHEER_CLASSIC = CHEER_QUICK[:3]
 
 
 STREAK_MILESTONES = (7, 30, 100, 365)

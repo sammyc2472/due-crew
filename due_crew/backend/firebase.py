@@ -41,7 +41,7 @@ KEEP_DAYS = 7
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v7"
+RULES_MARKER = "rules-v8"
 # The token endpoint's verdicts that mean "this sign-in is over" — as opposed
 # to a network failure or a 5xx, which must NEVER sign anyone out: going
 # offline is not the same as being signed out.
@@ -790,11 +790,14 @@ class FirebaseClient:
         cheers = []
         for fid, prof in mutual:
             doc = docs.get(f"users/{uid}/cheers/{fid}")
-            if doc and doc.get("emoji"):
+            # v2.7: any one emoji. What isn't one is dropped, whatever the
+            # rules let through; the flurry never rains text.
+            emoji = clean_emoji((doc or {}).get("emoji"))
+            if doc and emoji:
                 cheers.append({"from": fid,
                                # profile name, not the doc's: senders can't spoof
                                "name": str(prof.get("displayName", "?")),
-                               "emoji": str(doc.get("emoji")),
+                               "emoji": emoji,
                                "at": str(doc.get("at", "")),
                                "note": clean_note(doc.get("note"))})
         return {"entries": entries, "pending": pending, "cheers": cheers,
@@ -806,6 +809,9 @@ class FirebaseClient:
         A note needs rules-v5: if the server still runs older rules the
         cheer goes again without it and the result is "no-note", so the
         sender hears that the words stayed behind."""
+        emoji = clean_emoji(emoji)
+        if not emoji:
+            return False  # nothing that isn't one emoji is ever sent
         path = f"users/{to_uid}/cheers/{from_uid}"
         data = {"emoji": emoji, "name": from_name,
                 "at": {"timestampValue": _now_ts()}}

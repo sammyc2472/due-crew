@@ -207,8 +207,12 @@ def main(out):
 
     def cheer():
         from due_crew.ui.cheer_dialog import CheerDialog
-        dlg = CheerDialog(None, "Ameya", ("\U0001F389", "\U0001F4AA", "\U0001F525"))
+        from due_crew.app import CHEER_CLASSIC, CHEER_QUICK
+        dlg = CheerDialog(None, "Ameya", CHEER_QUICK)
+        dlg.other.setText("\U0001F973")  # a palette pick landing in the box
         shoot(dlg, os.path.join(out, "cheer.png"))
+        dlg = CheerDialog(None, "Ameya", CHEER_CLASSIC, any_emoji=False)  # server on old rules
+        shoot(dlg, os.path.join(out, "cheer-old-rules.png"))
 
     def auth():
         from due_crew.ui.auth_dialog import AuthDialog
