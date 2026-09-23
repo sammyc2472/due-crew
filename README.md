@@ -27,6 +27,9 @@ streak means what it says.
   they've done in it today and this week, and how well it's sticking. Hover
   a bar for the exact numbers. Decks match automatically by note
   fingerprint: AnKing and other imported decks pair up with no setup.
+- **Just show up** — a switch in Privacy: share only that you studied, and
+  see only that of others. Your row is a check, never a rank; your board is
+  a square per day.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
   of your name on the board, on cards, and in shares.
 - **Friend profiles** — click a name for their half-year heatmap, streak,

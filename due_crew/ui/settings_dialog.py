@@ -20,6 +20,7 @@ DEFAULTS = {
     "theme": "auto", "compact": False, "show_last_active": True,
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
+    "show_up": False,
     "paused": False, "exam_date": "",
     "crew_label": "Crew", "accent": "green",
     "away_from": "", "away_to": "",
@@ -325,6 +326,12 @@ class SettingsDialog(QDialog):
         self._check(lay, "share_retention", "Retention")
         self._check(lay, "share_streak", "Streak")
         self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
+        lay.addSpacing(8)
+        self._check(lay, "show_up", "Just show up")
+        note = QLabel("Share only that you studied, and see only that of others.")
+        note.setStyleSheet("font-size: 11px;")
+        note.setWordWrap(True)
+        lay.addWidget(note)
         lay.addSpacing(8)
         exam_row = QHBoxLayout()
         self.exam_on = QCheckBox("Share an exam date")

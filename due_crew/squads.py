@@ -123,6 +123,7 @@ def _open_squad_card(uid):
     rank = next((i + 1 for i, r in enumerate(live) if r["user_id"] == uid), None)
     mw.web.eval(board.stranger_card_js({
         "uid": uid, "name": row["name"], "emoji": row.get("emoji") or "",
+        "show_up": bool(cfg().get("show_up")), "week": row.get("week"),
         "reviews": row["reviews"],
         "time_ms": row["time_ms"], "retention": row["retention"],
         "streak": row["streak"], "rank": rank, "squad": view.get("name") or "",

@@ -166,7 +166,8 @@ def _open_profile(uid):
     days = entry["days"]
     doc = (days.get(tomorrow) or (days.get(labels[0]) if labels else None)
            or next((days.get(lb) for lb in labels[1:] if days.get(lb)), None))
-    streak_val = (doc or {}).get("streak")
+    show_up = bool(cfg().get("show_up"))
+    streak_val = None if show_up else (doc or {}).get("streak")
     groups, _extras = board.build_deck_groups(_state["entries"])
     decks_line = ", ".join(g["label"] for g in groups
                            if any(u == uid for _n, _m, _d, u in g["rows"]))
@@ -187,7 +188,9 @@ def _open_profile(uid):
                 return
             cells = same = duet = None
             if counts is not None:
-                cells = [counts.get(lb, 0) for lb in reversed(my_labels)]
+                # show-up mode: the heatmap says which days, not how much
+                cells = [(1 if counts.get(lb, 0) else 0) if show_up else counts.get(lb, 0)
+                         for lb in reversed(my_labels)]
                 if not you:
                     their_days = {lb for lb, n in counts.items() if n}
                     same = len(my_days & their_days)

@@ -108,7 +108,8 @@ def crew_week(label, labels_oldest_first, rows, reviews, time_ms):
         if as_of:
             line += f" · as of {as_of}"
         lines.append(line)
-    lines.append(f"{int(reviews):,} reviews · {_fmt_time(int(time_ms or 0))} together")
+    if reviews is not None:  # show-up mode shares the squares alone
+        lines.append(f"{int(reviews):,} reviews · {_fmt_time(int(time_ms or 0))} together")
     lines.append(FOOTER)
     return "\n".join(lines)
 

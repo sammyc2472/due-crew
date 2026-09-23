@@ -38,6 +38,9 @@ AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
 TOKEN_URL = "https://securetoken.googleapis.com/v1/token"
 TIMEOUT = 10
 KEEP_DAYS = 7
+# a squad member doc's row fields (joinedAt is the membership, never touched)
+MEMBER_FIELDS = ("name", "day", "reviews", "studyTimeMs", "accuracy", "streak",
+                 "updatedAt", "week", "emoji")
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
@@ -936,7 +939,10 @@ class FirebaseClient:
         mask = ["date", "studied"]
         for field, share_key in self.METRICS:
             mask.append(field)
-            if cfg.get(share_key, True) and values.get(field) is not None:
+            # show-up mode (v2.8) drops every number; the toggles keep their
+            # settings underneath for when it is switched off again
+            if (cfg.get(share_key, True) and not cfg.get("show_up")
+                    and values.get(field) is not None):
                 doc[field] = values.get(field)
         # v2.2: the status bubble (today's doc only — callers pass it) and
         # the away flag; both always in the mask, so clearing them clears.
@@ -1237,9 +1243,10 @@ class FirebaseClient:
             # 2.5.1 it could — a PATCH to a missing doc is an insert, so a
             # member the founder had removed rejoined an open squad on their
             # very next sync, and "Remove" quietly undid itself.
+            # every row field is in the mask, so a number the row no longer
+            # carries (show-up mode) is deleted, not left standing
             status = self._patch_status(f"squads/{sid}/members/{uid}", data,
-                                        mask=sorted(set(row) | {"updatedAt", "emoji", "week"}),
-                                        must_exist=True)
+                                        mask=list(MEMBER_FIELDS), must_exist=True)
             if status in (200, 201):
                 hashes[sid] = digest
             elif 400 <= status < 500:

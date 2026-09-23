@@ -240,16 +240,24 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             paused.append(row)
             continue
         days = e.get("days") or {}
+        # presence: how many of the seven days they showed up (the numbers-
+        # free floor every doc carries), and whether that is all they share
+        row["days7"] = sum(1 for lb in labels if _showed(days.get(lb)))
+        row["days_wk"] = sum(1 for lb in week_labels(labels) if _showed(days.get(lb)))
+        row["showup"] = False
         if period == "week":
             agg = _week_row(days, week_labels(labels))
             if agg is None:
-                if e["you"]:
+                if e["you"] or row["days7"]:
+                    row["showup"] = bool(row["days7"])
                     fresh.append(row)
                 else:
                     row["quiet"] = True
                     quiet.append(row)
                 continue
             row.update(agg)
+            row["showup"] = bool(row["days7"]) and all(
+                row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
             fresh.append(row)
         else:
             # a friend whose day rolled over ahead of mine writes my
@@ -259,6 +267,9 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             if today:
                 row.update(_day_metrics(today))
                 row.update(_day_flags(today, today_lb))
+                row["showup"] = _showed(today) and all(
+                    row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
+                row["studied_today"] = _showed(today)
                 fresh.append(row)
             elif yesterday and cfg.get("show_stale", True) and not e["you"]:
                 row.update(_day_metrics(yesterday))
@@ -360,6 +371,15 @@ def _css(cfg):
       text-overflow: ellipsis; }}
     #due-crew td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
     #due-crew td.rk {{ width: 30px; color: var(--dc-muted); }}
+    #due-crew th.lt {{ text-align: left; font-weight: 400; }}
+    #due-crew th.lt, #due-crew th.sqh {{ color: var(--dc-muted); font-size: 11px; }}
+    #due-crew th.sqh {{ text-align: center; padding: 2px 3px 6px; font-weight: 700; }}
+    #due-crew th.sqh.on {{ color: var(--dc-accent); }}
+    #due-crew td.sqc {{ text-align: center; padding-left: 3px; padding-right: 3px; width: 18px; }}
+    #due-crew .sq {{ display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+      background: var(--dc-well); vertical-align: middle; }}
+    #due-crew .sq.on {{ background: var(--dc-accent); }}
+    #due-crew .sq.away {{ background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }}
     #due-crew td.chc {{ width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }}
     #due-crew a.dc-cheer {{ text-decoration: none; opacity: 0.3; font-size: 12px; }}
     #due-crew a.dc-cheer:hover {{ opacity: 1; }}
@@ -441,11 +461,17 @@ def _pycmd(cmd):
     return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_-]', '', str(cmd))}'); return false;"
 
 
-def _head(period):
+def _head(period, show_up=False):
+    if show_up:
+        # one crew view: today is the last square of the week
+        keys = (("today", "Crew"), ("decks", "Decks"), ("squads", "Squads"))
+        on = "today" if period in ("today", "week") else period
+    else:
+        keys = (("today", "Today"), ("week", "Week"), ("decks", "Decks"), ("squads", "Squads"))
+        on = period
     pills = ""
-    for key, label in (("today", "Today"), ("week", "Week"),
-                       ("decks", "Decks"), ("squads", "Squads")):
-        cls = "dc-pill on" if period == key else "dc-pill"
+    for key, label in keys:
+        cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
     return (f'<div class="dc-head"><span class="dc-title">Due Crew</span>'
@@ -472,6 +498,9 @@ def _row_html(row, rank, cfg):
         if row["stale"]:
             cls += " dim"
             extra = ' <span class="la faded">&middot; yesterday</span>'
+        elif row.get("showup") and row.get("days_wk"):
+            n = row["days_wk"]
+            extra = f' <span class="la faded">&middot; {n} day{"s" if n != 1 else ""} this week</span>'
         cells = (f'<td class="n">{_cell(row["reviews"], lambda v: format(v, ","))}</td>'
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
                  f'<td class="n">{_cell(row["retention"], lambda v: f"{v:.1f}%")}</td>'
@@ -516,9 +545,18 @@ def _table_html(data, cfg, period):
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
     heads += "<th></th>"
+    if cfg.get("show_up"):
+        fresh, dormant = build_rows(data["entries"], data["labels"],
+                                    data.get("tomorrow", ""), "today", cfg)
+        return _presence_html(fresh, dormant, data["labels"], data["entries"])
     body = ""
-    for i, row in enumerate(fresh):
-        rank = MEDALS[i] if i < 3 else f"#{i + 1}"
+    n = 0  # show-up rows are counted, not ranked
+    for row in fresh:
+        if row.get("showup"):
+            rank = "&#10003;"
+        else:
+            n += 1
+            rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
         body += _row_html(row, rank, cfg)
     for row in dormant:
         body += _row_html(row, "&mdash;", cfg)
@@ -604,6 +642,48 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
             f'<span class="dc-count"><span>{counts}</span>{chip_html}</span></div>')
 
 
+def _presence_html(fresh, dormant, labels, entries):
+    """The board in show-up mode: one view in place of Today and Week — a
+    square per day, Monday to today, nothing to rank. Sorted by days showed
+    up, then name; today is the last square, so who showed up today reads
+    off the right-hand column."""
+    days_of = {e["user_id"]: e.get("days") or {} for e in entries}
+    week = list(reversed(week_labels(labels)))  # Monday first
+    # sorted by what is on screen: squares lit this week, then name
+    lit = lambda r: sum(1 for lb in week if _showed(days_of.get(r["user_id"], {}).get(lb)))
+    fresh = sorted(fresh, key=lambda r: (-lit(r), r["name"].lower()))
+    today_n = sum(1 for r in fresh if r.get("studied_today"))
+    letters = ""
+    for lb in week:
+        cls = "sqh on" if lb == labels[0] else "sqh"
+        letters += f'<th class="{cls}">{"MTWTFSS"[datetime.fromisoformat(lb).weekday()]}</th>'
+    heads = f'<th class="lt" colspan="2">{today_n} showed up today</th>{letters}'
+    body = ""
+    for row in fresh + dormant:
+        name = _label(row["name"], row.get("emoji"))
+        cls, note = ("you" if row["you"] else ""), ""
+        if row["paused"]:
+            cls += " dim"
+            note = ' <span class="dc-note">&middot; on a break</span>'
+        elif row["quiet"]:
+            cls += " dim"
+            txt, tone = _ago(row["last_updated"])
+            note = f' <span class="la {tone}">({txt})</span>' if txt else ""
+        elif row["stale"]:
+            cls += " dim"
+            note = ' <span class="la faded">&middot; yesterday</span>'
+        elif row.get("away"):
+            note = f' <span class="la faded">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
+        docs = days_of.get(row["user_id"], {})
+        cells = "".join(
+            '<td class="sqc"><i class="sq %s"></i></td>' % (
+                "on" if _showed(docs.get(lb)) else "away" if (docs.get(lb) or {}).get("away") else "")
+            for lb in week)
+        body += (f'<tr class="{cls.strip()}"><td class="rk"></td>'
+                 f'<td class="nm">{name}{note}</td>{cells}</tr>')
+    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+
+
 def _decks_html(data, deltas=None):
     deltas = deltas or {}
     labels = data.get("labels") or []
@@ -685,6 +765,7 @@ def _squads_html(view, cfg):
     if live:
         headline += (f' &middot; {len(live):,} studying today &middot; '
                      f'{int(view.get("reviews") or 0):,} reviews together')
+    # the squad head is rebuilt below when show-up mode is on
     heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
              f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
     for key, label in SQUAD_HEADERS:
@@ -692,8 +773,18 @@ def _squads_html(view, cfg):
         arrow = " &#9662;" if key == sort else ""
         heads += (f'<th><a class="{on}" href="#" '
                   f'onclick="{_pycmd("sort:" + key)}">{label}{arrow}</a></th>')
+    show_up = bool(cfg.get("show_up"))
+    numberless = lambda r: all(r.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
+    if show_up:
+        live.sort(key=lambda r: (-(r.get("week") or 0), r["name"].lower()))
+        heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
+                 f'<span style="color: var(--dc-muted); font-size: 11px;">{people:,} in {name}'
+                 + (" &middot; locked" if view.get("open") is False else "")
+                 + (f" &middot; {len(live):,} showed up today" if live else "") + "</span></th>"
+                 '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
-    for i, r in enumerate(live + rest):
+    n = 0
+    for r in live + rest:
         pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
         cls, note = "", ""
@@ -715,8 +806,16 @@ def _squads_html(view, cfg):
             when = "yesterday" if r.get("day") == yesterday else "quiet"
             note += f' <span class="la faded">&middot; {when}</span>'
             rank = ""
+        elif show_up or numberless(r):
+            rank = "&#10003;"  # showed up: counted, not ranked
         else:
-            rank = f"#{i + 1}"
+            n += 1
+            rank = f"#{n}"
+        if show_up:
+            body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
+                     f'<td class="nm">{link}{note}</td>'
+                     f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+            continue
         body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                  f'<td class="nm">{link}{note}</td>'
                  f'<td class="n">{_cell(r.get("reviews"), lambda v: format(v, ","))}</td>'
@@ -769,6 +868,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
+    show_up = bool(cfg.get("show_up"))
     body = (_decks_html(data, deltas) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
@@ -787,7 +887,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
                 f'<a class="wx" href="#" title="Not now" '
                 f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>') + body
-    if wrap:
+    if wrap and not show_up:  # the week's totals are numbers
         extra = ""
         if (wrap.get("full_days") or 0) >= 3:
             extra = f' &middot; everyone showed up {wrap["full_days"]} of 7 days'
@@ -838,10 +938,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 ' &middot; ') + left
     if period == "decks":
         left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
-    if period == "today":
+    if period == "today" and not show_up:
         left += (f' &middot; <a href="#" title="Copy your day for the chat" '
                  f'onclick="{_pycmd("sharetoday")}">Share today</a>')
-    if period == "week":
+    if period == "week" or (show_up and period == "today"):
         left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
                  f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
 
@@ -854,7 +954,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
-            f'{_css(cfg)}{_head(period)}{body}{foot}</div>')
+            f'{_css(cfg)}{_head(period, show_up)}{body}{foot}</div>')
 
 
 def _card(cfg, title, body_html):
@@ -956,14 +1056,22 @@ def stranger_card_js(info):
     pending, knocked_me, founder_me."""
     name = _label(info.get("name", "?"), info.get("emoji"))
     squad = _html.escape(str(info.get("squad") or "squad"))
-    where = (f'#{int(info["rank"])} in {squad} today' if info.get("rank")
-             else f'in {squad}')
-    when = "today" if info.get("today") else "last sync"
-    bits = [f'{format(int(info.get("reviews") or 0), ",")} reviews {when}',
-            _fmt_time(int(info.get("time_ms") or 0))]
-    if info.get("retention") is not None:
-        bits.append(f'{float(info["retention"]):.1f}% retention')
-    bits.append(f'{int(info.get("streak") or 0)}-day streak')
+    numberless = all(info.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
+    if info.get("show_up") or numberless:
+        # show-up, theirs or mine: presence is the whole story, no rank
+        where = f'in {squad}'
+        bits = ["showed up today" if info.get("today") else "not today"]
+        if info.get("week") is not None:
+            bits.append(f'{int(info["week"])}/7 days this week')
+    else:
+        where = (f'#{int(info["rank"])} in {squad} today' if info.get("rank")
+                 else f'in {squad}')
+        when = "today" if info.get("today") else "last sync"
+        bits = [f'{format(int(info.get("reviews") or 0), ",")} reviews {when}',
+                _fmt_time(int(info.get("time_ms") or 0))]
+        if info.get("retention") is not None:
+            bits.append(f'{float(info["retention"]):.1f}% retention')
+        bits.append(f'{int(info.get("streak") or 0)}-day streak')
     stat = " &middot; ".join(bits)
     inner = _json.dumps(
         f'<div style="display: flex; align-items: baseline; gap: 8px;">'

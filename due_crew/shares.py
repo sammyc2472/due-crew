@@ -126,6 +126,8 @@ def _crew_week_text(q, stats, labels):
         rows.append((client().display_name or "Me", flags, ""))
         reviews, time_ms = r, t
     label = str(cfg().get("crew_label") or "Crew").strip() or "Crew"
+    if cfg().get("show_up"):
+        reviews = time_ms = None  # squares only
     return share.crew_week(label, week, rows, reviews, time_ms)
 
 

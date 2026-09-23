@@ -87,3 +87,11 @@ installing — add-ons load at launch).
 - [ ] With more than ten crewmates: Today and Week scroll inside the card, the header stays while scrolling, and the board opens with your own row in view. Ten or fewer: unchanged.
 - [ ] Same on a squad of more than ten, and on Decks when the bars pass ten (legend stays below the box).
 - [ ] Decks tab: no more "X shares Y — open Shared decks" lines; the dialog still says "matches …".
+
+
+## 2.8: just show up
+- [ ] Settings → Privacy → Just show up, Save: the board becomes one Crew view, a square per day (Monday to today), today's letter in green, "N showed up today" above; the Today/Week pills are one "Crew" pill.
+- [ ] Your next sync: in the console your daily doc has `studied` and no numbers; your squad member doc has no numbers either, `joinedAt` intact.
+- [ ] A crewmate on numbers sees you as a check after the ranked rows (Today), "· N of 7 days" (Week), and on a squad board a check with your 7-day count.
+- [ ] In the mode: toasts say "X just studied" with no count; no streak toasts; a crewmate's card shows no streak and a which-days heatmap; a squadmate's card says "showed up today"; Share week copies squares with no totals line.
+- [ ] Switch it off, Save, sync: numbers return everywhere on the next fetch.

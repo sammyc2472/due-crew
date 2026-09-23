@@ -136,7 +136,7 @@ CONFIG = {
     "sync_notifications": True, "theme": "auto", "accent": "green", "compact": False,
     "show_last_active": True, "highlight_me": True, "share_reviews": True,
     "share_time": True, "share_retention": True, "share_streak": True,
-    "share_heatmap": True, "paused": False, "exam_date": "2026-09-20",
+    "share_heatmap": True, "show_up": False, "paused": False, "exam_date": "2026-09-20",
     "crew_label": "busm", "away_from": "", "away_to": "", "status": "coffee, then 400 cards",
     "shared_decks": [1], "squads": [SQUAD, {"id": "b" * 24, "code": "MS2XXXXX", "name": "MS2", "founder": "x"}],
     "squad": SQUAD["id"],

@@ -175,8 +175,11 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     cl.delete_heatmap(uid)  # share turned off, or paused
             gone = []
             if squad_row is not None and squads and not c.get("paused"):
-                gone = cl.upload_squad_rows(uid, dict(squad_row, day=labels[0]),
-                                            squads)
+                srow = dict(squad_row)
+                srow.setdefault("day", labels[0])
+                # a show-up row carries the day it last studied, or none
+                srow = {k: v for k, v in srow.items() if v is not None}
+                gone = cl.upload_squad_rows(uid, srow, squads)
             cl.check_rules(labels[0])  # cached: one real request per day
             if not fetch:
                 mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone))
@@ -320,8 +323,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         if baseline_valid and c.get("sync_notifications", True):
             old = _state["prev_counts"].get(e["user_id"])
             if old is not None and counts[e["user_id"]] > old:
-                toasts.append(f"{html.escape(e['name'])} just studied — "
-                              f"{counts[e['user_id']]:,} reviews today")
+                toasts.append(f"{html.escape(e['name'])} just studied" + (
+                    "" if c.get("show_up") else f" — {counts[e['user_id']]:,} reviews today"))
     for e in data["entries"]:
         if e["you"]:
             continue
@@ -329,7 +332,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         streak_val = (doc or {}).get("streak")
         if isinstance(streak_val, int):
             old = _state["prev_streaks"].get(e["user_id"])
-            if isinstance(old, int) and c.get("sync_notifications", True):
+            if isinstance(old, int) and c.get("sync_notifications", True) and not c.get("show_up"):
                 for t in STREAK_MILESTONES:
                     if old < t <= streak_val:
                         toasts.append(f"{html.escape(e['name'])} hit a "
@@ -411,6 +414,19 @@ def _on_did_render(deck_browser):
     _play_cheers()
 
 
+def _last_studied(q, stats):
+    """The most recent day label with answers in the last week: today when
+    today has any, else the newest such day, else None. Main thread."""
+    if int(stats.reviews or 0) > 0:
+        return q.day_label(0)
+    try:
+        studied = [lb for lb, t in q.daily_totals(7).items() if t and t[0]]
+    except Exception:
+        traceback.print_exc()
+        return None
+    return max(studied) if studied else None
+
+
 def _on_sync_done(full=False, light=False, fetch=None):
     """Upload everything that changed, then fetch. Anki's sync hook and the
     board's Refresh both land here, so Refresh never leaves your own row
@@ -446,12 +462,16 @@ def _on_sync_done(full=False, light=False, fetch=None):
             traceback.print_exc()
     row = None
     if stats is not None:
-        row = {"name": client().display_name or "Me",
-               "reviews": int(stats.reviews),
-               "studyTimeMs": int(stats.time_ms),
-               "streak": int(stats.streak)}
-        if stats.accuracy is not None:
-            row["accuracy"] = float(stats.accuracy)
+        row = {"name": client().display_name or "Me"}
+        if c.get("show_up"):
+            # just show up: no numbers, and the row is dated by the last day I
+            # studied, so "today" on a squad board means I studied today
+            row["day"] = _last_studied(StatsQueries(mw.col), stats)
+        else:
+            row.update(reviews=int(stats.reviews), studyTimeMs=int(stats.time_ms),
+                       streak=int(stats.streak))
+            if stats.accuracy is not None:
+                row["accuracy"] = float(stats.accuracy)
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:
@@ -652,7 +672,7 @@ def open_settings():
     dlg.exec()
 
 
-SHARE_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
+SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
               "share_heatmap", "paused", "exam_date",
               "away_from", "away_to")
 

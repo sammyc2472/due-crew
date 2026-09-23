@@ -90,6 +90,15 @@ MANY = ENTRIES + [
                            "Kai", "Lena", "Mateo", "Inés", "Yara", "Bo", "Eli"])
 ]
 DATA_MANY = {"entries": MANY, "labels": L, "tomorrow": TOMORROW, "pending": []}
+
+# show-up only: two crewmates who share presence and nothing else
+SHOWUP = [
+    {"user_id": "kai", "name": "Kai", "you": False, "paused": False, "last_updated": ago(minutes=9),
+     "exam_date": "", "days": {lb: {"studied": i not in (2, 5)} for i, lb in enumerate(L)}, "decks": []},
+    {"user_id": "nia", "name": "Nia", "you": False, "paused": False, "last_updated": ago(hours=3),
+     "exam_date": "", "days": {lb: {"studied": i not in (1, 3, 4)} for i, lb in enumerate(L)}, "decks": []},
+]
+DATA_SHOWUP = {"entries": ENTRIES + SHOWUP, "labels": L, "tomorrow": TOMORROW, "pending": []}
 WRAP = {"reviews": 21430, "time_ms": 148320000, "best_name": "Marisa K.", "full_days": 5}
 DELTAS = {("sam", "AnKing Step 1"): 124}
 
@@ -121,6 +130,21 @@ SQUAD_VIEW = {"state": "ok", "squads": [{"id": "abc", "name": "busm"}, {"id": "d
               "rows": SROWS, "day": L[0], "yesterday": L[1], "people": 5, "studying": 4,
               "reviews": 2114}
 KNOCKS = [{"uid": "u3", "name": "Jordan", "squad": "busm"}]
+sections.append("<h3>today, two crewmates on show-up only (as everyone else sees them)</h3>"
+                + board.render(DATA_SHOWUP, {"period": "today"}, now_ts - 60))
+sections.append("<h3>week, same crew</h3>" + board.render(DATA_SHOWUP, {"period": "week"}, now_ts - 60))
+sections.append("<h3>show-up mode: the one crew view (what a show-up person sees)</h3>"
+                + board.render(DATA_SHOWUP, {"period": "today", "show_up": True}, now_ts - 60,
+                               wrap={"reviews": 21430, "time_ms": 148320000, "full_days": 5}))
+SROWS_SHOWUP = SROWS + [
+    {"user_id": "s_kai", "name": "Kai", "day": L[0], "week": 5},
+    {"user_id": "s_nia", "name": "Nia", "day": L[1], "week": 3}]
+sections.append("<h3>squad with two show-up-only members</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60,
+    squad_view=dict(SQUAD_VIEW, rows=SROWS_SHOWUP, people=8, studying=6)))
+sections.append("<h3>squad in show-up mode</h3>" + board.render(
+    DATA, {"period": "squads", "show_up": True}, now_ts - 60,
+    squad_view=dict(SQUAD_VIEW, rows=SROWS_SHOWUP, people=8, studying=6)))
 for period in ("today", "decks"):
     sections.append(f"<h3>{period}, 21 in the crew (the row cap)</h3>"
                     + board.render(DATA_MANY, {"period": period}, now_ts - 60))

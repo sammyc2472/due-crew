@@ -1691,6 +1691,104 @@ def test_row_cap():
           "'#due-crew .dc-scroll'" in js and "tr.you" in js and ".dr.me" in js and "if (want > 0)" in js)
 
 
+def test_show_up():
+    """2.8: "Just show up" — share only that you studied, and see only that
+    of others. Day docs and squad rows go numbers-free; the board becomes
+    one view, a square per day; a show-up person reads as a check to the
+    rest of the crew, counted but never ranked."""
+    from due_crew import share
+    lb = TODAY.isoformat()
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    values = {"reviews": 120, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4, "status": "hi"}
+    doc, mask = sam._day_doc(lb, values, {"show_up": True})
+    check("show-up: my day doc keeps studied and status, drops every number; the mask still clears them",
+          doc.get("studied") is True and doc.get("status") == "hi"
+          and not {"reviews", "studyTimeMs", "accuracy", "streak"} & set(doc)
+          and {"reviews", "studyTimeMs", "accuracy", "streak"} <= set(mask))
+    full, _m = sam._day_doc(lb, values, {"show_up": False})
+    check("show-up: off, the toggles rule as before", full.get("reviews") == 120)
+    import hashlib
+    sid = hashlib.sha1(b"due-crew-squad:ABCDEFGH").hexdigest()[:24]
+    store.docs[f"squads/{sid}"] = {"name": fv_str("busm"), "founder": fv_str("sam"),
+                                   "open": {"booleanValue": True}}
+    store.docs[f"squads/{sid}/members/sam"] = {
+        "name": fv_str("Sammy"), "joinedAt": {"timestampValue": "2026-09-01T00:00:00Z"},
+        "reviews": {"integerValue": "500"}, "streak": {"integerValue": "9"}, "day": fv_str(lb)}
+    sam.upload_squad_rows("sam", {"name": "Sammy", "week": 5, "day": lb}, [sid])
+    m = store.docs[f"squads/{sid}/members/sam"]
+    check("show-up: a numbers-free row deletes the numbers that stood, keeps joinedAt",
+          "reviews" not in m and "streak" not in m and "joinedAt" in m
+          and int(m["week"]["integerValue"]) == 5)
+
+    def person(uid, name, you=False, numbers=True, studied=(), paused=False, away=None):
+        days = {}
+        for i in studied:
+            days[labels[i]] = ({"studied": True, "reviews": 300 - 10 * i, "studyTimeMs": 100000,
+                                "accuracy": 88.0, "streak": 3} if numbers else {"studied": True})
+        if away is not None:
+            days[labels[0]] = {"away": True, "awayTo": away}
+        return {"user_id": uid, "name": name, "you": you, "paused": paused, "last_updated": "",
+                "exam_date": "", "days": days, "decks": []}
+    entries = [person("sam", "Sammy", you=True, studied=(0, 1, 2)),
+               person("dre", "Dre", studied=(0, 1)),
+               person("kai", "Kai", numbers=False, studied=(0, 2, 3)),
+               person("nia", "Nia", numbers=False, studied=(1,)),
+               person("pri", "Priya", studied=(1, 3), away="2026-09-06"),
+               person("theo", "Theo", paused=True)]
+    base = {"entries": entries, "labels": labels, "tomorrow": "", "pending": []}
+    today = board.render(base, {"period": "today"}, 0)
+    check("show-up rows, Today: a check instead of a rank, after the ranked rows",
+          '<td class="rk">&#10003;</td><td class="nm">' in today and today.index("Kai") > today.index("Dre")
+          and '<td class="rk">#3</td>' not in today)
+    week = board.render(base, {"period": "week"}, 0)
+    check("show-up rows, Week: a check and the days this week, no rank (Nia studied Monday: she counts too)",
+          "1 day this week" in week and week.count("&#10003;") == 2 and '<td class="rk">#3</td>' not in week)
+    mode = board.render(base, {"period": "week", "show_up": True}, 0,
+                        wrap={"reviews": 5, "time_ms": 1, "full_days": 5})
+    check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
+          ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
+          and "Last week" not in mode and "Share week" in mode and "Share today" not in mode)
+    week_len = len(board.week_labels(labels))
+    check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
+          mode.count('class="sq on"') == 3 + 2 + 3 + 1 + 2 * 0 + 0  # per person within the calendar week
+          if week_len >= 4 else True)
+    check("mode: whoever studied today is counted, an away day is not; sorted by squares lit, then name",
+          "3 showed up today" in mode and 'class="sqh on"' in mode
+          # Nia has no doc today: a dim "yesterday" row after the live ones, as on the Today table
+          and mode.index("Dre") < mode.index("Sammy") < mode.index("Kai") < mode.index("Priya") < mode.index("Nia"))
+    check("mode: an away day is an outlined square and a note, a paused row stays dim",
+          'class="sq away"' in mode and "&#9992;&#65039; back" in mode and "on a break" in mode)
+    rows = [{"user_id": "a", "name": "Ann", "day": lb, "reviews": 500, "time_ms": 1000, "retention": 90.0, "streak": 3, "week": 4},
+            {"user_id": "k", "name": "Kai", "day": lb, "reviews": None, "time_ms": None, "retention": None, "streak": None, "week": 5}]
+    view = {"state": "ok", "squads": [{"id": "x", "name": "busm"}], "current": "x", "name": "busm",
+            "open": True, "founder_me": False, "rows": rows, "day": lb, "yesterday": labels[1],
+            "people": 2, "studying": 2, "reviews": 500}
+    sq = board.render(base, {"period": "squads"}, 0, squad_view=view)
+    sq_mode = board.render(base, {"period": "squads", "show_up": True}, 0, squad_view=view)
+    check("squads: a show-up member is a check after the ranked rows, with their days",
+          "#1" in sq and sq.count("&#10003;") == 1 and sq.index("Kai") > sq.index("Ann") and "5/7" in sq)
+    check("squads in the mode: everyone is a check, days first, no numbers, no reviews together",
+          sq_mode.count("&#10003;") == 2 and '<td class="rk">#1</td>' not in sq_mode and "showed up today" in sq_mode
+          and "reviews together" not in sq_mode and sq_mode.index("Kai") < sq_mode.index("Ann"))
+    card = board.stranger_card_js({"uid": "k", "name": "Kai", "reviews": None, "time_ms": None,
+                                   "retention": None, "streak": None, "rank": None, "squad": "busm",
+                                   "today": True, "week": 5})
+    check("squadmate card for a show-up person: presence only",
+          "showed up today" in card and "5/7 days this week" in card and "-day streak" not in card)
+    txt = share.crew_week("busm", labels[::-1], [("Sammy", [True, False, True], "")], None, None)
+    check("share: in the mode the crew week is squares alone, no totals line",
+          "reviews" not in txt and "together" not in txt and "Sammy" in txt)
+    js = board.stranger_card_js({"uid": "a", "name": "Ann", "reviews": 500, "time_ms": 1000,
+                                 "retention": 90.0, "streak": 3, "rank": 1, "squad": "busm",
+                                 "today": True, "week": 4, "show_up": True})
+    check("squadmate card seen from the mode: their numbers stay out of sight",
+          "showed up today" in js and "500" not in js and "-day streak" not in js)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
