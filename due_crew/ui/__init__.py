@@ -107,6 +107,14 @@ def _night():
         return False
 
 
+def _accent_name():
+    from ..board import DEFAULT_ACCENT
+    try:
+        return (mw.addonManager.getConfig(__name__) or {}).get("accent") or DEFAULT_ACCENT
+    except Exception:
+        return DEFAULT_ACCENT
+
+
 def accent():
     """The board's accent (Settings → Accent) in the shade made for Anki's
     current theme. Until 2.9 dialogs were always green. Dialogs rebuild on
@@ -114,10 +122,40 @@ def accent():
     shade = "dark" if _night() else "light"
     try:
         from ..board import ACCENTS, DEFAULT_ACCENT
-        name = (mw.addonManager.getConfig(__name__) or {}).get("accent") or DEFAULT_ACCENT
-        return ACCENTS.get(name, ACCENTS[DEFAULT_ACCENT])[shade][0]
+        return ACCENTS.get(_accent_name(), ACCENTS[DEFAULT_ACCENT])[shade][0]
     except Exception:
         return "#7cc47f" if shade == "dark" else "#2e7d32"
+
+
+def logo_label(width=150):
+    """The stacked logo in the user's accent and Anki's theme (2.10), for
+    the top of the sign-in and welcome screens, or None if this Qt can't
+    draw SVG (then the screen goes without). Drawn at the screen's pixel
+    ratio so it stays sharp; one square's width of clear space around it."""
+    from aqt.qt import (QBuffer, QByteArray, QGuiApplication, QIODevice, QImageReader,
+                        QLabel, QPixmap, QSize)
+    from ..logo import ASPECT, svg
+    try:
+        ratio = max(1.0, float(QGuiApplication.primaryScreen().devicePixelRatio()))
+    except Exception:
+        ratio = 1.0
+    height = round(width * ASPECT)
+    buf = QBuffer()
+    buf.setData(QByteArray(svg("dark" if _night() else "light", _accent_name()).encode("utf-8")))
+    buf.open(QIODevice.OpenModeFlag.ReadOnly)
+    reader = QImageReader(buf, QByteArray(b"svg"))
+    reader.setScaledSize(QSize(round(width * ratio), round(height * ratio)))
+    image = reader.read()
+    if image.isNull():
+        return None
+    pixmap = QPixmap.fromImage(image)
+    pixmap.setDevicePixelRatio(ratio)
+    label = QLabel()
+    label.setPixmap(pixmap)
+    label.setAccessibleName("Due Crew")
+    clear = round(width * 40 / 401)  # one square
+    label.setContentsMargins(4, 4, 0, clear)  # the dialog's margin makes up the rest
+    return label
 
 
 def danger():

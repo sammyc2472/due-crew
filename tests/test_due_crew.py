@@ -2001,6 +2001,27 @@ def test_ways_in_v29():
           "duecrew:settings:privacy" in js)
 
 
+def test_logo_accent():
+    """2.10: the logo in the add-on is the kit's artwork, byte for byte,
+    with only its fills swapped for the accent and theme."""
+    from due_crew import logo
+    here = os.path.join(REPO, "due_crew", "logo.svg")
+    with open(here, "rb") as a, open(os.path.join(REPO, "docs", "logo", "svg", "due-crew-logo.svg"), "rb") as b:
+        check("logo: the add-on's copy is the docs/logo original", a.read() == b.read())
+    shapes = lambda s: re.sub(r'fill="#[0-9a-f]{6}"', 'fill=""', s)
+    green = logo.svg("light", "green")
+    check("logo: green in light is the original", green == open(here, encoding="utf-8").read())
+    for name, shades in board.ACCENTS.items():
+        for shade in ("light", "dark"):
+            s = logo.svg(shade, name)
+            pal = board.LIGHT if shade == "light" else board.DARK
+            check(f"logo {name}/{shade}: six studied days in the accent, one off, the wordmark",
+                  s.count(f'fill="{shades[shade][0]}"') == 6 and s.count(f'fill="{pal["line"]}"') == 1
+                  and s.count(f'fill="{logo.WORDMARK[shade]}"') == 1)
+            check(f"logo {name}/{shade}: only the fills change", shapes(s) == shapes(green))
+    check("logo: an unknown accent falls back to green", logo.svg("light", "nope") == green)
+
+
 def test_together_v210():
     """2.10: studying now, tricky cards and tips, the good-luck card, the
     tiny plan, and the season. No new reads: all of it rides the week doc

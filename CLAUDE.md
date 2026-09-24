@@ -13,8 +13,12 @@ maintainer. The repo is the source of truth; there is no build step.
   and squads (private boards behind an invite code) are enforced here. v2.0 removed crew
   servers, the directory, and custom projects — nobody but Sam ever used
   them.
-- `README.md` — doubles verbatim as the AnkiWeb listing description; keep
-  them in sync when it changes.
+- `README.md` — from the tagline down, doubles verbatim as the AnkiWeb
+  listing description; keep them in sync when it changes. The logo block
+  above the tagline is GitHub-only (AnkiWeb shows its own title).
+- `docs/logo/` — the logo ("Seven days"), final artwork: never redraw or
+  re-typeset it. Green on GitHub; inside the add-on, `due_crew/logo.py`
+  colours the studied days with the user's accent.
 - `tests/` — `python3 tests/test_due_crew.py` (client behavior against a
   fake Firestore; standard library only) and `tests/rules/` (the real
   rules, in the Firestore emulator — needs firebase-tools + Java). See
