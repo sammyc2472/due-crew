@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import rooms, together
+from . import account, rooms, together
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -486,6 +486,11 @@ def _on_sync_done(full=False, light=False, fetch=None):
     global _last_attempt
     if not mw.col or not client().signed_in:
         return
+    if not account.ready():
+        # 2.13: my settings first, so a new computer never uploads defaults
+        # over the account's (its shared decks, its privacy switches)
+        account.ensure(lambda: _on_sync_done(full=full, light=light, fetch=fetch))
+        return
     _last_attempt = time.time()
     c = cfg()
     # independent try blocks: one gatherer failing must not silently stop
@@ -504,7 +509,10 @@ def _on_sync_done(full=False, light=False, fetch=None):
         except Exception:
             traceback.print_exc()
         try:
-            decks = gather_shared_decks(mw.col, c)
+            # an install that has never had a deck list (and couldn't pull
+            # one) doesn't upload an empty one over the account's
+            if c.get("shared_decks") or c.get("shared_decks_set"):
+                decks = gather_shared_decks(mw.col, c)
         except Exception:
             traceback.print_exc()
         try:
@@ -526,6 +534,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
                 "reviews": int(stats.reviews), "studyTimeMs": int(stats.time_ms),
                 "streak": int(stats.streak),
                 "accuracy": None if stats.accuracy is None else float(stats.accuracy)}, c))
+            if "reviews" in row and not client().rules_stale:
+                row["newCards"] = int(stats.new_cards)  # rules-v11 lets a row say it
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:
@@ -750,6 +760,7 @@ def open_decks():
 def _on_decks_saved(changed):
     c = cfg()
     c.update(changed)
+    c["shared_decks_set"] = True
     save_cfg(c)
     try:
         decks = gather_shared_decks(mw.col, c)
@@ -805,6 +816,8 @@ def _on_profile_open():
     _closing = False
     _last_attempt = 0.0
     client()                  # rebind to this profile's session
+    if client().signed_in:
+        account.ensure()      # 2.13: my settings, before anything uploads
     _migrate_server_json()    # v1.x crew-server config, if any
     refresh_board()           # the board, right away
     # ...and my own numbers a few seconds later, unless Anki's own sync got
@@ -886,6 +899,7 @@ if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap
+app.on_account_change = account.on_change
 app.rerender = _rerender
 app.refresh = refresh_board
 app.sync = _on_sync_done

@@ -187,6 +187,10 @@ def main():
     check("profile: 17-char emoji field rejected", put("users/bob", {"emoji": "x" * 17}, "bob") == 403)
     check("member: week and emoji accepted", put(f"squads/{sid}/members/alice", {"week": 5, "emoji": "🐢"}, "alice") == 200)
     check("member: week over 7 rejected", put(f"squads/{sid}/members/alice", {"week": 8}, "alice") == 403)
+    # -- v2.13: how many of the reviews were new cards (rules-v11)
+    check("member: newCards accepted", put(f"squads/{sid}/members/alice", {"newCards": 20}, "alice") == 200)
+    check("member: negative newCards rejected", put(f"squads/{sid}/members/alice", {"newCards": -1}, "alice") == 403)
+    check("member: newCards must be an int", put(f"squads/{sid}/members/alice", {"newCards": "20"}, "alice") == 403)
     put(f"squads/{sid}", {"open": True}, "alice")
     put(f"squads/{sid}/members/bob", dict(member, name="Bob"), "owner")
     check("ban: founder sets the list", put(f"squads/{sid}", {"banned": ["bob"]}, "alice") == 200)
@@ -276,6 +280,25 @@ def main():
     check("new code: the new one knocks",
           put("users/bob/knocks/dave", dict(code_knock, name="Dave", code="BOB999"), "dave") in (200, 201))
 
+    # -- 2.13: my settings follow me. One doc, mine only; my crew can't read it.
+    mine = {"v": 1, "at": "2026-09-24T10:00:00Z",
+            "settings": {"mapValue": {"fields": {"share_retention": {"booleanValue": False},
+                                                 "status": {"stringValue": "hi"}}}}}
+    check("settings: I save mine", put("users/bob/private/settings", mine, "bob") in (200, 201))
+    check("settings: I read mine", call("GET", "users/bob/private/settings", "bob")[0] == 200)
+    check("settings: a friend can't read them",
+          call("GET", "users/bob/private/settings", "alice")[0] == 403)
+    check("settings: nobody else can write them",
+          put("users/bob/private/settings", mine, "carol") == 403)
+    check("settings: only the one doc",
+          put("users/bob/private/other", mine, "bob") == 403)
+    check("settings: only its three fields",
+          put("users/bob/private/settings", dict(mine, extra=1), "bob") == 403)
+    check("settings: settings must be a map",
+          put("users/bob/private/settings", dict(mine, settings="all of them"), "bob") == 403)
+    check("settings: I can delete mine (account deletion)",
+          call("DELETE", "users/bob/private/settings", "bob")[0] == 200)
+
     # -- v2.9: one batchGet of friends' stats gets 20 access calls; the client
     # sends at most ten friends per batch, safe even without edge docs (two
     # calls each). Eleven without edges is where one batch breaks.
@@ -312,9 +335,9 @@ def main():
 
     # -- markers cumulative
     for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-              "rules-v9", "rules-v10"):
+              "rules-v9", "rules-v10", "rules-v11"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
-    check("marker rules-v11: not provisioned (403)", call("GET", "meta/rules-v11", "alice")[0] == 403)
+    check("marker rules-v12: not provisioned (403)", call("GET", "meta/rules-v12", "alice")[0] == 403)
 
     print(f"\n{PASSED}/{PASSED + FAILED} rules checks passed")
     sys.exit(1 if FAILED else 0)

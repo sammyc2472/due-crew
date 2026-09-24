@@ -1971,6 +1971,138 @@ def test_squad_privacy_v29():
           and doc["reviews"] == 40 and doc["streak"] == 3)
 
 
+def test_settings_follow_account_v213():
+    """2.13: a person's settings follow their account. A second computer
+    pulls them before it uploads anything, so it never sends defaults over
+    them (the shared decks a friend lost, the privacy switches)."""
+    from due_crew import account, app as appmod
+    from due_crew.app import _state
+    # pure: decks by id, else by name; junk dropped; bounds
+    cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
+             "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
+             "status": "coffee", "accent": "rose", "sort": "time"}
+    doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
+    check("pick: only what follows the account; decks with names; accent and sort stay",
+          "accent" not in doc and "sort" not in doc
+          and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
+    here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
+    resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
+    got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
+    check("apply: the account's settings land; the deck matches by id, else by name; accent stays",
+          got["share_retention"] is False and got["exam_date"] == "2026-10-02"
+          and got["shared_decks"] == [11, 99] and got["accent"] == "green" and got["shared_decks_set"])
+    junk = account.clean({"share_retention": "no", "status": "x" * 500, "squads": [{"id": 5}, "x"],
+                          "shared_decks": [{"id": "abc"}, {"id": 3, "name": 7}] + [{"id": 1}] * 500})
+    check("clean: wrong types dropped, text and lists bounded",
+          "share_retention" not in junk and len(junk["status"]) == 80 and junk["squads"] == []
+          and len(junk["shared_decks"]) == account.MAX_DECKS and junk["shared_decks"][0] == {"id": 3, "name": "7"})
+
+    # the doc: mine only, on rules-v11
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    store.auth_uid = "sam"
+    sam = new_client(store, "sam", "Sammy")
+    ok = sam.put_settings("sam", "2026-09-24T10:00:00.000000Z", doc)
+    back, status = sam.get_settings("sam")
+    check("settings doc: I write it and read it back", ok and status == 200
+          and back["settings"]["shared_decks"][1]["name"] == "Pathoma")
+    store.auth_uid = "dre"
+    dre = new_client(store, "dre", "Dre")
+    check("settings doc: not even my crew can read it", dre.get_settings("sam")[1] == 403)
+    store.auth_uid = "sam"
+    old = fakes.FakeFirestore(rules_mode="v10")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
+    seed_users(old, {"sam": "Sammy"}, {"sam": []})
+    old.auth_uid = "sam"
+    check("settings doc: refused on rules-v10 (the pull carries on without it)",
+          new_client(old, "sam", "Sammy").get_settings("sam")[1] == 403)
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+
+    # two computers, through the real pull and push
+    saved = {k: getattr(account, k) for k in ("cfg", "client")}
+    saved_app = {k: getattr(appmod, k) for k in ("_bg", "save_cfg", "swap")}
+    saved_col = account.mw.col
+    boxes = {}
+
+    class Decks:
+        def __init__(self, names): self.names = names
+        def get(self, did, default=False): return {"id": did} if did in self.names else default
+        def name(self, did): return self.names.get(did, "")
+        def id_for_name(self, name): return next((d for d, n in self.names.items() if n == name), None)
+
+    def computer(name, config, decks):
+        cl = new_client(store, "sam", "Sammy")
+        boxes[name] = {"cfg": config, "cl": cl, "decks": Decks(decks)}
+        return boxes[name]
+
+    def use(box):
+        account.cfg = lambda: dict(box["cfg"])
+        account.client = lambda: box["cl"]
+        appmod.save_cfg = lambda c, from_account=False: box["cfg"].update(c)
+        account.mw.col = types.SimpleNamespace(decks=box["decks"])
+        _state.update(settings_ready=False, settings_pulling=False, labels=[TODAY.isoformat()])
+
+    appmod._bg = lambda job, done=None: done(job()) if done else job()
+    appmod.swap = None
+    store.docs.pop("users/sam/private/settings", None)
+    try:
+        a = computer("a", dict(cfg_a), {11: "AnKing", 12: "Pathoma"})
+        use(a)
+        synced = []
+        account.ensure(lambda: synced.append("a"))
+        check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
+              synced == ["a"] and "users/sam/private/settings" in store.docs and account.ready())
+        b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
+                     {11: "AnKing", 77: "Pathoma"})
+        use(b)
+        order = []
+        real_pulled = account._pulled
+        account._pulled = lambda r: (order.append("pulled"), real_pulled(r))[1]
+        account.ensure(lambda: order.append("sync"))
+        account._pulled = real_pulled
+        check("second computer: pulls before its first sync, and takes the account's settings",
+              order == ["pulled", "sync"] and b["cfg"]["shared_decks"] == [11, 77]
+              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "blue")
+        b["cfg"]["status"] = "200 cards, then bed"
+        account.on_change(b["cfg"])
+        use(a)
+        a["cl"].session["settings_day"] = ""  # the next day
+        account.ensure()
+        check("a change on one computer reaches the other on its next pull",
+              a["cfg"]["status"] == "200 cards, then bed")
+        # newest save wins: a has an unsent edit newer than the doc
+        a["cl"].session.update(settings_dirty=True, settings_local_at="2999-01-01T00:00:00Z", settings_seen="old")
+        a["cfg"]["exam_date"] = "2027-01-01"
+        a["cl"].session["settings_day"] = ""
+        account.ensure()
+        check("newest save wins: an unsent edit here, newer than the account's, goes up instead",
+              store.docs["users/sam/private/settings"]["settings"]["mapValue"]["fields"]["exam_date"]["stringValue"] == "2027-01-01")
+        # offline: the pull fails, the sync still runs, and doesn't loop
+        use(a)
+        a["cl"].session["settings_day"] = ""
+        real_get = a["cl"].get_settings
+        tries = []
+        a["cl"].get_settings = lambda uid: (tries.append(1), (None, 0))[1]
+        runs = []
+
+        def sync_like():
+            runs.append(1)
+            if not account.ready():
+                account.ensure(sync_like)
+        account.ensure(sync_like)
+        a["cl"].get_settings = real_get
+        check("offline: one failed pull, then the sync runs once, no loop",
+              tries == [1] and runs == [1] and account.ready())
+    finally:
+        for k, v in saved.items():
+            setattr(account, k, v)
+        for k, v in saved_app.items():
+            setattr(appmod, k, v)
+        account.mw.col = saved_col
+        _state.update(settings_ready=False, settings_pulling=False, labels=[])
+
+
 def test_study_rooms_v212():
     """2.12: study rooms. A shared clock on the week doc, no reads; the
     room shows in the top bar, else the bottom bar, else the margin; the
@@ -2602,6 +2734,96 @@ def test_show_up():
                                  "today": True, "week": 4, "show_up": True})
     check("squadmate card seen from the mode: their numbers stay out of sight",
           "showed up today" in js and "500" not in js and "-day streak" not in js)
+
+
+def test_new_cards_v213():
+    """2.13: under Reviews, how many were new cards: a card whose first
+    answer ever was that day. A card seen before is a review, relearned or
+    not. It goes out under the Reviews switch, never on its own."""
+    from due_crew import share
+    at = lambda d, h=12: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    three_ago = TODAY - datetime.timedelta(days=3)
+    fakes.add_review(conn, at(three_ago), cid=1)                  # first seen three days ago
+    fakes.add_review(conn, at(TODAY, 9), ease=1, cid=1)           # relearned today
+    fakes.add_review(conn, at(TODAY, 10), cid=1)
+    fakes.add_review(conn, at(TODAY, 11), ease=1, cid=2)          # new today, twice
+    fakes.add_review(conn, at(TODAY, 12), cid=2)
+    fakes.add_review(conn, at(TODAY, 13), cid=3)                  # new today
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    q = StatsQueries(col)
+    files = tempfile.mkdtemp()
+    stats = gather_stats(col, files)
+    check("new cards: first answered today, once each; a relearned card is a review",
+          stats.reviews == 5 and stats.new_cards == 2, f"{stats.reviews} {stats.new_cards}")
+    week = {d["label"]: d for d in gather_week(col, files)} if gather_week else {}
+    check("new cards: each past day of the week carries its own count (today is upload_today's)",
+          week.get(three_ago.isoformat(), {}).get("new_cards") == 1 and TODAY.isoformat() not in week)
+    check("new cards: the week's count for Share week", sum(q.new_cards_by_day(7).values()) == 3)
+
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    lb = TODAY.isoformat()
+    values = {"reviews": 5, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4, "newCards": 2}
+    on, mask = sam._day_doc(lb, values, {})
+    off, _m = sam._day_doc(lb, values, {"share_reviews": False})
+    up, _m = sam._day_doc(lb, values, {"show_up": True})
+    check("new cards: on the day doc with Reviews, gone without it or in show-up; the mask clears it",
+          on.get("newCards") == 2 and "newCards" not in off and "newCards" not in up and "newCards" in mask)
+
+    def ent(day):
+        return {"user_id": "u", "name": "Nia", "you": False, "paused": False,
+                "last_updated": "", "exam_date": "", "days": {lb: day}, "decks": []}
+    base = {"labels": [lb], "tomorrow": "", "pending": []}
+    some = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
+                        {"period": "today"}, 0)
+    every = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 20})]),
+                         {"period": "today"}, 0)
+    none = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 0})]),
+                        {"period": "today"}, 0)
+    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "today"}, 0)
+    check("board: a grey line under Reviews, with the whole count on hover",
+          '<small class="nw">12 new</small>' in some and 'title="12 of 205 were new cards"' in some)
+    check("board: \"all new\" when every review was new; nothing when none were or they didn't say",
+          ">all new<" in every and 'class="nw"' not in none and 'class="nw"' not in old)
+    wk = board._week_row({lb: {"reviews": 10, "newCards": 3},
+                          (TODAY - datetime.timedelta(days=1)).isoformat(): {"reviews": 5, "newCards": 1}},
+                         [lb, (TODAY - datetime.timedelta(days=1)).isoformat()])
+    check("board: Week adds the days up", wk["new"] == 4 and wk["reviews"] == 15)
+
+    # squad rows: rules-v11 lets a row say it; older rules refuse it
+    store.auth_uid = "sam"
+    sid = sam.create_squad("sam", "busm", "Sammy")["id"]
+    row = {"name": "Sammy", "day": lb, "reviews": 5, "newCards": 2}
+    check("squad row: newCards lands on rules-v11", sam.upload_squad_rows("sam", row, [sid]) == []
+          and store.docs[f"squads/{sid}/members/sam"]["newCards"]["integerValue"] == "2")
+    check("squad row: a negative count is refused",
+          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": -1}, ["newCards"]) == 403)
+    drow = next(r for r in sam.fetch_squad(sid)["rows"] if r["user_id"] == "sam")
+    check("squad row: read back as new_cards", drow["new_cards"] == 2)
+    store.rules_mode = "v10"
+    check("squad row: rules-v10 refuses the field (so a stale client leaves it out)",
+          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": 2}, ["newCards"]) == 403)
+    store.rules_mode = "repo"
+    view = {"state": "ok", "squads": [{"id": sid, "name": "busm"}], "current": sid, "name": "busm",
+            "open": True, "founder_me": True, "day": lb, "yesterday": "", "people": 1, "studying": 1,
+            "reviews": 5, "rows": [dict(drow, you=True, crew=False, pending=False, knocked_me=False)]}
+    sq = board.render(dict(base, entries=[]), {"period": "squads"}, 0, squad_view=view)
+    check("squads: the same line under Reviews", '<small class="nw">2 new</small>' in sq)
+
+    # the card and the shares
+    check("card: Today line", board.today_text(205, 20) == "205 reviews (20 new)"
+          and board.today_text(1, 1) == "1 review (all new)" and board.today_text(9, None) == "9 reviews")
+    card = board.profile_overlay_js({"name": "Nia", "today": (205, 20), "cells": None, "last_active": ""})
+    check("card: the profile says today's reviews and new cards", "Today: 205 reviews (20 new)" in card)
+    t = share.my_today(lb, 205, 60000, 90.0, 3, 20)
+    w = share.my_week([lb], [True], 205, 60000, 3, 205)
+    check("share: (N new) after the reviews; (all new); none when none were",
+          "205 reviews (20 new)" in t and "205 reviews (all new)" in w
+          and "(" not in share.my_today(lb, 205, 60000, None, 3, 0).split("\n")[1])
 
 
 def main():

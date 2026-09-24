@@ -14,6 +14,7 @@ class UserStats:
     time_ms: int
     accuracy: Optional[float]  # None until the first answer of the day
     streak: int
+    new_cards: int = 0         # 2.13: of the reviews, cards answered for the first time
 
 
 def gather_stats(col, user_files_dir):
@@ -25,6 +26,7 @@ def gather_stats(col, user_files_dir):
         time_ms=q.study_time_ms_today(),
         accuracy=(correct / total * 100) if total else None,
         streak=StreakTracker(q, user_files_dir).current(),
+        new_cards=q.new_cards_by_day(1).get(q.day_label(0), 0),
     )
 
 
@@ -160,6 +162,7 @@ def gather_week(col, user_files_dir, days=7):
     studied = q.studied_days_ago(WEEK_WINDOW)
     base = StreakTracker(q, user_files_dir).base()
     totals = q.daily_totals(days)  # one pass; this was three queries per day
+    fresh = q.new_cards_by_day(days)
     out = []
     for ago in range(1, days):
         if ago not in studied:
@@ -180,5 +183,6 @@ def gather_week(col, user_files_dir, days=7):
             "time_ms": time_ms,
             "accuracy": (correct / graded * 100) if graded else None,
             "streak": streak,
+            "new_cards": fresh.get(label, 0),
         })
     return out

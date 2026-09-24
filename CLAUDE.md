@@ -66,6 +66,24 @@ maintainer. The repo is the source of truth; there is no build step.
   its timer restarts when the break ends. Each break costs one light
   refresh (a doc per friend), once per round, only while reviewing: that
   is how the chip learns who joined. Closing Anki leaves the room.
+- 2.13: settings that belong to a person (`account.ACCOUNT_KEYS`: privacy
+  switches, show-up, paused, exam and away dates, status, emoji, squads,
+  crew label, shared decks by id and name) live in
+  `users/{me}/private/settings`, owner-only (rules-v11). Accent, theme,
+  sort and tab stay per computer. An install pulls before it uploads:
+  `_on_sync_done` waits for `account.ensure()` at profile open, sign-in and
+  the day's first sync, so a new computer never sends defaults over the
+  account's. That's one read a day per person, deliberate. Newest save
+  wins. `app.save_cfg` pushes when an account key changes. An install
+  that has never set a deck list (and couldn't pull one) doesn't upload an
+  empty one.
+- 2.13 also says how many reviews were new cards (`newCards`): a card
+  whose first answer ever was that day (`StatsQueries.new_cards_by_day`,
+  an index probe per answer, no full-revlog scan); relearned and Forget-reset
+  cards are reviews. It rides the day and week docs under the Reviews
+  switch (`METRICS`), and squad rows only on rules-v11 (`memberShape`
+  refuses it before). Shown under Reviews, on the profile card, in Share
+  today and week. Sorting is unchanged. No new reads.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in

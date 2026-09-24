@@ -117,7 +117,8 @@ def _day_metrics(doc):
     return {"reviews": doc.get("reviews"),
             "time_ms": doc.get("studyTimeMs"),
             "retention": doc.get("accuracy"),
-            "streak": doc.get("streak")}
+            "streak": doc.get("streak"),
+            "new": doc.get("newCards")}
 
 
 def week_labels(labels):
@@ -144,13 +145,15 @@ def _week_row(days, labels):
     times = [d["studyTimeMs"] for d in found if "studyTimeMs" in d]
     accs = [(d["accuracy"], d.get("reviews", 1)) for d in found if "accuracy" in d]
     streak = next((d["streak"] for d in found if "streak" in d), None)
+    fresh = [d["newCards"] for d in found if "newCards" in d]
     acc = None
     if accs:
         weights = sum(max(r, 1) for _, r in accs)
         acc = sum(a * max(r, 1) for a, r in accs) / weights
     return {"reviews": sum(reviews) if reviews else None,
             "time_ms": sum(times) if times else None,
-            "retention": acc, "streak": streak}
+            "retention": acc, "streak": streak,
+            "new": sum(fresh) if fresh else None}
 
 
 def _showed(doc):
@@ -274,7 +277,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "emoji": e.get("emoji") or "",
                "paused": e["paused"], "last_updated": e["last_updated"],
                "reviews": None, "time_ms": None, "retention": None,
-               "streak": None, "stale": False, "quiet": False,
+               "streak": None, "new": None, "stale": False, "quiet": False,
                "back": bool(e.get("back")) and not e["paused"],
                "live": live_now(e.get("live_until")) and not e["paused"],
                # 2.12: "in Dre's room" takes the place of "studying now"
@@ -366,6 +369,37 @@ def _cell(value, fmt=str):
     return "&mdash;" if value is None else fmt(value)
 
 
+def today_text(reviews, new=None):
+    """ "205 reviews (20 new)": the profile card's Today line (2.13)."""
+    reviews = int(reviews or 0)
+    out = f'{reviews:,} review{"" if reviews == 1 else "s"}'
+    try:
+        new = min(int(new), reviews)
+    except (TypeError, ValueError):
+        return out
+    if new <= 0:
+        return out
+    return out + (" (all new)" if new == reviews else f" ({new:,} new)")
+
+
+def _reviews_cell(reviews, new):
+    """The Reviews number, and under it how many were new cards (2.13): "all
+    new" when every one was, nothing when none were or they didn't say."""
+    if reviews is None:
+        return "&mdash;"
+    out = format(int(reviews), ",")
+    try:
+        new = int(new)
+    except (TypeError, ValueError):
+        return out
+    if new <= 0 or reviews <= 0:
+        return out
+    new = min(new, int(reviews))
+    line = "all new" if new == reviews else f"{new:,} new"
+    return (f'<span title="{new:,} of {int(reviews):,} were new cards">{out}'
+            f'<small class="nw">{line}</small></span>')
+
+
 def _css(cfg):
     pad = 3 if cfg.get("compact") else 6
     you_bg = "background: var(--dc-you-bg);" if cfg.get("highlight_me", True) else ""
@@ -443,6 +477,8 @@ def _css(cfg):
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
+    #due-crew small.nw {{ display: block; font-size: 10px; line-height: 1.1;
+                          color: var(--dc-muted); font-weight: 400; }}
     #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
     #due-crew .la.faded {{ color: var(--dc-faded); }}
     #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
@@ -606,7 +642,7 @@ def _row_html(row, rank, cfg):
         elif row.get("showup") and row.get("days_wk"):
             n = row["days_wk"]
             extra = f' <span class="la faded">&middot; {n} day{"s" if n != 1 else ""} this week</span>'
-        cells = (f'<td class="n">{_cell(row["reviews"], lambda v: format(v, ","))}</td>'
+        cells = (f'<td class="n">{_reviews_cell(row["reviews"], row.get("new"))}</td>'
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
                  f'<td class="n">{_cell(row["retention"], lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(row["streak"])}</td>')
@@ -964,7 +1000,7 @@ def _squads_html(view, cfg):
             continue
         body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                  f'<td class="nm">{link}{note}</td>'
-                 f'<td class="n">{_cell(r.get("reviews"), lambda v: format(v, ","))}</td>'
+                 f'<td class="n">{_reviews_cell(r.get("reviews"), r.get("new_cards"))}</td>'
                  f'<td class="n">{_cell(r.get("time_ms"), _fmt_time)}</td>'
                  f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(r.get("streak"))}</td>'
@@ -1520,7 +1556,8 @@ def profile_overlay_js(profile):
       counts oldest->newest, or None when the heatmap is private),
       same_days (int|None), decks_line (str), uid, you (bool),
       paused (bool), exam (str, client-built text or ""), away (str, text
-      or ""), status (str or "").
+      or ""), status (str or ""), today ((reviews, new cards or None) or
+      None).
     For your own card ("you") the overlay shows exactly what the crew sees,
     and the cheer button becomes a Privacy shortcut. Everything user-sourced
     is escaped here; the JS only injects the built HTML and wires buttons."""
@@ -1541,6 +1578,10 @@ def profile_overlay_js(profile):
                     f'margin-left: auto;">({_html.escape(ago_txt)})</span>')
     head = (kicker + '<div style="display: flex; align-items: baseline; gap: 8px;">'
             + "".join(bits) + "</div>")
+    today = profile.get("today")
+    if today and not profile.get("paused"):
+        head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
+                 f'Today: {today_text(*today)}</div>')
     if profile.get("paused"):
         head += ('<div style="font-size: 12px; font-style: italic; '
                  'opacity: 0.7; padding: 4px 0 0;">on a break</div>')
