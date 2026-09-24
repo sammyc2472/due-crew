@@ -158,6 +158,10 @@ installing — add-ons load at launch).
 - [ ] Preferences → hide the top bar while reviewing: the room moves beside Edit in the bottom bar. Hide the bottom bar too, window wide: a card in the left margin, gone on a card with a full-width image.
 - [ ] Open a room of 2 × 15 with 5-min breaks, review past the 15 minutes: the card on screen stays until you answer it; then the break replaces the next card, keys do nothing, the answer buttons are hidden. Skip the break brings the card and keys back. Waiting it out does too.
 - [ ] Cheer the room on the break sends 🎉 to each roommate.
+- [ ] On a type-in-the-answer card, let the break arrive: Enter does nothing under it. On an audio card: no sound under the break; the audio plays when it ends.
+- [ ] Browse → the card you came back to after the break: its time is the few seconds after the break, not the break.
+- [ ] A friend joins mid-round: at the next break your chip shows their initial.
+- [ ] Close Anki while in a room; a friend refreshes: you're no longer "in the room".
 - [ ] After the last round: the chip goes, and the board says "Room done: … together with …", with Share (copies a line) and × .
 - [ ] "At 20:00": the invite says "starts at 20:00"; the chip shows "starts 20:00" until then.
 - [ ] Night mode: chip, bottom bar, margin card, break and room card all read well.

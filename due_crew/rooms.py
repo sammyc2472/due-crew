@@ -230,7 +230,18 @@ def _show_break(room):
         mw.clearStateShortcuts()  # no answering a card nobody can see
     except Exception:
         pass
+    try:
+        from aqt.sound import av_player
+        av_player.stop_and_clear_queue()  # the card under the break keeps quiet
+    except Exception:
+        pass
     _state["room_break"] = True
+    # one refresh per break: who's in the room now, for the chip. At most
+    # one light fetch a round (a doc per friend), and only while reviewing.
+    mark = (room_model.room_key(room), room_model.phase(room)["round"])
+    if _state["room_refreshed"] != mark:
+        _state["room_refreshed"] = mark
+        app.sync(light=True, fetch=True)
 
 
 def _remove_break():
@@ -246,6 +257,42 @@ def _remove_break():
         mw.setStateShortcuts(mw.reviewer._shortcutKeys())
     except Exception:
         pass
+    # the card under the break starts now: its timer (Anki's answer time,
+    # and Due Crew's study time) and its audio
+    card = getattr(mw.reviewer, "card", None)
+    try:
+        if card is not None:
+            if hasattr(card, "start_timer"):
+                card.start_timer()
+            else:
+                import time
+                card.timerStarted = time.time()
+    except Exception:
+        pass
+    try:
+        mw.reviewer.replayAudio()
+    except Exception:
+        pass
+
+
+def swallow(message):
+    """While the break is up, answering is off from every direction: the
+    shortcuts are cleared, and this drops what a card's own page can still
+    send (Enter in a type-in answer box sends "ans")."""
+    return bool(_state["room_break"]) and (message == "ans" or message.startswith("ease"))
+
+
+def on_close():
+    """profile_will_close: closing Anki leaves the room. Anki's closing sync
+    (or this push) takes it off my week doc; uploads still go while closing."""
+    cl = client()
+    if cl.signed_in and cl.session.get("room"):
+        cl.session.pop("room", None)
+        cl._save_session()
+        try:
+            app.sync(light=True, fetch=False)
+        except Exception:
+            pass
 
 
 def skip_break():

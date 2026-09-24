@@ -2084,8 +2084,13 @@ def test_study_rooms_v212():
     fake_mw = rooms.mw
     saved = {k: getattr(fake_mw, k, None) for k in ("state", "reviewer", "toolbar", "clearStateShortcuts", "setStateShortcuts", "pm")}
     fake_mw.state = "review"
+    timers, replays, syncs = [], [], []
+    fake_card = types.SimpleNamespace(start_timer=lambda: timers.append(1))
     fake_mw.reviewer = types.SimpleNamespace(web=web, bottom=types.SimpleNamespace(web=web),
-                                             _shortcutKeys=lambda: ["keys"])
+                                             _shortcutKeys=lambda: ["keys"], card=fake_card,
+                                             replayAudio=lambda: replays.append(1))
+    real_sync = rooms.app.sync
+    rooms.app.sync = lambda **kw: syncs.append(kw)
     fake_mw.toolbar = types.SimpleNamespace(web=web)
     fake_mw.clearStateShortcuts = lambda: calls.append("clear")
     fake_mw.setStateShortcuts = lambda k: calls.append(("set", k))
@@ -2098,12 +2103,22 @@ def test_study_rooms_v212():
     rooms.cfg = lambda: {}
     _state.update(entries=entries, labels=labels, room_skip=None, room_break=False)
     try:
+        _state["room_refreshed"] = None
         rooms.on_question(None)
         check("break: after a round, the next question gets the break, and the keys go quiet",
               _state["room_break"] and calls == ["clear"] and any("'break'" in e or '"break"' in e for e in evals))
+        check("break: answering from the card's own page is dropped while it's up",
+              rooms.swallow("ans") and rooms.swallow("ease3") and not rooms.swallow("edit"))
+        check("break: one light refresh for the round, to learn who's in", syncs == [{"light": True, "fetch": True}])
+        rooms._state["room_break"] = False
+        rooms.on_question(None)
+        check("break: and only one per round, however many cards pass", len(syncs) == 1)
         rooms.skip_break()
         check("break: skip brings the card and its keys back",
               not _state["room_break"] and calls[-1] == ("set", ["keys"]))
+        check("break: the card's timer starts over and its audio plays, so the break isn't study time",
+              timers == [1] and replays == [1])
+        check("break: answering works again after it", not rooms.swallow("ans"))
         evals.clear(); calls.clear()
         rooms.on_question(None)
         check("break: a skipped break doesn't come back on the next card", calls == [] and not _state["room_break"])
@@ -2113,7 +2128,12 @@ def test_study_rooms_v212():
         check("placement: top bar showing, the chip goes there and the margin card doesn't",
               any('"chip"' in e and '"title"' in e for e in evals)
               and any('"gutter"' in e and "null" in e.split("var D =")[1][:12] for e in evals))
+        syncs.clear()
+        rooms.on_close()
+        check("close: closing Anki leaves the room, and pushes that", "room" not in fake_cl.session
+              and syncs == [{"light": True, "fetch": False}])
     finally:
+        rooms.app.sync = real_sync
         rooms.client, rooms.cfg = real_client, real_cfg
         for k, v in saved.items():
             setattr(fake_mw, k, v)

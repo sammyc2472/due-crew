@@ -333,6 +333,8 @@ _RUNTIME = r"""
     };
     window.addEventListener('resize', function () { window.dcRoomFit && window.dcRoomFit(); });
   } else if (KIND === 'break') {
+    // a type-in answer box keeps no focus under the break
+    try { if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); } } catch (e) {}
     root = el('div', 'position:fixed;inset:0;background:' + c.bg + ';color:' + c.ink + ';display:grid;place-items:center;z-index:9999;' +
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var box = el('div', 'display:grid;justify-items:center;gap:14px;max-width:520px;padding:20px;');

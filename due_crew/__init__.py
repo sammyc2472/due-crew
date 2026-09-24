@@ -412,6 +412,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _play_cheers()
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
+    rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
 
 
 def _rerender():
@@ -537,6 +538,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
 
 
 def _on_js(handled, message, context):
+    if rooms.swallow(message):
+        return (True, None)  # 2.12: no answering under the break
     if message.startswith("duecrew:room"):
         # 2.12: study rooms answer from the top bar and the review screen too
         parts = message.split(":")
@@ -837,6 +840,10 @@ def _awaiting_phone():
 def _on_profile_close():
     global _closing
     _closing = True
+    try:
+        rooms.on_close()  # 2.12: closing Anki leaves the room
+    except Exception:
+        traceback.print_exc()
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)

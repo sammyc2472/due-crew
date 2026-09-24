@@ -58,6 +58,10 @@ maintainer. The repo is the source of truth; there is no build step.
   bottom bar (B), else a margin card that shows only while the card leaves
   the margin free (C). The one exception is the break, which replaces the
   next card and turns the review shortcuts off until it ends or is skipped.
+  Under the break, answer messages are dropped, the card's audio stops, and
+  its timer restarts when the break ends. Each break costs one light
+  refresh (a doc per friend), once per round, only while reviewing: that
+  is how the chip learns who joined. Closing Anki leaves the room.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in
