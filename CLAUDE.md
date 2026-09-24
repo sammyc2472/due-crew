@@ -38,6 +38,12 @@ maintainer. The repo is the source of truth; there is no build step.
   which the week doc already carries. Profiles are readable by any
   signed-in user with the uid (squadmates have it), so that step is also
   a privacy fix; the README says so until then.
+- 2.10's together features add no reads: "studying now" (`liveUntil`) and
+  flagged cards (`tricky`) ride the week doc; good-luck lines (`luck`) and
+  card tips (`guid`) ride cheers (rules-v10), and on arrival they're kept
+  in wrap.json (`luck`, `tips`), not played. A flag shows at most the first
+  60 characters of the card's first field, clozes as […], and only to
+  crewmates whose collection has the same note guid.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in

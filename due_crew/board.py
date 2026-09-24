@@ -196,6 +196,39 @@ def _exam_badge(iso, today_label):
     return f' <span class="exb">&#128214; {_html.escape(txt)}</span>'
 
 
+def live_now(until, now=None):
+    """Whether a "studying now" time (ISO, UTC) is still ahead (2.10)."""
+    try:
+        t = datetime.fromisoformat(str(until).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return t > (now or datetime.now(timezone.utc))
+
+
+def plan_target(status):
+    """A status that starts with a number is a plan (2.10): "200 cards,
+    then bed" -> 200. None otherwise, or for numbers no one plans."""
+    m = _re.match(r"\s*(\d{1,5})(?!\d)", str(status or ""))
+    n = int(m.group(1)) if m else 0
+    return n if 0 < n <= 20000 else None
+
+
+def season_emoji(day):
+    """A few emoji for the season, sprinkled into flurries (2.10)."""
+    month = day.month
+    if month == 10:
+        return ["\U0001F383", "\U0001F342"]              # pumpkin, leaf
+    if month in (9, 11):
+        return ["\U0001F342", "\U0001F341"]              # leaves
+    if month == 12:
+        return ["\u2744\ufe0f", "\u26c4"]               # snowflake, snowman
+    if month in (1, 2):
+        return ["\u2744\ufe0f"]
+    if month in (3, 4, 5):
+        return ["\U0001F338", "\U0001F331"]              # blossom, sprout
+    return ["\U0001F33B", "\u2600\ufe0f"]               # sunflower, sun
+
+
 def sort_key(cfg):
     key = cfg.get("sort", "reviews")
     return key if key in SORT_KEYS else "reviews"
@@ -239,6 +272,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "reviews": None, "time_ms": None, "retention": None,
                "streak": None, "stale": False, "quiet": False,
                "back": bool(e.get("back")) and not e["paused"],
+               "live": live_now(e.get("live_until")) and not e["paused"],
                "status": "", "away": "",
                "exam": "" if e["paused"] else
                        _exam_badge(e.get("exam_date"), today_lb)}
@@ -449,6 +483,16 @@ def _css(cfg):
     #due-crew .dc-count .dc-delta {{ margin-left: 0; }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
     #due-crew .dc-line a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .dc-live {{ display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
+      vertical-align: 1px; }}
+    #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
+      background: var(--dc-line); overflow: hidden; vertical-align: middle; margin: 0 4px 0 1px; }}
+    #due-crew .dc-plan i {{ display: block; height: 100%; background: var(--dc-accent); }}
+    #due-crew .dc-flag {{ font-size: 12px; padding: 6px 10px; margin-bottom: 10px; border-radius: 8px;
+      background: var(--dc-well); display: flex; flex-wrap: wrap; gap: 4px 10px; }}
+    #due-crew .dc-flag a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
+      text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-code {{ font-family: Menlo, Consolas, monospace; font-weight: 700;
       letter-spacing: 1.5px; color: var(--dc-ink); }}
     /* a narrow window: headers keep their icons, the last-active chips go
@@ -533,10 +577,25 @@ def _row_html(row, rank, cfg):
         exam = ' <span class="bkb">&#128075; back</span>' + exam
     if row.get("away"):
         exam += f' <span class="awb">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
+    if row.get("live") and not row["quiet"]:
+        # 2.10: studying right now; the dot clears itself when the hour is up
+        exam = ' <span class="dc-live"></span><span class="la fresh">studying now</span>' + exam
     status = ""
     if row.get("status"):
         st = _html.escape(str(row["status"]))
-        status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{st}</span></div>'
+        # 2.10: a status that starts with a number is a plan, ticked by the
+        # day's reviews; without shared reviews it stays a plain status
+        target = plan_target(row["status"])
+        done = row.get("reviews")
+        lead = ""
+        if target and isinstance(done, int) and not row.get("stale"):
+            if done >= target:
+                lead = "&#10003; "
+            else:
+                pct = min(100, round(100 * done / target))
+                lead = (f'&#128221; <span class="dc-plan"><i style="width:{pct}%"></i></span>'
+                        f'{done:,} &middot; ')
+        status = f'<div class="dc-stw"><span class="dc-st" title="{st}">{lead}{st}</span></div>'
     if row["you"]:
         cheer = '<td class="chc"></td>'
         name = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
@@ -704,7 +763,28 @@ def _presence_html(fresh, dormant, labels, entries):
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
 
 
-def _decks_html(data, deltas=None):
+def _tricky_html(tricky):
+    """2.10: cards a crewmate flagged "this one's getting me", listed only
+    when I have the same note. Their text is theirs: escaped."""
+    out = ""
+    for t in (tricky or [])[:6]:
+        who = _html.escape(str(t.get("name", "?")))
+        text = _html.escape(str(t.get("text") or "a card"))
+        deck = _html.escape(str(t.get("deck") or ""))
+        cmd = f'tricktip:{t.get("uid", "")}:{int(t.get("index", 0))}'
+        out += (f'<div class="dc-flag"><span>&#129513; <b>{who}</b> finds '
+                f'&ldquo;{text}&rdquo; tricky{" &middot; " + deck if deck else ""}</span>'
+                f'<a href="#" title="One line; it shows when the card comes up for them" '
+                f'onclick="{_pycmd(cmd)}">Send a tip</a></div>')
+    return out
+
+
+def _decks_html(data, deltas=None, tricky=None):
+    flags = _tricky_html(tricky)
+    return flags + _decks_body(data, deltas)
+
+
+def _decks_body(data, deltas=None):
     deltas = deltas or {}
     labels = data.get("labels") or []
     # a friend ahead of my timezone writes my "tomorrow" as their today
@@ -881,12 +961,15 @@ def _review_banner(kind, info):
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
-           sync_error=False):
+           sync_error=False, live=False, tricky=None, milestones=None):
+    """live: I'm studying now (the footer offers to stop). tricky: flagged
+    cards I share with a crewmate (Decks tab). milestones: [(uid, name,
+    days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer."""
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
     show_up = bool(cfg.get("show_up"))
-    body = (_decks_html(data, deltas) if period == "decks"
+    body = (_decks_html(data, deltas, tricky) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
             else _table_html(data, cfg, period))
@@ -926,15 +1009,16 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 f'<a class="wx" href="#" title="Dismiss" '
                 f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
     if exam_eve and exam_eve.get("people"):
-        links = [f'<a class="dc-pl" href="#" title="Send a cheer" '
-                 f'onclick="{_pycmd("cheerpick:" + str(u))}">'
+        # 2.10: a line for their exam-morning card, rather than a cheer now
+        links = [f'<a class="dc-pl" href="#" title="Add a line to their good-luck card" '
+                 f'onclick="{_pycmd("luckline:" + str(u))}">'
                  f'<b>{_html.escape(str(n))}</b></a>'
                  for u, n in exam_eve["people"]]
         if len(links) == 1:
             uid = exam_eve["people"][0][0]
             line = f'{links[0]}&rsquo;s exam is tomorrow.'
-            act = (f'<a class="wc" href="#" title="Send a cheer" '
-                   f'onclick="{_pycmd("cheerpick:" + str(uid))}">&#128170; Send one</a>')
+            act = (f'<a class="wc" href="#" title="They see it when they open Anki that morning" '
+                   f'onclick="{_pycmd("luckline:" + str(uid))}">&#127808; Add a line to their card</a>')
         else:
             line = " and ".join(links) + " have exams tomorrow."
             act = ""
@@ -942,6 +1026,15 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 f'<span>{line}</span>{act}'
                 f'<a class="wx" href="#" title="Dismiss" '
                 f'onclick="{_pycmd("evedismiss")}">&times;</a></div>') + body
+
+    for uid, who, days in (milestones or [])[:2]:
+        emoji = "&#128175;" if int(days) < 365 else "&#127881;"
+        body = (f'<div class="dc-wrap"><span>{emoji}</span>'
+                f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
+                f'<a class="wc" href="#" title="Send a cheer" '
+                f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
+                f'<a class="wx" href="#" title="Dismiss" '
+                f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>') + body
 
     n_pending = len(data.get("pending", []))
     if n_pending:
@@ -967,6 +1060,12 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if period == "week" or (show_up and period == "today"):
         left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
                  f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
+    if period in ("today", "week") and not cfg.get("paused"):
+        # 2.10: a dot by your name for an hour, so friends can join you
+        left += (f' &middot; <a href="#" title="Stop showing that you\'re studying" '
+                 f'onclick="{_pycmd("live")}">Stop studying</a>' if live else
+                 f' &middot; <a href="#" title="A dot by your name for the next hour" '
+                 f'onclick="{_pycmd("live")}">I&rsquo;m studying</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
@@ -1001,14 +1100,15 @@ def loading_card(cfg):
     return _card(cfg, "Due Crew", "Catching up with your crew&hellip;")
 
 
-def flurry_js(emojis, banner_text, back=None, notes=None):
+def flurry_js(emojis, banner_text, back=None, notes=None, season=None):
     """Injected via web.eval after render — never inline in board HTML.
     Banner takes its colors from the board's tokens (so Settings → Theme
     holds), the page's night classes only when the board is off. When `back` is
     (uid, emoji) — a single sender — the banner is clickable to return the
     cheer, and stays up a little longer. `notes`: sender-written lines shown
     under the title (textContent: never markup), which also buy time."""
-    emoji_list = _json.dumps(emojis)
+    # 2.10: about one flake in three is the season's
+    emoji_list = _json.dumps(list(emojis) * 2 + list(season or []) if season else list(emojis))
     banner = _json.dumps(banner_text)
     notes_json = _json.dumps([str(n) for n in (notes or [])][:3])
     back_cmd = _json.dumps(f"duecrew:cheerback:{back[0]}:{back[1]}" if back else None)
@@ -1223,6 +1323,90 @@ def stranger_card_js(info):
         document.body.appendChild(back);
     })();
     """ % (inner, act_cmd, act_label, act_primary, extras_json)
+
+
+def luck_card_js(name, lines):
+    """2.10: the good-luck card, shown once on the morning of my exam.
+    `lines`: [(sender name, note)]. Everything sender-written goes in as
+    textContent, never markup. Thanks sends a 💚 back to each of them."""
+    title = _json.dumps(f"\U0001F340 Good luck today, {str(name or 'you')}")
+    items = _json.dumps([[str(n), str(t)] for n, t in (lines or [])][:12])
+    return """
+    (function() {
+        var old = document.getElementById('dc-profile');
+        if (old) { old.remove(); }
+        var night = /night/i.test(document.body.className) ||
+            (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var dcBoard = document.getElementById('due-crew');
+        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+        function tok(name, light, dark) {
+            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+            return v || (night ? dark : light);
+        }
+        var bg = tok('bg', '#ffffff', '#1c1c1c'), ink = tok('ink', '#333333', '#dfe1dc'),
+            line = tok('line', '#e2e2da', '#3d403b'), accent = tok('accent', '#2e7d32', '#7cc47f'),
+            accentInk = tok('accent-ink', '#ffffff', '#122912');
+        var back = document.createElement('div');
+        back.id = 'dc-profile';
+        back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
+            'display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;';
+        var card = document.createElement('div');
+        card.style.cssText = 'min-width:320px;max-width:420px;border-radius:12px;padding:18px 22px;' +
+            'box-shadow:0 16px 60px rgba(0,0,0,0.35);background:' + bg + ';color:' + ink +
+            ';border:1px solid ' + line + ';';
+        var h = document.createElement('div');
+        h.textContent = %s;
+        h.style.cssText = 'font-size:17px;font-weight:700;margin-bottom:10px;';
+        card.appendChild(h);
+        %s.forEach(function(pair) {
+            var p = document.createElement('div');
+            p.style.cssText = 'font-size:13.5px;padding:4px 0;';
+            p.textContent = '\u201c' + pair[1] + '\u201d';
+            var who = document.createElement('span');
+            who.textContent = ' \u2014 ' + pair[0];
+            who.style.cssText = 'opacity:0.6;font-size:12px;';
+            p.appendChild(who);
+            card.appendChild(p);
+        });
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:14px;';
+        var close = document.createElement('button');
+        close.textContent = 'Close';
+        close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
+            'background:none;color:inherit;border:1px solid ' + line + ';';
+        close.addEventListener('click', function() { back.remove(); });
+        var thanks = document.createElement('button');
+        thanks.textContent = 'Thanks, crew';
+        thanks.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
+            'background:' + accent + ';color:' + accentInk + ';border:1px solid transparent;font-weight:600;';
+        thanks.addEventListener('click', function() {
+            back.remove();
+            if (typeof pycmd !== 'undefined') { pycmd('duecrew:luckthanks'); }
+        });
+        var spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        row.appendChild(close);
+        row.appendChild(spacer);
+        row.appendChild(thanks);
+        card.appendChild(row);
+        back.appendChild(card);
+        back.addEventListener('click', function(e) { if (e.target === back) { back.remove(); } });
+        document.body.appendChild(back);
+    })();
+    """ % (title, items)
+
+
+def tip_html(tips):
+    """2.10: tips crewmates sent on this card, for the bottom of its answer.
+    `tips`: [(name, note)]. Escaped; plain inline styles, since the card's
+    own template owns the page."""
+    if not tips:
+        return ""
+    rows = "".join(
+        f'<div>&#128161; {_html.escape(str(n))}: &ldquo;{_html.escape(str(t))}&rdquo;</div>'
+        for n, t in tips[:3])
+    return ('<div id="dc-tip" style="margin-top:18px;padding-top:8px;font-size:0.8em;'
+            'opacity:0.75;border-top:1px solid rgba(128,128,128,0.35);">' + rows + '</div>')
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))

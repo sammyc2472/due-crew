@@ -2,6 +2,7 @@
 line, and the profile card. Squads have their own module; knocks live
 there because they are a squad flow."""
 
+import datetime
 import html
 
 from aqt import mw
@@ -42,7 +43,12 @@ def _play_cheers():
     back = (cheers[0]["from"], cheers[0]["emoji"]) if len(cheers) == 1 else None
     notes = [ch["note"] if len(cheers) == 1 else f"{ch['name']}: {ch['note']}"
              for ch in cheers if ch.get("note")]
-    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes))
+    today = _state["labels"][0] if _state["labels"] else None
+    try:
+        season = board.season_emoji(datetime.date.fromisoformat(today)) if today else None
+    except ValueError:
+        season = None
+    mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season))
 
 
 def cheer_choices(stale):
@@ -76,13 +82,23 @@ def _cheer_menu(to_uid):
             _send_cheer(to_uid, entry["name"], emoji, dlg.note)
 
 
-def _send_cheer(to_uid, to_name, emoji, note=""):
+def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None):
+    """luck: a line held for their exam morning; guid: a tip on one card
+    (2.10). On rules older than v10 either goes as a plain cheer with its
+    words, and the tooltip says so."""
     cl = client()
     uid = cl.user_id
     my_name = cl.display_name or "A friend"
 
     def done(ok):
-        if ok == "no-note":
+        if ok == "no-extras":
+            tooltip(f"Sent to {html.escape(to_name)} as a cheer. "
+                    "Cards and tips need a server update.")
+        elif ok is True and luck:
+            tooltip(f"Added to {html.escape(to_name)}'s card.")
+        elif ok is True and guid:
+            tooltip("Tip sent.")
+        elif ok == "no-note":
             tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}. "
                     "The note needs a server update.")
         elif ok:
@@ -90,7 +106,8 @@ def _send_cheer(to_uid, to_name, emoji, note=""):
         else:
             tooltip("Couldn't send. Check your connection.")
 
-    _bg(lambda: cl.send_cheer(to_uid, uid, my_name, emoji, note or None), done)
+    _bg(lambda: cl.send_cheer(to_uid, uid, my_name, emoji, note or None, luck=luck, guid=guid),
+        done)
 
 
 def _edit_status(parent=None):
@@ -102,7 +119,8 @@ def _edit_status(parent=None):
     current = str(c.get("status") or "")
     text, ok = QInputDialog.getText(
         parent or mw, "Status",
-        "One line under your name, for your crew. Empty clears it.",
+        "One line under your name, for your crew. Start with a number "
+        "(\u201c200 cards, then bed\u201d) and it ticks itself off. Empty clears it.",
         text=current)
     if not ok:
         return None

@@ -171,6 +171,19 @@ sections.append("<h3>today with a knock banner</h3>" + board.render(
 sections.append("<h3>someone added my code (2.9)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60,
     knocks=[{"uid": "p1", "name": "Priya", "squad": "", "via_code": True}]))
+LIVE_AT = (NOW + datetime.timedelta(minutes=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
+TOGETHER = [dict(e) for e in ENTRIES]
+TOGETHER[1]["live_until"] = LIVE_AT
+TOGETHER[0]["live_until"] = LIVE_AT
+TOGETHER[0]["days"] = dict(TOGETHER[0]["days"], **{L[0]: dict(TOGETHER[0]["days"][L[0]], status="600 cards, then bed")})
+TOGETHER[2]["days"] = dict(TOGETHER[2]["days"], **{L[0]: dict(TOGETHER[2]["days"][L[0]], status="500 before lunch")})
+sections.append("<h3>2.10: studying now, a plan, a 100-day streak</h3>" + board.render(
+    dict(DATA, entries=TOGETHER), {"period": "today"}, now_ts - 60, live=True,
+    milestones=[("dre", "Dre", 100)]))
+sections.append("<h3>2.10: a flagged card on the Decks tab</h3>" + board.render(
+    DATA, {"period": "decks"}, now_ts - 60,
+    tricky=[{"uid": "dre", "name": "Dre", "index": 0, "text": "Heart sounds: S3 is heard in [\u2026]",
+             "deck": "Cardio"}]))
 SOLO = {"entries": [ENTRIES[0]], "labels": L, "tomorrow": TOMORROW, "pending": [],
         "my_code": "K7Q2ZP"}
 sections.append("<h3>just me, the day I joined (2.9)</h3>" + board.render(SOLO, {"period": "today"}, now_ts - 60))
@@ -202,7 +215,11 @@ profile_js = board.profile_overlay_js({
              "mine_week": [True, True, False, True, True, True, True],
              "theirs_week": [True, True, True, True, True, True, True]},
 })
-flurry = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001F389"))
+flurry = board.flurry_js(["\U0001F389"], "Dre sent cheers", back=("dre", "\U0001F389"),
+                         season=board.season_emoji(TODAY))
+luck_js = board.luck_card_js("Marisa", [("Dre", "You've done the work. Go get it."),
+                                        ("Sammy", "Breakfast first. Then crush it."),
+                                        ("Adina", "Proud of you either way \U0001F49A")])
 stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
                                       "reviews": 488, "time_ms": 3900000,
                                       "retention": 89.0, "streak": 31, "rank": 3,
@@ -230,6 +247,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(PROFILE_JS)">profile</button>
   <button onclick="eval(FLURRY_JS)">flurry</button>
   <button onclick="eval(STRANGER_JS)">stranger</button>
+  <button onclick="eval(LUCK_JS)">luck</button>
 </div>
 {''.join(sections)}
 <script>
@@ -237,6 +255,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   var PROFILE_JS = {json.dumps(profile_js)};
   var FLURRY_JS = {json.dumps(flurry)};
   var STRANGER_JS = {json.dumps(stranger_js)};
+  var LUCK_JS = {json.dumps(luck_js)};
 </script>
 </body></html>"""
 

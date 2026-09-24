@@ -282,11 +282,23 @@ def main():
     check("batch: ten friends without edge docs fit one read", batch(10) == 200)
     check("batch: eleven don't (why FRIENDS_PER_BATCH is ten)", batch(11) == 403)
 
+    # -- v2.10: a cheer may carry `luck` (a bool) or a card's `guid` (short text)
+    put("users/alice", {"displayName": "Alice", "friends": ["dave"]}, "owner")
+    lucky = {"emoji": "🍀", "name": "Dave", "at": TS, "note": "Go get it", "luck": True}
+    check("cheer: a good-luck line from someone added", put("users/alice/cheers/dave", lucky, "dave") in (200, 201))
+    check("cheer: luck must be a bool", put("users/alice/cheers/dave", dict(lucky, luck="yes"), "dave") == 403)
+    tip = {"emoji": "💡", "name": "Dave", "at": TS, "note": "Ken-tuck-y", "guid": "Ab3$kQ9+zX"}
+    check("cheer: a tip naming a card", put("users/alice/cheers/dave", tip, "dave") in (200, 201))
+    check("cheer: a guid past 40 characters is refused",
+          put("users/alice/cheers/dave", dict(tip, guid="x" * 41), "dave") == 403)
+    check("cheer: still only from someone the owner added",
+          put("users/alice/cheers/carol", dict(tip, name="Carol"), "carol") == 403)
+
     # -- markers cumulative
     for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-              "rules-v9"):
+              "rules-v9", "rules-v10"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
-    check("marker rules-v10: not provisioned (403)", call("GET", "meta/rules-v10", "alice")[0] == 403)
+    check("marker rules-v11: not provisioned (403)", call("GET", "meta/rules-v11", "alice")[0] == 403)
 
     print(f"\n{PASSED}/{PASSED + FAILED} rules checks passed")
     sys.exit(1 if FAILED else 0)

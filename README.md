@@ -22,7 +22,16 @@ streak means what it says.
   flurry to cheer back.
 - **Status** — click your own name and set one line ("coffee, then 400
   cards"). It sits in a bubble under your name on Today, for your crew and
-  no one else.
+  no one else. Start it with a number ("200 cards, then bed") and it's a
+  plan: it fills in as you study and ticks itself off.
+- **Studying now** — tap "I'm studying" in the footer and a dot sits by
+  your name for an hour, so friends can come study too.
+- **Stuck on a card?** — in the reviewer's More menu, "this one's getting
+  me" flags it for a week. Crewmates who have the same card see it on the
+  Decks tab and can send a one-line tip, which shows under the answer the
+  next time it comes up. A cloze never shows its answer in the flag.
+- **Good-luck card** — on the eve of a friend's exam, add a line to their
+  card. On exam morning they open Anki to every line their crew wrote.
 - **Shared decks** — progress bars through decks you have in common:
   how much of the deck each person has unlocked, seen, and matured, what
   they've done in it today and this week, and how well it's sticking. Hover
@@ -31,6 +40,8 @@ streak means what it says.
 - **Just show up** — a choice in Privacy: share only that you studied, and
   see only that of others. Your row is a check, never a rank; your board is
   a square per day.
+- **A bit of the season** — flurries carry the season's emoji, and a
+  crewmate's 100-day streak gets a banner with a one-tap 💯.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
   of your name on the board, on cards, and in shares.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
