@@ -1,4 +1,7 @@
-# Due Crew
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/svg/due-crew-logo-dark.svg">
+  <img alt="Due Crew" src="docs/logo/svg/due-crew-logo.svg" width="220">
+</picture>
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
