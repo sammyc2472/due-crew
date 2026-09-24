@@ -1,18 +1,25 @@
 """Settings dialog. Save hands back ONLY the keys this dialog owns, so it
 can never clobber config changed by flows launched from inside it (sign-in,
-Shared decks). The Account tab rebuilds by swapping one child widget, which
-cleans up nested layouts correctly."""
+Shared decks, the emoji and status editors). The You tab rebuilds by
+swapping one child widget, which cleans up nested layouts correctly.
+
+2.9: three tabs, You, Board, Privacy (Board and Appearance were two, and
+your emoji and status lived only on your card). Privacy is one choice of
+three instead of three switches that overruled each other unannounced. The
+reset button resets the Board tab only: Restore Defaults used to turn every
+sharing switch back on."""
 
 import html
 
 from aqt.qt import (
-    QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QPushButton, QSizePolicy,
-    QTabWidget, QTimer, QVBoxLayout, QWidget, Qt,
+    QButtonGroup, QCheckBox, QColor, QComboBox, QDate, QDateEdit, QDialog,
+    QDialogButtonBox, QFrame, QHBoxLayout, QIcon, QInputDialog, QLabel, QLineEdit,
+    QPixmap, QPushButton, QRadioButton, QSizePolicy, QTabWidget, QTimer, QVBoxLayout,
+    QWidget, Qt,
 )
 from aqt.utils import tooltip
 
-from . import attach_alive, confirm, danger, run_bg
+from . import _night, attach_alive, confirm, danger, run_bg
 
 DEFAULTS = {
     "show_leaderboard": True, "period": "today", "sort": "reviews",
@@ -25,17 +32,24 @@ DEFAULTS = {
     "crew_label": "Crew", "accent": "green",
     "away_from": "", "away_to": "",
 }
+# what Reset Board puts back: the Board tab, and never anything on Privacy
+BOARD_KEYS = ("show_leaderboard", "show_stale", "show_last_active", "sync_notifications",
+              "theme", "accent", "compact", "highlight_me", "crew_label")
+TABS = ("you", "board", "privacy")
 
-SORTS = [("reviews", "Reviews"), ("time", "Study time"),
-         ("retention", "Retention"), ("streak", "Streak")]
 THEMES = [("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")]
 ACCENTS = [("green", "Green"), ("blue", "Blue"), ("purple", "Purple"),
            ("teal", "Teal"), ("amber", "Amber"), ("rose", "Rose")]
+NUMBERS, SHOW_UP, PAUSED = 0, 1, 2   # the three Privacy choices
 
 
 class SettingsDialog(QDialog):
     def __init__(self, parent, client, config, on_saved, open_auth,
-                 open_friends, on_signed_out, open_decks, open_squads=None):
+                 open_friends, on_signed_out, open_decks, open_squads=None,
+                 edit_emoji=None, edit_status=None, tab=None):
+        """edit_emoji / edit_status: the card's editors (they save on their
+        own and return the new value, or None). tab: "you", "board", or
+        "privacy", the tab to open on (your card's Privacy… opens Privacy)."""
         super().__init__(parent)
         self.client = client
         self.config = dict(config)
@@ -45,20 +59,23 @@ class SettingsDialog(QDialog):
         self.on_signed_out = on_signed_out
         self.open_decks = open_decks
         self.open_squads = open_squads
+        self.edit_emoji = edit_emoji
+        self.edit_status = edit_status
         self._binds = {}
         self._kept = {}  # combo key -> a stored value its list doesn't offer
         attach_alive(self)
         self._build()
+        if tab in TABS:
+            self.tabs.setCurrentIndex(TABS.index(tab))
 
     def _build(self):
         self.setWindowTitle("Due Crew Settings")
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(460)
         root = QVBoxLayout(self)
 
         tabs = QTabWidget()
-        tabs.addTab(self._account_tab(), "Account")
+        tabs.addTab(self._you_tab(), "You")
         tabs.addTab(self._board_tab(), "Board")
-        tabs.addTab(self._look_tab(), "Appearance")
         tabs.addTab(self._privacy_tab(), "Privacy")
         root.addWidget(tabs)
         self.tabs = tabs
@@ -66,10 +83,8 @@ class SettingsDialog(QDialog):
         tabs.currentChanged.connect(self._fit_tab)
         self._fit_tab(tabs.currentIndex())
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.RestoreDefaults
-                                   | QDialogButtonBox.StandardButton.Cancel
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel
                                    | QDialogButtonBox.StandardButton.Save)
-        buttons.button(QDialogButtonBox.StandardButton.RestoreDefaults).clicked.connect(self._restore)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -90,29 +105,44 @@ class SettingsDialog(QDialog):
         # +12: wrapped notes report a hint a hair short of their last line
         self.resize(self.width(), self.minimumSizeHint().height() + 12)
 
-    # ---- account ----
+    @staticmethod
+    def _note(lay, text, indent=0):
+        note = QLabel(text)
+        note.setStyleSheet(f"font-size: 11px; margin-left: {indent}px;")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        return note
 
-    def _account_tab(self):
-        self.account_host = QWidget()
-        self.account_host_layout = QVBoxLayout(self.account_host)
-        self.account_host_layout.setContentsMargins(0, 0, 0, 0)
-        self.account_inner = None
-        self._fill_account()
-        return self.account_host
+    @staticmethod
+    def _rule(lay):
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        lay.addWidget(line)
 
-    def _fill_account(self):
-        if self.account_inner is not None:
-            self.account_host_layout.removeWidget(self.account_inner)
-            self.account_inner.deleteLater()
-        self.account_inner = QWidget()
-        lay = QVBoxLayout(self.account_inner)
-        self.account_host_layout.addWidget(self.account_inner)
+    # ---- you ----
+
+    def _you_tab(self):
+        self.you_host = QWidget()
+        self.you_host_layout = QVBoxLayout(self.you_host)
+        self.you_host_layout.setContentsMargins(0, 0, 0, 0)
+        self.you_inner = None
+        self._fill_you()
+        return self.you_host
+
+    def _fill_you(self):
+        if self.you_inner is not None:
+            self.you_host_layout.removeWidget(self.you_inner)
+            self.you_inner.deleteLater()
+        self.you_inner = QWidget()
+        lay = QVBoxLayout(self.you_inner)
+        self.you_host_layout.addWidget(self.you_inner)
 
         if not self.client.signed_in:
             lay.addWidget(QLabel("Not signed in."))
             sign_in = QPushButton("Sign In…")
             sign_in.clicked.connect(self._sign_in)
-            lay.addWidget(sign_in)
+            lay.addWidget(sign_in, alignment=Qt.AlignmentFlag.AlignLeft)
             lay.addStretch()
             return
 
@@ -120,13 +150,35 @@ class SettingsDialog(QDialog):
         self.who_label = QLabel(self._who_text())
         who.addWidget(self.who_label)
         who.addStretch()
-        rename = QPushButton("Change Name…")
+        if self.edit_emoji is not None:
+            emoji = QPushButton("Emoji…")
+            emoji.setToolTip("In front of your name, for your crew and squads")
+            emoji.clicked.connect(self._emoji)
+            who.addWidget(emoji)
+        rename = QPushButton("Name…")
         rename.clicked.connect(self._rename)
         who.addWidget(rename)
         lay.addLayout(who)
 
-        lay.addSpacing(12)
-        lay.addWidget(QLabel("<b>Crew</b>"))
+        if self.edit_status is not None:
+            srow = QHBoxLayout()
+            self.status_label = QLabel()
+            self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+            self.status_label.setWordWrap(True)
+            self._show_status()
+            srow.addWidget(self.status_label, 1)
+            status = QPushButton("Status…")
+            status.setToolTip("One line under your name on Today, for your crew")
+            status.clicked.connect(self._status)
+            srow.addWidget(status)
+            lay.addLayout(srow)
+        self.sync_label = QLabel(self._sync_line())
+        self.sync_label.setStyleSheet("font-size: 11px;")
+        lay.addWidget(self.sync_label)
+
+        lay.addSpacing(6)
+        self._rule(lay)
+        lay.addWidget(QLabel("<b>Your crew</b>"))
         row = QHBoxLayout()
         for label, opener in (("Friends…", self.open_friends),
                               ("Squads…", self.open_squads),
@@ -139,7 +191,8 @@ class SettingsDialog(QDialog):
         row.addStretch()
         lay.addLayout(row)
 
-        lay.addSpacing(16)
+        lay.addSpacing(6)
+        self._rule(lay)
         bottom = QHBoxLayout()
         out = QPushButton("Sign Out")
         out.setToolTip("Stops syncing on this device. Your account and stats stay.")
@@ -154,9 +207,16 @@ class SettingsDialog(QDialog):
 
     def _who_text(self):
         name = html.escape(self.client.display_name or "?")
-        email = html.escape(self.client.email)
-        return (f"Signed in as <b>{name}</b><br>"
-                f"<span style='font-size: 11px;'>{email}<br>{html.escape(self._sync_text())}</span>")
+        emoji = html.escape(str(self.config.get("emoji") or ""))
+        return f"<b style='font-size: 14px;'>{emoji + ' ' if emoji else ''}{name}</b>"
+
+    def _show_status(self):
+        status = str(self.config.get("status") or "")
+        self.status_label.setText(f"“{status}”" if status else "No status")
+
+    def _sync_line(self):
+        email = self.client.email
+        return f"{email} · {self._sync_text()}" if email else self._sync_text()
 
     def _sync_text(self):
         """"Is it syncing for me?" answered where people look for it. The
@@ -170,9 +230,21 @@ class SettingsDialog(QDialog):
             state = f"Synced {ago}" if ago else "Not synced yet"
         return f"{state} · v{ADDON_VERSION}" if ADDON_VERSION else state
 
+    def _emoji(self):
+        new = self.edit_emoji(self)
+        if new is not None:
+            self.config["emoji"] = new  # shown here; the editor saved it
+            self.who_label.setText(self._who_text())
+
+    def _status(self):
+        new = self.edit_status(self)
+        if new is not None:
+            self.config["status"] = new
+            self._show_status()
+
     def _sign_in(self):
         self.open_auth()
-        self._fill_account()
+        self._fill_you()
 
     def _rename(self):
         current = self.client.display_name
@@ -192,7 +264,7 @@ class SettingsDialog(QDialog):
             try:
                 self.who_label.setText(self._who_text())
             except RuntimeError:
-                pass  # account tab was rebuilt meanwhile
+                pass  # the You tab was rebuilt meanwhile
             tooltip("Name changed.")
 
         run_bg(self, lambda: self.client.patch_doc(
@@ -204,7 +276,7 @@ class SettingsDialog(QDialog):
             return
         self.client.sign_out()
         self.on_signed_out()
-        self._fill_account()
+        self._fill_you()
 
     def _delete(self):
         if not confirm(self, "Delete account?", "This deletes your stats, your code, and "
@@ -240,16 +312,19 @@ class SettingsDialog(QDialog):
             tooltip("Couldn't delete. Check your connection and try again.")
             return
         self.on_signed_out()
-        self._fill_account()
+        self._fill_you()
         tooltip("Account deleted.")
 
-    # ---- other tabs ----
+    # ---- board ----
 
-    def _check(self, lay, key, label):
+    def _check(self, lay, key, label, indent=0):
         box = QCheckBox(label)
         box.setChecked(bool(self.config.get(key, DEFAULTS[key])))
+        if indent:
+            box.setStyleSheet(f"margin-left: {indent}px;")
         lay.addWidget(box)
         self._binds[key] = box
+        return box
 
     def _text(self, lay, key, label, placeholder=""):
         row = QHBoxLayout()
@@ -263,70 +338,137 @@ class SettingsDialog(QDialog):
         lay.addLayout(row)
         self._binds[key] = edit
 
-    def _combo(self, lay, key, label, options):
+    def _combo(self, lay, key, label, options, icons=None):
         row = QHBoxLayout()
         row.addWidget(QLabel(label))
         combo = QComboBox()
         current = self.config.get(key, DEFAULTS[key])
         for i, (value, text) in enumerate(options):
-            combo.addItem(text, value)
+            if icons and value in icons:
+                combo.addItem(icons[value], text, value)
+            else:
+                combo.addItem(text, value)
             if value == current:
                 combo.setCurrentIndex(i)
         if current not in [value for value, _text in options]:
-            # e.g. the squads-only "7 days" sort: Save keeps it unless the
-            # list is touched (until 2.9 it quietly became Reviews)
+            # a stored value the list doesn't offer: Save keeps it unless
+            # the list is touched
             self._kept[key] = (current, combo.currentIndex())
         row.addWidget(combo)
         row.addStretch()
         lay.addLayout(row)
         self._binds[key] = combo
 
+    @staticmethod
+    def _swatches():
+        """A dot of each accent, in the shade for Anki's current theme."""
+        from ..board import ACCENTS as TRIOS
+        shade = "dark" if _night() else "light"
+        icons = {}
+        for name, trio in TRIOS.items():
+            pix = QPixmap(12, 12)
+            pix.fill(QColor(trio[shade][0]))
+            icons[name] = QIcon(pix)
+        return icons
+
     def _board_tab(self):
         w = QWidget()
         lay = QVBoxLayout(w)
+        lay.addWidget(QLabel("<b>What it shows</b>"))
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
-        self._combo(lay, "sort", "Sort by", SORTS)
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
+        self._check(lay, "show_last_active", 'Show "last active" next to names')
         self._check(lay, "sync_notifications", "Tell me when my crew studies")
-        lay.addSpacing(8)
+        lay.addSpacing(6)
+        lay.addWidget(QLabel("<b>How it looks</b>"))
+        self._combo(lay, "theme", "Theme", THEMES)
+        try:
+            icons = self._swatches()
+        except Exception:
+            icons = None
+        self._combo(lay, "accent", "Accent", ACCENTS, icons)
+        self._check(lay, "compact", "Compact rows")
+        self._check(lay, "highlight_me", "Highlight my row")
+        lay.addSpacing(6)
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
-        note = QLabel("Refreshes when Anki opens or syncs, when you come back after "
-                      "15 minutes, and with Refresh on the board.")
-        note.setStyleSheet("font-size: 11px;")
-        note.setWordWrap(True)
-        lay.addWidget(note)
+        # two short lines, unwrapped: a wrapped note got clipped by _shrink
+        hint = QLabel("Refreshes when Anki opens or syncs, and with Refresh.<br>"
+                      "Sort by clicking the board's headers.")
+        hint.setStyleSheet("font-size: 11px;")
+        lay.addWidget(hint)
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset = QPushButton("Reset Board")
+        reset.setToolTip("Puts this tab back as it was. Privacy stays as you set it.")
+        reset.clicked.connect(self._reset_board)
+        reset_row.addWidget(reset)
+        lay.addLayout(reset_row)
         lay.addStretch()
         return w
 
-    def _look_tab(self):
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        self._combo(lay, "theme", "Theme", THEMES)
-        self._combo(lay, "accent", "Accent", ACCENTS)
-        self._check(lay, "compact", "Compact rows")
-        self._check(lay, "show_last_active", 'Show "last active" next to names')
-        self._check(lay, "highlight_me", "Highlight my row")
-        lay.addStretch()
-        return w
+    def _reset_board(self):
+        """This tab only. Until 2.9 Restore Defaults reset Privacy too, and
+        since the defaults share the most, a reset only ever widened what
+        went out."""
+        for key in BOARD_KEYS:
+            widget = self._binds.get(key)
+            if isinstance(widget, QCheckBox):
+                widget.setChecked(bool(DEFAULTS[key]))
+            elif isinstance(widget, QComboBox):
+                self._kept.pop(key, None)
+                for i in range(widget.count()):
+                    if widget.itemData(i) == DEFAULTS[key]:
+                        widget.setCurrentIndex(i)
+                        break
+            elif isinstance(widget, QLineEdit):
+                widget.setText(str(DEFAULTS[key]))
+
+    # ---- privacy ----
 
     def _privacy_tab(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.addWidget(QLabel("<b>Share with your crew and squads</b>"))
-        self._check(lay, "share_reviews", "Reviews")
-        self._check(lay, "share_time", "Study time")
-        self._check(lay, "share_retention", "Retention")
-        self._check(lay, "share_streak", "Streak")
-        self._check(lay, "share_heatmap", "My heatmap (shown on my profile card)")
-        lay.addSpacing(8)
-        self._check(lay, "show_up", "Just show up")
-        note = QLabel("Share only that you studied, and see only that of others.")
-        note.setStyleSheet("font-size: 11px;")
-        note.setWordWrap(True)
-        lay.addWidget(note)
-        lay.addSpacing(8)
+        lay.addWidget(QLabel("<b>What your crew and squads see</b>"))
+        self.choice = QButtonGroup(w)
+        numbers = QRadioButton("My numbers")
+        self.choice.addButton(numbers, NUMBERS)
+        lay.addWidget(numbers)
+        self.number_boxes = []
+        grid = QHBoxLayout()
+        grid.setContentsMargins(22, 0, 0, 0)
+        for key, label in (("share_reviews", "Reviews"), ("share_time", "Study time"),
+                           ("share_retention", "Retention"), ("share_streak", "Streak")):
+            box = QCheckBox(label)
+            box.setChecked(bool(self.config.get(key, DEFAULTS[key])))
+            self._binds[key] = box
+            self.number_boxes.append(box)
+            grid.addWidget(box)
+        grid.addStretch()
+        lay.addLayout(grid)
+        heat = self._check(lay, "share_heatmap", "My heatmap · crew only, on my card", indent=22)
+        self.number_boxes.append(heat)
+
+        show_up = QRadioButton("Just that I studied")
+        self.choice.addButton(show_up, SHOW_UP)
+        lay.addWidget(show_up)
+        self._note(lay, "Squares for the days you studied, no numbers. You see "
+                        "everyone else the same way.", indent=22)
+        paused = QRadioButton("Nothing for now")
+        self.choice.addButton(paused, PAUSED)
+        lay.addWidget(paused)
+        self._note(lay, 'Your crew sees "on a break". Your streak keeps counting.', indent=22)
+        # paused wins over show-up: it shares less
+        start = (PAUSED if self.config.get("paused") else
+                 SHOW_UP if self.config.get("show_up") else NUMBERS)
+        self.choice.button(start).setChecked(True)
+        self.choice.idToggled.connect(lambda _id, _on: self._numbers_enabled())
+        self._numbers_enabled()
+
+        lay.addSpacing(6)
+        self._rule(lay)
+        lay.addWidget(QLabel("<b>Dates your crew sees</b>"))
         exam_row = QHBoxLayout()
-        self.exam_on = QCheckBox("Share an exam date")
+        self.exam_on = QCheckBox("Exam")
         exam_row.addWidget(self.exam_on)
         self.exam_edit = QDateEdit()
         self.exam_edit.setCalendarPopup(True)
@@ -340,25 +482,22 @@ class SettingsDialog(QDialog):
         self.exam_edit.setEnabled(self.exam_on.isChecked())
         self.exam_on.toggled.connect(self.exam_edit.setEnabled)
         exam_row.addWidget(self.exam_edit)
+        exam_row.addWidget(QLabel("\U0001F4D6 for the two weeks before"))
         exam_row.addStretch()
         lay.addLayout(exam_row)
-        exam_note = QLabel("\U0001F4D6 by your name for the two weeks before.")
-        exam_note.setStyleSheet("font-size: 11px;")
-        exam_note.setWordWrap(True)
-        lay.addWidget(exam_note)
         away_row = QHBoxLayout()
-        self.away_on = QCheckBox("Share when I'm away")
+        self.away_on = QCheckBox("Away")
         away_row.addWidget(self.away_on)
         self.away_from = QDateEdit()
         self.away_to = QDateEdit()
-        start = QDate.fromString(str(self.config.get("away_from", "")),
+        start_d = QDate.fromString(str(self.config.get("away_from", "")),
+                                   Qt.DateFormat.ISODate)
+        end_d = QDate.fromString(str(self.config.get("away_to", "")),
                                  Qt.DateFormat.ISODate)
-        end = QDate.fromString(str(self.config.get("away_to", "")),
-                               Qt.DateFormat.ISODate)
-        if start.isValid() and end.isValid():
+        if start_d.isValid() and end_d.isValid():
             self.away_on.setChecked(True)
-            self.away_from.setDate(start)
-            self.away_to.setDate(end)
+            self.away_from.setDate(start_d)
+            self.away_to.setDate(end_d)
         else:
             self.away_from.setDate(QDate.currentDate().addDays(1))
             self.away_to.setDate(QDate.currentDate().addDays(7))
@@ -369,40 +508,19 @@ class SettingsDialog(QDialog):
         away_row.addWidget(self.away_from)
         away_row.addWidget(QLabel("to"))
         away_row.addWidget(self.away_to)
+        away_row.addWidget(QLabel("✈️ on those days"))
         away_row.addStretch()
         lay.addLayout(away_row)
-        away_note = QLabel("\u2708\ufe0f by your name on those days, and in "
-                           "week shares instead of a gap.")
-        away_note.setStyleSheet("font-size: 11px;")
-        away_note.setWordWrap(True)
-        lay.addWidget(away_note)
-        lay.addSpacing(8)
-        self._check(lay, "paused", 'Pause sharing (your crew sees "on a break")')
-        note = QLabel("Pausing hides your stats; your streak keeps counting. "
-                      "Turning a stat off also removes what's already shared "
-                      "this week.")
-        note.setStyleSheet("font-size: 11px;")
-        note.setWordWrap(True)
-        lay.addWidget(note)
+        self._note(lay, "Turning a number off also removes what's already shared this week.")
         lay.addStretch()
         return w
 
-    # ---- footer ----
+    def _numbers_enabled(self):
+        on = self.choice.checkedId() == NUMBERS
+        for box in self.number_boxes:
+            box.setEnabled(on)
 
-    def _restore(self):
-        self.exam_on.setChecked(False)
-        self.away_on.setChecked(False)  # until 2.9 Restore left this one on
-        self._kept.clear()
-        for key, widget in self._binds.items():
-            if isinstance(widget, QCheckBox):
-                widget.setChecked(bool(DEFAULTS[key]))
-            elif isinstance(widget, QComboBox):
-                for i in range(widget.count()):
-                    if widget.itemData(i) == DEFAULTS[key]:
-                        widget.setCurrentIndex(i)
-                        break
-            elif isinstance(widget, QLineEdit):
-                widget.setText(str(DEFAULTS[key]))
+    # ---- footer ----
 
     def _save(self):
         changed = {}
@@ -415,6 +533,11 @@ class SettingsDialog(QDialog):
                 changed[key] = kept[0] if untouched else widget.currentData()
             elif isinstance(widget, QLineEdit):
                 changed[key] = widget.text().strip()[:24]
+        choice = self.choice.checkedId()
+        # the numbers keep their settings under the other two choices, for
+        # when "My numbers" comes back
+        changed["show_up"] = choice == SHOW_UP
+        changed["paused"] = choice == PAUSED
         changed["exam_date"] = (
             self.exam_edit.date().toString(Qt.DateFormat.ISODate)
             if self.exam_on.isChecked() else "")

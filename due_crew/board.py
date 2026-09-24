@@ -974,7 +974,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               ' &middot; ') if sync_error else ""
     foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
             f'<span>{failed}Updated {ago} &middot; <a href="#" '
-            f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
+            f'onclick="{_pycmd("refresh")}">Refresh</a> &middot; <a href="#" '
+            f'onclick="{_pycmd("settings")}">Settings</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
             f'{_css(cfg)}{_head(period, show_up)}{body}{foot}</div>')
@@ -1366,7 +1367,7 @@ def profile_overlay_js(profile):
     inner = _json.dumps(head + grid + lines)
     if you:
         act_label, act_primary = _json.dumps("Privacy…"), "false"
-        act_cmd = _json.dumps("duecrew:settings")
+        act_cmd = _json.dumps("duecrew:settings:privacy")
     else:
         act_label, act_primary = _json.dumps("\U0001F389 Send a cheer"), "true"
         act_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")

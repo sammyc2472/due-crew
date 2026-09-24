@@ -108,7 +108,13 @@ installing — add-ons load at launch).
 - [ ] A 2.8 crewmate still sees a 2.9 account normally (day docs are still written).
 - [ ] Privacy → turn Retention off, Save: your squad row loses retention for squadmates after the next sync. Squads dialog note matches what's shared.
 - [ ] Settings → Theme: Light with Anki in night mode: your card, a squadmate's card, and a cheer banner are light, in your accent. Dialogs (the code box, cheer picks) use your accent too.
-- [ ] Sort the squad board by 7 days, open Settings, Save: still sorted by 7 days. Restore Defaults clears the away dates.
+- [ ] Sort the squad board by 7 days, open Settings, Save: still sorted by 7 days.
+- [ ] Settings has three tabs, You · Board · Privacy. You: emoji, name, and status, each editable there; the emoji picker and status box open over Settings, and the tab shows the change at once.
+- [ ] Privacy: "My numbers" / "Just that I studied" / "Nothing for now". The number boxes grey out under the other two and keep their ticks; switching back to My numbers shares what was ticked.
+- [ ] Choose "Nothing for now", Save: the board shows you "on a break" to your crew (as Pause did). Choose "Just that I studied": the one Crew view.
+- [ ] Board → Reset Board: only that tab changes; Privacy (choice, numbers, dates) stays as it was. There is no Restore Defaults any more.
+- [ ] Your card → Privacy…: Settings opens on the Privacy tab. The board footer ends "Refresh · Settings", which opens Settings.
+- [ ] Board tab: no "Sort by"; the note says to sort by the headers. Accent shows a color dot per choice.
 - [ ] Your card → Pick an emoji: the picker with quick picks and "other"; Remove clears it.
 - [ ] Squad board: "Copy invite · Lock · Leave" on the squad's line, "Share today" in the footer. Founder card: Remove / Block / Make founder on a row of their own, Close beside Add.
 - [ ] Remove, Leave, Block, Sign out, Delete account: one confirmation style, the button says what happens, Cancel is the default.

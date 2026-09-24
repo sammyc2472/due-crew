@@ -28,7 +28,7 @@ streak means what it says.
   they've done in it today and this week, and how well it's sticking. Hover
   a bar for the exact numbers. Decks match automatically by note
   fingerprint: AnKing and other imported decks pair up with no setup.
-- **Just show up** — a switch in Privacy: share only that you studied, and
+- **Just show up** — a choice in Privacy: share only that you studied, and
   see only that of others. Your row is a check, never a rank; your board is
   a square per day.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
@@ -66,7 +66,7 @@ streak means what it says.
   Counts are reviews (every answer counts), and a crewmate who hasn't
   synced since mid-week is marked "as of" their last sync rather than
   shown as absent.
-- **Your colors** — six accent colors (Settings → Appearance), each tuned
+- **Your colors** — six accent colors (Settings → Board), each tuned
   for light and dark mode; the whole board, your row highlight, and the
   cards follow it.
 - **Light on everything** — a refresh reads one small document per

@@ -583,7 +583,7 @@ def _on_js(handled, message, context):
             copy_text(text + " — Due Crew")
             tooltip("Copied.")
     elif cmd == "settings":
-        open_settings()
+        open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
@@ -710,11 +710,14 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-def open_settings():
+def open_settings(tab=None):
+    """tab: "you", "board", or "privacy" (your card's Privacy… opens that
+    one; until 2.9 it landed on Account)."""
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
                          open_auth, open_friends, _on_signed_out, open_decks,
-                         open_squads)
+                         open_squads, edit_emoji=_edit_emoji, edit_status=_edit_status,
+                         tab=tab)
     dlg.exec()
 
 

@@ -93,21 +93,22 @@ def _send_cheer(to_uid, to_name, emoji, note=""):
     _bg(lambda: cl.send_cheer(to_uid, uid, my_name, emoji, note or None), done)
 
 
-def _edit_status():
-    """Own card → "Set a status" / "edit". One line, crew-only, pushed
-    right away (it rides today's stats doc). Empty clears it."""
+def _edit_status(parent=None):
+    """Own card → "Set a status" / "edit", and (2.9) Settings → You. One
+    line, crew-only, pushed right away (it rides today's stats doc). Empty
+    clears it. Returns the new status, or None when nothing changed."""
     from aqt.qt import QInputDialog
     c = cfg()
     current = str(c.get("status") or "")
     text, ok = QInputDialog.getText(
-        mw, "Status",
+        parent or mw, "Status",
         "One line under your name, for your crew. Empty clears it.",
         text=current)
     if not ok:
-        return
+        return None
     text = " ".join(str(text).split())[:80]
     if text == current:
-        return
+        return None
     c["status"] = text
     save_cfg(c)
     lb = _state["labels"][0] if _state["labels"] else None
@@ -122,21 +123,24 @@ def _edit_status():
     app.rerender()
     app.sync()
     tooltip("Status set." if text else "Status cleared.")
+    return text
 
 
-def _edit_emoji():
-    """Own card → "Pick an emoji" / "Change emoji". One glyph, in front of
-    your name everywhere your crew sees it. Since 2.9 it's the cheer picker
-    with faces for a quick row (it was a bare text box); Remove clears it."""
+def _edit_emoji(parent=None):
+    """Own card → "Pick an emoji" / "Change emoji", and (2.9) Settings →
+    You. One glyph, in front of your name everywhere your crew sees it.
+    Since 2.9 it's the cheer picker with faces for a quick row (it was a
+    bare text box); Remove clears it. Returns the new emoji ("" when
+    removed), or None when nothing changed."""
     from .ui.cheer_dialog import EmojiDialog
     c = cfg()
     current = clean_emoji(c.get("emoji"))
-    dlg = EmojiDialog(mw, current)
+    dlg = EmojiDialog(parent or mw, current)
     if not dlg.exec():
-        return
+        return None
     emoji = clean_emoji(dlg.emoji)
     if emoji == current:
-        return
+        return None
     c["emoji"] = emoji
     save_cfg(c)
     for e in _state["entries"] or []:  # show it now; the upload confirms it
@@ -145,6 +149,7 @@ def _edit_emoji():
     app.rerender()
     app.sync()
     tooltip("Emoji set." if emoji else "Emoji removed.")
+    return emoji
 
 
 def _open_profile(uid):

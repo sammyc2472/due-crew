@@ -180,11 +180,16 @@ def main(out):
 
     def settings():
         from due_crew.ui.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(None, CLIENT, CONFIG, noop, noop, noop, noop, noop, noop)
+        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, emoji="\U0001F98A"), noop, noop, noop,
+                             noop, noop, noop, edit_emoji=noop, edit_status=noop)
         tabs = dlg.findChild(QtWidgets.QTabWidget)
         for i in range(tabs.count()):
             tabs.setCurrentIndex(i)
             shoot(dlg, os.path.join(out, f"settings-{i}-{tabs.tabText(i).lower()}.png"))
+        # Just show up chosen: the numbers stay set underneath, greyed out
+        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, show_up=True), noop, noop, noop,
+                             noop, noop, noop, tab="privacy")
+        shoot(dlg, os.path.join(out, "settings-privacy-showup.png"))
 
     def friends():
         from due_crew.ui.friends_dialog import FriendsDialog

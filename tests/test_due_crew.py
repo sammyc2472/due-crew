@@ -1987,6 +1987,19 @@ def test_main_thread_caches_v29():
     big.db.all = real_all
 
 
+def test_ways_in_v29():
+    """2.9 (K4): the board's footer has a way into Settings, and your own
+    card's Privacy… opens the Privacy tab (it landed on Account)."""
+    labels = [TODAY.isoformat()]
+    page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0)
+    foot = page[page.index('<div class="dc-foot">'):]
+    check("ways in: Settings sits in the footer, after Refresh",
+          "duecrew:settings')" in foot and foot.index("duecrew:refresh") < foot.index("duecrew:settings"))
+    js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
+    check("ways in: your card's Privacy… opens Settings on Privacy",
+          "duecrew:settings:privacy" in js)
+
+
 def test_row_cap():
     """2.7: past ten rows a view scrolls inside the card instead of growing
     the page, with the header pinned; a small crew is untouched. And the
