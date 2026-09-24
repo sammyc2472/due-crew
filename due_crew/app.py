@@ -98,6 +98,9 @@ _state = {
     "room_skip": None,     # (room key, round): the break I skipped
     "room_break": False,   # the break is on screen (review shortcuts are off)
     "room_refreshed": None,  # (room key, round): that break's one refresh
+    "settings_ready": False,   # 2.13: my account settings were pulled (or can't be)
+    "settings_pulling": False,
+    "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
 }
 
 
@@ -131,8 +134,19 @@ def cfg():
     return mw.addonManager.getConfig(__name__) or {}
 
 
-def save_cfg(c):
+# 2.13: set by __init__ to account.on_change; a config write that changes a
+# setting that follows the account also saves it there
+on_account_change = None
+
+
+def save_cfg(c, from_account=False):
+    """from_account: the account's own settings arriving; no echo back."""
+    before = mw.addonManager.getConfig(__name__) or {}
     mw.addonManager.writeConfig(__name__, c)
+    if not from_account and on_account_change is not None:
+        from .account import ACCOUNT_KEYS
+        if any(before.get(k) != c.get(k) for k in ACCOUNT_KEYS):
+            on_account_change(c)
 
 
 def client():
@@ -180,7 +194,8 @@ def _reset_runtime():
                   knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
                   knocks_ts=0.0, milestones=[], anki_synced=False,
                   room_dismissed=set(), room_skip=None, room_break=False,
-                  room_refreshed=None)
+                  room_refreshed=None, settings_ready=False, settings_pulling=False,
+                  settings_failed_ts=0.0)
     _pending_cheers.clear()
 
 

@@ -164,8 +164,10 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v10: v9 plus a cheer
-                      that carries `luck` or a card's `guid`)
+      "repo"        — current repository rules (rules-v11: v10 plus my own
+                      settings doc, users/{me}/private/settings)
+      "v10"         — the paste before it (v2.10–v2.12): a cheer may carry
+                      `luck` or a card's `guid`
       "v9"          — the paste before it (v2.9): knocks may carry the
                       recipient's own friend code
       "v8"          — the paste before it (v2.7–v2.8): any one emoji in a
@@ -256,15 +258,17 @@ class FakeFirestore:
 
     CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}  # all that rules before v8 accept
     MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-                        "rules-v9", "rules-v10"),
+                        "rules-v9", "rules-v10", "rules-v11"),
+               "v10": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
+                       "rules-v9", "rules-v10"),
                "v9": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
                       "rules-v9"),
                "v8": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
                "v7": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
-    MODERN = ("repo", "v9", "v8", "v7")  # everything v2.5 brought is in all of these
-    ANY_EMOJI = ("repo", "v9", "v8")      # rules-v8: any one emoji in a cheer
-    CODE_KNOCKS = ("repo", "v9")          # rules-v9: a knock may carry a friend code
+    MODERN = ("repo", "v10", "v9", "v8", "v7")  # everything v2.5 brought is in all of these
+    ANY_EMOJI = ("repo", "v10", "v9", "v8")      # rules-v8: any one emoji in a cheer
+    CODE_KNOCKS = ("repo", "v10", "v9")          # rules-v9: a knock may carry a friend code
     # Firestore: 20 exists()/get() calls per multi-document read, and
     # isFriend() spends one per friend with an edge doc, two without
     ACCESS_CALLS = 20
@@ -310,7 +314,7 @@ class FakeFirestore:
             allowed = {"emoji", "name", "at"}
             if self.rules_mode in self.MODERN:
                 allowed.add("note")  # rules-v5: optional, <= 80 chars
-            if self.rules_mode == "repo":
+            if self.rules_mode in ("repo", "v10"):
                 allowed |= {"luck", "guid"}  # rules-v10
             note = (f.get("note") or {}).get("stringValue")
             emoji = (f.get("emoji") or {}).get("stringValue")
@@ -398,6 +402,15 @@ class FakeFirestore:
                 if "timestampValue" not in ((fields or {}).get("joinedAt") or {}):
                     return False
             return self._member_shape(dict(existing or {}, **(fields or {})))
+        m = re.fullmatch(r"users/([^/]+)/private/([^/]+)", path)
+        if m:
+            if self.rules_mode != "repo" or uid != m.group(1):
+                return False
+            if method == "DELETE":
+                return True
+            f = fields or {}
+            return (m.group(2) == "settings" and set(f) <= {"v", "at", "settings"}
+                    and "mapValue" in (f.get("settings") or {}))
         if re.fullmatch(r"friend_codes/[^/]+", path):
             # as the rules: a new code names its maker; an existing one
             # changes or goes only at its owner's hand, and stays theirs
@@ -446,6 +459,9 @@ class FakeFirestore:
         m = re.fullmatch(r"server_board/[^/]+", path)
         if m:
             return self.rules_mode == "v3" and self._open_board(uid)
+        m = re.fullmatch(r"users/([^/]+)/private/[^/]+", path)
+        if m:
+            return self.rules_mode == "repo" and uid == m.group(1)
         if re.fullmatch(r"friend_codes/[^/]+", path):
             return not listing
         return False

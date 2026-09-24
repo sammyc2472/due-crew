@@ -49,7 +49,7 @@ MEMBER_FIELDS = ("name", "day", "reviews", "studyTimeMs", "accuracy", "streak",
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v10"
+RULES_MARKER = "rules-v11"
 # Firestore allows 20 exists()/get() calls per multi-document read, and
 # isFriend() spends one per friend (an edge doc), or two (edge missing, then
 # the profile array). Past that the WHOLE batch is refused: measured in the
@@ -1439,6 +1439,18 @@ class FirebaseClient:
             self._save_session()
         return ok
 
+    # ---- my settings (2.13) ----
+
+    def get_settings(self, uid):
+        """(doc, status): my settings doc as {v, at, settings}; status 404
+        when there's none yet, 403 on rules older than v11."""
+        return self.get_doc(f"users/{uid}/private/settings")
+
+    def put_settings(self, uid, at, settings):
+        return self.patch_doc(f"users/{uid}/private/settings",
+                              {"v": 1, "at": at, "settings": settings},
+                              ["v", "at", "settings"], label="settings")
+
     def upload_shared(self, uid, decks):
         """Skips the write when nothing changed since the last upload."""
         digest = hashlib.sha1(
@@ -1686,6 +1698,7 @@ class FirebaseClient:
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
         self.delete_doc(f"users/{uid}/shared/week")
+        self.delete_doc(f"users/{uid}/private/settings")
         for sid in squad_ids:
             self.delete_doc(f"squads/{sid}/members/{uid}")
         if friend_code:

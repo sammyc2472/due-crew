@@ -1971,6 +1971,138 @@ def test_squad_privacy_v29():
           and doc["reviews"] == 40 and doc["streak"] == 3)
 
 
+def test_settings_follow_account_v213():
+    """2.13: a person's settings follow their account. A second computer
+    pulls them before it uploads anything, so it never sends defaults over
+    them (the shared decks a friend lost, the privacy switches)."""
+    from due_crew import account, app as appmod
+    from due_crew.app import _state
+    # pure: decks by id, else by name; junk dropped; bounds
+    cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
+             "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
+             "status": "coffee", "accent": "rose", "sort": "time"}
+    doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
+    check("pick: only what follows the account; decks with names; accent and sort stay",
+          "accent" not in doc and "sort" not in doc
+          and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
+    here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
+    resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
+    got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
+    check("apply: the account's settings land; the deck matches by id, else by name; accent stays",
+          got["share_retention"] is False and got["exam_date"] == "2026-10-02"
+          and got["shared_decks"] == [11, 99] and got["accent"] == "green" and got["shared_decks_set"])
+    junk = account.clean({"share_retention": "no", "status": "x" * 500, "squads": [{"id": 5}, "x"],
+                          "shared_decks": [{"id": "abc"}, {"id": 3, "name": 7}] + [{"id": 1}] * 500})
+    check("clean: wrong types dropped, text and lists bounded",
+          "share_retention" not in junk and len(junk["status"]) == 80 and junk["squads"] == []
+          and len(junk["shared_decks"]) == account.MAX_DECKS and junk["shared_decks"][0] == {"id": 3, "name": "7"})
+
+    # the doc: mine only, on rules-v11
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    store.auth_uid = "sam"
+    sam = new_client(store, "sam", "Sammy")
+    ok = sam.put_settings("sam", "2026-09-24T10:00:00.000000Z", doc)
+    back, status = sam.get_settings("sam")
+    check("settings doc: I write it and read it back", ok and status == 200
+          and back["settings"]["shared_decks"][1]["name"] == "Pathoma")
+    store.auth_uid = "dre"
+    dre = new_client(store, "dre", "Dre")
+    check("settings doc: not even my crew can read it", dre.get_settings("sam")[1] == 403)
+    store.auth_uid = "sam"
+    old = fakes.FakeFirestore(rules_mode="v10")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
+    seed_users(old, {"sam": "Sammy"}, {"sam": []})
+    old.auth_uid = "sam"
+    check("settings doc: refused on rules-v10 (the pull carries on without it)",
+          new_client(old, "sam", "Sammy").get_settings("sam")[1] == 403)
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+
+    # two computers, through the real pull and push
+    saved = {k: getattr(account, k) for k in ("cfg", "client")}
+    saved_app = {k: getattr(appmod, k) for k in ("_bg", "save_cfg", "swap")}
+    saved_col = account.mw.col
+    boxes = {}
+
+    class Decks:
+        def __init__(self, names): self.names = names
+        def get(self, did, default=False): return {"id": did} if did in self.names else default
+        def name(self, did): return self.names.get(did, "")
+        def id_for_name(self, name): return next((d for d, n in self.names.items() if n == name), None)
+
+    def computer(name, config, decks):
+        cl = new_client(store, "sam", "Sammy")
+        boxes[name] = {"cfg": config, "cl": cl, "decks": Decks(decks)}
+        return boxes[name]
+
+    def use(box):
+        account.cfg = lambda: dict(box["cfg"])
+        account.client = lambda: box["cl"]
+        appmod.save_cfg = lambda c, from_account=False: box["cfg"].update(c)
+        account.mw.col = types.SimpleNamespace(decks=box["decks"])
+        _state.update(settings_ready=False, settings_pulling=False, labels=[TODAY.isoformat()])
+
+    appmod._bg = lambda job, done=None: done(job()) if done else job()
+    appmod.swap = None
+    store.docs.pop("users/sam/private/settings", None)
+    try:
+        a = computer("a", dict(cfg_a), {11: "AnKing", 12: "Pathoma"})
+        use(a)
+        synced = []
+        account.ensure(lambda: synced.append("a"))
+        check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
+              synced == ["a"] and "users/sam/private/settings" in store.docs and account.ready())
+        b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
+                     {11: "AnKing", 77: "Pathoma"})
+        use(b)
+        order = []
+        real_pulled = account._pulled
+        account._pulled = lambda r: (order.append("pulled"), real_pulled(r))[1]
+        account.ensure(lambda: order.append("sync"))
+        account._pulled = real_pulled
+        check("second computer: pulls before its first sync, and takes the account's settings",
+              order == ["pulled", "sync"] and b["cfg"]["shared_decks"] == [11, 77]
+              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "blue")
+        b["cfg"]["status"] = "200 cards, then bed"
+        account.on_change(b["cfg"])
+        use(a)
+        a["cl"].session["settings_day"] = ""  # the next day
+        account.ensure()
+        check("a change on one computer reaches the other on its next pull",
+              a["cfg"]["status"] == "200 cards, then bed")
+        # newest save wins: a has an unsent edit newer than the doc
+        a["cl"].session.update(settings_dirty=True, settings_local_at="2999-01-01T00:00:00Z", settings_seen="old")
+        a["cfg"]["exam_date"] = "2027-01-01"
+        a["cl"].session["settings_day"] = ""
+        account.ensure()
+        check("newest save wins: an unsent edit here, newer than the account's, goes up instead",
+              store.docs["users/sam/private/settings"]["settings"]["mapValue"]["fields"]["exam_date"]["stringValue"] == "2027-01-01")
+        # offline: the pull fails, the sync still runs, and doesn't loop
+        use(a)
+        a["cl"].session["settings_day"] = ""
+        real_get = a["cl"].get_settings
+        tries = []
+        a["cl"].get_settings = lambda uid: (tries.append(1), (None, 0))[1]
+        runs = []
+
+        def sync_like():
+            runs.append(1)
+            if not account.ready():
+                account.ensure(sync_like)
+        account.ensure(sync_like)
+        a["cl"].get_settings = real_get
+        check("offline: one failed pull, then the sync runs once, no loop",
+              tries == [1] and runs == [1] and account.ready())
+    finally:
+        for k, v in saved.items():
+            setattr(account, k, v)
+        for k, v in saved_app.items():
+            setattr(appmod, k, v)
+        account.mw.col = saved_col
+        _state.update(settings_ready=False, settings_pulling=False, labels=[])
+
+
 def test_study_rooms_v212():
     """2.12: study rooms. A shared clock on the week doc, no reads; the
     room shows in the top bar, else the bottom bar, else the margin; the

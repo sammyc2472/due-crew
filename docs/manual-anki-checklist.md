@@ -165,3 +165,12 @@ installing — add-ons load at launch).
 - [ ] After the last round: the chip goes, and the board says "Room done: … together with …", with Share (copies a line) and × .
 - [ ] "At 20:00": the invite says "starts at 20:00"; the chip shows "starts 20:00" until then.
 - [ ] Night mode: chip, bottom bar, margin card, break and room card all read well.
+
+## 2.13: settings follow the account (rules-v11)
+
+- [ ] Rules-v11 pasted in the console BEFORE the release.
+- [ ] Computer A: share two decks, turn Retention off, set an exam date and a status. Computer B (or a fresh Anki profile), sign in: before its first upload, B shows the same shared decks, Retention off, exam date and status. A crewmate's board never loses your decks.
+- [ ] B: change the status. A, the next day (or restart A): the new status is there.
+- [ ] Accent and sort differ between A and B and stay that way.
+- [ ] Settings shows the line about what follows your account.
+- [ ] With rules-v10 still published: B carries on as before 2.13, and its first sync doesn't empty your shared decks.

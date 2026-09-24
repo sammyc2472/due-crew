@@ -83,6 +83,15 @@ class SettingsDialog(QDialog):
         tabs.currentChanged.connect(self._fit_tab)
         self._fit_tab(tabs.currentIndex())
 
+        if self.client.signed_in:
+            # 2.13: what's in the account follows it; the look is per computer
+            follow = QLabel("Privacy, dates, status, squads and shared decks are saved to "
+                            "your account, so they follow you to other computers. "
+                            "Colours and layout stay on this one.")
+            follow.setWordWrap(True)
+            follow.setStyleSheet("font-size: 11px;")
+            root.addWidget(follow)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel
                                    | QDialogButtonBox.StandardButton.Save)
         buttons.accepted.connect(self._save)

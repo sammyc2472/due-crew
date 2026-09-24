@@ -77,8 +77,10 @@ newer. Restart Anki after installing.
 
 Your stats go only to people you've added, and to squads you join, where
 squadmates see your name and today's numbers. Choose what you share in
-Settings → Privacy, or pause sharing at any time. Your email is only used
-to sign in. Deleting your account deletes your data.
+Settings → Privacy, or pause sharing at any time. Those choices are saved
+to your account, where only you can read them, so they follow you to other
+computers. Your email is only used to sign in. Deleting your account
+deletes your data.
 
 Until an upcoming update, your profile (name, emoji, exam date, time zone
 and friend list) can be read by anyone with your account id, which your
