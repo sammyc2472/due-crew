@@ -143,3 +143,9 @@ installing — add-ons load at launch).
 - [ ] Friends → New Code → confirm: a different code shows; Copy Invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
 - [ ] A friend adds the OLD code: "That code doesn't match anyone." They add the new one: it works, and you get the Add back banner.
 - [ ] Your crew is unchanged after New Code, on your board and on theirs.
+
+## 2.11.1: streaks from the phone
+
+- [ ] Study only on the phone for a day (desktop closed), sync the phone. Next morning open desktop Anki: while it syncs, your streak on the board doesn't drop; once the sync lands it shows the full run (yesterday included), the same morning, not the day after.
+- [ ] The heatmap (click your name) shows the phone-only days after that same sync.
+- [ ] A profile that doesn't sync with AnkiWeb: the streak is exactly the count from this computer, as before.

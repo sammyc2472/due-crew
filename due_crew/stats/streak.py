@@ -3,6 +3,14 @@
 The backward base (through yesterday) is one bounded SQL pass over revlog,
 cached per day; after that each call costs a single query to check whether today
 counts yet. Not studying today never breaks the streak until rollover.
+
+2.11.1: phone reviews arrive when Anki syncs, often after the day's first
+count. Until then a day studied only on the phone looked like a day off, and
+the short run was cached for the rest of the day. Now the cache watches the
+gap (the day just before the run): once a sync fills it, the run is counted
+again. And a run the tracker has seen is kept: yesterday's streak, today
+included, is the floor for today's base, so a late or partial history can't
+shorten what was already counted.
 """
 
 import json
@@ -15,18 +23,33 @@ class StreakTracker:
         self.path = os.path.join(user_files_dir, "streak.json")
 
     def base(self):
-        """Consecutive studied days ending yesterday; one full revlog pass
-        per day, cached after that."""
+        """Consecutive studied days ending yesterday; one bounded revlog pass
+        per day, cached after that, and again whenever a sync fills the gap."""
         today = self.q.day_label(0)
         cached = self._load()
+        kept = 0
         if cached.get("date") == today:
-            return cached.get("base", 0)
-        base = self._base_through_yesterday()
-        self._save({"date": today, "base": base})
+            kept = _int(cached.get("base"))
+            # the day before the run: still empty means nothing that
+            # arrived since can lengthen it (one day, one indexed count)
+            if self.q.reviews_for_day(kept + 1) == 0:
+                return kept
+        seen = cached.get("seen") if isinstance(cached.get("seen"), dict) else {}
+        if seen.get("day") == self.q.day_label(1):
+            kept = max(kept, _int(seen.get("run")))  # what I counted yesterday stands
+        base = max(self._base_through_yesterday(), kept)
+        self._save(dict(cached, date=today, base=base))
         return base
 
     def current(self):
-        return self.base() + (1 if self.q.reviews_for_day(0) > 0 else 0)
+        base = self.base()
+        if self.q.reviews_for_day(0) == 0:
+            return base
+        run = base + 1
+        cached = self._load()
+        if cached.get("seen") != {"day": self.q.day_label(0), "run": run}:
+            self._save(dict(cached, seen={"day": self.q.day_label(0), "run": run}))
+        return run
 
     def _base_through_yesterday(self):
         """The run back from yesterday, scanned over a window that widens only
@@ -58,3 +81,10 @@ class StreakTracker:
                 json.dump(data, f)
         except OSError:
             pass
+
+
+def _int(value):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0

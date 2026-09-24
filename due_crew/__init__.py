@@ -41,7 +41,7 @@ from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _dr
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
                      _toggle_squad_lock, _visible_knocks, open_squads)
-from .stats import gather_stats, gather_week, week_days
+from .stats import gather_stats, gather_week, held_streak, week_days
 from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
@@ -490,6 +490,9 @@ def _on_sync_done(full=False, light=False, fetch=None):
     stats = week = decks = heat = None
     try:
         stats = gather_stats(mw.col, _profile_files())
+        if _awaiting_phone():
+            stats.streak = held_streak(stats.streak, client().session.get("own_days"),
+                                       StatsQueries(mw.col).day_label(0))
     except Exception:
         traceback.print_exc()
     if not light:
@@ -804,6 +807,21 @@ def _push_on_open():
     _on_sync_done(light=True, fetch=False)  # the open just drew the board
 
 
+def _mark_anki_synced(*_args):
+    _state["anki_synced"] = True
+
+
+def _awaiting_phone():
+    """This profile syncs with AnkiWeb and no sync has finished since it
+    opened: reviews done on a phone may not have arrived yet (2.11.1)."""
+    if _state["anki_synced"]:
+        return False
+    try:
+        return bool(mw.pm.sync_auth())
+    except Exception:
+        return False
+
+
 def _on_profile_close():
     global _closing
     _closing = True
@@ -813,6 +831,10 @@ gui_hooks.deck_browser_will_render_content.append(_on_render)
 
 
 gui_hooks.deck_browser_did_render.append(_on_did_render)
+
+
+# first: the upload that follows knows the phone's reviews are in
+gui_hooks.sync_did_finish.append(_mark_anki_synced)
 
 
 gui_hooks.sync_did_finish.append(_on_sync_done)

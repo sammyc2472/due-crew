@@ -1971,6 +1971,68 @@ def test_squad_privacy_v29():
           and doc["reviews"] == 40 and doc["streak"] == 3)
 
 
+def test_streak_phone_v2111():
+    """2.11.1: a day studied only on the phone reaches the desktop when Anki
+    syncs, often after the add-on's first count of the day. The streak and
+    heatmap caches notice, and what was already counted is never lost."""
+    from due_crew.stats import heatmap, held_streak
+    from due_crew.stats.streak import StreakTracker
+    at_noon = lambda d: int(datetime.datetime.combine(d, datetime.time(12)).timestamp() * 1000)
+    # desktop on days 2..40 ago, the phone yesterday: not synced yet
+    col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(2, 41)])
+    q = StatsQueries(col)
+    files = tempfile.mkdtemp()
+    tracker = StreakTracker(q, files)
+    check("phone: before the sync, yesterday looks like a day off", tracker.current() == 0)
+    fakes.add_review(col.db.conn, at_noon(TODAY - datetime.timedelta(days=1)))   # Anki syncs
+    check("phone: once the sync brings yesterday in, the same day's count is the whole run",
+          StreakTracker(q, files).current() == 40)
+    fakes.add_review(col.db.conn, at_noon(TODAY))
+    check("phone: today counts on top", StreakTracker(q, files).current() == 41)
+    calls = []
+    real_scan = StreakTracker._base_through_yesterday
+    StreakTracker._base_through_yesterday = lambda self: calls.append(1) or real_scan(self)
+    try:
+        StreakTracker(q, files).current()
+    finally:
+        StreakTracker._base_through_yesterday = real_scan
+    check("phone: with the gap still empty, a later sync doesn't rescan", calls == [])
+
+    # the next day, yesterday's reviews are gone (a full sync that pulled an
+    # older collection): the 41 counted yesterday stands
+    col.db.conn.execute("DELETE FROM revlog WHERE id >= ?", (at_noon(TODAY) - 3600000,))
+    col.sched.day_cutoff += 86400
+    q2 = StatsQueries(col)
+    check("floor: a run counted yesterday isn't shortened by a history that lost it",
+          StreakTracker(q2, files).base() == 41)
+    check("floor: only yesterday's count is kept; two days on, the history decides",
+          (col.sched.__setattr__("day_cutoff", col.sched.day_cutoff + 86400) or True)
+          and StreakTracker(StatsQueries(col), files).base() == 0)
+
+    # heatmap: phone days older than yesterday used to stay missing all day
+    col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(6, 100)])
+    q = StatsQueries(col)
+    files = tempfile.mkdtemp()
+    heatmap(q, files, 182)
+    for i in (5, 4, 3):
+        fakes.add_review(col.db.conn, at_noon(TODAY - datetime.timedelta(days=i)))
+    check("heatmap: a sync that brings older phone days in is counted the same day",
+          heatmap(q, files, 182) == q.heatmap_counts(182) and q.day_label(4) in heatmap(q, files, 182))
+    check("heatmap: the settled-days check counts exactly what the cache keeps",
+          q.answers_in_days(2, 182) == sum(n for lb, n in q.heatmap_counts(182).items()
+                                            if lb < q.day_label(1)))
+
+    # before Anki's first sync, the streak sent to the crew doesn't drop
+    own = {"2026-09-20": {"streak": 12}, "2026-09-22": {"streak": 40}}
+    check("held: before the sync, a short count doesn't replace the 40 last sent",
+          held_streak(0, own, "2026-09-24") == 40)
+    check("held: a longer count goes out as is", held_streak(43, own, "2026-09-24") == 43)
+    check("held: nothing sent yet, or junk, leaves the count alone",
+          held_streak(3, {}, "2026-09-24") == 3 and held_streak(3, {"2026-09-22": {"streak": "x"}}, "2026-09-24") == 3)
+    check("held: an upload from a later day (clock change) isn't the one held",
+          held_streak(5, {"2026-09-30": {"streak": 90}}, "2026-09-24") == 5)
+
+
 def test_main_thread_caches_v29():
     """2.9 (H5, H6): the per-sync SQL gets caches, and the Shared Decks
     dialog stops fingerprinting every deck. Each must give exactly what the
