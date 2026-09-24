@@ -18,7 +18,8 @@ streak means what it says.
 - **Consent-based friendships** — add a friend's 6-character code (or
   paste their whole invite) and their board offers "Add back": one click and
   you're crew. You see someone's stats only after they add you, and vice
-  versa. Remove someone and they stop seeing yours immediately.
+  versa. Remove someone and they stop seeing yours immediately. Shared
+  your code too widely? Friends → New Code retires it; your crew stays.
 - **Cheers** — send an emoji (six quick picks, or any one from your emoji
   picker) and your friend gets a full-screen flurry with your name on it
   after their next sync. Add a short note and it rides along. Click a

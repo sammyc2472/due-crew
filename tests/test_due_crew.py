@@ -1902,6 +1902,57 @@ def test_code_knocks_v29():
           len(codes) == 1 and store.docs["users/newbie"].get("friendCode", {}).get("stringValue") == codes[0][13:])
 
 
+def test_new_code():
+    """2.10: New Code swaps my friend code; the old one stops working, the
+    crew stays, and the board shows the new one the same day."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
+    store.docs["friend_codes/SAM123"] = {"userId": fv_str("sam")}
+    store.docs["users/sam"]["friendCode"] = fv_str("SAM123")
+    store.auth_uid = "sam"
+    sam = new_client(store, "sam", "Sammy")
+    sam._people = {"uid": "sam", "day": "x", "own": {"friendCode": "SAM123"}}
+    code, err = sam.new_friend_code("sam", "SAM123")
+    check("new code: a fresh code, pointed at me, on my profile; the old one gone",
+          err is None and code and code != "SAM123"
+          and store.docs[f"friend_codes/{code}"]["userId"]["stringValue"] == "sam"
+          and store.docs["users/sam"]["friendCode"]["stringValue"] == code
+          and "friend_codes/SAM123" not in store.docs)
+    check("new code: the day's cached profile shows it (the board's Copy invite)",
+          sam._people["own"]["friendCode"] == code)
+    check("new code: the crew is untouched",
+          [v["stringValue"] for v in store.docs["users/sam"]["friends"]["arrayValue"]["values"]] == ["priya"])
+    store.auth_uid = "priya"
+    priya = new_client(store, "priya", "Priya")
+    _f, old_err = priya.add_friend("priya", "SAM123", [], "Priya")
+    check("new code: the old code no longer matches anyone", old_err == "That code doesn't match anyone.")
+    # someone else holds the first draw: the rules refuse, the next draw lands
+    store.auth_uid = "sam"
+    store.docs["friend_codes/TAKEN1"] = {"userId": fv_str("priya")}
+    draws = iter("TAKEN1" + "FRESH2")
+    real = firebase.secrets.choice
+    firebase.secrets.choice = lambda seq: next(draws)
+    try:
+        code2, err2 = sam.new_friend_code("sam", code)
+    finally:
+        firebase.secrets.choice = real
+    check("new code: a code that's someone else's is skipped, and stays theirs",
+          code2 == "FRESH2" and err2 is None
+          and store.docs["friend_codes/TAKEN1"]["userId"]["stringValue"] == "priya")
+    # the profile write fails: the new code is let go and the old one stands
+    real_patch = sam.patch_doc
+    sam.patch_doc = lambda path, *a, **k: False if path == "users/sam" else real_patch(path, *a, **k)
+    try:
+        code3, err3 = sam.new_friend_code("sam", "FRESH2")
+    finally:
+        sam.patch_doc = real_patch
+    check("new code: a failed profile write keeps the old code, and frees the new one",
+          code3 is None and err3 and "friend_codes/FRESH2" in store.docs
+          and sum(1 for p, d in store.docs.items() if p.startswith("friend_codes/")
+                  and d["userId"]["stringValue"] == "sam") == 1)
+
+
 def test_squad_privacy_v29():
     """2.9 (G2): the Privacy switches reach squad rows, through the same
     gate as the day docs."""

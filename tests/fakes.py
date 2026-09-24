@@ -399,7 +399,14 @@ class FakeFirestore:
                     return False
             return self._member_shape(dict(existing or {}, **(fields or {})))
         if re.fullmatch(r"friend_codes/[^/]+", path):
-            return uid is not None
+            # as the rules: a new code names its maker; an existing one
+            # changes or goes only at its owner's hand, and stays theirs
+            owner = ((self.docs.get(path) or {}).get("userId") or {}).get("stringValue")
+            if uid is None or (path in self.docs and owner != uid):
+                return False
+            if method == "DELETE":
+                return True
+            return ((fields or {}).get("userId") or {}).get("stringValue") == uid
         return False
 
     def _can_read(self, path, uid, listing=False):

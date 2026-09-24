@@ -925,6 +925,34 @@ class FirebaseClient:
                 return code
         return None
 
+    def new_friend_code(self, uid, old):
+        """2.10: swap my code for a fresh one, and the old one stops working.
+        Since 2.9 a code also knocks, so one posted somewhere public keeps
+        landing banners on my board; this is the way out. Friendships are
+        edges and arrays of uids, so the crew doesn't notice. Order: the new
+        code is claimed, then the profile points at it, then the old doc
+        goes. If the profile write fails the new doc is let go and the old
+        code stays. Returns (code, error)."""
+        for _ in range(3):
+            code = "".join(secrets.choice(string.ascii_uppercase + string.digits)
+                           for _ in range(FRIEND_CODE_LEN))
+            if code == old:
+                continue
+            # someone else's code: the rules refuse the write -> another draw
+            if self.patch_doc(f"friend_codes/{code}", {"userId": uid}):
+                break
+        else:
+            return None, "Couldn't make a new code. Try again."
+        if not self.patch_doc(f"users/{uid}", {"friendCode": code}):
+            self.delete_doc(f"friend_codes/{code}")
+            return None, "Couldn't save. Your code is unchanged."
+        # the day's cached profile would show the old code until tomorrow
+        if self._people and isinstance(self._people.get("own"), dict):
+            self._people["own"]["friendCode"] = code
+        if old and not self.delete_doc(f"friend_codes/{old}"):
+            return code, "New code saved, but the old one couldn't be retired. Try again later."
+        return code, None
+
     def add_friend(self, uid, code, own_friends, my_name=None):
         """Add by code. Since 2.9 the add also knocks, with their own code in
         the knock (rules-v9 lets that through), so their board offers a

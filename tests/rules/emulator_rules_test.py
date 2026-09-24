@@ -260,6 +260,22 @@ def main():
     check("code knock: cannot forge the sender",
           put("users/bob/knocks/dave", code_knock, "carol") == 403)
 
+    # -- 2.10: New Code. Bob claims a fresh code, then retires the old one;
+    # a knock on the retired code is refused, and nobody else can take it
+    # over or retire it for him.
+    check("new code: a fresh code is claimed by its maker",
+          put("friend_codes/BOB999", {"userId": "bob"}, "bob") in (200, 201))
+    check("new code: someone else's code can't be repointed at me",
+          put("friend_codes/BOB999", {"userId": "carol"}, "carol") == 403)
+    check("new code: nor retired by anyone but its owner",
+          call("DELETE", "friend_codes/BOB999", "carol")[0] == 403)
+    check("new code: the owner retires the old one",
+          call("DELETE", "friend_codes/BOB123", "bob")[0] == 200)
+    check("new code: a knock on the retired code is refused",
+          put("users/bob/knocks/dave", dict(code_knock, name="Dave"), "dave") == 403)
+    check("new code: the new one knocks",
+          put("users/bob/knocks/dave", dict(code_knock, name="Dave", code="BOB999"), "dave") in (200, 201))
+
     # -- v2.9: one batchGet of friends' stats gets 20 access calls; the client
     # sends at most ten friends per batch, safe even without edge docs (two
     # calls each). Eleven without edges is where one batch breaks.

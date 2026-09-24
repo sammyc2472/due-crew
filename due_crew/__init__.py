@@ -710,8 +710,12 @@ def open_friends(focus_add=False):
                         muted=list(_wrap_data().get("muted_knocks") or []),
                         on_mute=_mute_knocker, focus_add=focus_add)
     dlg.exec()
+    if dlg.new_code:
+        _state["my_code"] = dlg.new_code  # the solo board's Copy invite
     if dlg.changed:
         refresh_board(full=True)
+    elif dlg.new_code:
+        _swap(cfg())
 
 
 def open_decks():
