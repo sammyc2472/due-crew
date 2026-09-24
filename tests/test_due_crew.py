@@ -2054,6 +2054,8 @@ def test_study_rooms_v212():
     check("widgets: names ride as JSON data and go in as text",
           '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "")
           and "textContent" in js)
+    check("widgets: faces are each person's own initial, mine too (not Y for 'you')",
+          data["initials"] == ["D", "A", "S"] and data["names"][-1] == "you")
     check("widgets: the clock comes from start, lengths in ms",
           data["start"] == int(t0.timestamp() * 1000) and data["round"] == 25 * 60000 and data["brk"] == 5 * 60000)
 

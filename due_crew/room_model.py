@@ -184,6 +184,8 @@ def widget_data(room, entries, accent_pair, compact=False):
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
             "title": title(entries, room),
             "names": [n.split(" ")[0] if not you else "you" for _u, n, you in ms],
+            # faces show each person's own initial, mine included
+            "initials": [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
             "line": names_line(ms),
             "accent": list(accent_pair), "compact": bool(compact)}
 
@@ -258,7 +260,7 @@ _RUNTIME = r"""
   }
   function faces(c, size) {
     var f = el('span', 'display:inline-flex;');
-    D.names.forEach(function (n, i) {
+    (D.initials || D.names).forEach(function (n, i) {
       var x = el('i', 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:grid;place-items:center;font:700 ' +
         Math.round(size * .45) + 'px -apple-system,Segoe UI,sans-serif;font-style:normal;background:' + c.face + ';color:' + c.a +
         ';border:2px solid ' + c.bg + ';margin-left:' + (i ? -6 : 0) + 'px;', (n || '?').charAt(0).toUpperCase());
