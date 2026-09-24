@@ -149,3 +149,15 @@ installing — add-ons load at launch).
 - [ ] Study only on the phone for a day (desktop closed), sync the phone. Next morning open desktop Anki: while it syncs, your streak on the board doesn't drop; once the sync lands it shows the full run (yesterday included), the same morning, not the day after.
 - [ ] The heatmap (click your name) shows the phone-only days after that same sync.
 - [ ] A profile that doesn't sync with AnkiWeb: the streak is exactly the count from this computer, as before.
+
+## 2.12: study rooms
+
+- [ ] Footer → Open a room → 4 × 25, 5-min breaks, Now → Open Room. The board shows the room (ring, rounds, Study, Leave); the top bar shows the chip with the seven squares, the ring, "Round 1 of 4", and your initial.
+- [ ] A crewmate on 2.12 refreshes: an invite with Join. They join; after your next refresh both of you show "in <host>'s room" and both initials sit in the chip.
+- [ ] Review: the chip stays in the top bar; the card is untouched. Click it: the room card (rounds, who's in, Tuck it away, Leave). Tuck it away leaves only the ring.
+- [ ] Preferences → hide the top bar while reviewing: the room moves beside Edit in the bottom bar. Hide the bottom bar too, window wide: a card in the left margin, gone on a card with a full-width image.
+- [ ] Open a room of 2 × 15 with 5-min breaks, review past the 15 minutes: the card on screen stays until you answer it; then the break replaces the next card, keys do nothing, the answer buttons are hidden. Skip the break brings the card and keys back. Waiting it out does too.
+- [ ] Cheer the room on the break sends 🎉 to each roommate.
+- [ ] After the last round: the chip goes, and the board says "Room done: … together with …", with Share (copies a line) and × .
+- [ ] "At 20:00": the invite says "starts at 20:00"; the chip shows "starts 20:00" until then.
+- [ ] Night mode: chip, bottom bar, margin card, break and room card all read well.

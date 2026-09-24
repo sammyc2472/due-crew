@@ -46,7 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import together
+from . import rooms, together
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -451,13 +451,15 @@ def _board_html(c):
                         reviews=review_banners(), sync_error=_state["sync_error"],
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
-                        milestones=None if show_up else _state["milestones"])
+                        milestones=None if show_up else _state["milestones"],
+                        room=rooms.board_view())
 
 
 def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
     together.show_luck_card()
+    rooms.refresh_widgets()
 
 
 def _last_studied(q, stats):
@@ -535,6 +537,16 @@ def _on_sync_done(full=False, light=False, fetch=None):
 
 
 def _on_js(handled, message, context):
+    if message.startswith("duecrew:room"):
+        # 2.12: study rooms answer from the top bar and the review screen too
+        parts = message.split(":")
+        try:
+            done = rooms.on_message(parts[1], parts)
+        except Exception:
+            traceback.print_exc()
+            done = True
+        if done:
+            return (True, None)
     if not isinstance(context, DeckBrowser) or not message.startswith("duecrew:"):
         return handled
     parts = message.split(":")
@@ -855,6 +867,15 @@ gui_hooks.card_will_show.append(together.card_will_show)
 
 
 gui_hooks.reviewer_will_show_context_menu.append(together.reviewer_menu)
+
+
+# 2.12: study rooms. The room follows Anki from screen to screen; the break
+# waits for the card on screen to be answered.
+gui_hooks.reviewer_did_show_question.append(rooms.on_question)
+gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
+gui_hooks.state_did_change.append(rooms.on_state)
+if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
+    gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

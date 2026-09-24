@@ -20,6 +20,7 @@ import time
 from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
+from . import room_model
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -276,6 +277,9 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "streak": None, "stale": False, "quiet": False,
                "back": bool(e.get("back")) and not e["paused"],
                "live": live_now(e.get("live_until")) and not e["paused"],
+               # 2.12: "in Dre's room" takes the place of "studying now"
+               "room": (room_model.title(entries, e["room"]) if e.get("room")
+                        and not e["paused"] else ""),
                "status": "", "away": "",
                "exam": "" if e["paused"] else
                        _exam_badge(e.get("exam_date"), today_lb)}
@@ -475,6 +479,30 @@ def _css(cfg):
     #due-crew tr.you .dc-stw::before {{ border-bottom-color: var(--dc-bg); }}
     #due-crew tr.you .dc-st {{ background: var(--dc-bg); font-weight: 400; }}
     #due-crew .dc-wrap.eve {{ border-color: var(--dc-hours); }}
+    /* 2.12: study rooms */
+    #due-crew .dc-room {{ display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+      border: 1px solid var(--dc-accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }}
+    #due-crew .dc-room .rg {{ width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      background: conic-gradient(var(--dc-accent) calc(var(--p) * 360deg), var(--dc-line) 0); }}
+    #due-crew .dc-room .rg.brk {{ background: conic-gradient(var(--dc-hours) calc(var(--p) * 360deg), var(--dc-line) 0); }}
+    #due-crew .dc-room .rg b {{ width: 31px; height: 31px; border-radius: 50%; background: var(--dc-bg);
+      display: grid; place-items: center; font-size: 12px; }}
+    #due-crew .dc-room .rt {{ display: grid; gap: 4px; min-width: 0; font-size: 12.5px; }}
+    #due-crew .dc-room .rt small {{ color: var(--dc-muted); font-size: 11.5px; }}
+    #due-crew .dc-room .rb {{ display: flex; gap: 3px; align-items: center; }}
+    #due-crew .dc-room .rb i {{ height: 6px; border-radius: 3px; background: var(--dc-line); display: block; position: relative; overflow: hidden; }}
+    #due-crew .dc-room .rb i u {{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); display: block; }}
+    #due-crew .dc-room .rb em {{ height: 3px; border-radius: 2px; background: var(--dc-hours); opacity: .45; display: block; }}
+    #due-crew .dc-room .rw {{ display: flex; gap: 8px; align-items: center; }}
+    #due-crew .dc-room .fc {{ display: inline-flex; }}
+    #due-crew .dc-room .fc i {{ width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+      font-style: normal; font-size: 11px; font-weight: 700; color: var(--dc-accent); border: 2px solid var(--dc-bg);
+      background: var(--dc-you-bg); margin-left: -6px; }}
+    #due-crew .dc-room .fc i:first-child {{ margin-left: 0; }}
+    #due-crew .dc-room .go {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px;
+      padding: 4px 12px; font-weight: 700; text-decoration: none; font-size: 12px; }}
+    #due-crew .dc-room .lv {{ color: var(--dc-muted); text-decoration: none; font-size: 12px; }}
+    #due-crew .dc-wrap .rdot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--dc-accent); flex: none; }}
     #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
@@ -515,6 +543,8 @@ def _css(cfg):
       #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
       #due-crew tr:not(.dim) .la {{ display: none; }}
       #due-crew .dc-head .dc-mark {{ height: 14px; }}
+      #due-crew .dc-room {{ grid-template-columns: auto 1fr; }}
+      #due-crew .dc-room .rw {{ grid-column: 1 / -1; justify-content: flex-end; }}
     }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
@@ -590,7 +620,11 @@ def _row_html(row, rank, cfg):
         exam = ' <span class="bkb">&#128075; back</span>' + exam
     if row.get("away"):
         exam += f' <span class="awb">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
-    if row.get("live") and not row["quiet"]:
+    if row.get("room") and not row["quiet"]:
+        # 2.12: in a study room (the room's title is escaped: a friend's name)
+        exam = (' <span class="dc-live"></span><span class="la fresh">in '
+                f'{_html.escape(str(row["room"]))}</span>') + exam
+    elif row.get("live") and not row["quiet"]:
         # 2.10: studying right now; the dot clears itself when the hour is up
         exam = ' <span class="dc-live"></span><span class="la fresh">studying now</span>' + exam
     status = ""
@@ -974,10 +1008,12 @@ def _review_banner(kind, info):
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
-           sync_error=False, live=False, tricky=None, milestones=None):
+           sync_error=False, live=False, tricky=None, milestones=None, room=None):
     """live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
-    days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer."""
+    days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
+    room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
+    see room_html."""
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
@@ -989,6 +1025,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     for kind in ("year", "month"):
         if reviews and reviews.get(kind):
             body = _review_banner(kind, reviews[kind]) + body
+    if room and period in ("today", "week"):
+        body = room_html(room) + body
     for k in (knocks or [])[:3]:
         # someone in a squad added me: my add makes it mutual
         who = _html.escape(str(k.get("name", "?")))
@@ -1073,6 +1111,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if period == "week" or (show_up and period == "today"):
         left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
                  f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
+    if period in ("today", "week") and not cfg.get("paused") and not (room or {}).get("mine"):
+        # 2.12: a study room for the crew
+        left += (f' &middot; <a href="#" title="Rounds and breaks with your crew" '
+                 f'onclick="{_pycmd("roomopen")}">Open a room</a>')
     if period in ("today", "week") and not cfg.get("paused"):
         # 2.10: a dot by your name for an hour, so friends can join you
         left += (f' &middot; <a href="#" title="Stop showing that you\'re studying" '
@@ -1091,6 +1133,44 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 
     return (f'<div id="due-crew" class="dc-frame">'
             f'{_css(cfg)}{_head(period, show_up)}{body}{foot}</div>')
+
+
+def room_html(room):
+    """2.12: the Decks screen's study rooms, from room_model.board_view.
+    Every string in it may carry a friend's name: escaped here."""
+    e = _html.escape
+    out = ""
+    done = room.get("done")
+    if done:
+        out += (f'<div class="dc-wrap"><span>&#10003;</span><span><b>Room done:</b> '
+                f'{int(done.get("rounds", 0))} rounds, {e(room_model.duration_text(done.get("minutes", 0)))} together'
+                f'{" with " + e(str(done["with"])) if done.get("with") else ""}.</span>'
+                f'<a class="wc" href="#" onclick="{_pycmd("roomshare")}">Share</a>'
+                f'<a class="wc" href="#" style="margin-left:6px" onclick="{_pycmd("roomcheer")}">Cheer the room</a>'
+                f'<a class="wx" href="#" title="Done" onclick="{_pycmd("roomdonex")}">&times;</a></div>')
+    for inv in (room.get("invites") or [])[:2]:
+        key = str(inv.get("key", ""))
+        out += (f'<div class="dc-wrap"><span class="rdot"></span><span><b>{e(str(inv.get("title", "")))}</b>'
+                f' &middot; {e(str(inv.get("sub", "")))}'
+                f'{" &middot; " + e(str(inv["line"])) + (" is" if " and " not in str(inv["line"]) else " are") + " in" if inv.get("line") else ""}'
+                f'</span><a class="wc" href="#" onclick="{_pycmd("roomjoin:" + key)}">Join</a>'
+                f'<a class="wx" href="#" title="Not now" onclick="{_pycmd("roomx:" + key)}">&times;</a></div>')
+    mine = room.get("mine")
+    if mine:
+        bars = ""
+        for i, f in enumerate(mine.get("bars") or []):
+            if i:
+                bars += f'<em style="flex:{int(mine.get("brk_min", 5)) or 1}"></em>'
+            bars += f'<i style="flex:{int(mine.get("round", 25))}"><u style="width:{float(f) * 100:.1f}%"></u></i>'
+        faces = "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6])
+        out += (f'<div class="dc-room"><span class="rg{" brk" if mine.get("brk") else ""}" style="--p:{float(mine.get("frac", 0)):.3f}">'
+                f'<b>{e(str(mine.get("label", "")))}</b></span>'
+                f'<span class="rt"><b>{e(str(mine.get("title", "")))}</b><small>{e(str(mine.get("sub", "")))}</small>'
+                f'<span class="rb">{bars}</span></span>'
+                f'<span class="rw"><span class="fc" title="{e(str(mine.get("line", "")))}">{faces}</span>'
+                f'<a class="go" href="#" onclick="{_pycmd("roomstudy")}">Study</a>'
+                f'<a class="lv" href="#" onclick="{_pycmd("roomleave")}">Leave</a></span></div>')
+    return out
 
 
 def _card(cfg, title, body_html):

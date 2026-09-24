@@ -1971,6 +1971,155 @@ def test_squad_privacy_v29():
           and doc["reviews"] == 40 and doc["streak"] == 3)
 
 
+def test_study_rooms_v212():
+    """2.12: study rooms. A shared clock on the week doc, no reads; the
+    room shows in the top bar, else the bottom bar, else the margin; the
+    break waits for the card on screen."""
+    from due_crew import room_model as rm
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 9, 24, 18, 0, tzinfo=utc)
+    room = rm.make_room("dre", t0, 4, 25, 5)
+    at = lambda m: t0 + datetime.timedelta(minutes=m)
+    check("room: 4 x 25 with 5-min breaks is 115 minutes", rm.room_minutes(room) == 115
+          and rm.room_end(room) == at(115))
+    ph = [(m, rm.phase(room, at(m))) for m in (-10, 0, 24, 25, 29, 30, 60, 114, 115)]
+    got = [(m, p["state"], p["round"], round(p["left"] / 60)) for m, p in ph]
+    check("room: the clock, from the start time alone",
+          got == [(-10, "before", 0, 10), (0, "round", 1, 25), (24, "round", 1, 1), (25, "break", 1, 5),
+                  (29, "break", 1, 1), (30, "round", 2, 25), (60, "round", 3, 25), (114, "round", 4, 1),
+                  (115, "done", 4, 0)], got)
+    check("room: no breaks when the break is 0",
+          rm.phase(rm.make_room("x", t0, 2, 25, 0), at(25))["state"] == "round")
+    bad = rm.clean_room({"host": "<b>x</b>" * 40, "start": "2026-09-24T18:00:00Z", "rounds": 999,
+                         "round": 0, "brk": -3})
+    check("room: a friend's doc is bounded (rounds, lengths, host)",
+          bad["rounds"] == rm.MAX_ROUNDS and bad["round"] == 5 and bad["brk"] == 0
+          and len(bad["host"]) == rm.HOST_MAX)
+    check("room: junk is no room", rm.clean_room({"host": "x", "start": "soon"}) is None
+          and rm.clean_room("room") is None and rm.clean_room(None) is None)
+
+    entries = [{"user_id": "dre", "name": "Dre <K>", "you": False, "room": room},
+               {"user_id": "ameya", "name": "Ameya", "you": False, "room": room},
+               {"user_id": "yas", "name": "Yashas", "you": False, "room": None},
+               {"user_id": "me", "name": "sammy", "you": True, "room": None}]
+    inv = rm.invites(entries, None, now=at(36))
+    check("invites: a room my crew is in, with who's in",
+          len(inv) == 1 and [m[1] for m in inv[0][1]] == ["Dre <K>", "Ameya"]
+          and rm.names_line(inv[0][1]) == "Dre and Ameya")
+    check("invites: not once I'm in, dismissed, or over",
+          rm.invites(entries, room, now=at(36)) == [] and rm.invites(entries, None, {rm.cmd_key(room)}, at(36)) == []
+          and rm.invites(entries, None, now=at(200)) == [])
+    entries[3]["room"] = room
+    view = rm.board_view(room, entries, now=at(36))
+    check("lobby: round 2, minutes left, bars, faces, and the host by name",
+          view["mine"]["title"] == "Dre\u2019s room" and view["mine"]["label"] == "19"
+          and view["mine"]["bars"][0] == 1.0 and 0 < view["mine"]["bars"][1] < 1
+          and view["mine"]["initials"] == ["D", "A", "S"] and view["invites"] == [])
+    html = board.room_html(view)
+    check("lobby html: names escaped, Study and Leave",
+          "Dre <K>" not in html and "roomstudy" in html and "roomleave" in html)
+    inv_html = board.room_html(rm.board_view(None, [dict(e, room=room) if e["user_id"] != "me" else dict(e, room=None) for e in entries], now=at(36)))
+    check("invite html: Join by room key, names escaped",
+          "roomjoin:" + rm.cmd_key(room) in inv_html and "&lt;K&gt;" not in inv_html
+          and "Dre, Ameya and Yashas are in" in inv_html)
+    done = {"rounds": 4, "minutes": 115, "with": "Dre and <Ameya>", "uids": [], "day": ""}
+    dh = board.room_html({"mine": None, "invites": [], "done": done})
+    # Join finds the room from what the command carries
+    from due_crew import rooms as rooms_glue
+    from due_crew.app import _state as st
+    picked = []
+    real_set = rooms_glue._set_room
+    rooms_glue._set_room = lambda r, msg: picked.append(r)
+    st["entries"] = [dict(e, room=room) if e["user_id"] != "me" else dict(e, room=None) for e in entries]
+    try:
+        cmd = inv_html.split("roomjoin:")[1].split("'")[0]
+        real_over = rm.is_over
+        rooms_glue.room_model.is_over = lambda r, now=None: False
+        rooms_glue.join(cmd)
+    finally:
+        rooms_glue._set_room = real_set
+        rooms_glue.room_model.is_over = real_over
+        st["entries"] = None
+    check("join: the key in the Join command finds the room", picked == [room])
+    check("done line: how long together and with whom, escaped",
+          "1 h 55 m together" in dh and "&lt;Ameya&gt;" in dh and "roomshare" in dh)
+    check("done share: one line for the chat",
+          rm.done_share(done).startswith("Studied together on Due Crew: 4 rounds, 1 h 55 m with Dre"))
+
+    check("placement: the top bar, else the bottom bar, else the margin",
+          rm.placement(False, False) == "chip" and rm.placement(False, True) == "chip"
+          and rm.placement(True, False) == "bottom" and rm.placement(True, True) == "gutter")
+    data = rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0"))
+    js = rm.widget_js("chip", data)
+    check("widgets: names ride as JSON data and go in as text",
+          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "")
+          and "textContent" in js)
+    check("widgets: the clock comes from start, lengths in ms",
+          data["start"] == int(t0.timestamp() * 1000) and data["round"] == 25 * 60000 and data["brk"] == 5 * 60000)
+
+    # the week doc carries it, and only while it lasts
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    now = datetime.datetime.now(utc)
+    live_room = rm.make_room("sam", now - datetime.timedelta(minutes=10))
+    sam.session["room"] = live_room
+    sam.upload_week("sam", labels, {})
+    week = store.docs["users/sam/shared/week"]
+    check("week doc: my room rides it", "room" in week and "host" in json.dumps(week["room"]))
+    sam.session["room"] = rm.make_room("sam", now - datetime.timedelta(hours=5))
+    sam.upload_week("sam", labels, {})
+    check("week doc: an ended room is gone from it", "room" not in store.docs["users/sam/shared/week"])
+    sam.session["room"] = live_room
+    sam.upload_week("sam", labels, {"paused": True})
+    check("week doc: paused, no room", "room" not in store.docs["users/sam/shared/week"])
+
+    # the glue: the break, and the shortcuts under it
+    from due_crew import rooms
+    from due_crew.app import _state
+    evals, calls = [], []
+    web = types.SimpleNamespace(eval=evals.append)
+    fake_mw = rooms.mw
+    saved = {k: getattr(fake_mw, k, None) for k in ("state", "reviewer", "toolbar", "clearStateShortcuts", "setStateShortcuts", "pm")}
+    fake_mw.state = "review"
+    fake_mw.reviewer = types.SimpleNamespace(web=web, bottom=types.SimpleNamespace(web=web),
+                                             _shortcutKeys=lambda: ["keys"])
+    fake_mw.toolbar = types.SimpleNamespace(web=web)
+    fake_mw.clearStateShortcuts = lambda: calls.append("clear")
+    fake_mw.setStateShortcuts = lambda k: calls.append(("set", k))
+    fake_mw.pm = types.SimpleNamespace(hide_top_bar=lambda: False, hide_bottom_bar=lambda: False)
+    real_client = rooms.client
+    fake_cl = types.SimpleNamespace(signed_in=True, session={"room": rm.make_room("dre", now - datetime.timedelta(minutes=26))},
+                                    _save_session=lambda: None, rules_stale=False, user_id="me")
+    rooms.client = lambda: fake_cl
+    real_cfg = rooms.cfg
+    rooms.cfg = lambda: {}
+    _state.update(entries=entries, labels=labels, room_skip=None, room_break=False)
+    try:
+        rooms.on_question(None)
+        check("break: after a round, the next question gets the break, and the keys go quiet",
+              _state["room_break"] and calls == ["clear"] and any("'break'" in e or '"break"' in e for e in evals))
+        rooms.skip_break()
+        check("break: skip brings the card and its keys back",
+              not _state["room_break"] and calls[-1] == ("set", ["keys"]))
+        evals.clear(); calls.clear()
+        rooms.on_question(None)
+        check("break: a skipped break doesn't come back on the next card", calls == [] and not _state["room_break"])
+        fake_cl.session["room"] = rm.make_room("dre", now - datetime.timedelta(minutes=10))
+        evals.clear()
+        rooms.on_question(None)
+        check("placement: top bar showing, the chip goes there and the margin card doesn't",
+              any('"chip"' in e and '"title"' in e for e in evals)
+              and any('"gutter"' in e and "null" in e.split("var D =")[1][:12] for e in evals))
+    finally:
+        rooms.client, rooms.cfg = real_client, real_cfg
+        for k, v in saved.items():
+            setattr(fake_mw, k, v)
+        _state.update(entries=None, labels=[], room_break=False, room_skip=None)
+
+
 def test_streak_phone_v2111():
     """2.11.1: a day studied only on the phone reaches the desktop when Anki
     syncs, often after the add-on's first count of the day. The streak and

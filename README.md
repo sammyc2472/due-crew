@@ -30,6 +30,11 @@ streak means what it says.
   plan: it fills in as you study and ticks itself off.
 - **Studying now** — tap "I'm studying" in the footer and a dot sits by
   your name for an hour, so friends can come study too.
+- **Study rooms** — "Open a room" in the footer: rounds of 25 minutes with
+  short breaks, now or at a set time. Your crew sees it and joins in one
+  click. While you review, the room's countdown and who's in sit in Anki's
+  top bar (or the bottom bar, if you hide the top one), never on your card.
+  When a round ends, you finish your card, then everyone breaks together.
 - **Stuck on a card?** — in the reviewer's More menu, "this one's getting
   me" flags it for a week. Crewmates who have the same card see it on the
   Decks tab and can send a one-line tip, which shows under the answer the

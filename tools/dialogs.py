@@ -257,6 +257,13 @@ def main(out):
             CONFIG["accent"] = was
             theme.theme_manager.night_mode = False
 
+    def room():
+        from due_crew.ui.room_dialog import RoomDialog
+        dlg = RoomDialog(None)
+        shoot(dlg, os.path.join(out, "room.png"))
+        dlg.later.setChecked(True)
+        shoot(dlg, os.path.join(out, "room-later.png"))
+
     def emoji():
         from due_crew.ui.cheer_dialog import EmojiDialog
         shoot(EmojiDialog(None, "\U0001F98A"), os.path.join(out, "emoji.png"))
@@ -264,7 +271,7 @@ def main(out):
 
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
-                         ("welcome", welcome), ("logo", logo), ("emoji", emoji)):
+                         ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")
