@@ -198,6 +198,10 @@ def _open_profile(uid):
     away = (board._away_text(today_doc, labels[0])
             if labels and today_doc and today_doc.get("away") else "")
     away = away[:1].upper() + away[1:] if away else ""
+    # 2.13: today's reviews and how many were new, when they share reviews
+    today_nums = None
+    if not show_up and today_doc and today_doc.get("reviews") is not None:
+        today_nums = (today_doc.get("reviews"), today_doc.get("newCards"))
     cl = client()
 
     def show(counts):
@@ -225,6 +229,7 @@ def _open_profile(uid):
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
                 "duet": duet, "status": status, "away": away,
                 "emoji": entry.get("emoji") or "",
+                "today": today_nums,
                 "start": my_labels[-1],  # the heatmap's first day, for its weekday rows
             }))
 

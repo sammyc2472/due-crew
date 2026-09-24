@@ -534,6 +534,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
                 "reviews": int(stats.reviews), "studyTimeMs": int(stats.time_ms),
                 "streak": int(stats.streak),
                 "accuracy": None if stats.accuracy is None else float(stats.accuracy)}, c))
+            if "reviews" in row and not client().rules_stale:
+                row["newCards"] = int(stats.new_cards)  # rules-v11 lets a row say it
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:

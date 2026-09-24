@@ -2736,6 +2736,96 @@ def test_show_up():
           "showed up today" in js and "500" not in js and "-day streak" not in js)
 
 
+def test_new_cards_v213():
+    """2.13: under Reviews, how many were new cards: a card whose first
+    answer ever was that day. A card seen before is a review, relearned or
+    not. It goes out under the Reviews switch, never on its own."""
+    from due_crew import share
+    at = lambda d, h=12: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    three_ago = TODAY - datetime.timedelta(days=3)
+    fakes.add_review(conn, at(three_ago), cid=1)                  # first seen three days ago
+    fakes.add_review(conn, at(TODAY, 9), ease=1, cid=1)           # relearned today
+    fakes.add_review(conn, at(TODAY, 10), cid=1)
+    fakes.add_review(conn, at(TODAY, 11), ease=1, cid=2)          # new today, twice
+    fakes.add_review(conn, at(TODAY, 12), cid=2)
+    fakes.add_review(conn, at(TODAY, 13), cid=3)                  # new today
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    q = StatsQueries(col)
+    files = tempfile.mkdtemp()
+    stats = gather_stats(col, files)
+    check("new cards: first answered today, once each; a relearned card is a review",
+          stats.reviews == 5 and stats.new_cards == 2, f"{stats.reviews} {stats.new_cards}")
+    week = {d["label"]: d for d in gather_week(col, files)} if gather_week else {}
+    check("new cards: each past day of the week carries its own count (today is upload_today's)",
+          week.get(three_ago.isoformat(), {}).get("new_cards") == 1 and TODAY.isoformat() not in week)
+    check("new cards: the week's count for Share week", sum(q.new_cards_by_day(7).values()) == 3)
+
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    lb = TODAY.isoformat()
+    values = {"reviews": 5, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4, "newCards": 2}
+    on, mask = sam._day_doc(lb, values, {})
+    off, _m = sam._day_doc(lb, values, {"share_reviews": False})
+    up, _m = sam._day_doc(lb, values, {"show_up": True})
+    check("new cards: on the day doc with Reviews, gone without it or in show-up; the mask clears it",
+          on.get("newCards") == 2 and "newCards" not in off and "newCards" not in up and "newCards" in mask)
+
+    def ent(day):
+        return {"user_id": "u", "name": "Nia", "you": False, "paused": False,
+                "last_updated": "", "exam_date": "", "days": {lb: day}, "decks": []}
+    base = {"labels": [lb], "tomorrow": "", "pending": []}
+    some = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
+                        {"period": "today"}, 0)
+    every = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 20})]),
+                         {"period": "today"}, 0)
+    none = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 0})]),
+                        {"period": "today"}, 0)
+    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "today"}, 0)
+    check("board: a grey line under Reviews, with the whole count on hover",
+          '<small class="nw">12 new</small>' in some and 'title="12 of 205 were new cards"' in some)
+    check("board: \"all new\" when every review was new; nothing when none were or they didn't say",
+          ">all new<" in every and 'class="nw"' not in none and 'class="nw"' not in old)
+    wk = board._week_row({lb: {"reviews": 10, "newCards": 3},
+                          (TODAY - datetime.timedelta(days=1)).isoformat(): {"reviews": 5, "newCards": 1}},
+                         [lb, (TODAY - datetime.timedelta(days=1)).isoformat()])
+    check("board: Week adds the days up", wk["new"] == 4 and wk["reviews"] == 15)
+
+    # squad rows: rules-v11 lets a row say it; older rules refuse it
+    store.auth_uid = "sam"
+    sid = sam.create_squad("sam", "busm", "Sammy")["id"]
+    row = {"name": "Sammy", "day": lb, "reviews": 5, "newCards": 2}
+    check("squad row: newCards lands on rules-v11", sam.upload_squad_rows("sam", row, [sid]) == []
+          and store.docs[f"squads/{sid}/members/sam"]["newCards"]["integerValue"] == "2")
+    check("squad row: a negative count is refused",
+          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": -1}, ["newCards"]) == 403)
+    drow = next(r for r in sam.fetch_squad(sid)["rows"] if r["user_id"] == "sam")
+    check("squad row: read back as new_cards", drow["new_cards"] == 2)
+    store.rules_mode = "v10"
+    check("squad row: rules-v10 refuses the field (so a stale client leaves it out)",
+          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": 2}, ["newCards"]) == 403)
+    store.rules_mode = "repo"
+    view = {"state": "ok", "squads": [{"id": sid, "name": "busm"}], "current": sid, "name": "busm",
+            "open": True, "founder_me": True, "day": lb, "yesterday": "", "people": 1, "studying": 1,
+            "reviews": 5, "rows": [dict(drow, you=True, crew=False, pending=False, knocked_me=False)]}
+    sq = board.render(dict(base, entries=[]), {"period": "squads"}, 0, squad_view=view)
+    check("squads: the same line under Reviews", '<small class="nw">2 new</small>' in sq)
+
+    # the card and the shares
+    check("card: Today line", board.today_text(205, 20) == "205 reviews (20 new)"
+          and board.today_text(1, 1) == "1 review (all new)" and board.today_text(9, None) == "9 reviews")
+    card = board.profile_overlay_js({"name": "Nia", "today": (205, 20), "cells": None, "last_active": ""})
+    check("card: the profile says today's reviews and new cards", "Today: 205 reviews (20 new)" in card)
+    t = share.my_today(lb, 205, 60000, 90.0, 3, 20)
+    w = share.my_week([lb], [True], 205, 60000, 3, 205)
+    check("share: (N new) after the reviews; (all new); none when none were",
+          "205 reviews (20 new)" in t and "205 reviews (all new)" in w
+          and "(" not in share.my_today(lb, 205, 60000, None, 3, 0).split("\n")[1])
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

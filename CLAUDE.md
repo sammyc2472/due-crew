@@ -77,6 +77,13 @@ maintainer. The repo is the source of truth; there is no build step.
   wins. `app.save_cfg` pushes when an account key changes. An install
   that has never set a deck list (and couldn't pull one) doesn't upload an
   empty one.
+- 2.13 also says how many reviews were new cards (`newCards`): a card
+  whose first answer ever was that day (`StatsQueries.new_cards_by_day`,
+  an index probe per answer, no full-revlog scan); relearned and Forget-reset
+  cards are reviews. It rides the day and week docs under the Reviews
+  switch (`METRICS`), and squad rows only on rules-v11 (`memberShape`
+  refuses it before). Shown under Reviews, on the profile card, in Share
+  today and week. Sorting is unchanged. No new reads.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in

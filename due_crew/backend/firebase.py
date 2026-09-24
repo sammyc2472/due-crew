@@ -45,7 +45,7 @@ TIMEOUT = 10
 KEEP_DAYS = 7
 # a squad member doc's row fields (joinedAt is the membership, never touched)
 MEMBER_FIELDS = ("name", "day", "reviews", "studyTimeMs", "accuracy", "streak",
-                 "updatedAt", "week", "emoji")
+                 "updatedAt", "week", "emoji", "newCards")
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
@@ -284,7 +284,7 @@ def _clean_day(doc):
         return None
     out = {}
     for key, conv in (("reviews", _as_int), ("studyTimeMs", _as_int),
-                      ("accuracy", _as_float), ("streak", _as_int)):
+                      ("accuracy", _as_float), ("streak", _as_int), ("newCards", _as_int)):
         if key in doc:
             v = conv(doc[key])
             if v is not None:
@@ -335,7 +335,10 @@ def _week_days(doc, labels):
 
 # the number fields and the Privacy switch each one answers to
 METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
-           ("accuracy", "share_retention"), ("streak", "share_streak"))
+           ("accuracy", "share_retention"), ("streak", "share_streak"),
+           # 2.13: of the reviews, cards answered for the first time; it goes
+           # out under the Reviews switch, never on its own
+           ("newCards", "share_reviews"))
 
 
 def shared_numbers(values, cfg):
@@ -493,6 +496,7 @@ def _clean_member(uid, fields):
             "emoji": clean_emoji(fields.get("emoji")),
             "day": day,
             "reviews": _as_int(fields.get("reviews")),
+            "new_cards": _as_int(fields.get("newCards")),
             "time_ms": _as_int(fields.get("studyTimeMs")),
             "retention": acc if acc is not None and 0 <= acc <= 100 else None,
             "streak": _as_int(fields.get("streak")),
@@ -1269,6 +1273,7 @@ class FirebaseClient:
                       "studyTimeMs": int(stats.time_ms),
                       "accuracy": None if stats.accuracy is None else float(stats.accuracy),
                       "streak": int(stats.streak),
+                      "newCards": int(getattr(stats, "new_cards", 0) or 0),
                       "status": cfg.get("status")}
             before = (self.session.get("day_hashes") or {}).get(label)
             ok = self._put_day(uid, label, values, cfg)
@@ -1428,7 +1433,8 @@ class FirebaseClient:
             values = {"reviews": int(d["reviews"]),
                       "studyTimeMs": int(d["time_ms"]),
                       "accuracy": None if d["accuracy"] is None else float(d["accuracy"]),
-                      "streak": int(d["streak"])}
+                      "streak": int(d["streak"]),
+                      "newCards": int(d.get("new_cards") or 0)}
             ok = self._put_day(uid, d["label"], values, cfg) and ok
         mine = self.session.setdefault("own_days", {})
         written = {d["label"] for d in days or []}

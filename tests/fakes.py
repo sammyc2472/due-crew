@@ -233,11 +233,12 @@ class FakeFirestore:
         return [v.get("stringValue") for v in arr]
 
     def _member_shape(self, f):
-        if not set(f) <= self.MEMBER_FIELDS:
+        allowed = self.MEMBER_FIELDS | ({"newCards"} if self.rules_mode == "repo" else set())
+        if not set(f) <= allowed:
             return False
         if not self._str_ok(f, "name", 60) or "name" not in f:
             return False
-        for key in ("reviews", "studyTimeMs", "streak"):
+        for key in ("reviews", "studyTimeMs", "streak", "newCards"):
             if key in f:
                 r = f[key] or {}
                 if "integerValue" not in r or int(r["integerValue"]) < 0:

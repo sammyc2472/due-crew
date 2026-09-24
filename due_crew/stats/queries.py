@@ -77,6 +77,21 @@ class StatsQueries:
         return {self.day_label(int(ago)): (int(n), int(t or 0), int(c or 0), int(g or 0))
                 for ago, n, t, c, g in rows or []}
 
+    def new_cards_by_day(self, days):
+        """{day_label: n} for the last `days` days: cards whose first answer
+        ever fell on that day. Each card counts once, on its first day; a
+        card seen before is a review, even relearned. One pass over the
+        window's answers, each checking revlog's card index for an earlier
+        one (2.13)."""
+        cutoff = self._cutoff_s()
+        start_ms = (cutoff - days * 86400) * 1000
+        rows = self.col.db.all(
+            "SELECT CAST((? - r.id / 1000) / 86400 AS INTEGER), COUNT(DISTINCT r.cid) "
+            "FROM revlog r WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND NOT EXISTS "
+            "(SELECT 1 FROM revlog p WHERE p.cid = r.cid AND p.ease > 0 AND p.id < r.id) "
+            "GROUP BY 1", cutoff - 1, start_ms, cutoff * 1000)
+        return {self.day_label(int(ago)): int(n) for ago, n in rows or []}
+
     def answers_in_days(self, first, last):
         """Answers on the days `first` to `last - 1` ago, the span
         heatmap_counts(last) keeps once `first` days have settled: one count

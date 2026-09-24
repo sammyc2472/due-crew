@@ -72,23 +72,36 @@ def _studied(flags):
     return sum(1 for f in flags if f is True)
 
 
-def my_today(label, reviews, time_ms, retention, streak):
+def _new_bit(reviews, new_cards):
+    """" (20 new)" after a reviews count (2.13); nothing when none were."""
+    try:
+        n = min(int(new_cards), int(reviews))
+    except (TypeError, ValueError):
+        return ""
+    if n <= 0:
+        return ""
+    return " (all new)" if n == int(reviews) else f" ({n:,} new)"
+
+
+def my_today(label, reviews, time_ms, retention, streak, new_cards=None):
     head = "Today" + (f" · {day_text(label)}" if day_text(label) else "")
-    stats = f"📚 {int(reviews):,} reviews · ⏱ {_fmt_time(int(time_ms or 0))}"
+    stats = (f"📚 {int(reviews):,} reviews{_new_bit(reviews, new_cards)}"
+             f" · ⏱ {_fmt_time(int(time_ms or 0))}")
     if retention is not None:
         stats += f" · 🎯 {float(retention):.1f}%"
     stats += f" · 🔥 {int(streak or 0)}"
     return "\n".join([head, stats, FOOTER])
 
 
-def my_week(labels_oldest_first, flags, reviews, time_ms, streak):
+def my_week(labels_oldest_first, flags, reviews, time_ms, streak, new_cards=None):
     n = _studied(flags)
     head = "This week" + (f" · {date_range(labels_oldest_first)}"
                          if date_range(labels_oldest_first) else "")
     return "\n".join([
         head,
         f"{week_squares(flags)} {n} of {len(flags)} days",
-        f"{int(reviews):,} reviews · {_fmt_time(int(time_ms or 0))} · 🔥 {int(streak or 0)}",
+        f"{int(reviews):,} reviews{_new_bit(reviews, new_cards)} · "
+        f"{_fmt_time(int(time_ms or 0))} · 🔥 {int(streak or 0)}",
         FOOTER])
 
 

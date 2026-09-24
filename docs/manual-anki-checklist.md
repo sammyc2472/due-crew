@@ -174,3 +174,7 @@ installing — add-ons load at launch).
 - [ ] Accent and sort differ between A and B and stay that way.
 - [ ] Settings shows the line about what follows your account.
 - [ ] With rules-v10 still published: B carries on as before 2.13, and its first sync doesn't empty your shared decks.
+- [ ] Learn a few new cards and review some old ones: under your Reviews a grey "N new" line; hover says "N of M were new cards". Only new cards today: "all new". None: no line.
+- [ ] Week tab: the line adds up the week. Squads tab (rules-v11 published): the same line on your row.
+- [ ] Turn Reviews off in Privacy: the line goes from your friends' boards with the number. Just show up: neither.
+- [ ] Your profile card: "Today: X reviews (N new)". Share today and Share week: "(N new)" after the reviews.

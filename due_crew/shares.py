@@ -30,7 +30,7 @@ def _share(kind):
     labels = list(_state["labels"]) or [q.day_label(i) for i in range(7)]
     if kind == "sharetoday":
         text = share.my_today(labels[0], stats.reviews, stats.time_ms,
-                              stats.accuracy, stats.streak)
+                              stats.accuracy, stats.streak, stats.new_cards)
     elif kind == "shareweek":
         text = _my_week_text(q, stats, labels)
     elif kind in ("sharemonth", "monthcopy"):
@@ -74,8 +74,13 @@ def _my_week(q, labels):
 def _my_week_text(q, stats, labels):
     from . import share
     flags, reviews, time_ms = _my_week(q, labels)
-    return share.my_week(list(reversed(board.week_labels(labels))), flags, reviews,
-                         time_ms, stats.streak)
+    week = board.week_labels(labels)
+    try:
+        new_cards = sum(q.new_cards_by_day(len(week) or 1).values())
+    except Exception:
+        new_cards = None
+    return share.my_week(list(reversed(week)), flags, reviews,
+                         time_ms, stats.streak, new_cards)
 
 
 def _day_flag(doc):
