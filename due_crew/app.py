@@ -92,6 +92,7 @@ _state = {
     "decks_ts": 0.0,       # when the Decks tab last fetched them itself
     "my_code": "",         # my friend code, for Copy invite on a solo board
     "knocks_ts": 0.0,      # when knocks were last listed
+    "milestones": [],      # [(uid, name, days)]: a crewmate's 100/365-day streak, today
 }
 
 
@@ -172,7 +173,7 @@ def _reset_runtime():
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
                   knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
-                  knocks_ts=0.0)
+                  knocks_ts=0.0, milestones=[])
     _pending_cheers.clear()
 
 

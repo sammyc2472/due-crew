@@ -260,6 +260,22 @@ def main():
     check("code knock: cannot forge the sender",
           put("users/bob/knocks/dave", code_knock, "carol") == 403)
 
+    # -- 2.10: New Code. Bob claims a fresh code, then retires the old one;
+    # a knock on the retired code is refused, and nobody else can take it
+    # over or retire it for him.
+    check("new code: a fresh code is claimed by its maker",
+          put("friend_codes/BOB999", {"userId": "bob"}, "bob") in (200, 201))
+    check("new code: someone else's code can't be repointed at me",
+          put("friend_codes/BOB999", {"userId": "carol"}, "carol") == 403)
+    check("new code: nor retired by anyone but its owner",
+          call("DELETE", "friend_codes/BOB999", "carol")[0] == 403)
+    check("new code: the owner retires the old one",
+          call("DELETE", "friend_codes/BOB123", "bob")[0] == 200)
+    check("new code: a knock on the retired code is refused",
+          put("users/bob/knocks/dave", dict(code_knock, name="Dave"), "dave") == 403)
+    check("new code: the new one knocks",
+          put("users/bob/knocks/dave", dict(code_knock, name="Dave", code="BOB999"), "dave") in (200, 201))
+
     # -- v2.9: one batchGet of friends' stats gets 20 access calls; the client
     # sends at most ten friends per batch, safe even without edge docs (two
     # calls each). Eleven without edges is where one batch breaks.
@@ -282,11 +298,23 @@ def main():
     check("batch: ten friends without edge docs fit one read", batch(10) == 200)
     check("batch: eleven don't (why FRIENDS_PER_BATCH is ten)", batch(11) == 403)
 
+    # -- v2.10: a cheer may carry `luck` (a bool) or a card's `guid` (short text)
+    put("users/alice", {"displayName": "Alice", "friends": ["dave"]}, "owner")
+    lucky = {"emoji": "🍀", "name": "Dave", "at": TS, "note": "Go get it", "luck": True}
+    check("cheer: a good-luck line from someone added", put("users/alice/cheers/dave", lucky, "dave") in (200, 201))
+    check("cheer: luck must be a bool", put("users/alice/cheers/dave", dict(lucky, luck="yes"), "dave") == 403)
+    tip = {"emoji": "💡", "name": "Dave", "at": TS, "note": "Ken-tuck-y", "guid": "Ab3$kQ9+zX"}
+    check("cheer: a tip naming a card", put("users/alice/cheers/dave", tip, "dave") in (200, 201))
+    check("cheer: a guid past 40 characters is refused",
+          put("users/alice/cheers/dave", dict(tip, guid="x" * 41), "dave") == 403)
+    check("cheer: still only from someone the owner added",
+          put("users/alice/cheers/carol", dict(tip, name="Carol"), "carol") == 403)
+
     # -- markers cumulative
     for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-              "rules-v9"):
+              "rules-v9", "rules-v10"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
-    check("marker rules-v10: not provisioned (403)", call("GET", "meta/rules-v10", "alice")[0] == 403)
+    check("marker rules-v11: not provisioned (403)", call("GET", "meta/rules-v11", "alice")[0] == 403)
 
     print(f"\n{PASSED}/{PASSED + FAILED} rules checks passed")
     sys.exit(1 if FAILED else 0)

@@ -141,6 +141,7 @@ CONFIG = {
     "shared_decks": [1], "squads": [SQUAD, {"id": "b" * 24, "code": "MS2XXXXX", "name": "MS2", "founder": "x"}],
     "squad": SQUAD["id"],
 }
+aqt.mw.addonManager.getConfig = lambda name: CONFIG  # the accent reaches dialogs
 # fingerprints are note guids; these overlap the AnKing subtree built in
 # _collection(), so the Shared Decks dialog has a real match to show
 _SIG = [f"guid{n:06d}" for n in range(1, 13)]
@@ -232,6 +233,30 @@ def main(out):
         dlg.code_input.setText("Study with me on Due Crew · my code IGK123")
         shoot(dlg, os.path.join(out, "welcome.png"))
 
+    def logo():
+        """2.10: the logo takes the accent and the theme. The sign-in and
+        welcome screens drop it quietly if Qt can't draw SVG; here that's a
+        failure, so CI proves it draws."""
+        from due_crew import ui
+        was = CONFIG["accent"]
+        try:
+            for accent, night in (("green", False), ("rose", False), ("purple", True), ("amber", True)):
+                CONFIG["accent"] = accent
+                theme.theme_manager.night_mode = night
+                label = ui.logo_label()
+                if label is None:
+                    raise RuntimeError("logo_label: Qt could not draw the SVG")
+                label.setStyleSheet(f"background: {'#1c1c1c' if night else '#ffffff'}; padding: 16px;")
+                label.adjustSize()
+                label.grab().save(os.path.join(out, f"logo-{accent}{'-dark' if night else ''}.png"))
+            CONFIG["accent"] = "rose"
+            theme.theme_manager.night_mode = False
+            from due_crew.ui.welcome_dialog import WelcomeDialog
+            shoot(WelcomeDialog(None, CLIENT, CONFIG, noop), os.path.join(out, "welcome-rose.png"))
+        finally:
+            CONFIG["accent"] = was
+            theme.theme_manager.night_mode = False
+
     def emoji():
         from due_crew.ui.cheer_dialog import EmojiDialog
         shoot(EmojiDialog(None, "\U0001F98A"), os.path.join(out, "emoji.png"))
@@ -239,7 +264,7 @@ def main(out):
 
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
-                         ("welcome", welcome), ("emoji", emoji)):
+                         ("welcome", welcome), ("logo", logo), ("emoji", emoji)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

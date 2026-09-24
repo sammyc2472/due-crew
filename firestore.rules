@@ -1,6 +1,7 @@
 rules_version = '2';
 
-// Due Crew — Firestore rules (v2.9: adding a code knocks its owner;
+// Due Crew — Firestore rules (v2.10: a cheer may be a good-luck line or a
+// tip on one card; v2.9: adding a code knocks its owner;
 // v2.7: any one emoji in a cheer; v2.5: friend edges, crew emoji, squad week
 // counts, block list and founder handoff; v2.4: hardening; v2.3: squads;
 // v2.2: cheer notes; v2.0: one hosted backend).
@@ -112,12 +113,14 @@ service cloud.firestore {
 
       // v1.2: cheers. Only people the owner added may send, one doc per
       // sender (the doc id), one emoji (any, since v2.7) and, since v2.2,
-      // an optional note of at most 80 characters.
+      // an optional note of at most 80 characters. v2.10: `luck` marks a
+      // line held for the owner's exam morning; `guid` names the one card a
+      // tip is about.
       match /cheers/{senderId} {
         allow read, delete: if isOwner(userId);
         allow create, update: if isFriend(userId)
                               && request.auth.uid == senderId
-                              && request.resource.data.keys().hasOnly(['emoji', 'name', 'at', 'note'])
+                              && request.resource.data.keys().hasOnly(['emoji', 'name', 'at', 'note', 'luck', 'guid'])
                               // v2.7: any one emoji. Rules can't see graphemes; the shape
                               // is "no letters, digits or spaces, at most 16 UTF-16 units"
                               // (the unit size() counts — measured), and the client keeps
@@ -130,7 +133,12 @@ service cloud.firestore {
                               && request.resource.data.at is timestamp
                               && (!('note' in request.resource.data)
                                   || (request.resource.data.note is string
-                                      && request.resource.data.note.size() <= 80));
+                                      && request.resource.data.note.size() <= 80))
+                              && (!('luck' in request.resource.data)
+                                  || request.resource.data.luck is bool)
+                              && (!('guid' in request.resource.data)
+                                  || (request.resource.data.guid is string
+                                      && request.resource.data.guid.size() <= 40));
       }
 
       // v2.3: knocks — "added you", one small doc per sender, overwrite
@@ -205,7 +213,7 @@ service cloud.firestore {
     // (newer rules must still satisfy older clients' probes); add a version
     // here and bump RULES_MARKER in backend/firebase.py together.
     match /meta/{marker} {
-      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6', 'rules-v7', 'rules-v8', 'rules-v9'];
+      allow get: if marker in ['rules-v2', 'rules-v3', 'rules-v4', 'rules-v5', 'rules-v6', 'rules-v7', 'rules-v8', 'rules-v9', 'rules-v10'];
       allow list, create, update, delete: if false;
     }
 

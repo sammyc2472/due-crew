@@ -122,3 +122,24 @@ installing — add-ons load at launch).
 - [ ] Shared Decks: a collapsed tree with a filter; a deck someone shares says "matches <name>" and is expanded into view.
 - [ ] A large collection: syncing no longer stutters the Decks screen (the heatmap and fingerprints are cached for the day).
 - [ ] A crew of more than 20 loads (it didn't before 2.9).
+
+
+## 2.10: studying together (rules-v10)
+- [ ] Rules-v10 pasted in the console BEFORE the release.
+- [ ] Footer → "I'm studying": a dot and "studying now" by your name; a crewmate on 2.10 sees it after a Refresh; "Stop studying" clears it; after an hour it clears on its own.
+- [ ] Status "200 cards, then bed": a small bar and count under your name that fills as you study, then "✓ 200 cards, then bed". A status without a leading number is unchanged.
+- [ ] Reviewer → More (and right-click) → "Due Crew: this one's getting me": tooltip says it's flagged. A crewmate with the same deck sees "🧩 <you> finds “…” tricky" on the Decks tab; a cloze reads […]. A crewmate without the deck sees nothing.
+- [ ] They click Send a tip, write a line: you get a toast; the next time that card's answer shows, the tip sits under it. Not on the question side.
+- [ ] Set a friend's exam date to tomorrow: your board's eve banner says "Add a line to their card". Send one. On their exam day, their first Decks screen opens the good-luck card with the lines; Thanks, crew sends each writer a 💚. It shows once.
+- [ ] A crewmate crosses a 100-day streak: a banner with "Send 💯"; it sends and goes away; × dismisses it.
+- [ ] A cheer in October has 🎃/🍂 in its flurry.
+- [ ] With rules-v9 still published: a tip or a line goes as a plain cheer with its words, and the tooltip says the server needs an update.
+- [ ] The board's top left is the one-line logo, not the words "Due Crew", in your accent; Settings → Accent changes it on Save; night mode turns the wordmark pale. A narrow window puts the Today/Week/Decks/Squads pills under it. The signed-out and loading cards show it too.
+- [ ] The logo tops Sign In / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign In: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.
+
+## 2.11: the logo on the board, New Code
+
+- [ ] The board's top left is the logo (see the 2.10 logo lines above).
+- [ ] Friends → New Code → confirm: a different code shows; Copy Invite copies it; the solo board's Copy invite copies the new one too, without waiting for tomorrow.
+- [ ] A friend adds the OLD code: "That code doesn't match anyone." They add the new one: it works, and you get the Add back banner.
+- [ ] Your crew is unchanged after New Code, on your board and on theirs.

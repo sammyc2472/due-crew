@@ -7,7 +7,7 @@ from aqt.qt import (
     QTabWidget, QWidget, Qt,
 )
 
-from . import accent, attach_alive, danger, run_bg
+from . import accent, attach_alive, danger, logo_label, run_bg
 
 ERRORS = {
     "INVALID_LOGIN_CREDENTIALS": "Email or password is incorrect.",
@@ -41,6 +41,9 @@ class AuthDialog(QDialog):
         self.setWindowTitle("Due Crew")
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
+        logo = logo_label()
+        if logo is not None:
+            root.addWidget(logo)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._signin_tab(), "Sign In")

@@ -12,7 +12,7 @@ from aqt.qt import (
 from aqt.utils import tooltip
 
 from ..backend.firebase import friend_code_from
-from . import accent, attach_alive, copy_text, run_bg, shared_words
+from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
 
 
 class WelcomeDialog(QDialog):
@@ -31,6 +31,9 @@ class WelcomeDialog(QDialog):
         self.setWindowTitle("Due Crew")
         self.setMinimumWidth(460)
         root = QVBoxLayout(self)
+        logo = logo_label()
+        if logo is not None:
+            root.addWidget(logo)
 
         hello = QLabel(f"You're in, {html.escape(client.display_name or 'friend')}.")
         hello.setStyleSheet("font-size: 16px; font-weight: bold;")

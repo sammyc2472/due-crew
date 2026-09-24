@@ -43,6 +43,7 @@ class FriendsDialog(QDialog):
         self.knocks = []       # [(sender_uid, name)] from squads
         self.loaded = False
         self.changed = False
+        self.new_code = None   # set when the code was swapped: the board shows it
         attach_alive(self)
         self._build()
         QTimer.singleShot(0, self._load)
@@ -71,6 +72,11 @@ class FriendsDialog(QDialog):
         invite.setToolTip("Everything a friend needs, in one paste")
         invite.clicked.connect(self._copy_invite)
         code_row.addWidget(invite)
+        # 2.10: a code also knocks now, so one posted too widely needs a way out
+        self.new_btn = QPushButton("New Code")
+        self.new_btn.setToolTip("Retire this code and get a fresh one. Your crew stays.")
+        self.new_btn.clicked.connect(self._new_code)
+        code_row.addWidget(self.new_btn)
         code_row.addStretch()
         root.addLayout(code_row)
         hint = QLabel("You're crew once you've both added each other's codes.")
@@ -118,6 +124,7 @@ class FriendsDialog(QDialog):
         self._set_writable(False)
 
     def _set_writable(self, on):
+        self.new_btn.setEnabled(on)
         self.add_btn.setEnabled(on)
         self.code_input.setEnabled(on)
         self.remove_btn.setEnabled(on)
@@ -256,6 +263,29 @@ class FriendsDialog(QDialog):
         if self.code:
             copy_text(invite_text(self.code))
             tooltip("Invite copied.")
+
+    def _new_code(self):
+        if not self.loaded or not self.code:
+            return
+        if not confirm(self, "New Code",
+                       "Get a new code? This one stops working, and so does any invite "
+                       "with it in. Your crew stays as it is.", "New Code"):
+            return
+        old = self.code
+        self.new_btn.setEnabled(False)
+
+        def done(result, err):
+            self.new_btn.setEnabled(self.loaded)
+            if err or result is None:
+                tooltip("Couldn't reach the server. Your code is unchanged.")
+                return
+            code, problem = result
+            if code:
+                self.code = self.new_code = code
+                self.code_label.setText(code)
+            tooltip(problem or "New code. The old one no longer works.")
+
+        run_bg(self, lambda: self.client.new_friend_code(self.uid, old), done)
 
     def _add(self):
         if not self.loaded:

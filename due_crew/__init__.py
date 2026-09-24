@@ -46,6 +46,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
+from . import together
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -362,6 +363,11 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                     if old < t <= streak_val:
                         toasts.append(f"{html.escape(e['name'])} hit a "
                                       f"{t}-day streak \U0001F525")
+                        if t >= 100:
+                            # 2.10: the big ones get a banner with a one-tap cheer
+                            _state["milestones"] = [m for m in _state["milestones"]
+                                                    if m[0] != e["user_id"]]
+                            _state["milestones"].append((e["user_id"], e["name"], t))
             _state["prev_streaks"][e["user_id"]] = streak_val
 
     _state["prev_label"] = today
@@ -374,6 +380,11 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         cl.session["cheers_seen"] = seen
         cl.session.pop("cheers_seen_ts", None)
         cl._save_session()
+    # 2.10: good-luck lines wait for my exam morning, tips for their card
+    today_lb = labels[0]
+    my_exam = str(c.get("exam_date") or "")
+    fresh, luck, tips = together.route_cheers(fresh, my_exam, today_lb)
+    toasts += together.keep(luck, tips, my_exam, today_lb)
     if fresh:
         _pending_cheers.extend(fresh)
 
@@ -423,21 +434,30 @@ def _on_render(deck_browser, content):
             refresh_board()
         else:
             _state["board_shown"] = True
-            content.stats += board.render(_board_data(), c, _state["ts"],
-                                          wrap=_wrap_info(), deltas=_deck_deltas(),
-                                          exam_eve=_exam_eve_info(),
-                                          rules_stale=client().rules_stale,
-                                          squad_view=_squad_view(c), knocks=_visible_knocks(c),
-                                          reviews=review_banners(),
-                                          sync_error=_state["sync_error"])
+            content.stats += _board_html(c)
             _push_if_stale()
     except Exception:
         traceback.print_exc()
 
 
+def _board_html(c):
+    """The board from cache: one call for the first render and every swap."""
+    show_up = bool(c.get("show_up"))
+    return board.render(_board_data(), c, _state["ts"],
+                        wrap=_wrap_info(), deltas=_deck_deltas(),
+                        exam_eve=_exam_eve_info(),
+                        rules_stale=client().rules_stale,
+                        squad_view=_squad_view(c), knocks=_visible_knocks(c),
+                        reviews=review_banners(), sync_error=_state["sync_error"],
+                        live=together.is_live(),
+                        tricky=together.tricky_view() if c.get("period") == "decks" else None,
+                        milestones=None if show_up else _state["milestones"])
+
+
 def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
+    together.show_luck_card()
 
 
 def _last_studied(q, stats):
@@ -537,6 +557,18 @@ def _on_js(handled, message, context):
             _fetch_decks(force=True)
     elif cmd == "friends":
         open_friends()
+    elif cmd == "live":
+        together.toggle_live()
+    elif cmd == "luckline" and len(parts) > 2:
+        together.send_luck_line(parts[2])
+    elif cmd == "luckthanks":
+        together.luck_thanks()
+    elif cmd == "tricktip" and len(parts) > 3:
+        together.send_tip(parts[2], parts[3])
+    elif cmd == "milestonecheer" and len(parts) > 2:
+        together.milestone_cheer(parts[2])
+    elif cmd == "milestonex" and len(parts) > 2:
+        together.dismiss_milestone(parts[2])
     elif cmd == "copyinvite":
         _copy_friend_invite()
     elif cmd == "addcode":
@@ -629,12 +661,7 @@ def _swap(c):
     if _state["entries"] is None:
         _rerender()
         return
-    html_out = board.render(_board_data(), c, _state["ts"],
-                            wrap=_wrap_info(), deltas=_deck_deltas(),
-                            exam_eve=_exam_eve_info(),
-                            rules_stale=client().rules_stale,
-                            squad_view=_squad_view(c), knocks=_visible_knocks(c),
-                            reviews=review_banners(), sync_error=_state["sync_error"])
+    html_out = _board_html(c)
     js = """
     (function() {
         var el = document.getElementById('due-crew');
@@ -683,8 +710,12 @@ def open_friends(focus_add=False):
                         muted=list(_wrap_data().get("muted_knocks") or []),
                         on_mute=_mute_knocker, focus_add=focus_add)
     dlg.exec()
+    if dlg.new_code:
+        _state["my_code"] = dlg.new_code  # the solo board's Copy invite
     if dlg.changed:
         refresh_board(full=True)
+    elif dlg.new_code:
+        _swap(cfg())
 
 
 def open_decks():
@@ -794,6 +825,14 @@ gui_hooks.profile_did_open.append(_on_profile_open)
 
 
 gui_hooks.profile_will_close.append(_on_profile_close)
+
+
+# 2.10: tips under the answer of the card they're for, and the flag on the
+# reviewer's More menu. Both hooks exist on every Anki the add-on supports.
+gui_hooks.card_will_show.append(together.card_will_show)
+
+
+gui_hooks.reviewer_will_show_context_menu.append(together.reviewer_menu)
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

@@ -10,6 +10,7 @@ import re
 import sqlite3
 import sys
 import tempfile
+import types
 
 HARNESS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -368,9 +369,9 @@ def test_exam_eve_and_rules_render():
     html = b.render(data, {}, 0,
                     exam_eve={"people": [("p1", "Priya <x>")]},
                     rules_stale=True)
-    check("exam eve: banner renders, name escaped, cheer wired",
+    check("exam eve: banner renders, name escaped, a line for their card wired (2.10)",
           "exam is tomorrow" in html and "Priya &lt;x&gt;" in html
-          and "cheerpick:p1" in html and "evedismiss" in html)
+          and "luckline:p1" in html and "Add a line to their card" in html and "evedismiss" in html)
     check("rules: footer notice renders",
           "server catching up" in html and "duecrew:rules" not in html)
     two = b.render(data, {}, 0, exam_eve={"people": [("p1", "Priya"), ("p2", "Theo")]})
@@ -1901,6 +1902,57 @@ def test_code_knocks_v29():
           len(codes) == 1 and store.docs["users/newbie"].get("friendCode", {}).get("stringValue") == codes[0][13:])
 
 
+def test_new_code():
+    """2.10: New Code swaps my friend code; the old one stops working, the
+    crew stays, and the board shows the new one the same day."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
+    store.docs["friend_codes/SAM123"] = {"userId": fv_str("sam")}
+    store.docs["users/sam"]["friendCode"] = fv_str("SAM123")
+    store.auth_uid = "sam"
+    sam = new_client(store, "sam", "Sammy")
+    sam._people = {"uid": "sam", "day": "x", "own": {"friendCode": "SAM123"}}
+    code, err = sam.new_friend_code("sam", "SAM123")
+    check("new code: a fresh code, pointed at me, on my profile; the old one gone",
+          err is None and code and code != "SAM123"
+          and store.docs[f"friend_codes/{code}"]["userId"]["stringValue"] == "sam"
+          and store.docs["users/sam"]["friendCode"]["stringValue"] == code
+          and "friend_codes/SAM123" not in store.docs)
+    check("new code: the day's cached profile shows it (the board's Copy invite)",
+          sam._people["own"]["friendCode"] == code)
+    check("new code: the crew is untouched",
+          [v["stringValue"] for v in store.docs["users/sam"]["friends"]["arrayValue"]["values"]] == ["priya"])
+    store.auth_uid = "priya"
+    priya = new_client(store, "priya", "Priya")
+    _f, old_err = priya.add_friend("priya", "SAM123", [], "Priya")
+    check("new code: the old code no longer matches anyone", old_err == "That code doesn't match anyone.")
+    # someone else holds the first draw: the rules refuse, the next draw lands
+    store.auth_uid = "sam"
+    store.docs["friend_codes/TAKEN1"] = {"userId": fv_str("priya")}
+    draws = iter("TAKEN1" + "FRESH2")
+    real = firebase.secrets.choice
+    firebase.secrets.choice = lambda seq: next(draws)
+    try:
+        code2, err2 = sam.new_friend_code("sam", code)
+    finally:
+        firebase.secrets.choice = real
+    check("new code: a code that's someone else's is skipped, and stays theirs",
+          code2 == "FRESH2" and err2 is None
+          and store.docs["friend_codes/TAKEN1"]["userId"]["stringValue"] == "priya")
+    # the profile write fails: the new code is let go and the old one stands
+    real_patch = sam.patch_doc
+    sam.patch_doc = lambda path, *a, **k: False if path == "users/sam" else real_patch(path, *a, **k)
+    try:
+        code3, err3 = sam.new_friend_code("sam", "FRESH2")
+    finally:
+        sam.patch_doc = real_patch
+    check("new code: a failed profile write keeps the old code, and frees the new one",
+          code3 is None and err3 and "friend_codes/FRESH2" in store.docs
+          and sum(1 for p, d in store.docs.items() if p.startswith("friend_codes/")
+                  and d["userId"]["stringValue"] == "sam") == 1)
+
+
 def test_squad_privacy_v29():
     """2.9 (G2): the Privacy switches reach squad rows, through the same
     gate as the day docs."""
@@ -1998,6 +2050,180 @@ def test_ways_in_v29():
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
     check("ways in: your card's Privacy… opens Settings on Privacy",
           "duecrew:settings:privacy" in js)
+
+
+def test_logo_accent():
+    """2.10: the logo in the add-on is the kit's artwork, byte for byte,
+    with only its fills swapped for the accent and theme."""
+    from due_crew import logo
+    here = os.path.join(REPO, "due_crew", "logo.svg")
+    with open(here, "rb") as a, open(os.path.join(REPO, "docs", "logo", "svg", "due-crew-logo.svg"), "rb") as b:
+        check("logo: the add-on's copy is the docs/logo original", a.read() == b.read())
+    shapes = lambda s: re.sub(r'fill="#[0-9a-f]{6}"', 'fill=""', s)
+    green = logo.svg("light", "green")
+    check("logo: green in light is the original", green == open(here, encoding="utf-8").read())
+    for name, shades in board.ACCENTS.items():
+        for shade in ("light", "dark"):
+            s = logo.svg(shade, name)
+            pal = board.LIGHT if shade == "light" else board.DARK
+            check(f"logo {name}/{shade}: six studied days in the accent, one off, the wordmark",
+                  s.count(f'fill="{shades[shade][0]}"') == 6 and s.count(f'fill="{pal["line"]}"') == 1
+                  and s.count(f'fill="{logo.WORDMARK[shade]}"') == 1)
+            check(f"logo {name}/{shade}: only the fills change", shapes(s) == shapes(green))
+    check("logo: an unknown accent falls back to green", logo.svg("light", "nope") == green)
+    # the board's title is the one-line logo, coloured by the board's own tokens
+    with open(os.path.join(REPO, "due_crew", "logo_line.svg"), "rb") as a, \
+            open(os.path.join(REPO, "docs", "logo", "svg", "due-crew-logo-line.svg"), "rb") as b:
+        check("logo: the board's one-line copy is the docs/logo original", a.read() == b.read())
+    mark = logo.board_mark()
+    check("board mark: six studied days, one off, the wordmark; no fixed colours",
+          mark.count('class="on"') == 6 and mark.count('class="off"') == 1
+          and mark.count('class="wm"') == 1 and "fill=" not in mark and 'aria-label="Due Crew"' in mark)
+    css = board._css({"accent": "rose", "theme": "auto"})
+    check("board mark: the CSS points it at the accent, line and mark tokens",
+          ".dc-mark .on {{ fill: var(--dc-accent); }}".replace("{{", "{").replace("}}", "}") in css
+          and "--dc-mark: #242424" in css and "--dc-mark: #e6e8e3" in css)
+    check("board mark: tops the signed-out card, in place of the words",
+          'class="dc-mark"' in board.signed_out_card({}) and "<b>Due Crew</b>" not in board.signed_out_card({}))
+
+
+def test_together_v210():
+    """2.10: studying now, tricky cards and tips, the good-luck card, the
+    tiny plan, and the season. No new reads: all of it rides the week doc
+    and cheers."""
+    from due_crew import together
+    from due_crew.app import _state
+    wrapmod = _patched_due_crew()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    for a, b in (("sam", "dre"), ("dre", "sam")):
+        store.docs[f"users/{a}/friends/{b}"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+
+    # L1 + L2 ride the week doc
+    dre = new_client(store, "dre", "Dre")
+    dre.session["live_until"] = (now + datetime.timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    dre.session["tricky"] = [{"guid": "guid000003", "text": "Heart sounds: S3 <b>", "deck": "Cardio",
+                              "at": labels[0]}]
+    _push29(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {})
+    wk = store.docs["users/dre/shared/week"]
+    check("live + flags: the week doc carries liveUntil and the flagged card",
+          "liveUntil" in wk and "tricky" in wk)
+    store.auth_uid = "sam"
+    sam = new_client(store, "sam", "Sammy")
+    data = sam.fetch_board("sam", labels, tomorrow=tomorrow)
+    d = next(e for e in data["entries"] if e["user_id"] == "dre")
+    check("live + flags: a friend's refresh reads both, no extra reads",
+          board.live_now(d["live_until"]) and d["tricky"][0]["guid"] == "guid000003")
+    dre.session["live_until"] = (now - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _push29(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {})
+    check("live: once the hour is up, the next push drops it",
+          "liveUntil" not in store.docs["users/dre/shared/week"])
+
+    rows = board.build_rows([dict(d, live_until=(now + datetime.timedelta(minutes=5)).isoformat())],
+                            labels, tomorrow, "today", {})[0]
+    html = board._row_html(rows[0], "#1", {})
+    check("live: the row shows a dot and 'studying now'", "dc-live" in html and "studying now" in html)
+    page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=False)
+    stop = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, live=True)
+    check("live: the footer offers I'm studying, then Stop studying",
+          "I&rsquo;m studying" in page and "Stop studying" in stop and "duecrew:live" in page)
+
+    # L2: flags I share show on the Decks tab; tips go to the card
+    store.auth_uid = "sam"
+    col = make_user_col([TODAY])
+    fakes.add_card(col.db.conn, 3, did=1)
+    sys.modules["aqt"].mw.col = col
+    _state["entries"] = data["entries"]
+    view = together.tricky_view()
+    check("flags: only on notes I have, with who and where",
+          [(v["uid"], v["index"], v["deck"]) for v in view] == [("dre", 0, "Cardio")])
+    col2 = make_user_col([TODAY])
+    sys.modules["aqt"].mw.col = col2
+    check("flags: a card I don't have stays out of view", together.tricky_view() == [])
+    sys.modules["aqt"].mw.col = None
+    flags = board._tricky_html(view)
+    check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
+    check("flags: a cloze shows as [...], never its answer",
+          together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
+    tip = board.tip_html([("Dre <i>", "Ken-tuck-y")])
+    check("tips: under the answer, escaped", "Dre &lt;i&gt;" in tip and "Ken-tuck-y" in tip)
+
+    # L3 + tips: cheers carry luck / guid; v9 servers get a plain cheer
+    store.auth_uid = "dre"
+    check("luck: a line goes out marked", dre.send_cheer("sam", "dre", "Dre", "\U0001F340", "Go get it", luck=True) is True
+          and store.docs["users/sam/cheers/dre"]["luck"] == {"booleanValue": True})
+    store.auth_uid = "sam"
+    got = sam.fetch_board("sam", labels, tomorrow=tomorrow)["cheers"]
+    check("luck: it arrives marked", got and got[0]["luck"] is True and got[0]["note"] == "Go get it")
+    old = fakes.FakeFirestore(rules_mode="v9")
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
+    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    d9 = new_client(old, "dre", "Dre")
+    res = d9.send_cheer("sam", "dre", "Dre", "\U0001F4A1", "Ken-tuck-y", guid="guid000003")
+    check("tips on rules-v9: sent as a plain cheer with its words, and says so",
+          res == "no-extras" and "guid" not in old.docs["users/sam/cheers/dre"]
+          and old.docs["users/sam/cheers/dre"]["note"] == {"stringValue": "Ken-tuck-y"})
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+
+    exam = (TODAY + datetime.timedelta(days=1)).isoformat()
+    cheers = [{"from": "dre", "name": "Dre", "emoji": "\U0001F340", "note": "Go", "luck": True, "guid": ""},
+              {"from": "eve", "name": "Eve", "emoji": "\U0001F4A1", "note": "S3 = Kentucky", "luck": False,
+               "guid": "guid000003"},
+              {"from": "kai", "name": "Kai", "emoji": "\U0001F389", "note": "", "luck": False, "guid": ""}]
+    play, luck, tips = together.route_cheers(cheers, exam, TODAY.isoformat())
+    check("routing: a luck line waits for the exam, a tip for its card, the rest play",
+          [c["from"] for c in play] == ["kai"] and [c["from"] for c in luck] == ["dre"]
+          and [c["from"] for c in tips] == ["eve"])
+    play2, luck2, _t = together.route_cheers(cheers[:1], "", TODAY.isoformat())
+    check("routing: with no exam ahead, a luck line plays as a cheer", play2 and not luck2)
+    toasts = together.keep(luck, tips, exam, TODAY.isoformat())
+    w = wrapmod._wrap_data()
+    check("keeping: the line and the tip are held locally, and each says so",
+          w["luck"]["exam"] == exam and w["luck"]["lines"][0]["note"] == "Go"
+          and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
+    class Card:
+        def note(self):
+            return types.SimpleNamespace(guid="guid000003")
+    check("tips: on the answer only",
+          "Kentucky" in together.card_will_show("A", Card(), "reviewAnswer")
+          and together.card_will_show("Q", Card(), "reviewQuestion") == "Q")
+    js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
+    check("good-luck card: lines go in as text, and Thanks is wired",
+          "textContent" in js and "innerHTML" not in js and "duecrew:luckthanks" in js
+          and json.dumps("</div><script>x</script>")[1:-1] in js)
+    eve = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0,
+                       exam_eve={"people": [("m1", "Marisa")]})
+    check("good-luck card: the eve banner asks for a line", "luckline:m1" in eve)
+
+    # L4: the plan
+    row = {"user_id": "a", "name": "Ann", "you": False, "paused": False, "quiet": False, "stale": False,
+           "last_updated": "", "reviews": 140, "time_ms": 1, "retention": None, "streak": 1,
+           "status": "200 cards, then bed"}
+    doing = board._row_html(row, "#1", {"show_last_active": False})
+    done = board._row_html(dict(row, reviews=205), "#1", {"show_last_active": False})
+    plain = board._row_html(dict(row, reviews=None), "#1", {"show_last_active": False})
+    check("plan: a number-led status fills in, then ticks; no numbers, no bar",
+          "dc-plan" in doing and "140" in doing and "&#10003;" in done and "dc-plan" not in done
+          and "dc-plan" not in plain and "&#10003;" not in plain)
+    check("plan: only a leading number counts",
+          board.plan_target("200 cards") == 200 and board.plan_target("cards: 200") is None
+          and board.plan_target("0 today") is None)
+
+    # L5: the season and the big streaks
+    check("season: October is pumpkins, December snow",
+          "\U0001F383" in board.season_emoji(datetime.date(2026, 10, 3))
+          and "⛄" in board.season_emoji(datetime.date(2026, 12, 3)))
+    js = board.flurry_js(["\U0001F389"], "Dre sent cheers", season=["\U0001F383"])
+    check("season: flurries carry a sprinkle of it", json.dumps(["\U0001F389", "\U0001F389", "\U0001F383"]) in js)
+    ban = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0,
+                       milestones=[("dre", "Dre <b>", 100)])
+    check("milestone: a 100-day streak gets a banner with a one-tap cheer",
+          "Dre &lt;b&gt;" in ban and "milestonecheer:dre" in ban and "100-day streak" in ban)
+    _state["entries"] = None
 
 
 def test_row_cap():

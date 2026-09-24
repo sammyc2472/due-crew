@@ -47,7 +47,7 @@ MEMBER_FIELDS = ("name", "day", "reviews", "studyTimeMs", "accuracy", "streak",
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v9"
+RULES_MARKER = "rules-v10"
 # Firestore allows 20 exists()/get() calls per multi-document read, and
 # isFriend() spends one per friend (an edge doc), or two (edge missing, then
 # the profile array). Past that the WHOLE batch is refused: measured in the
@@ -57,7 +57,12 @@ FRIENDS_PER_BATCH = 10
 # 2.9: each client also writes users/{me}/shared/week, its last eight days in
 # one doc. A friend whose profile says 2.9 or newer is read from it.
 WEEK_DOC_SINCE = (2, 9, 0)
-WEEK_FIELDS = ("v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo")
+WEEK_FIELDS = ("v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo",
+               "liveUntil", "tricky")
+LIVE_MINUTES = 60   # 2.10: "studying now" lasts this long unless stopped
+TRICKY_MAX = 3      # 2.10: cards flagged "this one's getting me", newest kept
+TRICKY_DAYS = 7     # ...for this long
+GUID_MAX = 40
 # The token endpoint's verdicts that mean "this sign-in is over" — as opposed
 # to a network failure or a 5xx, which must NEVER sign anyone out: going
 # offline is not the same as being signed out.
@@ -340,6 +345,42 @@ def shared_numbers(values, cfg):
         return {}
     return {field: values[field] for field, key in METRICS
             if cfg.get(key, True) and values.get(field) is not None}
+
+
+def clean_tricky(value, today_label=None):
+    """Flagged cards from a week doc (2.10), coerced: [{guid, text, deck,
+    at}], at most TRICKY_MAX, none older than TRICKY_DAYS when a day is
+    given. Everything is text that ends up escaped in the board."""
+    out = []
+    if not isinstance(value, list):
+        return out
+    oldest = ""
+    if today_label:
+        try:
+            oldest = (datetime.date.fromisoformat(today_label)
+                      - datetime.timedelta(days=TRICKY_DAYS)).isoformat()
+        except ValueError:
+            oldest = ""
+    for t in value:
+        if not isinstance(t, dict):
+            continue
+        guid = str(t.get("guid") or "")[:GUID_MAX]
+        at = str(t.get("at") or "")[:10]
+        if not guid or (oldest and at < oldest):
+            continue
+        out.append({"guid": guid, "text": clean_note(t.get("text"), 60),
+                    "deck": clean_note(t.get("deck"), 40), "at": at})
+    return out[-TRICKY_MAX:]
+
+
+def live_now(until, now_utc=None):
+    """Whether a "studying now" time (ISO, UTC) is still ahead."""
+    try:
+        t = datetime.datetime.fromisoformat(str(until).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    now_utc = now_utc or datetime.datetime.now(datetime.timezone.utc)
+    return t > now_utc
 
 
 def _clean_decks(value):
@@ -884,6 +925,34 @@ class FirebaseClient:
                 return code
         return None
 
+    def new_friend_code(self, uid, old):
+        """2.10: swap my code for a fresh one, and the old one stops working.
+        Since 2.9 a code also knocks, so one posted somewhere public keeps
+        landing banners on my board; this is the way out. Friendships are
+        edges and arrays of uids, so the crew doesn't notice. Order: the new
+        code is claimed, then the profile points at it, then the old doc
+        goes. If the profile write fails the new doc is let go and the old
+        code stays. Returns (code, error)."""
+        for _ in range(3):
+            code = "".join(secrets.choice(string.ascii_uppercase + string.digits)
+                           for _ in range(FRIEND_CODE_LEN))
+            if code == old:
+                continue
+            # someone else's code: the rules refuse the write -> another draw
+            if self.patch_doc(f"friend_codes/{code}", {"userId": uid}):
+                break
+        else:
+            return None, "Couldn't make a new code. Try again."
+        if not self.patch_doc(f"users/{uid}", {"friendCode": code}):
+            self.delete_doc(f"friend_codes/{code}")
+            return None, "Couldn't save. Your code is unchanged."
+        # the day's cached profile would show the old code until tomorrow
+        if self._people and isinstance(self._people.get("own"), dict):
+            self._people["own"]["friendCode"] = code
+        if old and not self.delete_doc(f"friend_codes/{old}"):
+            return code, "New code saved, but the old one couldn't be retired. Try again later."
+        return code, None
+
     def add_friend(self, uid, code, own_friends, my_name=None):
         """Add by code. Since 2.9 the add also knocks, with their own code in
         the knock (rules-v9 lets that through), so their board offers a
@@ -1057,6 +1126,10 @@ class FirebaseClient:
                 "exam_date": str(head.get("examDate") or ""),
                 "days": days,
                 "decks": decks,  # None = not fetched this time
+                # 2.10: studying now, and the cards they've flagged
+                "live_until": str(self.session.get("live_until") or "") if u == uid
+                              else str((week or {}).get("liveUntil") or ""),
+                "tricky": [] if u == uid else clean_tricky((week or {}).get("tricky"), day),
             })
 
         cheers = []
@@ -1071,31 +1144,50 @@ class FirebaseClient:
                                "name": str(prof.get("displayName", "?")),
                                "emoji": emoji,
                                "at": str(doc.get("at", "")),
-                               "note": clean_note(doc.get("note"))})
+                               "note": clean_note(doc.get("note")),
+                               # 2.10: held for an exam morning, or a tip on a card
+                               "luck": doc.get("luck") is True,
+                               "guid": str(doc.get("guid") or "")[:GUID_MAX]})
         if cheer_docs:
             self.delete_cheers(uid, list(cheer_docs))  # delivered, or junk: either way done
         return {"entries": entries, "pending": pending, "cheers": cheers,
                 "my_friends": [fid for fid, _p, _m in resolved],
                 "my_code": str(own.get("friendCode") or "")}
 
-    def send_cheer(self, to_uid, from_uid, from_name, emoji, note=None):
+    def send_cheer(self, to_uid, from_uid, from_name, emoji, note=None, luck=False, guid=None):
         """One write; overwrites any previous cheer to the same person.
-        A note needs rules-v5: if the server still runs older rules the
-        cheer goes again without it and the result is "no-note", so the
-        sender hears that the words stayed behind."""
+        A note needs rules-v5; `luck` (a line held for their exam morning)
+        and `guid` (a tip on one card) need rules-v10. On older rules the
+        cheer goes again without what they refused, and the result says so:
+        "no-extras" (sent as a plain cheer, words kept) or "no-note"."""
         emoji = clean_emoji(emoji)
         if not emoji:
             return False  # nothing that isn't one emoji is ever sent
         path = f"users/{to_uid}/cheers/{from_uid}"
         data = {"emoji": emoji, "name": from_name,
                 "at": {"timestampValue": _now_ts()}}
-        # note is always in the mask: a bare cheer must not re-deliver the
-        # words from the last one (the doc is overwritten, not replaced)
-        mask = list(data) + ["note"]
+        # everything optional is always in the mask: a bare cheer must not
+        # re-deliver the words, the luck, or the card of the last one
+        mask = list(data) + ["note", "luck", "guid"]
         note = clean_note(note)
         if note:
-            if self.patch_doc(path, dict(data, note=note), mask, label="cheer note"):
+            data["note"] = note
+        extras = {}
+        if luck:
+            extras["luck"] = True
+        if guid:
+            extras["guid"] = str(guid)[:GUID_MAX]
+        if extras:
+            if self.patch_doc(path, dict(data, **extras), mask, label="cheer extras"):
                 return True
+            if self.patch_doc(path, data, mask, label="cheer note" if note else None):
+                return "no-extras"
+            data.pop("note", None)
+            return "no-note" if note and self.patch_doc(path, data, mask) else False
+        if note:
+            if self.patch_doc(path, data, mask, label="cheer note"):
+                return True
+            data.pop("note")
             return "no-note" if self.patch_doc(path, data, mask) else False
         return self.patch_doc(path, data, mask)
 
@@ -1246,6 +1338,13 @@ class FirebaseClient:
         rng = away_range(cfg)
         if rng and not paused:
             doc["awayFrom"], doc["awayTo"] = rng[0].isoformat(), rng[1].isoformat()
+        # 2.10: "studying now" while it lasts, and the cards I've flagged
+        live = self.session.get("live_until")
+        if live and live_now(live) and not paused:
+            doc["liveUntil"] = str(live)
+        tricky = clean_tricky(self.session.get("tricky"), labels[0])
+        if tricky and not paused:
+            doc["tricky"] = tricky
         digest = hashlib.sha1(json.dumps(doc, sort_keys=True).encode()).hexdigest()
         if self.session.get("week_hash") == digest:
             return True

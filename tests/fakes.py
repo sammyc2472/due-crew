@@ -164,8 +164,10 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v9: v8 plus a knock
-                      that carries the recipient's own friend code)
+      "repo"        — current repository rules (rules-v10: v9 plus a cheer
+                      that carries `luck` or a card's `guid`)
+      "v9"          — the paste before it (v2.9): knocks may carry the
+                      recipient's own friend code
       "v8"          — the paste before it (v2.7–v2.8): any one emoji in a
                       cheer, knocks between squadmates only
       "v7"          — the paste before it (v2.5–v2.6): squads with member
@@ -254,12 +256,15 @@ class FakeFirestore:
 
     CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}  # all that rules before v8 accept
     MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-                        "rules-v9"),
+                        "rules-v9", "rules-v10"),
+               "v9": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
+                      "rules-v9"),
                "v8": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
                "v7": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
-    MODERN = ("repo", "v8", "v7")  # everything v2.5 brought is in all three
-    ANY_EMOJI = ("repo", "v8")      # rules-v8: any one emoji in a cheer
+    MODERN = ("repo", "v9", "v8", "v7")  # everything v2.5 brought is in all of these
+    ANY_EMOJI = ("repo", "v9", "v8")      # rules-v8: any one emoji in a cheer
+    CODE_KNOCKS = ("repo", "v9")          # rules-v9: a knock may carry a friend code
     # Firestore: 20 exists()/get() calls per multi-document read, and
     # isFriend() spends one per friend with an edge doc, two without
     ACCESS_CALLS = 20
@@ -305,6 +310,8 @@ class FakeFirestore:
             allowed = {"emoji", "name", "at"}
             if self.rules_mode in self.MODERN:
                 allowed.add("note")  # rules-v5: optional, <= 80 chars
+            if self.rules_mode == "repo":
+                allowed |= {"luck", "guid"}  # rules-v10
             note = (f.get("note") or {}).get("stringValue")
             emoji = (f.get("emoji") or {}).get("stringValue")
             if self.rules_mode in self.ANY_EMOJI:
@@ -321,7 +328,9 @@ class FakeFirestore:
                     and self._str_ok(f, "name", 60)
                     and "timestampValue" in (f.get("at") or {})
                     and ("note" not in f
-                         or (isinstance(note, str) and len(note) <= 80)))
+                         or (isinstance(note, str) and len(note) <= 80))
+                    and ("luck" not in f or isinstance((f["luck"] or {}).get("booleanValue"), bool))
+                    and ("guid" not in f or len((f["guid"] or {}).get("stringValue", "x" * 99)) <= 40))
         m = re.fullmatch(r"users/([^/]+)/knocks/([^/]+)", path)
         if m:
             owner, sender = m.groups()
@@ -335,11 +344,11 @@ class FakeFirestore:
                         and self._open_board(sender) and set(f) <= {"name", "at"})
             squad = (f.get("squad") or {}).get("stringValue")
             code = (f.get("code") or {}).get("stringValue")
-            keys = {"name", "at", "squad", "code"} if self.rules_mode == "repo" else {"name", "at", "squad"}
+            keys = {"name", "at", "squad", "code"} if self.rules_mode in self.CODE_KNOCKS else {"name", "at", "squad"}
             by_squad = (isinstance(squad, str) and len(squad) <= 40
                         and self._member(squad, sender) and self._member(squad, owner))
             # rules-v9: or the recipient's own friend code, which only they hand out
-            by_code = (self.rules_mode == "repo" and isinstance(code, str) and len(code) == 6
+            by_code = (self.rules_mode in self.CODE_KNOCKS and isinstance(code, str) and len(code) == 6
                        and ((self.docs.get(f"friend_codes/{code}") or {}).get("userId") or {})
                        .get("stringValue") == owner)
             return (uid == sender and set(f) <= keys
@@ -390,7 +399,14 @@ class FakeFirestore:
                     return False
             return self._member_shape(dict(existing or {}, **(fields or {})))
         if re.fullmatch(r"friend_codes/[^/]+", path):
-            return uid is not None
+            # as the rules: a new code names its maker; an existing one
+            # changes or goes only at its owner's hand, and stays theirs
+            owner = ((self.docs.get(path) or {}).get("userId") or {}).get("stringValue")
+            if uid is None or (path in self.docs and owner != uid):
+                return False
+            if method == "DELETE":
+                return True
+            return ((fields or {}).get("userId") or {}).get("stringValue") == uid
         return False
 
     def _can_read(self, path, uid, listing=False):
@@ -642,7 +658,8 @@ def install_fake_aqt():
     hooks = types.ModuleType("aqt.gui_hooks")
     for name in ("deck_browser_will_render_content", "deck_browser_did_render",
                  "sync_did_finish", "webview_did_receive_js_message",
-                 "profile_did_open", "profile_will_close"):
+                 "profile_did_open", "profile_will_close", "card_will_show",
+                 "reviewer_will_show_context_menu"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")

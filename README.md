@@ -1,4 +1,7 @@
-# Due Crew
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/svg/due-crew-logo-dark.svg">
+  <img alt="Due Crew" src="docs/logo/svg/due-crew-logo.svg" width="220">
+</picture>
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
@@ -15,14 +18,24 @@ streak means what it says.
 - **Consent-based friendships** — add a friend's 6-character code (or
   paste their whole invite) and their board offers "Add back": one click and
   you're crew. You see someone's stats only after they add you, and vice
-  versa. Remove someone and they stop seeing yours immediately.
+  versa. Remove someone and they stop seeing yours immediately. Shared
+  your code too widely? Friends → New Code retires it; your crew stays.
 - **Cheers** — send an emoji (six quick picks, or any one from your emoji
   picker) and your friend gets a full-screen flurry with your name on it
   after their next sync. Add a short note and it rides along. Click a
   flurry to cheer back.
 - **Status** — click your own name and set one line ("coffee, then 400
   cards"). It sits in a bubble under your name on Today, for your crew and
-  no one else.
+  no one else. Start it with a number ("200 cards, then bed") and it's a
+  plan: it fills in as you study and ticks itself off.
+- **Studying now** — tap "I'm studying" in the footer and a dot sits by
+  your name for an hour, so friends can come study too.
+- **Stuck on a card?** — in the reviewer's More menu, "this one's getting
+  me" flags it for a week. Crewmates who have the same card see it on the
+  Decks tab and can send a one-line tip, which shows under the answer the
+  next time it comes up. A cloze never shows its answer in the flag.
+- **Good-luck card** — on the eve of a friend's exam, add a line to their
+  card. On exam morning they open Anki to every line their crew wrote.
 - **Shared decks** — progress bars through decks you have in common:
   how much of the deck each person has unlocked, seen, and matured, what
   they've done in it today and this week, and how well it's sticking. Hover
@@ -31,6 +44,8 @@ streak means what it says.
 - **Just show up** — a choice in Privacy: share only that you studied, and
   see only that of others. Your row is a check, never a rank; your board is
   a square per day.
+- **A bit of the season** — flurries carry the season's emoji, and a
+  crewmate's 100-day streak gets a banner with a one-tap 💯.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
   of your name on the board, on cards, and in shares.
 - **Friend profiles** — click a name for their half-year heatmap, streak,
