@@ -41,12 +41,12 @@ from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _dr
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
                      _toggle_squad_lock, _visible_knocks, open_squads)
-from .stats import gather_stats, gather_week, week_days
+from .stats import gather_stats, gather_week, held_streak, week_days
 from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import together
+from . import rooms, together
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -412,6 +412,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         _play_cheers()
     else:
         _rerender()         # deck_browser_did_render plays queued cheers
+    rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
 
 
 def _rerender():
@@ -451,13 +452,15 @@ def _board_html(c):
                         reviews=review_banners(), sync_error=_state["sync_error"],
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
-                        milestones=None if show_up else _state["milestones"])
+                        milestones=None if show_up else _state["milestones"],
+                        room=rooms.board_view())
 
 
 def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
     together.show_luck_card()
+    rooms.refresh_widgets()
 
 
 def _last_studied(q, stats):
@@ -490,6 +493,9 @@ def _on_sync_done(full=False, light=False, fetch=None):
     stats = week = decks = heat = None
     try:
         stats = gather_stats(mw.col, _profile_files())
+        if _awaiting_phone():
+            stats.streak = held_streak(stats.streak, client().session.get("own_days"),
+                                       StatsQueries(mw.col).day_label(0))
     except Exception:
         traceback.print_exc()
     if not light:
@@ -532,6 +538,18 @@ def _on_sync_done(full=False, light=False, fetch=None):
 
 
 def _on_js(handled, message, context):
+    if rooms.swallow(message):
+        return (True, None)  # 2.12: no answering under the break
+    if message.startswith("duecrew:room"):
+        # 2.12: study rooms answer from the top bar and the review screen too
+        parts = message.split(":")
+        try:
+            done = rooms.on_message(parts[1], parts)
+        except Exception:
+            traceback.print_exc()
+            done = True
+        if done:
+            return (True, None)
     if not isinstance(context, DeckBrowser) or not message.startswith("duecrew:"):
         return handled
     parts = message.split(":")
@@ -804,15 +822,38 @@ def _push_on_open():
     _on_sync_done(light=True, fetch=False)  # the open just drew the board
 
 
+def _mark_anki_synced(*_args):
+    _state["anki_synced"] = True
+
+
+def _awaiting_phone():
+    """This profile syncs with AnkiWeb and no sync has finished since it
+    opened: reviews done on a phone may not have arrived yet (2.11.1)."""
+    if _state["anki_synced"]:
+        return False
+    try:
+        return bool(mw.pm.sync_auth())
+    except Exception:
+        return False
+
+
 def _on_profile_close():
     global _closing
     _closing = True
+    try:
+        rooms.on_close()  # 2.12: closing Anki leaves the room
+    except Exception:
+        traceback.print_exc()
 
 
 gui_hooks.deck_browser_will_render_content.append(_on_render)
 
 
 gui_hooks.deck_browser_did_render.append(_on_did_render)
+
+
+# first: the upload that follows knows the phone's reviews are in
+gui_hooks.sync_did_finish.append(_mark_anki_synced)
 
 
 gui_hooks.sync_did_finish.append(_on_sync_done)
@@ -833,6 +874,15 @@ gui_hooks.card_will_show.append(together.card_will_show)
 
 
 gui_hooks.reviewer_will_show_context_menu.append(together.reviewer_menu)
+
+
+# 2.12: study rooms. The room follows Anki from screen to screen; the break
+# waits for the card on screen to be answered.
+gui_hooks.reviewer_did_show_question.append(rooms.on_question)
+gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
+gui_hooks.state_did_change.append(rooms.on_state)
+if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
+    gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 
 # the modules that need a redraw or a refresh reach it through app
 app.swap = _swap

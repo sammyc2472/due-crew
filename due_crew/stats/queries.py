@@ -77,6 +77,15 @@ class StatsQueries:
         return {self.day_label(int(ago)): (int(n), int(t or 0), int(c or 0), int(g or 0))
                 for ago, n, t, c, g in rows or []}
 
+    def answers_in_days(self, first, last):
+        """Answers on the days `first` to `last - 1` ago, the span
+        heatmap_counts(last) keeps once `first` days have settled: one count
+        over an id range, to check a cache still holds."""
+        cutoff = self._cutoff_s()
+        return self.col.db.scalar(
+            "SELECT COUNT(*) FROM revlog WHERE ease > 0 AND id >= ? AND id < ?",
+            (cutoff - last * 86400) * 1000, (cutoff - first * 86400) * 1000) or 0
+
     def heatmap_counts(self, days=182):
         """{day_label: answer_count} for the last `days` days. One query."""
         cutoff = self._cutoff_s()

@@ -50,6 +50,18 @@ maintainer. The repo is the source of truth; there is no build step.
   in wrap.json (`luck`, `tips`), not played. A flag shows at most the first
   60 characters of the card's first field, clozes as […], and only to
   crewmates whose collection has the same note guid.
+- 2.12's study rooms add no reads either: a room is `{host, start, rounds,
+  round, brk}` on the week doc (`room`), joining copies it to mine, and
+  every screen computes the clock from `start` (`room_model.phase`, and the
+  same arithmetic in its JS). Nothing is ever drawn inside a card: while
+  reviewing, the room goes in Anki's top bar (A), else beside Edit in the
+  bottom bar (B), else a margin card that shows only while the card leaves
+  the margin free (C). The one exception is the break, which replaces the
+  next card and turns the review shortcuts off until it ends or is skipped.
+  Under the break, answer messages are dropped, the card's audio stops, and
+  its timer restarts when the break ends. Each break costs one light
+  refresh (a doc per friend), once per round, only while reviewing: that
+  is how the chip learns who joined. Closing Anki leaves the room.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in

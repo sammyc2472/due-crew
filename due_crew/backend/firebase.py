@@ -32,6 +32,8 @@ import threading
 
 import requests
 
+from ..room_model import clean_room, is_over
+
 # A Firebase web API key is a public client identifier, not a secret: it
 # ships inside the add-on to every install, and access control lives entirely
 # in firestore.rules + Auth. Secret scanners will flag it; that is expected.
@@ -58,7 +60,7 @@ FRIENDS_PER_BATCH = 10
 # one doc. A friend whose profile says 2.9 or newer is read from it.
 WEEK_DOC_SINCE = (2, 9, 0)
 WEEK_FIELDS = ("v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo",
-               "liveUntil", "tricky")
+               "liveUntil", "tricky", "room")
 LIVE_MINUTES = 60   # 2.10: "studying now" lasts this long unless stopped
 TRICKY_MAX = 3      # 2.10: cards flagged "this one's getting me", newest kept
 TRICKY_DAYS = 7     # ...for this long
@@ -371,6 +373,11 @@ def clean_tricky(value, today_label=None):
         out.append({"guid": guid, "text": clean_note(t.get("text"), 60),
                     "deck": clean_note(t.get("deck"), 40), "at": at})
     return out[-TRICKY_MAX:]
+
+
+def _live_room(value):
+    room = clean_room(value)
+    return None if is_over(room) else room
 
 
 def live_now(until, now_utc=None):
@@ -1130,6 +1137,9 @@ class FirebaseClient:
                 "live_until": str(self.session.get("live_until") or "") if u == uid
                               else str((week or {}).get("liveUntil") or ""),
                 "tricky": [] if u == uid else clean_tricky((week or {}).get("tricky"), day),
+                # 2.12: the study room they're in (mine from the session)
+                "room": _live_room(self.session.get("room") if u == uid
+                                   else (week or {}).get("room")),
             })
 
         cheers = []
@@ -1345,6 +1355,10 @@ class FirebaseClient:
         tricky = clean_tricky(self.session.get("tricky"), labels[0])
         if tricky and not paused:
             doc["tricky"] = tricky
+        # 2.12: the study room I'm in, while it lasts
+        room = clean_room(self.session.get("room"))
+        if room and not is_over(room) and not paused:
+            doc["room"] = room
         digest = hashlib.sha1(json.dumps(doc, sort_keys=True).encode()).hexdigest()
         if self.session.get("week_hash") == digest:
             return True

@@ -28,6 +28,22 @@ def gather_stats(col, user_files_dir):
     )
 
 
+def held_streak(computed, own_days, today_label):
+    """2.11.1: before Anki's first sync of the session, the phone's reviews
+    may not be here yet, so the streak sent to the crew doesn't drop below
+    the last one sent. `own_days` is the session's record of my uploads
+    ({label: doc}). The sync that follows sends the real count, whatever it
+    is. Pure."""
+    sent = [lb for lb in (own_days or {}) if lb <= today_label]
+    if not sent:
+        return computed
+    try:
+        last = int((own_days[max(sent)] or {}).get("streak") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return computed
+    return max(computed, last)
+
+
 def duet_runs(my_days, their_days, today_label):
     """(current, best) runs of consecutive days BOTH studied, from two sets
     of ISO day labels. Like a streak, today still counting is a bonus, not a
@@ -57,10 +73,11 @@ def duet_runs(my_days, their_days, today_label):
 
 def heatmap(q, user_files_dir, days=182):
     """heatmap_counts, with the settled days kept for the day in
-    heatmap.json. Only today and yesterday still move (a phone's reviews can
-    sync in late), so after the day's first call a sync queries two days.
-    Measured at 1.1 million reviews: 103 ms on the main thread, per sync,
-    until 2.9. Main thread."""
+    heatmap.json. Today and yesterday always move; the settled days are
+    checked with one count, and counted again if a sync brought in a phone's
+    older reviews (2.11.1: until then they stayed missing all day). Measured
+    at 1.1 million reviews: 103 ms on the main thread, per sync, until 2.9.
+    Main thread."""
     today = q.day_label(0)
     path = os.path.join(user_files_dir, "heatmap.json")
     try:
@@ -71,8 +88,9 @@ def heatmap(q, user_files_dir, days=182):
     if (isinstance(cached, dict) and cached.get("day") == today
             and cached.get("days") == days and isinstance(cached.get("counts"), dict)):
         counts = {str(k): int(v) for k, v in cached["counts"].items()}
-        counts.update(q.heatmap_counts(2))
-        return counts
+        if sum(counts.values()) == q.answers_in_days(2, days):
+            counts.update(q.heatmap_counts(2))
+            return counts
     counts = q.heatmap_counts(days)
     yesterday = q.day_label(1)
     try:

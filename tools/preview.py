@@ -186,6 +186,19 @@ sections.append("<h3>2.10: a flagged card on the Decks tab</h3>" + board.render(
              "deck": "Cardio"}]))
 SOLO = {"entries": [ENTRIES[0]], "labels": L, "tomorrow": TOMORROW, "pending": [],
         "my_code": "K7Q2ZP"}
+# 2.12: study rooms, in the room, invited, and done
+from due_crew import room_model  # noqa: E402
+_room = room_model.make_room(DATA["entries"][1]["user_id"],
+                             NOW - datetime.timedelta(minutes=36), 4, 25, 5)
+ROOMED = [dict(e, room=_room) if i in (1, 2) or e["you"] else e for i, e in enumerate(DATA["entries"])]
+sections.append("<h3>2.12: in a study room</h3>" + board.render(
+    dict(DATA, entries=ROOMED), {"period": "today"}, now_ts - 60,
+    room=room_model.board_view(_room, ROOMED)))
+INVITED = [dict(e, room=_room) if i in (1, 2) else e for i, e in enumerate(DATA["entries"])]
+sections.append("<h3>2.12: invited, and a room I finished</h3>" + board.render(
+    dict(DATA, entries=INVITED), {"period": "today"}, now_ts - 60,
+    room=dict(room_model.board_view(None, INVITED),
+              done={"rounds": 4, "minutes": 115, "with": "Dre and Ameya"})))
 sections.append("<h3>just me, the day I joined (2.9)</h3>" + board.render(SOLO, {"period": "today"}, now_ts - 60))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.

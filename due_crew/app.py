@@ -93,6 +93,11 @@ _state = {
     "my_code": "",         # my friend code, for Copy invite on a solo board
     "knocks_ts": 0.0,      # when knocks were last listed
     "milestones": [],      # [(uid, name, days)]: a crewmate's 100/365-day streak, today
+    "anki_synced": False,  # an AnkiWeb sync finished since the profile opened
+    "room_dismissed": set(),  # study-room invites waved off this session
+    "room_skip": None,     # (room key, round): the break I skipped
+    "room_break": False,   # the break is on screen (review shortcuts are off)
+    "room_refreshed": None,  # (room key, round): that break's one refresh
 }
 
 
@@ -173,7 +178,9 @@ def _reset_runtime():
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
                   knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
-                  knocks_ts=0.0, milestones=[])
+                  knocks_ts=0.0, milestones=[], anki_synced=False,
+                  room_dismissed=set(), room_skip=None, room_break=False,
+                  room_refreshed=None)
     _pending_cheers.clear()
 
 
