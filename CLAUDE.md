@@ -18,7 +18,9 @@ maintainer. The repo is the source of truth; there is no build step.
   above the tagline is GitHub-only (AnkiWeb shows its own title).
 - `docs/logo/` — the logo ("Seven days"), final artwork: never redraw or
   re-typeset it. Green on GitHub; inside the add-on, `due_crew/logo.py`
-  colours the studied days with the user's accent.
+  colours the studied days with the user's accent: the board's title is
+  the one-line logo (inline SVG on the `--dc-*` tokens), and the stacked
+  one tops the sign-in and welcome screens.
 - `tests/` — `python3 tests/test_due_crew.py` (client behavior against a
   fake Firestore; standard library only) and `tests/rules/` (the real
   rules, in the Firestore emulator — needs firebase-tools + Java). See

@@ -127,6 +127,27 @@ def accent():
         return "#7cc47f" if shade == "dark" else "#2e7d32"
 
 
+def _svg_by_renderer(data, w, h):
+    """The image plugin's stand-in: QtSvg's renderer, where the build has
+    it. None where it doesn't."""
+    try:
+        from PyQt6.QtCore import QByteArray, Qt
+        from PyQt6.QtGui import QImage, QPainter
+        from PyQt6.QtSvg import QSvgRenderer
+    except Exception:
+        return None
+    renderer = QSvgRenderer(QByteArray(data))
+    if not renderer.isValid():
+        return None
+    image = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    renderer.render(painter)
+    painter.end()
+    return image
+
+
 def logo_label(width=150):
     """The stacked logo in the user's accent and Anki's theme (2.10), for
     the top of the sign-in and welcome screens, or None if this Qt can't
@@ -141,12 +162,15 @@ def logo_label(width=150):
         ratio = 1.0
     height = round(width * ASPECT)
     buf = QBuffer()
-    buf.setData(QByteArray(svg("dark" if _night() else "light", _accent_name()).encode("utf-8")))
+    data = svg("dark" if _night() else "light", _accent_name()).encode("utf-8")
+    buf.setData(QByteArray(data))
     buf.open(QIODevice.OpenModeFlag.ReadOnly)
     reader = QImageReader(buf, QByteArray(b"svg"))
     reader.setScaledSize(QSize(round(width * ratio), round(height * ratio)))
     image = reader.read()
     if image.isNull():
+        image = _svg_by_renderer(data, round(width * ratio), round(height * ratio))
+    if image is None or image.isNull():
         return None
     pixmap = QPixmap.fromImage(image)
     pixmap.setDevicePixelRatio(ratio)

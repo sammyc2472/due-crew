@@ -2020,6 +2020,20 @@ def test_logo_accent():
                   and s.count(f'fill="{logo.WORDMARK[shade]}"') == 1)
             check(f"logo {name}/{shade}: only the fills change", shapes(s) == shapes(green))
     check("logo: an unknown accent falls back to green", logo.svg("light", "nope") == green)
+    # the board's title is the one-line logo, coloured by the board's own tokens
+    with open(os.path.join(REPO, "due_crew", "logo_line.svg"), "rb") as a, \
+            open(os.path.join(REPO, "docs", "logo", "svg", "due-crew-logo-line.svg"), "rb") as b:
+        check("logo: the board's one-line copy is the docs/logo original", a.read() == b.read())
+    mark = logo.board_mark()
+    check("board mark: six studied days, one off, the wordmark; no fixed colours",
+          mark.count('class="on"') == 6 and mark.count('class="off"') == 1
+          and mark.count('class="wm"') == 1 and "fill=" not in mark and 'aria-label="Due Crew"' in mark)
+    css = board._css({"accent": "rose", "theme": "auto"})
+    check("board mark: the CSS points it at the accent, line and mark tokens",
+          ".dc-mark .on {{ fill: var(--dc-accent); }}".replace("{{", "{").replace("}}", "}") in css
+          and "--dc-mark: #242424" in css and "--dc-mark: #e6e8e3" in css)
+    check("board mark: tops the signed-out card, in place of the words",
+          'class="dc-mark"' in board.signed_out_card({}) and "<b>Due Crew</b>" not in board.signed_out_card({}))
 
 
 def test_together_v210():

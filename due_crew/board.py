@@ -19,6 +19,7 @@ import re as _re
 import time
 from datetime import date as _date, datetime, timezone
 
+from .logo import board_mark
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -48,6 +49,8 @@ def palette(theme, accent=DEFAULT_ACCENT):
     base = dict(LIGHT if theme == "light" else DARK)
     a, ink, you = ACCENTS.get(accent, ACCENTS[DEFAULT_ACCENT])[theme]
     base.update({"accent": a, "accent-ink": ink, "you-bg": you, "fresh": a})
+    # the logo's wordmark, a touch darker (lighter at night) than ink
+    base["mark"] = "#e6e8e3" if theme == "dark" else "#242424"
     return base
 NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
@@ -385,8 +388,17 @@ def _css(cfg):
     /* the one fill inside the card: your row (re-asserted after the reset) */
     #due-crew tr.you td {{ {you_bg.replace(";", " !important;") if you_bg else ""} }}
     #due-crew .dc-head {{ display: flex; align-items: center; justify-content: space-between;
-      gap: 10px; margin-bottom: 10px; }}
-    #due-crew .dc-title {{ font-size: 15px; font-weight: 700; }}
+      flex-wrap: wrap; gap: 8px 10px; margin-bottom: 10px; }}
+    /* the pills stay one row; a narrow window puts them under the logo */
+    #due-crew .dc-head > span:last-child {{ white-space: nowrap; }}
+    #due-crew .dc-title {{ font-size: 15px; font-weight: 700; line-height: 0; }}
+    /* 2.10: the logo is the title. Its squares are the board's: the accent,
+       and the line colour for the day off. */
+    #due-crew .dc-mark {{ display: inline-block; height: 17px; width: auto; vertical-align: middle; }}
+    #due-crew .dc-mark .on {{ fill: var(--dc-accent); }}
+    #due-crew .dc-mark .off {{ fill: var(--dc-line); }}
+    #due-crew .dc-mark .wm {{ fill: var(--dc-mark); }}
+    #due-crew .dc-card .dc-mark {{ display: block; height: 17px; margin: 0 auto 8px; }}
     #due-crew .dc-pill {{ display: inline-block; font-size: 11px; font-weight: 700;
       padding: 1px 10px; border: 1px solid var(--dc-line); color: var(--dc-muted); text-decoration: none; }}
     #due-crew .dc-pill.on {{ background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }}
@@ -502,6 +514,7 @@ def _css(cfg):
       #due-crew th .hl {{ display: none; }}
       #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
       #due-crew tr:not(.dim) .la {{ display: none; }}
+      #due-crew .dc-head .dc-mark {{ height: 14px; }}
     }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
@@ -536,7 +549,7 @@ def _head(period, show_up=False):
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + key)}">{label}</a>')
-    return (f'<div class="dc-head"><span class="dc-title">Due Crew</span>'
+    return (f'<div class="dc-head"><span class="dc-title">{board_mark()}</span>'
             f'<span>{pills}</span></div>')
 
 
@@ -1081,8 +1094,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 
 
 def _card(cfg, title, body_html):
+    head = board_mark() if title == "Due Crew" else f"<b>{title}</b>"
     return (f'<div id="due-crew">{_css(cfg)}<div class="dc-card">'
-            f'<b>{title}</b><span>{body_html}</span></div></div>')
+            f'{head}<span>{body_html}</span></div></div>')
 
 
 def signed_out_card(cfg, expired=False):

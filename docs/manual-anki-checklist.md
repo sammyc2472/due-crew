@@ -134,4 +134,5 @@ installing — add-ons load at launch).
 - [ ] A crewmate crosses a 100-day streak: a banner with "Send 💯"; it sends and goes away; × dismisses it.
 - [ ] A cheer in October has 🎃/🍂 in its flurry.
 - [ ] With rules-v9 still published: a tip or a line goes as a plain cheer with its words, and the tooltip says the server needs an update.
+- [ ] The board's top left is the one-line logo, not the words "Due Crew", in your accent; Settings → Accent changes it on Save; night mode turns the wordmark pale. A narrow window puts the Today/Week/Decks/Squads pills under it. The signed-out and loading cards show it too.
 - [ ] The logo tops Sign In / Join and the welcome screen, sharp on a Retina or high-DPI screen. Settings → Accent → rose, reopen Sign In: the studied days are rose. Anki in night mode: the wordmark is pale and the squares take the dark shade.

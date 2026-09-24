@@ -52,7 +52,9 @@ logo stays GitHub-only.
 All from `due_crew/board.py`. Green here and on GitHub, where nobody's
 accent is known. Inside the add-on (`due_crew/logo.py`) the studied days
 take the accent the user picked in Settings, in the same light or dark
-shade the board uses; the day off and the wordmark stay as below.
+shade the board uses; the day off and the wordmark stay as below. There,
+the one-line logo is the board's title (top left), and the stacked one
+tops the sign-in and welcome screens.
 
 | | light | dark | from |
 |---|---|---|---|
