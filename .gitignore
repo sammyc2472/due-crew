@@ -10,3 +10,5 @@ dialog-shots/
 .claude/launch.json
 .claude/harness/
 tools/preview.html
+# the Firestore emulator's log, from the rules test
+firestore-debug.log

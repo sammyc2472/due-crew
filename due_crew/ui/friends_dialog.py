@@ -9,12 +9,13 @@ friends array. self.changed tells the caller to refresh the board.
 import html
 
 from aqt.qt import (
-    QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QMessageBox, QPushButton, QTimer, QVBoxLayout, QWidget, Qt,
+    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QPushButton, QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
 
-from . import accent, attach_alive, copy_text, run_bg
+from ..backend.firebase import friend_code_from
+from . import accent, attach_alive, confirm, copy_text, run_bg
 
 
 def _with_emoji(prof):
@@ -30,8 +31,9 @@ def invite_text(friend_code):
 
 
 class FriendsDialog(QDialog):
-    def __init__(self, parent, client, muted=None, on_mute=None):
+    def __init__(self, parent, client, muted=None, on_mute=None, focus_add=False):
         super().__init__(parent)
+        self.focus_add = focus_add  # the board's "Add a code" opens straight to it
         self.client = client
         self.uid = client.user_id
         self.muted = set(muted or [])
@@ -79,8 +81,8 @@ class FriendsDialog(QDialog):
         root.addWidget(QLabel("<b>Add a friend</b>"))
         add_row = QHBoxLayout()
         self.code_input = QLineEdit()
-        self.code_input.setPlaceholderText("Their 6-character code")
-        self.code_input.setMaxLength(6)
+        # 2.9: the whole invite pastes in; the code is taken from it
+        self.code_input.setPlaceholderText("Their code, or paste their invite")
         self.code_input.returnPressed.connect(self._add)
         add_row.addWidget(self.code_input)
         self.add_btn = QPushButton("Add")
@@ -108,8 +110,8 @@ class FriendsDialog(QDialog):
         self.retry_btn.hide()
         buttons.addWidget(self.retry_btn)
         buttons.addStretch()
-        close = QPushButton("Close")
-        close.clicked.connect(self.accept)
+        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close.rejected.connect(self.accept)
         buttons.addWidget(close)
         root.addLayout(buttons)
 
@@ -155,6 +157,8 @@ class FriendsDialog(QDialog):
             self._set_writable(True)
             self._render_knocks()
             self._render_list()
+            if self.focus_add:
+                self.code_input.setFocus()
 
         run_bg(self, job, done)
 
@@ -173,14 +177,14 @@ class FriendsDialog(QDialog):
         if not self.knocks:
             self.knocks_host.hide()
             return
-        title = QLabel("<b>Knocks</b>")
+        title = QLabel("<b>Added you</b>")
         self.knocks_lay.addWidget(title)
         for kuid, kname in self.knocks:
             row = QHBoxLayout()
             # server-sourced name: force plain text
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setText(f"{kname} — wants to be crew")
+            label.setText(f"{kname} added you")
             row.addWidget(label)
             row.addStretch()
             add = QPushButton("Add Back")
@@ -239,7 +243,7 @@ class FriendsDialog(QDialog):
             if mutual:
                 self.list.addItem(f"✓ {name}")
             else:
-                self.list.addItem(f"⏳ {name} — pending")
+                self.list.addItem(f"⏳ {name} — waiting")
 
     # ---- actions ----
 
@@ -256,9 +260,9 @@ class FriendsDialog(QDialog):
     def _add(self):
         if not self.loaded:
             return
-        code = self.code_input.text().strip().upper()
-        if len(code) != 6:
-            tooltip("Codes are 6 characters.")
+        code = friend_code_from(self.code_input.text())
+        if not code:
+            tooltip("Codes are 6 letters and numbers. Pasting the whole invite works too.")
             return
         if self.code and code == self.code:
             tooltip("That's your own code.")
@@ -281,10 +285,14 @@ class FriendsDialog(QDialog):
             name = html.escape(friend["name"])
             if friend["mutual"]:
                 tooltip(f"You and {name} are crew.")
+            elif friend.get("knocked"):
+                # 2.9: the add knocked; their board offers Add back
+                tooltip(f"Added {name}. They'll see it on their board.")
             else:
                 tooltip(f"Added {name}. Send them your code to finish.")
 
-        run_bg(self, lambda: self.client.add_friend(self.uid, code, own_ids), done)
+        my_name = self.client.display_name or "A friend"
+        run_bg(self, lambda: self.client.add_friend(self.uid, code, own_ids, my_name), done)
 
     def _remove(self):
         if not self.loaded:
@@ -294,18 +302,9 @@ class FriendsDialog(QDialog):
             tooltip("Pick someone in the list first.")
             return
         fid, name, _ = self.friends[row]
-        # plain text: names are server-sourced and QMessageBox auto-detects
-        # rich text, so markup in a name must never render
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle("Remove?")
-        box.setTextFormat(Qt.TextFormat.PlainText)
-        box.setText(f"Remove {name}?\n\nThey leave your board and stop seeing "
-                    f"your stats.")
-        box.setStandardButtons(QMessageBox.StandardButton.Yes
-                               | QMessageBox.StandardButton.No)
-        box.setDefaultButton(QMessageBox.StandardButton.No)
-        if box.exec() != QMessageBox.StandardButton.Yes:
+        # plain text (confirm): names are server-sourced
+        if not confirm(self, "Remove?", f"Remove {name}?\n\nThey leave your board and "
+                       "stop seeing your stats.", "Remove"):
             return
         self._set_writable(False)
         remaining = [f for f, _, _ in self.friends if f != fid]

@@ -1,9 +1,11 @@
 """Firebase REST client for Due Crew.
 
-Call budget is the design constraint: the whole board loads in 4 requests
-(own profile, all friend profiles, one batchGet for stats + shared decks +
-cheers, one list of my knocks). Stats are only requested for people who
-added you back, so a pending invite can never fail the batch.
+Call budget is the design constraint: a refresh is one read per friend (their
+week doc, or their day docs on a client older than 2.9) plus the cheers
+list; profiles ride the day's first fetch. Stats are only requested for
+people who added you back, so a pending invite can never fail the batch.
+A batch holds at most FRIENDS_PER_BATCH friends: the rules' consent check
+spends an access call per friend, and a multi-document read gets 20.
 
 Failure is never conflated with absence: batch_get and list_friends raise
 TransportError on any non-200, so callers keep their caches and their
@@ -23,6 +25,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import secrets
 import string
 import threading
@@ -44,7 +47,17 @@ MEMBER_FIELDS = ("name", "day", "reviews", "studyTimeMs", "accuracy", "streak",
 # The rules generation this client needs. The deployed firestore.rules allow
 # `get` on meta/{RULES_MARKER} (no doc exists): 404 = current, 403 = stale.
 # Bump together with the marker block in firestore.rules.
-RULES_MARKER = "rules-v8"
+RULES_MARKER = "rules-v9"
+# Firestore allows 20 exists()/get() calls per multi-document read, and
+# isFriend() spends one per friend (an edge doc), or two (edge missing, then
+# the profile array). Past that the WHOLE batch is refused: measured in the
+# emulator, 21 friends with edges fail, and 11 without. Ten per batch is
+# safe either way.
+FRIENDS_PER_BATCH = 10
+# 2.9: each client also writes users/{me}/shared/week, its last eight days in
+# one doc. A friend whose profile says 2.9 or newer is read from it.
+WEEK_DOC_SINCE = (2, 9, 0)
+WEEK_FIELDS = ("v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo")
 # The token endpoint's verdicts that mean "this sign-in is over" — as opposed
 # to a network failure or a 5xx, which must NEVER sign anyone out: going
 # offline is not the same as being signed out.
@@ -283,6 +296,52 @@ def _clean_day(doc):
     return out
 
 
+def _version(text):
+    """"2.9.0" -> (2, 9, 0); anything unparsable -> ()."""
+    try:
+        return tuple(int(x) for x in str(text or "").split(".")[:3])
+    except ValueError:
+        return ()
+
+
+def has_week_doc(prof):
+    """Whether this profile's client writes the week doc (2.9+)."""
+    return _version((prof or {}).get("clientVersion")) >= WEEK_DOC_SINCE
+
+
+def _week_days(doc, labels):
+    """A week doc -> {label: day doc} for `labels`, shaped like the day docs
+    older clients write, so everything downstream reads one form. The away
+    spell rides the doc as a range; each day inside it is flagged here, the
+    way sync_away used to write a doc per day for it."""
+    days = doc.get("days") if isinstance(doc.get("days"), dict) else {}
+    lo, hi = str(doc.get("awayFrom") or ""), str(doc.get("awayTo") or "")
+    out = {}
+    for lb in labels:
+        d = days.get(lb)
+        d = dict(d) if isinstance(d, dict) else None
+        if lo and hi and lo <= lb <= hi:
+            d = dict(d or {}, away=True, awayTo=hi)
+        out[lb] = d
+    return out
+
+
+# the number fields and the Privacy switch each one answers to
+METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
+           ("accuracy", "share_retention"), ("streak", "share_streak"))
+
+
+def shared_numbers(values, cfg):
+    """The numbers the Privacy switches let out of `values` (keyed by the
+    fields in METRICS). One gate for the day docs and, since 2.9, the squad
+    row, which until then carried all four whatever the switches said. Just
+    show up (2.8) lets none out; the switches keep their settings under it."""
+    if cfg.get("show_up"):
+        return {}
+    return {field: values[field] for field, key in METRICS
+            if cfg.get(key, True) and values.get(field) is not None}
+
+
 def _clean_decks(value):
     """Validate a friend's shared-decks payload down to a known shape."""
     if not isinstance(value, list):
@@ -330,6 +389,33 @@ def new_squad_code():
 def normalize_code(code):
     """What a person typed -> the code: uppercase, alphabet only."""
     return "".join(ch for ch in str(code or "").upper() if ch in SQUAD_ALPHABET)
+
+
+FRIEND_CODE_LEN = 6
+
+
+def _code_after_word(text, length):
+    """The last `length`-character code that follows the word "code" in a
+    pasted invite, or ''. Last, because a squad may be named "code club"."""
+    found = re.findall(r"CODE:?\s*([A-Z0-9]{%d})(?![A-Z0-9])" % length, str(text or "").upper())
+    return found[-1] if found else ""
+
+
+def friend_code_from(text):
+    """A friend code from whatever was typed or pasted: the code itself, or
+    a whole invite. Until 2.9 the box took six characters, so a pasted
+    invite arrived as "Study " and was refused."""
+    code = _code_after_word(text, FRIEND_CODE_LEN)
+    if code:
+        return code
+    bare = re.sub(r"[^A-Z0-9]", "", str(text or "").upper())
+    return bare if len(bare) == FRIEND_CODE_LEN else ""
+
+
+def squad_code_from(text):
+    """A squad code from a typed code or a pasted squad invite, normalized.
+    The caller checks the length."""
+    return normalize_code(_code_after_word(text, SQUAD_CODE_LEN) or text)
 
 
 def squad_id(code):
@@ -468,6 +554,11 @@ class FirebaseClient:
         })
         self.session["display_name"] = display_name
         self._save_session()
+        try:
+            # 2.9: the code exists from the start, so Copy invite always copies
+            self.ensure_friend_code(uid, None)
+        except Exception:
+            pass  # the account is made; Friends makes the code later
         return uid, display_name
 
     def sign_in(self, email, password):
@@ -545,7 +636,8 @@ class FirebaseClient:
     # on any of these flips the footer's "server catching up" hint. Social
     # writes (cheers, knocks, squad admin) are refused by design in normal
     # use and must not.
-    HINT_LABELS = ("profile", "daily stats", "shared decks", "heatmap", "away", "friend")
+    HINT_LABELS = ("profile", "daily stats", "shared decks", "heatmap", "away", "friend",
+                   "week")
 
     def patch_doc(self, path, data, mask=None, label=None):
         """label: names the write in a console line when the server rejects
@@ -606,6 +698,46 @@ class FirebaseClient:
             if "found" in item:
                 name = item["found"]["name"]
                 out[name[len(self.doc_root) + 1:]] = _parse(item["found"].get("fields"))
+        return out
+
+    def batch_get_people(self, paths, uid):
+        """batch_get for docs that belong to several people, in batches of at
+        most FRIENDS_PER_BATCH other people each (my own docs cost the rules
+        nothing and ride the first), fetched side by side. The same reads as
+        one batch. A failed batch fails the whole call, a 403 first, so the
+        caller can tell "someone removed me" from an outage."""
+        by_owner = {}
+        for p in paths:
+            parts = p.split("/")
+            owner = parts[1] if len(parts) > 2 and parts[0] == "users" else ""
+            by_owner.setdefault(owner, []).append(p)
+        mine = by_owner.pop(uid, []) + by_owner.pop("", [])
+        others = list(by_owner.values())
+        groups = [[p for ps in others[i:i + FRIENDS_PER_BATCH] for p in ps]
+                  for i in range(0, len(others), FRIENDS_PER_BATCH)] or [[]]
+        groups[0] = mine + groups[0]
+        if len(groups) == 1:
+            return self.batch_get(groups[0])
+        results, errors = [None] * len(groups), []
+
+        def run(i):
+            try:
+                results[i] = self.batch_get(groups[i])
+            except TransportError as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=run, args=(i,), daemon=True)
+                   for i in range(len(groups))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(3 * TIMEOUT)
+        if errors or any(r is None for r in results):
+            raise next((e for e in errors if e.status == 403), None) or (
+                errors[0] if errors else TransportError("batchGet timed out"))
+        out = {}
+        for r in results:
+            out.update(r)
         return out
 
     @staticmethod
@@ -752,8 +884,13 @@ class FirebaseClient:
                 return code
         return None
 
-    def add_friend(self, uid, code, own_friends):
-        doc, _ = self.get_doc(f"friend_codes/{code.upper()}")
+    def add_friend(self, uid, code, own_friends, my_name=None):
+        """Add by code. Since 2.9 the add also knocks, with their own code in
+        the knock (rules-v9 lets that through), so their board offers a
+        one-click Add back instead of waiting for my code to come back by
+        chat. On older rules the knock is refused and "knocked" says so."""
+        code = friend_code_from(code) or str(code or "").strip().upper()
+        doc, _ = self.get_doc(f"friend_codes/{code}")
         fid = (doc or {}).get("userId")
         if not fid:
             return None, "That code doesn't match anyone."
@@ -766,9 +903,11 @@ class FirebaseClient:
             return None, "That code doesn't match anyone."
         if not self.set_friends(uid, own_friends + [fid]):
             return None, "Couldn't save. Try again."
+        mutual = uid in (prof.get("friends") or [])
+        knocked = bool(my_name) and not mutual and self.send_code_knock(fid, uid, my_name, code)
         return {"user_id": fid,
                 "name": prof.get("displayName", "?"),
-                "mutual": uid in (prof.get("friends") or [])}, None
+                "mutual": mutual, "knocked": knocked}, None
 
     def set_friends(self, uid, friends):
         """The array (what every client reads today) and the edge mirror."""
@@ -781,8 +920,9 @@ class FirebaseClient:
 
     def fetch_decks(self, uids):
         """{uid: decks} for the Decks tab, fetched when someone looks rather
-        than on every refresh. One batchGet, one read per person."""
-        docs = self.batch_get([f"users/{u}/shared/decks" for u in uids])
+        than on every refresh. One read per person, in batches the rules
+        allow."""
+        docs = self.batch_get_people([f"users/{u}/shared/decks" for u in uids], self.user_id)
         return {u: _clean_decks((docs.get(f"users/{u}/shared/decks") or {}).get("decks"))
                 for u in uids}
 
@@ -805,19 +945,22 @@ class FirebaseClient:
 
     def fetch_board(self, uid, labels, tomorrow=None, include_shared=True, check_edges=None,
                     light=False, own_days=None, cached_people=False, now_utc=None):
-        """labels: the week's day labels, newest first. light: read only the
-        doc each person is writing right now (see _wanted) instead of the
-        week. own_days: my own uploads by label, kept by the session — those
-        docs are never read back. cached_people: reuse the day's profiles
-        instead of reading them again; a 403 on the stats batch then means
-        someone removed me, and the profiles are read once more. Shared-deck
-        docs ride along when include_shared. Raises TransportError on
-        failure — the caller keeps its cache."""
+        """labels: the week's day labels, newest first. A friend on 2.9 or
+        newer is one read, their week doc, on a full fetch or a light one.
+        An older client's day docs are read as before: the week on a full
+        fetch, the one doc they are writing now on a light one (_wanted).
+        own_days: my own uploads by label, kept by the session; those are
+        never read back. cached_people: reuse the day's profiles instead of
+        reading them again; a 403 on the stats batch then means someone
+        removed me, and the profiles are read once more. Shared-deck docs
+        ride along when include_shared. Raises TransportError on failure;
+        the caller keeps its cache."""
         if check_edges is None:
             check_edges = include_shared
         now_utc = now_utc or datetime.datetime.now(datetime.timezone.utc)
         day = labels[0] if labels else ""
         own_days = own_days or {}
+        span = list(labels) + ([tomorrow] if tomorrow else [])
 
         def people(fresh):
             cache = self._people
@@ -829,31 +972,54 @@ class FirebaseClient:
                             "resolved": resolved, "pending": pending}
             return own, resolved, pending, True
 
-        def plan(own, resolved):
+        def plan(own, resolved, no_week=()):
+            """(mutual, everyone, show, weekly, paths): `show` is the labels
+            each person's row gets, `weekly` who is read from a week doc."""
             mutual = [(fid, prof) for fid, prof, m in resolved if m]
             everyone = [(uid, own)] + mutual
-            want, paths = {}, []
+            show, weekly, paths = {}, set(), []
             for u, prof in everyone:
+                use_week = has_week_doc(prof) and u not in no_week
                 if u == uid:
-                    want[u] = [labels[0]] if light else list(labels)
-                    paths += [f"users/{u}/daily_stats/{lb}" for lb in want[u] if lb not in own_days]
+                    show[u] = [labels[0]] if light else list(labels)
+                    need = [lb for lb in show[u] if lb not in own_days]
+                    if need and use_week:
+                        weekly.add(u)
+                        paths.append(f"users/{u}/shared/week")
+                    else:
+                        paths += [f"users/{u}/daily_stats/{lb}" for lb in need]
+                elif use_week:
+                    show[u] = span  # the whole week comes with the one read
+                    weekly.add(u)
+                    paths.append(f"users/{u}/shared/week")
                 else:
-                    want[u] = _wanted(prof, labels, tomorrow, now_utc, light)
-                    paths += [f"users/{u}/daily_stats/{lb}" for lb in want[u]]
+                    show[u] = _wanted(prof, labels, tomorrow, now_utc, light)
+                    paths += [f"users/{u}/daily_stats/{lb}" for lb in show[u]]
             if include_shared:
                 paths += [f"users/{u}/shared/decks" for u, _ in everyone]
-            return mutual, everyone, want, paths
+            return mutual, everyone, show, weekly, paths
 
         own, resolved, pending, fresh = people(fresh=False)
-        mutual, everyone, want, paths = plan(own, resolved)
+        mutual, everyone, show, weekly, paths = plan(own, resolved)
         try:
-            docs = self.batch_get(paths)
+            docs = self.batch_get_people(paths, uid)
         except TransportError as e:
             if fresh or e.status != 403:
                 raise
             own, resolved, pending, fresh = people(fresh=True)
-            mutual, everyone, want, paths = plan(own, resolved)
-            docs = self.batch_get(paths)
+            mutual, everyone, show, weekly, paths = plan(own, resolved)
+            docs = self.batch_get_people(paths, uid)
+        # a 2.9 client that hasn't pushed since updating has no week doc yet:
+        # its day docs, in a second and smaller read
+        late = {u for u in weekly if docs.get(f"users/{u}/shared/week") is None}
+        if late:
+            _m, _e, show2, _w, paths2 = plan(own, resolved, no_week=late)
+            paths2 = [p for p in paths2 if "/daily_stats/" in p and p.split("/")[1] in late]
+            if paths2:
+                docs.update(self.batch_get_people(paths2, uid))
+            for u in late:
+                show[u] = show2[u]
+            weekly -= late
         cheer_docs = self.list_cheers(uid)
 
         entries = []
@@ -862,10 +1028,18 @@ class FirebaseClient:
             if include_shared:
                 decks = _clean_decks(
                     (docs.get(f"users/{u}/shared/decks") or {}).get("decks"))
+            week = docs.get(f"users/{u}/shared/week") if u in weekly else None
+            from_week = _week_days(week, show[u]) if week is not None else {}
+            head = week if week is not None else prof  # 2.9: the week doc is fresher
             days, stamps = {}, [str(prof.get("lastUpdated") or "")]
-            for lb in want[u]:
-                raw = own_days.get(lb) if u == uid else docs.get(f"users/{u}/daily_stats/{lb}")
-                if u == uid and raw is None:
+            if week is not None:
+                stamps.append(str(week.get("updatedAt") or ""))
+            for lb in show[u]:
+                if u == uid and lb in own_days:
+                    raw = own_days.get(lb)
+                elif week is not None:
+                    raw = from_week.get(lb)
+                else:
                     raw = docs.get(f"users/{u}/daily_stats/{lb}")
                 days[lb] = _clean_day(raw)
                 stamps.append(str((raw or {}).get("updatedAt") or ""))
@@ -876,11 +1050,11 @@ class FirebaseClient:
                 "name": str(prof.get("displayName", "?")),
                 "emoji": clean_emoji(prof.get("emoji")),
                 "you": u == uid,
-                "paused": bool(prof.get("paused")),
+                "paused": bool(head.get("paused")),
                 # a profile may be a day old now; a day doc says when its
                 # numbers last changed, which is what "last active" means
                 "last_updated": max(stamps),
-                "exam_date": str(prof.get("examDate") or ""),
+                "exam_date": str(head.get("examDate") or ""),
                 "days": days,
                 "decks": decks,  # None = not fetched this time
             })
@@ -927,8 +1101,7 @@ class FirebaseClient:
 
     # ---- upload ----
 
-    METRICS = (("reviews", "share_reviews"), ("studyTimeMs", "share_time"),
-               ("accuracy", "share_retention"), ("streak", "share_streak"))
+    METRICS = METRICS
 
     def _day_doc(self, label, values, cfg):
         """(doc, mask) for one daily_stats write. Every field is always in
@@ -936,14 +1109,8 @@ class FirebaseClient:
         not left stale. `studied` is the numbers-free floor the Days view
         stands on; it shares whenever sharing isn't paused."""
         doc = {"date": label, "studied": bool(values.get("reviews"))}
-        mask = ["date", "studied"]
-        for field, share_key in self.METRICS:
-            mask.append(field)
-            # show-up mode (v2.8) drops every number; the toggles keep their
-            # settings underneath for when it is switched off again
-            if (cfg.get(share_key, True) and not cfg.get("show_up")
-                    and values.get(field) is not None):
-                doc[field] = values.get(field)
+        mask = ["date", "studied"] + [field for field, _key in METRICS]
+        doc.update(shared_numbers(values, cfg))
         # v2.2: the status bubble (today's doc only — callers pass it) and
         # the away flag; both always in the mask, so clearing them clears.
         mask += ["status", "away", "awayTo"]
@@ -989,9 +1156,25 @@ class FirebaseClient:
         return True
 
     def upload_today(self, uid, display_name, label, stats, cfg, version=None, clock=None):
+        """Today's day doc, then the profile. Since 2.9 the profile is written
+        only when one of its fields changed or today's numbers did. Until then
+        every push rewrote it to move lastUpdated, including each return to a
+        stale Decks screen with nothing studied."""
+        ok = True
+        wrote_day = False
+        if not cfg.get("paused"):
+            values = {"reviews": int(stats.reviews),
+                      "studyTimeMs": int(stats.time_ms),
+                      "accuracy": None if stats.accuracy is None else float(stats.accuracy),
+                      "streak": int(stats.streak),
+                      "status": cfg.get("status")}
+            before = (self.session.get("day_hashes") or {}).get(label)
+            ok = self._put_day(uid, label, values, cfg)
+            wrote_day = (self.session.get("day_hashes") or {}).get(label) != before
+            ok = self.sync_away(uid, label, cfg) and ok
+            self._cleanup(uid, label)
         profile = {
             "displayName": display_name,
-            "lastUpdated": {"timestampValue": _now_ts()},
             "paused": bool(cfg.get("paused")),
         }
         if clock:
@@ -1006,30 +1189,74 @@ class FirebaseClient:
         # examDate rides the always-in-the-mask pattern: unset, past, or
         # paused thereby DELETES it server-side, never stale. openBoard (the
         # v2.0–2.2 Everyone flag) is cleared the same way.
-        mask = list(profile) + ["examDate", "openBoard", "emoji"]
+        mask = list(profile) + ["lastUpdated", "examDate", "openBoard", "emoji"]
         exam = _exam_value(cfg.get("exam_date"), label)
         if exam and not cfg.get("paused"):
             profile["examDate"] = exam
         emoji = clean_emoji(cfg.get("emoji"))
         if emoji:
             profile["emoji"] = emoji
-        ok = self.patch_doc(f"users/{uid}", profile, mask, label="profile")
+        digest = hashlib.sha1(json.dumps(profile, sort_keys=True).encode()).hexdigest()
+        if wrote_day or self.session.get("profile_hash") != digest:
+            data = dict(profile, lastUpdated={"timestampValue": _now_ts()})
+            if self.patch_doc(f"users/{uid}", data, mask, label="profile"):
+                self.session["profile_hash"] = digest
+            else:
+                ok = False
         if ok:
-            self.session["last_ok"] = _now_ts()  # Settings: "Synced 2m ago"
+            # Settings: "Synced 2m ago". Also when nothing needed writing: the
+            # hashes say the server already holds exactly this.
+            self.session["last_ok"] = _now_ts()
+        self._save_session()
         own, _status = self.get_doc(f"users/{uid}") if not self.session.get("friend_edges") else (None, 0)
         if own is not None:  # first run on 2.5: mirror the existing list once
             self.sync_friend_edges(uid, [f for f in (own.get("friends") or []) if isinstance(f, str)])
-        if cfg.get("paused"):
-            return ok
-        values = {"reviews": int(stats.reviews),
-                  "studyTimeMs": int(stats.time_ms),
-                  "accuracy": None if stats.accuracy is None else float(stats.accuracy),
-                  "streak": int(stats.streak),
-                  "status": cfg.get("status")}
-        ok = self._put_day(uid, label, values, cfg) and ok
-        ok = self.sync_away(uid, label, cfg) and ok
-        self._cleanup(uid, label)
         return ok
+
+    def upload_week(self, uid, labels, cfg):
+        """users/{me}/shared/week (2.9): my last eight days in one doc, built
+        from what _put_day uploaded (the session's own_days), so a friend's
+        refresh reads my whole week at the price of one doc. Hash-guarded like
+        the day docs. The away spell rides as a range, and readers flag its
+        days. Paused: the days go and the doc says so. Every field is always
+        in the mask, so whatever isn't sent is deleted."""
+        if not labels:
+            return True
+        try:
+            oldest = datetime.date.fromisoformat(labels[-1])
+        except ValueError:
+            return True
+        # one day past my week: a friend a day behind me still finds theirs
+        window = list(labels) + [(oldest - datetime.timedelta(days=1)).isoformat()]
+        paused = bool(cfg.get("paused"))
+        mine = self.session.get("own_days") or {}
+        days, stamps = {}, []
+        if not paused:
+            for lb in window:
+                d = mine.get(lb)
+                if not isinstance(d, dict):
+                    continue
+                stamps.append(str(d.get("updatedAt") or ""))
+                days[lb] = {k: v for k, v in d.items()
+                            if k not in ("updatedAt", "date", "away", "awayTo")}
+        doc = {"v": 1, "days": days, "paused": paused}
+        exam = _exam_value(cfg.get("exam_date"), labels[0])
+        if exam and not paused:
+            doc["examDate"] = exam
+        rng = away_range(cfg)
+        if rng and not paused:
+            doc["awayFrom"], doc["awayTo"] = rng[0].isoformat(), rng[1].isoformat()
+        digest = hashlib.sha1(json.dumps(doc, sort_keys=True).encode()).hexdigest()
+        if self.session.get("week_hash") == digest:
+            return True
+        stamp = max(stamps) if stamps and max(stamps) else _now_ts()
+        if not self.patch_doc(f"users/{uid}/shared/week",
+                              dict(doc, updatedAt={"timestampValue": stamp}),
+                              list(WEEK_FIELDS), label="week"):
+            return False
+        self.session["week_hash"] = digest
+        self._save_session()
+        return True
 
     def sync_away(self, uid, today_label, cfg):
         """Flag the days of an away spell so the crew sees the plane while
@@ -1284,7 +1511,17 @@ class FirebaseClient:
             "name": from_name,
             "squad": str(squad),
             "at": {"timestampValue": _now_ts()},
-        }, label="knock")
+        }, ["name", "squad", "at", "code"], label="knock")
+
+    def send_code_knock(self, to_uid, from_uid, from_name, code):
+        """rules-v9: a knock may carry the recipient's own friend code in
+        place of a shared squad. Holding it means they gave it to me. No
+        stale-rules hint on a refusal: the add itself went through."""
+        return self._patch_status(f"users/{to_uid}/knocks/{from_uid}", {
+            "name": from_name,
+            "code": str(code),
+            "at": {"timestampValue": _now_ts()},
+        }, mask=["name", "code", "at", "squad"]) in (200, 201)
 
     def list_knocks(self, uid):
         """[(sender_uid, sender_profile_name, squad_id)] — names come from
@@ -1335,6 +1572,7 @@ class FirebaseClient:
         self._delete_listed(f"users/{uid}/friends")
         self.delete_doc(f"users/{uid}/shared/decks")
         self.delete_doc(f"users/{uid}/shared/heatmap")
+        self.delete_doc(f"users/{uid}/shared/week")
         for sid in squad_ids:
             self.delete_doc(f"squads/{sid}/members/{uid}")
         if friend_code:

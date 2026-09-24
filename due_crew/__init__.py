@@ -8,9 +8,10 @@ thread is the only writer of shared state and renders never see torn data.
 Anki profiles share the add-on folder, so session/streak files live under
 user_files/<profile>/ and all runtime state resets on profile switch.
 
-Document-read budget: full 7-day history once per day and on manual Refresh;
-other refreshes fetch only today (plus my next label, so friends whose day
-already rolled over ahead of my timezone stay live).
+Document-read budget: a friend on 2.9+ is one read per refresh (their week
+doc); an older client's week is read once per day and on Refresh, and only
+the doc they are writing now otherwise. Profiles ride the day's first fetch,
+knocks that or an hourly one.
 """
 
 import datetime
@@ -26,14 +27,14 @@ from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS, STALE_SECS,
-                  STREAK_MILESTONES,
+from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, KNOCK_SECS, SQUAD_CACHE_SECS,
+                  STALE_SECS, STREAK_MILESTONES,
                   _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
 from .backend.firebase import TransportError
 from .shares import _share, dismiss_review, review_banners
-from .backend.firebase import _clean_day, clean_emoji
+from .backend.firebase import _clean_day, clean_emoji, shared_numbers
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer, cheer_allowed)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
@@ -41,6 +42,7 @@ from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _dr
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
                      _toggle_squad_lock, _visible_knocks, open_squads)
 from .stats import gather_stats, gather_week, week_days
+from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
@@ -55,7 +57,8 @@ _closing = False      # profile_will_close: uploads still go, fetches don't
 
 def _board_data():
     return {"entries": _state["entries"], "labels": _state["labels"],
-            "tomorrow": _state["tomorrow"], "pending": _state["pending"]}
+            "tomorrow": _state["tomorrow"], "pending": _state["pending"],
+            "my_code": _state["my_code"]}
 
 
 def _wants_fetch(uploading, have_board, age, closing, fetch=None):
@@ -143,6 +146,9 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         # the Decks tab fetches its own when someone actually looks. They
         # used to ride EVERY full fetch, a read per person per Refresh.
         with_decks = full and _state["decks_day"] != labels[0]
+        # knocks are rare: the day's first fetch and Refresh read them, and
+        # otherwise an hourly one does. They were a read on every refresh.
+        with_knocks = full or time.time() - _state["knocks_ts"] > KNOCK_SECS
         fetch = _wants_fetch(uploading, _state["entries"] is not None,
                              time.time() - _state["ts"], _closing, fetch)
         clock = _clock()
@@ -166,6 +172,9 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                                          version=ADDON_VERSION, clock=clock)
             if backfill is not None:
                 cl.upload_backfill(uid, backfill, c, labels=labels)
+            if upload_stats is not None or backfill is not None:
+                # 2.9: my week in one doc, from what was just uploaded
+                pushed = cl.upload_week(uid, labels, c) and pushed
             if shared_decks is not None and not c.get("paused"):
                 cl.upload_shared(uid, shared_decks)
             if heatmap is not None:
@@ -194,12 +203,14 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                     box["knocks"] = None
 
             side = threading.Thread(target=_knocks, daemon=True)
-            side.start()
+            if with_knocks:
+                side.start()
             data = cl.fetch_board(uid, labels, tomorrow=tomorrow,
                                   include_shared=with_decks, check_edges=full,
                                   light=not full, own_days=own_days,
                                   cached_people=not full)
-            side.join(25)
+            if with_knocks:
+                side.join(25)
             knocks = box.get("knocks")
             failed = not pushed
             mw.taskman.run_on_main(
@@ -277,14 +288,28 @@ def _fetch_decks(force=False):
 
 
 def _copy_friend_invite():
-    """The solo board's Copy invite. No code yet means the Friends dialog
-    has never been opened on this account; it makes one."""
+    """The solo board's Copy invite. Accounts made since 2.9 have a code from
+    sign-up; an older one that never opened Friends gets one made here, and
+    the invite is copied when it lands (until 2.9 this opened Friends)."""
     from .share import friend_invite
-    if not _state["my_code"]:
-        open_friends()
+    if _state["my_code"]:
+        copy_text(friend_invite(_state["my_code"]))
+        tooltip("Invite copied.")
         return
-    copy_text(friend_invite(_state["my_code"]))
-    tooltip("Invite copied.")
+    cl = client()
+    uid = cl.user_id
+
+    def done(code):
+        if not code:
+            tooltip("Couldn't make your code. Check your connection.")
+            return
+        _state["my_code"] = code
+        copy_text(friend_invite(code))
+        tooltip("Invite copied.")
+        _swap(cfg())
+
+    _bg(lambda: cl.ensure_friend_code(uid, (cl.get_doc(f"users/{uid}")[0] or {}).get("friendCode")),
+        done)
 
 
 def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
@@ -354,6 +379,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
+        _state["knocks_ts"] = time.time()
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
@@ -456,7 +482,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
         except Exception:
             traceback.print_exc()
         try:
-            heat = (StatsQueries(mw.col).heatmap_counts(HEATMAP_DAYS)
+            heat = (cached_heatmap(StatsQueries(mw.col), _profile_files(), HEATMAP_DAYS)
                     if c.get("share_heatmap", True) else "off")
         except Exception:
             traceback.print_exc()
@@ -468,10 +494,12 @@ def _on_sync_done(full=False, light=False, fetch=None):
             # studied, so "today" on a squad board means I studied today
             row["day"] = _last_studied(StatsQueries(mw.col), stats)
         else:
-            row.update(reviews=int(stats.reviews), studyTimeMs=int(stats.time_ms),
-                       streak=int(stats.streak))
-            if stats.accuracy is not None:
-                row["accuracy"] = float(stats.accuracy)
+            # the Privacy switches, as on the day docs: until 2.9 a squad got
+            # all four numbers whatever the switches said
+            row.update(shared_numbers({
+                "reviews": int(stats.reviews), "studyTimeMs": int(stats.time_ms),
+                "streak": int(stats.streak),
+                "accuracy": None if stats.accuracy is None else float(stats.accuracy)}, c))
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:
@@ -511,10 +539,12 @@ def _on_js(handled, message, context):
         open_friends()
     elif cmd == "copyinvite":
         _copy_friend_invite()
+    elif cmd == "addcode":
+        open_friends(focus_add=True)
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
-        open_auth()
+        open_auth(join=(parts[2] == "join") if len(parts) > 2 else None)
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
     elif cmd == "status":
@@ -553,7 +583,7 @@ def _on_js(handled, message, context):
             copy_text(text + " — Due Crew")
             tooltip("Copied.")
     elif cmd == "settings":
-        open_settings()
+        open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
@@ -617,25 +647,41 @@ def _swap(c):
     mw.web.eval(js)
 
 
-def open_auth():
+def open_auth(join=None):
+    """join: open the dialog on Join (True) or Sign In (False); None lets it
+    choose. A new account gets the welcome screen before its first upload,
+    so what the crew will see is said before any of it is shared."""
     from .ui.auth_dialog import AuthDialog
-    dlg = AuthDialog(mw, client())
+    dlg = AuthDialog(mw, client(), join=join)
     if dlg.exec() and dlg.user:
         _uid, name = dlg.user
         _reset_runtime()
+        if dlg.joined:
+            _welcome()
+        else:
+            tooltip(f"Welcome back, {html.escape(name)}.")
         _on_sync_done()
         _rerender()
-        tooltip(f"Welcome, {html.escape(name)}.")
 
 
-def open_friends():
+def _welcome():
+    from .ui.welcome_dialog import WelcomeDialog
+    dlg = WelcomeDialog(mw, client(), cfg(), open_squads)
+    if dlg.exec() and dlg.offered:
+        c = cfg()
+        if bool(c.get("show_up")) != dlg.show_up:
+            c["show_up"] = dlg.show_up
+            save_cfg(c)
+
+
+def open_friends(focus_add=False):
     if not client().signed_in:
         open_auth()
         return
     from .ui.friends_dialog import FriendsDialog
     dlg = FriendsDialog(mw, client(),
                         muted=list(_wrap_data().get("muted_knocks") or []),
-                        on_mute=_mute_knocker)
+                        on_mute=_mute_knocker, focus_add=focus_add)
     dlg.exec()
     if dlg.changed:
         refresh_board(full=True)
@@ -664,11 +710,14 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
-def open_settings():
+def open_settings(tab=None):
+    """tab: "you", "board", or "privacy" (your card's Privacy… opens that
+    one; until 2.9 it landed on Account)."""
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
                          open_auth, open_friends, _on_signed_out, open_decks,
-                         open_squads)
+                         open_squads, edit_emoji=_edit_emoji, edit_status=_edit_status,
+                         tab=tab)
     dlg.exec()
 
 

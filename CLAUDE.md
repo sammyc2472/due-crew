@@ -29,6 +29,15 @@ maintainer. The repo is the source of truth; there is no build step.
   `users/{me}/friends/{fid}` (what 2.5+ reads for add-backs, and what the
   rules honour). A later release stops writing the array once the crew
   is on 2.5+ (check `clientVersion` on their profiles first).
+- Day stats live twice during the 2.9 changeover: `daily_stats/{label}`
+  docs (what clients up to 2.8 read) and `shared/week`, a person's last
+  eight days in one doc (what 2.9+ reads for a friend whose profile says
+  2.9+, falling back to day docs when it's missing). The same later
+  release stops writing day docs, `sync_away`'s future-day docs, and the
+  profile's crew-only fields (`examDate`, `paused`, `tz`, `rollover`),
+  which the week doc already carries. Profiles are readable by any
+  signed-in user with the uid (squadmates have it), so that step is also
+  a privacy fix; the README says so until then.
 - "Week" is the calendar week, Monday to Sunday (`board.week_labels`).
   The squad board's "7 days" column is the one rolling count, and is
   labelled as such. Crew totals accrue through the per-day ledger in
@@ -61,14 +70,20 @@ maintainer. The repo is the source of truth; there is no build step.
 - Simplicity is the product rule. Friendship framing, never competition —
   "crew", no "compete/rivals". Copy is terse, no AI-speak.
 - Firebase reads cost money at scale: minimize document reads. A light
-  refresh is one day doc per friend plus two owner-only lists (cheers,
-  knocks): profiles are read once a day, my own row comes from my own
-  uploads (`session.own_days`), and a friend's profile clock (`tz`,
-  `rollover`) says which one doc they are writing right now. A squad
-  board is one get plus one query, a read per member, fetched lazily.
-  `test_reads_diet` pins the reads per operation; changing a number there
-  is changing what the add-on costs per user, and must be deliberate.
-  Don't add polling, per-friend fetches, or unbounded queries.
+  refresh is one doc per friend (their week doc) plus the cheers list;
+  knocks are listed on the day's first fetch, on Refresh, on the Squads
+  tab, and at most hourly otherwise. Profiles are read once a day, and my
+  own row comes from my own uploads (`session.own_days`). A squad board
+  is one get plus one query, a read per member, fetched lazily. Every
+  friend read also costs a rules read (`isFriend()`'s `exists()`), billed
+  like a document: `test_reads_diet` and `test_week_doc_v29` count both
+  and pin them; changing a number there is changing what the add-on costs
+  per user, and must be deliberate. Don't add polling, per-friend
+  fetches, or unbounded queries.
+- A multi-document read gets 20 rules access calls, and `isFriend()`
+  spends one per friend (two without an edge doc); past that the whole
+  batch is refused. Batches of friends' docs go through
+  `batch_get_people`, ten friends at a time. Measured in the emulator.
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - A PATCH to a missing Firestore doc is an INSERT. Any write meant as an

@@ -54,8 +54,14 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
 
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads")
-HEADERS = (("reviews", "&#128218; Reviews"), ("time", "&#9201; Time"),
-           ("retention", "&#127919; Retention"), ("streak", "&#128293; Streak"))
+def _head_label(icon, text):
+    """Icon, then the word, which a narrow window drops (see _css)."""
+    return f'{icon}<span class="hl"> {text}</span>'
+
+
+HEADERS = (("reviews", _head_label("&#128218;", "Reviews")), ("time", _head_label("&#9201;", "Time")),
+           ("retention", _head_label("&#127919;", "Retention")),
+           ("streak", _head_label("&#128293;", "Streak")))
 MEDALS = ("&#129351;", "&#129352;", "&#129353;")
 
 
@@ -391,7 +397,8 @@ def _css(cfg):
     #due-crew .la.faded {{ color: var(--dc-faded); }}
     #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
     #due-crew .dc-foot .sp {{ flex: 1; }}
-    #due-crew .dc-foot a {{ color: var(--dc-accent); text-decoration: none; font-weight: 700; }}
+    #due-crew .dc-foot a {{ color: var(--dc-accent); text-decoration: none; font-weight: 700;
+      white-space: nowrap; }}
     #due-crew .dc-note {{ font-style: italic; font-size: 11px; }}
     #due-crew a.dc-pl {{ color: inherit; text-decoration: none;
       border-bottom: 1px dotted var(--dc-line); }}
@@ -441,6 +448,17 @@ def _css(cfg):
       color: var(--dc-muted); }}
     #due-crew .dc-count .dc-delta {{ margin-left: 0; }}
     #due-crew .dc-line {{ font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }}
+    #due-crew .dc-line a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .dc-code {{ font-family: Menlo, Consolas, monospace; font-weight: 700;
+      letter-spacing: 1.5px; color: var(--dc-ink); }}
+    /* a narrow window: headers keep their icons, the last-active chips go
+       (a quiet row keeps its: that chip is the whole story), and the name
+       gets the room. Until 2.9 every name shrank to three letters. */
+    @media (max-width: 560px) {{
+      #due-crew th .hl {{ display: none; }}
+      #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
+      #due-crew tr:not(.dim) .la {{ display: none; }}
+    }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
     #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700;
@@ -562,10 +580,12 @@ def _table_html(data, cfg, period):
         body += _row_html(row, "&mdash;", cfg)
     solo = ""
     if len(data["entries"]) == 1 and not data.get("pending"):
-        solo = ('<div class="dc-line">Just you so far. '
-                f'<a href="#" style="color: var(--dc-accent); font-weight: 700; '
-                f'text-decoration: none;" onclick="{_pycmd("copyinvite")}">Copy invite</a>'
-                ' and send it to a friend.</div>')
+        code = str(data.get("my_code") or "")
+        mine = (f'Your code <span class="dc-code">{_html.escape(code)}</span> &middot; '
+                if code else "")
+        solo = (f'<div class="dc-line">Just you so far. {mine}'
+                f'<a href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a> &middot; '
+                f'<a href="#" onclick="{_pycmd("addcode")}">Add a code</a></div>')
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
@@ -691,7 +711,7 @@ def _decks_html(data, deltas=None):
     today_labels = tuple(lb for lb in (labels[0] if labels else "", data.get("tomorrow")) if lb)
     groups, extras = build_deck_groups(data["entries"])
     if not groups and not extras:
-        return ('<div class="dc-line" style="border-top: none;">No shared decks yet. '
+        return ('<div class="dc-line">No shared decks yet. '
                 f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a> '
                 '&mdash; matching decks pair up on their own.</div>')
     html = ""
@@ -702,7 +722,7 @@ def _decks_html(data, deltas=None):
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(html, sum(len(g["rows"]) for g in groups))
-    html += ('<div class="dc-line" style="border-top: none; padding-top: 2px;">'
+    html += ('<div class="dc-line" style="padding-top: 2px;">'
              # named by texture, not by light/dark: in dark mode the mature fill
              # is the bright one, and "dark = mature" read backwards there
              'solid = mature &middot; faded = seen &middot; hatched = unlocked &middot; '
@@ -715,7 +735,7 @@ SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
 # squads stay Today-only, so this column is a rolling count ("studied 5 of
 # the last 7 days"), one int per member. Labelled for what it is: the crew's
 # Week view is the calendar week, and the two must not share a word.
-SQUAD_HEADERS = HEADERS + (("week", "&#128197; 7 days"),)
+SQUAD_HEADERS = HEADERS + (("week", _head_label("&#128197;", "7 days")),)
 
 
 def _switcher(view):
@@ -737,17 +757,16 @@ def _squads_html(view, cfg):
     sw = _switcher(view)
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return (sw + '<div class="dc-line" style="border-top: none;">A private board '
+        return (sw + '<div class="dc-line">A private board '
                 'for any group. Join with a code, or create one.</div>')
     if state == "loading":
-        return sw + '<div class="dc-line" style="border-top: none;">Fetching&hellip;</div>'
+        return sw + '<div class="dc-line">Fetching&hellip;</div>'
     if state == "error":
-        return (sw + '<div class="dc-line" style="border-top: none;">Couldn&rsquo;t '
+        return (sw + '<div class="dc-line">Couldn&rsquo;t '
                 'load. Check your connection and Refresh.</div>')
     if state == "gone":
-        return (sw + f'<div class="dc-line" style="border-top: none;">You&rsquo;re no '
-                f'longer in {name}. <a href="#" style="color: var(--dc-accent); '
-                f'font-weight: 700; text-decoration: none;" '
+        return (sw + f'<div class="dc-line">You&rsquo;re no '
+                f'longer in {name}. <a href="#" '
                 f'onclick="{_pycmd("squaddrop:" + str(view.get("current", "")))}">Remove</a></div>')
     rows = view.get("rows") or []
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
@@ -798,7 +817,7 @@ def _squads_html(view, cfg):
             elif r.get("knocked_me"):
                 note = ' <span class="la fresh">&middot; added you</span>'
             elif r.get("pending"):
-                note = ' <span class="la faded">&middot; knocked</span>'
+                note = ' <span class="la faded">&middot; waiting</span>'
             link = (f'<a class="dc-pl" href="#" title="Open card" '
                     f'onclick="{_pycmd("ecard:" + uid)}">{pname}</a>')
         if r.get("day") != day:
@@ -823,18 +842,16 @@ def _squads_html(view, cfg):
                  f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(r.get("streak"))}</td>'
                  f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
-    link_css = 'style="color: var(--dc-accent); font-weight: 700; text-decoration: none;"'
-    acts = [f'<a href="#" {link_css} onclick="{_pycmd("squadinvite")}">Copy invite</a>',
-            f'<a href="#" {link_css} title="Copy today for the chat" '
-            f'onclick="{_pycmd("squadshare")}">Share</a>']
+    # the squad's own line; Share today sits in the footer, as on Today
+    acts = [f'<a href="#" onclick="{_pycmd("squadinvite")}">Copy invite</a>']
     if view.get("founder_me"):
-        acts.append(f'<a href="#" {link_css} onclick="{_pycmd("squadlock")}">'
+        acts.append(f'<a href="#" onclick="{_pycmd("squadlock")}">'
                     f'{"Open" if view.get("open") is False else "Lock"}</a>')
-    acts.append(f'<a href="#" {link_css} onclick="{_pycmd("squadleave")}">Leave</a>')
-    foot = ('<div class="dc-line" style="border-top: none;">'
+    acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
+    foot = ('<div class="dc-line">'
             + " &middot; ".join(acts) + "</div>")
     if not body:
-        return (sw + '<div class="dc-line" style="border-top: none;">No one&rsquo;s '
+        return (sw + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
     return sw + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
 
@@ -879,10 +896,12 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     for k in (knocks or [])[:3]:
         # someone in a squad added me: my add makes it mutual
         who = _html.escape(str(k.get("name", "?")))
-        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad") else "")
+        # a squadmate's add names the squad; an add by code (2.9) says so
+        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad")
+                 else " your code" if k.get("via_code") else "")
         uid = str(k.get("uid", ""))
         body = (f'<div class="dc-wrap knock"><span>&#128075;</span>'
-                f'<span><b>{who}</b> added you{where}</span>'
+                f'<span><b>{who}</b> added{"" if k.get("via_code") and not k.get("squad") else " you"}{where}</span>'
                 f'<a class="wc" href="#" title="Add back" '
                 f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
                 f'<a class="wx" href="#" title="Not now" '
@@ -926,8 +945,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 
     n_pending = len(data.get("pending", []))
     if n_pending:
-        s = "s" if n_pending > 1 else ""
-        left = (f'{n_pending} invite{s} pending &middot; '
+        left = (f'<span title="You added them; you\'re crew when they add you back">'
+                f'{n_pending} waiting</span> &middot; '
                 f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>')
     else:
         left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
@@ -941,6 +960,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     if period == "today" and not show_up:
         left += (f' &middot; <a href="#" title="Copy your day for the chat" '
                  f'onclick="{_pycmd("sharetoday")}">Share today</a>')
+    if (period == "squads" and not show_up
+            and (squad_view or {}).get("state") == "ok"):
+        left += (f' &middot; <a href="#" title="Copy the squad\'s day for the chat" '
+                 f'onclick="{_pycmd("squadshare")}">Share today</a>')
     if period == "week" or (show_up and period == "today"):
         left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
                  f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
@@ -951,7 +974,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               ' &middot; ') if sync_error else ""
     foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
             f'<span>{failed}Updated {ago} &middot; <a href="#" '
-            f'onclick="{_pycmd("refresh")}">Refresh</a></span></div>')
+            f'onclick="{_pycmd("refresh")}">Refresh</a> &middot; <a href="#" '
+            f'onclick="{_pycmd("settings")}">Settings</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
             f'{_css(cfg)}{_head(period, show_up)}{body}{foot}</div>')
@@ -968,8 +992,9 @@ def signed_out_card(cfg, expired=False):
                      f'Your sign-in expired. '
                      f'<a href="#" onclick="{_pycmd("setup")}">Sign in again</a>')
     return _card(cfg, "Due Crew",
-                 f'Your studying, alongside your friends\'. '
-                 f'<a href="#" onclick="{_pycmd("setup")}">Join your crew</a>')
+                 f'Your friends&rsquo; studying next to yours. Nothing is shared '
+                 f'until you join. <a href="#" onclick="{_pycmd("setup:join")}">Join</a>'
+                 f' &middot; <a href="#" onclick="{_pycmd("setup:signin")}">Sign in</a>')
 
 
 def loading_card(cfg):
@@ -978,7 +1003,8 @@ def loading_card(cfg):
 
 def flurry_js(emojis, banner_text, back=None, notes=None):
     """Injected via web.eval after render — never inline in board HTML.
-    Banner picks its colors from the page's night classes. When `back` is
+    Banner takes its colors from the board's tokens (so Settings → Theme
+    holds), the page's night classes only when the board is off. When `back` is
     (uid, emoji) — a single sender — the banner is clickable to return the
     cheer, and stays up a little longer. `notes`: sender-written lines shown
     under the title (textContent: never markup), which also buy time."""
@@ -991,6 +1017,18 @@ def flurry_js(emojis, banner_text, back=None, notes=None):
         if (document.getElementById('dc-flurry')) { return; }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        // 2.9: colors come from the board, which already follows Settings ->
+        // Theme and Accent; Anki's night class is only the fallback
+        var dcBoard = document.getElementById('due-crew');
+        var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
+        function tok(name, light, dark) {
+            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+            return v || (night ? dark : light);
+        }
+        var dcBg = tok('bg', '#ffffff', '#1c1c1c'), dcInk = tok('ink', '#333333', '#dfe1dc'),
+            dcLine = tok('line', '#e2e2da', '#3d403b'), dcWell = tok('well', '#f2f2ec', '#2b2d29'),
+            accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+            warn = tok('hours', '#b26a00', '#dda45c');
         var backCmd = %s;
         var banner = document.createElement('div');
         var title = document.createElement('div');
@@ -1006,10 +1044,7 @@ def flurry_js(emojis, banner_text, back=None, notes=None):
         banner.style.cssText = 'position:fixed;top:18vh;left:50%%;transform:translateX(-50%%);' +
             'z-index:70;border-radius:12px;padding:10px 20px;font-weight:700;font-size:15px;' +
             'text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.3);transition:opacity 0.5s;' +
-            (night ? 'background:#262b24;color:#dfe1dc;' : 'background:#ffffff;color:#23281f;') +
-            'border:1px solid ' + ((document.getElementById('due-crew') &&
-                getComputedStyle(document.getElementById('due-crew')).getPropertyValue('--dc-accent').trim())
-                || (night ? '#7cc47f' : '#2e7d32')) + ';';
+            'background:' + dcBg + ';color:' + dcInk + ';border:1px solid ' + accent + ';';
         var linger = 2600 + (notes.length ? 2500 : 0);
         if (backCmd && typeof pycmd !== 'undefined') {
             linger = 5000;
@@ -1084,7 +1119,7 @@ def stranger_card_js(info):
         act_label = _json.dumps("\U0001F91D Add back")
         act_cmd, act_primary = _json.dumps(f"duecrew:addback:{uid}"), "true"
     elif info.get("pending"):
-        act_label = _json.dumps("\u23F3 Knocked")
+        act_label = _json.dumps("\u23F3 Waiting")
         act_cmd, act_primary = _json.dumps(None), "false"
     else:
         act_label = _json.dumps("\U0001F91D Add")
@@ -1101,10 +1136,18 @@ def stranger_card_js(info):
         if (old) { old.remove(); }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        // 2.9: colors come from the board, which already follows Settings ->
+        // Theme and Accent; Anki's night class is only the fallback
         var dcBoard = document.getElementById('due-crew');
         var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-        var accent = (dcStyle && dcStyle.getPropertyValue('--dc-accent').trim()) || (night ? '#7cc47f' : '#2e7d32');
-        var accentInk = (dcStyle && dcStyle.getPropertyValue('--dc-accent-ink').trim()) || (night ? '#122912' : '#ffffff');
+        function tok(name, light, dark) {
+            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+            return v || (night ? dark : light);
+        }
+        var dcBg = tok('bg', '#ffffff', '#1c1c1c'), dcInk = tok('ink', '#333333', '#dfe1dc'),
+            dcLine = tok('line', '#e2e2da', '#3d403b'), dcWell = tok('well', '#f2f2ec', '#2b2d29'),
+            accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+            warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -1112,8 +1155,7 @@ def stranger_card_js(info):
         var card = document.createElement('div');
         card.style.cssText = 'min-width:300px;max-width:380px;border-radius:12px;padding:16px 20px;' +
             'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
-            (night ? 'background:#23271f;color:#dfe1dc;border:1px solid #3d403b;'
-                   : 'background:#ffffff;color:#333333;border:1px solid #e2e2da;');
+            'background:' + dcBg + ';color:' + dcInk + ';border:1px solid ' + dcLine + ';';
         var body = document.createElement('div');
         body.innerHTML = %s;
         card.appendChild(body);
@@ -1127,7 +1169,7 @@ def stranger_card_js(info):
             (primary ? 'background:' + accent + ';color:' + accentInk +
                        ';border:1px solid transparent;font-weight:600;cursor:pointer;'
                      : 'background:none;color:inherit;opacity:0.7;border:1px solid ' +
-                       (night ? '#3d403b' : '#e2e2da') + ';cursor:default;');
+                       dcLine + ';cursor:default;');
         if (actCmd) {
             act.addEventListener('click', function() {
                 back.remove();
@@ -1138,27 +1180,39 @@ def stranger_card_js(info):
         close.textContent = 'Close';
         close.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
             'background:none;color:inherit;border:1px solid ' +
-            (night ? '#3d403b' : '#e2e2da') + ';';
+            dcLine + ';';
         close.addEventListener('click', function() { back.remove(); });
         row.appendChild(act);
-        var extras = %s;
-        extras.forEach(function(pair) {
-            var extra = document.createElement('button');
-            extra.textContent = pair[0];
-            extra.style.cssText = 'font-size:12.5px;padding:5px 13px;border-radius:6px;cursor:pointer;' +
-                'background:none;color:inherit;opacity:0.8;border:1px solid ' +
-                (night ? '#3d403b' : '#e2e2da') + ';';
-            extra.addEventListener('click', function() {
-                back.remove();
-                if (typeof pycmd !== 'undefined') { pycmd(pair[1]); }
-            });
-            row.appendChild(extra);
-        });
         var spacer = document.createElement('div');
         spacer.style.flex = '1';
         row.appendChild(spacer);
         row.appendChild(close);
         card.appendChild(row);
+        // the founder's tools get a row of their own; on the action row
+        // they pushed Close onto a line by itself
+        var extras = %s;
+        if (extras.length) {
+            var tools = document.createElement('div');
+            tools.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;' +
+                'margin-top:12px;padding-top:10px;border-top:1px solid ' + dcLine + ';';
+            var toolsLabel = document.createElement('span');
+            toolsLabel.textContent = 'Founder';
+            toolsLabel.style.cssText = 'font-size:10.5px;opacity:0.6;margin-right:4px;' +
+                'text-transform:uppercase;letter-spacing:0.08em;';
+            tools.appendChild(toolsLabel);
+            extras.forEach(function(pair) {
+                var extra = document.createElement('button');
+                extra.textContent = pair[0];
+                extra.style.cssText = 'font-size:11.5px;padding:3px 10px;border-radius:6px;cursor:pointer;' +
+                    'background:none;color:inherit;opacity:0.85;border:1px solid ' + dcLine + ';';
+                extra.addEventListener('click', function() {
+                    back.remove();
+                    if (typeof pycmd !== 'undefined') { pycmd(pair[1]); }
+                });
+                tools.appendChild(extra);
+            });
+            card.appendChild(tools);
+        }
         back.appendChild(card);
         back.addEventListener('click', function(e) {
             if (e.target === back) { back.remove(); }
@@ -1244,19 +1298,26 @@ def profile_overlay_js(profile):
         grid = (f'<div style="font-size: 12px; opacity: 0.7; margin: 12px 0;">'
                 f'{private}</div>')
     else:
+        # rows are weekdays: the first column starts on a Monday, padded with
+        # blanks, and the last is padded after today. Until 2.9 the grid
+        # started wherever the half-year did.
+        try:
+            pad = _date.fromisoformat(str(profile.get("start"))).weekday()
+        except (TypeError, ValueError):
+            pad = 0
         cols = []
-        week = []
+        week = [-1] * pad
         for n in cells:
             week.append(_heat_level(int(n)))
             if len(week) == 7:
                 cols.append(week)
                 week = []
         if week:
-            cols.append(week + [0] * (7 - len(week)))
+            cols.append(week + [-1] * (7 - len(week)))
         col_html = ""
         for col in cols[-26:]:
             cell_html = "".join(
-                f'<i class="dchm h{lvl}"></i>' for lvl in col)
+                f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>' for lvl in col)
             col_html += f'<div class="dchc">{cell_html}</div>'
         grid = f'<div class="dchg">{col_html}</div>'
 
@@ -1306,7 +1367,7 @@ def profile_overlay_js(profile):
     inner = _json.dumps(head + grid + lines)
     if you:
         act_label, act_primary = _json.dumps("Privacy…"), "false"
-        act_cmd = _json.dumps("duecrew:settings")
+        act_cmd = _json.dumps("duecrew:settings:privacy")
     else:
         act_label, act_primary = _json.dumps("\U0001F389 Send a cheer"), "true"
         act_cmd = _json.dumps(f"duecrew:cheerpick:{profile.get('uid', '')}")
@@ -1316,11 +1377,18 @@ def profile_overlay_js(profile):
         if (old) { old.remove(); }
         var night = /night/i.test(document.body.className) ||
             (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        // 2.9: colors come from the board, which already follows Settings ->
+        // Theme and Accent; Anki's night class is only the fallback
         var dcBoard = document.getElementById('due-crew');
         var dcStyle = dcBoard ? getComputedStyle(dcBoard) : null;
-        var accent = (dcStyle && dcStyle.getPropertyValue('--dc-accent').trim()) || (night ? '#7cc47f' : '#2e7d32');
-        var accentInk = (dcStyle && dcStyle.getPropertyValue('--dc-accent-ink').trim()) || (night ? '#122912' : '#ffffff');
-        var warn = night ? '#dda45c' : '#b26a00';
+        function tok(name, light, dark) {
+            var v = dcStyle && dcStyle.getPropertyValue('--dc-' + name).trim();
+            return v || (night ? dark : light);
+        }
+        var dcBg = tok('bg', '#ffffff', '#1c1c1c'), dcInk = tok('ink', '#333333', '#dfe1dc'),
+            dcLine = tok('line', '#e2e2da', '#3d403b'), dcWell = tok('well', '#f2f2ec', '#2b2d29'),
+            accent = tok('accent', '#2e7d32', '#7cc47f'), accentInk = tok('accent-ink', '#ffffff', '#122912'),
+            warn = tok('hours', '#b26a00', '#dda45c');
         var back = document.createElement('div');
         back.id = 'dc-profile';
         back.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.35);' +
@@ -1328,24 +1396,24 @@ def profile_overlay_js(profile):
         var card = document.createElement('div');
         card.style.cssText = 'min-width:340px;max-width:420px;border-radius:12px;padding:16px 20px;' +
             'box-shadow:0 16px 60px rgba(0,0,0,0.35);' +
-            (night ? 'background:#23271f;color:#dfe1dc;border:1px solid #3d403b;'
-                   : 'background:#ffffff;color:#333333;border:1px solid #e2e2da;');
+            'background:' + dcBg + ';color:' + dcInk + ';border:1px solid ' + dcLine + ';';
         var style = document.createElement('style');
         style.textContent = '.dchg{display:flex;gap:2px;margin:12px 0 8px;}' +
             '.dchc{display:flex;flex-direction:column;gap:2px;}' +
             '.dchm{width:8px;height:8px;border-radius:1.5px;display:block;background:' +
-            (night ? '#2b2d29' : '#f2f2ec') + ';}' +
+            dcWell + ';}' +
             '.dchm.h1{background:' + accent + ';opacity:0.25;}' +
             '.dchm.h2{background:' + accent + ';opacity:0.45;}' +
             '.dchm.h3{background:' + accent + ';opacity:0.7;}' +
             '.dchm.h4{background:' + accent + ';}' +
+            '.dchm.hx{visibility:hidden;}' +
             '.dcex{color:' + warn + ';}' +
             '.dcduet{display:flex;align-items:center;gap:8px;padding:1px 0;}' +
             '.dcdl{width:42px;flex-shrink:0;font-size:10px;opacity:0.65;' +
             'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
             '.dcd{width:9px;height:9px;border-radius:50%%;display:inline-block;' +
             'margin-right:6px;background:' + accent + ';}' +
-            '.dcd.off{background:' + (night ? '#2b2d29' : '#f2f2ec') + ';}';
+            '.dcd.off{background:' + dcWell + ';}';
         card.appendChild(style);
         var body = document.createElement('div');
         body.innerHTML = %s;
@@ -1359,7 +1427,7 @@ def profile_overlay_js(profile):
                 (primary ? 'background:' + accent + ';color:' + accentInk +
                            ';border:1px solid transparent;font-weight:600;'
                          : 'background:none;color:inherit;border:1px solid ' +
-                           (night ? '#3d403b' : '#e2e2da') + ';');
+                           dcLine + ';');
             return b;
         }
         var act = btn(%s, %s);

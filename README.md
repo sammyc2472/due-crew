@@ -12,9 +12,10 @@ streak means what it says.
   for you and your crew. Today, Week, and shared-deck progress. Friends
   who go quiet stay on the board; that's when a cheer counts — and the
   day they're back, the board says so.
-- **Consent-based friendships** — swap 6-character codes. You see someone's
-  stats only after they add your code, and vice versa. Remove someone and
-  they stop seeing yours immediately.
+- **Consent-based friendships** — add a friend's 6-character code (or
+  paste their whole invite) and their board offers "Add back": one click and
+  you're crew. You see someone's stats only after they add you, and vice
+  versa. Remove someone and they stop seeing yours immediately.
 - **Cheers** — send an emoji (six quick picks, or any one from your emoji
   picker) and your friend gets a full-screen flurry with your name on it
   after their next sync. Add a short note and it rides along. Click a
@@ -27,7 +28,7 @@ streak means what it says.
   they've done in it today and this week, and how well it's sticking. Hover
   a bar for the exact numbers. Decks match automatically by note
   fingerprint: AnKing and other imported decks pair up with no setup.
-- **Just show up** — a switch in Privacy: share only that you studied, and
+- **Just show up** — a choice in Privacy: share only that you studied, and
   see only that of others. Your row is a check, never a rank; your board is
   a square per day.
 - **Crew emoji** — pick one emoji from your own card and it sits in front
@@ -49,8 +50,8 @@ streak means what it says.
   streak keeps counting as long as you keep studying.
 - **Squads** — a private board for any group: a class, a Discord, a
   study group. Join with an invite code, or create one and share yours.
-  Squadmates see your name and today's reviews, time, retention, and
-  streak, plus how many of the last seven days they studied. Plain ranks,
+  Squadmates see your name and today's numbers, whichever your Privacy
+  switches share, plus how many of the last seven days you studied. Plain ranks,
   everyone in the squad, Today only. The founder can lock the door, remove
   or block people, and hand the squad on; anyone can leave. Tap a name to
   add someone; you're crew when they add back, and the board tells you when
@@ -65,13 +66,14 @@ streak means what it says.
   Counts are reviews (every answer counts), and a crewmate who hasn't
   synced since mid-week is marked "as of" their last sync rather than
   shown as absent.
-- **Your colors** — six accent colors (Settings → Appearance), each tuned
+- **Your colors** — six accent colors (Settings → Board), each tuned
   for light and dark mode; the whole board, your row highlight, and the
   cards follow it.
-- **Light on everything** — the whole board loads in 4 HTTP requests, all
-  network runs off the main thread with timeouts, and it syncs when Anki
-  opens or syncs, when you come back to a board more than 15 minutes old,
-  or when you click Refresh. If a sync fails, the board says so.
+- **Light on everything** — a refresh reads one small document per
+  friend, all network runs off the main thread with timeouts, and it syncs
+  when Anki opens or syncs, when you come back to a board more than 15
+  minutes old, or when you click Refresh. If a sync fails, the board says
+  so.
 
 ## Install
 
@@ -84,20 +86,24 @@ restart Anki after installing.
 
 ## Getting started
 
-1. Click Due Crew on the Decks screen and sign up (an email and a
-   display name).
-2. Friends → Copy invite (or just your code), send it to a friend. They
-   add yours, you add theirs — you're crew.
-3. Study. Stats sync when Anki syncs.
-4. Optional: Squads → **+ join or create**. Share the invite code with
-   your class or group chat.
+1. Click **Join** on the Decks screen and sign up (an email and a
+   display name). One screen follows: copy your invite, add a code you
+   were sent, or join a squad, and see what your crew will see first.
+2. Send your invite. When your friend adds your code, **Add back** shows
+   up on your board: click it and you're crew.
+3. Study. Stats sync when Anki opens and syncs.
+4. Optional: Squads → **+ join or create**. Share the invite with your
+   class or group chat.
 
 ## Privacy
 
 Due Crew runs on one hosted backend (the maintainer pays for it). Stats
-live there, readable only by people you've added, and who you've added is
-visible only to you and to them — and, in any squad you join, a single
-name-and-today's-numbers row readable by that squad's members. Squads have no directory: only people holding the invite code can
+live there, readable only by people you've added — and, in any squad you
+join, a single name-and-today's-numbers row readable by that squad's
+members, with the same Privacy switches applied. Your profile can be
+read by anyone who has your account id, which squadmates have: your name
+and emoji, and until a coming release finishes moving them, your exam
+date, time zone, and friend list. Squads have no directory: only people holding the invite code can
 find one, and the founder can lock it. All of it is enforced server-side
 by the
 [Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)

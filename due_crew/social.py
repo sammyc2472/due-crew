@@ -8,10 +8,10 @@ from aqt import mw
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (CHEER_CLASSIC, CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers, _state,
-                  cfg, client, save_cfg)
-from .backend.firebase import clean_emoji, emoji_too_long
-from .stats import duet_runs
+from .app import (CHEER_CLASSIC, CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
+                  _profile_files, _state, cfg, client, save_cfg)
+from .backend.firebase import clean_emoji
+from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
 
 def _fresh_cheers(cheers, seen, old_ts=""):
@@ -93,21 +93,22 @@ def _send_cheer(to_uid, to_name, emoji, note=""):
     _bg(lambda: cl.send_cheer(to_uid, uid, my_name, emoji, note or None), done)
 
 
-def _edit_status():
-    """Own card → "Set a status" / "edit". One line, crew-only, pushed
-    right away (it rides today's stats doc). Empty clears it."""
+def _edit_status(parent=None):
+    """Own card → "Set a status" / "edit", and (2.9) Settings → You. One
+    line, crew-only, pushed right away (it rides today's stats doc). Empty
+    clears it. Returns the new status, or None when nothing changed."""
     from aqt.qt import QInputDialog
     c = cfg()
     current = str(c.get("status") or "")
     text, ok = QInputDialog.getText(
-        mw, "Status",
+        parent or mw, "Status",
         "One line under your name, for your crew. Empty clears it.",
         text=current)
     if not ok:
-        return
+        return None
     text = " ".join(str(text).split())[:80]
     if text == current:
-        return
+        return None
     c["status"] = text
     save_cfg(c)
     lb = _state["labels"][0] if _state["labels"] else None
@@ -122,26 +123,24 @@ def _edit_status():
     app.rerender()
     app.sync()
     tooltip("Status set." if text else "Status cleared.")
+    return text
 
 
-def _edit_emoji():
-    """Own card → "Pick an emoji" / "Change emoji". One glyph, in front of
-    your name everywhere your crew sees it. Empty removes it."""
-    from aqt.qt import QInputDialog
+def _edit_emoji(parent=None):
+    """Own card → "Pick an emoji" / "Change emoji", and (2.9) Settings →
+    You. One glyph, in front of your name everywhere your crew sees it.
+    Since 2.9 it's the cheer picker with faces for a quick row (it was a
+    bare text box); Remove clears it. Returns the new emoji ("" when
+    removed), or None when nothing changed."""
+    from .ui.cheer_dialog import EmojiDialog
     c = cfg()
-    current = str(c.get("emoji") or "")
-    text, ok = QInputDialog.getText(
-        mw, "Emoji", "One emoji, shown in front of your name. Empty removes it.",
-        text=current)
-    if not ok:
-        return
-    emoji = clean_emoji(text)
-    if text.strip() and not emoji:
-        tooltip("That one's too long. Try a simpler emoji." if emoji_too_long(text)
-                else "That isn't an emoji.")
-        return
+    current = clean_emoji(c.get("emoji"))
+    dlg = EmojiDialog(parent or mw, current)
+    if not dlg.exec():
+        return None
+    emoji = clean_emoji(dlg.emoji)
     if emoji == current:
-        return
+        return None
     c["emoji"] = emoji
     save_cfg(c)
     for e in _state["entries"] or []:  # show it now; the upload confirms it
@@ -150,6 +149,7 @@ def _edit_emoji():
     app.rerender()
     app.sync()
     tooltip("Emoji set." if emoji else "Emoji removed.")
+    return emoji
 
 
 def _open_profile(uid):
@@ -160,7 +160,7 @@ def _open_profile(uid):
     you = bool(entry.get("you"))
     q = StatsQueries(mw.col)
     my_labels = [q.day_label(i) for i in range(HEATMAP_DAYS)]
-    my_days = set() if you else set(q.heatmap_counts(HEATMAP_DAYS))
+    my_days = set() if you else set(heatmap(q, _profile_files(), HEATMAP_DAYS))
     tomorrow = _state["tomorrow"]
     labels = _state["labels"]
     days = entry["days"]
@@ -183,9 +183,7 @@ def _open_profile(uid):
     cl = client()
 
     def show(counts):
-        if True:
-            if mw.state != "deckBrowser":
-                return
+        if mw.state == "deckBrowser":
             cells = same = duet = None
             if counts is not None:
                 # show-up mode: the heatmap says which days, not how much
@@ -209,6 +207,7 @@ def _open_profile(uid):
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
                 "duet": duet, "status": status, "away": away,
                 "emoji": entry.get("emoji") or "",
+                "start": my_labels[-1],  # the heatmap's first day, for its weekday rows
             }))
 
     # your own card fetches your own heatmap doc: the honest, as-uploaded

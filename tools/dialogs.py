@@ -180,11 +180,16 @@ def main(out):
 
     def settings():
         from due_crew.ui.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(None, CLIENT, CONFIG, noop, noop, noop, noop, noop, noop)
+        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, emoji="\U0001F98A"), noop, noop, noop,
+                             noop, noop, noop, edit_emoji=noop, edit_status=noop)
         tabs = dlg.findChild(QtWidgets.QTabWidget)
         for i in range(tabs.count()):
             tabs.setCurrentIndex(i)
             shoot(dlg, os.path.join(out, f"settings-{i}-{tabs.tabText(i).lower()}.png"))
+        # Just show up chosen: the numbers stay set underneath, greyed out
+        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, show_up=True), noop, noop, noop,
+                             noop, noop, noop, tab="privacy")
+        shoot(dlg, os.path.join(out, "settings-privacy-showup.png"))
 
     def friends():
         from due_crew.ui.friends_dialog import FriendsDialog
@@ -218,9 +223,23 @@ def main(out):
         from due_crew.ui.auth_dialog import AuthDialog
         dlg = AuthDialog(None, CLIENT)
         shoot(dlg, os.path.join(out, "auth.png"))
+        dlg = AuthDialog(None, CLIENT, join=True)  # a new install opens on Join
+        shoot(dlg, os.path.join(out, "auth-join.png"))
+
+    def welcome():
+        from due_crew.ui.welcome_dialog import WelcomeDialog
+        dlg = WelcomeDialog(None, CLIENT, CONFIG, noop)
+        dlg.code_input.setText("Study with me on Due Crew · my code IGK123")
+        shoot(dlg, os.path.join(out, "welcome.png"))
+
+    def emoji():
+        from due_crew.ui.cheer_dialog import EmojiDialog
+        shoot(EmojiDialog(None, "\U0001F98A"), os.path.join(out, "emoji.png"))
+        shoot(EmojiDialog(None, "\U0001F985"), os.path.join(out, "emoji-other.png"))
 
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
-                         ("squads", squads), ("cheer", cheer), ("auth", auth)):
+                         ("squads", squads), ("cheer", cheer), ("auth", auth),
+                         ("welcome", welcome), ("emoji", emoji)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

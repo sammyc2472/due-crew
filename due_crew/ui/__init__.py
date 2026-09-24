@@ -108,13 +108,49 @@ def _night():
 
 
 def accent():
-    """Board green, readable on both of Anki's themes. Dialogs rebuild on
-    every open, so a theme change is picked up next time."""
-    return "#7cc47f" if _night() else "#2e7d32"
+    """The board's accent (Settings → Accent) in the shade made for Anki's
+    current theme. Until 2.9 dialogs were always green. Dialogs rebuild on
+    every open, so a change is picked up next time."""
+    shade = "dark" if _night() else "light"
+    try:
+        from ..board import ACCENTS, DEFAULT_ACCENT
+        name = (mw.addonManager.getConfig(__name__) or {}).get("accent") or DEFAULT_ACCENT
+        return ACCENTS.get(name, ACCENTS[DEFAULT_ACCENT])[shade][0]
+    except Exception:
+        return "#7cc47f" if shade == "dark" else "#2e7d32"
 
 
 def danger():
     return "#ef8383" if _night() else "#d32f2f"
+
+
+def confirm(parent, title, text, yes):
+    """The one way to ask before a step that can't be taken back: the button
+    says what happens ("Remove", "Leave"), Cancel is the default, and the
+    text is plain, because names in it come from the server. Until 2.9 there
+    were three styles of this."""
+    from aqt.qt import QMessageBox, Qt
+    box = QMessageBox(parent or mw)
+    box.setIcon(QMessageBox.Icon.Question)
+    box.setWindowTitle(title)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(text)
+    go = box.addButton(yes, QMessageBox.ButtonRole.AcceptRole)
+    cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(cancel)
+    box.exec()
+    return box.clickedButton() is go
+
+
+def shared_words(cfg):
+    """The numbers the Privacy switches share, as words for a sentence:
+    "reviews, time, retention, and streak". '' when none are."""
+    words = [w for key, w in (("share_reviews", "reviews"), ("share_time", "time"),
+                              ("share_retention", "retention"), ("share_streak", "streak"))
+             if cfg.get(key, True)]
+    if len(words) <= 2:
+        return " and ".join(words)
+    return ", ".join(words[:-1]) + f", and {words[-1]}"
 
 
 def attach_alive(dialog):

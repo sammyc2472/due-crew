@@ -1,8 +1,9 @@
 """Sign in / Join dialog. Network runs in the background; the dialog never
-blocks Anki. On success, self.user holds (user_id, display_name)."""
+blocks Anki. On success, self.user holds (user_id, display_name) and
+self.joined says whether it was a new account (the welcome screen follows)."""
 
 from aqt.qt import (
-    QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QVBoxLayout,
     QTabWidget, QWidget, Qt,
 )
 
@@ -23,12 +24,18 @@ ERRORS = {
 
 
 class AuthDialog(QDialog):
-    def __init__(self, parent, client):
+    def __init__(self, parent, client, join=None):
+        """join: open on Join (True) or Sign In (False). None: Join for a
+        profile where no email was ever used, Sign In when one was. Until
+        2.9 it always opened on Sign In, under a card saying "Join"."""
         super().__init__(parent)
         self.client = client
         self.user = None
+        self.joined = False
         attach_alive(self)
         self._build()
+        if join if join is not None else not client.email:
+            self.tabs.setCurrentIndex(1)
 
     def _build(self):
         self.setWindowTitle("Due Crew")
@@ -46,16 +53,14 @@ class AuthDialog(QDialog):
         self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
         root.addWidget(self.error)
 
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(self.reject)
-        buttons.addWidget(cancel)
-        self.go = QPushButton("Sign In")
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                                   | QDialogButtonBox.StandardButton.Cancel)
+        self.go = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.go.setText("Sign In")
         self.go.setDefault(True)
         self.go.clicked.connect(self._submit)
-        buttons.addWidget(self.go)
-        root.addLayout(buttons)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
 
     def _field(self, layout, label, placeholder, password=False):
         layout.addWidget(QLabel(label))
@@ -137,6 +142,7 @@ class AuthDialog(QDialog):
                     ERRORS.get(err, err.replace("_", " ").capitalize()))
                 return
             self.user = result
+            self.joined = joining
             self.accept()
 
         run_bg(self, job, done)

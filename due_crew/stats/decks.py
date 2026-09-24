@@ -116,6 +116,75 @@ def deck_signature(col, did):
     return [r[0] for r in rows]
 
 
+# fingerprints for the day: (did, day label, card count) -> guids. The deck's
+# 20 smallest note guids only change when its notes do, and a sort over a
+# big deck's notes cost 31 ms of main thread per sync until 2.9.
+_SIG_CACHE = {}
+
+
+def deck_signature_cached(col, did, day, total):
+    key = (int(did), str(day), int(total))
+    if key not in _SIG_CACHE:
+        if len(_SIG_CACHE) > 256:
+            _SIG_CACHE.clear()
+        _SIG_CACHE[key] = deck_signature(col, did)
+    return _SIG_CACHE[key]
+
+
+def clear_cache():
+    """A profile switch: another collection, whose deck ids mean other decks."""
+    _SIG_CACHE.clear()
+
+
+def local_matches(col, crew, names):
+    """{did: [crewmate names]}: which of my decks pair with a deck someone in
+    my crew shares, by the board's own test (sig_match on fingerprints).
+    `names`: {did: full deck name}. A deck can only pair with a crew deck
+    if its subtree holds MATCH_MIN of that deck's fingerprint guids, so one
+    query over every crew fingerprint finds the candidates, and only those
+    are fingerprinted and tested. Until 2.9 the Shared Decks dialog
+    fingerprinted every deck in the collection to find out."""
+    wanted = []
+    for e in crew or []:
+        if e.get("you"):
+            continue
+        for d in e.get("decks") or []:
+            sig = [g for g in d.get("sig") or [] if isinstance(g, str)]
+            if sig:
+                wanted.append((e["name"], sig))
+    guids = sorted({g for _n, sig in wanted for g in sig})
+    if not guids:
+        return {}
+    homes = {}
+    for i in range(0, len(guids), 500):  # SQLite's parameter cap on old builds
+        chunk = guids[i:i + 500]
+        for guid, did in col.db.all(
+                "SELECT DISTINCT n.guid, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END "
+                "FROM notes n JOIN cards c ON c.nid = n.id "
+                f"WHERE n.guid IN ({','.join('?' * len(chunk))})", *chunk):
+            homes.setdefault(guid, set()).add(int(did))
+    by_name = {name: did for did, name in names.items()}
+
+    def up(did):
+        """The deck and its ancestors, by name."""
+        parts = str(names.get(did, "")).split("::")
+        return {by_name[p] for p in ("::".join(parts[:k]) for k in range(1, len(parts) + 1))
+                if p in by_name}
+
+    reach = {g: set().union(*(up(d) for d in ds)) for g, ds in homes.items()}
+    out = {}
+    for who, sig in wanted:
+        count = {}
+        for g in sig:
+            for did in reach.get(g, ()):
+                count[did] = count.get(did, 0) + 1
+        for did, n in count.items():
+            if n >= MATCH_MIN and sig_match(deck_signature(col, did), sig):
+                if who not in out.setdefault(did, []):
+                    out[did].append(who)
+    return out
+
+
 def gather_shared_decks(col, cfg):
     """Upload payload: one entry per configured shared deck. Main thread."""
     out = []
@@ -134,15 +203,16 @@ def gather_shared_decks(col, cfg):
             continue
         if not total:
             continue
+        today_label = StatsQueries(col).day_label(0)
         entry = {
             "name": name.split("::")[-1],
-            "sig": deck_signature(col, did),
+            "sig": deck_signature_cached(col, did, today_label, total),
             "total": total,
             "seen": seen,
             "mature": mature,
             "open": max(opened, seen),
             # `today` is only true on `day`; a reader on another day drops it
-            "day": StatsQueries(col).day_label(0),
+            "day": today_label,
         }
         # the same privacy switches as the board's columns
         if cfg.get("share_reviews", True):

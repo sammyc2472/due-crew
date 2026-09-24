@@ -95,3 +95,30 @@ installing — add-ons load at launch).
 - [ ] A crewmate on numbers sees you as a check after the ranked rows (Today), "· N of 7 days" (Week), and on a squad board a check with your 7-day count.
 - [ ] In the mode: toasts say "X just studied" with no count; no streak toasts; a crewmate's card shows no streak and a which-days heatmap; a squadmate's card says "showed up today"; Share week copies squares with no totals line.
 - [ ] Switch it off, Save, sync: numbers return everywhere on the next fetch.
+
+## 2.9: onboarding, a lighter week, consistency (rules-v9)
+- [ ] Rules-v9 pasted in the console BEFORE the release; the footer shows no "server catching up" on 2.9.
+- [ ] A fresh profile (no email used yet): the Decks screen says "Nothing is shared until you join. Join · Sign in"; Join opens the dialog on Join, Sign in on Sign In.
+- [ ] Join: the welcome screen shows your code at once, Copy Invite copies, and nothing is uploaded until it closes (console: no daily_stats doc yet). Tick "Just show up", Done: the first upload has no numbers.
+- [ ] Welcome → paste a friend's whole invite into "Have a code?" → Add: "Added X. They'll see it on their board."
+- [ ] On that friend's account: within an hour, or at once on Refresh, the board says "👋 <name> added your code · Add back"; Add back makes you crew on both boards.
+- [ ] Friends dialog: paste an invite in the old wording ("My friend code: ABC123"): it adds. The list says "⏳ … — waiting", the section is "Added you".
+- [ ] A one-person board: "Just you so far. Your code ABC123 · Copy invite · Add a code"; Add a code opens Friends with the box focused.
+- [ ] Two 2.9 accounts: in the console, `users/{uid}/shared/week` holds the last days; after one Refresh the other's week view matches their day docs. Away dates show as ✈️ for the right days with no future `daily_stats` docs needed by 2.9 readers.
+- [ ] A 2.8 crewmate still sees a 2.9 account normally (day docs are still written).
+- [ ] Privacy → turn Retention off, Save: your squad row loses retention for squadmates after the next sync. Squads dialog note matches what's shared.
+- [ ] Settings → Theme: Light with Anki in night mode: your card, a squadmate's card, and a cheer banner are light, in your accent. Dialogs (the code box, cheer picks) use your accent too.
+- [ ] Sort the squad board by 7 days, open Settings, Save: still sorted by 7 days.
+- [ ] Settings has three tabs, You · Board · Privacy. You: emoji, name, and status, each editable there; the emoji picker and status box open over Settings, and the tab shows the change at once.
+- [ ] Privacy: "My numbers" / "Just that I studied" / "Nothing for now". The number boxes grey out under the other two and keep their ticks; switching back to My numbers shares what was ticked.
+- [ ] Choose "Nothing for now", Save: the board shows you "on a break" to your crew (as Pause did). Choose "Just that I studied": the one Crew view.
+- [ ] Board → Reset Board: only that tab changes; Privacy (choice, numbers, dates) stays as it was. There is no Restore Defaults any more.
+- [ ] Your card → Privacy…: Settings opens on the Privacy tab. The board footer ends "Refresh · Settings", which opens Settings.
+- [ ] Board tab: no "Sort by"; the note says to sort by the headers. Accent shows a color dot per choice.
+- [ ] Your card → Pick an emoji: the picker with quick picks and "other"; Remove clears it.
+- [ ] Squad board: "Copy invite · Lock · Leave" on the squad's line, "Share today" in the footer. Founder card: Remove / Block / Make founder on a row of their own, Close beside Add.
+- [ ] Remove, Leave, Block, Sign out, Delete account: one confirmation style, the button says what happens, Cancel is the default.
+- [ ] A window about 480 px wide: headers are icons, names keep their room, the footer links don't break mid-word.
+- [ ] Shared Decks: a collapsed tree with a filter; a deck someone shares says "matches <name>" and is expanded into view.
+- [ ] A large collection: syncing no longer stutters the Decks screen (the heatmap and fingerprints are cached for the day).
+- [ ] A crew of more than 20 loads (it didn't before 2.9).
