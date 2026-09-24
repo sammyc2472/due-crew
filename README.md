@@ -5,142 +5,94 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-Due Crew is a small, consent-based social layer for Anki. It's not a
-competition: you see the people you chose, they see you, and everyone's
-streak means what it says.
+<img alt="The Due Crew board on the Decks screen" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png" width="600">
 
-## What it does
+Studying for a big exam can get lonely. Due Crew puts your friends'
+studying next to yours on Anki's Decks screen, so you can keep each other
+going.
 
-- **Board on the Decks screen** — reviews, study time, retention, and streak
-  for you and your crew. Today, Week, and shared-deck progress. Friends
-  who go quiet stay on the board; that's when a cheer counts — and the
-  day they're back, the board says so.
-- **Consent-based friendships** — add a friend's 6-character code (or
-  paste their whole invite) and their board offers "Add back": one click and
-  you're crew. You see someone's stats only after they add you, and vice
-  versa. Remove someone and they stop seeing yours immediately. Shared
-  your code too widely? Friends → New Code retires it; your crew stays.
-- **Cheers** — send an emoji (six quick picks, or any one from your emoji
-  picker) and your friend gets a full-screen flurry with your name on it
-  after their next sync. Add a short note and it rides along. Click a
-  flurry to cheer back.
-- **Status** — click your own name and set one line ("coffee, then 400
-  cards"). It sits in a bubble under your name on Today, for your crew and
-  no one else. Start it with a number ("200 cards, then bed") and it's a
-  plan: it fills in as you study and ticks itself off.
-- **Studying now** — tap "I'm studying" in the footer and a dot sits by
-  your name for an hour, so friends can come study too.
-- **Study rooms** — "Open a room" in the footer: rounds of 25 minutes with
-  short breaks, now or at a set time. Your crew sees it and joins in one
-  click. While you review, the room's countdown and who's in sit in Anki's
-  top bar (or the bottom bar, if you hide the top one), never on your card.
-  When a round ends, you finish your card, then everyone breaks together.
-- **Stuck on a card?** — in the reviewer's More menu, "this one's getting
-  me" flags it for a week. Crewmates who have the same card see it on the
-  Decks tab and can send a one-line tip, which shows under the answer the
-  next time it comes up. A cloze never shows its answer in the flag.
-- **Good-luck card** — on the eve of a friend's exam, add a line to their
-  card. On exam morning they open Anki to every line their crew wrote.
-- **Shared decks** — progress bars through decks you have in common:
-  how much of the deck each person has unlocked, seen, and matured, what
-  they've done in it today and this week, and how well it's sticking. Hover
-  a bar for the exact numbers. Decks match automatically by note
-  fingerprint: AnKing and other imported decks pair up with no setup.
-- **Just show up** — a choice in Privacy: share only that you studied, and
-  see only that of others. Your row is a check, never a rank; your board is
-  a square per day.
-- **A bit of the season** — flurries carry the season's emoji, and a
-  crewmate's 100-day streak gets a banner with a one-tap 💯.
-- **Crew emoji** — pick one emoji from your own card and it sits in front
-  of your name on the board, on cards, and in shares.
-- **Friend profiles** — click a name for their half-year heatmap, streak,
-  how many of the same days you've both studied, and your current run of
-  days studied together. Click your own name to see your card exactly as
-  your crew sees it.
-- **Exam and away flags** — share an exam date and 📖 sits by your name
-  for the two weeks before, so your crew knows when a 💪 matters most. On
-  the eve, the board offers the 💪 itself. Share away dates and ✈️ sits by
-  your name for those days, with ✈️ squares in week shares, so a gap reads
-  as a trip, not a slip.
-- **Crew Wrap** — a weekly "together we did X" banner, plus streak
-  milestones and all-time crew milestones ("250,000 reviews together").
-  One click copies it for the group chat.
-- **Privacy controls** — choose which stats you share (heatmap included),
-  or pause sharing entirely ("on a break"). Pausing hides your stats; your
-  streak keeps counting as long as you keep studying.
-- **Squads** — a private board for any group: a class, a Discord, a
-  study group. Join with an invite code, or create one and share yours.
-  Squadmates see your name and today's numbers, whichever your Privacy
-  switches share, plus how many of the last seven days you studied. Plain ranks,
-  everyone in the squad, Today only. The founder can lock the door, remove
-  or block people, and hand the squad on; anyone can leave. Tap a name to
-  add someone; you're crew when they add back, and the board tells you when
-  someone adds you. Share copies the day's headline for the group chat.
-- **Share it** — paste-ready for the group chat: your week so far as
-  squares (🟩🟩🟩⬜🟩 4 of 5 days, Monday to today), the crew's week as a row per
-  person, today's numbers in one line, or your month and your year (exact,
-  from your own review history) — each signed with the add-on code. Copy
-  from the Today and Week footers or your own profile card. In the first
-  week of a month the board offers last month's review; from December 20
-  it offers the year's.
-  Counts are reviews (every answer counts), and a crewmate who hasn't
-  synced since mid-week is marked "as of" their last sync rather than
-  shown as absent.
-- **Your colors** — six accent colors (Settings → Board), each tuned
-  for light and dark mode; the whole board, your row highlight, and the
-  cards follow it.
-- **Light on everything** — a refresh reads one small document per
-  friend, all network runs off the main thread with timeouts, and it syncs
-  when Anki opens or syncs, when you come back to a board more than 15
-  minutes old, or when you click Refresh. If a sync fails, the board says
-  so.
+It's meant for friends helping friends. You only see people you've added,
+and they only see you once they've added you back.
+
+## Ways to show up for each other
+
+**Cheers.** Tap 🎉 next to a friend's name and it rains down their screen
+after their next sync, with your name and any note you added. They can
+send one right back.
+
+<img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
+
+**Study rooms.** Open a room and your crew can join you for 25-minute
+rounds with short breaks in between. While you review, the timer and
+who's in the room sit in Anki's top bar, out of the way of your cards.
+When a round ends you finish the card you're on, and then everyone takes
+the break together.
+
+<img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
+
+**Good-luck cards.** The night before a friend's exam, leave them a line.
+On exam morning they open Anki to every note their crew wrote.
+
+<img alt="A good-luck card on exam morning" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/luck.png" width="420">
+
+**Friend profiles.** Click a name for half a year of their studying, and
+how many days in a row the two of you have both shown up.
+
+<img alt="A friend's profile with a heatmap" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/profile.png" width="420">
+
+**Group chat material.** Copy your crew's week as a grid of squares and
+paste it into your group chat.
+
+<img alt="The crew's week pasted into a group chat" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/share.png" width="420">
+
+**And also**
+
+- **Status.** One line under your name. Start it with a number, like
+  "200 cards, then bed", and it ticks itself off as you go.
+- **Stuck on a card?** Flag it from the reviewer's More menu. A friend
+  with the same card can send you a tip, which shows under the answer
+  next time.
+- **Shared decks.** Decks you have in common, like AnKing, match up
+  automatically, so you can see how far each of you has gotten.
+- **Squads.** A private board for your class or your Discord, behind an
+  invite code.
+- **Just show up.** If you'd rather not share numbers, share only
+  whether you studied.
+- **Exam and away dates.** Add an exam date and your crew sees it
+  coming. Add away dates and a few missed days read as a trip.
+- **Six accent colours.** The logo changes with them.
 
 ## Install
 
-In Anki: Tools → Add-ons → Get Add-ons → code **2035408484**
-([AnkiWeb listing](https://ankiweb.net/shared/info/2035408484)) — or
-download `due_crew.ankiaddon` from
-[the releases page](https://github.com/sammyc2472/due-crew/releases)
-and install it with Tools → Add-ons → Install from file. Anki 2.1.55+;
-restart Anki after installing.
+Tools → Add-ons → Get Add-ons, code **2035408484**. Needs Anki 2.1.55 or
+newer. Restart Anki after installing.
 
-## Getting started
+## Get started
 
-1. Click **Join** on the Decks screen and sign up (an email and a
-   display name). One screen follows: copy your invite, add a code you
-   were sent, or join a squad, and see what your crew will see first.
-2. Send your invite. When your friend adds your code, **Add back** shows
-   up on your board: click it and you're crew.
-3. Study. Stats sync when Anki opens and syncs.
-4. Optional: Squads → **+ join or create**. Share the invite with your
-   class or group chat.
+1. Click **Join** on the Decks screen and sign up.
+2. Copy your invite and send it to a friend.
+3. When they add you, click **Add back**. You're crew.
 
 ## Privacy
 
-Due Crew runs on one hosted backend (the maintainer pays for it). Stats
-live there, readable only by people you've added — and, in any squad you
-join, a single name-and-today's-numbers row readable by that squad's
-members, with the same Privacy switches applied. Your profile can be
-read by anyone who has your account id, which squadmates have: your name
-and emoji, and until a coming release finishes moving them, your exam
-date, time zone, and friend list. Squads have no directory: only people holding the invite code can
-find one, and the founder can lock it. All of it is enforced server-side
-by the
-[Firestore rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules)
-in this repo. Your email is used for sign-in only and is never shown to
-friends or stored in the database. Deleting your account removes your data.
+Your stats go only to people you've added, and to squads you join, where
+squadmates see your name and today's numbers. Choose what you share in
+Settings → Privacy, or pause sharing at any time. Your email is only used
+to sign in. Deleting your account deletes your data.
+
+Until an upcoming update, your profile (name, emoji, exam date, time zone
+and friend list) can be read by anyone with your account id, which your
+squadmates have.
+
+The server rules that enforce this are in
+[firestore.rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules).
 
 ## Development
 
-Open source, MIT: https://github.com/sammyc2472/due-crew — issues and pull
-requests welcome. The add-on is plain Python + Anki hooks, no build step.
-Tests: `python3 tests/test_due_crew.py` (no dependencies) and the emulator
-rules test in `tests/rules/` — see `tests/README.md`; the manual Anki
-checklist is in `docs/`. The Firestore rules in `firestore.rules` are the
-ones deployed to the hosted backend. Package with:
-
-    cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"
+Plain Python and Anki hooks, no build step. Run the tests with
+`python3 tests/test_due_crew.py`; `tests/README.md` has the rest. Issues
+and pull requests are welcome.
 
 ## License
 
-MIT — Copyright (c) 2026 Sammy Caplan and Claude.
+MIT. Copyright (c) 2026 Sammy Caplan and Claude.
