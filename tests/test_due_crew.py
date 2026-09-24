@@ -501,9 +501,9 @@ def test_accents():
     check("accents: unknown accent falls back to green",
           "#2e7d32" in board._theme_css({"accent": "plaid"}))
     js = board.profile_overlay_js({"name": "Dre", "you": False, "cells": None})
-    check("accents: overlays read --dc-accent instead of hard-coding green",
-          "--dc-accent" in js and "--dc-accent-ink" in js
-          and "duecrew:cheerpick" in js)
+    check("accents: overlays take the board's tokens (accent, ink, card), not hard-coded colors",
+          "'--dc-' + name" in js and "tok('accent'" in js and "tok('accent-ink'" in js
+          and "tok('bg'" in js and "#23271f" not in js and "duecrew:cheerpick" in js)
 
 def _render(data, labels, tomorrow, period):
     return board.render({"entries": data["entries"], "labels": labels,
@@ -791,7 +791,7 @@ def test_squad_view_html():
           "#1" in html and "&#129351;" not in html and "dc-cheer" not in html)
     check("squad view: names escaped, card command wired, notes",
           "StepQueen &lt;s&gt;" in html and "ecard:u1" in html
-          and "knocked" in html and "added you" in html and "&middot; crew" not in html)
+          and "&middot; waiting" in html and "added you" in html and "&middot; crew" not in html)
     check("squad view: retention column and headline",
           "92.1%" in html and "5 in busm &middot; locked &middot; 4 studying today "
           "&middot; 2,713 reviews together" in html, html)
@@ -806,7 +806,7 @@ def test_squad_view_html():
           'onclick="pycmd(\'duecrew:sort:retention\')' in html
           and by_streak.index("StepQueen") < by_streak.index("Maya")
           and by_streak.index("Maya") < by_streak.index("Sammy")
-          and "&#128293; Streak &#9662;" in by_streak, by_streak)
+          and '&#128293;<span class="hl"> Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
           'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
@@ -1019,14 +1019,19 @@ def test_v25_edges_emoji_week():
     html = board._squads_html(view, {"sort": "week"})
     check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
           "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
-          and "&#128197; 7 days &#9662;" in html and "squadshare" in html
+          and '&#128197;<span class="hl"> 7 days</span> &#9662;' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
+    page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                        {"period": "squads"}, 0, squad_view=view)
+    check("squad board: Share today sits in the footer, as on Today, not on the squad's line",
+          "squadshare" not in html and "squadshare" in page
+          and page.index("squadinvite") < page.index('<div class="dc-foot">') < page.index("squadshare"))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
                          "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week"}, 0)
     check("crew board: emoji by the name; the squads-only sort falls back to reviews",
-          "🦊 Sammy" in crew and "&#128218; Reviews &#9662;" in crew)
+          "🦊 Sammy" in crew and '&#128218;<span class="hl"> Reviews</span> &#9662;' in crew)
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
     esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
     check("own card: emoji by the name and a link to change it",
@@ -1529,8 +1534,9 @@ def test_reads_diet():
                {"sam": friends, **{f: ["sam"] for f in friends}})
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
-    for f in friends:  # 2.7 clients, on my clock
+    for f in friends:  # 2.7 clients, on my clock, with 2.5's edge docs
         store.docs[f"users/{f}"].update(tz={"integerValue": "0"}, rollover={"integerValue": "4"})
+        store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
         for lb in labels:
             store.docs[f"users/{f}/daily_stats/{lb}"] = {"studied": {"booleanValue": True},
                                                           "reviews": {"integerValue": "100"}}
@@ -1553,14 +1559,18 @@ def test_reads_diet():
     sam = new_client(store, "sam", "Sammy")
 
     def count(fn):
+        """Billed reads: the docs, plus (2.9) the exists()/get() calls the
+        rules make to check consent, one per friend per request."""
         reads["n"] = 0
+        before = store.rule_reads
         fn()
-        return reads["n"]
+        return reads["n"] + store.rule_reads - before
     first = count(lambda: (sam.check_rules(labels[0]), sam.list_knocks("sam"),
                            sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=True,
                                            check_edges=True, now_utc=noon)))
-    check("reads: first open, nothing cached = marker 1 + profiles 12 + days 7x12 + decks 12 + cheers 1 + knocks 1",
-          first == 1 + 12 + 84 + 12 + 1 + 1, str(first))
+    check("reads: first open, nothing cached = marker 1 + profiles 12 + days 7x12 + decks 12 + cheers 1"
+          " + knocks 1 + rules 11",
+          first == 1 + 12 + 84 + 12 + 1 + 1 + 11, str(first))
     sync_once(store, sam, make_user_col([TODAY]), tempfile.mkdtemp(), {}, TODAY)
     own = sam.session.get("own_days") or {}
     check("reads: my uploads are remembered by label (empty days as empty), with when they changed",
@@ -1571,13 +1581,13 @@ def test_reads_diet():
                            sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
                                            check_edges=False, light=True, own_days=own,
                                            cached_people=True, now_utc=noon)))
-    check("reads: a light refresh = one day doc per friend + cheers list + knocks list = 13",
-          light == N + 2, str(light))
+    check("reads: a light refresh = one day doc per friend + cheers list + knocks list + rules 11 = 24",
+          light == N + 2 + N, str(light))
     full = count(lambda: (sam.list_knocks("sam"),
                           sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
                                           check_edges=True, own_days=own, now_utc=noon)))
-    check("reads: Refresh = profiles 12 + 7 days x 11 friends + cheers 1 + knocks 1 = 91",
-          full == 12 + 77 + 2, str(full))
+    check("reads: Refresh = profiles 12 + 7 days x 11 friends + cheers 1 + knocks 1 + rules 11 = 102",
+          full == 12 + 77 + 2 + N, str(full))
     data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
                            cached_people=True, now_utc=noon)
     me = next(e for e in data["entries"] if e["you"])
@@ -1623,7 +1633,7 @@ def test_reads_diet():
                            cached_people=True, now_utc=noon)
     # f2 is back on a 2.6 client since the clock checks: two docs for them
     check("cheers: one read to find it, delivered, and its doc is gone before the next fetch",
-          got == N + 1 + 1 and "users/sam/cheers/f0" not in store.docs and data["cheers"] == [], str(got))
+          got == N + 1 + 1 + N and "users/sam/cheers/f0" not in store.docs and data["cheers"] == [], str(got))
 
     # profiles cached for the day: someone removing me is noticed, once, not an outage
     store.docs["users/f4"]["friends"] = {"arrayValue": {"values": []}}
@@ -1642,6 +1652,339 @@ def test_reads_diet():
           and due_crew._wants_fetch(True, True, 0, False, fetch=True) is True)
     check("push on open: goes unless something already pushed; the open's fetch is not a push",
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
+
+
+def _push29(store, cl, col, files, cfg, version="2.9.0"):
+    """What a 2.9 client's sync uploads: today, the week's backfill, the
+    week doc. Returns the labels."""
+    store.auth_uid = cl.user_id
+    q = StatsQueries(col)
+    labels = [q.day_label(i) for i in range(7)]
+    stats = gather_stats(col, files)
+    cl.upload_today(cl.user_id, cl.display_name, labels[0], stats, cfg, version=version,
+                    clock={"tz": 0, "rollover": 4})
+    cl.upload_backfill(cl.user_id, gather_week(col, files), cfg, labels=labels)
+    cl.upload_week(cl.user_id, labels, cfg)
+    return labels
+
+
+def test_week_doc_v29():
+    """2.9 (H1): a friend's week is one doc. Same rows as the day docs gave,
+    a third of the reads on a full fetch, and it survives a friend who has
+    updated but not pushed yet."""
+    N = 11
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    friends = [f"f{i}" for i in range(N)]
+    seed_users(store, {"sam": "Sammy", **{f: f.upper() for f in friends}},
+               {"sam": friends, **{f: ["sam"] for f in friends}})
+    days = [TODAY - datetime.timedelta(days=i) for i in (0, 1, 3, 4, 6)]
+    for f in friends:
+        store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
+        _push29(store, new_client(store, f, f.upper()), make_user_col(days), tempfile.mkdtemp(), {})
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    week = store.docs.get("users/f0/shared/week", {})
+    got_days = sorted(week.get("days", {}).get("mapValue", {}).get("fields", {}))
+    check("week doc: one doc holds the studied days of the week, numbers inside",
+          got_days == sorted(d.isoformat() for d in days)
+          and "reviews" in week["days"]["mapValue"]["fields"][labels[0]]["mapValue"]["fields"],
+          str(got_days))
+    # the same friends, read through the week doc and through the day docs
+    sam = new_client(store, "sam", "Sammy")
+    via_week = sam.fetch_board("sam", labels, tomorrow=tomorrow)
+    for f in friends:
+        store.docs[f"users/{f}"]["clientVersion"] = fv_str("2.8.0")
+    sam._people = None
+    via_days = sam.fetch_board("sam", labels, tomorrow=tomorrow)
+    rows = lambda data: {e["user_id"]: [(lb, (e["days"].get(lb) or {}).get("reviews"),
+                                         board._showed(e["days"].get(lb))) for lb in labels]
+                         for e in data["entries"] if not e["you"]}
+    check("week doc: every friend's week reads the same as from their day docs",
+          rows(via_week) == rows(via_days) and len(rows(via_week)) == N)
+    for f in friends:
+        store.docs[f"users/{f}"]["clientVersion"] = fv_str("2.9.0")
+
+    reads = {"n": 0}
+    orig = store.handle
+
+    def counting(method, url, headers=None, json_body=None):
+        resp = orig(method, url, headers=headers, json_body=json_body)
+        if url.endswith(":batchGet"):
+            reads["n"] += len(json_body["documents"])
+        elif method == "GET" and "?" in url:
+            reads["n"] += max(1, len((resp.json() or {}).get("documents", [])))
+        elif method == "GET":
+            reads["n"] += 1
+        return resp
+    store.handle = counting
+
+    def billed(fn):
+        reads["n"] = 0
+        before = store.rule_reads
+        fn()
+        return reads["n"] + store.rule_reads - before
+    store.auth_uid = "sam"
+    fresh = new_client(store, "sam", "Sammy")
+    store.docs["users/sam"]["clientVersion"] = fv_str("2.9.0")
+    store.docs["users/sam/shared/week"] = {"v": {"integerValue": "1"},
+                                           "days": {"mapValue": {"fields": {}}}}
+    first = billed(lambda: (fresh.check_rules(labels[0]), fresh.list_knocks("sam"),
+                            fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=True,
+                                              check_edges=True)))
+    check("reads 2.9: first open = marker 1 + profiles 12 + week docs 12 + decks 12 + cheers 1"
+          " + knocks 1 + rules 11 = 50 (2.8: 122)", first == 50, str(first))
+    own = {lb: None for lb in labels}
+    full = billed(lambda: (fresh.list_knocks("sam"),
+                           fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                                             check_edges=True, own_days=own)))
+    check("reads 2.9: Refresh = profiles 12 + week docs 11 + cheers 1 + knocks 1 + rules 11 = 36"
+          " (2.8: 102)", full == 36, str(full))
+    light = billed(lambda: fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                                             light=True, own_days=own, cached_people=True))
+    check("reads 2.9: a light refresh = week docs 11 + cheers 1 + rules 11 = 23, and knocks"
+          " only hourly now", light == 23, str(light))
+    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
+                             light=True, own_days=own, cached_people=True)
+    f1 = next(e for e in data["entries"] if e["user_id"] == "f1")
+    check("reads 2.9: a light refresh still carries the whole week",
+          sum(1 for lb in labels if board._showed(f1["days"].get(lb))) == len(days))
+    store.handle = orig
+
+    # updated, not pushed yet: no week doc, so their day docs, read once more
+    store.docs.pop("users/f2/shared/week")
+    fresh._people = None
+    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
+    f2 = next(e for e in data["entries"] if e["user_id"] == "f2")
+    check("week doc: missing for a 2.9 friend, their day docs fill in",
+          sum(1 for lb in labels if board._showed(f2["days"].get(lb))) == len(days))
+
+    # away rides as a range; paused empties the doc; exam comes along
+    f3 = new_client(store, "f3", "F3")
+    away = {"away_from": (TODAY + datetime.timedelta(days=1)).isoformat(),
+            "away_to": (TODAY + datetime.timedelta(days=5)).isoformat(),
+            "exam_date": (TODAY + datetime.timedelta(days=9)).isoformat()}
+    _push29(store, f3, make_user_col(days), tempfile.mkdtemp(), away)
+    store.auth_uid = "sam"
+    fresh._people = None
+    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
+    e3 = next(e for e in data["entries"] if e["user_id"] == "f3")
+    check("week doc: an away spell flags my tomorrow for a friend, and the exam date rides along",
+          (e3["days"].get(tomorrow) or {}).get("away") is True
+          and e3["exam_date"] == away["exam_date"])
+    f4 = new_client(store, "f4", "F4")
+    _push29(store, f4, make_user_col(days), tempfile.mkdtemp(), {"paused": True})
+    wk = store.docs["users/f4/shared/week"]
+    check("week doc: pausing empties the days and says so",
+          wk["paused"] == {"booleanValue": True} and not wk["days"]["mapValue"].get("fields"))
+    store.auth_uid = "sam"
+    fresh._people = None
+    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
+    e4 = next(e for e in data["entries"] if e["user_id"] == "f4")
+    check("week doc: a paused friend reads as paused from the doc itself",
+          e4["paused"] is True and not any(e4["days"].get(lb) for lb in labels))
+    f5 = new_client(store, "f5", "F5")
+    col5, files5 = make_user_col(days), tempfile.mkdtemp()
+    week_writes = lambda: sum(1 for m, p, st in store.log if m == "PATCH" and p == "users/f5/shared/week")
+    base = week_writes()
+    _push29(store, f5, col5, files5, {})
+    once = week_writes() - base
+    _push29(store, f5, col5, files5, {})
+    check("week doc: hash-guarded, a second push with nothing new writes nothing",
+          once == 1 and week_writes() - base == 1, f"{once} {week_writes() - base}")
+
+
+def test_big_crews_v29():
+    """2.9 (G1): the rules allow 20 access calls per multi-document read,
+    one per friend with an edge doc, two without. A crew past that used to
+    fail its whole batch, so the board never loaded."""
+    for n, edges in ((21, True), (25, False)):
+        store = fakes.FakeFirestore()
+        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+        friends = [f"g{i}" for i in range(n)]
+        seed_users(store, {"sam": "Sammy", **{f: f for f in friends}},
+                   {"sam": friends, **{f: ["sam"] for f in friends}})
+        labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+        for f in friends:
+            if edges:
+                store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
+            store.docs[f"users/{f}/daily_stats/{labels[0]}"] = {"studied": {"booleanValue": True},
+                                                                "reviews": {"integerValue": "5"}}
+        sam = new_client(store, "sam", "Sammy")
+        store.auth_uid = "sam"
+        try:
+            sam.batch_get([f"users/{f}/daily_stats/{labels[0]}" for f in friends])
+            one_batch = "loaded"
+        except firebase.TransportError as e:
+            one_batch = e.status
+        data = sam.fetch_board("sam", labels)
+        studied = sum(1 for e in data["entries"] if not e["you"]
+                      and board._showed(e["days"].get(labels[0])))
+        decks = sam.fetch_decks([f for f in friends])
+        check(f"big crew: {n} friends {'with' if edges else 'without'} edge docs is refused as one"
+              " batch, loads in batches of ten", one_batch == 403 and studied == n and len(decks) == n,
+              f"{one_batch} {studied}")
+
+
+def test_profile_guard_v29():
+    """2.9 (H4): the profile is written when a field changes or today's
+    numbers do, not on every push."""
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    col = make_user_col([TODAY])
+    files = tempfile.mkdtemp()
+    writes = lambda: sum(1 for m, p, st in store.log if m == "PATCH" and p == "users/sam")
+    _push29(store, sam, col, files, {})
+    a = writes()
+    stamp = sam.session.get("last_ok")
+    _push29(store, sam, col, files, {})
+    b = writes()
+    check("profile: a push with nothing new doesn't rewrite it, and still counts as synced",
+          a == 1 and b == 1 and sam.session.get("last_ok") >= stamp, f"{a} {b}")
+    _push29(store, sam, col, files, {"emoji": "\U0001F98A"})
+    c = writes()
+    fakes.add_review(col.db.conn,
+                     int(datetime.datetime.combine(TODAY, datetime.time(13)).timestamp() * 1000))
+    _push29(store, sam, col, files, {"emoji": "\U0001F98A"})
+    d = writes()
+    check("profile: a new emoji rewrites it, and so does a new review (last active moves)",
+          c == 2 and d == 3, f"{c} {d}")
+
+
+def test_code_knocks_v29():
+    """2.9 (J1): adding a code knocks its owner, so they add back in one
+    click. The rules let a knock through when it carries the recipient's
+    own friend code; on older rules the add still stands."""
+    for mode, expect in (("repo", True), ("v8", False)):
+        store = fakes.FakeFirestore(rules_mode=mode)
+        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+        seed_users(store, {"sam": "Sammy", "priya": "Priya", "carl": "Carl"},
+                   {"sam": [], "priya": [], "carl": []})
+        store.docs["friend_codes/SAM123"] = {"userId": fv_str("sam")}
+        store.docs["friend_codes/CRL456"] = {"userId": fv_str("carl")}
+        priya = new_client(store, "priya", "Priya")
+        friend, err = priya.add_friend("priya", "Study with me on Due Crew · my code SAM123", [], "Priya")
+        knock = store.docs.get("users/sam/knocks/priya")
+        check(f"code knock ({mode}): a pasted invite adds, and the owner {'is' if expect else 'is not'} knocked",
+              err is None and friend["user_id"] == "sam" and friend["knocked"] is expect
+              and (knock is not None) is expect
+              and "sam" in [v["stringValue"] for v in store.docs["users/priya"]["friends"]["arrayValue"]["values"]])
+        if mode == "repo":
+            store.auth_uid = "sam"
+            sam = new_client(store, "sam", "Sammy")
+            check("code knock: the owner's list shows it, with no squad",
+                  sam.list_knocks("sam") == [("priya", "Priya", "")])
+            store.auth_uid = "priya"
+            forged = priya.send_code_knock("carl", "priya", "Priya", "SAM123")
+            check("code knock: someone else's code doesn't open another door", forged is False)
+    check("invite paste: a friend code from a code, a spaced code, or either invite wording",
+          firebase.friend_code_from("k7q2zp") == "K7Q2ZP"
+          and firebase.friend_code_from(" K7Q 2ZP ") == "K7Q2ZP"
+          and firebase.friend_code_from("Study with me on Due Crew — Anki add-on 2035408484.\nMy friend code: K7Q2ZP") == "K7Q2ZP"
+          and firebase.friend_code_from("Study with me on Due Crew · my code K7Q2ZP\n— Due Crew · Anki add-on 2035408484") == "K7Q2ZP"
+          and firebase.friend_code_from("Join busm on Due Crew · code ABCD2345") == "")
+    check("invite paste: a squad code from its invite, even from a squad named for codes",
+          firebase.squad_code_from("Join code club on Due Crew · code ABCD2345\n— Due Crew") == "ABCD2345"
+          and firebase.squad_code_from("abcd 2345") == "ABCD2345")
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    cl = firebase.FirebaseClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    cl._auth_post = lambda endpoint, payload: {"localId": "newbie", "idToken": "t-newbie",
+                                               "refreshToken": "r"}
+    store.auth_uid = "newbie"
+    cl.sign_up("new@example.com", "secret1", "Newbie")
+    codes = [p for p, d in store.docs.items() if p.startswith("friend_codes/")
+             and d["userId"]["stringValue"] == "newbie"]
+    check("sign-up makes the friend code, so Copy invite copies from minute one",
+          len(codes) == 1 and store.docs["users/newbie"].get("friendCode", {}).get("stringValue") == codes[0][13:])
+
+
+def test_squad_privacy_v29():
+    """2.9 (G2): the Privacy switches reach squad rows, through the same
+    gate as the day docs."""
+    values = {"reviews": 40, "studyTimeMs": 90000, "accuracy": 91.0, "streak": 3}
+    cfg = {"share_time": False, "share_retention": False}
+    check("squad row: switched-off numbers stay home",
+          firebase.shared_numbers(values, cfg) == {"reviews": 40, "streak": 3})
+    check("squad row: just show up lets none out",
+          firebase.shared_numbers(values, {"show_up": True}) == {})
+    store = fakes.FakeFirestore()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    sam = new_client(store, "sam", "Sammy")
+    doc, _mask = sam._day_doc(TODAY.isoformat(), values, cfg)
+    check("day doc: the same gate as before", "studyTimeMs" not in doc and "accuracy" not in doc
+          and doc["reviews"] == 40 and doc["streak"] == 3)
+
+
+def test_main_thread_caches_v29():
+    """2.9 (H5, H6): the per-sync SQL gets caches, and the Shared Decks
+    dialog stops fingerprinting every deck. Each must give exactly what the
+    uncached version gave."""
+    from due_crew.stats import heatmap
+    from due_crew.stats.streak import StreakTracker
+    from due_crew.stats import decks as dk
+    days = [TODAY - datetime.timedelta(days=i) for i in range(0, 200) if i % 5 != 3]
+    col = make_user_col(days)
+    q = StatsQueries(col)
+    files = tempfile.mkdtemp()
+    first = heatmap(q, files, 182)
+    cached = json.load(open(os.path.join(files, "heatmap.json")))
+    check("heatmap cache: the first call is the full query, and keeps only settled days",
+          first == q.heatmap_counts(182) and q.day_label(0) not in cached["counts"]
+          and q.day_label(1) not in cached["counts"] and q.day_label(2) in cached["counts"])
+    noon = int(datetime.datetime.combine(TODAY, datetime.time(15)).timestamp() * 1000)
+    fakes.add_review(col.db.conn, noon)
+    check("heatmap cache: later the same day, today moves and the rest comes from the file",
+          heatmap(q, files, 182) == q.heatmap_counts(182))
+
+    for run in (3, 70, 150):
+        c = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(1, run + 1)])
+        qq = StatsQueries(c)
+        studied = qq.studied_days_ago()
+        brute = 0
+        while brute + 1 in studied:
+            brute += 1
+        got = StreakTracker(qq, tempfile.mkdtemp())._base_through_yesterday()
+        check(f"streak: a {run}-day run through a widening window equals the full scan",
+              got == brute == run, f"{got} {brute}")
+
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid in range(1, 31):
+        fakes.add_card(conn, cid, did=10 if cid <= 15 else 11)        # Big, Big::Sub
+    for cid in range(31, 41):
+        fakes.add_card(conn, cid, did=12)                             # Other
+    big = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    big.decks = fakes.FakeDecks({10: "Big", 11: "Big::Sub", 12: "Other"})
+    names = {10: "Big", 11: "Big::Sub", 12: "Other"}
+    crew = [{"user_id": "igk", "name": "igk", "you": False,
+             "decks": [{"name": "Big", "sig": dk.deck_signature(big, 10)}]},
+            {"user_id": "dre", "name": "Dre", "you": False,
+             "decks": [{"name": "Sub", "sig": dk.deck_signature(big, 11)[:9]}]},
+            {"user_id": "eve", "name": "Eve", "you": False,
+             "decks": [{"name": "Elsewhere", "sig": [f"x{i}" for i in range(20)]}]}]
+    brute = {did: dk.crew_matches(dk.deck_signature(big, did), crew) for did in names}
+    brute = {did: who for did, who in brute.items() if who}
+    got = dk.local_matches(big, crew, names)
+    check("shared decks: matches found by lookup equal fingerprinting every deck",
+          got == brute and got.get(10) == ["igk"] and "Dre" in got.get(11, []), f"{got} {brute}")
+    calls = {"n": 0}
+    real_all = big.db.all
+
+    def counted(sql, *args):
+        calls["n"] += "DISTINCT n.guid" in sql
+        return real_all(sql, *args)
+    big.db.all = counted
+    dk.clear_cache()
+    a = dk.deck_signature_cached(big, 10, TODAY.isoformat(), 30)
+    b = dk.deck_signature_cached(big, 10, TODAY.isoformat(), 30)
+    c = dk.deck_signature_cached(big, 10, TODAY.isoformat(), 31)
+    check("fingerprint cache: one query per deck per day, again when its card count moves",
+          a == b == c == dk.deck_signature(big, 10) and calls["n"] == 3, str(calls["n"]))
+    big.db.all = real_all
 
 
 def test_row_cap():
@@ -1668,7 +2011,7 @@ def test_row_cap():
     decks = [{"name": "A", "sig": sig, "total": 10, "seen": 5, "mature": 2}]
     many = [dict(e, decks=decks) for e in mk(12)]
     d = board._decks_html(dict(base, entries=many))
-    legend = '<div class="dc-line" style="border-top: none; padding-top: 2px;">'
+    legend = '<div class="dc-line" style="padding-top: 2px;">'
     check("cap: the Decks tab scrolls its bars, legend outside the box",
           d.count('class="dc-scroll"') == 1 and d.count('class="dr') == 12
           and "</div></div>" + legend in d)

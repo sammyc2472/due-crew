@@ -5,13 +5,17 @@ Two layers, deliberately separate:
 | Layer | Command | What it proves | What it cannot prove |
 | --- | --- | --- | --- |
 | Unit + behavior (`test_due_crew.py`) | `python3 tests/test_due_crew.py` | Client behavior against an in-memory Firestore fake: upload shapes, backfill costs, privacy toggles, share text, board rendering, rename-follow, clipboard paths. | Anything about the **real** rules — the fake *restates* `firestore.rules`; it is a model of intent, not evidence of enforcement. |
-| Rules (`rules/`) | `firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"` (repo root) | That the deployed rules text actually enforces friendship consent, squads (the invite-derived id, open/locked joins, member-only reads, founder removal), member row shape, knocks between squadmates, and the retired collections. | Live Anki behavior. |
+| Rules (`rules/`) | `firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"` (repo root) | That the deployed rules text actually enforces friendship consent, squads (the invite-derived id, open/locked joins, member-only reads, founder removal), member row shape, knocks between squadmates or with the recipient's own code (2.9), the 20-call cap a batch of friends' docs runs into, and the retired collections. | Live Anki behavior. |
+
+The fake also models what the rules cost and where they stop: it counts the
+`exists()`/`get()` calls the consent check makes (`store.rule_reads`, billed
+as reads, and counted by the reads-budget tests) and refuses a batch past 20
+of them, as the emulator does.
 
 Requirements: Python 3.9+ and the standard library only for the first layer
 (`sqlite3` backs the fake collection). The rules layer needs
 [firebase-tools](https://firebase.google.com/docs/cli) and a Java runtime;
-it was **not run** on the machine that authored it (neither was installed).
-Run it before deploying any rules change.
+Run it before deploying any rules change (CI runs it on every push).
 
 Neither layer replaces a click-test in a running Anki: see
 `docs/manual-anki-checklist.md`.

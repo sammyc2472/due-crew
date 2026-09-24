@@ -55,6 +55,10 @@ SQUAD_CACHE_SECS = 300
 FRESH_SECS = 120
 
 
+# knocks ride full fetches and the Squads tab; otherwise one list an hour
+KNOCK_SECS = 3600
+
+
 _client = None
 
 
@@ -82,11 +86,12 @@ _state = {
     "prev_streaks": {}, "board_shown": False,
     "my_friends": [],
     "squad": {"id": "", "data": None, "day": "", "ts": 0.0, "state": "loading"},
-    "knocks": [],
+    "knocks": [],          # [(sender_uid, name, squad_id)] awaiting my add
     "sync_error": False,   # the last upload/fetch failed; the footer says so
     "decks_day": "",       # the day shared-deck docs last rode a board fetch
     "decks_ts": 0.0,       # when the Decks tab last fetched them itself
-    "my_code": "",         # my friend code, for Copy invite on a solo board   # [(sender_uid, name, squad_id)] awaiting my add
+    "my_code": "",         # my friend code, for Copy invite on a solo board
+    "knocks_ts": 0.0,      # when knocks were last listed
 }
 
 
@@ -158,13 +163,16 @@ def _migrate_server_json():
 
 
 def _reset_runtime():
+    from .stats.decks import clear_cache
+    clear_cache()  # fingerprints belong to the last profile's collection
     _state.update(entries=None, days={}, decks={}, labels=[], tomorrow="",
                   pending=[], ts=0.0, prev_label="", prev_counts={},
                   prev_streaks={}, board_shown=False,
                   my_friends=[],
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
-                  knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="")
+                  knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
+                  knocks_ts=0.0)
     _pending_cheers.clear()
 
 

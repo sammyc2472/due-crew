@@ -22,9 +22,13 @@ NAME_MAX = 24
 
 
 def friend_invite(friend_code):
-    """One paste with everything a friend needs."""
-    return ("Study with me on Due Crew — Anki add-on 2035408484.\n"
-            f"My friend code: {friend_code}")
+    """One paste with everything a friend needs. Since 2.9 both invites share
+    one shape and the code box takes the whole paste."""
+    return f"Study with me on Due Crew · my code {friend_code}\n{FOOTER}"
+
+
+def squad_invite(name, code):
+    return f"Join {clean_name(name)} on Due Crew · code {code}\n{FOOTER}"
 
 
 def clean_name(name):

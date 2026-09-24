@@ -6,14 +6,14 @@ import html
 import time
 
 from aqt import mw
-from aqt.utils import askUser, tooltip
+from aqt.utils import tooltip
 
 from . import app, board
 from .app import SQUAD_CACHE_SECS, _bg, _state, cfg, client, save_cfg
 from .backend.firebase import TransportError
 from .social import _open_profile
 from .stats.queries import StatsQueries
-from .ui import copy_text
+from .ui import confirm, copy_text
 from .wrap import _mute_knocker, _wrap_data
 
 def _my_squads(c=None):
@@ -82,15 +82,24 @@ def _fetch_squad(force=False):
     cl = client()
     sid = cur["id"]
 
+    uid = cl.user_id
+
     def job():
         try:
+            knocks = cl.list_knocks(uid)  # the Squads tab is where they matter
+        except Exception:
+            knocks = None
+        try:
             data = cl.fetch_squad(sid)
-            return data, ("ok" if data is not None else "gone")
+            return data, ("ok" if data is not None else "gone"), knocks
         except TransportError as e:
-            return None, ("gone" if e.status == 403 else "error")
+            return None, ("gone" if e.status == 403 else "error"), knocks
 
     def commit(result):
-        data, state = result or (None, "error")
+        data, state, knocks = result or (None, "error", None)
+        if knocks is not None:
+            _state["knocks"] = [tuple(k) for k in knocks]
+            _state["knocks_ts"] = time.time()
         if sq["id"] != sid:
             return  # switched meanwhile
         if data is not None:
@@ -137,7 +146,8 @@ def _visible_knocks(c=None):
     muted = set(_wrap_data().get("muted_knocks") or [])
     crew = {e["user_id"] for e in _state["entries"] or []}
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
-    return [{"uid": u, "name": n, "squad": names.get(sid, "")}
+    # a knock without a squad came with my code (2.9: adding a code knocks)
+    return [{"uid": u, "name": n, "squad": names.get(sid, ""), "via_code": not sid}
             for u, n, sid in _state["knocks"] if u not in muted and u not in crew][:3]
 
 
@@ -185,8 +195,8 @@ def _select_squad(sid):
 
 
 def open_squads():
-    from .ui.squad_dialog import SquadDialog
-    dlg = SquadDialog(mw, client(), _on_squad_joined)
+    from .ui.squad_dialog import SquadDialog, shared_note
+    dlg = SquadDialog(mw, client(), _on_squad_joined, note=shared_note(cfg()))
     dlg.exec()
 
 
@@ -224,19 +234,19 @@ def _copy_invite():
     cur = _current_squad()
     if cur is None:
         return
-    from .ui.squad_dialog import invite_text
+    from .share import squad_invite
     code = str(cur.get("code") or "")
     if not code:
         tooltip("No code on this device.")
         return
-    copy_text(invite_text(cur.get("name") or "my squad", code))
+    copy_text(squad_invite(cur.get("name") or "my squad", code))
     tooltip("Copied.")
 
 
 def _leave_squad():
     cur = _current_squad()
-    if cur is None or not askUser(
-            f"Leave {html.escape(cur.get('name') or 'this squad')}?"):
+    if cur is None or not confirm(
+            mw, "Leave squad?", f"Leave {cur.get('name') or 'this squad'}?", "Leave"):
         return
     cl = client()
     me, sid = cl.user_id, cur["id"]
@@ -271,9 +281,9 @@ def _block_member(uid):
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not askUser(
-            f"Block {html.escape(row['name'])}? They leave "
-            f"{html.escape(cur.get('name') or 'the squad')} and can't rejoin."):
+    if row is None or not confirm(
+            mw, "Block?", f"Block {row['name']}? They leave "
+            f"{cur.get('name') or 'the squad'} and can't rejoin.", "Block"):
         return
     cl = client()
     banned = list(sq["data"].get("banned") or [])
@@ -298,9 +308,9 @@ def _make_founder(uid):
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not askUser(
-            f"Make {html.escape(row['name'])} the founder of "
-            f"{html.escape(cur.get('name') or 'the squad')}? You can't undo this."):
+    if row is None or not confirm(
+            mw, "Hand the squad on?", f"Make {row['name']} the founder of "
+            f"{cur.get('name') or 'the squad'}? You can't undo this.", "Make Founder"):
         return
     cl = client()
 
@@ -345,9 +355,9 @@ def _kick_member(uid):
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
         return
     row = next((r for r in sq["data"]["rows"] if r["user_id"] == uid), None)
-    if row is None or not askUser(
-            f"Remove {html.escape(row['name'])} from "
-            f"{html.escape(cur.get('name') or 'the squad')}?"):
+    if row is None or not confirm(
+            mw, "Remove?", f"Remove {row['name']} from "
+            f"{cur.get('name') or 'the squad'}?", "Remove"):
         return
     cl = client()
 
@@ -355,6 +365,7 @@ def _kick_member(uid):
         if ok:
             sq["data"]["rows"] = [r for r in sq["data"]["rows"]
                                   if r["user_id"] != uid]
+            tooltip("Removed.")
             app.swap(cfg())
         else:
             tooltip("Couldn't remove them.")
@@ -383,9 +394,9 @@ def _send_knock(to_uid):
     def done(ok):
         if ok:
             _state["my_friends"] = friends + [to_uid]
-            tooltip("Knocked — you're crew when they add back.")
+            tooltip("Added. You're crew when they add back.")
             app.swap(cfg())
         else:
-            tooltip("Couldn't knock. Check your connection.")
+            tooltip("Couldn't add them. Check your connection.")
 
     _bg(job, done)

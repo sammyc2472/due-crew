@@ -168,6 +168,12 @@ sections.append("<h3>squads (none yet)</h3>" + board.render(
     squad_view={"state": "none", "squads": [], "current": ""}))
 sections.append("<h3>today with a knock banner</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, knocks=KNOCKS))
+sections.append("<h3>someone added my code (2.9)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60,
+    knocks=[{"uid": "p1", "name": "Priya", "squad": "", "via_code": True}]))
+SOLO = {"entries": [ENTRIES[0]], "labels": L, "tomorrow": TOMORROW, "pending": [],
+        "my_code": "K7Q2ZP"}
+sections.append("<h3>just me, the day I joined (2.9)</h3>" + board.render(SOLO, {"period": "today"}, now_ts - 60))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):
@@ -187,7 +193,9 @@ sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))
 
 profile_js = board.profile_overlay_js({
     "name": "Dre", "streak": 41, "last_active": ago(minutes=12),
-    "cells": [([0, 1, 3, 12, 30, 70, 160][i * 7 % 7] if (i % 9) else 0) for i in range(182)],
+    # until 2.9 this was `[...][i * 7 % 7]`, always 0: the preview never lit a cell
+    "cells": [([0, 1, 3, 12, 30, 70, 160][(i * 3) % 7] if (i % 9) else 0) for i in range(182)],
+    "start": (TODAY - datetime.timedelta(days=181)).isoformat(),
     "same_days": 118, "decks_line": "AnKing Step 1", "uid": "dre",
     "you": False, "paused": False, "exam": "",
     "duet": {"run": 5, "best": 23,

@@ -6,13 +6,13 @@ cleans up nested layouts correctly."""
 import html
 
 from aqt.qt import (
-    QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSizePolicy,
+    QCheckBox, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QPushButton, QSizePolicy,
     QTabWidget, QTimer, QVBoxLayout, QWidget, Qt,
 )
 from aqt.utils import tooltip
 
-from . import attach_alive, danger, run_bg
+from . import attach_alive, confirm, danger, run_bg
 
 DEFAULTS = {
     "show_leaderboard": True, "period": "today", "sort": "reviews",
@@ -46,6 +46,7 @@ class SettingsDialog(QDialog):
         self.open_decks = open_decks
         self.open_squads = open_squads
         self._binds = {}
+        self._kept = {}  # combo key -> a stored value its list doesn't offer
         attach_alive(self)
         self._build()
 
@@ -65,19 +66,13 @@ class SettingsDialog(QDialog):
         tabs.currentChanged.connect(self._fit_tab)
         self._fit_tab(tabs.currentIndex())
 
-        buttons = QHBoxLayout()
-        restore = QPushButton("Restore Defaults")
-        restore.clicked.connect(self._restore)
-        buttons.addWidget(restore)
-        buttons.addStretch()
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(self.reject)
-        buttons.addWidget(cancel)
-        save = QPushButton("Save")
-        save.setDefault(True)
-        save.clicked.connect(self._save)
-        buttons.addWidget(save)
-        root.addLayout(buttons)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.RestoreDefaults
+                                   | QDialogButtonBox.StandardButton.Cancel
+                                   | QDialogButtonBox.StandardButton.Save)
+        buttons.button(QDialogButtonBox.StandardButton.RestoreDefaults).clicked.connect(self._restore)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
 
     def _fit_tab(self, index):
         for i in range(self.tabs.count()):
@@ -204,24 +199,16 @@ class SettingsDialog(QDialog):
             f"users/{uid}", {"displayName": name}), done)
 
     def _sign_out(self):
-        answer = QMessageBox.question(
-            self, "Sign out?", "Sign out on this device?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if answer != QMessageBox.StandardButton.Yes:
+        if not confirm(self, "Sign out?", "Sign out on this device? Your account and "
+                       "stats stay.", "Sign Out"):
             return
         self.client.sign_out()
         self.on_signed_out()
         self._fill_account()
 
     def _delete(self):
-        answer = QMessageBox.question(
-            self, "Delete account?",
-            "This deletes your stats, your code, and your account for good. "
-            "No undo.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if answer != QMessageBox.StandardButton.Yes:
+        if not confirm(self, "Delete account?", "This deletes your stats, your code, and "
+                       "your account for good. No undo.", "Delete Account"):
             return
         self._delete_attempt(password=None)
 
@@ -285,6 +272,10 @@ class SettingsDialog(QDialog):
             combo.addItem(text, value)
             if value == current:
                 combo.setCurrentIndex(i)
+        if current not in [value for value, _text in options]:
+            # e.g. the squads-only "7 days" sort: Save keeps it unless the
+            # list is touched (until 2.9 it quietly became Reviews)
+            self._kept[key] = (current, combo.currentIndex())
         row.addWidget(combo)
         row.addStretch()
         lay.addLayout(row)
@@ -296,10 +287,11 @@ class SettingsDialog(QDialog):
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._combo(lay, "sort", "Sort by", SORTS)
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
-        self._check(lay, "sync_notifications", "Notify me when a friend syncs")
+        self._check(lay, "sync_notifications", "Tell me when my crew studies")
         lay.addSpacing(8)
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
-        note = QLabel("Refreshes when Anki syncs, or with Refresh on the board.")
+        note = QLabel("Refreshes when Anki opens or syncs, when you come back after "
+                      "15 minutes, and with Refresh on the board.")
         note.setStyleSheet("font-size: 11px;")
         note.setWordWrap(True)
         lay.addWidget(note)
@@ -320,7 +312,7 @@ class SettingsDialog(QDialog):
     def _privacy_tab(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.addWidget(QLabel("<b>Share with your crew</b>"))
+        lay.addWidget(QLabel("<b>Share with your crew and squads</b>"))
         self._check(lay, "share_reviews", "Reviews")
         self._check(lay, "share_time", "Study time")
         self._check(lay, "share_retention", "Retention")
@@ -399,6 +391,8 @@ class SettingsDialog(QDialog):
 
     def _restore(self):
         self.exam_on.setChecked(False)
+        self.away_on.setChecked(False)  # until 2.9 Restore left this one on
+        self._kept.clear()
         for key, widget in self._binds.items():
             if isinstance(widget, QCheckBox):
                 widget.setChecked(bool(DEFAULTS[key]))
@@ -416,7 +410,9 @@ class SettingsDialog(QDialog):
             if isinstance(widget, QCheckBox):
                 changed[key] = widget.isChecked()
             elif isinstance(widget, QComboBox):
-                changed[key] = widget.currentData()
+                kept = self._kept.get(key)
+                untouched = kept is not None and widget.currentIndex() == kept[1]
+                changed[key] = kept[0] if untouched else widget.currentData()
             elif isinstance(widget, QLineEdit):
                 changed[key] = widget.text().strip()[:24]
         changed["exam_date"] = (

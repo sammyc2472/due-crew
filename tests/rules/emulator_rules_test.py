@@ -132,7 +132,7 @@ def main():
     check("knock: from a non-member rejected", put("users/alice/knocks/carol", dict(knock, name="Carol"), "carol") == 403)
     check("knock: cannot forge sender id", put("users/alice/knocks/carol", knock, "bob") == 403)
     check("knock: extra fields rejected", put("users/alice/knocks/bob", dict(knock, crew="x"), "bob") == 403)
-    check("knock: squad is required (fresh doc)", put("users/bob/knocks/alice", {"name": "Alice", "at": TS}, "alice") == 403)
+    check("knock: a squad or a code is required (fresh doc)", put("users/bob/knocks/alice", {"name": "Alice", "at": TS}, "alice") == 403)
     check("knock: owner reads and deletes", call("GET", "users/alice/knocks/bob", "alice")[0] == 200
           and call("DELETE", "users/alice/knocks/bob", "alice")[0] == 200)
 
@@ -242,10 +242,51 @@ def main():
     print(f"    [observed] rules string size() counts {unit}: 5 astral chars -> {r5}, 9 -> {r9}")
     put("users/bob", {"emoji": "🦊"}, "bob")
 
+    # -- v2.9: a knock may carry the recipient's own friend code instead of a
+    # squad. Carol shares no squad with Bob; she holds his code.
+    put("friend_codes/BOB123", {"userId": "bob"}, "owner")
+    put("friend_codes/ALI123", {"userId": "alice"}, "owner")
+    code_knock = {"name": "Carol", "at": TS, "code": "BOB123"}
+    check("code knock: holding the recipient's code opens the door",
+          put("users/bob/knocks/carol", code_knock, "carol") in (200, 201))
+    check("code knock: someone else's code doesn't",
+          put("users/dave/knocks/carol", code_knock, "carol") == 403)
+    check("code knock: a code that isn't anyone's doesn't",
+          put("users/bob/knocks/carol", dict(code_knock, code="NOPE00"), "carol") == 403)
+    check("code knock: the code must be six characters",
+          put("users/alice/knocks/carol", dict(code_knock, code="ALI123X"), "carol") == 403)
+    check("code knock: no squad and no code is still refused",
+          put("users/bob/knocks/dave", {"name": "Dave", "at": TS}, "dave") == 403)
+    check("code knock: cannot forge the sender",
+          put("users/bob/knocks/dave", code_knock, "carol") == 403)
+
+    # -- v2.9: one batchGet of friends' stats gets 20 access calls; the client
+    # sends at most ten friends per batch, safe even without edge docs (two
+    # calls each). Eleven without edges is where one batch breaks.
+    put("users/me", {"displayName": "Me", "friends": []}, "owner")
+    for i in range(11):
+        put(f"users/pal{i}", {"displayName": f"Pal {i}", "friends": ["me"]}, "owner")
+        put(f"users/pal{i}/daily_stats/2026-09-10", {"reviews": 5}, "owner")
+    root = f"projects/{PROJECT}/databases/(default)/documents"
+
+    def batch(n):
+        req = urllib.request.Request(BASE + ":batchGet", method="POST", data=json.dumps(
+            {"documents": [f"{root}/users/pal{i}/daily_stats/2026-09-10" for i in range(n)]}).encode())
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", f"Bearer {token('me')}")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+    check("batch: ten friends without edge docs fit one read", batch(10) == 200)
+    check("batch: eleven don't (why FRIENDS_PER_BATCH is ten)", batch(11) == 403)
+
     # -- markers cumulative
-    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"):
+    for m in ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
+              "rules-v9"):
         check(f"marker {m}: get is allowed (404, not 403)", call("GET", f"meta/{m}", "alice")[0] == 404)
-    check("marker rules-v9: not provisioned (403)", call("GET", "meta/rules-v9", "alice")[0] == 403)
+    check("marker rules-v10: not provisioned (403)", call("GET", "meta/rules-v10", "alice")[0] == 403)
 
     print(f"\n{PASSED}/{PASSED + FAILED} rules checks passed")
     sys.exit(1 if FAILED else 0)

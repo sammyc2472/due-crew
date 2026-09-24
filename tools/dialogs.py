@@ -218,9 +218,23 @@ def main(out):
         from due_crew.ui.auth_dialog import AuthDialog
         dlg = AuthDialog(None, CLIENT)
         shoot(dlg, os.path.join(out, "auth.png"))
+        dlg = AuthDialog(None, CLIENT, join=True)  # a new install opens on Join
+        shoot(dlg, os.path.join(out, "auth-join.png"))
+
+    def welcome():
+        from due_crew.ui.welcome_dialog import WelcomeDialog
+        dlg = WelcomeDialog(None, CLIENT, CONFIG, noop)
+        dlg.code_input.setText("Study with me on Due Crew · my code IGK123")
+        shoot(dlg, os.path.join(out, "welcome.png"))
+
+    def emoji():
+        from due_crew.ui.cheer_dialog import EmojiDialog
+        shoot(EmojiDialog(None, "\U0001F98A"), os.path.join(out, "emoji.png"))
+        shoot(EmojiDialog(None, "\U0001F985"), os.path.join(out, "emoji-other.png"))
 
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
-                         ("squads", squads), ("cheer", cheer), ("auth", auth)):
+                         ("squads", squads), ("cheer", cheer), ("auth", auth),
+                         ("welcome", welcome), ("emoji", emoji)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

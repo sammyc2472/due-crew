@@ -9,6 +9,7 @@ import datetime
 import json
 import re
 import sys
+import threading
 import types
 
 
@@ -163,8 +164,10 @@ class FakeFirestore:
     """In-memory store; enforces the repo's firestore.rules for /users/**.
 
     rules_mode:
-      "repo"        — current repository rules (rules-v8: v7 plus any one
-                      emoji in a cheer, checked by shape)
+      "repo"        — current repository rules (rules-v9: v8 plus a knock
+                      that carries the recipient's own friend code)
+      "v8"          — the paste before it (v2.7–v2.8): any one emoji in a
+                      cheer, knocks between squadmates only
       "v7"          — the paste before it (v2.5–v2.6): squads with member
                       rows, friend edges, knocks between squadmates, cheers
                       limited to the three classic emoji
@@ -185,6 +188,8 @@ class FakeFirestore:
         self.force_401 = False  # every Firestore call says "token expired"
         self.token_reply = None  # (status, payload) from the token endpoint,
                                  # or "network" to make the refresh call fail
+        self.rule_reads = 0     # exists()/get() the rules made: billed as reads
+        self.lock = threading.RLock()  # batches run side by side since 2.9
 
     # -- rules ------------------------------------------------------------
     def _friends_of(self, uid):
@@ -248,10 +253,16 @@ class FakeFirestore:
         return True
 
     CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}  # all that rules before v8 accept
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
+    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
+                        "rules-v9"),
+               "v8": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
                "v7": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
                "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
-    MODERN = ("repo", "v7")  # everything v2.5 brought is in both
+    MODERN = ("repo", "v8", "v7")  # everything v2.5 brought is in all three
+    ANY_EMOJI = ("repo", "v8")      # rules-v8: any one emoji in a cheer
+    # Firestore: 20 exists()/get() calls per multi-document read, and
+    # isFriend() spends one per friend with an edge doc, two without
+    ACCESS_CALLS = 20
 
     ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
     DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
@@ -296,7 +307,7 @@ class FakeFirestore:
                 allowed.add("note")  # rules-v5: optional, <= 80 chars
             note = (f.get("note") or {}).get("stringValue")
             emoji = (f.get("emoji") or {}).get("stringValue")
-            if self.rules_mode == "repo":
+            if self.rules_mode in self.ANY_EMOJI:
                 # rules-v8: any one emoji, by shape — no letters, digits or
                 # spaces, at most 16 UTF-16 units (the unit size() counts)
                 emoji_ok = (isinstance(emoji, str)
@@ -323,12 +334,18 @@ class FakeFirestore:
                 return (uid == sender and self._open_board(owner)
                         and self._open_board(sender) and set(f) <= {"name", "at"})
             squad = (f.get("squad") or {}).get("stringValue")
-            return (uid == sender and set(f) <= {"name", "at", "squad"}
-                    and isinstance(squad, str) and len(squad) <= 40
+            code = (f.get("code") or {}).get("stringValue")
+            keys = {"name", "at", "squad", "code"} if self.rules_mode == "repo" else {"name", "at", "squad"}
+            by_squad = (isinstance(squad, str) and len(squad) <= 40
+                        and self._member(squad, sender) and self._member(squad, owner))
+            # rules-v9: or the recipient's own friend code, which only they hand out
+            by_code = (self.rules_mode == "repo" and isinstance(code, str) and len(code) == 6
+                       and ((self.docs.get(f"friend_codes/{code}") or {}).get("userId") or {})
+                       .get("stringValue") == owner)
+            return (uid == sender and set(f) <= keys
                     and self._str_ok(f, "name", 60)
                     and "timestampValue" in (f.get("at") or {})
-                    and self._member(squad, sender)
-                    and self._member(squad, owner))
+                    and (by_squad or by_code))
         m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
         if m:
             # v2.0–v2.2 Everyone rows: no rule at all since v2.3.1
@@ -417,6 +434,17 @@ class FakeFirestore:
             return not listing
         return False
 
+    def _access_calls(self, paths, uid):
+        """The exists()/get() calls the rules make to read `paths`: one per
+        other person whose stats are read (their edge doc), two when that
+        doc is missing (then their profile). Calls repeat per document but
+        are cached per request, so each person counts once."""
+        calls = 0
+        for owner in {m.group(1) for m in (re.fullmatch(r"users/([^/]+)/(?:daily_stats|shared)/[^/]+", p)
+                                          for p in paths) if m and m.group(1) != uid}:
+            calls += 1 if f"users/{owner}/friends/{uid}" in self.docs else 2
+        return calls
+
     # -- request handling --------------------------------------------------
     def handle(self, method, url, headers=None, json_body=None):
         if self.force_401:
@@ -497,6 +525,12 @@ class FakeFirestore:
             return FakeResponse(200, {"documents": docs})
 
         if action == "batchGet":
+            calls = self._access_calls([full.split("/documents/")[-1]
+                                        for full in json_body.get("documents", [])], uid)
+            self.rule_reads += calls
+            if calls > self.ACCESS_CALLS:
+                self.log.append((method, "batchGet", 403))
+                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED: access call limit"}})
             out = []
             for full in json_body.get("documents", []):
                 p = full.split("/documents/")[-1]
@@ -511,6 +545,7 @@ class FakeFirestore:
             return FakeResponse(200, out)
 
         if method == "GET":
+            self.rule_reads += self._access_calls([path], uid)
             if not self._can_read(path, uid):
                 self.log.append((method, path, 403))
                 return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
@@ -567,7 +602,8 @@ class FakeSession:
         self.store = store
 
     def request(self, method, url, headers=None, timeout=None, **kw):
-        return self.store.handle(method, url, headers=headers, json_body=kw.get("json"))
+        with self.store.lock:
+            return self.store.handle(method, url, headers=headers, json_body=kw.get("json"))
 
     def post(self, url, params=None, json=None, data=None, timeout=None):
         reply = self.store.token_reply
