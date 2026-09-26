@@ -188,6 +188,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
   if (!Array.isArray(body.users)) throw new HttpError(400, "bad_users");
   const now = nowSec();
   let imported = 0;
+  let reclaimed = 0;
   const skipped: string[] = [];
   const rows: { uid: string; email: string; name: string | null; code: string | null }[] = [];
   for (const u of body.users as Record<string, unknown>[]) {
@@ -215,6 +216,22 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
         await env.DB.batch(won.map((r) => env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(r.code, r.uid)));
       }
     }
+    if (body.reclaimCodes === true) {
+      // 3.0.0's first sync swapped imported codes for new ones: an account
+      // already here gets its imported code back when nobody else holds it
+      const back = chunk.filter((r, j) => !results[j].meta.changes && r.code);
+      for (const r of back) {
+        const claim = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")
+          .bind(r.code, r.uid).run();
+        const mine = await env.DB.prepare("SELECT uid FROM codes WHERE code = ?").bind(r.code).first<string>("uid");
+        if (!claim.meta.changes && mine !== r.uid) continue;
+        await env.DB.batch([
+          env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(r.code, r.uid),
+          env.DB.prepare("DELETE FROM codes WHERE uid = ? AND code != ?").bind(r.uid, r.code),
+        ]);
+        reclaimed++;
+      }
+    }
     for (let j = 0; j < chunk.length; j++) {
       if (results[j].meta.changes) {
         imported++;
@@ -226,5 +243,5 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
       if (owner?.uid !== chunk[j].uid) skipped.push(chunk[j].uid);
     }
   }
-  return json({ imported, skipped });
+  return json({ imported, skipped, reclaimed });
 }

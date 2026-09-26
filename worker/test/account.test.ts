@@ -84,9 +84,9 @@ describe("identity import", () => {
   it("imports by uid, idempotently; the first 3.0 sign-in lands on the old uid", async () => {
     const box = mailbox();
     const r = await api("POST", "/admin/import-users", { body: { users }, token: "test-admin" });
-    expect(r.body).toEqual({ imported: 2, skipped: [] });
+    expect(r.body).toEqual({ imported: 2, skipped: [], reclaimed: 0 });
     const again = await api("POST", "/admin/import-users", { body: { users }, token: "test-admin" });
-    expect(again.body).toEqual({ imported: 0, skipped: [] });
+    expect(again.body).toEqual({ imported: 0, skipped: [], reclaimed: 0 });
     const sam = await signIn("sam@example.com", box);
     expect(sam.uid).toBe(users[0].uid);
     expect(sam.new).toBe(false);
@@ -105,6 +105,19 @@ describe("identity import", () => {
     expect((await api("GET", "/board", { token: sam.token })).body.me.code).toBe("SAM123");
     expect(await db().prepare("SELECT code FROM users WHERE uid = ?").bind(withCodes[2].uid).first("code")).toBeNull();
     expect(await db().prepare("SELECT COUNT(*) AS n FROM codes").first("n")).toBe(1);
+  });
+
+  it("reclaimCodes puts an imported code back after a first sync swapped it", async () => {
+    const box = mailbox();
+    const withCode = [{ ...users[0], code: "SAM123" }];
+    await api("POST", "/admin/import-users", { body: { users: withCode }, token: "test-admin" });
+    const sam = await signIn("sam@example.com", box);
+    await api("POST", "/codes", { token: sam.token, body: {} });  // what 3.0.0's restore did
+    expect((await api("GET", "/board", { token: sam.token })).body.me.code).not.toBe("SAM123");
+    const r = await api("POST", "/admin/import-users", { body: { users: withCode, reclaimCodes: true }, token: "test-admin" });
+    expect(r.body.reclaimed).toBe(1);
+    expect((await api("GET", "/board", { token: sam.token })).body.me.code).toBe("SAM123");
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM codes WHERE uid = ?").bind(sam.uid).first("n")).toBe(1);
   });
 
   it("an address that already signed in to 3.0 under a new uid is skipped and reported", async () => {

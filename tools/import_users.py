@@ -84,9 +84,12 @@ def google_token():
     return token
 
 
-def post(api, token, users):
+def post(api, token, users, reclaim=False):
+    body = {"users": users}
+    if reclaim:
+        body["reclaimCodes"] = True
     req = urllib.request.Request(api.rstrip("/") + "/admin/import-users", method="POST",
-                                 data=json.dumps({"users": users}).encode())
+                                 data=json.dumps(body).encode())
     req.add_header("Content-Type", "application/json")
     req.add_header("Authorization", f"Bearer {token}")
     # Cloudflare's Browser Integrity Check turns away urllib's own
@@ -102,6 +105,8 @@ def main(argv=None):
     ap.add_argument("--api", default="https://api.duecrew.com")
     ap.add_argument("--firestore", action="store_true",
                     help="also carry each profile's name and friend code (gcloud login)")
+    ap.add_argument("--reclaim-codes", action="store_true",
+                    help="give accounts already imported their imported code back (the 3.0.0 restore swapped them)")
     ap.add_argument("--go", action="store_true", help="send it (default: a dry run)")
     args = ap.parse_args(argv)
     users = accounts(args.export)
@@ -123,17 +128,19 @@ def main(argv=None):
     if not token:
         print("set DUE_CREW_ADMIN_TOKEN (the Worker's ADMIN_TOKEN secret)", file=sys.stderr)
         return 2
-    imported, skipped = 0, []
+    imported, skipped, reclaimed = 0, [], 0
     for i in range(0, len(users), CHUNK):
         try:
-            r = post(args.api, token, users[i:i + CHUNK])
+            r = post(args.api, token, users[i:i + CHUNK], args.reclaim_codes)
         except urllib.error.HTTPError as e:
             where = "the Worker" if (e.headers.get("content-type") or "").startswith("application/json") else "Cloudflare's edge"
             print(f"refused: {e.code}, by {where}", file=sys.stderr)
             return 1
         imported += r.get("imported", 0)
         skipped += r.get("skipped", [])
-    print(f"imported {imported}; already there {len(users) - imported - len(skipped)}; skipped {len(skipped)}")
+        reclaimed += r.get("reclaimed", 0)
+    print(f"imported {imported}; already there {len(users) - imported - len(skipped)}; skipped {len(skipped)}"
+          + (f"; codes put back {reclaimed}" if args.reclaim_codes else ""))
     for uid in skipped:
         print(f"  skipped uid {uid}: its address already signed in to 3.0 under a new uid, or it's malformed")
     return 0
