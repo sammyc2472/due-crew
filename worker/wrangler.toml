@@ -11,14 +11,20 @@ API_VERSION = "1"
 MIN_CLIENT = "3.0.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
 
-# Secrets (wrangler secret put): RESEND_API_KEY (no key: codes are logged,
-# not sent), ADMIN_TOKEN (the one-shot identity import; unset: no admin).
+# Secrets (wrangler secret put): ADMIN_TOKEN (the one-shot identity import;
+# unset: no admin). RESEND_API_KEY only if mail ever moves off the EMAIL
+# binding below.
 
 [[d1_databases]]
 binding = "DB"
 database_name = "due-crew"
 database_id = "64b685e7-9051-45e0-9511-5124cbf1280c"
 migrations_dir = "migrations"
+
+# Sign-in codes by Cloudflare Email Service, and only from this address.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["codes@duecrew.com"]
 
 # Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
 [triggers]
@@ -43,3 +49,7 @@ migrations_dir = "migrations"
 
 [env.dev.triggers]
 crons = ["17 4 * * *"]
+
+[[env.dev.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["codes@duecrew.com"]

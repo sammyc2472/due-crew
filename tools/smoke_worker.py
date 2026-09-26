@@ -6,8 +6,8 @@ own tests each prove one side, this proves they agree.
     npx wrangler dev --env="" --local --port 8787 > ../wdev.log 2>&1 &
     cd .. && python3 tools/smoke_worker.py wdev.log
 
-With no RESEND_API_KEY the Worker logs each sign-in code instead of sending
-it; this reads them from wrangler's log. Needs `requests`. Exits non-zero
+Local dev never sends mail: each code lands in wrangler's log, or (with the
+EMAIL binding) in a text file the log names; this reads it from there. Needs `requests`. Exits non-zero
 on any failure. CI runs it in the worker job.
 """
 import datetime
@@ -33,16 +33,32 @@ def check(name, cond, detail=""):
     ok_all &= bool(cond)
     print(("PASS " if cond else "FAIL ") + name + ("" if cond else f"  [{detail}]"))
 
-def code_for():
-    for _ in range(50):
-        m = re.findall(r"code: (\d{3}) (\d{3})\.", open(LOG).read())
-        if m: return "".join(m[-1])
+def _codes():
+    """Every code sent so far, oldest first: logged inline (no mail set up),
+    or, with the EMAIL binding, in the text file local dev writes for each
+    message and names in the log."""
+    out = []
+    for line in open(LOG).read().splitlines():
+        f = re.search(r"Text: (\S+\.txt)", line)
+        text = open(f.group(1)).read() if f and os.path.exists(f.group(1)) else line
+        out += ["".join(m) for m in re.findall(r"code: (\d{3}) (\d{3})\.", text)]
+    return out
+
+
+def code_for(before):
+    """The first code sent after `before` codes had been."""
+    for _ in range(100):
+        got = _codes()
+        if len(got) > before:
+            return got[before]
         time.sleep(0.1)
+
 
 def person(email, name):
     cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"), base=BASE)
+    before = len(_codes())
     cl.request_code(email)
-    got = cl.verify_code(email, code_for(), "smoke")
+    got = cl.verify_code(email, code_for(before), "smoke")
     if got["new"]: cl.set_display_name(name)
     return cl, got
 
@@ -108,7 +124,9 @@ new_code, e2 = sam.new_friend_code(code)
 check("new code; the old one is gone", e2 is None and new_code != code and dre.add_friend(code)[1] is not None)
 # a 2.x account, imported and restored
 kai = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"), base=BASE)
-kai.request_code(f"kai{stamp}@example.com"); kg = kai.verify_code(f"kai{stamp}@example.com", code_for())
+n = len(_codes())
+kai.request_code(f"kai{stamp}@example.com")
+kg = kai.verify_code(f"kai{stamp}@example.com", code_for(n))
 kai.set_display_name("Kai")
 kai.session.update(needs_restore=True, friend_ids=[sam.user_id, "ghost"], friend_code="KAI" + stamp[-3:])
 old_code = shapes.new_squad_code()  # a 2.x squad nobody has brought back yet

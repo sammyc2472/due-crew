@@ -17,7 +17,8 @@ export async function api(
     init.body = JSON.stringify(opts.body);
     headers["content-type"] = "application/json";
   }
-  const res = await worker.fetch(new Request(BASE + path, init), { ...env, ...(opts.env ?? {}) } as any);
+  // the EMAIL binding only when a test brings one: the rest see Resend's path
+  const res = await worker.fetch(new Request(BASE + path, init), { ...env, EMAIL: undefined, ...(opts.env ?? {}) } as any);
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : null, headers: res.headers };
 }
