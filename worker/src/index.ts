@@ -57,7 +57,20 @@ authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));
 
+/** Daily: what has expired goes. Nothing anyone would miss. */
+export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM otp WHERE expires_at <= ?").bind(now),
+    env.DB.prepare("DELETE FROM limits WHERE window_start <= ?").bind(now - 86400),
+    env.DB.prepare("DELETE FROM sessions WHERE last_used <= ?").bind(now - A.SESSION_IDLE),
+  ]);
+}
+
 export default {
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(housekeeping(env));
+  },
+
   async fetch(req: Request, env: Env): Promise<Response> {
     const path = new URL(req.url).pathname;
     try {

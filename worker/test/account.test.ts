@@ -105,3 +105,25 @@ describe("identity import", () => {
     expect((await signIn("dre@example.com", box)).uid).toBe(early.uid);
   });
 });
+
+describe("housekeeping", () => {
+  it("clears spent codes, old limit windows and idle sessions; nothing live", async () => {
+    const { housekeeping } = await import("../src/index");
+    const box = mailbox();
+    const live = await signIn("sam@example.com", box);
+    const idle = await signIn("dre@example.com", box);
+    await api("POST", "/auth/code", { body: { email: "nia@example.com" } });   // a live code
+    await api("POST", "/auth/code", { body: { email: "zed@example.com" } });
+    await db().batch([
+      db().prepare("UPDATE otp SET expires_at = 1 WHERE email = 'zed@example.com'"),
+      db().prepare("UPDATE sessions SET last_used = 1 WHERE uid = ?").bind(idle.uid),
+      db().prepare("INSERT INTO limits VALUES ('old', 3, 1)"),
+    ]);
+    await housekeeping((await import("cloudflare:workers")).env as any);
+    expect(await count("otp")).toBe(1);
+    expect(await count("limits WHERE key = 'old'")).toBe(0);
+    expect(await count("limits")).toBeGreaterThan(0);  // this hour's windows stay
+    expect(await count("sessions WHERE uid = ?", idle.uid)).toBe(0);
+    expect((await api("GET", "/auth/me", { token: live.token })).status).toBe(200);
+  });
+});

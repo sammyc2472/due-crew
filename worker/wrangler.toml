@@ -1,8 +1,10 @@
-# Due Crew API: one Worker, D1 underneath. Served at api.duecrew.com (route
-# and deploy job come with step 3 of the 3.0 brief).
+# Due Crew API: one Worker, D1 underneath, at api.duecrew.com.
+# Setup, once: docs/cloudflare-setup.md. Deploys run from CI on a v* tag.
 name = "due-crew-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-20"
+workers_dev = false
+routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 
 [vars]
 API_VERSION = "1"
@@ -15,5 +17,29 @@ MAIL_FROM = "Due Crew <codes@duecrew.com>"
 [[d1_databases]]
 binding = "DB"
 database_name = "due-crew"
-database_id = "00000000-0000-0000-0000-000000000000"  # set at step 3
+database_id = "00000000-0000-0000-0000-000000000000"  # from `wrangler d1 create due-crew`
 migrations_dir = "migrations"
+
+# Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
+[triggers]
+crons = ["17 4 * * *"]
+
+# A second Worker and database for trying a client before the crew does:
+# `wrangler deploy --env dev`, served at api-dev.duecrew.com.
+[env.dev]
+name = "due-crew-api-dev"
+routes = [{ pattern = "api-dev.duecrew.com", custom_domain = true }]
+
+[env.dev.vars]
+API_VERSION = "1"
+MIN_CLIENT = "3.0.0"
+MAIL_FROM = "Due Crew <codes@duecrew.com>"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "due-crew-dev"
+database_id = "00000000-0000-0000-0000-000000000000"  # from `wrangler d1 create due-crew-dev`
+migrations_dir = "migrations"
+
+[env.dev.triggers]
+crons = ["17 4 * * *"]
