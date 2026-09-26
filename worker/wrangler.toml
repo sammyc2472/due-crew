@@ -1,0 +1,19 @@
+# Due Crew API: one Worker, D1 underneath. Served at api.duecrew.com (route
+# and deploy job come with step 3 of the 3.0 brief).
+name = "due-crew-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-20"
+
+[vars]
+API_VERSION = "1"
+MIN_CLIENT = "3.0.0"
+MAIL_FROM = "Due Crew <codes@duecrew.com>"
+
+# Secrets (wrangler secret put): RESEND_API_KEY (no key: codes are logged,
+# not sent), ADMIN_TOKEN (the one-shot identity import; unset: no admin).
+
+[[d1_databases]]
+binding = "DB"
+database_name = "due-crew"
+database_id = "00000000-0000-0000-0000-000000000000"  # set at step 3
+migrations_dir = "migrations"

@@ -8,6 +8,10 @@ maintainer. The repo is the source of truth; there is no build step.
 - `due_crew/` — the add-on. `__init__.py` (hooks/glue, main-thread rules in
   its docstring), `board.py` (pure HTML rendering), `backend/` (Firebase
   REST + server directory), `stats/` (local SQL), `ui/` (Qt dialogs).
+- `worker/` — 3.0's backend in progress: a Cloudflare Worker (TypeScript)
+  on D1, with its own sign-in by emailed code. `worker/README.md` has the
+  API; `npx vitest run` there runs it in real workerd with a local D1.
+  Until 3.0 ships, the add-on still talks to Firestore.
 - `firestore.rules` — deployed to the one hosted Firebase project
   (anki-leaderboard-f6691; Sam pays past the free tier). Friendship consent
   and squads (private boards behind an invite code) are enforced here. v2.0 removed crew
