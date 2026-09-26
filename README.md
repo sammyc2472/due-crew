@@ -69,7 +69,8 @@ newer. Restart Anki after installing.
 
 ## Get started
 
-1. Click **Join** on the Decks screen and sign up.
+1. Click **Join** on the Decks screen and enter your email. Type in the
+   code we send you. There's no password.
 2. Copy your invite and send it to a friend.
 3. When they add you, click **Add back**. You're crew.
 
@@ -84,15 +85,15 @@ computers. Anyone else sees your name and emoji, nothing more.
 You sign in with a code sent to your email; there's no password. Your email
 is only used for that. Deleting your account deletes your data.
 
-The server that enforces this is in
-[worker/](https://github.com/sammyc2472/due-crew/tree/main/worker), in this
-repo.
+The add-on and the server that enforces all of this are open source, on
+[GitHub](https://github.com/sammyc2472/due-crew).
 
 ## Development
 
-Plain Python and Anki hooks, no build step. Run the tests with
-`python3 tests/test_due_crew.py`; `tests/README.md` has the rest. Issues
-and pull requests are welcome.
+The add-on is plain Python and Anki hooks, no build step; the server is a
+Cloudflare Worker in `worker/`. Run the tests with
+`python3 tests/test_due_crew.py` and, in `worker/`, `npx vitest run`;
+`tests/README.md` has the rest. Issues and pull requests are welcome.
 
 ## License
 
