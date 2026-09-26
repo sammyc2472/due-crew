@@ -4,8 +4,8 @@ Until 2.13 every setting lived in Anki's add-on config on one computer,
 which AnkiWeb doesn't sync. A second computer started from the defaults:
 shared decks empty (and its first upload emptied them for the crew), the
 privacy switches all on, no squads, no exam date. Now the settings in
-ACCOUNT_KEYS live in users/{me}/private/settings too, readable only by me
-(rules-v11). What's about the screen (accent, theme, sort, tab) stays
+ACCOUNT_KEYS live on the server too (GET/PUT /settings), readable only by
+me. What's about the screen (accent, theme, sort, tab) stays
 per computer.
 
 The one rule that matters: an install pulls before it uploads. Profile
@@ -183,8 +183,7 @@ def ensure(then=None):
         return
     cl = client()
     _state["settings_pulling"] = True
-    uid = cl.user_id
-    app._bg(lambda: cl.get_settings(uid), _pulled)
+    app._bg(cl.get_settings, _pulled)
 
 
 def _pulled(result):
@@ -207,9 +206,8 @@ def _pulled(result):
         elif status == 404:
             push(cfg())  # the account's first settings: this computer's
     finally:
-        # a refusal (rules older than v11) waits for tomorrow; no network
-        # tries again at the next sync. Either way uploads carry on as
-        # before 2.13 rather than wait forever.
+        # a refusal waits for tomorrow; no network tries again at the next
+        # sync. Either way uploads carry on rather than wait forever.
         _state["settings_pulling"] = False
         _state["settings_ready"] = True
         if status in (200, 403, 404):
@@ -234,7 +232,6 @@ def push(c):
         return
     at = _now()
     settings = pick(c, _deck_name)
-    uid = cl.user_id
     cl.session.update(settings_dirty=True, settings_local_at=at)
     cl._save_session()
 
@@ -243,7 +240,7 @@ def push(c):
             cl.session.update(settings_seen=at, settings_dirty=False)
             cl._save_session()
 
-    app._bg(lambda: cl.put_settings(uid, at, settings), done)
+    app._bg(lambda: cl.put_settings(at, settings), done)
 
 
 def on_change(c):

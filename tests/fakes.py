@@ -1,8 +1,7 @@
-"""Test doubles for Due Crew: fake anki collection + strict fake Firestore.
-
-The Firestore fake validates request shape the way the real REST API does
-(typed values, updateMask semantics, rules from the repo), so a malformed
-client payload fails loudly here instead of silently in production.
+"""Test doubles for Due Crew: a fake anki collection, and a fake of the
+3.0 Worker API (worker/) in memory, so the client suite runs on the
+standard library alone. The fake restates the Worker's consent and shape
+rules; worker/test proves the real thing in workerd with D1.
 """
 
 import datetime
@@ -54,7 +53,7 @@ def make_collection(conn):
     conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0)")
-    conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT)")
+    conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, flds TEXT DEFAULT '')")
     return conn
 
 
@@ -93,58 +92,7 @@ class FakeDecks:
         return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]
 
 
-# ------------------------------------------------------------ fake firestore
-
-VALUE_KEYS = {"stringValue", "integerValue", "doubleValue", "booleanValue",
-              "timestampValue", "mapValue", "arrayValue", "nullValue"}
-
-
-def _check_value(v, path="$"):
-    """Strict Firestore Value validation; raises ValueError on bad shape."""
-    if not isinstance(v, dict) or len(v) != 1:
-        raise ValueError(f"{path}: value must be a single-key dict, got {v!r}")
-    key = next(iter(v))
-    if key not in VALUE_KEYS:
-        raise ValueError(f"{path}: unknown value type {key!r}")
-    inner = v[key]
-    if key == "integerValue":
-        if not isinstance(inner, str) or not re.fullmatch(r"-?\d+", inner):
-            raise ValueError(f"{path}: integerValue must be a string int")
-    elif key == "doubleValue":
-        if not isinstance(inner, (int, float)) or isinstance(inner, bool):
-            raise ValueError(f"{path}: doubleValue must be a number")
-    elif key == "booleanValue":
-        if not isinstance(inner, bool):
-            raise ValueError(f"{path}: booleanValue must be a bool")
-    elif key == "stringValue":
-        if not isinstance(inner, str):
-            raise ValueError(f"{path}: stringValue must be a str")
-    elif key == "timestampValue":
-        if not isinstance(inner, str):
-            raise ValueError(f"{path}: timestampValue must be a str")
-    elif key == "mapValue":
-        fields = inner.get("fields", {})
-        if not isinstance(fields, dict):
-            raise ValueError(f"{path}: mapValue.fields must be a dict")
-        for k, x in fields.items():
-            if not isinstance(k, str) or not k:
-                raise ValueError(f"{path}: bad map key {k!r}")
-            _check_value(x, f"{path}.{k}")
-    elif key == "arrayValue":
-        for i, x in enumerate(inner.get("values", [])):
-            _check_value(x, f"{path}[{i}]")
-
-
-def _num(value):
-    """A Firestore Value -> number, or None."""
-    if not isinstance(value, dict):
-        return None
-    if "integerValue" in value:
-        return int(value["integerValue"])
-    if "doubleValue" in value:
-        return float(value["doubleValue"])
-    return None
-
+# ------------------------------------------------------------ fake worker
 
 class FakeResponse:
     def __init__(self, status_code, payload=None):
@@ -160,474 +108,569 @@ class RequestException(Exception):
     pass
 
 
-class FakeFirestore:
-    """In-memory store; enforces the repo's firestore.rules for /users/**.
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+EMOJI_RE = re.compile(r"[^A-Za-z0-9 ]+")
+SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-    rules_mode:
-      "repo"        — current repository rules (rules-v11: v10 plus my own
-                      settings doc, users/{me}/private/settings)
-      "v10"         — the paste before it (v2.10–v2.12): a cheer may carry
-                      `luck` or a card's `guid`
-      "v9"          — the paste before it (v2.9): knocks may carry the
-                      recipient's own friend code
-      "v8"          — the paste before it (v2.7–v2.8): any one emoji in a
-                      cheer, knocks between squadmates only
-      "v7"          — the paste before it (v2.5–v2.6): squads with member
-                      rows, friend edges, knocks between squadmates, cheers
-                      limited to the three classic emoji
-      "v3"          — an old paste: markers v2+v3, the UNSCOPED
-                      server_board, knocks gated only on openBoard
-      "v2"          — marker v2 only, no board/knocks
-      "decks-only"  — ancient drift: shared/decks literal, no markers
 
-    This fake RESTATES the rules; it is a model of intent. Only
-    tests/rules/ (the emulator) proves what the deployed text enforces.
-    """
+def _u16(s):
+    return len(s.encode("utf-16-le")) // 2
 
-    def __init__(self, rules_mode="repo"):
-        self.docs = {}          # path -> {field: Value}
-        self.auth_uid = None    # uid the bearer token maps to
-        self.log = []           # (method, path, status)
-        self.rules_mode = rules_mode
-        self.force_401 = False  # every Firestore call says "token expired"
-        self.token_reply = None  # (status, payload) from the token endpoint,
-                                 # or "network" to make the refresh call fail
-        self.rule_reads = 0     # exists()/get() the rules made: billed as reads
-        self.lock = threading.RLock()  # batches run side by side since 2.9
 
-    # -- rules ------------------------------------------------------------
-    def _friends_of(self, uid):
-        """Who `uid` has added: the profile array (clients to 2.4) plus the
-        edge docs (2.5+) — the rules honour both during the changeover."""
-        doc = self.docs.get(f"users/{uid}", {})
-        arr = doc.get("friends", {}).get("arrayValue", {}).get("values", [])
-        ids = [v.get("stringValue") for v in arr]
-        prefix = f"users/{uid}/friends/"
-        ids += [p[len(prefix):] for p in self.docs if p.startswith(prefix) and p.count("/") == 3]
-        return ids
+def _is_emoji(v):
+    return isinstance(v, str) and 1 <= _u16(v) <= 16 and bool(EMOJI_RE.fullmatch(v))
 
-    def _open_board(self, uid):
-        doc = self.docs.get(f"users/{uid}", {})
-        return doc.get("openBoard", {}).get("booleanValue") is True
 
-    SQUAD_FIELDS = {"name", "founder", "open", "createdAt", "banned"}
-    MEMBER_FIELDS = {"name", "joinedAt", "day", "reviews", "studyTimeMs",
-                     "accuracy", "streak", "updatedAt", "week", "emoji"}
+def _is_int(v, lo=0, hi=None):
+    return isinstance(v, int) and not isinstance(v, bool) and v >= lo and (hi is None or v <= hi)
 
-    def _founder(self, sid):
-        return (self.docs.get(f"squads/{sid}", {}).get("founder") or {}).get("stringValue")
 
-    def _member(self, sid, uid):
-        return uid is not None and f"squads/{sid}/members/{uid}" in self.docs
+def _now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def _squad_shape(self, f):
-        name = (f.get("name") or {}).get("stringValue")
-        banned = (f.get("banned") or {}).get("arrayValue", {}).get("values", [])
-        return (set(f) <= self.SQUAD_FIELDS and isinstance(name, str)
-                and 1 <= len(name) <= 24
-                and isinstance((f.get("open") or {}).get("booleanValue"), bool)
-                and ("banned" not in f or ("arrayValue" in f["banned"] and len(banned) <= 200)))
 
-    def _banned(self, sid):
-        arr = (self.docs.get(f"squads/{sid}", {}).get("banned") or {}).get("arrayValue", {}).get("values", [])
-        return [v.get("stringValue") for v in arr]
+class Bad(Exception):
+    def __init__(self, status, code):
+        super().__init__(code)
+        self.status, self.code = status, code
 
-    def _member_shape(self, f):
-        allowed = self.MEMBER_FIELDS | ({"newCards"} if self.rules_mode == "repo" else set())
-        if not set(f) <= allowed:
-            return False
-        if not self._str_ok(f, "name", 60) or "name" not in f:
-            return False
-        for key in ("reviews", "studyTimeMs", "streak", "newCards"):
-            if key in f:
-                r = f[key] or {}
-                if "integerValue" not in r or int(r["integerValue"]) < 0:
-                    return False
-        if "accuracy" in f:
-            a = _num(f["accuracy"])
-            if a is None or not 0 <= a <= 100:
-                return False
-        if "week" in f:
-            w = f["week"] or {}
-            if "integerValue" not in w or not 0 <= int(w["integerValue"]) <= 7:
-                return False
-        if not self._str_ok(f, "emoji", 16):
-            return False
-        if "day" in f and not self.DAY_RE.fullmatch((f["day"] or {}).get("stringValue", "")):
-            return False
-        return True
 
-    CHEERS = {"\U0001F389", "\U0001F4AA", "\U0001F525"}  # all that rules before v8 accept
-    MARKERS = {"repo": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-                        "rules-v9", "rules-v10", "rules-v11"),
-               "v10": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-                       "rules-v9", "rules-v10"),
-               "v9": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8",
-                      "rules-v9"),
-               "v8": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7", "rules-v8"),
-               "v7": ("rules-v2", "rules-v3", "rules-v4", "rules-v5", "rules-v6", "rules-v7"),
-               "v3": ("rules-v2", "rules-v3"), "decks-only": ()}
-    MODERN = ("repo", "v10", "v9", "v8", "v7")  # everything v2.5 brought is in all of these
-    ANY_EMOJI = ("repo", "v10", "v9", "v8")      # rules-v8: any one emoji in a cheer
-    CODE_KNOCKS = ("repo", "v10", "v9")          # rules-v9: a knock may carry a friend code
-    # Firestore: 20 exists()/get() calls per multi-document read, and
-    # isFriend() spends one per friend with an edge doc, two without
-    ACCESS_CALLS = 20
+class FakeWorker:
+    """The Worker's API in memory: worker/src restated in Python, so the
+    client suite needs nothing but the standard library. It's a model of
+    the Worker, as the old fake was of the Firestore rules; worker/test is
+    what proves the real one (in workerd, with D1).
 
-    ROW_FIELDS = {"name", "reviews", "studyTimeMs", "streak", "updatedAt"}
-    DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+    Every request is logged as (method, path, status): the request budget
+    tests count them. `writes` counts rows the server wrote."""
 
-    @staticmethod
-    def _str_ok(f, key, limit):
-        if key not in f:
-            return True
-        v = (f[key] or {}).get("stringValue")
-        return isinstance(v, str) and len(v) <= limit
+    def __init__(self):
+        self.users = {}      # uid -> {email, name, emoji, code, client_version, tz, rollover}
+        self.tokens = {}     # token -> uid
+        self.friends = set()  # (owner, friend)
+        self.weeks = {}      # uid -> (json text, updatedAt)
+        self.decks = {}      # uid -> list
+        self.heat = {}       # uid -> {"counts": {...}}
+        self.cheers = {}     # (to, from) -> {emoji, note, luck, guid, at}
+        self.knocks = {}     # (to, from) -> {squad, at}
+        self.squads = {}     # id -> {name, founder, open}
+        self.members = {}    # (sid, uid) -> row
+        self.bans = set()    # (sid, uid)
+        self.settings = {}   # uid -> {v, at, settings}
+        self.codes = {}      # code -> uid
+        self.otp = {}        # email -> code
+        self.log = []        # (method, path, status)
+        self.bodies = []     # (method, path, json body)
+        self.writes = 0      # rows written, all tables
+        self.wrote = {}      # table -> rows written
+        self.min_client = "3.0.0"
+        self.down = False    # no network at all
+        self.fail_status = None  # every request answers this (a 5xx, say)
+        self.lock = threading.RLock()
+        self._seq = 0
 
-    def _can_write(self, path, uid, method="PATCH", fields=None):
-        m = re.fullmatch(r"users/([^/]+)", path)
-        if m:
-            f = fields or {}
-            friends = (f.get("friends") or {}).get("arrayValue", {}).get("values", [])
-            return (uid == m.group(1) and self._str_ok(f, "displayName", 60)
-                    and self._str_ok(f, "emoji", 16)
-                    and ("friends" not in f or ("arrayValue" in f["friends"]
-                                                and len(friends) <= 500)))
-        m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
-        if m:
-            if self.rules_mode not in self.MODERN or uid != m.group(1):
-                return False
-            return method == "DELETE" or set(fields or {}) <= {"at"}
-        m = re.fullmatch(r"users/([^/]+)/daily_stats/[^/]+", path)
-        if m:
-            return uid == m.group(1)
-        m = re.fullmatch(r"users/([^/]+)/shared/([^/]+)", path)
-        if m:
-            if self.rules_mode == "decks-only" and m.group(2) != "decks":
-                return False
-            return uid == m.group(1)
-        m = re.fullmatch(r"users/([^/]+)/cheers/([^/]+)", path)
-        if m:
-            owner, sender = m.groups()
-            if method == "DELETE":
-                return uid == owner
-            f = fields or {}
-            allowed = {"emoji", "name", "at"}
-            if self.rules_mode in self.MODERN:
-                allowed.add("note")  # rules-v5: optional, <= 80 chars
-            if self.rules_mode in ("repo", "v10"):
-                allowed |= {"luck", "guid"}  # rules-v10
-            note = (f.get("note") or {}).get("stringValue")
-            emoji = (f.get("emoji") or {}).get("stringValue")
-            if self.rules_mode in self.ANY_EMOJI:
-                # rules-v8: any one emoji, by shape — no letters, digits or
-                # spaces, at most 16 UTF-16 units (the unit size() counts)
-                emoji_ok = (isinstance(emoji, str)
-                            and len(emoji.encode("utf-16-le")) // 2 <= 16
-                            and re.fullmatch(r"[^A-Za-z0-9 ]+", emoji) is not None)
-            else:
-                emoji_ok = emoji in self.CHEERS
-            return (uid == sender and uid in self._friends_of(owner)
-                    and set(f) <= allowed
-                    and emoji_ok
-                    and self._str_ok(f, "name", 60)
-                    and "timestampValue" in (f.get("at") or {})
-                    and ("note" not in f
-                         or (isinstance(note, str) and len(note) <= 80))
-                    and ("luck" not in f or isinstance((f["luck"] or {}).get("booleanValue"), bool))
-                    and ("guid" not in f or len((f["guid"] or {}).get("stringValue", "x" * 99)) <= 40))
-        m = re.fullmatch(r"users/([^/]+)/knocks/([^/]+)", path)
-        if m:
-            owner, sender = m.groups()
-            if self.rules_mode == "decks-only":
-                return False
-            if method == "DELETE":
-                return uid == owner
-            f = fields or {}
-            if self.rules_mode not in self.MODERN:  # v1.8–2.2: both on the Everyone board
-                return (uid == sender and self._open_board(owner)
-                        and self._open_board(sender) and set(f) <= {"name", "at"})
-            squad = (f.get("squad") or {}).get("stringValue")
-            code = (f.get("code") or {}).get("stringValue")
-            keys = {"name", "at", "squad", "code"} if self.rules_mode in self.CODE_KNOCKS else {"name", "at", "squad"}
-            by_squad = (isinstance(squad, str) and len(squad) <= 40
-                        and self._member(squad, sender) and self._member(squad, owner))
-            # rules-v9: or the recipient's own friend code, which only they hand out
-            by_code = (self.rules_mode in self.CODE_KNOCKS and isinstance(code, str) and len(code) == 6
-                       and ((self.docs.get(f"friend_codes/{code}") or {}).get("userId") or {})
-                       .get("stringValue") == owner)
-            return (uid == sender and set(f) <= keys
-                    and self._str_ok(f, "name", 60)
-                    and "timestampValue" in (f.get("at") or {})
-                    and (by_squad or by_code))
-        m = re.fullmatch(r"boards/([^/]+)/rows/([^/]+)", path)
-        if m:
-            # v2.0–v2.2 Everyone rows: no rule at all since v2.3.1
-            return False
-        m = re.fullmatch(r"server_board/([^/]+)", path)
-        if m:
-            return self.rules_mode == "v3" and uid == m.group(1)  # v1.8–1.9 only
-        m = re.fullmatch(r"squads/([^/]+)", path)
-        if m:
-            if self.rules_mode not in self.MODERN or uid is None:
-                return False
-            f = fields or {}
-            existing = self.docs.get(path)
-            if method == "DELETE":
-                return existing is not None and self._founder(m.group(1)) == uid
-            if existing is None:
-                return ((f.get("founder") or {}).get("stringValue") == uid
-                        and self._squad_shape(f))
-            merged = dict(existing, **f)
-            new_founder = (merged.get("founder") or {}).get("stringValue")
-            return (self._founder(m.group(1)) == uid
-                    and (new_founder == uid or self._member(m.group(1), new_founder))
-                    and self._squad_shape(merged))
-        m = re.fullmatch(r"squads/([^/]+)/members/([^/]+)", path)
-        if m:
-            sid, member = m.groups()
-            if self.rules_mode not in self.MODERN:
-                return False
-            if method == "DELETE":
-                return uid == member or (uid is not None and self._founder(sid) == uid)
-            if uid != member:
-                return False
-            existing = self.docs.get(path)
-            if existing is None:
-                sq = self.docs.get(f"squads/{sid}")
-                if not sq or (sq.get("open") or {}).get("booleanValue") is not True:
-                    return False
-                if uid in self._banned(sid):
-                    return False
-                # a join carries joinedAt; a row update turned insert does not
-                if "timestampValue" not in ((fields or {}).get("joinedAt") or {}):
-                    return False
-            return self._member_shape(dict(existing or {}, **(fields or {})))
-        m = re.fullmatch(r"users/([^/]+)/private/([^/]+)", path)
-        if m:
-            if self.rules_mode != "repo" or uid != m.group(1):
-                return False
-            if method == "DELETE":
-                return True
-            f = fields or {}
-            return (m.group(2) == "settings" and set(f) <= {"v", "at", "settings"}
-                    and "mapValue" in (f.get("settings") or {}))
-        if re.fullmatch(r"friend_codes/[^/]+", path):
-            # as the rules: a new code names its maker; an existing one
-            # changes or goes only at its owner's hand, and stays theirs
-            owner = ((self.docs.get(path) or {}).get("userId") or {}).get("stringValue")
-            if uid is None or (path in self.docs and owner != uid):
-                return False
-            if method == "DELETE":
-                return True
-            return ((fields or {}).get("userId") or {}).get("stringValue") == uid
-        return False
+    # -- setup helpers ---------------------------------------------------
+    def add_user(self, uid, name, email=None, code=None):
+        self.users[uid] = {"email": email or f"{uid}@example.com", "name": name, "emoji": None,
+                           "code": code, "client_version": None, "tz": None, "rollover": None}
+        if code:
+            self.codes[code] = uid
+        return self.session_for(uid)
 
-    def _can_read(self, path, uid, listing=False):
-        m = re.fullmatch(r"users/([^/]+)", path)
-        if m:
-            return uid is not None and not listing
-        m = re.fullmatch(r"users/([^/]+)/friends/([^/]+)", path)
-        if m:
-            owner, friend = m.groups()
-            if self.rules_mode not in self.MODERN:
-                return False
-            if listing:
-                return uid == owner
-            return uid == owner or uid == friend
-        m = re.fullmatch(r"users/([^/]+)/(daily_stats|shared)/([^/]+)", path)
-        if m:
-            owner = m.group(1)
-            if (self.rules_mode == "decks-only" and m.group(2) == "shared"
-                    and m.group(3) != "decks" and uid != owner):
-                return False
-            return uid == owner or uid in self._friends_of(owner)
-        m = re.fullmatch(r"users/([^/]+)/(cheers|knocks)/[^/]+", path)
-        if m:
-            return uid == m.group(1)
-        m = re.fullmatch(r"meta/(.+)", path)
-        if m:
-            return m.group(1) in self.MARKERS[self.rules_mode]
-        m = re.fullmatch(r"boards/[^/]+/rows/[^/]+", path)
-        if m:
-            return False  # retired in v2.3
-        m = re.fullmatch(r"squads/([^/]+)", path)
-        if m:
-            return self.rules_mode in self.MODERN and uid is not None and not listing
-        m = re.fullmatch(r"squads/([^/]+)/members/[^/]+", path)
-        if m:
-            return self.rules_mode in self.MODERN and self._member(m.group(1), uid)
-        m = re.fullmatch(r"server_board/[^/]+", path)
-        if m:
-            return self.rules_mode == "v3" and self._open_board(uid)
-        m = re.fullmatch(r"users/([^/]+)/private/[^/]+", path)
-        if m:
-            return self.rules_mode == "repo" and uid == m.group(1)
-        if re.fullmatch(r"friend_codes/[^/]+", path):
-            return not listing
-        return False
+    def session_for(self, uid):
+        """A fresh session token for an existing user."""
+        token = f"tok-{uid}-{len(self.tokens)}".ljust(43, "x")[:43]
+        self.tokens[token] = uid
+        return token
 
-    def _access_calls(self, paths, uid):
-        """The exists()/get() calls the rules make to read `paths`: one per
-        other person whose stats are read (their edge doc), two when that
-        doc is missing (then their profile). Calls repeat per document but
-        are cached per request, so each person counts once."""
-        calls = 0
-        for owner in {m.group(1) for m in (re.fullmatch(r"users/([^/]+)/(?:daily_stats|shared)/[^/]+", p)
-                                          for p in paths) if m and m.group(1) != uid}:
-            calls += 1 if f"users/{owner}/friends/{uid}" in self.docs else 2
-        return calls
+    def _count(self, table, n=1):
+        self.writes += n
+        self.wrote[table] = self.wrote.get(table, 0) + n
 
-    # -- request handling --------------------------------------------------
+    def befriend(self, a, b):
+        self.friends.add((a, b))
+
+    def mutual(self, a, b):
+        return (a, b) in self.friends and (b, a) in self.friends
+
+    def requests(self, method=None, prefix=""):
+        return [(m, p, s) for m, p, s in self.log
+                if (method is None or m == method) and p.startswith(prefix)]
+
+    # -- transport ---------------------------------------------------------
     def handle(self, method, url, headers=None, json_body=None):
-        if self.force_401:
-            return FakeResponse(401, {"error": {"message": "UNAUTHENTICATED"}})
-        uid = self.auth_uid if (headers or {}).get("Authorization", "").startswith("Bearer t-") else None
-        m = re.match(r"https://firestore\.googleapis\.com/v1/projects/[^/]+/"
-                     r"databases/\(default\)/documents(?::(\w+))?/?([^?]*)(?:\?(.*))?$", url)
-        if not m:
-            return FakeResponse(404, {"error": {"message": "bad url"}})
-        action, path, query = m.group(1), m.group(2), m.group(3) or ""
+        if self.down:
+            raise RequestException("offline")
+        if self.fail_status:
+            self.log.append((method, url.split("?")[0], self.fail_status))
+            return FakeResponse(self.fail_status, {"error": "server"})
+        path = url.split("://", 1)[-1]
+        path = "/" + path.split("/", 1)[1] if "/" in path else "/"
+        route, _, query = path.partition("?")
+        auth = (headers or {}).get("Authorization", "")
+        try:
+            self.bodies.append((method, route, json_body))
+            status, body = self._route(method, route, dict(p.split("=", 1) for p in query.split("&") if "=" in p),
+                                       auth, json_body)
+        except Bad as e:
+            status, body = e.status, {"error": e.code}
+        self.log.append((method, route, status))
+        return FakeResponse(status, body)
 
-        # :runQuery / :runAggregationQuery may hang off a parent document
-        parent = ""
-        if action is None and ":" in path:
-            path, action = path.rsplit(":", 1)
-            parent = path
-        if action in ("runQuery", "runAggregationQuery"):
-            body = json_body or {}
-            sq = (body.get("structuredQuery")
-                  or body.get("structuredAggregationQuery", {}).get("structuredQuery", {}))
-            coll = sq.get("from", [{}])[0].get("collectionId", "")
-            prefix = f"{parent}/{coll}" if parent else coll
-            if not self._can_read(prefix + "/probe", uid, listing=True):
-                self.log.append((method, action + ":" + prefix, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            matches = []
-            for pth, fields in self.docs.items():
-                if not re.fullmatch(re.escape(prefix) + r"/([^/]+)", pth):
+    def _me(self, auth):
+        token = auth[7:] if auth.startswith("Bearer ") else ""
+        uid = self.tokens.get(token)
+        if not uid or uid not in self.users:
+            raise Bad(401, "auth")
+        return uid
+
+    def _route(self, method, path, query, auth, body):
+        parts = [p for p in path.split("/") if p]
+        m = (method, parts[0] if parts else "")
+        if path == "/version" and method == "GET":
+            return 200, {"api": 1, "minClient": self.min_client}
+        if parts[:1] == ["auth"]:
+            return self._auth(method, parts[1:], auth, body or {})
+        me = self._me(auth)
+        if m == ("GET", "board"):
+            return 200, self._board(me, query.get("decks") == "1")
+        if m == ("POST", "sync"):
+            return self._sync(me, body or {})
+        if m == ("GET", "decks"):
+            return 200, {"decks": self._decks_for(me)}
+        if m == ("GET", "heatmap") and len(parts) == 2:
+            uid = parts[1]
+            if uid != me and not self.mutual(me, uid):
+                raise Bad(403, "not_friends")
+            return 200, {"counts": (self.heat.get(uid) or {}).get("counts")}
+        if m == ("GET", "settings"):
+            if me not in self.settings:
+                raise Bad(404, "no_settings")
+            return 200, dict(self.settings[me])
+        if m == ("PUT", "settings"):
+            self._put_settings(me, body)
+            return 200, {"ok": True}
+        if m == ("GET", "users") and len(parts) == 2:
+            u = self.users.get(parts[1])
+            if not u:
+                raise Bad(404, "no_user")
+            return 200, {"uid": parts[1], "name": u["name"] or "?", "emoji": u["emoji"] or ""}
+        if parts[:1] == ["friends"]:
+            return self._friends(method, me, parts[1:], body)
+        if parts[:1] == ["codes"]:
+            return self._codes(method, me, parts[1:], body)
+        if m == ("POST", "cheers") and len(parts) == 2:
+            return self._cheer(me, parts[1], body or {})
+        if parts[:1] == ["knocks"]:
+            return self._knock(method, me, parts[1:], body or {})
+        if parts[:1] == ["squads"]:
+            return self._squad(method, me, parts[1:], query, body or {})
+        if m == ("DELETE", "account"):
+            self._delete_account(me)
+            return 200, {"ok": True}
+        raise Bad(404, "not_found")
+
+    # -- auth --------------------------------------------------------------
+    def _auth(self, method, rest, auth, body):
+        what = rest[0] if rest else ""
+        if what == "code" and method == "POST":
+            email = str(body.get("email") or "").strip().lower()
+            if "@" not in email:
+                raise Bad(400, "bad_email")
+            self.otp[email] = "%06d" % ((len(self.otp) + 1) * 7919 % 1000000)
+            return 200, {"ok": True}
+        if what == "verify" and method == "POST":
+            email = str(body.get("email") or "").strip().lower()
+            if self.otp.get(email) is None:
+                raise Bad(400, "expired")
+            if str(body.get("code")) != self.otp[email]:
+                raise Bad(400, "wrong_code")
+            del self.otp[email]
+            uid = next((u for u, d in self.users.items() if d["email"] == email), None)
+            new = uid is None
+            if new:
+                self._seq += 1
+                uid = f"U{self._seq:025d}"
+                self.users[uid] = {"email": email, "name": None, "emoji": None, "code": None,
+                                   "client_version": None, "tz": None, "rollover": None}
+            token = f"tok-{uid}-{len(self.tokens)}".ljust(43, "x")[:43]
+            self.tokens[token] = uid
+            return 200, {"token": token, "uid": uid, "new": new, "name": self.users[uid]["name"]}
+        me = self._me(auth)
+        if what == "me" and method == "GET":
+            u = self.users[me]
+            return 200, {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+        if what == "signout" and method == "POST":
+            self.tokens = {t: u for t, u in self.tokens.items() if t != auth[7:]}
+            return 200, {"ok": True}
+        raise Bad(404, "not_found")
+
+    # -- board and sync ------------------------------------------------------
+    def _week_of(self, uid):
+        w = self.weeks.get(uid)
+        return (json.loads(w[0]), w[1]) if w else (None, "")
+
+    def _board(self, me, with_decks):
+        u = self.users[me]
+        week, at = self._week_of(me)
+        friends = []
+        for owner, fid in sorted(self.friends):
+            if owner != me or fid not in self.users:
+                continue
+            f = self.users[fid]
+            if self.mutual(me, fid):
+                fw, fat = self._week_of(fid)
+                friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
+                                "mutual": True, "week": fw, "updatedAt": fat})
+            else:
+                friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
+                                "mutual": False})
+        cheers = []
+        for (to, frm), c in sorted(self.cheers.items()):
+            if to != me:
+                continue
+            if self.mutual(me, frm):
+                cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
+                               "note": c.get("note") or "", "luck": bool(c.get("luck")),
+                               "guid": c.get("guid") or "", "at": c["at"]})
+        for key in [k for k in self.cheers if k[0] == me]:
+            del self.cheers[key]
+        out = {"me": {"uid": me, "name": u["name"] or "", "emoji": u["emoji"] or "", "code": u["code"] or "",
+                      "week": week, "updatedAt": at},
+               "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me)}
+        if with_decks:
+            out["decks"] = self._decks_for(me)
+        return out
+
+    def _decks_for(self, me):
+        return {u: d for u, d in self.decks.items() if u == me or self.mutual(me, u)}
+
+    def _knocks_of(self, me):
+        return [{"from": frm, "name": self.users[frm]["name"] or "?", "emoji": self.users[frm]["emoji"] or "",
+                 "squad": k.get("squad") or ""}
+                for (to, frm), k in sorted(self.knocks.items()) if to == me and frm in self.users]
+
+    WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room"}
+    DAY_KEYS = {"studied", "reviews", "studyTimeMs", "streak", "newCards", "accuracy", "status"}
+
+    def _clean_week(self, w):
+        if not isinstance(w, dict) or not set(w) <= self.WEEK_KEYS:
+            raise Bad(400, "bad_week")
+        days = w.get("days") or {}
+        if not isinstance(days, dict) or len(days) > 9:
+            raise Bad(400, "bad_week")
+        for lb, d in days.items():
+            if not DATE_RE.fullmatch(lb) or not isinstance(d, dict) or not set(d) <= self.DAY_KEYS:
+                raise Bad(400, "bad_week")
+            for k in ("reviews", "studyTimeMs", "streak", "newCards"):
+                if k in d and not _is_int(d[k]):
+                    raise Bad(400, "bad_week")
+            if "accuracy" in d and not (isinstance(d["accuracy"], (int, float)) and 0 <= d["accuracy"] <= 100):
+                raise Bad(400, "bad_week")
+            if "status" in d and (not isinstance(d["status"], str) or len(d["status"]) > 80):
+                raise Bad(400, "bad_week")
+        out = dict(w, v=1, days=days, paused=bool(w.get("paused")))
+        if "tricky" in w:
+            if not isinstance(w["tricky"], list) or len(w["tricky"]) > 3:
+                raise Bad(400, "bad_week")
+            out["tricky"] = [{"guid": t["guid"], "deck": t.get("deck") or "", "at": t["at"]} for t in w["tricky"]]
+        return out
+
+    ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards"}
+
+    def _clean_row(self, r):
+        if not isinstance(r, dict) or not set(r) <= self.ROW_KEYS:
+            raise Bad(400, "bad_row")
+        for k in ("reviews", "studyTimeMs", "streak", "newCards"):
+            if r.get(k) is not None and not _is_int(r[k]):
+                raise Bad(400, "bad_row")
+        if r.get("week") is not None and not _is_int(r["week"], 0, 7):
+            raise Bad(400, "bad_row")
+        if r.get("accuracy") is not None and not (isinstance(r["accuracy"], (int, float)) and 0 <= r["accuracy"] <= 100):
+            raise Bad(400, "bad_row")
+        if r.get("day") is not None and not DATE_RE.fullmatch(str(r["day"])):
+            raise Bad(400, "bad_row")
+        if r.get("emoji") is not None and (not isinstance(r["emoji"], str) or _u16(r["emoji"]) > 16):
+            raise Bad(400, "bad_row")
+        return {k: r.get(k) for k in self.ROW_KEYS - {"name"}}, r.get("name")
+
+    def _sync(self, me, body):
+        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings"}:
+            raise Bad(400, "bad_sync")
+        prof = body.get("profile")
+        if prof is not None:
+            if "name" in prof and (not isinstance(prof["name"], str) or not prof["name"].strip() or len(prof["name"]) > 60):
+                raise Bad(400, "bad_name")
+            if prof.get("emoji") not in (None, "") and not _is_emoji(prof["emoji"]):
+                raise Bad(400, "bad_emoji")
+        week = self._clean_week(body["week"]) if "week" in body else None
+        row = names = None
+        if "squads" in body:
+            row, names = self._clean_row(body["squads"].get("row"))
+        wrote = {}
+        u = self.users[me]
+        if prof is not None:
+            changed = False
+            for k, key in (("name", "name"), ("emoji", "emoji"), ("clientVersion", "client_version"),
+                           ("tz", "tz"), ("rollover", "rollover")):
+                if k in prof and u[key] != (prof[k] or None):
+                    u[key] = prof[k] or None
+                    changed = True
+            wrote["profile"] = changed
+            self._count("users", changed)
+        if week is not None:
+            text = json.dumps(week, sort_keys=True)
+            wrote["week"] = self.weeks.get(me, ("",))[0] != text
+            if wrote["week"]:
+                self.weeks[me] = (text, _now())
+                self._count("weeks")
+        if "decks" in body:
+            wrote["decks"] = self.decks.get(me) != body["decks"]
+            self.decks[me] = body["decks"]
+            self._count("decks", wrote["decks"])
+        if "heatmap" in body:
+            want = body["heatmap"]
+            wrote["heatmap"] = self.heat.get(me) != want
+            if want is None:
+                self.heat.pop(me, None)
+            else:
+                self.heat[me] = want
+            self._count("heatmaps", wrote["heatmap"])
+        if "settings" in body:
+            self._put_settings(me, body["settings"])
+        gone = []
+        if "squads" in body:
+            wrote["squads"] = False
+            for sid in body["squads"].get("ids") or []:
+                key = (sid, me)
+                if key not in self.members:
+                    gone.append(sid)  # an update, never an insert
                     continue
-                ok = True
-                for f in sq.get("where", {}).get("compositeFilter", {}).get("filters", []):
-                    ff = f["fieldFilter"]
-                    fp = ff["field"]["fieldPath"]
-                    have, want = _num(fields.get(fp)), _num(ff["value"])
-                    op = ff["op"]
-                    if op == "EQUAL":
-                        ok = ok and fields.get(fp) == ff["value"]
-                    elif have is None or want is None:
-                        ok = False
-                    elif op == "GREATER_THAN":
-                        ok = ok and have > want
-                    elif op == "GREATER_THAN_OR_EQUAL":
-                        ok = ok and have >= want
-                    elif op == "LESS_THAN":
-                        ok = ok and have < want
-                if ok:
-                    matches.append((pth, fields))
-            if action == "runAggregationQuery":
-                result = {}
-                for agg in body["structuredAggregationQuery"].get("aggregations", []):
-                    if "count" in agg:
-                        result[agg["alias"]] = {"integerValue": str(len(matches))}
-                    else:
-                        field = agg["sum"]["field"]["fieldPath"]
-                        result[agg["alias"]] = {"integerValue": str(sum(
-                            _num(f.get(field)) or 0 for _p, f in matches))}
-                self.log.append((method, action + ":" + prefix, 200))
-                return FakeResponse(200, [{"result": {"aggregateFields": result}}])
-            order = (sq.get("orderBy") or [{}])[0]
-            if order:
-                field = order["field"]["fieldPath"]
-                matches.sort(key=lambda pf: _num(pf[1].get(field)) or 0,
-                             reverse=order.get("direction") == "DESCENDING")
-            out = [{"document": {"name": f"d/{pth}", "fields": fields}}
-                   for pth, fields in matches[:sq.get("limit", 300)]]
-            self.log.append((method, action + ":" + prefix, 200))
-            return FakeResponse(200, out)
+                new = dict(self.members[key], **row, name=names or self.members[key]["name"])
+                if new != self.members[key]:
+                    self.members[key] = new
+                    wrote["squads"] = True
+                    self._count("members")
+        return 200, {"ok": True, "gone": gone, "wrote": wrote}
 
-        if method == "GET" and len(path.split("/")) % 2 == 1:
-            # collection list (odd segment count): needs read on children
-            if not self._can_read(path + "/probe", uid, listing=True):
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            docs = [{"name": f"d/{pth}", "fields": fields}
-                    for pth, fields in self.docs.items()
-                    if re.fullmatch(re.escape(path) + r"/[^/]+", pth)]
-            self.log.append((method, path, 200))
-            return FakeResponse(200, {"documents": docs})
+    def _put_settings(self, me, doc):
+        if not isinstance(doc, dict) or set(doc) != {"v", "at", "settings"} or not isinstance(doc["settings"], dict):
+            raise Bad(400, "bad_settings")
+        self.settings[me] = {"v": doc["v"], "at": doc["at"], "settings": doc["settings"]}
+        self._count("settings")
 
-        if action == "batchGet":
-            calls = self._access_calls([full.split("/documents/")[-1]
-                                        for full in json_body.get("documents", [])], uid)
-            self.rule_reads += calls
-            if calls > self.ACCESS_CALLS:
-                self.log.append((method, "batchGet", 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED: access call limit"}})
-            out = []
-            for full in json_body.get("documents", []):
-                p = full.split("/documents/")[-1]
-                if not self._can_read(p, uid):
-                    self.log.append((method, p, 403))
-                    return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-                if p in self.docs:
-                    out.append({"found": {"name": full, "fields": self.docs[p]}})
-                else:
-                    out.append({"missing": full})
-            self.log.append((method, "batchGet", 200))
-            return FakeResponse(200, out)
-
-        if method == "GET":
-            self.rule_reads += self._access_calls([path], uid)
-            if not self._can_read(path, uid):
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            if path in self.docs:
-                self.log.append((method, path, 200))
-                return FakeResponse(200, {"name": f"d/{path}", "fields": self.docs[path]})
-            self.log.append((method, path, 404))
-            return FakeResponse(404, {"error": {"message": "NOT_FOUND"}})
-
-        if method == "PATCH":
-            fields = (json_body or {}).get("fields", {})
-            try:
-                for k, v in fields.items():
-                    if not isinstance(k, str) or not k:
-                        raise ValueError("bad field name")
-                    _check_value(v, k)
-            except ValueError as e:
-                self.log.append((method, path, 400))
-                return FakeResponse(400, {"error": {"message": f"INVALID_ARGUMENT: {e}"}})
-            if "currentDocument.exists=true" in query and path not in self.docs:
-                # 403, as the real emulator answers (observed 2026-09-18): the
-                # rules see an update of nothing and refuse before NOT_FOUND
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            if not self._can_write(path, uid, "PATCH", fields):
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            mask = [p.split("=", 1)[1] for p in query.split("&")
-                    if p.startswith("updateMask.fieldPaths=")]
-            doc = self.docs.setdefault(path, {})
-            for field in mask or list(fields):
-                if field in fields:
-                    doc[field] = fields[field]
-                else:
-                    doc.pop(field, None)   # masked but absent -> delete
-            if not mask:
-                self.docs[path] = dict(fields)
-            self.log.append((method, path, 200))
-            return FakeResponse(200, {"name": f"d/{path}", "fields": doc})
-
+    # -- people ------------------------------------------------------------
+    def _friends(self, method, me, rest, body):
+        if method == "GET" and not rest:
+            return 200, {"code": self.users[me]["code"] or "",
+                         "friends": [{"uid": f, "name": self.users[f]["name"] or "?",
+                                      "emoji": self.users[f]["emoji"] or "", "mutual": self.mutual(me, f)}
+                                     for o, f in sorted(self.friends) if o == me and f in self.users],
+                         "knocks": self._knocks_of(me)}
+        if method == "PUT" and not rest:
+            ids = (body or {}).get("ids")
+            if not isinstance(ids, list):
+                raise Bad(400, "bad_ids")
+            added = sorted({i for i in ids if i in self.users and i != me})
+            for f in added:
+                self.friends.add((me, f))
+            return 200, {"added": added}
+        fid = rest[0] if rest else ""
+        if method == "PUT":
+            if fid == me:
+                raise Bad(400, "self")
+            if fid not in self.users:
+                raise Bad(404, "no_user")
+            self.friends.add((me, fid))
+            self.knocks.pop((me, fid), None)
+            f = self.users[fid]
+            return 200, {"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "", "mutual": self.mutual(me, fid)}
         if method == "DELETE":
-            if not self._can_write(path, uid, "DELETE"):
-                self.log.append((method, path, 403))
-                return FakeResponse(403, {"error": {"message": "PERMISSION_DENIED"}})
-            self.docs.pop(path, None)
-            self.log.append((method, path, 200))
-            return FakeResponse(200, {})
+            self.friends.discard((me, fid))
+            return 200, {"ok": True}
+        raise Bad(405, "method")
 
-        return FakeResponse(405, {"error": {"message": "bad method"}})
+    def _codes(self, method, me, rest, body):
+        if method == "POST" and not rest:
+            want = (body or {}).get("code")
+            old = self.users[me]["code"]
+            if want and want == old:
+                return 200, {"code": old}
+            n = 0
+            code = want if want and want not in self.codes else None
+            while code is None:
+                n += 1
+                cand = f"C{abs(hash((me, n, len(self.codes)))) % 10**5:05d}"
+                code = cand if cand not in self.codes else None
+            self.codes = {c: u for c, u in self.codes.items() if u != me}
+            self.codes[code] = me
+            self.users[me]["code"] = code
+            return 200, {"code": code}
+        if method == "POST" and len(rest) == 2 and rest[1] == "add":
+            code = rest[0].upper()
+            owner = self.codes.get(code)
+            if not owner:
+                raise Bad(404, "no_match")
+            if owner == me:
+                raise Bad(400, "own_code")
+            if (me, owner) in self.friends:
+                raise Bad(409, "already")
+            self.friends.add((me, owner))
+            mutual = self.mutual(me, owner)
+            if not mutual:
+                self.knocks[(owner, me)] = {"squad": "", "at": _now()}
+            o = self.users[owner]
+            return 200, {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or "",
+                         "mutual": mutual, "knocked": not mutual}
+        raise Bad(405, "method")
+
+    def _cheer(self, me, to, body):
+        if not set(body) <= {"emoji", "note", "luck", "guid"} or not _is_emoji(body.get("emoji")):
+            raise Bad(400, "bad_cheer")
+        if body.get("note") is not None and (not isinstance(body["note"], str) or len(body["note"]) > 80):
+            raise Bad(400, "bad_note")
+        if "luck" in body and not isinstance(body["luck"], bool):
+            raise Bad(400, "bad_luck")
+        if body.get("guid") is not None and (not isinstance(body["guid"], str) or len(body["guid"]) > 40):
+            raise Bad(400, "bad_guid")
+        if (to, me) not in self.friends:
+            raise Bad(403, "not_friends")
+        self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
+                                 "guid": body.get("guid"), "at": _now()}
+        return 200, {"ok": True}
+
+    def _knock(self, method, me, rest, body):
+        if method == "GET" and not rest:
+            return 200, {"knocks": self._knocks_of(me)}
+        to = rest[0] if rest else ""
+        if method == "DELETE":
+            self.knocks.pop((me, to), None)
+            return 200, {"ok": True}
+        if method == "POST":
+            if set(body) != {"squad"}:
+                raise Bad(400, "bad_knock")
+            sid = body["squad"]
+            if to == me or (sid, me) not in self.members or (sid, to) not in self.members:
+                raise Bad(403, "no_squad_in_common")
+            self.knocks[(to, me)] = {"squad": sid, "at": _now()}
+            return 200, {"ok": True}
+        raise Bad(405, "method")
+
+    # -- squads ------------------------------------------------------------
+    @staticmethod
+    def squad_id(code):
+        import hashlib
+        code = "".join(ch for ch in code.upper() if ch in SQUAD_ALPHABET)
+        return hashlib.sha1(f"due-crew-squad:{code}".encode()).hexdigest()[:24]
+
+    def _join(self, sid, me):
+        self.members[(sid, me)] = {"name": self.users[me]["name"] or "?", "joined": len(self.members),
+                                   "day": None, "reviews": None, "studyTimeMs": None, "accuracy": None,
+                                   "streak": None, "week": None, "emoji": None, "newCards": None}
+
+    def _info(self, sid, code=None):
+        sq = self.squads[sid]
+        out = {"id": sid, "name": sq["name"], "founder": sq["founder"], "open": sq["open"]}
+        if code:
+            out["code"] = code
+        return out
+
+    def _squad(self, method, me, rest, query, body):
+        if method == "POST" and not rest:
+            if set(body) != {"name"} or not str(body["name"]).strip() or len(body["name"].strip()) > 24:
+                raise Bad(400, "bad_name")
+            n = len(self.squads)
+            while True:
+                code = "".join(SQUAD_ALPHABET[(n * 7 + i * 13) % 32] for i in range(8))
+                sid = self.squad_id(code)
+                if sid not in self.squads:
+                    break
+                n += 1
+            self.squads[sid] = {"name": " ".join(body["name"].split()), "founder": me, "open": True}
+            self._join(sid, me)
+            return 200, self._info(sid, code)
+        if method == "GET" and rest == ["peek"]:
+            code = "".join(ch for ch in str(query.get("code", "")).upper() if ch in SQUAD_ALPHABET)
+            sid = self.squad_id(code)
+            if len(code) != 8 or sid not in self.squads:
+                raise Bad(404, "no_squad")
+            return 200, self._info(sid, code)
+        if method == "POST" and rest == ["restore"]:
+            code = "".join(ch for ch in str(body.get("code", "")).upper() if ch in SQUAD_ALPHABET)
+            sid = self.squad_id(code)
+            if sid not in self.squads:
+                founder = body.get("founder") if body.get("founder") in self.users else me
+                self.squads[sid] = {"name": body.get("name") or "squad", "founder": founder, "open": True}
+            st, info = self._squad("POST", me, [sid, "join"], {}, {})
+            return st, dict(info, code=code)
+        sid = rest[0] if rest else ""
+        if sid not in self.squads:
+            raise Bad(404, "no_squad")
+        sq = self.squads[sid]
+        if method == "POST" and rest[1:] == ["join"]:
+            if (sid, me) in self.members:
+                return 200, self._info(sid)
+            if (sid, me) in self.bans:
+                raise Bad(403, "blocked")
+            if not sq["open"]:
+                raise Bad(403, "locked")
+            self._join(sid, me)
+            return 200, self._info(sid)
+        if method == "GET" and len(rest) == 1:
+            if (sid, me) not in self.members:
+                raise Bad(403, "not_member")
+            rows = sorted(((u, r) for (s2, u), r in self.members.items() if s2 == sid), key=lambda x: x[1]["joined"])
+            return 200, dict(self._info(sid), banned=sorted(u for s2, u in self.bans if s2 == sid) if sq["founder"] == me else [],
+                             rows=[dict({k: v for k, v in r.items() if k != "joined"}, uid=u) for u, r in rows])
+        if method == "PUT" and rest[1:] == ["row"]:
+            row, name = self._clean_row(body)
+            if (sid, me) not in self.members:
+                raise Bad(403, "not_member")
+            self.members[(sid, me)].update(row, name=name or self.members[(sid, me)]["name"])
+            return 200, {"ok": True}
+        if method == "DELETE" and rest[1:2] == ["members"]:
+            who = rest[2]
+            if who != me and sq["founder"] != me:
+                raise Bad(403, "not_founder")
+            self.members.pop((sid, who), None)
+            return 200, {"ok": True}
+        if method == "POST" and rest[1:2] == ["block"]:
+            if sq["founder"] != me:
+                raise Bad(403, "not_founder")
+            self.bans.add((sid, rest[2]))
+            self.members.pop((sid, rest[2]), None)
+            return 200, {"ok": True}
+        if method == "PATCH" and len(rest) == 1:
+            if sq["founder"] != me:
+                raise Bad(403, "not_founder")
+            if "founder" in body:
+                if (sid, body["founder"]) not in self.members:
+                    raise Bad(403, "not_member")
+                sq["founder"] = body["founder"]
+            if "open" in body:
+                sq["open"] = bool(body["open"])
+            return 200, self._info(sid)
+        raise Bad(405, "method")
+
+    def _delete_account(self, me):
+        email = self.users[me]["email"]
+        for sid, sq in list(self.squads.items()):
+            if sq["founder"] == me:
+                others = sorted((r["joined"], u) for (s2, u), r in self.members.items() if s2 == sid and u != me)
+                if others:
+                    sq["founder"] = others[0][1]
+                else:
+                    del self.squads[sid]
+        self.members = {k: v for k, v in self.members.items() if k[1] != me}
+        self.friends = {e for e in self.friends if me not in e}
+        self.cheers = {k: v for k, v in self.cheers.items() if me not in k}
+        self.knocks = {k: v for k, v in self.knocks.items() if me not in k}
+        for table in (self.weeks, self.decks, self.heat, self.settings):
+            table.pop(me, None)
+        self.codes = {c: u for c, u in self.codes.items() if u != me}
+        self.tokens = {t: u for t, u in self.tokens.items() if u != me}
+        self.otp.pop(email, None)
+        del self.users[me]
 
 
 class FakeSession:
@@ -637,14 +680,6 @@ class FakeSession:
     def request(self, method, url, headers=None, timeout=None, **kw):
         with self.store.lock:
             return self.store.handle(method, url, headers=headers, json_body=kw.get("json"))
-
-    def post(self, url, params=None, json=None, data=None, timeout=None):
-        reply = self.store.token_reply
-        if "securetoken" in url and reply is not None:
-            if reply == "network":
-                raise RequestException("offline")
-            return FakeResponse(*reply)
-        raise RequestException("auth endpoints not faked")
 
 
 def install_fake_requests(store):

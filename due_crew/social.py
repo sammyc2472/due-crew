@@ -9,9 +9,9 @@ from aqt import mw
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (CHEER_CLASSIC, CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
+from .app import (CHEER_QUICK, HEATMAP_DAYS, _bg, _pending_cheers,
                   _profile_files, _state, cfg, client, save_cfg)
-from .backend.firebase import clean_emoji
+from .backend.shapes import clean_emoji
 from .stats import duet_runs, heatmap
 from .stats.queries import StatsQueries
 
@@ -51,20 +51,15 @@ def _play_cheers():
     mw.web.eval(board.flurry_js(emojis, text, back=back, notes=notes, season=season))
 
 
-def cheer_choices(stale):
-    """(quick picks, any-emoji box?) for the picker. A server still on rules
-    before v8 accepts only the classic three, so that is all the dialog
-    offers then; the footer already says the server is behind."""
-    return (CHEER_CLASSIC, False) if stale else (CHEER_QUICK, True)
+def cheer_choices():
+    """(quick picks, any-emoji box?) for the picker."""
+    return CHEER_QUICK, True
 
 
-def cheer_allowed(emoji, stale):
+def cheer_allowed(emoji):
     """The one emoji to send, or ''. The same gate for the dialog and for
     a cheer-back click, whose emoji rides in from the page."""
-    emoji = clean_emoji(emoji)
-    if stale and emoji not in CHEER_CLASSIC:
-        return ""
-    return emoji
+    return clean_emoji(emoji)
 
 
 def _cheer_menu(to_uid):
@@ -73,41 +68,30 @@ def _cheer_menu(to_uid):
     if entry is None:
         return
     from .ui.cheer_dialog import CheerDialog
-    stale = client().rules_stale
-    quick, any_emoji = cheer_choices(stale)
+    quick, any_emoji = cheer_choices()
     dlg = CheerDialog(mw, entry["name"], quick, any_emoji=any_emoji)
     if dlg.exec():
-        emoji = cheer_allowed(dlg.emoji, stale)
+        emoji = cheer_allowed(dlg.emoji)
         if emoji:
             _send_cheer(to_uid, entry["name"], emoji, dlg.note)
 
 
 def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None):
     """luck: a line held for their exam morning; guid: a tip on one card
-    (2.10). On rules older than v10 either goes as a plain cheer with its
-    words, and the tooltip says so."""
+    (2.10)."""
     cl = client()
-    uid = cl.user_id
-    my_name = cl.display_name or "A friend"
 
     def done(ok):
-        if ok == "no-extras":
-            tooltip(f"Sent to {html.escape(to_name)} as a cheer. "
-                    "Cards and tips need a server update.")
-        elif ok is True and luck:
+        if ok is True and luck:
             tooltip(f"Added to {html.escape(to_name)}'s card.")
         elif ok is True and guid:
             tooltip("Tip sent.")
-        elif ok == "no-note":
-            tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}. "
-                    "The note needs a server update.")
         elif ok:
             tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}.")
         else:
             tooltip("Couldn't send. Check your connection.")
 
-    _bg(lambda: cl.send_cheer(to_uid, uid, my_name, emoji, note or None, luck=luck, guid=guid),
-        done)
+    _bg(lambda: cl.send_cheer(to_uid, emoji, note or None, luck=luck, guid=guid), done)
 
 
 def _edit_status(parent=None):

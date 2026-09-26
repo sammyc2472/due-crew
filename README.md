@@ -79,15 +79,14 @@ Your stats go only to people you've added, and to squads you join, where
 squadmates see your name and today's numbers. Choose what you share in
 Settings → Privacy, or pause sharing at any time. Those choices are saved
 to your account, where only you can read them, so they follow you to other
-computers. Your email is only used to sign in. Deleting your account
-deletes your data.
+computers. Anyone else sees your name and emoji, nothing more.
 
-Until an upcoming update, your profile (name, emoji, exam date, time zone
-and friend list) can be read by anyone with your account id, which your
-squadmates have.
+You sign in with a code sent to your email; there's no password. Your email
+is only used for that. Deleting your account deletes your data.
 
-The server rules that enforce this are in
-[firestore.rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules).
+The server that enforces this is in
+[worker/](https://github.com/sammyc2472/due-crew/tree/main/worker), in this
+repo.
 
 ## Development
 

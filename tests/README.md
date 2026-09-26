@@ -1,21 +1,22 @@
 # Tests
 
-Two layers, deliberately separate:
+Three layers, deliberately separate:
 
 | Layer | Command | What it proves | What it cannot prove |
 | --- | --- | --- | --- |
-| Unit + behavior (`test_due_crew.py`) | `python3 tests/test_due_crew.py` | Client behavior against an in-memory Firestore fake: upload shapes, backfill costs, privacy toggles, share text, board rendering, rename-follow, clipboard paths. | Anything about the **real** rules — the fake *restates* `firestore.rules`; it is a model of intent, not evidence of enforcement. |
-| Rules (`rules/`) | `firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"` (repo root) | That the deployed rules text actually enforces friendship consent, squads (the invite-derived id, open/locked joins, member-only reads, founder removal), member row shape, knocks between squadmates or with the recipient's own code (2.9), the 20-call cap a batch of friends' docs runs into, and the retired collections. | Live Anki behavior. |
+| Client (`test_due_crew.py`) | `python3 tests/test_due_crew.py` | Client behavior against an in-memory fake of the Worker API (`fakes.FakeWorker`): what a sync sends, what a refresh reads, the request budget (a refresh is one request), privacy switches, the 2.x restore, share text, board rendering. | Anything about the **real** server: the fake *restates* the Worker's rules; it is a model of intent. |
+| Worker (`worker/test/`) | `cd worker && npm ci && npx vitest run` | The Worker itself, in real workerd with a local D1: sign-in by code (limits, lockout, replay), sessions, and the consent model. `consent.test.ts` restates every check the Firestore rules test had, in its order and under its label. | Live Anki behavior. |
+| Rules (`rules/`), until the Firebase project goes | `firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"` (repo root) | That `firestore.rules`, still live for 2.x clients until the cutover, enforces what it says. | Anything about 3.0. |
 
-The fake also models what the rules cost and where they stop: it counts the
-`exists()`/`get()` calls the consent check makes (`store.rule_reads`, billed
-as reads, and counted by the reads-budget tests) and refuses a batch past 20
-of them, as the emulator does.
+`tools/smoke_worker.py` runs the real client against the real Worker
+(`wrangler dev`, local D1): where the fake and the Worker's own tests each
+prove one side, it proves they agree. Its docstring has the three commands;
+CI runs it in the worker job.
 
-Requirements: Python 3.9+ and the standard library only for the first layer
-(`sqlite3` backs the fake collection). The rules layer needs
-[firebase-tools](https://firebase.google.com/docs/cli) and a Java runtime;
-Run it before deploying any rules change (CI runs it on every push).
+Requirements: Python 3.9+ and the standard library for the first layer
+(`sqlite3` backs the fake collection); Node 22 for the Worker; the rules
+layer needs [firebase-tools](https://firebase.google.com/docs/cli) and a
+Java runtime. CI runs all three on every push.
 
 Neither layer replaces a click-test in a running Anki: see
 `docs/manual-anki-checklist.md`.
@@ -28,7 +29,7 @@ glass fill — it is a stand-in for the webview, not the webview.
 ## Dialogs (Qt)
 
 The suite above runs without Qt, so it cannot see the dialogs. Render every
-dialog offscreen against the fake Firestore and get a PNG of each, or just
+dialog offscreen against the fake Worker and get a PNG of each, or just
 a non-zero exit if one fails to build:
 
     QT_QPA_PLATFORM=offscreen <python with PyQt6> tools/dialogs.py OUT_DIR

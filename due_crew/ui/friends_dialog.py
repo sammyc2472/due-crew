@@ -14,14 +14,11 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from ..backend.firebase import friend_code_from
+from ..backend.shapes import friend_code_from
 from . import accent, attach_alive, confirm, copy_text, run_bg
 
 
-def _with_emoji(prof):
-    from ..backend.firebase import clean_emoji
-    name = str(prof.get("displayName", "?"))
-    emoji = clean_emoji(prof.get("emoji"))
+def _with_emoji(name, emoji):
     return f"{emoji} {name}" if emoji else name
 
 
@@ -139,14 +136,9 @@ class FriendsDialog(QDialog):
         self.list.addItem("Loading…")
 
         def job():
-            own, resolved, _pending = self.client.list_friends(self.uid)
-            code = self.client.ensure_friend_code(self.uid, own.get("friendCode"))
-            try:
-                knocks = self.client.list_knocks(self.uid)
-            except Exception:
-                knocks = []  # knocks are a bonus; never fail the dialog
-            return (code, [(fid, _with_emoji(prof), mutual)
-                           for fid, prof, mutual in resolved], knocks)
+            code, people, knocks = self.client.friends_view()  # one request
+            return (code, [(fid, _with_emoji(name, emoji), mutual)
+                           for fid, name, emoji, mutual in people], knocks)
 
         def done(result, err):
             if err or result is None:
@@ -210,7 +202,6 @@ class FriendsDialog(QDialog):
         if not self.loaded:
             return
         self._set_writable(False)
-        remaining = [f for f, _, _ in self.friends] + [kuid]
 
         def done(ok, err):
             self._set_writable(True)
@@ -226,10 +217,7 @@ class FriendsDialog(QDialog):
             tooltip(f"You and {html.escape(kname)} are crew.")
 
         def job():
-            ok = self.client.set_friends(self.uid, remaining)
-            if ok:
-                self.client.delete_knock(self.uid, kuid)
-            return ok
+            return self.client.add_back(kuid) is not None  # clears the knock too
 
         run_bg(self, job, done)
 
@@ -238,7 +226,7 @@ class FriendsDialog(QDialog):
         self.muted.add(kuid)
         self.on_mute(kuid)   # local mute: their re-knocks stay hidden
         self._render_knocks()
-        run_bg(self, lambda: self.client.delete_knock(self.uid, kuid),
+        run_bg(self, lambda: self.client.delete_knock(kuid),
                lambda _ok, _err: None)
 
     def _render_list(self):
@@ -285,7 +273,7 @@ class FriendsDialog(QDialog):
                 self.code_label.setText(code)
             tooltip(problem or "New code. The old one no longer works.")
 
-        run_bg(self, lambda: self.client.new_friend_code(self.uid, old), done)
+        run_bg(self, lambda: self.client.new_friend_code(old), done)
 
     def _add(self):
         if not self.loaded:
@@ -299,7 +287,6 @@ class FriendsDialog(QDialog):
             return
         self._set_writable(False)
         self.add_btn.setText("Adding…")
-        own_ids = [fid for fid, _, _ in self.friends]
 
         def done(result, err):
             self.add_btn.setText("Add")
@@ -321,8 +308,7 @@ class FriendsDialog(QDialog):
             else:
                 tooltip(f"Added {name}. Send them your code to finish.")
 
-        my_name = self.client.display_name or "A friend"
-        run_bg(self, lambda: self.client.add_friend(self.uid, code, own_ids, my_name), done)
+        run_bg(self, lambda: self.client.add_friend(code), done)
 
     def _remove(self):
         if not self.loaded:
@@ -337,7 +323,6 @@ class FriendsDialog(QDialog):
                        "stop seeing your stats.", "Remove"):
             return
         self._set_writable(False)
-        remaining = [f for f, _, _ in self.friends if f != fid]
 
         def done(ok, err):
             self._set_writable(True)
@@ -348,4 +333,4 @@ class FriendsDialog(QDialog):
             self.changed = True
             self._render_list()
 
-        run_bg(self, lambda: self.client.set_friends(self.uid, remaining), done)
+        run_bg(self, lambda: self.client.remove_friend(fid), done)

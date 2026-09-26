@@ -37,6 +37,7 @@ authed("GET", r("/settings"), (_q, s, env) => B.getSettings(s, env));
 authed("PUT", r("/settings"), B.putSettings);
 
 authed("GET", r(`/users/${ID}`), (_q, s, env, p) => S.getUser(s, env, p));
+authed("GET", r("/friends"), (_q, s, env) => S.getFriends(s, env));
 authed("PUT", r("/friends"), S.restoreFriends);
 authed("PUT", r(`/friends/${ID}`), S.putFriend);
 authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, p));

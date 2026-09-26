@@ -12,3 +12,4 @@ dialog-shots/
 tools/preview.html
 # the Firestore emulator's log, from the rules test
 firestore-debug.log
+wdev.log

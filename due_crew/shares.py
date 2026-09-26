@@ -9,7 +9,7 @@ from aqt.utils import tooltip
 
 from . import board
 from .app import _profile_files, _state, cfg, client
-from .backend.firebase import away_on
+from .backend.shapes import away_on
 from .stats import gather_stats, period_review
 from .stats.queries import StatsQueries
 from .ui import copy_text

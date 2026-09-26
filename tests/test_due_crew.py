@@ -1,4 +1,5 @@
-"""End-to-end tests for Due Crew against fake anki + strict fake Firestore.
+"""End-to-end tests for Due Crew against fake anki and a fake of the 3.0
+Worker API (tests/fakes.py). worker/test proves the Worker itself.
 
 Run: python3 test_due_crew.py
 """
@@ -18,29 +19,35 @@ sys.path.insert(0, HARNESS)
 
 import fakes
 
-STORE = fakes.FakeFirestore()
+STORE = fakes.FakeWorker()
 fakes.install_fake_requests(STORE)
 fakes.install_fake_aqt()
 sys.path.insert(0, REPO)
 
 from due_crew import board                                    # noqa: E402
-from due_crew.backend import firebase                         # noqa: E402
+from due_crew.backend import api, shapes                      # noqa: E402
 from due_crew.stats import gather_stats                       # noqa: E402
 from due_crew.stats.queries import StatsQueries               # noqa: E402
 
 TODAY = datetime.date(2026, 9, 1)
 
 
-def fv_str(s):
-    return {"stringValue": s}
+def world(users=None, friends=None):
+    """A fresh fake Worker that the client's requests go to. users: {uid:
+    name}; friends: {uid: [the people uid added]}."""
+    store = fakes.FakeWorker()
+    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    seed_users(store, users or {}, friends or {})
+    return store
 
 
 def seed_users(store, users, friends):
     for uid, name in users.items():
-        store.docs[f"users/{uid}"] = {
-            "displayName": fv_str(name),
-            "friends": {"arrayValue": {"values": [fv_str(f) for f in friends[uid]]}},
-        }
+        if uid not in store.users:
+            store.add_user(uid, name)
+    for uid, fs in friends.items():
+        for f in fs:
+            store.befriend(uid, f)
 
 
 def make_user_col(study_days, today=TODAY):
@@ -56,28 +63,22 @@ def make_user_col(study_days, today=TODAY):
 
 
 def new_client(store, uid, name=None):
+    """A signed-in client for `uid` (who must exist in the store)."""
     tmp = tempfile.mkdtemp()
-    cl = firebase.FirebaseClient(os.path.join(tmp, "session.json"))
-    cl.session = {"user_id": uid, "id_token": "t-" + uid, "refresh_token": "r",
-                  "display_name": name or uid.capitalize()}
-    store.auth_uid = uid
+    cl = api.ApiClient(os.path.join(tmp, "session.json"))
+    cl.session = {"user_id": uid, "token": store.session_for(uid),
+                  "email": f"{uid}@example.com", "display_name": name or uid.capitalize()}
     return cl
 
 
 def sync_once(store, cl, col, files_dir, cfg, today):
-    """What refresh_board's job does on sync, minus threading."""
+    """What a full sync does, minus threading: today, the week, the heatmap."""
     q = StatsQueries(col)
     labels = [q.day_label(i) for i in range(7)]
     stats = gather_stats(col, files_dir)
-    cl.upload_today(cl.user_id, cl.display_name or "Me", labels[0], stats, cfg)
-    if hasattr(firebase.FirebaseClient, "upload_backfill"):
-        week = gather_week(col, files_dir)
-        cl.upload_backfill(cl.user_id, week, cfg, labels=labels)
-    heat = q.heatmap_counts(182)
-    if cfg.get("share_heatmap", True) and not cfg.get("paused"):
-        cl.upload_heatmap(cl.user_id, heat)
-    elif not cl.session.get("heatmap_deleted"):
-        cl.delete_heatmap(cl.user_id)
+    week = gather_week(col, files_dir)
+    heat = q.heatmap_counts(182) if cfg.get("share_heatmap", True) else "off"
+    cl.push(labels, cfg, stats=stats, backfill=week, heatmap=heat)
     return labels
 
 
@@ -85,7 +86,7 @@ def fetch_as(store, cl, col):
     q = StatsQueries(col)
     labels = [q.day_label(i) for i in range(7)]
     tomorrow = q.day_label(-1)
-    return cl.fetch_board(cl.user_id, labels, tomorrow=tomorrow), labels, tomorrow
+    return cl.fetch_board(labels, tomorrow=tomorrow, with_decks=True), labels, tomorrow
 
 
 def showed_days(entry, labels):
@@ -94,10 +95,7 @@ def showed_days(entry, labels):
     return sum(1 for lb in labels if board._showed(days.get(lb)))
 
 
-try:
-    from due_crew.stats import gather_week                    # noqa: E402
-except ImportError:
-    gather_week = None
+from due_crew.stats import gather_week                        # noqa: E402
 
 CHECKS = []
 
@@ -109,185 +107,154 @@ def check(name, cond, detail=""):
 
 # ---------------------------------------------------------------- scenarios
 
-def test_payload_shapes():
-    """Client payloads are well-formed Firestore values (strict validation)."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+def test_one_sync_one_request():
+    """A sync is one request carrying today, the week and the heatmap."""
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
     files = tempfile.mkdtemp()
-    days = [TODAY - datetime.timedelta(days=i) for i in range(16)]
-    col = make_user_col(days)
-    cfg = {}
-    sync_once(store, cl, col, files, cfg, TODAY)
-    heat_ok = any(p.endswith("shared/heatmap") and s == 200 for m, p, s in store.log)
-    daily_ok = any("daily_stats" in p and s == 200 for m, p, s in store.log)
-    check("payloads: daily_stats PATCH accepted", daily_ok)
-    check("payloads: heatmap PATCH accepted by strict validator", heat_ok)
-    check("payloads: heatmap_hash recorded after success",
-          bool(cl.session.get("heatmap_hash")))
+    col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(16)])
+    labels = sync_once(store, cl, col, files, {}, TODAY)
+    check("sync: one request", store.requests() == [("POST", "/sync", 200)], str(store.log))
+    week = json.loads(store.weeks["sam"][0])
+    check("sync: the week holds the last seven days I studied", set(week["days"]) == set(labels))
+    check("sync: the heatmap went with it, and its hash is kept",
+          bool(store.heat.get("sam")) and bool(cl.session.get("heatmap_hash")))
 
 
-def test_rules_drift_reproduces_live_state():
-    """shared/decks-only rules -> decks hash set, heatmap hash never set."""
-    store = fakes.FakeFirestore(rules_mode="decks-only")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+def test_refused_sync_keeps_nothing():
+    """A sync the server refuses (a shape it won't take) doesn't count as sent."""
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
-    ok_decks = cl.upload_shared("sam", [{"name": "X", "sig": ["a"], "total": 5,
-                                         "seen": 1, "mature": 0}])
-    ok_heat = cl.upload_heatmap("sam", {"2026-08-31": 12})
-    check("drift: decks upload succeeds", ok_decks and cl.session.get("shared_hash"))
-    check("drift: heatmap upload silently fails", not ok_heat)
-    check("drift: heatmap_hash absent (matches live session.json)",
-          not cl.session.get("heatmap_hash"))
+
+    def refuse(_w):
+        raise fakes.Bad(400, "bad_week")
+    store._clean_week = refuse
+    ok, gone = cl.push([TODAY.isoformat()], {}, heatmap={TODAY.isoformat(): 3})
+    check("refused: the sync says it failed", ok is False and gone == [])
+    check("refused: nothing is marked sent", not cl.session.get("heatmap_hash")
+          and not cl.session.get("last_ok"))
 
 
 def test_dots_gap():
-    """Studies daily, syncs rarely -> server has holes; streak stays high.
-    With backfill (fix), the holes fill on the next sync."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"},
-               {"sam": ["dre"], "dre": ["sam"]})
+    """Studies daily, syncs rarely: the week still arrives whole, because
+    every sync sends the whole week."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     files = tempfile.mkdtemp()
-    cfg = {}
     cl = new_client(store, "sam", "Sammy")
     study_days = [TODAY - datetime.timedelta(days=i) for i in range(16)]
-
-    # synced two days ago and today only (studied every day)
     for sync_day in (TODAY - datetime.timedelta(days=2), TODAY):
-        store.auth_uid = "sam"
         col = make_user_col([d for d in study_days if d <= sync_day], today=sync_day)
-        sync_once(store, cl, col, files, cfg, sync_day)
-
-    # Dre (studied+synced today only) views the board
+        sync_once(store, cl, col, files, {}, sync_day)
     dre = new_client(store, "dre", "Dre")
-    dre_col = make_user_col([TODAY])
-    data, labels, tomorrow = fetch_as(store, dre, dre_col)
+    data, labels, tomorrow = fetch_as(store, dre, make_user_col([TODAY]))
     sam_entry = next(e for e in data["entries"] if e["user_id"] == "sam")
     filled = showed_days(sam_entry, labels)
-    doc = sam_entry["days"].get(labels[0]) or {}
-    streak_shown = doc.get("streak")
-    fixed = hasattr(firebase.FirebaseClient, "upload_backfill")
-    if fixed:
-        check(f"backfill: full week on the server ({filled}/7, streak {streak_shown})",
-              filled == 7 and streak_shown == 16)
-    else:
-        check(f"backfill: REPRO — streak {streak_shown} but only {filled}/7 days",
-              filled < 7 and (streak_shown or 0) >= 14)
-    return filled, streak_shown
+    streak_shown = (sam_entry["days"].get(labels[0]) or {}).get("streak")
+    check(f"backfill: full week on the server ({filled}/7, streak {streak_shown})",
+          filled == 7 and streak_shown == 16)
 
 
 def test_backfill_costs():
-    """Second sync the same day must not re-PATCH unchanged past days."""
-    if not hasattr(firebase.FirebaseClient, "upload_backfill"):
-        return
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    """A second sync the same day writes nothing; a new review rewrites the
+    week once (and the heatmap, which counts it too)."""
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
     files = tempfile.mkdtemp()
     col = make_user_col([TODAY - datetime.timedelta(days=i) for i in range(9)])
-    cfg = {}
-    sync_once(store, cl, col, files, cfg, TODAY)
-    n_daily = lambda: sum(1 for m, p, s in store.log
-                          if "daily_stats" in p and m == "PATCH")
-    n0 = n_daily()
-    sync_once(store, cl, col, files, cfg, TODAY)       # nothing changed
-    unchanged = n_daily() - n0
+    sync_once(store, cl, col, files, {}, TODAY)
+    w0 = dict(store.wrote)
+    sync_once(store, cl, col, files, {}, TODAY)       # nothing changed
+    same = dict(store.wrote) == w0
+    heat_sent = sum(1 for m, p, b in store.bodies if p == "/sync" and "heatmap" in (b or {}))
     noon = datetime.datetime.combine(TODAY, datetime.time(13))
     fakes.add_review(col.db.conn, int(noon.timestamp() * 1000))
-    n1 = n_daily()
-    sync_once(store, cl, col, files, cfg, TODAY)       # one new review today
-    after_review = n_daily() - n1
-    check(f"backfill: no-change sync writes 0 daily docs (got {unchanged})",
-          unchanged == 0)
-    check(f"backfill: new-review sync writes exactly today (got {after_review})",
-          after_review == 1)
+    sync_once(store, cl, col, files, {}, TODAY)       # one new review today
+    check("backfill: a no-change sync writes nothing", same, f"{w0} -> {store.wrote}")
+    check("backfill: an unchanged heatmap isn't even sent", heat_sent == 1)
+    check("backfill: a new review writes the week once",
+          store.wrote.get("weeks") == w0.get("weeks", 0) + 1)
 
 
 def test_studied_field_privacy():
     """All share_* off: no numbers reach the server, dots still work."""
-    if not hasattr(firebase.FirebaseClient, "upload_backfill"):
-        return
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"},
-               {"sam": ["dre"], "dre": ["sam"]})
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     cl = new_client(store, "sam", "Sammy")
     files = tempfile.mkdtemp()
     col = make_user_col([TODAY - datetime.timedelta(days=i) for i in (0, 1, 3)])
     cfg = {"share_reviews": False, "share_time": False,
            "share_retention": False, "share_streak": False}
     sync_once(store, cl, col, files, cfg, TODAY)
-    today_label = StatsQueries(col).day_label(0)
-    doc = store.docs.get(f"users/sam/daily_stats/{today_label}", {})
-    leaked = {k for k in doc if k in ("reviews", "studyTimeMs", "accuracy", "streak")}
+    days = json.loads(store.weeks["sam"][0])["days"]
+    leaked = {k for d in days.values() for k in d
+              if k in ("reviews", "studyTimeMs", "accuracy", "streak", "newCards")}
     dre = new_client(store, "dre", "Dre")
-    dre_col = make_user_col([TODAY])
-    data, labels, tomorrow = fetch_as(store, dre, dre_col)
+    data, labels, tomorrow = fetch_as(store, dre, make_user_col([TODAY]))
     sam_entry = next(e for e in data["entries"] if e["user_id"] == "sam")
     filled = showed_days(sam_entry, labels)
     check("privacy: no numeric fields uploaded when shares off", not leaked, str(leaked))
     check(f"privacy: studied flag still marks showed-up days ({filled}/7)", filled == 3)
+    # a switch turned off takes the number off every day at once, light sync or not
+    cl2 = new_client(store, "sam", "Sammy")
+    cl2.session["week_raw"] = {labels[1]: {"reviews": 40, "streak": 2}}
+    cl2.push(labels, {"share_streak": False})
+    past = json.loads(store.weeks["sam"][0])["days"][labels[1]]
+    check("privacy: turning a switch off clears it from past days too",
+          past.get("reviews") == 40 and "streak" not in past, str(past))
 
 
 def test_heatmap_roundtrip():
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"},
-               {"sam": ["dre"], "dre": ["sam"]})
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     cl = new_client(store, "sam", "Sammy")
     counts = {(TODAY - datetime.timedelta(days=i)).isoformat(): i * 3 for i in range(60)}
-    ok = cl.upload_heatmap("sam", counts)
-    store.auth_uid = "dre"
-    dre = new_client(store, "dre", "Dre")
-    got = dre.fetch_heatmap("sam")
-    check("heatmap: friend roundtrip preserves counts",
-          ok and got == {k: int(v) for k, v in counts.items()})
+    ok, _gone = cl.push([TODAY.isoformat()], {}, heatmap=counts)
+    got = new_client(store, "dre", "Dre").fetch_heatmap("sam")
+    check("heatmap: friend roundtrip preserves counts", ok and got == counts)
+    stranger = world({"sam": "Sammy", "zed": "Zed"}, {"sam": ["zed"]})
+    new_client(stranger, "sam").push([TODAY.isoformat()], {}, heatmap=counts)
+    check("heatmap: not to someone I added who hasn't added me back",
+          new_client(stranger, "zed").fetch_heatmap("sam") is None)
 
 
 def test_heatmap_retraction():
-    """Share off deletes the doc once; share back on re-uploads."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    """Share off takes it down once; share back on puts it back."""
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
     files = tempfile.mkdtemp()
     col = make_user_col([TODAY])
     sync_once(store, cl, col, files, {}, TODAY)
-    doc_path = "users/sam/shared/heatmap"
-    was_up = doc_path in store.docs
+    was_up = "sam" in store.heat
     off = {"share_heatmap": False}
     sync_once(store, cl, col, files, off, TODAY)
-    gone = doc_path not in store.docs
-    n0 = sum(1 for m, p, s in store.log if m == "DELETE" and p == doc_path)
+    gone = "sam" not in store.heat
+    sent = lambda: sum(1 for m, p, b in store.bodies if p == "/sync" and "heatmap" in (b or {}))
+    n0 = sent()
     sync_once(store, cl, col, files, off, TODAY)
-    n1 = sum(1 for m, p, s in store.log if m == "DELETE" and p == doc_path)
+    n1 = sent()
     sync_once(store, cl, col, files, {}, TODAY)
-    back = doc_path in store.docs
-    check("retract: heatmap uploaded, deleted once on share-off, restored on share-on",
-          was_up and gone and n0 == 1 and n1 == 1 and back)
+    back = "sam" in store.heat
+    check("retract: heatmap uploaded, taken down once on share-off, restored on share-on",
+          was_up and gone and n1 == n0 and back)
 
 
-def test_rules_probe():
-    """Marker probe: current rules -> fine; drifted -> stale; 403 hint."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+def test_version_probe():
+    """GET /version once a day: below minClient, the footer says so."""
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
-    ok_state = cl.check_rules("2026-09-01")
-    drifted = fakes.FakeFirestore(rules_mode="decks-only")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(drifted)
-    seed_users(drifted, {"sam": "Sammy"}, {"sam": []})
-    cl2 = new_client(drifted, "sam", "Sammy")
-    stale_state = cl2.check_rules("2026-09-01")
-    cl3 = new_client(drifted, "sam", "Sammy")
-    cl3.upload_heatmap("sam", {"2026-08-31": 3})  # rejected write -> hint
-    check("rules: probe says current on repo rules", ok_state is False)
-    check("rules: probe says stale on drifted rules", stale_state is True)
-    check("rules: rejected write flips the flag instantly", cl3.rules_stale)
+    ok_state = cl.check_version("2026-09-01", "3.0.0")
+    again = len(store.log)
+    cl.check_version("2026-09-01", "3.0.0")
+    cached = len(store.log) == again
+    store.min_client = "3.1.0"
+    cl2 = new_client(store, "sam", "Sammy")
+    stale_state = cl2.check_version("2026-09-01", "3.0.0")
+    store.down = True
+    cl3 = new_client(store, "sam", "Sammy")
+    offline = cl3.check_version("2026-09-01", "3.0.0")
+    store.down = False
+    check("version: current client is fine", ok_state is False)
+    check("version: asked once a day", cached)
+    check("version: below minClient reads stale", stale_state is True and cl2.rules_stale)
+    check("version: no network changes nothing", offline is False and not cl3.session.get("version_check"))
 
 
 def test_duet_runs():
@@ -513,38 +480,26 @@ def _render(data, labels, tomorrow, period):
 
 
 def test_cheer_notes():
-    """v2.2: a cheer may carry a note (rules-v5); the fake caps it like the
-    rules; on older rules the cheer still lands, without the note."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    """v2.2: a cheer may carry a note of at most 80 characters, one line."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     dre = new_client(store, "dre", "Dre")
     fire = "\U0001F525"
-    ok = dre.send_cheer("sam", "dre", "Dre", fire, "you're on fire  this\nweek")
-    doc = store.docs.get("users/sam/cheers/dre") or {}
+    ok = dre.send_cheer("sam", fire, "you're on fire  this\nweek")
     check("cheer note: stored as one line", ok is True
-          and doc.get("note") == fv_str("you're on fire this week"), str(doc))
-    long = dre.send_cheer("sam", "dre", "Dre", fire, "x" * 200)
+          and store.cheers[("sam", "dre")]["note"] == "you're on fire this week", str(store.cheers))
+    long = dre.send_cheer("sam", fire, "x" * 200)
     check("cheer note: client trims to 80 before sending", long is True
-          and len(store.docs["users/sam/cheers/dre"]["note"]["stringValue"]) == 80)
-    bare = dre.send_cheer("sam", "dre", "Dre", "\U0001F389")
-    check("cheer note: no note, no field", bare is True
-          and "note" not in store.docs["users/sam/cheers/dre"])
-    dre.send_cheer("sam", "dre", "Dre", "\U0001F4AA", "big day")
+          and len(store.cheers[("sam", "dre")]["note"]) == 80)
+    bare = dre.send_cheer("sam", "\U0001F389")
+    check("cheer note: no note, no field", bare is True and not store.cheers[("sam", "dre")]["note"])
+    dre.send_cheer("sam", "\U0001F4AA", "big day")
     sam = new_client(store, "sam", "Sammy")
     data, _labels, _t = fetch_as(store, sam, make_user_col([TODAY]))
     ch = (data["cheers"] or [{}])[0]
     check("cheer note: arrives with the cheer, name from the profile",
           ch.get("note") == "big day" and ch.get("name") == "Dre"
           and ch.get("emoji") == "\U0001F4AA", str(data["cheers"]))
-    old = fakes.FakeFirestore(rules_mode="v3")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
-    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    dre_old = new_client(old, "dre", "Dre")
-    res = dre_old.send_cheer("sam", "dre", "Dre", fire, "hello")
-    check("cheer note: older rules -> cheer lands without the note, sender told",
-          res == "no-note" and "note" not in old.docs["users/sam/cheers/dre"]
-          and old.docs["users/sam/cheers/dre"]["emoji"] == fv_str(fire), str(res))
+    check("cheer: delivered once", fetch_as(store, sam, make_user_col([TODAY]))[0]["cheers"] == [])
     js = board.flurry_js([fire], "Dre sent cheers", back=("dre", fire),
                          notes=["you're on fire <b>now</b>"])
     check("cheer note: flurry shows the note as text, longer linger",
@@ -553,20 +508,19 @@ def test_cheer_notes():
 
 
 def test_status_bubble():
-    """v2.2: a one-line status rides today's doc (crew-only by the same
-    rules as stats), shows as a bubble under the name on Today only, and
-    clears when emptied."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    """v2.2: a one-line status rides today in my week (crew-only, like the
+    numbers), shows as a bubble under the name on Today only, and clears
+    when emptied."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     col = make_user_col([TODAY])
     files = tempfile.mkdtemp()
     dre = new_client(store, "dre", "Dre")
     labels = sync_once(store, dre, col, files,
                        {"status": "coffee, then <b>400</b> cards\nnow"}, TODAY)
-    doc = store.docs["users/dre/daily_stats/" + labels[0]]
-    check("status: uploaded as one line",
-          doc.get("status") == fv_str("coffee, then <b>400</b> cards now"), str(doc))
+    days = json.loads(store.weeks["dre"][0])["days"]
+    check("status: uploaded as one line, today only",
+          days[labels[0]].get("status") == "coffee, then <b>400</b> cards now"
+          and not any("status" in d for lb, d in days.items() if lb != labels[0]), str(days))
     sam = new_client(store, "sam", "Sammy")
     data, labels, tomorrow = fetch_as(store, sam, col)
     entry = next(e for e in data["entries"] if e["user_id"] == "dre")
@@ -577,63 +531,54 @@ def test_status_bubble():
           'class="dc-st"' in today_html and "&lt;b&gt;400&lt;/b&gt;" in today_html
           and "<b>400</b>" not in today_html)
     check("status: nothing on Week", 'class="dc-st"' not in _render(data, labels, tomorrow, "week"))
-    store.auth_uid = "dre"  # the fake signs requests as the last client made
     sync_once(store, dre, col, files, {"status": ""}, TODAY)
     check("status: emptied -> removed server-side",
-          "status" not in store.docs["users/dre/daily_stats/" + labels[0]])
+          "status" not in json.loads(store.weeks["dre"][0])["days"][labels[0]])
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None})
     check("status: own card offers to set one", "duecrew:status" in js and "Set a status" in js)
     js = board.profile_overlay_js({"name": "Dre", "you": False, "cells": None,
                                    "status": "hi <i>there</i>"})
     check("status: friend's card shows it escaped, no edit link",
           "hi &lt;i&gt;there&lt;/i&gt;" in js and "duecrew:status" not in js)
-    junk = firebase._clean_day({"status": 5, "away": "yes", "awayTo": "soon"})
-    good = firebase._clean_day({"status": "  hi\n there ", "away": True, "awayTo": "2026-09-04"})
+    junk = shapes._clean_day({"status": 5, "away": "yes", "awayTo": "soon"})
+    good = shapes._clean_day({"status": "  hi\n there ", "away": True, "awayTo": "2026-09-04"})
     check("status/away: junk from the server is dropped",
           "status" not in junk and "away" not in junk
           and good == {"status": "hi there", "away": True, "awayTo": "2026-09-04"}, str((junk, good)))
 
 
 def test_away_flag():
-    """v2.2: away dates flag day docs (friend-gated like stats) — the
-    coming days ahead of time, so the crew sees the plane while the person
-    isn't syncing; shrinking or clearing unflags; week shares show planes
-    and still count only studied days."""
+    """v2.2: away dates ride my week as a range (2.9), friend-gated like the
+    numbers, so the crew sees the plane while I'm not syncing; readers flag
+    each day inside it. Shrinking or clearing is one sync. Week shares show
+    planes and still count only studied days."""
     from due_crew import share, shares
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     col = make_user_col([TODAY, TODAY - datetime.timedelta(days=2)])
     files = tempfile.mkdtemp()
     dre = new_client(store, "dre", "Dre")
-    d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
-    path = lambda n: f"users/dre/daily_stats/{d(n)}"
-    on = {"booleanValue": True}
-    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(3)}, TODAY)
-    docs = store.docs
-    check("away: today's doc carries the flag and the end date",
-          docs[path(0)].get("away") == on and docs[path(0)].get("awayTo") == fv_str(d(3))
-          and "reviews" in docs[path(0)], str(docs.get(path(0))))
-    check("away: the coming days are flagged ahead of time, nothing beyond",
-          all(docs.get(path(n), {}).get("away") == on for n in (1, 2, 3))
-          and path(4) not in docs)
-    check("away: yesterday (unstudied) flagged, no numbers invented",
-          docs.get(path(-1), {}).get("away") == on and "reviews" not in docs.get(path(-1), {}))
-    check("away: a studied day outside the spell is untouched",
-          "away" not in docs[path(-2)] and "reviews" in docs[path(-2)])
-    snapshot = {k: dict(v) for k, v in docs.items()}
-    dre.sync_away("dre", d(0), {"away_from": d(-1), "away_to": d(3)})
-    check("away: steady state changes nothing", snapshot == {k: dict(v) for k, v in docs.items()})
-    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(1)}, TODAY)
-    check("away: shrinking the spell drops the future docs it made",
-          path(2) not in docs and path(3) not in docs
-          and docs[path(1)].get("away") == on and docs[path(0)].get("awayTo") == fv_str(d(1)))
-    sync_once(store, dre, col, files, {}, TODAY)
-    check("away: clearing unflags everything (numbers stay)",
-          path(1) not in docs and "away" not in docs[path(0)] and "reviews" in docs[path(0)]
-          and "away" not in docs.get(path(-1), {}))
-    sync_once(store, dre, col, files, {"away_from": d(0), "away_to": d(0)}, TODAY)
     sam = new_client(store, "sam", "Sammy")
+    d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
+    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(3)}, TODAY)
+    week = json.loads(store.weeks["dre"][0])
+    check("away: the spell rides the week as a range",
+          week.get("awayFrom") == d(-1) and week.get("awayTo") == d(3), str(week))
+    data, labels, tomorrow = fetch_as(store, sam, col)
+    days = next(e for e in data["entries"] if e["user_id"] == "dre")["days"]
+    check("away: today reads away, with the end date and the numbers",
+          days[d(0)].get("away") is True and days[d(0)].get("awayTo") == d(3) and "reviews" in days[d(0)])
+    check("away: tomorrow reads away before they get there", (days.get(d(1)) or {}).get("away") is True)
+    check("away: yesterday (unstudied) flagged, no numbers invented",
+          days[d(-1)].get("away") is True and "reviews" not in days[d(-1)])
+    check("away: a studied day outside the spell is untouched",
+          "away" not in days[d(-2)] and "reviews" in days[d(-2)])
+    sync_once(store, dre, col, files, {"away_from": d(-1), "away_to": d(1)}, TODAY)
+    check("away: shrinking the spell is one sync", json.loads(store.weeks["dre"][0]).get("awayTo") == d(1))
+    sync_once(store, dre, col, files, {}, TODAY)
+    days = next(e for e in fetch_as(store, sam, col)[0]["entries"] if e["user_id"] == "dre")["days"]
+    check("away: clearing unflags everything (numbers stay)",
+          "away" not in days[d(0)] and "reviews" in days[d(0)] and not days.get(d(-1)))
+    sync_once(store, dre, col, files, {"away_from": d(0), "away_to": d(0)}, TODAY)
     data, labels, tomorrow = fetch_as(store, sam, col)
     today_html = _render(data, labels, tomorrow, "today")
     check("away: Today row says when they're back",
@@ -657,15 +602,11 @@ def test_away_flag():
           crew is not None and crew.count("\n") == 3 and "🟩✈️✈️🟩🟩🟩🟩 igk" in crew, str(crew))
 
 
-
 def _squad_fixture():
     """Sam founds busm; Dre, Eve, and Zed exist and aren't members yet."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"},
-               {"sam": [], "dre": [], "eve": [], "zed": []})
+    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve", "zed": "Zed"})
     sam = new_client(store, "sam", "Sammy")
-    squad = sam.create_squad("sam", "  busm  <b> ", "Sammy")
+    squad = sam.create_squad("  busm  <b> ")
     return store, sam, squad
 
 
@@ -673,8 +614,13 @@ def _denied(fn):
     try:
         fn()
         return False
-    except firebase.TransportError:
+    except shapes.TransportError:
         return True
+
+
+def _row_sync(cl, row, sids):
+    """A squad row the way a sync sends it: (ok, gone)."""
+    return cl.push([TODAY.isoformat()], {}, squad_row=row, squads=sids)
 
 
 def test_squads():
@@ -682,45 +628,30 @@ def test_squads():
     board: members read every row (with retention), nobody else does."""
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
-    check("squad: create makes the doc and the founder's member row",
-          bool(squad) and squad["name"] == "busm <b>"
-          and f"squads/{sid}" in store.docs
-          and f"squads/{sid}/members/sam" in store.docs, str(squad))
+    check("squad: create makes the squad and the founder's row",
+          bool(squad) and squad["name"] == "busm <b>" and sid in store.squads
+          and (sid, "sam") in store.members, str(squad))
     check("squad: code is 8 safe chars; any spelling of it derives the id",
           len(squad["code"]) == 8
-          and all(ch in firebase.SQUAD_ALPHABET for ch in squad["code"])
-          and firebase.squad_id(squad["code"].lower() + "--") == sid)
-    check("squad: squads cannot be listed",
-          sam._req("GET", f"{sam.base}/squads?pageSize=50").status_code == 403)
+          and all(ch in shapes.SQUAD_ALPHABET for ch in squad["code"])
+          and shapes.squad_id(squad["code"].lower() + "--") == sid)
     dre = new_client(store, "dre", "Dre")
     info, status = dre.peek_squad(squad["code"])
     check("squad: peek shows name, founder, open",
           bool(info) and info["name"] == "busm <b>" and info["founder"] == "sam"
           and info["open"], str((info, status)))
-    check("squad: unknown code is a 404, not an error",
-          dre.peek_squad("ZZZZZZZZ") == (None, 404))
-    check("squad: join while open", dre.join_squad("dre", sid, "Dre") in (200, 201))
+    check("squad: unknown code is a 404, not an error", dre.peek_squad("ZZZZZZZZ") == (None, 404))
+    check("squad: join while open", dre.join_squad(sid) == 200)
     eve = new_client(store, "eve", "Eve")
-    check("squad: non-member cannot read the board",
-          _denied(lambda: eve.fetch_squad(sid)))
+    check("squad: non-member cannot read the board", _denied(lambda: eve.fetch_squad(sid)))
     day = TODAY.isoformat()
-    row = {"name": "Dre", "reviews": 812, "studyTimeMs": 7440000,
+    row = {"name": "Dre", "day": day, "reviews": 812, "studyTimeMs": 7440000,
            "accuracy": 91.25, "streak": 41}
-    store.auth_uid = "dre"
-    before = sum(1 for m, pth, st in store.log
-                 if pth == f"squads/{sid}/members/dre" and m == "PATCH")
-    gone = dre.upload_squad_rows("dre", dict(row, day=day), [sid])
-    dre.upload_squad_rows("dre", dict(row, day=day), [sid])
-    after = sum(1 for m, pth, st in store.log
-                if pth == f"squads/{sid}/members/dre" and m == "PATCH")
-    check("squad: row upserts once, hash skips repeats", gone == [] and after - before == 1)
-    check("squad: extra fields rejected by rules",
-          dre._patch_status(f"squads/{sid}/members/dre", {"name": "Dre", "server": "x"}) == 403)
-    check("squad: negative reviews rejected",
-          dre._patch_status(f"squads/{sid}/members/dre", {"name": "Dre", "reviews": -1}) == 403)
-    check("squad: cannot write someone else's row",
-          dre._patch_status(f"squads/{sid}/members/sam", {"name": "x"}) == 403)
-    store.auth_uid = "sam"
+    ok, gone = _row_sync(dre, row, [sid])
+    n = store.wrote.get("members", 0)
+    _row_sync(dre, row, [sid])
+    check("squad: a row writes once; the same row again writes nothing",
+          ok and gone == [] and n == 1 and store.wrote.get("members", 0) == 1)
     data = sam.fetch_squad(sid)
     dre_row = next((r for r in data["rows"] if r["user_id"] == "dre"), None)
     check("squad: members read every row, retention included",
@@ -729,22 +660,16 @@ def test_squads():
           and data["open"] and data["founder"] == "sam", str(data))
     check("squad: founder locks", sam.set_squad_open(sid, False))
     zed = new_client(store, "zed", "Zed")
-    check("squad: join refused while locked", zed.join_squad("zed", sid, "Zed") == 403)
-    store.auth_uid = "dre"
+    check("squad: join refused while locked", zed.join_squad(sid) == 403)
     check("squad: existing member still writes while locked",
-          dre._patch_status(f"squads/{sid}/members/dre", {"reviews": 900}, ["reviews"]) == 200)
+          _row_sync(dre, dict(row, reviews=900), [sid]) == (True, []))
     check("squad: non-founder cannot lock or remove",
           not dre.set_squad_open(sid, True) and not dre.remove_member(sid, "sam"))
-    store.auth_uid = "sam"
-    check("squad: founder removes a member",
-          sam.remove_member(sid, "dre") and f"squads/{sid}/members/dre" not in store.docs)
-    store.auth_uid = "dre"
-    check("squad: a removed member's next row write reports the squad gone",
-          dre.upload_squad_rows("dre", dict(row, day=day, reviews=1), [sid]) == [sid]
-          and _denied(lambda: dre.fetch_squad(sid)))
-    store.auth_uid = "sam"
-    check("squad: leave deletes my member doc",
-          sam.leave_squad("sam", sid) and f"squads/{sid}/members/sam" not in store.docs)
+    check("squad: founder removes a member", sam.remove_member(sid, "dre") and (sid, "dre") not in store.members)
+    check("squad: a removed member's next row reports the squad gone, and creates nothing",
+          _row_sync(dre, dict(row, reviews=1), [sid]) == (True, [sid])
+          and (sid, "dre") not in store.members and _denied(lambda: dre.fetch_squad(sid)))
+    check("squad: leave deletes my row", sam.leave_squad(sid) and (sid, "sam") not in store.members)
 
 
 def test_knocks_squad():
@@ -752,21 +677,16 @@ def test_knocks_squad():
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad("dre", sid, "Dre")
-    ok = dre.send_knock("sam", "dre", "TOTALLY FAKE NAME", sid)
-    check("knock: needs a squad both are in",
-          not dre.send_knock("eve", "dre", "Dre", sid))
-    check("knock: extra fields rejected",
-          not dre.patch_doc("users/sam/knocks/dre", {"name": "Dre", "squad": sid, "crew": "x"}))
+    dre.join_squad(sid)
+    ok = dre.send_knock("sam", sid)
+    check("knock: needs a squad both are in", not dre.send_knock("eve", sid))
     eve = new_client(store, "eve", "Eve")
-    eve_ok = eve.send_knock("sam", "eve", "Eve", sid)
-    check("knock: squadmates can knock, outsiders cannot", ok and not eve_ok)
-    store.auth_uid = "sam"
-    knocks = sam.list_knocks("sam")
+    check("knock: squadmates can knock, outsiders cannot", ok and not eve.send_knock("sam", sid))
+    knocks = sam.list_knocks()
     check("knock: names from profiles (no spoofing), squad id carried",
           knocks == [("dre", "Dre", sid)], str(knocks))
-    sam.delete_knock("sam", "dre")
-    check("knock: delete clears it", sam.list_knocks("sam") == [])
+    sam.delete_knock("dre")
+    check("knock: delete clears it", sam.list_knocks() == [])
 
 
 def test_squad_view_html():
@@ -838,41 +758,23 @@ def test_squad_view_html():
           and "retention" not in plain)
 
 
-def test_marker_compat():
-    """Cumulative markers: old clients stay green on newer rules; a v2.3
-    client on v1.9-era rules sees squads denied and the probe stale."""
-    v6 = fakes.FakeFirestore(rules_mode="repo")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v6)
-    seed_users(v6, {"sam": "Sammy"}, {"sam": []})
-    cl = new_client(v6, "sam", "Sammy")
-    check("markers: v2.3 client current on v6 rules", cl.check_rules(TODAY.isoformat()) is False)
-    check("markers: v1.7 client still green on v6 rules",
-          cl._req("GET", f"{cl.base}/meta/rules-v2").status_code == 404)
-    v3 = fakes.FakeFirestore(rules_mode="v3")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(v3)
-    seed_users(v3, {"sam": "Sammy"}, {"sam": []})
-    cl3 = new_client(v3, "sam", "Sammy")
-    check("markers: v2.3 client on v3 rules — squads denied, probe stale",
-          _denied(lambda: cl3.fetch_squad("a" * 24))
-          and cl3.check_rules(TODAY.isoformat()) is True)
-
-
 def test_deletion_sweep():
+    """Delete account: everything of mine goes in one request, and this
+    computer is signed out."""
     store, sam, squad = _squad_fixture()
-    real_post = fakes.FakeSession.post
-    fakes.FakeSession.post = lambda self, url, **kw: fakes.FakeResponse(200, {})
-    try:
-        sid = squad["id"]
-        dre = new_client(store, "dre", "Dre")
-        dre.join_squad("dre", sid, "Dre")
-        dre.send_knock("sam", "dre", "Dre", sid)
-        store.auth_uid = "sam"
-        sam.delete_account("sam", None, [sid])
-        check("deletion: squad membership and knocks are swept",
-              f"squads/{sid}/members/sam" not in store.docs
-              and not any(p.startswith("users/sam/knocks/") for p in store.docs))
-    finally:
-        fakes.FakeSession.post = real_post
+    sid = squad["id"]
+    dre = new_client(store, "dre", "Dre")
+    dre.join_squad(sid)
+    dre.send_knock("sam", sid)
+    sam.push([TODAY.isoformat()], {}, heatmap={TODAY.isoformat(): 3})
+    n = len(store.log)
+    sam.delete_account()
+    check("deletion: one request", store.log[n:] == [("DELETE", "/account", 200)], str(store.log[n:]))
+    check("deletion: membership, knocks, week and heatmap are swept; the squad passes on",
+          (sid, "sam") not in store.members and not any("sam" in k for k in store.knocks)
+          and "sam" not in store.weeks and "sam" not in store.heat
+          and store.squads[sid]["founder"] == "dre")
+    check("deletion: signed out here", not sam.signed_in and sam.session == {})
 
 
 def test_hardening_v24():
@@ -882,7 +784,7 @@ def test_hardening_v24():
     check("pycmd: ids and keys pass, quote-breakers are dropped",
           board._pycmd("profile:abc_1-2") == "pycmd('duecrew:profile:abc_1-2'); return false;"
           and "'" not in board._pycmd("x:a')alert(1)//").replace("pycmd('duecrew:", "", 1)[:-len("'); return false;")])
-    err = firebase.TransportError("query failed: 403", 403)
+    err = shapes.TransportError("query failed: 403", 403)
     check("transport error carries its status", err.status == 403 and str(err) == "query failed: 403")
     a1 = {"from": "a", "at": "2026-09-10T10:00:00Z", "emoji": "🔥", "name": "A", "note": ""}
     b_far = {"from": "b", "at": "9999-01-01T00:00:00Z", "emoji": "🎉", "name": "B", "note": ""}
@@ -899,111 +801,72 @@ def test_hardening_v24():
     fresh4, _ = social._fresh_cheers([a1, a2], None, a1["at"])
     check("cheers: migration folds the old global mark in (older stays quiet)",
           [c["at"] for c in fresh4] == [a2["at"]])
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    store = world({"sam": "Sammy"})
     cl = new_client(store, "sam", "Sammy")
-    check("rules: users and codes cannot be listed",
-          cl._req("GET", f"{cl.base}/users?pageSize=50").status_code == 403
-          and cl._req("GET", f"{cl.base}/friend_codes?pageSize=50").status_code == 403)
-    check("rules: a 61-char display name is refused, 60 is fine",
-          not cl.patch_doc("users/sam", {"displayName": "x" * 61})
-          and cl.patch_doc("users/sam", {"displayName": "x" * 60}))
-    check("hint: a refused social write does not flip the rules-stale hint",
-          not cl.patch_doc("users/zed/knocks/sam", {"name": "S", "squad": "x",
-                                                    "at": {"timestampValue": "t"}}, label="knock")
-          and not cl.session.get("rules_stale_hint"))
+    check("server: users can't be listed", cl._call("GET", "/users")[0] == 404)
+    check("server: a 61-char display name is refused, 60 is fine",
+          not cl.set_display_name("x" * 61) and cl.set_display_name("x" * 60)
+          and cl.display_name == "x" * 60)
+    check("server: a profile is a name and an emoji, nothing more",
+          new_client(store, "sam").profile("sam") == {"uid": "sam", "name": "x" * 60, "emoji": ""})
 
 
 def test_v25_edges_emoji_week():
-    """2.5: friend edges mirror the array (and vouch for add-backs on their
-    own), crew emoji, the squad week count, block list, founder handoff."""
+    """2.5: friendship is two edges, one per person; crew emoji; the squad
+    week count; block list; founder handoff."""
     from due_crew import share, shares
     from due_crew.stats import week_days
-    ce = firebase.clean_emoji
+    ce = shapes.clean_emoji
     check("emoji: one glyph passes, with skin tone and joiners; text does not",
           ce("🦊") == "🦊" and ce(" 🐢 ") == "🐢" and ce("👍🏽") == "👍🏽"
           and ce("👩‍💻") == "👩‍💻" and ce("🇺🇸") == "🇺🇸" and ce("🦊🐢") == "🦊"
           and ce("A") == "" and ce("<b>") == "" and ce("") == "" and ce(None) == "")
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre", "eve": "Eve"},
-               {"sam": ["dre"], "dre": [], "eve": ["sam"]})
+    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"eve": ["sam"]})
     sam = new_client(store, "sam", "Sammy")
-    col = make_user_col([TODAY])
-    files = tempfile.mkdtemp()
-    stats = gather_stats(col, files)
-    sam.upload_today("sam", "Sammy", TODAY.isoformat(), stats, {"emoji": "🦊"})
-    check("edges: first upload mirrors the existing array once, and the emoji lands",
-          "users/sam/friends/dre" in store.docs
-          and store.docs["users/sam"]["emoji"] == {"stringValue": "🦊"}
-          and sam.session["friend_edges"] == {"uid": "sam", "ids": ["dre"]})
-    n0 = len(store.log)
-    sam.upload_today("sam", "Sammy", TODAY.isoformat(), stats, {"emoji": "🦊"})
-    check("edges: steady state writes no edge",
-          not any(p.startswith("users/sam/friends/") for m, p, st in store.log[n0:] if m == "PATCH"))
-    sam.set_friends("sam", ["dre", "eve"])
-    check("edges: adding writes one edge; the array stays for older clients",
-          "users/sam/friends/eve" in store.docs
-          and [v["stringValue"] for v in store.docs["users/sam"]["friends"]["arrayValue"]["values"]] == ["dre", "eve"])
-    sam.set_friends("sam", ["eve"])
-    check("edges: removing deletes the edge", "users/sam/friends/dre" not in store.docs)
-    # eve added sam by array only (an older client); dre will add sam by edge only (a 2.6 client)
-    store.docs["users/dre"]["friends"] = fakes.fv_str("") if False else store.docs["users/dre"]["friends"]
-    store.docs["users/dre"]["friends"] = {"arrayValue": {"values": []}}
-    store.docs["users/dre/friends/sam"] = {"at": {"timestampValue": "t"}}
-    sam.set_friends("sam", ["dre", "eve"])
-    _own, resolved, pending = sam.list_friends("sam", check_edges=True)
-    mutual = {fid: m for fid, _p, m in resolved}
-    check("edges: an add-back is seen through the edge alone, or the array alone",
-          mutual == {"dre": True, "eve": True} and pending == [], str(mutual))
-    _own, resolved, _p = sam.list_friends("sam", check_edges=False)
-    check("edges: without the edge check, an edge-only add-back reads pending (cheap path)",
-          {fid: m for fid, _p, m in resolved} == {"dre": False, "eve": True})
-    store.auth_uid = "eve"
+    sam.push([TODAY.isoformat()], {"emoji": "🦊"})
+    check("emoji: a sync carries it", store.users["sam"]["emoji"] == "🦊")
+    info = sam.add_back("eve")
+    check("edges: adding someone who added me makes it mutual at once", info and info["mutual"] is True)
+    info = sam.add_back("dre")
+    check("edges: adding someone who hasn't is pending", info and info["mutual"] is False)
+    _code, people, _k = sam.friends_view()
+    check("edges: the Friends dialog reads both, with mutual marked",
+          [(u, m) for u, _n, _e, m in people] == [("dre", False), ("eve", True)], str(people))
+    board_data, labels, _t = fetch_as(store, sam, make_user_col([TODAY]))
+    check("edges: the board shows the crew, and the pending by name only",
+          [e["user_id"] for e in board_data["entries"]] == ["sam", "eve"] and board_data["pending"] == ["Dre"])
     eve = new_client(store, "eve", "Eve")
-    check("edges: only the two people on an edge can read it",
-          eve._req("GET", f"{eve.base}/users/sam/friends/eve").status_code == 200
-          and eve._req("GET", f"{eve.base}/users/sam/friends/dre").status_code == 403
-          and eve._req("GET", f"{eve.base}/users/sam/friends?pageSize=50").status_code == 403)
-    # rules: isFriend honours the edge — dre reads sam's stats via the edge, eve via the array
-    store.auth_uid = "dre"
-    dre = new_client(store, "dre", "Dre")
-    check("edges: rules grant stats to an edge friend",
-          dre._req("GET", f"{dre.base}/users/sam/daily_stats/{TODAY.isoformat()}").status_code == 200)
+    check("edges: someone else sees none of my edges",
+          set(eve.profile("sam")) == {"uid", "name", "emoji"}
+          and [e["user_id"] for e in fetch_as(store, eve, make_user_col([TODAY]))[0]["entries"]] == ["eve", "sam"])
+    sam.remove_friend("eve")
+    check("edges: removing ends their reads, the same request",
+          [e["user_id"] for e in fetch_as(store, eve, make_user_col([TODAY]))[0]["entries"]] == ["eve"])
 
     # ---- squads: week + emoji on rows, block, handoff ----
-    store.auth_uid = "sam"
-    squad = sam.create_squad("sam", "busm", "Sammy")
+    squad = sam.create_squad("busm")
     sid = squad["id"]
-    store.auth_uid = "dre"
-    dre.join_squad("dre", sid, "Dre")
-    row = {"name": "Dre", "reviews": 10, "studyTimeMs": 1000, "streak": 1, "week": 5, "emoji": "🐢"}
-    check("squad row: week and emoji ride along", dre.upload_squad_rows("dre", dict(row, day=TODAY.isoformat()), [sid]) == [])
-    check("squad row: week outside 0..7 is refused",
-          dre._patch_status(f"squads/{sid}/members/dre", {"week": 9}, ["week"]) == 403)
+    dre = new_client(store, "dre", "Dre")
+    dre.join_squad(sid)
+    row = {"name": "Dre", "day": TODAY.isoformat(), "reviews": 10, "studyTimeMs": 1000, "streak": 1,
+           "week": 5, "emoji": "🐢"}
+    check("squad row: week and emoji ride along", _row_sync(dre, row, [sid]) == (True, []))
+    check("squad row: week outside 0..7 is refused", _row_sync(dre, dict(row, week=9), [sid])[0] is False)
     check("week_days counts the last seven days from the revlog",
           week_days(StatsQueries(make_user_col([TODAY, TODAY - datetime.timedelta(days=1),
                                                 TODAY - datetime.timedelta(days=9)]))) == 2)
-    store.auth_uid = "sam"
     data = sam.fetch_squad(sid)
     drow = next(r for r in data["rows"] if r["user_id"] == "dre")
     check("squad fetch: week, emoji, and the ban list come back",
           drow["week"] == 5 and drow["emoji"] == "🐢" and data["banned"] == [])
-    store.auth_uid = "dre"
-    check("block: non-founder cannot", not dre.block_member(sid, "sam", []))
-    store.auth_uid = "sam"
+    check("block: non-founder cannot", not dre.block_member(sid, "sam"))
     check("block: founder blocks; the member is gone",
-          sam.block_member(sid, "dre", data["banned"]) and f"squads/{sid}/members/dre" not in store.docs)
-    store.auth_uid = "dre"
-    check("block: rejoining is refused even with the door open",
-          dre.join_squad("dre", sid, "Dre") == 403)
-    store.auth_uid = "eve"
-    eve.join_squad("eve", sid, "Eve")
-    store.auth_uid = "sam"
+          sam.block_member(sid, "dre") and (sid, "dre") not in store.members)
+    check("block: rejoining is refused even with the door open", dre.join_squad(sid) == 403)
+    eve.join_squad(sid)
     check("handoff: only to a member",
           not sam.set_founder(sid, "dre") and sam.set_founder(sid, "eve")
-          and store.docs[f"squads/{sid}"]["founder"] == {"stringValue": "eve"})
+          and store.squads[sid]["founder"] == "eve")
     check("handoff: the old founder can no longer lock", not sam.set_squad_open(sid, False))
 
     # ---- rendering + shares ----
@@ -1104,69 +967,55 @@ def test_personal_reviews():
 
 
 def test_sync_reliability_v251():
-    """2.5.1: a refused sign-in is detected (and only a REFUSED one — offline
-    is not signed out), the build number rides the profile, a refused squad
-    row isn't mistaken for removal, and staleness has a retry guard."""
+    """A refused session is detected (and only a REFUSED one: offline is not
+    signed out), the build number rides the profile, and staleness has a
+    retry guard."""
     import due_crew
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": [], "dre": []})
+    store = world({"sam": "Sammy", "dre": "Dre"})
     cl = new_client(store, "sam", "Sammy")
     check("session: alive to begin with", cl.signed_in and not cl.session_dead)
-
-    store.force_401 = True
-    store.token_reply = "network"
-    _doc, status = cl.get_doc("users/sam")
-    check("session: offline during refresh is NOT signed out", status == 401 and not cl.session_dead)
-    store.token_reply = (503, {})
-    cl.get_doc("users/sam")
-    check("session: a 5xx from the token endpoint is NOT signed out", not cl.session_dead)
-    store.token_reply = (400, {"error": {"message": "API key not valid. Please pass a valid API key."}})
-    cl.get_doc("users/sam")
-    check("session: an unrelated 400 is NOT signed out", not cl.session_dead)
-    store.token_reply = (400, {"error": {"message": "TOKEN_EXPIRED"}})
-    cl.get_doc("users/sam")
-    check("session: a refused refresh token marks the session dead", cl.session_dead and cl.signed_in)
-    cl2 = new_client(store, "sam", "Sammy")
-    cl2.session["auth_dead"] = True
-    cl2._store_tokens({"localId": "sam", "idToken": "t-sam", "refreshToken": "r"}, "s@example.com")
-    check("session: signing in again clears it", not cl2.session_dead)
-    store.force_401 = False
-    store.token_reply = None
+    store.down = True
+    check("session: offline is NOT signed out",
+          _denied(lambda: cl.fetch_board([TODAY.isoformat()])) and not cl.session_dead)
+    store.down = False
+    store.fail_status = 503
+    check("session: a 5xx is NOT signed out",
+          _denied(lambda: cl.fetch_board([TODAY.isoformat()])) and not cl.session_dead)
+    store.fail_status = None
+    store.tokens.clear()  # signed out everywhere, or idle 180 days
+    check("session: a refused token marks the session dead",
+          _denied(lambda: cl.fetch_board([TODAY.isoformat()])) and cl.session_dead and cl.signed_in)
+    store.otp["sam@example.com"] = "123456"
+    cl.verify_code("sam@example.com", "123456")
+    check("session: signing in again clears it", not cl.session_dead and cl.signed_in)
 
     col = make_user_col([TODAY])
-    cl3 = new_client(store, "sam", "Sammy")
-    cl3.upload_today("sam", "Sammy", TODAY.isoformat(), gather_stats(col, tempfile.mkdtemp()), {}, version="2.5.1")
-    check("profile carries the client version",
-          store.docs["users/sam"].get("clientVersion") == {"stringValue": "2.5.1"})
+    cl.push([TODAY.isoformat()], {}, stats=gather_stats(col, tempfile.mkdtemp()), version="3.0.0",
+            clock={"tz": -240, "rollover": 4})
+    check("profile carries the client version and clock",
+          store.users["sam"]["client_version"] == "3.0.0" and store.users["sam"]["tz"] == -240)
 
-    squad = cl3.create_squad("sam", "busm", "Sammy")
+    squad = cl.create_squad("busm")
     sid = squad["id"]
-    store.auth_uid = "dre"
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad("dre", sid, "Dre")
+    dre.join_squad(sid)
     bad = {"name": "Dre", "reviews": 1, "studyTimeMs": 1, "streak": 1, "week": 9, "day": TODAY.isoformat()}
-    gone = dre.upload_squad_rows("dre", bad, [sid])
-    check("squad: a row the rules refuse is NOT read as removal; it raises the rules hint",
-          gone == [] and dre.session.get("rules_stale_hint") is True
-          and f"squads/{sid}/members/dre" in store.docs)
-    store.auth_uid = "sam"
-    cl3.remove_member(sid, "dre")
-    store.auth_uid = "dre"
-    good = dict(bad, week=3)
-    check("squad: once actually removed, the same 403 does mean gone",
-          dre.upload_squad_rows("dre", good, [sid]) == [sid])
+    ok, gone = _row_sync(dre, bad, [sid])
+    check("squad: a row the server refuses is NOT read as removal",
+          ok is False and gone == [] and (sid, "dre") in store.members)
+    cl.remove_member(sid, "dre")
+    check("squad: once actually removed, the sync says gone", _row_sync(dre, dict(bad, week=3), [sid]) == (True, [sid]))
 
-    ce, too_long = firebase.clean_emoji, firebase.emoji_too_long
+    ce, too_long = shapes.clean_emoji, shapes.emoji_too_long
     family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"   # 11 UTF-16 units
     monster = "\U0001F468" + "\u200d\U0001F469" * 6                            # 20 units
     units = lambda t: len(t.encode("utf-16-le")) // 2
-    check("emoji: the cap is the rules' own unit (UTF-16), so a family emoji passes",
+    check("emoji: the cap is the server's own unit (UTF-16), so a family emoji passes",
           ce(family) == family and units(family) == 11 and not too_long(family))
     check("emoji: past 16 units it is refused whole, never truncated or sent",
           units(monster) == 20 and ce(monster) == "" and too_long(monster)
           and not too_long("abc") and not too_long("🦊"))
-    check("emoji: everything the client accepts fits the rules' 16 units",
+    check("emoji: everything the client accepts fits the server's 16 units",
           all(ce(e) == e and units(e) <= 16
               for e in ("🦊", "🇺🇸", "👍🏽", "👩‍💻", "🧑🏽‍💻", "❤️‍🔥", family)))
 
@@ -1187,36 +1036,25 @@ def test_sync_reliability_v251():
 
 
 def test_remove_sticks():
-    """Found 2026-09-18: on an OPEN squad, Remove undid itself. Clients PATCH
-    their daily row; a PATCH to a missing doc is an insert; so the removed
-    person's next sync re-created their membership. The 2.3 test missed it by
-    locking the squad first. Two layers now: rules demand joinedAt on a
-    create, and 2.5.1 row writes are update-only."""
+    """Found 2026-09-18: on an OPEN squad, Remove undid itself, because a
+    row write could create membership. In 3.0 a row is an UPDATE on the
+    server, and the join is the only way in."""
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
-    path = f"squads/{sid}/members/dre"
-    store.auth_uid = "dre"
     dre = new_client(store, "dre", "Dre")
-    check("join: a join without joinedAt is refused",
-          dre._patch_status(path, {"name": "Dre"}) == 403)
-    check("join: the real join works", dre.join_squad("dre", sid, "Dre") in (200, 201))
     row = {"name": "Dre", "reviews": 5, "studyTimeMs": 1, "streak": 1, "day": TODAY.isoformat()}
-    check("row: a member's sync still lands", dre.upload_squad_rows("dre", row, [sid]) == []
-          and store.docs[path]["reviews"] == {"integerValue": "5"})
-    store.auth_uid = "sam"
+    check("join: a row is not a join", _row_sync(dre, row, [sid]) == (True, [sid])
+          and (sid, "dre") not in store.members)
+    check("join: the real join works", dre.join_squad(sid) == 200)
+    check("row: a member's sync still lands", _row_sync(dre, row, [sid]) == (True, [])
+          and store.members[(sid, "dre")]["reviews"] == 5)
     sam.remove_member(sid, "dre")            # the squad is OPEN — never locked
-    store.auth_uid = "dre"
-    check("remove sticks: a 2.5.1 sync reports gone and re-creates nothing",
-          dre.upload_squad_rows("dre", dict(row, reviews=6), [sid]) == [sid] and path not in store.docs)
-    old_client = dict(row, reviews=7, updatedAt={"timestampValue": "2026-09-18T10:00:00Z"})
-    check("remove sticks: an old client's plain PATCH is refused by the rules",
-          dre._patch_status(path, old_client) == 403 and path not in store.docs)
-    store.auth_uid = "sam"
+    check("remove sticks: the next sync reports gone and re-creates nothing",
+          _row_sync(dre, dict(row, reviews=6), [sid]) == (True, [sid]) and (sid, "dre") not in store.members)
     check("remove sticks: the founder's board no longer lists them",
           sorted(r["name"] for r in sam.fetch_squad(sid)["rows"]) == ["Sammy"])
-    store.auth_uid = "dre"
     check("a deliberate rejoin with the code still works — Block is what stops that",
-          dre.join_squad("dre", sid, "Dre") in (200, 201))
+          dre.join_squad(sid) == 200)
 
 
 def _deck_col():
@@ -1270,7 +1108,7 @@ def test_decks():
                                            "share_retention": False})[0]
     check("decks: the privacy switches cover the new fields",
           "today" not in private and "ret" not in private and private["open"] == 5)
-    clean = firebase._clean_decks
+    clean = shapes._clean_decks
     check("decks: a friend's payload round-trips",
           clean(payload)[0] == dict(d, sig=d["sig"]))
     bad = dict(d, open=1, ret=140, mature=99)
@@ -1463,187 +1301,73 @@ def test_wrap_file_is_durable():
 
 
 def test_cheer_any_emoji():
-    """v2.7: a cheer carries any one emoji (rules-v8). The fake restates the
-    shape rule; the client keeps one cluster on send and on receive, and
-    offers only the classic three while the server is on older rules."""
+    """v2.7: a cheer carries any one emoji. The server restates the shape
+    rule; the client keeps one cluster on send and on receive."""
     from due_crew import social
-    from due_crew.app import CHEER_CLASSIC, CHEER_QUICK
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    from due_crew.app import CHEER_QUICK
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     dre = new_client(store, "dre", "Dre")
-    path = "users/sam/cheers/dre"
+    got = lambda: store.cheers[("sam", "dre")]["emoji"]
     party, thumbs = "\U0001F973", "\U0001F44D\U0001F3FD"
-    check("any emoji: a new one lands", dre.send_cheer("sam", "dre", "Dre", party) is True
-          and store.docs[path]["emoji"] == fv_str(party))
+    check("any emoji: a new one lands", dre.send_cheer("sam", party) is True and got() == party)
     check("any emoji: a skin tone rides along as one cluster",
-          dre.send_cheer("sam", "dre", "Dre", thumbs) is True
-          and store.docs[path]["emoji"] == fv_str(thumbs))
+          dre.send_cheer("sam", thumbs) is True and got() == thumbs)
     check("any emoji: the client sends one cluster, whatever it was handed",
-          dre.send_cheer("sam", "dre", "Dre", party + "\U0001F389 yay") is True
-          and store.docs[path]["emoji"] == fv_str(party))
-    check("any emoji: text never leaves the client",
-          dre.send_cheer("sam", "dre", "Dre", "lol") is False
-          and store.docs[path]["emoji"] == fv_str(party))
-    ts = {"timestampValue": "2026-09-01T00:00:00Z"}
-    probe = new_client(store, "dre", "Dre")  # past the client's cleaner, straight at the rules
-    refused = [probe.patch_doc(path, {"emoji": bad, "name": "Dre", "at": ts}, ["emoji", "name", "at"])
+          dre.send_cheer("sam", party + "\U0001F389 yay") is True and got() == party)
+    check("any emoji: text never leaves the client", dre.send_cheer("sam", "lol") is False and got() == party)
+    refused = [dre._call("POST", "/cheers/sam", {"emoji": bad})[0]
                for bad in ("lol", "\U0001F525x", "\U0001F389" * 9, "", "\U0001F389 ")]
-    check("fake rules: letters, a trailing letter, 18 units, empty, and a space are refused",
-          refused == [False] * 5 and store.docs[path]["emoji"] == fv_str(party), str(refused))
-    store.docs[path]["emoji"] = fv_str("hello")  # as if the rules had let it through
+    check("server: letters, a trailing letter, 18 units, empty, and a space are refused",
+          refused == [400] * 5 and got() == party, str(refused))
+    store.cheers[("sam", "dre")]["emoji"] = "hello"  # as if the server had let it through
     sam = new_client(store, "sam", "Sammy")
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
-    check("any emoji: a doc that isn't one emoji is dropped on receive", data["cheers"] == [])
-    check("any emoji: a delivered cheer's doc is gone", path not in store.docs)
-    store.docs[path] = {"emoji": fv_str(thumbs), "name": fv_str("Dre"), "at": ts}
+    check("any emoji: a cheer that isn't one emoji is dropped on receive", data["cheers"] == [])
+    check("any emoji: a delivered cheer is gone", ("sam", "dre") not in store.cheers)
+    dre.send_cheer("sam", thumbs)
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
     check("any emoji: a real one arrives intact", [c["emoji"] for c in data["cheers"]] == [thumbs])
-
-    old = fakes.FakeFirestore(rules_mode="v7")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
-    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    dre_old = new_client(old, "dre", "Dre")
-    check("older rules: the classic three still land",
-          dre_old.send_cheer("sam", "dre", "Dre", "\U0001F525") is True)
-    check("older rules: a new emoji is refused by the server",
-          dre_old.send_cheer("sam", "dre", "Dre", party) is False)
-    dre_old.check_rules(TODAY.isoformat())
-    check("older rules: the client knows; the picker shrinks to the three, no other box",
-          dre_old.rules_stale is True and social.cheer_choices(True) == (CHEER_CLASSIC, False)
-          and social.cheer_choices(False) == (CHEER_QUICK, True))
-    check("cheer gate: one cluster; a new emoji held back while stale; text never",
-          social.cheer_allowed(party + "\U0001F389", False) == party
-          and social.cheer_allowed(party, True) == ""
-          and social.cheer_allowed("\U0001F525", True) == "\U0001F525"
-          and social.cheer_allowed("lol", False) == "")
+    check("cheer picker: the quick row and the any-emoji box",
+          social.cheer_choices() == (CHEER_QUICK, True))
+    check("cheer gate: one cluster; text never",
+          social.cheer_allowed(party + "\U0001F389") == party and social.cheer_allowed("lol") == "")
 
 
-def test_reads_diet():
-    """2.7: fewer reads per refresh, and the numbers pinned. Cheers come
-    from one list and their docs go once delivered; profiles are read once
-    a day; my own row comes from my own uploads; a friend's clock says which
-    day doc to read. The numbers below are the budget: a change here is a
-    change in what the add-on costs per user, and must be deliberate."""
+def test_request_budget():
+    """3.0: a refresh is ONE request, whatever the crew's size, and a sync
+    is one. The numbers below are the budget: a change here is a change in
+    what the add-on costs, and must be deliberate."""
     import due_crew  # the glue: _wants_fetch, _open_push_due
-    from due_crew.backend.firebase import _clock_label, _wanted
-    N = 11
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    N = 25
     friends = [f"f{i}" for i in range(N)]
-    seed_users(store, {"sam": "Sammy", **{f: f.upper() for f in friends}},
-               {"sam": friends, **{f: ["sam"] for f in friends}})
+    store = world({"sam": "Sammy", **{f: f.upper() for f in friends}},
+                  {"sam": friends, **{f: ["sam"] for f in friends}})
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
-    for f in friends:  # 2.7 clients, on my clock, with 2.5's edge docs
-        store.docs[f"users/{f}"].update(tz={"integerValue": "0"}, rollover={"integerValue": "4"})
-        store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
-        for lb in labels:
-            store.docs[f"users/{f}/daily_stats/{lb}"] = {"studied": {"booleanValue": True},
-                                                          "reviews": {"integerValue": "100"}}
-    reads = {"n": 0}
-    orig = store.handle
-
-    def counting(method, url, headers=None, json_body=None):
-        resp = orig(method, url, headers=headers, json_body=json_body)
-        if url.endswith(":batchGet"):
-            reads["n"] += len(json_body["documents"])
-        elif url.endswith(":runQuery"):
-            reads["n"] += max(1, sum(1 for i in resp.json() if "document" in i))
-        elif method == "GET" and "?" in url:
-            reads["n"] += max(1, len((resp.json() or {}).get("documents", [])))
-        elif method == "GET":
-            reads["n"] += 1
-        return resp
-    store.handle = counting
-    noon = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)  # TODAY, on a tz-0 clock
+    for f in friends:
+        new_client(store, f).push(labels, {}, stats=types.SimpleNamespace(
+            reviews=100, time_ms=60000, accuracy=90.0, streak=3, new_cards=4))
     sam = new_client(store, "sam", "Sammy")
-
-    def count(fn):
-        """Billed reads: the docs, plus (2.9) the exists()/get() calls the
-        rules make to check consent, one per friend per request."""
-        reads["n"] = 0
-        before = store.rule_reads
-        fn()
-        return reads["n"] + store.rule_reads - before
-    first = count(lambda: (sam.check_rules(labels[0]), sam.list_knocks("sam"),
-                           sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=True,
-                                           check_edges=True, now_utc=noon)))
-    check("reads: first open, nothing cached = marker 1 + profiles 12 + days 7x12 + decks 12 + cheers 1"
-          " + knocks 1 + rules 11",
-          first == 1 + 12 + 84 + 12 + 1 + 1 + 11, str(first))
-    sync_once(store, sam, make_user_col([TODAY]), tempfile.mkdtemp(), {}, TODAY)
-    own = sam.session.get("own_days") or {}
-    check("reads: my uploads are remembered by label (empty days as empty), with when they changed",
-          set(labels) <= set(own) and own[labels[0]].get("studied") is True
-          and own[labels[3]] is None
-          and str(own[labels[0]].get("updatedAt", "")).endswith("Z"))
-    light = count(lambda: (sam.list_knocks("sam"),
-                           sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                                           check_edges=False, light=True, own_days=own,
-                                           cached_people=True, now_utc=noon)))
-    check("reads: a light refresh = one day doc per friend + cheers list + knocks list + rules 11 = 24",
-          light == N + 2 + N, str(light))
-    full = count(lambda: (sam.list_knocks("sam"),
-                          sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                                          check_edges=True, own_days=own, now_utc=noon)))
-    check("reads: Refresh = profiles 12 + 7 days x 11 friends + cheers 1 + knocks 1 + rules 11 = 102",
-          full == 12 + 77 + 2 + N, str(full))
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
-                           cached_people=True, now_utc=noon)
-    me = next(e for e in data["entries"] if e["you"])
-    check("own row: today from my own upload, not read back",
-          me["days"].get(labels[0], {}).get("studied") is True and "updatedAt" not in me["days"][labels[0]])
-
-    # a friend's clock decides which doc is live for them
-    store.docs["users/f1"].update(tz={"integerValue": "600"})     # ten hours ahead
-    store.docs["users/f2"].pop("tz"); store.docs["users/f2"].pop("rollover")  # a 2.6 client
-    store.docs["users/f3"].update(tz={"integerValue": "-600"})    # ten hours behind
-    sam._people = None
-    evening = datetime.datetime(2026, 9, 1, 20, 0, tzinfo=datetime.timezone.utc)
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own, now_utc=evening)
-    keys = {e["user_id"]: sorted(e["days"]) for e in data["entries"]}
-    check("clock: a friend ten hours ahead is read on my tomorrow only",
-          keys["f1"] == [tomorrow], str(keys["f1"]))
-    check("clock: a friend on an older client is read on today and tomorrow, as before",
-          keys["f2"] == sorted([labels[0], tomorrow]), str(keys["f2"]))
-    morning = datetime.datetime(2026, 9, 1, 6, 0, tzinfo=datetime.timezone.utc)
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own, now_utc=morning)
-    keys = {e["user_id"]: sorted(e["days"]) for e in data["entries"]}
-    check("clock: a friend ten hours behind is read on my yesterday, the day they are writing",
-          keys["f3"] == [labels[1]] and keys["f0"] == [labels[0]], f'{keys["f3"]} {keys["f0"]}')
-    check("clock: label from tz and rollover; nonsense means unknown",
-          _clock_label({"tz": 0, "rollover": 4}, noon) == labels[0]
-          and _clock_label({"tz": 600, "rollover": 4}, evening) == tomorrow
-          and _clock_label({}, noon) is None and _clock_label({"tz": 5000}, noon) is None
-          and _clock_label({"tz": 0, "rollover": 99}, noon) == labels[0])
-    check("clock: a full fetch reads the week, plus tomorrow only for a clock that may be there",
-          _wanted({"tz": 0, "rollover": 4}, labels, tomorrow, noon, light=False) == labels
-          and _wanted({}, labels, tomorrow, noon, light=False) == labels + [tomorrow]
-          and _wanted({"tz": 600, "rollover": 4}, labels, tomorrow, evening, light=False) == labels + [tomorrow])
-
-    # cheers: one list, delivered once, then gone
-    store.auth_uid = "f0"
-    f0 = new_client(store, "f0", "F0")
-    f0.send_cheer("sam", "f0", "F0", "\U0001F525")
-    store.auth_uid = "sam"
-    got = count(lambda: sam.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                                        check_edges=False, light=True, own_days=own,
-                                        cached_people=True, now_utc=noon))
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
-                           cached_people=True, now_utc=noon)
-    # f2 is back on a 2.6 client since the clock checks: two docs for them
-    check("cheers: one read to find it, delivered, and its doc is gone before the next fetch",
-          got == N + 1 + 1 + N and "users/sam/cheers/f0" not in store.docs and data["cheers"] == [], str(got))
-
-    # profiles cached for the day: someone removing me is noticed, once, not an outage
-    store.docs["users/f4"]["friends"] = {"arrayValue": {"values": []}}
-    store.docs.pop("users/f4/friends/sam", None)
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow, light=True, own_days=own,
-                           cached_people=True, now_utc=noon)
-    check("profiles: a friend who removed me drops off the board on the next light refresh, no error",
+    count = lambda fn: (lambda n: (fn(), len(store.log) - n)[1])(len(store.log))
+    check("budget: a refresh (light or full, with decks or not) is one request",
+          count(lambda: sam.fetch_board(labels, tomorrow)) == 1
+          and count(lambda: sam.fetch_board(labels, tomorrow, with_decks=True)) == 1)
+    data = sam.fetch_board(labels, tomorrow)
+    check(f"budget: and it carries all {N} weeks", sum(
+        1 for e in data["entries"] if not e["you"] and board._showed(e["days"].get(labels[0]))) == N)
+    col = make_user_col([TODAY])
+    check("budget: a full sync is one request",
+          count(lambda: sync_once(store, sam, col, tempfile.mkdtemp(), {}, TODAY)) == 1)
+    check("budget: the version check is one request a day",
+          count(lambda: [sam.check_version(labels[0], "3.0.0") for _ in range(3)]) == 1)
+    new_client(store, "f0").send_cheer("sam", "\U0001F525")
+    data = sam.fetch_board(labels, tomorrow)
+    check("cheers: they ride the refresh, and are delivered once",
+          [c["from"] for c in data["cheers"]] == ["f0"] and sam.fetch_board(labels, tomorrow)["cheers"] == [])
+    store.friends.discard(("f4", "sam"))
+    data = sam.fetch_board(labels, tomorrow)
+    check("a friend who removed me drops off the board at the next refresh, no error",
           "f4" not in {e["user_id"] for e in data["entries"]} and "F4" in data["pending"])
-
     check("fetch after upload: only when the board is old, never while closing, always for a pure fetch",
           due_crew._wants_fetch(True, True, 30, False) is False
           and due_crew._wants_fetch(True, True, 300, False) is True
@@ -1655,320 +1379,147 @@ def test_reads_diet():
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
 
 
-def _push29(store, cl, col, files, cfg, version="2.9.0"):
-    """What a 2.9 client's sync uploads: today, the week's backfill, the
-    week doc. Returns the labels."""
-    store.auth_uid = cl.user_id
-    q = StatsQueries(col)
-    labels = [q.day_label(i) for i in range(7)]
-    stats = gather_stats(col, files)
-    cl.upload_today(cl.user_id, cl.display_name, labels[0], stats, cfg, version=version,
-                    clock={"tz": 0, "rollover": 4})
-    cl.upload_backfill(cl.user_id, gather_week(col, files), cfg, labels=labels)
-    cl.upload_week(cl.user_id, labels, cfg)
-    return labels
-
-
 def test_week_doc_v29():
-    """2.9 (H1): a friend's week is one doc. Same rows as the day docs gave,
-    a third of the reads on a full fetch, and it survives a friend who has
-    updated but not pushed yet."""
-    N = 11
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    friends = [f"f{i}" for i in range(N)]
-    seed_users(store, {"sam": "Sammy", **{f: f.upper() for f in friends}},
-               {"sam": friends, **{f: ["sam"] for f in friends}})
+    """2.9's week doc, as 3.0's one shape: the week of a friend in one
+    piece, the away spell as a range, the exam date, paused, and nothing
+    written twice."""
+    store = world({"sam": "Sammy", "f0": "F0", "f3": "F3", "f4": "F4", "f5": "F5"},
+                  {"sam": ["f0", "f3", "f4", "f5"], "f0": ["sam"], "f3": ["sam"], "f4": ["sam"], "f5": ["sam"]})
     days = [TODAY - datetime.timedelta(days=i) for i in (0, 1, 3, 4, 6)]
-    for f in friends:
-        store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
-        _push29(store, new_client(store, f, f.upper()), make_user_col(days), tempfile.mkdtemp(), {})
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
-    week = store.docs.get("users/f0/shared/week", {})
-    got_days = sorted(week.get("days", {}).get("mapValue", {}).get("fields", {}))
+    sync_once(store, new_client(store, "f0"), make_user_col(days), tempfile.mkdtemp(), {}, TODAY)
+    week = json.loads(store.weeks["f0"][0])
     check("week doc: one doc holds the studied days of the week, numbers inside",
-          got_days == sorted(d.isoformat() for d in days)
-          and "reviews" in week["days"]["mapValue"]["fields"][labels[0]]["mapValue"]["fields"],
-          str(got_days))
-    # the same friends, read through the week doc and through the day docs
+          sorted(week["days"]) == sorted(d.isoformat() for d in days) and "reviews" in week["days"][labels[0]])
     sam = new_client(store, "sam", "Sammy")
-    via_week = sam.fetch_board("sam", labels, tomorrow=tomorrow)
-    for f in friends:
-        store.docs[f"users/{f}"]["clientVersion"] = fv_str("2.8.0")
-    sam._people = None
-    via_days = sam.fetch_board("sam", labels, tomorrow=tomorrow)
-    rows = lambda data: {e["user_id"]: [(lb, (e["days"].get(lb) or {}).get("reviews"),
-                                         board._showed(e["days"].get(lb))) for lb in labels]
-                         for e in data["entries"] if not e["you"]}
-    check("week doc: every friend's week reads the same as from their day docs",
-          rows(via_week) == rows(via_days) and len(rows(via_week)) == N)
-    for f in friends:
-        store.docs[f"users/{f}"]["clientVersion"] = fv_str("2.9.0")
-
-    reads = {"n": 0}
-    orig = store.handle
-
-    def counting(method, url, headers=None, json_body=None):
-        resp = orig(method, url, headers=headers, json_body=json_body)
-        if url.endswith(":batchGet"):
-            reads["n"] += len(json_body["documents"])
-        elif method == "GET" and "?" in url:
-            reads["n"] += max(1, len((resp.json() or {}).get("documents", [])))
-        elif method == "GET":
-            reads["n"] += 1
-        return resp
-    store.handle = counting
-
-    def billed(fn):
-        reads["n"] = 0
-        before = store.rule_reads
-        fn()
-        return reads["n"] + store.rule_reads - before
-    store.auth_uid = "sam"
-    fresh = new_client(store, "sam", "Sammy")
-    store.docs["users/sam"]["clientVersion"] = fv_str("2.9.0")
-    store.docs["users/sam/shared/week"] = {"v": {"integerValue": "1"},
-                                           "days": {"mapValue": {"fields": {}}}}
-    first = billed(lambda: (fresh.check_rules(labels[0]), fresh.list_knocks("sam"),
-                            fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=True,
-                                              check_edges=True)))
-    check("reads 2.9: first open = marker 1 + profiles 12 + week docs 12 + decks 12 + cheers 1"
-          " + knocks 1 + rules 11 = 50 (2.8: 122)", first == 50, str(first))
-    own = {lb: None for lb in labels}
-    full = billed(lambda: (fresh.list_knocks("sam"),
-                           fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                                             check_edges=True, own_days=own)))
-    check("reads 2.9: Refresh = profiles 12 + week docs 11 + cheers 1 + knocks 1 + rules 11 = 36"
-          " (2.8: 102)", full == 36, str(full))
-    light = billed(lambda: fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                                             light=True, own_days=own, cached_people=True))
-    check("reads 2.9: a light refresh = week docs 11 + cheers 1 + rules 11 = 23, and knocks"
-          " only hourly now", light == 23, str(light))
-    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow, include_shared=False,
-                             light=True, own_days=own, cached_people=True)
-    f1 = next(e for e in data["entries"] if e["user_id"] == "f1")
-    check("reads 2.9: a light refresh still carries the whole week",
-          sum(1 for lb in labels if board._showed(f1["days"].get(lb))) == len(days))
-    store.handle = orig
-
-    # updated, not pushed yet: no week doc, so their day docs, read once more
-    store.docs.pop("users/f2/shared/week")
-    fresh._people = None
-    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
-    f2 = next(e for e in data["entries"] if e["user_id"] == "f2")
-    check("week doc: missing for a 2.9 friend, their day docs fill in",
-          sum(1 for lb in labels if board._showed(f2["days"].get(lb))) == len(days))
-
-    # away rides as a range; paused empties the doc; exam comes along
-    f3 = new_client(store, "f3", "F3")
+    f0 = next(e for e in sam.fetch_board(labels, tomorrow)["entries"] if e["user_id"] == "f0")
+    check("week doc: a refresh carries the whole week",
+          sum(1 for lb in labels if board._showed(f0["days"].get(lb))) == len(days))
     away = {"away_from": (TODAY + datetime.timedelta(days=1)).isoformat(),
             "away_to": (TODAY + datetime.timedelta(days=5)).isoformat(),
             "exam_date": (TODAY + datetime.timedelta(days=9)).isoformat()}
-    _push29(store, f3, make_user_col(days), tempfile.mkdtemp(), away)
-    store.auth_uid = "sam"
-    fresh._people = None
-    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
-    e3 = next(e for e in data["entries"] if e["user_id"] == "f3")
+    sync_once(store, new_client(store, "f3"), make_user_col(days), tempfile.mkdtemp(), away, TODAY)
+    e3 = next(e for e in sam.fetch_board(labels, tomorrow)["entries"] if e["user_id"] == "f3")
     check("week doc: an away spell flags my tomorrow for a friend, and the exam date rides along",
-          (e3["days"].get(tomorrow) or {}).get("away") is True
-          and e3["exam_date"] == away["exam_date"])
-    f4 = new_client(store, "f4", "F4")
-    _push29(store, f4, make_user_col(days), tempfile.mkdtemp(), {"paused": True})
-    wk = store.docs["users/f4/shared/week"]
-    check("week doc: pausing empties the days and says so",
-          wk["paused"] == {"booleanValue": True} and not wk["days"]["mapValue"].get("fields"))
-    store.auth_uid = "sam"
-    fresh._people = None
-    data = fresh.fetch_board("sam", labels, tomorrow=tomorrow)
-    e4 = next(e for e in data["entries"] if e["user_id"] == "f4")
+          (e3["days"].get(tomorrow) or {}).get("away") is True and e3["exam_date"] == away["exam_date"])
+    sync_once(store, new_client(store, "f4"), make_user_col(days), tempfile.mkdtemp(), {"paused": True}, TODAY)
+    wk = json.loads(store.weeks["f4"][0])
+    check("week doc: pausing empties the days and says so", wk["paused"] is True and wk["days"] == {})
+    e4 = next(e for e in sam.fetch_board(labels, tomorrow)["entries"] if e["user_id"] == "f4")
     check("week doc: a paused friend reads as paused from the doc itself",
           e4["paused"] is True and not any(e4["days"].get(lb) for lb in labels))
-    f5 = new_client(store, "f5", "F5")
-    col5, files5 = make_user_col(days), tempfile.mkdtemp()
-    week_writes = lambda: sum(1 for m, p, st in store.log if m == "PATCH" and p == "users/f5/shared/week")
-    base = week_writes()
-    _push29(store, f5, col5, files5, {})
-    once = week_writes() - base
-    _push29(store, f5, col5, files5, {})
-    check("week doc: hash-guarded, a second push with nothing new writes nothing",
-          once == 1 and week_writes() - base == 1, f"{once} {week_writes() - base}")
+    f5, col5, files5 = new_client(store, "f5"), make_user_col(days), tempfile.mkdtemp()
+    sync_once(store, f5, col5, files5, {}, TODAY)
+    n = store.wrote.get("weeks", 0)
+    sync_once(store, f5, col5, files5, {}, TODAY)
+    check("week doc: a second sync with nothing new writes nothing", store.wrote.get("weeks", 0) == n)
 
 
 def test_big_crews_v29():
-    """2.9 (G1): the rules allow 20 access calls per multi-document read,
-    one per friend with an edge doc, two without. A crew past that used to
-    fail its whole batch, so the board never loaded."""
-    for n, edges in ((21, True), (25, False)):
-        store = fakes.FakeFirestore()
-        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-        friends = [f"g{i}" for i in range(n)]
-        seed_users(store, {"sam": "Sammy", **{f: f for f in friends}},
-                   {"sam": friends, **{f: ["sam"] for f in friends}})
-        labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
-        for f in friends:
-            if edges:
-                store.docs[f"users/{f}/friends/sam"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
-            store.docs[f"users/{f}/daily_stats/{labels[0]}"] = {"studied": {"booleanValue": True},
-                                                                "reviews": {"integerValue": "5"}}
-        sam = new_client(store, "sam", "Sammy")
-        store.auth_uid = "sam"
-        try:
-            sam.batch_get([f"users/{f}/daily_stats/{labels[0]}" for f in friends])
-            one_batch = "loaded"
-        except firebase.TransportError as e:
-            one_batch = e.status
-        data = sam.fetch_board("sam", labels)
-        studied = sum(1 for e in data["entries"] if not e["you"]
-                      and board._showed(e["days"].get(labels[0])))
-        decks = sam.fetch_decks([f for f in friends])
-        check(f"big crew: {n} friends {'with' if edges else 'without'} edge docs is refused as one"
-              " batch, loads in batches of ten", one_batch == 403 and studied == n and len(decks) == n,
-              f"{one_batch} {studied}")
+    """2.9 (G1) was a crew past twenty friends failing its whole batch. In
+    3.0 any crew is one request, decks included."""
+    n = 40
+    friends = [f"g{i}" for i in range(n)]
+    store = world({"sam": "Sammy", **{f: f for f in friends}}, {"sam": friends, **{f: ["sam"] for f in friends}})
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    for f in friends:
+        new_client(store, f).push(labels, {}, stats=types.SimpleNamespace(
+            reviews=5, time_ms=1, accuracy=None, streak=1, new_cards=0),
+            shared_decks=[{"name": "A", "sig": ["x"], "total": 5, "seen": 1, "mature": 0}])
+    sam = new_client(store, "sam", "Sammy")
+    data = sam.fetch_board(labels, with_decks=True)
+    studied = sum(1 for e in data["entries"] if not e["you"] and board._showed(e["days"].get(labels[0])))
+    check(f"big crew: {n} friends load in one request, decks too",
+          studied == n and len(sam.fetch_decks()) == n, str(studied))
 
 
 def test_profile_guard_v29():
-    """2.9 (H4): the profile is written when a field changes or today's
-    numbers do, not on every push."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    """The profile is written when a field of it changes, not on every sync;
+    a sync with nothing new still counts as synced."""
+    store = world({"sam": "Sammy"})
     sam = new_client(store, "sam", "Sammy")
-    col = make_user_col([TODAY])
-    files = tempfile.mkdtemp()
-    writes = lambda: sum(1 for m, p, st in store.log if m == "PATCH" and p == "users/sam")
-    _push29(store, sam, col, files, {})
-    a = writes()
+    labels = [TODAY.isoformat()]
+    push = lambda cfg: sam.push(labels, cfg, version="3.0.0", clock={"tz": 0, "rollover": 4})
+    push({})
+    a = store.wrote.get("users", 0)
     stamp = sam.session.get("last_ok")
-    _push29(store, sam, col, files, {})
-    b = writes()
-    check("profile: a push with nothing new doesn't rewrite it, and still counts as synced",
+    push({})
+    b = store.wrote.get("users", 0)
+    check("profile: a sync with nothing new doesn't rewrite it, and still counts as synced",
           a == 1 and b == 1 and sam.session.get("last_ok") >= stamp, f"{a} {b}")
-    _push29(store, sam, col, files, {"emoji": "\U0001F98A"})
-    c = writes()
-    fakes.add_review(col.db.conn,
-                     int(datetime.datetime.combine(TODAY, datetime.time(13)).timestamp() * 1000))
-    _push29(store, sam, col, files, {"emoji": "\U0001F98A"})
-    d = writes()
-    check("profile: a new emoji rewrites it, and so does a new review (last active moves)",
-          c == 2 and d == 3, f"{c} {d}")
+    push({"emoji": "\U0001F98A"})
+    check("profile: a new emoji rewrites it", store.wrote.get("users", 0) == 2)
 
 
 def test_code_knocks_v29():
-    """2.9 (J1): adding a code knocks its owner, so they add back in one
-    click. The rules let a knock through when it carries the recipient's
-    own friend code; on older rules the add still stands."""
-    for mode, expect in (("repo", True), ("v8", False)):
-        store = fakes.FakeFirestore(rules_mode=mode)
-        sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-        seed_users(store, {"sam": "Sammy", "priya": "Priya", "carl": "Carl"},
-                   {"sam": [], "priya": [], "carl": []})
-        store.docs["friend_codes/SAM123"] = {"userId": fv_str("sam")}
-        store.docs["friend_codes/CRL456"] = {"userId": fv_str("carl")}
-        priya = new_client(store, "priya", "Priya")
-        friend, err = priya.add_friend("priya", "Study with me on Due Crew · my code SAM123", [], "Priya")
-        knock = store.docs.get("users/sam/knocks/priya")
-        check(f"code knock ({mode}): a pasted invite adds, and the owner {'is' if expect else 'is not'} knocked",
-              err is None and friend["user_id"] == "sam" and friend["knocked"] is expect
-              and (knock is not None) is expect
-              and "sam" in [v["stringValue"] for v in store.docs["users/priya"]["friends"]["arrayValue"]["values"]])
-        if mode == "repo":
-            store.auth_uid = "sam"
-            sam = new_client(store, "sam", "Sammy")
-            check("code knock: the owner's list shows it, with no squad",
-                  sam.list_knocks("sam") == [("priya", "Priya", "")])
-            store.auth_uid = "priya"
-            forged = priya.send_code_knock("carl", "priya", "Priya", "SAM123")
-            check("code knock: someone else's code doesn't open another door", forged is False)
+    """2.9 (J1): adding a code knocks its owner, so they add back in one click."""
+    store = world({"sam": "Sammy", "priya": "Priya", "carl": "Carl"})
+    store.codes.update(SAM123="sam", CRL456="carl")
+    store.users["sam"]["code"], store.users["carl"]["code"] = "SAM123", "CRL456"
+    priya = new_client(store, "priya", "Priya")
+    friend, err = priya.add_friend("Study with me on Due Crew · my code SAM123")
+    check("code knock: a pasted invite adds, and the owner is knocked",
+          err is None and friend["user_id"] == "sam" and friend["knocked"] is True
+          and ("priya", "sam") in store.friends and ("sam", "priya") in store.knocks)
+    sam = new_client(store, "sam", "Sammy")
+    check("code knock: the owner's list shows it, with no squad", sam.list_knocks() == [("priya", "Priya", "")])
+    check("code knock: adding them back clears it, and they're crew",
+          sam.add_back("priya")["mutual"] is True and sam.list_knocks() == [])
+    check("code knock: errors say what happened",
+          priya.add_friend("SAM123")[1] == "Already in your crew."
+          and priya.add_friend("ZZZ999")[1] == "That code doesn't match anyone."
+          and sam.add_friend("SAM123")[1] == "That's your own code.")
+    fc = shapes.friend_code_from
     check("invite paste: a friend code from a code, a spaced code, or either invite wording",
-          firebase.friend_code_from("k7q2zp") == "K7Q2ZP"
-          and firebase.friend_code_from(" K7Q 2ZP ") == "K7Q2ZP"
-          and firebase.friend_code_from("Study with me on Due Crew — Anki add-on 2035408484.\nMy friend code: K7Q2ZP") == "K7Q2ZP"
-          and firebase.friend_code_from("Study with me on Due Crew · my code K7Q2ZP\n— Due Crew · Anki add-on 2035408484") == "K7Q2ZP"
-          and firebase.friend_code_from("Join busm on Due Crew · code ABCD2345") == "")
+          fc("k7q2zp") == "K7Q2ZP" and fc(" K7Q 2ZP ") == "K7Q2ZP"
+          and fc("Study with me on Due Crew — Anki add-on 2035408484.\nMy friend code: K7Q2ZP") == "K7Q2ZP"
+          and fc("Study with me on Due Crew · my code K7Q2ZP\n— Due Crew · Anki add-on 2035408484") == "K7Q2ZP"
+          and fc("Join busm on Due Crew · code ABCD2345") == "")
     check("invite paste: a squad code from its invite, even from a squad named for codes",
-          firebase.squad_code_from("Join code club on Due Crew · code ABCD2345\n— Due Crew") == "ABCD2345"
-          and firebase.squad_code_from("abcd 2345") == "ABCD2345")
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    cl = firebase.FirebaseClient(os.path.join(tempfile.mkdtemp(), "session.json"))
-    cl._auth_post = lambda endpoint, payload: {"localId": "newbie", "idToken": "t-newbie",
-                                               "refreshToken": "r"}
-    store.auth_uid = "newbie"
-    cl.sign_up("new@example.com", "secret1", "Newbie")
-    codes = [p for p, d in store.docs.items() if p.startswith("friend_codes/")
-             and d["userId"]["stringValue"] == "newbie"]
-    check("sign-up makes the friend code, so Copy invite copies from minute one",
-          len(codes) == 1 and store.docs["users/newbie"].get("friendCode", {}).get("stringValue") == codes[0][13:])
+          shapes.squad_code_from("Join code club on Due Crew · code ABCD2345\n— Due Crew") == "ABCD2345"
+          and shapes.squad_code_from("abcd 2345") == "ABCD2345")
+    store.add_user("newbie", None)
+    newbie = new_client(store, "newbie", "Newbie")
+    code, people, _k = newbie.friends_view()
+    check("a new account gets its code the first time Friends (or Welcome) opens",
+          code and store.codes.get(code) == "newbie" and people == [])
 
 
 def test_new_code():
     """2.10: New Code swaps my friend code; the old one stops working, the
-    crew stays, and the board shows the new one the same day."""
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
-    store.docs["friend_codes/SAM123"] = {"userId": fv_str("sam")}
-    store.docs["users/sam"]["friendCode"] = fv_str("SAM123")
-    store.auth_uid = "sam"
+    crew stays."""
+    store = world({"sam": "Sammy", "priya": "Priya"}, {"sam": ["priya"], "priya": ["sam"]})
+    store.codes["SAM123"] = "sam"
+    store.users["sam"]["code"] = "SAM123"
     sam = new_client(store, "sam", "Sammy")
-    sam._people = {"uid": "sam", "day": "x", "own": {"friendCode": "SAM123"}}
-    code, err = sam.new_friend_code("sam", "SAM123")
-    check("new code: a fresh code, pointed at me, on my profile; the old one gone",
-          err is None and code and code != "SAM123"
-          and store.docs[f"friend_codes/{code}"]["userId"]["stringValue"] == "sam"
-          and store.docs["users/sam"]["friendCode"]["stringValue"] == code
-          and "friend_codes/SAM123" not in store.docs)
-    check("new code: the day's cached profile shows it (the board's Copy invite)",
-          sam._people["own"]["friendCode"] == code)
-    check("new code: the crew is untouched",
-          [v["stringValue"] for v in store.docs["users/sam"]["friends"]["arrayValue"]["values"]] == ["priya"])
-    store.auth_uid = "priya"
+    code, err = sam.new_friend_code("SAM123")
+    check("new code: a fresh code, mine; the old one gone",
+          err is None and code and code != "SAM123" and store.codes.get(code) == "sam"
+          and store.users["sam"]["code"] == code and "SAM123" not in store.codes)
+    check("new code: the board shows it", sam.fetch_board([TODAY.isoformat()])["my_code"] == code)
+    check("new code: the crew is untouched", store.mutual("sam", "priya"))
     priya = new_client(store, "priya", "Priya")
-    _f, old_err = priya.add_friend("priya", "SAM123", [], "Priya")
-    check("new code: the old code no longer matches anyone", old_err == "That code doesn't match anyone.")
-    # someone else holds the first draw: the rules refuse, the next draw lands
-    store.auth_uid = "sam"
-    store.docs["friend_codes/TAKEN1"] = {"userId": fv_str("priya")}
-    draws = iter("TAKEN1" + "FRESH2")
-    real = firebase.secrets.choice
-    firebase.secrets.choice = lambda seq: next(draws)
-    try:
-        code2, err2 = sam.new_friend_code("sam", code)
-    finally:
-        firebase.secrets.choice = real
-    check("new code: a code that's someone else's is skipped, and stays theirs",
-          code2 == "FRESH2" and err2 is None
-          and store.docs["friend_codes/TAKEN1"]["userId"]["stringValue"] == "priya")
-    # the profile write fails: the new code is let go and the old one stands
-    real_patch = sam.patch_doc
-    sam.patch_doc = lambda path, *a, **k: False if path == "users/sam" else real_patch(path, *a, **k)
-    try:
-        code3, err3 = sam.new_friend_code("sam", "FRESH2")
-    finally:
-        sam.patch_doc = real_patch
-    check("new code: a failed profile write keeps the old code, and frees the new one",
-          code3 is None and err3 and "friend_codes/FRESH2" in store.docs
-          and sum(1 for p, d in store.docs.items() if p.startswith("friend_codes/")
-                  and d["userId"]["stringValue"] == "sam") == 1)
+    check("new code: the old code no longer matches anyone",
+          priya.add_friend("SAM123")[1] == "That code doesn't match anyone.")
+    store.down = True
+    check("new code: offline, the code is unchanged and it says so",
+          sam.new_friend_code(code) == (None, "Couldn't make a new code. Check your connection.")
+          and store.codes.get(code) == "sam")
+    store.down = False
 
 
 def test_squad_privacy_v29():
     """2.9 (G2): the Privacy switches reach squad rows, through the same
-    gate as the day docs."""
+    gate as my week."""
     values = {"reviews": 40, "studyTimeMs": 90000, "accuracy": 91.0, "streak": 3}
     cfg = {"share_time": False, "share_retention": False}
     check("squad row: switched-off numbers stay home",
-          firebase.shared_numbers(values, cfg) == {"reviews": 40, "streak": 3})
-    check("squad row: just show up lets none out",
-          firebase.shared_numbers(values, {"show_up": True}) == {})
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
-    sam = new_client(store, "sam", "Sammy")
-    doc, _mask = sam._day_doc(TODAY.isoformat(), values, cfg)
-    check("day doc: the same gate as before", "studyTimeMs" not in doc and "accuracy" not in doc
-          and doc["reviews"] == 40 and doc["streak"] == 3)
+          shapes.shared_numbers(values, cfg) == {"reviews": 40, "streak": 3})
+    check("squad row: just show up lets none out", shapes.shared_numbers(values, {"show_up": True}) == {})
+    doc = shapes.day_doc(values, cfg)
+    check("my week: the same gate", "studyTimeMs" not in doc and "accuracy" not in doc
+          and doc["reviews"] == 40 and doc["streak"] == 3 and doc["studied"] is True)
 
 
 def test_settings_follow_account_v213():
@@ -1997,27 +1548,16 @@ def test_settings_follow_account_v213():
           "share_retention" not in junk and len(junk["status"]) == 80 and junk["squads"] == []
           and len(junk["shared_decks"]) == account.MAX_DECKS and junk["shared_decks"][0] == {"id": 3, "name": "7"})
 
-    # the doc: mine only, on rules-v11
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    store.auth_uid = "sam"
+    # the doc: mine only
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     sam = new_client(store, "sam", "Sammy")
-    ok = sam.put_settings("sam", "2026-09-24T10:00:00.000000Z", doc)
-    back, status = sam.get_settings("sam")
+    ok = sam.put_settings("2026-09-24T10:00:00.000000Z", doc)
+    back, status = sam.get_settings()
     check("settings doc: I write it and read it back", ok and status == 200
           and back["settings"]["shared_decks"][1]["name"] == "Pathoma")
-    store.auth_uid = "dre"
     dre = new_client(store, "dre", "Dre")
-    check("settings doc: not even my crew can read it", dre.get_settings("sam")[1] == 403)
-    store.auth_uid = "sam"
-    old = fakes.FakeFirestore(rules_mode="v10")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
-    seed_users(old, {"sam": "Sammy"}, {"sam": []})
-    old.auth_uid = "sam"
-    check("settings doc: refused on rules-v10 (the pull carries on without it)",
-          new_client(old, "sam", "Sammy").get_settings("sam")[1] == 403)
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    check("settings doc: not even my crew can read it (GET /settings is only ever mine)",
+          dre.get_settings()[1] == 404)
 
     # two computers, through the real pull and push
     saved = {k: getattr(account, k) for k in ("cfg", "client")}
@@ -2045,14 +1585,14 @@ def test_settings_follow_account_v213():
 
     appmod._bg = lambda job, done=None: done(job()) if done else job()
     appmod.swap = None
-    store.docs.pop("users/sam/private/settings", None)
+    store.settings.pop("sam", None)
     try:
         a = computer("a", dict(cfg_a), {11: "AnKing", 12: "Pathoma"})
         use(a)
         synced = []
         account.ensure(lambda: synced.append("a"))
         check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
-              synced == ["a"] and "users/sam/private/settings" in store.docs and account.ready())
+              synced == ["a"] and "sam" in store.settings and account.ready())
         b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
                      {11: "AnKing", 77: "Pathoma"})
         use(b)
@@ -2077,13 +1617,13 @@ def test_settings_follow_account_v213():
         a["cl"].session["settings_day"] = ""
         account.ensure()
         check("newest save wins: an unsent edit here, newer than the account's, goes up instead",
-              store.docs["users/sam/private/settings"]["settings"]["mapValue"]["fields"]["exam_date"]["stringValue"] == "2027-01-01")
+              store.settings["sam"]["settings"]["exam_date"] == "2027-01-01")
         # offline: the pull fails, the sync still runs, and doesn't loop
         use(a)
         a["cl"].session["settings_day"] = ""
         real_get = a["cl"].get_settings
         tries = []
-        a["cl"].get_settings = lambda uid: (tries.append(1), (None, 0))[1]
+        a["cl"].get_settings = lambda: (tries.append(1), (None, 0))[1]
         runs = []
 
         def sync_like():
@@ -2192,23 +1732,21 @@ def test_study_rooms_v212():
           data["start"] == int(t0.timestamp() * 1000) and data["round"] == 25 * 60000 and data["brk"] == 5 * 60000)
 
     # the week doc carries it, and only while it lasts
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    store = world({"sam": "Sammy"})
     sam = new_client(store, "sam", "Sammy")
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     now = datetime.datetime.now(utc)
     live_room = rm.make_room("sam", now - datetime.timedelta(minutes=10))
+    week = lambda: json.loads(store.weeks["sam"][0])
     sam.session["room"] = live_room
-    sam.upload_week("sam", labels, {})
-    week = store.docs["users/sam/shared/week"]
-    check("week doc: my room rides it", "room" in week and "host" in json.dumps(week["room"]))
+    sam.push(labels, {})
+    check("week doc: my room rides it", week().get("room", {}).get("host") == "sam")
     sam.session["room"] = rm.make_room("sam", now - datetime.timedelta(hours=5))
-    sam.upload_week("sam", labels, {})
-    check("week doc: an ended room is gone from it", "room" not in store.docs["users/sam/shared/week"])
+    sam.push(labels, {})
+    check("week doc: an ended room is gone from it", "room" not in week())
     sam.session["room"] = live_room
-    sam.upload_week("sam", labels, {"paused": True})
-    check("week doc: paused, no room", "room" not in store.docs["users/sam/shared/week"])
+    sam.push(labels, {"paused": True})
+    check("week doc: paused, no room", "room" not in week())
 
     # the glue: the break, and the shortcuts under it
     from due_crew import rooms
@@ -2460,11 +1998,7 @@ def test_together_v210():
     from due_crew.app import _state
     wrapmod = _patched_due_crew()
     now = datetime.datetime.now(datetime.timezone.utc)
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    for a, b in (("sam", "dre"), ("dre", "sam")):
-        store.docs[f"users/{a}/friends/{b}"] = {"at": {"timestampValue": "2026-09-01T00:00:00Z"}}
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
 
@@ -2473,20 +2007,21 @@ def test_together_v210():
     dre.session["live_until"] = (now + datetime.timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     dre.session["tricky"] = [{"guid": "guid000003", "text": "Heart sounds: S3 <b>", "deck": "Cardio",
                               "at": labels[0]}]
-    _push29(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {})
-    wk = store.docs["users/dre/shared/week"]
+    sync_once(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {}, TODAY)
+    wk = json.loads(store.weeks["dre"][0])
     check("live + flags: the week doc carries liveUntil and the flagged card",
-          "liveUntil" in wk and "tricky" in wk)
-    store.auth_uid = "sam"
+          "liveUntil" in wk and wk["tricky"][0]["guid"] == "guid000003")
+    check("flags: the card's text never leaves this computer (3.0)",
+          "Heart sounds" not in store.weeks["dre"][0] and "text" not in wk["tricky"][0])
     sam = new_client(store, "sam", "Sammy")
-    data = sam.fetch_board("sam", labels, tomorrow=tomorrow)
+    data = sam.fetch_board(labels, tomorrow=tomorrow)
     d = next(e for e in data["entries"] if e["user_id"] == "dre")
     check("live + flags: a friend's refresh reads both, no extra reads",
           board.live_now(d["live_until"]) and d["tricky"][0]["guid"] == "guid000003")
     dre.session["live_until"] = (now - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    _push29(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {})
+    sync_once(store, dre, make_user_col([TODAY]), tempfile.mkdtemp(), {}, TODAY)
     check("live: once the hour is up, the next push drops it",
-          "liveUntil" not in store.docs["users/dre/shared/week"])
+          "liveUntil" not in json.loads(store.weeks["dre"][0]))
 
     rows = board.build_rows([dict(d, live_until=(now + datetime.timedelta(minutes=5)).isoformat())],
                             labels, tomorrow, "today", {})[0]
@@ -2498,41 +2033,33 @@ def test_together_v210():
           "I&rsquo;m studying" in page and "Stop studying" in stop and "duecrew:live" in page)
 
     # L2: flags I share show on the Decks tab; tips go to the card
-    store.auth_uid = "sam"
     col = make_user_col([TODAY])
     fakes.add_card(col.db.conn, 3, did=1)
+    col.db.conn.execute("UPDATE notes SET flds = ? WHERE id = 3", ("Heart sounds: S3 <b>\x1fback",))
     sys.modules["aqt"].mw.col = col
     _state["entries"] = data["entries"]
     view = together.tricky_view()
-    check("flags: only on notes I have, with who and where",
-          [(v["uid"], v["index"], v["deck"]) for v in view] == [("dre", 0, "Cardio")])
+    check("flags: only on notes I have, with who and where, the text from my own copy",
+          [(v["uid"], v["index"], v["deck"], v["text"]) for v in view]
+          == [("dre", 0, "Cardio", "Heart sounds: S3")], str(view))
     col2 = make_user_col([TODAY])
     sys.modules["aqt"].mw.col = col2
     check("flags: a card I don't have stays out of view", together.tricky_view() == [])
     sys.modules["aqt"].mw.col = None
-    flags = board._tricky_html(view)
+    flags = board._tricky_html([dict(view[0], text="S3 <b>")])
     check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
     tip = board.tip_html([("Dre <i>", "Ken-tuck-y")])
     check("tips: under the answer, escaped", "Dre &lt;i&gt;" in tip and "Ken-tuck-y" in tip)
 
-    # L3 + tips: cheers carry luck / guid; v9 servers get a plain cheer
-    store.auth_uid = "dre"
-    check("luck: a line goes out marked", dre.send_cheer("sam", "dre", "Dre", "\U0001F340", "Go get it", luck=True) is True
-          and store.docs["users/sam/cheers/dre"]["luck"] == {"booleanValue": True})
-    store.auth_uid = "sam"
-    got = sam.fetch_board("sam", labels, tomorrow=tomorrow)["cheers"]
+    # L3 + tips: cheers carry luck / guid
+    check("luck: a line goes out marked", dre.send_cheer("sam", "\U0001F340", "Go get it", luck=True) is True
+          and store.cheers[("sam", "dre")]["luck"] is True)
+    got = sam.fetch_board(labels, tomorrow=tomorrow)["cheers"]
     check("luck: it arrives marked", got and got[0]["luck"] is True and got[0]["note"] == "Go get it")
-    old = fakes.FakeFirestore(rules_mode="v9")
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(old)
-    seed_users(old, {"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    d9 = new_client(old, "dre", "Dre")
-    res = d9.send_cheer("sam", "dre", "Dre", "\U0001F4A1", "Ken-tuck-y", guid="guid000003")
-    check("tips on rules-v9: sent as a plain cheer with its words, and says so",
-          res == "no-extras" and "guid" not in old.docs["users/sam/cheers/dre"]
-          and old.docs["users/sam/cheers/dre"]["note"] == {"stringValue": "Ken-tuck-y"})
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
+    check("tips: a tip names its card", dre.send_cheer("sam", "\U0001F4A1", "Ken-tuck-y", guid="guid000003") is True
+          and sam.fetch_board(labels, tomorrow=tomorrow)["cheers"][0]["guid"] == "guid000003")
 
     exam = (TODAY + datetime.timedelta(days=1)).isoformat()
     cheers = [{"from": "dre", "name": "Dre", "emoji": "\U0001F340", "note": "Go", "luck": True, "guid": ""},
@@ -2646,30 +2173,24 @@ def test_show_up():
     from due_crew import share
     lb = TODAY.isoformat()
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    store = world({"sam": "Sammy"})
     sam = new_client(store, "sam", "Sammy")
-    values = {"reviews": 120, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4, "status": "hi"}
-    doc, mask = sam._day_doc(lb, values, {"show_up": True})
-    check("show-up: my day doc keeps studied and status, drops every number; the mask still clears them",
+    values = {"reviews": 120, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4}
+    doc = shapes.day_doc(values, {"show_up": True}, "hi")
+    check("show-up: my day keeps studied and status, drops every number",
           doc.get("studied") is True and doc.get("status") == "hi"
-          and not {"reviews", "studyTimeMs", "accuracy", "streak"} & set(doc)
-          and {"reviews", "studyTimeMs", "accuracy", "streak"} <= set(mask))
-    full, _m = sam._day_doc(lb, values, {"show_up": False})
-    check("show-up: off, the toggles rule as before", full.get("reviews") == 120)
-    import hashlib
-    sid = hashlib.sha1(b"due-crew-squad:ABCDEFGH").hexdigest()[:24]
-    store.docs[f"squads/{sid}"] = {"name": fv_str("busm"), "founder": fv_str("sam"),
-                                   "open": {"booleanValue": True}}
-    store.docs[f"squads/{sid}/members/sam"] = {
-        "name": fv_str("Sammy"), "joinedAt": {"timestampValue": "2026-09-01T00:00:00Z"},
-        "reviews": {"integerValue": "500"}, "streak": {"integerValue": "9"}, "day": fv_str(lb)}
-    sam.upload_squad_rows("sam", {"name": "Sammy", "week": 5, "day": lb}, [sid])
-    m = store.docs[f"squads/{sid}/members/sam"]
-    check("show-up: a numbers-free row deletes the numbers that stood, keeps joinedAt",
-          "reviews" not in m and "streak" not in m and "joinedAt" in m
-          and int(m["week"]["integerValue"]) == 5)
+          and not {"reviews", "studyTimeMs", "accuracy", "streak"} & set(doc))
+    check("show-up: off, the toggles rule as before", shapes.day_doc(values, {"show_up": False})["reviews"] == 120)
+    sam.session["week_raw"] = {lb: values}
+    sam.push(labels, {"show_up": True})
+    check("show-up: numbers already sent come off my week at the next sync",
+          set(json.loads(store.weeks["sam"][0])["days"][lb]) == {"studied"})
+    sid = sam.create_squad("busm")["id"]
+    _row_sync(sam, {"name": "Sammy", "day": lb, "reviews": 500, "streak": 9}, [sid])
+    _row_sync(sam, {"name": "Sammy", "week": 5, "day": lb}, [sid])
+    m = store.members[(sid, "sam")]
+    check("show-up: a numbers-free row clears the numbers that stood, and stays a member",
+          m["reviews"] is None and m["streak"] is None and m["week"] == 5)
 
     def person(uid, name, you=False, numbers=True, studied=(), paused=False, away=None):
         days = {}
@@ -2762,17 +2283,15 @@ def test_new_cards_v213():
           week.get(three_ago.isoformat(), {}).get("new_cards") == 1 and TODAY.isoformat() not in week)
     check("new cards: the week's count for Share week", sum(q.new_cards_by_day(7).values()) == 3)
 
-    store = fakes.FakeFirestore()
-    sys.modules["requests"].Session = lambda: fakes.FakeSession(store)
-    seed_users(store, {"sam": "Sammy"}, {"sam": []})
+    store = world({"sam": "Sammy"})
     sam = new_client(store, "sam", "Sammy")
     lb = TODAY.isoformat()
     values = {"reviews": 5, "studyTimeMs": 5000, "accuracy": 90.0, "streak": 4, "newCards": 2}
-    on, mask = sam._day_doc(lb, values, {})
-    off, _m = sam._day_doc(lb, values, {"share_reviews": False})
-    up, _m = sam._day_doc(lb, values, {"show_up": True})
-    check("new cards: on the day doc with Reviews, gone without it or in show-up; the mask clears it",
-          on.get("newCards") == 2 and "newCards" not in off and "newCards" not in up and "newCards" in mask)
+    on = shapes.day_doc(values, {})
+    off = shapes.day_doc(values, {"share_reviews": False})
+    up = shapes.day_doc(values, {"show_up": True})
+    check("new cards: in my week with Reviews, gone without it or in show-up",
+          on.get("newCards") == 2 and "newCards" not in off and "newCards" not in up)
 
     def ent(day):
         return {"user_id": "u", "name": "Nia", "you": False, "paused": False,
@@ -2794,20 +2313,14 @@ def test_new_cards_v213():
                          [lb, (TODAY - datetime.timedelta(days=1)).isoformat()])
     check("board: Week adds the days up", wk["new"] == 4 and wk["reviews"] == 15)
 
-    # squad rows: rules-v11 lets a row say it; older rules refuse it
-    store.auth_uid = "sam"
-    sid = sam.create_squad("sam", "busm", "Sammy")["id"]
+    # squad rows
+    sid = sam.create_squad("busm")["id"]
     row = {"name": "Sammy", "day": lb, "reviews": 5, "newCards": 2}
-    check("squad row: newCards lands on rules-v11", sam.upload_squad_rows("sam", row, [sid]) == []
-          and store.docs[f"squads/{sid}/members/sam"]["newCards"]["integerValue"] == "2")
-    check("squad row: a negative count is refused",
-          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": -1}, ["newCards"]) == 403)
+    check("squad row: newCards lands", _row_sync(sam, row, [sid]) == (True, [])
+          and store.members[(sid, "sam")]["newCards"] == 2)
+    check("squad row: a negative count is refused", _row_sync(sam, dict(row, newCards=-1), [sid])[0] is False)
     drow = next(r for r in sam.fetch_squad(sid)["rows"] if r["user_id"] == "sam")
     check("squad row: read back as new_cards", drow["new_cards"] == 2)
-    store.rules_mode = "v10"
-    check("squad row: rules-v10 refuses the field (so a stale client leaves it out)",
-          sam._patch_status(f"squads/{sid}/members/sam", {"newCards": 2}, ["newCards"]) == 403)
-    store.rules_mode = "repo"
     view = {"state": "ok", "squads": [{"id": sid, "name": "busm"}], "current": sid, "name": "busm",
             "open": True, "founder_me": True, "day": lb, "yesterday": "", "people": 1, "studying": 1,
             "reviews": 5, "rows": [dict(drow, you=True, crew=False, pending=False, knocked_me=False)]}
@@ -2824,6 +2337,96 @@ def test_new_cards_v213():
     check("share: (N new) after the reviews; (all new); none when none were",
           "205 reviews (20 new)" in t and "205 reviews (all new)" in w
           and "(" not in share.my_today(lb, 205, 60000, None, 3, 0).split("\n")[1])
+
+
+def test_sign_in_v30():
+    """3.0: an email, then the six-digit code it gets. A new address is a
+    new account, asked for a name. The same account from 2.x keeps what
+    this computer knew about it; another account starts clean."""
+    store = world({"sam": "Sammy"})
+    tmp = tempfile.mkdtemp()
+    cl = api.ApiClient(os.path.join(tmp, "session.json"))
+    try:
+        cl.request_code("nope")
+        bad = None
+    except shapes.AuthError as e:
+        bad = e.code
+    check("sign-in: a bad address is refused by name", bad == "bad_email")
+    cl.request_code("  New@Example.com ")
+    try:
+        cl.verify_code("new@example.com", "000000")
+        wrong = None
+    except shapes.AuthError as e:
+        wrong = e.code
+    check("sign-in: a wrong code says so", wrong == "wrong_code")
+    got = cl.verify_code("new@example.com", store.otp["new@example.com"], "Anki on Linux")
+    check("sign-in: a new address is a new account, asked for a name",
+          got["new"] is True and got["name"] == "" and cl.signed_in and cl.email == "new@example.com")
+    check("sign-in: the name is set with the first request", cl.set_display_name("Newbie")
+          and store.users[got["uid"]]["name"] == "Newbie" and cl.display_name == "Newbie")
+    check("sign-out: here at once", (cl.sign_out(), cl.signed_in)[1] is False)
+
+    # the same account, from a 2.x session.json
+    old = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    old.session = {"user_id": "sam", "email": "sam@example.com", "display_name": "Sammy",
+                   "id_token": "x", "refresh_token": "r", "friend_ids": ["dre"], "cheers_seen": {"dre": "t"}}
+    check("2.x: signed out, and the board knows why", not old.signed_in and old.was_on_2x)
+    old.request_code("sam@example.com")
+    got = old.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("2.x: the same uid, no name asked, what it knew is kept, and the restore is due",
+          got == {"uid": "sam", "name": "Sammy", "new": False}
+          and old.session["friend_ids"] == ["dre"] and old.session["cheers_seen"] == {"dre": "t"}
+          and old.session.get("needs_restore") is True
+          and "refresh_token" not in old.session and not old.was_on_2x)
+    other = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    other.session = {"user_id": "someone-else", "refresh_token": "r", "friend_ids": ["x"]}
+    other.request_code("sam@example.com")
+    other.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("another account: nothing carries over", "friend_ids" not in other.session
+          and not other.session.get("needs_restore"))
+
+
+def test_restore_from_2x():
+    """3.0's first sync brings back what a 2.x install knew: its code (when
+    this computer had it), its crew by uid, its squads by their codes. Then
+    it's done, and never runs again."""
+    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    sam.session.update(needs_restore=True, friend_ids=["dre", "eve", "ghost"], friend_code="SAM123")
+    cfg = {"squads": [{"id": shapes.squad_id("ABCD2345"), "code": "ABCD2345", "name": "busm", "founder": "dre"}]}
+    ok, _gone = sam.push([TODAY.isoformat()], cfg)
+    sid = shapes.squad_id("ABCD2345")
+    check("restore: my code comes back as it was", store.codes.get("SAM123") == "sam")
+    check("restore: my crew comes back by uid; who added me back is crew at once",
+          ("sam", "dre") in store.friends and ("sam", "eve") in store.friends and store.mutual("sam", "dre")
+          and not store.mutual("sam", "eve"))
+    check("restore: my squad comes back under its old id, with its founder, and me in it",
+          store.squads.get(sid, {}).get("founder") == "dre" and (sid, "sam") in store.members)
+    check("restore: done, once", ok and "needs_restore" not in sam.session)
+    n = len(store.log)
+    sam.push([TODAY.isoformat()], cfg)
+    check("restore: the next sync is just a sync", [p for _m, p, _s in store.log[n:]] == ["/sync"])
+    zed = new_client(store, "dre", "Dre")
+    zed.session["needs_restore"] = True
+    store.down = True
+    try:
+        zed.push([TODAY.isoformat()], cfg)
+    except shapes.TransportError:
+        pass
+    store.down = False
+    check("restore: offline, it waits for the next sync", zed.session.get("needs_restore") is True)
+    store.fail_status = 503
+    try:
+        zed.push([TODAY.isoformat()], cfg)
+    except shapes.TransportError:
+        pass
+    store.fail_status = None
+    check("restore: a server in trouble doesn't count as done either", zed.session.get("needs_restore") is True)
+    dre = zed
+    dre.push([TODAY.isoformat()], cfg)
+    check("restore: the founder coming back joins the squad the first member brought back",
+          (sid, "dre") in store.members and store.squads[sid]["founder"] == "dre"
+          and store.codes and "dre" in store.codes.values())
 
 
 def main():

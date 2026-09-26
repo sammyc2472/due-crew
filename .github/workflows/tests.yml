@@ -19,7 +19,7 @@ jobs:
       - run: python -m pyflakes due_crew tests tools
 
   suite:
-    name: client suite (fake Firestore)
+    name: client suite (fake Worker)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +81,18 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npx vitest run
+      # the real client against the real Worker: where the suite's fake and
+      # the Worker's own tests each prove one side, this proves they agree
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: npx wrangler d1 migrations apply due-crew --local --env=""
+      - name: client against the Worker (wrangler dev, local D1)
+        run: |
+          npx wrangler dev --env="" --local --port 8787 --ip 127.0.0.1 > ../wdev.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://127.0.0.1:8787/version && break; sleep 1; done
+          cd .. && python3 tools/smoke_worker.py wdev.log
 
   # 3.0: a v* tag deploys the Worker, after all five jobs are green. The
   # database migrates first; both are no-ops when nothing changed. Until

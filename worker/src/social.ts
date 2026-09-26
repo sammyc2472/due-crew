@@ -93,6 +93,24 @@ export async function deleteFriend(s: Session, env: Env, [fid]: string[]): Promi
   return json({ ok: true });
 }
 
+/** GET /friends: the Friends dialog. My code, the people I added (with
+ *  whether they added me back), and my knocks. Reads only: nothing is
+ *  consumed, unlike /board's cheers. */
+export async function getFriends(s: Session, env: Env): Promise<Response> {
+  const [me, friends] = await env.DB.batch([
+    env.DB.prepare("SELECT code FROM users WHERE uid = ?").bind(s.uid),
+    env.DB.prepare(
+      `SELECT f.friend AS uid, u.name, u.emoji,
+              EXISTS (SELECT 1 FROM friends b WHERE b.owner = f.friend AND b.friend = ?1) AS mutual
+       FROM friends f JOIN users u ON u.uid = f.friend WHERE f.owner = ?1 ORDER BY f.at, f.friend`).bind(s.uid),
+  ]);
+  return json({
+    code: (me.results[0] as any)?.code || "",
+    friends: (friends.results as any[]).map((f) => ({ uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: !!f.mutual })),
+    knocks: await listKnocks(env, s.uid),
+  });
+}
+
 // ---- codes ----
 
 function drawCode(): string {

@@ -117,7 +117,7 @@ def cheer_room():
         crew = [(u, n) for u, n, you in room_model.members(_state["entries"], room) if not you]
     else:
         crew = [tuple(x) for x in (_done() or {}).get("uids") or []]
-    emoji = cheer_allowed("\U0001F389", client().rules_stale)
+    emoji = cheer_allowed("\U0001F389")
     if not crew or not emoji:
         tooltip("Nobody else in the room yet.")
         return

@@ -1,5 +1,5 @@
 """Render every Due Crew dialog offscreen with real PyQt6 against the fake
-Firestore, and save a PNG of each. The one way to see the Qt side without
+Worker (tests/fakes.py), and save a PNG of each. The one way to see the Qt side without
 launching Anki; the two crashes of 2026-09-10 would both have shown here.
 
     QT_QPA_PLATFORM=offscreen <python-with-PyQt6> tools/dialogs.py OUT_DIR
@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import fakes  # noqa: E402
 
-STORE = fakes.FakeFirestore()
+STORE = fakes.FakeWorker()
 fakes.install_fake_requests(STORE)
 aqt = fakes.install_fake_aqt()  # hooks, deckbrowser: enough for the package import
 
@@ -93,43 +93,26 @@ for name, mod in (("aqt.qt", qt), ("aqt.utils", utils), ("aqt.theme", theme)):
     sys.modules[name] = mod
 aqt.qt, aqt.utils, aqt.theme = qt, utils, theme
 
-from due_crew.backend import firebase  # noqa: E402
+from due_crew.backend import api  # noqa: E402
 
 # ---- a signed-in Sam with a crew, a knock, and two squads ----
 TODAY = datetime.date.today().isoformat()
 
-
-def fv(v):
-    if isinstance(v, bool):
-        return {"booleanValue": v}
-    if isinstance(v, int):
-        return {"integerValue": str(v)}
-    if isinstance(v, float):
-        return {"doubleValue": v}
-    if isinstance(v, list):
-        return {"arrayValue": {"values": [fv(x) for x in v]}}
-    return {"stringValue": str(v)}
-
-
-for uid, name, friends in (("sam", "Sammy", ["igk", "ameya", "adina", "chi"]),
-                           ("igk", "igk", ["sam"]), ("ameya", "Ameya", ["sam"]),
-                           ("adina", "Adina", ["sam"]), ("chi", "Chidemma", []),
-                           ("priya", "Priya", ["sam"])):
-    STORE.docs[f"users/{uid}"] = {"displayName": fv(name), "friends": fv(friends),
-                                  "friendCode": fv(uid.upper()[:3] + "123")}
-STORE.docs["friend_codes/SAM123"] = {"userId": fv("sam")}
-STORE.auth_uid = "sam"
-CLIENT = firebase.FirebaseClient(os.path.join(os.environ.get("TMPDIR", "/tmp"), "dc-dialogs-session.json"))
-CLIENT.session = {"user_id": "sam", "id_token": "t-sam", "refresh_token": "r",
+for uid, name in (("sam", "Sammy"), ("igk", "igk"), ("ameya", "Ameya"), ("adina", "Adina"),
+                  ("chi", "Chidemma"), ("priya", "Priya")):
+    STORE.add_user(uid, name, code=uid.upper()[:3] + "123")
+for uid in ("igk", "ameya", "adina", "chi"):
+    STORE.befriend("sam", uid)
+for uid in ("igk", "ameya", "adina", "priya"):
+    STORE.befriend(uid, "sam")
+CLIENT = api.ApiClient(os.path.join(os.environ.get("TMPDIR", "/tmp"), "dc-dialogs-session.json"))
+CLIENT.session = {"user_id": "sam", "token": STORE.session_for("sam"),
                   "display_name": "Sammy", "email": "sam@example.com",
                   "last_ok": (datetime.datetime.now(datetime.timezone.utc)
                               - datetime.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")}
-SQUAD = CLIENT.create_squad("sam", "busm", "Sammy")
-STORE.docs[f"squads/{SQUAD['id']}/members/priya"] = {"name": fv("Priya"), "joinedAt": fv("t")}
-STORE.auth_uid = "priya"
-firebase.FirebaseClient(os.path.join(os.environ.get("TMPDIR", "/tmp"), "dc-dialogs-priya.json"))
-STORE.docs["users/sam/knocks/priya"] = {"name": fv("Priya"), "at": fv("t"), "squad": fv(SQUAD["id"])}
-STORE.auth_uid = "sam"
+SQUAD = CLIENT.create_squad("busm")
+STORE._join(SQUAD["id"], "priya")
+STORE.knocks[("sam", "priya")] = {"squad": SQUAD["id"], "at": "t"}
 
 CONFIG = {
     "show_leaderboard": True, "period": "today", "sort": "reviews", "show_stale": True,
@@ -213,19 +196,20 @@ def main(out):
 
     def cheer():
         from due_crew.ui.cheer_dialog import CheerDialog
-        from due_crew.app import CHEER_CLASSIC, CHEER_QUICK
+        from due_crew.app import CHEER_QUICK
         dlg = CheerDialog(None, "Ameya", CHEER_QUICK)
         dlg.other.setText("\U0001F973")  # a palette pick landing in the box
         shoot(dlg, os.path.join(out, "cheer.png"))
-        dlg = CheerDialog(None, "Ameya", CHEER_CLASSIC, any_emoji=False)  # server on old rules
-        shoot(dlg, os.path.join(out, "cheer-old-rules.png"))
 
     def auth():
         from due_crew.ui.auth_dialog import AuthDialog
         dlg = AuthDialog(None, CLIENT)
-        shoot(dlg, os.path.join(out, "auth.png"))
-        dlg = AuthDialog(None, CLIENT, join=True)  # a new install opens on Join
-        shoot(dlg, os.path.join(out, "auth-join.png"))
+        shoot(dlg, os.path.join(out, "auth.png"))              # 1: the email
+        dlg.sent_to.setText("We sent a code to sam@example.com. It works for 10 minutes.")
+        dlg._show(1)
+        shoot(dlg, os.path.join(out, "auth-code.png"))         # 2: the code
+        dlg._show(2)
+        shoot(dlg, os.path.join(out, "auth-name.png"))         # 3: a new account's name
 
     def welcome():
         from due_crew.ui.welcome_dialog import WelcomeDialog

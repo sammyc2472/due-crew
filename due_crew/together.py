@@ -13,7 +13,7 @@ from aqt.utils import tooltip
 
 from . import app, board
 from .app import _state, cfg, client
-from .backend.firebase import LIVE_MINUTES, TRICKY_MAX, clean_note, clean_tricky
+from .backend.shapes import LIVE_MINUTES, TRICKY_MAX, clean_note, clean_tricky
 from .wrap import _save_wrap, _wrap_data
 
 LUCK_EMOJI = "\U0001F340"   # four-leaf clover
@@ -145,8 +145,10 @@ def send_tip(uid, index):
         flag = (entry or {}).get("tricky", [])[int(index)]
     except (ValueError, IndexError):
         return
+    text = next((v["text"] for v in tricky_view()
+                 if v["uid"] == uid and v["index"] == int(index)), "")
     tip = _ask_line("Send a tip",
-                    f"On “{flag['text'] or 'this card'}”. One line; "
+                    f"On “{text or 'this card'}”. One line; "
                     f"{str(entry['name']).split(' ')[0]} sees it when the card comes up.")
     if tip:
         _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"])
@@ -157,7 +159,7 @@ def milestone_cheer(uid):
     m = next((m for m in _state["milestones"] if m[0] == uid), None)
     if m is None:
         return
-    emoji = cheer_allowed("\U0001F4AF" if m[2] < 365 else "\U0001F389", client().rules_stale)
+    emoji = cheer_allowed("\U0001F4AF" if m[2] < 365 else "\U0001F389")
     if emoji:
         _send_cheer(uid, m[1], emoji)
     dismiss_milestone(uid)
@@ -242,17 +244,19 @@ def reviewer_menu(reviewer, menu):
 def tricky_view():
     """Flags from my crew on notes I also have: [{uid, name, index, text,
     deck}]. One local query over their guids; a flag on a card I don't
-    have is someone else's deck, and stays out of view."""
+    have is someone else's deck, and stays out of view. Since 3.0 a flag
+    carries no text: it's read here, from my own copy of the note."""
     flags = [(e, i, t) for e in _state["entries"] or [] if not e["you"]
              for i, t in enumerate(e.get("tricky") or [])]
     if not flags or not mw.col:
         return []
     guids = sorted({t["guid"] for _e, _i, t in flags})
     try:
-        have = set(mw.col.db.list(
-            f"SELECT guid FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids))
+        rows = mw.col.db.all(
+            f"SELECT guid, flds FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids)
     except Exception:
         return []
+    text = {g: _plain(str(flds).split("\x1f", 1)[0]) for g, flds in rows}
     return [{"uid": e["user_id"], "name": e["name"], "index": i,
-             "text": t["text"], "deck": t["deck"]}
-            for e, i, t in flags if t["guid"] in have]
+             "text": text[t["guid"]], "deck": t["deck"]}
+            for e, i, t in flags if t["guid"] in text]

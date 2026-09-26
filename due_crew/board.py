@@ -1215,7 +1215,13 @@ def _card(cfg, title, body_html):
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False):
+def signed_out_card(cfg, expired=False, moved=False):
+    """moved: signed in on 2.x, which used passwords. 3.0 signs in with an
+    emailed code, so everyone signs in once more, and nothing is lost."""
+    if moved:
+        return _card(cfg, "Due Crew",
+                     f'Due Crew now signs in with a code by email, no password. '
+                     f'<a href="#" onclick="{_pycmd("setup")}">Sign in</a> once to carry on.')
     if expired:
         return _card(cfg, "Due Crew",
                      f'Your sign-in expired. '

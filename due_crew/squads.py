@@ -10,7 +10,7 @@ from aqt.utils import tooltip
 
 from . import app, board
 from .app import SQUAD_CACHE_SECS, _bg, _state, cfg, client, save_cfg
-from .backend.firebase import TransportError
+from .backend.shapes import TransportError
 from .social import _open_profile
 from .stats.queries import StatsQueries
 from .ui import confirm, copy_text
@@ -67,8 +67,7 @@ def _squad_view(c=None):
 
 
 def _fetch_squad(force=False):
-    """Lazy: when the view opens. One get plus one query (a read per
-    member), cached a few minutes."""
+    """Lazy: when the view opens. Cached a few minutes."""
     cur = _current_squad()
     sq = _state["squad"]
     if cur is None or not mw.col or not client().signed_in:
@@ -82,11 +81,9 @@ def _fetch_squad(force=False):
     cl = client()
     sid = cur["id"]
 
-    uid = cl.user_id
-
     def job():
         try:
-            knocks = cl.list_knocks(uid)  # the Squads tab is where they matter
+            knocks = cl.list_knocks()  # the Squads tab is where they matter
         except Exception:
             knocks = None
         try:
@@ -99,7 +96,6 @@ def _fetch_squad(force=False):
         data, state, knocks = result or (None, "error", None)
         if knocks is not None:
             _state["knocks"] = [tuple(k) for k in knocks]
-            _state["knocks_ts"] = time.time()
         if sq["id"] != sid:
             return  # switched meanwhile
         if data is not None:
@@ -154,13 +150,13 @@ def _visible_knocks(c=None):
 def _add_back(uid):
     """They added me; my add makes it mutual. The knock is done either way."""
     cl = client()
-    me = cl.user_id
     friends = list(_state["my_friends"])
     already = uid in friends
 
     def job():
-        ok = already or cl.set_friends(me, friends + [uid])
-        cl.delete_knock(me, uid)
+        ok = already or cl.add_back(uid) is not None  # the server clears the knock too
+        if already:
+            cl.delete_knock(uid)
         return ok
 
     def done(ok):
@@ -181,8 +177,7 @@ def _dismiss_knock(uid):
     _mute_knocker(uid)
     _state["knocks"] = [k for k in _state["knocks"] if k[0] != uid]
     cl = client()
-    me = cl.user_id
-    _bg(lambda: cl.delete_knock(me, uid))
+    _bg(lambda: cl.delete_knock(uid))
     app.swap(cfg())
 
 
@@ -249,8 +244,8 @@ def _leave_squad():
             mw, "Leave squad?", f"Leave {cur.get('name') or 'this squad'}?", "Leave"):
         return
     cl = client()
-    me, sid = cl.user_id, cur["id"]
-    _bg(lambda: cl.leave_squad(me, sid))
+    sid = cur["id"]
+    _bg(lambda: cl.leave_squad(sid))
     _drop_squad(sid)
 
 
@@ -275,7 +270,7 @@ def _toggle_squad_lock():
 
 def _block_member(uid):
     """Founder: remove and keep them out, even with the code and an open
-    door. The list rides the squad doc (rules-v7)."""
+    door."""
     cur = _current_squad()
     sq = _state["squad"]
     if cur is None or sq["data"] is None or sq["id"] != cur["id"]:
@@ -297,7 +292,7 @@ def _block_member(uid):
         else:
             tooltip("Couldn't block them.")
 
-    _bg(lambda: cl.block_member(cur["id"], uid, banned), done)
+    _bg(lambda: cl.block_member(cur["id"], uid), done)
 
 
 def _make_founder(uid):
@@ -385,11 +380,10 @@ def _send_knock(to_uid):
         return
     sid = cur["id"]
     friends = list(_state["my_friends"])
-    my_name = cl.display_name or "A friend"
 
     def job():
-        ok = cl.set_friends(me, friends + [to_uid])
-        return cl.send_knock(to_uid, me, my_name, sid) and ok
+        ok = cl.add_back(to_uid) is not None
+        return cl.send_knock(to_uid, sid) and ok
 
     def done(ok):
         if ok:

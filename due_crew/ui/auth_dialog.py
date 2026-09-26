@@ -1,41 +1,45 @@
-"""Sign in / Join dialog. Network runs in the background; the dialog never
-blocks Anki. On success, self.user holds (user_id, display_name) and
-self.joined says whether it was a new account (the welcome screen follows)."""
+"""Sign in (3.0): an email, then the six-digit code it gets, then a display
+name when the account doesn't have one yet. No passwords. Network runs in
+the background; the dialog never blocks Anki. On success, self.user holds
+(user_id, display_name) and self.joined says whether it was a new account
+(the welcome screen follows)."""
+
+import platform
 
 from aqt.qt import (
-    QDialog, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QVBoxLayout,
-    QTabWidget, QWidget, Qt,
+    QDialog, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QStackedWidget, QVBoxLayout,
+    QWidget, Qt,
 )
 
 from . import accent, attach_alive, danger, logo_label, run_bg
 
 ERRORS = {
-    "INVALID_LOGIN_CREDENTIALS": "Email or password is incorrect.",
-    # both say the same thing: a sign-in form must not confirm whether an
-    # email has an account
-    "INVALID_PASSWORD": "Email or password is incorrect.",
-    "EMAIL_NOT_FOUND": "Email or password is incorrect.",
-    "EMAIL_EXISTS": "That email already has an account. Sign in instead.",
-    "WEAK_PASSWORD": "Password needs at least 6 characters.",
-    "INVALID_EMAIL": "That doesn't look like an email address.",
-    "TOO_MANY_ATTEMPTS_TRY_LATER": "Too many tries. Wait a few minutes.",
+    "bad_email": "That doesn't look like an email address.",
+    "wrong_code": "That code isn't right.",
+    "expired": "That code has expired. Send a new one.",
+    "locked": "Too many tries. Wait an hour, then send a new code.",
+    "slow_down": "Too many codes. Wait a bit, then try again.",
     "NETWORK": "Can't reach the server. Check your connection.",
 }
 
 
+def _device():
+    try:
+        return f"Anki on {platform.system() or 'a computer'}"
+    except Exception:
+        return "Anki"
+
+
 class AuthDialog(QDialog):
     def __init__(self, parent, client, join=None):
-        """join: open on Join (True) or Sign In (False). None: Join for a
-        profile where no email was ever used, Sign In when one was. Until
-        2.9 it always opened on Sign In, under a card saying "Join"."""
+        """join: kept for callers from 2.x; one flow signs in and joins."""
         super().__init__(parent)
         self.client = client
         self.user = None
         self.joined = False
+        self._uid = ""
         attach_alive(self)
         self._build()
-        if join if join is not None else not client.email:
-            self.tabs.setCurrentIndex(1)
 
     def _build(self):
         self.setWindowTitle("Due Crew")
@@ -45,11 +49,11 @@ class AuthDialog(QDialog):
         if logo is not None:
             root.addWidget(logo)
 
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._signin_tab(), "Sign In")
-        self.tabs.addTab(self._join_tab(), "Join")
-        self.tabs.currentChanged.connect(self._tab_changed)
-        root.addWidget(self.tabs)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._email_page())
+        self.pages.addWidget(self._code_page())
+        self.pages.addWidget(self._name_page())
+        root.addWidget(self.pages)
 
         self.error = QLabel("")
         self.error.setWordWrap(True)
@@ -59,112 +63,156 @@ class AuthDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
         self.go = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.go.setText("Sign In")
         self.go.setDefault(True)
         self.go.clicked.connect(self._submit)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
+        self._show(0)
 
-    def _field(self, layout, label, placeholder, password=False):
-        layout.addWidget(QLabel(label))
+    def _field(self, layout, label, placeholder):
+        if label:
+            layout.addWidget(QLabel(label))
         edit = QLineEdit()
         edit.setPlaceholderText(placeholder)
-        if password:
-            edit.setEchoMode(QLineEdit.EchoMode.Password)
         edit.returnPressed.connect(self._submit)
         layout.addWidget(edit)
         return edit
 
-    def _signin_tab(self):
+    def _link(self, text, slot):
+        b = QPushButton(text)
+        b.setFlat(True)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setStyleSheet(f"color: {accent()}; text-align: left; border: none;")
+        b.clicked.connect(slot)
+        return b
+
+    def _email_page(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        self.in_email = self._field(lay, "Email", "you@example.com")
-        self.in_email.setText(self.client.email)
-        self.in_pw = self._field(lay, "Password", "", password=True)
-        forgot = QPushButton("Forgot password?")
-        forgot.setFlat(True)
-        forgot.setCursor(Qt.CursorShape.PointingHandCursor)
-        forgot.setStyleSheet(f"color: {accent()}; text-align: left; border: none;")
-        forgot.clicked.connect(self._reset)
-        lay.addWidget(forgot, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.email = self._field(lay, "Email", "you@example.com")
+        self.email.setText(self.client.email)
+        note = QLabel("We'll email you a code. No password.")
+        note.setStyleSheet("font-size: 12px; opacity: 0.7;")
+        lay.addWidget(note)
         lay.addStretch()
         return w
 
-    def _join_tab(self):
+    def _code_page(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        self.up_email = self._field(lay, "Email", "you@example.com")
-        self.up_pw = self._field(lay, "Password (6+ characters)", "", password=True)
-        self.up_name = self._field(lay, "Display name", "How your crew sees you")
+        self.sent_to = QLabel("")
+        self.sent_to.setWordWrap(True)
+        self.sent_to.setTextFormat(Qt.TextFormat.PlainText)
+        # two lines, always: an address long enough to wrap mustn't be clipped
+        self.sent_to.setMinimumHeight(2 * self.sent_to.fontMetrics().lineSpacing() + 4)
+        lay.addWidget(self.sent_to)
+        self.code = self._field(lay, "", "123 456")
+        self.code.setMaxLength(9)
+        lay.addWidget(self._link("Send a new code", self._resend), alignment=Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(self._link("Use a different email", lambda: self._show(0)),
+                      alignment=Qt.AlignmentFlag.AlignLeft)
         lay.addStretch()
         return w
 
-    def _tab_changed(self, i):
+    def _name_page(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        self.name = self._field(lay, "Display name", "How your crew sees you")
+        self.name.setMaxLength(60)
+        lay.addStretch()
+        return w
+
+    def _show(self, page):
+        self.pages.setCurrentIndex(page)
         self.error.setText("")
-        self.go.setText("Sign In" if i == 0 else "Join")
+        self.go.setText(("Send Code", "Sign In", "Done")[page])
+        (self.email, self.code, self.name)[page].setFocus()
 
     # ---- actions ----
 
     def _busy(self, on, text=None):
         self.go.setEnabled(not on)
-        self.tabs.setEnabled(not on)
+        self.pages.setEnabled(not on)
         if text:
             self.go.setText(text)
+
+    def _fail(self, err, again):
+        self._busy(False, again)
+        self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
+        self.error.setText(ERRORS.get(err, ERRORS["NETWORK"]))
 
     def _submit(self):
         if not self.go.isEnabled():
             return  # returnPressed while a request is in flight
-        self.error.setStyleSheet(f"color: {danger()}; font-size: 12px;")
         self.error.setText("")
-        joining = self.tabs.currentIndex() == 1
-        if joining:
-            email = self.up_email.text().strip()
-            pw = self.up_pw.text()
-            name = self.up_name.text().strip()
-            if not name:
-                self.error.setText("Pick a display name.")
-                return
+        page = self.pages.currentIndex()
+        if page == 0:
+            self._send()
+        elif page == 1:
+            self._verify()
         else:
-            email = self.in_email.text().strip()
-            pw = self.in_pw.text()
+            self._save_name()
+
+    def _send(self):
+        email = self.email.text().strip()
         if "@" not in email:
-            self.error.setText(ERRORS["INVALID_EMAIL"])
+            self.error.setText(ERRORS["bad_email"])
             return
-        if len(pw) < 6:
-            self.error.setText(ERRORS["WEAK_PASSWORD"])
-            return
+        self._busy(True, "Sending…")
 
-        self._busy(True, "Joining…" if joining else "Signing in…")
-        job = ((lambda: self.client.sign_up(email, pw, name)) if joining
-               else (lambda: self.client.sign_in(email, pw)))
-
-        def done(result, err):
-            self._busy(False, "Join" if joining else "Sign In")
+        def done(_result, err):
             if err:
-                self.error.setText(
-                    ERRORS.get(err, err.replace("_", " ").capitalize()))
+                self._fail(err, "Send Code")
                 return
-            self.user = result
-            self.joined = joining
-            self.accept()
+            self._busy(False)
+            self.sent_to.setText(f"We sent a code to {email}. It works for 10 minutes.")
+            self.code.clear()
+            self._show(1)
 
-        run_bg(self, job, done)
+        run_bg(self, lambda: self.client.request_code(email) or True, done)
 
-    def _reset(self):
+    def _resend(self):
         if not self.go.isEnabled():
             return
-        email = self.in_email.text().strip()
-        if "@" not in email:
-            self.error.setText("Enter your email first.")
+        self._show(0)
+        self._send()
+
+    def _verify(self):
+        code = "".join(ch for ch in self.code.text() if ch.isdigit())
+        if len(code) != 6:
+            self.error.setText("The code is six digits.")
             return
-        self._busy(True)
+        email = self.email.text().strip()
+        self._busy(True, "Signing in…")
 
-        def done(_, err):
+        def done(result, err):
+            if err or not result:
+                self._fail(err, "Sign In")
+                return
             self._busy(False)
-            if err:
-                self.error.setText(ERRORS.get(err, ERRORS["NETWORK"]))
-            else:
-                self.error.setStyleSheet(f"color: {accent()}; font-size: 12px;")
-                self.error.setText(f"Reset link sent to {email}.")
+            self._uid = result["uid"]
+            self.joined = bool(result["new"])
+            if result["name"] and not result["new"]:
+                self.user = (result["uid"], result["name"])
+                self.accept()
+                return
+            self.name.setText(result["name"] or "")
+            self._show(2)
 
-        run_bg(self, lambda: self.client.send_reset(email) or True, done)
+        run_bg(self, lambda: self.client.verify_code(email, code, _device()), done)
+
+    def _save_name(self):
+        name = " ".join(self.name.text().split())
+        if not name:
+            self.error.setText("Pick a display name.")
+            return
+        self._busy(True, "Saving…")
+
+        def done(ok, err):
+            if err or not ok:
+                self._fail(err, "Done")
+                return
+            self.user = (self._uid, name)
+            self.accept()
+
+        run_bg(self, lambda: self.client.set_display_name(name), done)

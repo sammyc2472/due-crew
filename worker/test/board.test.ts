@@ -175,6 +175,17 @@ describe("friends and codes", () => {
     expect((await nia.call("PUT", "/friends", { ids: "sam" })).status).toBe(400);
   });
 
+  it("GET /friends: the dialog's view, and it consumes nothing", async () => {
+    await dre.call("POST", "/cheers/sam", { emoji: "🎉" });
+    const f = (await sam.call("GET", "/friends")).body;
+    expect(f.friends).toEqual([
+      { uid: "dre", name: "Dre", emoji: "", mutual: true },
+      { uid: "nia", name: "Nia", emoji: "", mutual: false },
+    ]);
+    expect(f.knocks).toEqual([]);
+    expect((await sam.call("GET", "/board")).body.cheers).toHaveLength(1);  // still there
+  });
+
   it("adding someone who doesn't exist, or myself, is refused", async () => {
     expect((await sam.call("PUT", "/friends/ghost")).status).toBe(404);
     expect((await sam.call("PUT", "/friends/sam")).status).toBe(400);
