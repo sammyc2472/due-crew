@@ -6,6 +6,8 @@ export interface Env {
   MIN_CLIENT: string;
   MAIL_FROM: string;
   RESEND_API_KEY?: string;
+  /** Cloudflare Email Service's send_email binding, when configured. */
+  EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
   ADMIN_TOKEN?: string;
 }
 

@@ -30,26 +30,26 @@ npx wrangler d1 migrations apply due-crew --remote --env=""
 npx wrangler d1 migrations apply due-crew-dev --remote --env dev
 ```
 
-## 3. Mail (Resend)
+## 3. Mail: Cloudflare Email Service (or Resend)
 
-1. Make a Resend account, and add the domain `duecrew.com`.
-2. Resend lists DNS records to add: SPF and an MX on a sending subdomain,
-   and a DKIM key. Add them in Cloudflare → duecrew.com → DNS exactly as
-   Resend shows them, then click Verify in Resend.
-3. Add a DMARC record in Cloudflare DNS: type `TXT`, name `_dmarc`,
-   content `v=DMARC1; p=none; rua=mailto:you@duecrew.com` (any address
-   you read). Tighten `p=` to `quarantine` once mail has gone out cleanly
-   for a few weeks.
-4. Create a Resend API key with sending access only, then:
+The Worker sends sign-in codes through Cloudflare Email Service when its
+`send_email` binding (`EMAIL`) is configured, else through Resend when
+`RESEND_API_KEY` is set, else it logs each code (`npx wrangler tail`),
+which is how the dev Worker can be tried before mail works.
 
-```
-npx wrangler secret put RESEND_API_KEY --env=""
-npx wrangler secret put RESEND_API_KEY --env dev
-```
+**Cloudflare Email Service** (needs Workers Paid, $5/month; 3,000 emails a
+month included):
 
-Until the key is set, the Worker logs each code (`npx wrangler tail`)
-instead of sending it. That's how the dev Worker can be tried before mail
-works.
+1. Workers & Pages → Plans: move to Workers Paid.
+2. Email Service: add `duecrew.com` as a sending domain and let it add its
+   DNS records.
+3. The `send_email` binding goes in `wrangler.toml` (both environments),
+   allowed to send only from `codes@duecrew.com`; then deploy.
+
+**Resend** instead: make an account, add `duecrew.com`, add the DNS records
+it lists in Cloudflare DNS, add a DMARC record (`TXT _dmarc`,
+`v=DMARC1; p=none`), and `npx wrangler secret put RESEND_API_KEY` for each
+environment.
 
 ## 4. The admin token (for the identity import)
 

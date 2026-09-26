@@ -27,6 +27,20 @@ describe("codes", () => {
     expect(box.sent[0].text).not.toMatch(/http|www\./);
   });
 
+  it("sends through Cloudflare's binding when there is one, and Resend is left alone", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const sent: any[] = [];
+    const EMAIL = { send: async (m: any) => { sent.push(m); } };
+    const r = await api("POST", "/auth/code", { body: { email: "sam@example.com" }, env: { EMAIL } as any });
+    expect(r.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: "sam@example.com", from: "codes@duecrew.com", subject: "Your Due Crew code" });
+    expect(sent[0].text).toMatch(/^Your Due Crew code: \d{3} \d{3}\. It expires in 10 minutes\.$/);
+    const failing = { send: async () => { throw new Error("nope"); } };
+    expect((await api("POST", "/auth/code", { body: { email: "dre@example.com" }, env: { EMAIL: failing } as any })).status).toBe(502);
+  });
+
   it("stores the code hashed, never the digits", async () => {
     const box = mailbox();
     await api("POST", "/auth/code", { body: { email: "sam@example.com" } });
