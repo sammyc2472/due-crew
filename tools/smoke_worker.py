@@ -138,6 +138,36 @@ check("restore: squad under its 2.x id", kai.fetch_squad(shapes.squad_id(old_cod
 kai.delete_account()
 check("delete: signed out, and gone for everyone", not kai.signed_in
       and sam.profile(kg["uid"]) is None)
+# 3.1: plans. The site makes and saves a plan (POST /plans, PUT /plans/{id});
+# here the client's calls stand in for it.
+check("plans: the deck's tree goes up", sam.put_tree("Step 1", [["Step1::Cardio", 3]], [["Step 1::Extras", 1]]))
+check("plans: a one-time link for the site", len(sam.site_link() or "") == 43)
+_st, made = sam._call("POST", "/plans", {"name": "Step 1", "deck": "Step 1"})
+units = [{"id": "hf", "name": "Heart failure", "opens": labels[2], "due": labels[0], "tags": ["Step1::Cardio"]},
+         {"id": "nx", "name": "Next", "opens": tomorrow, "cards": [["g1", 0]]}]
+_st, saved = sam._call("PUT", f"/plans/{made['id']}", {"version": made["version"], "doc": {"deck": "Step 1", "units": units}})
+pid, pcode = saved["id"], saved["code"]
+peeked, st = dre.peek_plan(pcode.lower())
+check("plans: peek by code", st == 200 and peeked["doc"]["units"][0]["id"] == "hf" and not peeked["following"], str(peeked))
+followed_plan, st = dre.follow_plan(pcode, share=True)
+check("plans: follow", st == 200 and followed_plan["following"] and followed_plan["share"])
+ok4, _ = dre.push(labels, cfg, plans={pid: {"hf": [3, 3, 3], "nx": [0, 0, 1]}})
+bp = dre.fetch_board(labels, tomorrow, with_decks=True)["plans"]
+check("plans: on the decks=1 board, with crew counts from my progress",
+      ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and bp[0]["crewDone"] == {"hf": 1}, str(bp))
+got, st = sam.add_plan_cards(pid, [["g2", 1]], unit="hf")
+check("plans: the author adds single cards", st == 200 and got["doc"]["units"][0]["cards"] == [["g2", 1]])
+check("plans: only the author", dre.add_plan_cards(pid, [["g2", 1]], opens=tomorrow)[1] == 403)
+check("plans: mine", [p["id"] for p in sam.my_plans()] == [pid] and dre.my_plans()[0]["following"])
+check("plans: pause, sharing off", dre.set_follow(pid, paused=True) == {"share": True, "paused": True}
+      and dre.set_follow(pid, share=False) == {"share": False, "paused": True})
+check("plans: stop following", dre.unfollow_plan(pid) and dre.fetch_board(labels, tomorrow, with_decks=True)["plans"] == [])
+sq2 = sam.create_squad("plans")
+dre.join_squad(sq2["id"])
+_st, offer = sam._call("POST", "/plans", {"name": "Pharm", "deck": "Pharm"})
+sam._call("PUT", f"/plans/{offer['id']}", {"version": offer["version"], "audience": "squad", "squad": sq2["id"]})
+offers = dre.fetch_board(labels, tomorrow, with_decks=True)["plan_offers"]
+check("plans: a squad's plan is offered to its members", [o["id"] for o in offers] == [offer["id"]], str(offers))
 sam.sign_out(); time.sleep(0.5)
 print("ALL OK" if ok_all else "SOMETHING FAILED")
 sys.exit(0 if ok_all else 1)
