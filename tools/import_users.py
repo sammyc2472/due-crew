@@ -89,6 +89,9 @@ def post(api, token, users):
                                  data=json.dumps({"users": users}).encode())
     req.add_header("Content-Type", "application/json")
     req.add_header("Authorization", f"Bearer {token}")
+    # Cloudflare's Browser Integrity Check turns away urllib's own
+    # "Python-urllib/3.x" at the edge (a 403 that never reaches the Worker)
+    req.add_header("User-Agent", "due-crew-import/3.0")
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read())
 
@@ -125,7 +128,8 @@ def main(argv=None):
         try:
             r = post(args.api, token, users[i:i + CHUNK])
         except urllib.error.HTTPError as e:
-            print(f"refused: {e.code}", file=sys.stderr)
+            where = "the Worker" if (e.headers.get("content-type") or "").startswith("application/json") else "Cloudflare's edge"
+            print(f"refused: {e.code}, by {where}", file=sys.stderr)
             return 1
         imported += r.get("imported", 0)
         skipped += r.get("skipped", [])
