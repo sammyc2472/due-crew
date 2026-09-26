@@ -176,8 +176,9 @@ def done_share(done):
 
 # ---- the widgets ----
 
-def widget_data(room, entries, accent_pair, compact=False):
-    """What every widget needs, all plain values."""
+def widget_data(room, entries, accent_pair, compact=False, side="right"):
+    """What every widget needs, all plain values. side: the chip's end of
+    the top bar, "right" or "left"."""
     ms = members(entries, room)
     start = _parse(room["start"])
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
@@ -187,7 +188,7 @@ def widget_data(room, entries, accent_pair, compact=False):
             # faces show each person's own initial, mine included
             "initials": [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
             "line": names_line(ms),
-            "accent": list(accent_pair), "compact": bool(compact)}
+            "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side)}
 
 
 SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;height:auto" aria-hidden="true">'
@@ -277,7 +278,7 @@ _RUNTIME = r"""
   var c = C(), root, update;
 
   if (KIND === 'chip') {
-    root = el('div', 'position:fixed;right:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:7px;' +
+    root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:7px;' +
       'padding:0 10px 0 5px;border:1px solid ' + c.a + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
       ';font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
     root.title = 'Your study room';
@@ -421,13 +422,20 @@ _RUNTIME = r"""
 """
 
 
+def chip_side(value):
+    """3.0.1: which end of the top bar the chip sits at (a per-computer
+    setting: other add-ons put chips there too)."""
+    return "left" if value == "left" else "right"
+
+
 def widget_js(kind, data=None):
     """The JS that draws (or, with data None, removes) one widget. kind
     'off' removes them all from this webview."""
     return (_RUNTIME.replace("__DATA__", json.dumps(data))
             .replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
-            .replace("__GUTTER__", str(GUTTER_WIDTH)))
+            .replace("__GUTTER__", str(GUTTER_WIDTH))
+            .replace("__SIDE__", chip_side((data or {}).get("side"))))
 
 
 def placement(top_hidden, bottom_hidden):

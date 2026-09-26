@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { WEEK, befriend, db, person } from "./helpers";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WEEK, api, befriend, db, person } from "./helpers";
 
 type P = Awaited<ReturnType<typeof person>>;
 let sam: P, dre: P, nia: P;
@@ -236,5 +236,121 @@ describe("squads", () => {
     await sam.call("POST", `/squads/${sq.id}/block/nia`);
     expect((await sam.call("GET", `/squads/${sq.id}`)).body.banned).toEqual(["nia"]);
     expect((await dre.call("GET", `/squads/${sq.id}`)).body.banned).toEqual([]);
+  });
+});
+
+describe("a tip takes the flag down (3.0.1)", () => {
+  const flagged = (...guids: string[]) => ({ ...WEEK(TODAY), tricky: guids.map((guid) => ({ guid, deck: "Geo", at: TODAY })) });
+  const docOf = async (uid: string) =>
+    JSON.parse((await db().prepare("SELECT doc FROM weeks WHERE uid = ?").bind(uid).first<string>("doc"))!);
+  const flagsOf = async (uid: string) => ((await docOf(uid)).tricky ?? []).map((t: any) => t.guid);
+
+  it("the first tip takes that flag off the week, for everyone, and leaves the rest", async () => {
+    await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
+    await db().prepare("UPDATE weeks SET updated_at = 1000 WHERE uid = 'sam'").run();
+    expect((await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "Ken-tuck-y", guid: "g1" })).status).toBe(200);
+    expect(await flagsOf("sam")).toEqual(["g2"]);
+    expect((await dre.call("GET", "/board")).body.friends.find((f: any) => f.uid === "sam").week.tricky)
+      .toEqual([{ guid: "g2", deck: "Geo", at: TODAY }]);
+    // a tip isn't Sam studying: his "last active" stays where it was
+    expect(await db().prepare("SELECT updated_at FROM weeks WHERE uid = 'sam'").first<number>("updated_at")).toBe(1000);
+    await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "again", guid: "g2" });
+    expect(await docOf("sam")).not.toHaveProperty("tricky");
+  });
+
+  it("a cheer without a guid, or on a card not flagged, writes nothing", async () => {
+    await sam.call("POST", "/sync", { week: flagged("g1") });
+    const doc = await db().prepare("SELECT doc FROM weeks WHERE uid = 'sam'").first<string>("doc");
+    await dre.call("POST", "/cheers/sam", { emoji: "🎉" });
+    await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "x", guid: "other" });
+    expect(await db().prepare("SELECT doc FROM weeks WHERE uid = 'sam'").first<string>("doc")).toBe(doc);
+  });
+
+  it("only a tip from someone the flag was shown to counts", async () => {
+    // Nia added Sam; Sam never added Nia back, so he never saw her flag
+    await befriend(nia, sam);
+    await db().prepare("DELETE FROM friends WHERE owner = 'sam' AND friend = 'nia'").run();
+    await nia.call("POST", "/sync", { week: flagged("g1") });
+    expect((await sam.call("POST", "/cheers/nia", { emoji: "💡", note: "x", guid: "g1" })).status).toBe(200);
+    expect(await flagsOf("nia")).toEqual(["g1"]);
+    expect((await nia.call("POST", "/sync", { week: flagged("g1") })).body.wrote.week).toBe(false);
+    expect(await flagsOf("nia")).toEqual(["g1"]);
+  });
+
+  it("the race: a sync before I've read the tip doesn't put the flag back", async () => {
+    await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
+    await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "Ken-tuck-y", guid: "g1" });
+    // Sam's client still has both flags: it hasn't read the tip yet
+    const r = await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
+    expect(r.body.wrote.week).toBe(false);  // what's stored already has g1 down
+    expect(await flagsOf("sam")).toEqual(["g2"]);
+    // the tip is still waiting, and arrives with its card
+    expect((await sam.call("GET", "/board")).body.cheers[0]).toMatchObject({ from: "dre", guid: "g1" });
+    // once it's read, the client drops the flag itself; flagging it again is Sam's call
+    await sam.call("POST", "/sync", { week: flagged("g1", "g2") });
+    expect(await flagsOf("sam")).toEqual(["g1", "g2"]);
+  });
+});
+
+describe("POST /reports (3.0.1)", () => {
+  const report = (who: P, body: unknown, env: Record<string, unknown> = {}) =>
+    api("POST", "/reports", { token: who.token, body, env: env as any });
+
+  it("mails who, what and why to REPORT_TO, never the reporter's address, and stores nothing", async () => {
+    const sent: any[] = [];
+    const EMAIL = { send: async (m: any) => { sent.push(m); } };
+    await dre.call("POST", "/sync", { profile: { emoji: "🐢" } });
+    await dre.call("POST", "/cheers/sam", { emoji: "🔥", note: "hi there" });
+    const tables = async () => JSON.stringify(await Promise.all(["users", "friends", "cheers", "knocks", "settings", "weeks"]
+      .map((t) => db().prepare(`SELECT * FROM ${t}`).all().then((r) => r.results))));
+    const before = await tables();
+    const r = await report(sam, { uid: "dre", reason: "cheers", note: "too  many\ncheers" },
+                           { EMAIL, REPORT_TO: "reports@duecrew.com" });
+    expect(r.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: "reports@duecrew.com", from: "codes@duecrew.com", subject: "Due Crew report" });
+    const text: string = sent[0].text;
+    for (const want of ["Reporter: sam", "Reported: dre", "Name: Dre", "Emoji: 🐢", "Unwanted cheers or knocks",
+                        "Note: too many cheers", '🔥 "hi there"']) expect(text).toContain(want);
+    expect(text).not.toContain("@example.com");
+    expect(await tables()).toBe(before);  // and the cheer is still Sam's to read
+  });
+
+  it("without REPORT_TO: ok, one log line with no one in it, nothing sent", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const sent: any[] = [];
+    const EMAIL = { send: async (m: any) => { sent.push(m); } };
+    expect((await report(sam, { uid: "dre", reason: "name", note: "dre" }, { EMAIL })).status).toBe(200);
+    expect(sent).toEqual([]);
+    expect(log.mock.calls.map((c) => c.join(" "))).toEqual(["due crew: report received"]);
+  });
+
+  it("checks what it's given", async () => {
+    const bads: [unknown, number][] = [
+      [{ uid: "dre", reason: "spam" }, 400],
+      [{ uid: "dre", reason: "toString" }, 400],
+      [{ uid: "dre" }, 400],
+      [{ uid: "dre", reason: "other", note: "x".repeat(501) }, 400],
+      [{ uid: "dre", reason: "other", note: 5 }, 400],
+      [{ uid: "dre", reason: "other", extra: 1 }, 400],
+      [{ uid: "ghost", reason: "other" }, 404],
+      [{ uid: "../x", reason: "other" }, 404],
+      [{ reason: "other" }, 404],
+      [{ uid: "sam", reason: "other" }, 400],
+    ];
+    for (const [body, status] of bads) expect((await report(sam, body)).status, JSON.stringify(body)).toBe(status);
+    expect((await report(sam, { uid: "dre", reason: "other", note: "x".repeat(500) })).status).toBe(200);
+    expect((await api("POST", "/reports", { body: { uid: "dre", reason: "other" } })).status).toBe(401);
+  });
+
+  it("ten an hour per reporter", async () => {
+    for (let i = 0; i < 10; i++) expect((await report(sam, { uid: "dre", reason: "other" })).status).toBe(200);
+    expect((await report(sam, { uid: "nia", reason: "other" })).status).toBe(429);
+    expect((await report(dre, { uid: "sam", reason: "other" })).status).toBe(200);
+  });
+
+  it("mail that fails says so", async () => {
+    const EMAIL = { send: async () => { throw new Error("nope"); } };
+    expect((await report(sam, { uid: "dre", reason: "other" }, { EMAIL, REPORT_TO: "reports@duecrew.com" })).status).toBe(502);
   });
 });

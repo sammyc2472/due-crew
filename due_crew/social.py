@@ -76,12 +76,14 @@ def _cheer_menu(to_uid):
             _send_cheer(to_uid, entry["name"], emoji, dlg.note)
 
 
-def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None):
+def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None):
     """luck: a line held for their exam morning; guid: a tip on one card
-    (2.10)."""
+    (2.10). then(ok): on the main thread, after it went (or didn't)."""
     cl = client()
 
     def done(ok):
+        if then is not None:
+            then(ok is True)
         if ok is True and luck:
             tooltip(f"Added to {html.escape(to_name)}'s card.")
         elif ok is True and guid:
@@ -220,3 +222,73 @@ def _open_profile(uid):
     # your own card fetches your own heatmap doc: the honest, as-uploaded
     # state, not a local recomputation
     _bg(lambda: cl.fetch_heatmap(uid), show)
+
+
+# ---- mute and report (3.0.1) ----
+#
+# Mute is silent: they're never told, and we stay friends. Their cheers
+# (tips and good-luck lines too) and knocks are dropped when they arrive.
+# The list is an account setting (`muted`), so it follows me.
+
+def muted_uids(c):
+    return {u for u in (c.get("muted") or []) if isinstance(u, str)}
+
+
+def drop_muted(cheers, knocks, muted):
+    """(cheers, knocks) without what came from someone I muted. Knocks are
+    (sender_uid, name, squad) tuples, cheers dicts with `from`."""
+    if not muted:
+        return list(cheers or []), list(knocks or [])
+    return ([ch for ch in cheers or [] if ch.get("from") not in muted],
+            [k for k in knocks or [] if k[0] not in muted])
+
+
+def set_muted(uid, on):
+    """Mute or unmute, saved to the account. Main thread."""
+    c = cfg()
+    muted = [u for u in (c.get("muted") or []) if isinstance(u, str) and u != uid]
+    if on:
+        muted.append(uid)
+    c["muted"] = muted
+    save_cfg(c)
+    if on:
+        _pending_cheers[:] = [ch for ch in _pending_cheers if ch.get("from") != uid]
+        _state["knocks"] = [k for k in _state["knocks"] if k[0] != uid]
+        app.swap(c)  # a knock banner of theirs goes now
+
+
+def row_menu(uid):
+    """Right-click on a crewmate's name: Mute cheers / Unmute cheers, and
+    Report…. Never on my own row."""
+    entry = next((e for e in _state["entries"] or [] if e["user_id"] == uid), None)
+    if entry is None or entry.get("you"):
+        return
+    from aqt.qt import QCursor, QMenu
+    muted = uid in muted_uids(cfg())
+    menu = QMenu(mw)
+    mute = menu.addAction("Unmute cheers" if muted else "Mute cheers")
+    mute.triggered.connect(lambda: _toggle_mute(uid, entry["name"], not muted))
+    report = menu.addAction("Report…")
+    report.triggered.connect(lambda: _report(uid, entry["name"]))
+    menu.exec(QCursor.pos())
+
+
+def _toggle_mute(uid, name, on):
+    set_muted(uid, on)
+    tooltip(f"Muted {html.escape(name)}." if on else f"Unmuted {html.escape(name)}.")
+
+
+def _report(uid, name):
+    from .ui.report_dialog import ReportDialog
+    dlg = ReportDialog(mw, name)
+    if not dlg.exec() or not dlg.reason:
+        return
+    set_muted(uid, True)  # reporting also mutes
+    cl = client()
+    reason, note = dlg.reason, dlg.note
+
+    def done(ok):
+        tooltip(f"Reported. {html.escape(name)} is muted." if ok
+                else f"Couldn't send the report. {html.escape(name)} is muted.")
+
+    _bg(lambda: cl.report(uid, reason, note), done)

@@ -48,6 +48,7 @@ authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
 authed("POST", r(`/knocks/${ID}`), S.sendKnock);
 authed("DELETE", r(`/knocks/${ID}`), (_q, s, env, p) => S.deleteKnock(s, env, p));
+authed("POST", r("/reports"), S.report);
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);

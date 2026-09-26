@@ -253,9 +253,25 @@ def main(out):
         shoot(EmojiDialog(None, "\U0001F98A"), os.path.join(out, "emoji.png"))
         shoot(EmojiDialog(None, "\U0001F985"), os.path.join(out, "emoji-other.png"))
 
+    def report():
+        """3.0.1: right-click a crewmate → Report…. The name is the server's:
+        it goes in the title only, as plain text."""
+        from due_crew.ui.report_dialog import ReportDialog
+        dlg = ReportDialog(None, "Ameya <b>")
+        if dlg.windowTitle() != "Report Ameya <b>":
+            raise RuntimeError(f"report: title {dlg.windowTitle()!r}")
+        shoot(dlg, os.path.join(out, "report.png"))
+        dlg = ReportDialog(None, "Ameya")
+        dlg.choices[2].setChecked(True)
+        dlg.note_edit.setText("  keeps   knocking ")
+        dlg._report()
+        if (dlg.reason, dlg.note) != ("other", "keeps knocking"):
+            raise RuntimeError(f"report: {dlg.reason!r} {dlg.note!r}")
+
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
-                         ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji)):
+                         ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
+                         ("report", report)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

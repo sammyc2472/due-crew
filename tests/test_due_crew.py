@@ -2471,6 +2471,170 @@ def test_refresh_before_restore_keeps_the_crew():
     check("restore: after that, the board's list is the one kept",
           sorted(sam.session.get("friend_ids")) == ["dre", "eve"])
 
+
+def test_tip_clears_flag_v301():
+    """3.0.1: the first tip on a flagged card takes the flag down for the
+    whole crew, and a sync before the tip is read doesn't put it back."""
+    from due_crew import app as appmod, together
+    from due_crew.app import _state
+    store = world({"sam": "Sammy", "dre": "Dre", "nia": "Nia"},
+                  {"sam": ["dre"], "dre": ["sam"], "nia": ["dre"]})
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    tomorrow = (TODAY + datetime.timedelta(days=1)).isoformat()
+    dre = new_client(store, "dre", "Dre")
+    sam = new_client(store, "sam", "Sammy")
+    dre.session["tricky"] = [{"guid": g, "text": "S3", "deck": "Cardio", "at": labels[0]} for g in ("g1", "g2")]
+    dre.push(labels, {})
+    store.weeks["dre"] = (store.weeks["dre"][0], "2026-08-01T00:00:00Z")
+    flags = lambda: [t["guid"] for t in json.loads(store.weeks["dre"][0]).get("tricky", [])]
+
+    sam.send_cheer("dre", "\U0001F389", "go")
+    check("tip: a plain cheer leaves the flags alone", flags() == ["g1", "g2"])
+    n = len(store.log)
+    sam.send_cheer("dre", together.TIP_EMOJI, "Ken-tuck-y", guid="g1")
+    check("tip: the first tip takes that flag down, in the one request, and only that one",
+          flags() == ["g2"] and len(store.log) == n + 1)
+    check("tip: a tip isn't Dre studying: his last-active stays", store.weeks["dre"][1] == "2026-08-01T00:00:00Z")
+    seen = sam.fetch_board(labels, tomorrow=tomorrow)["entries"]
+    check("tip: the crew's next refresh has it gone",
+          [t["guid"] for t in next(e for e in seen if e["user_id"] == "dre")["tricky"]] == ["g2"])
+
+    dre.push(labels, {})
+    check("race: Dre's sync before he's read the tip doesn't put the flag back", flags() == ["g2"])
+    data = dre.fetch_board(labels, tomorrow=tomorrow)
+    check("race: the tip is still his to read", [c["guid"] for c in data["cheers"]] == ["g1"])
+    real = together.client
+    together.client = lambda: dre
+    try:
+        together.forget_tipped(data["cheers"])
+        check("arrival: the tipped flag leaves this computer too",
+              [f["guid"] for f in dre.session["tricky"]] == ["g2"])
+        dre.push(labels, {})
+        check("arrival: and stays down once the tip is read", flags() == ["g2"])
+        together.forget_tipped([{"from": "sam", "guid": "", "note": "hi"}])
+        check("arrival: a cheer without a card changes nothing", len(dre.session["tricky"]) == 1)
+    finally:
+        together.client = real
+    dre.session["tricky"].append({"guid": "g1", "deck": "Cardio", "at": labels[0]})
+    dre.push(labels, {})
+    check("re-flag: flagging it again is Dre's to do", flags() == ["g2", "g1"])
+
+    # Dre added Nia, and Nia never added Dre back: his flags were never hers to see
+    nia = new_client(store, "nia", "Nia")
+    store.befriend("dre", "nia")
+    store.friends.discard(("nia", "dre"))
+    nia_ok = nia.send_cheer("dre", together.TIP_EMOJI, "x", guid="g2")
+    check("tip: only someone the flag was shown to can take it down", nia_ok and flags() == ["g2", "g1"])
+
+    _state["entries"] = [dict(e) for e in seen]
+    swaps = []
+    real_swap, real_cfg = appmod.swap, together.cfg
+    appmod.swap, together.cfg = (lambda c: swaps.append(1)), (lambda: {})
+    try:
+        together.hide_tipped("dre", "g2")
+        check("tipper: my board hides the flag at once, no request",
+              next(e for e in _state["entries"] if e["user_id"] == "dre")["tricky"] == [] and swaps == [1])
+    finally:
+        appmod.swap, together.cfg = real_swap, real_cfg
+        _state["entries"] = None
+
+
+def test_mute_and_report_v301():
+    """3.0.1: right-click a crewmate: Mute cheers (silent, follows the
+    account) and Report… (mails us, stores nothing, and mutes)."""
+    from due_crew import account, app as appmod, social
+    from due_crew.app import _pending_cheers, _state
+    row ={"user_id": "dre", "name": "Dre", "you": False, "paused": False, "quiet": False, "stale": False,
+           "last_updated": "", "reviews": 5, "time_ms": 1, "retention": None, "streak": 1, "exam": ""}
+    html = board._row_html(row, "#1", {})
+    mine = board._row_html(dict(row, user_id="sam", you=True), "#2", {})
+    check("menu: a right-click on a crewmate's name asks for the menu; never on my own",
+          'oncontextmenu="pycmd(\'duecrew:rowmenu:dre\'); return false;"' in html and "rowmenu" not in mine)
+    check("menu: the uid is the only thing that rides the command",
+          "rowmenu:xscriptalert1script'" in board._row_html(dict(row, user_id="x'<script>alert(1)</script>"), "#1", {}))
+
+    cheers = [{"from": "dre", "emoji": "\U0001F389"}, {"from": "kai", "emoji": "\U0001F525"}]
+    knocks = [("dre", "Dre", ""), ("kai", "Kai", "sq")]
+    got = social.drop_muted(cheers, knocks, {"dre"})
+    check("mute: their cheers and knocks are dropped on arrival, everyone else's land",
+          [c["from"] for c in got[0]] == ["kai"] and [k[0] for k in got[1]] == ["kai"])
+    check("mute: nobody muted, nothing dropped", social.drop_muted(cheers, knocks, set()) == (cheers, knocks))
+    check("mute: follows the account",
+          "muted" in account.ACCOUNT_KEYS and account.pick({"muted": ["dre"]})["muted"] == ["dre"]
+          and account.clean({"muted": ["dre", 5, "", "dre", "x" * 200, "kai"]})["muted"] == ["dre", "kai"]
+          and account.apply({"muted": []}, {"muted": ["kai"]})["muted"] == ["kai"])
+
+    conf = {"muted": ["kai"]}
+    saved, swaps = [], []
+    real = (social.cfg, social.save_cfg, appmod.swap)
+    social.cfg = lambda: conf
+    social.save_cfg = lambda c: (saved.append(dict(c)), conf.update(c))
+    appmod.swap = lambda c: swaps.append(1)
+    _state["knocks"] = [("dre", "Dre", "")]
+    _pending_cheers[:] = [{"from": "dre", "emoji": "x"}]
+    try:
+        social.set_muted("dre", True)
+        check("mute: saved to the config (and so the account), and what's waiting from them goes",
+              conf["muted"] == ["kai", "dre"] and saved and _state["knocks"] == [] and _pending_cheers == []
+              and swaps == [1])
+        social.set_muted("dre", False)
+        check("unmute: off the list, the rest kept", conf["muted"] == ["kai"])
+    finally:
+        social.cfg, social.save_cfg, appmod.swap = real
+        _state["knocks"] = []
+        _pending_cheers.clear()
+
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    dre = new_client(store, "dre", "Dre")
+    dre.send_cheer("sam", "\U0001F525", "hi")
+    n = len(store.log)
+    ok = sam.report("dre", "cheers", "too   many")
+    rep = store.reports[0] if store.reports else {}
+    check("report: one request, with who, what and why",
+          ok and len(store.log) == n + 1 and rep.get("reporter") == "sam" and rep.get("uid") == "dre"
+          and rep.get("name") == "Dre" and rep.get("reason") == "cheers" and rep.get("note") == "too many"
+          and rep.get("cheer", {}).get("note") == "hi")
+    check("report: never the reporter's address", "sam@example.com" not in json.dumps(rep))
+    check("report: dre isn't told, and stays crew", store.mutual("sam", "dre") and ("sam", "dre") in store.cheers)
+    check("report: the dialog's reasons are the ones the server takes",
+          [r[0] for r in shapes.REPORT_REASONS] == ["cheers", "name", "other"]
+          and all(sam.report("dre", r[0]) for r in shapes.REPORT_REASONS))
+    bodies = [b for _m, p, b in store.bodies if p == "/reports"]
+    check("report: the note goes as one line, and only when there is one",
+          bodies[0] == {"uid": "dre", "reason": "cheers", "note": "too many"}
+          and bodies[1] == {"uid": "dre", "reason": "cheers"})
+    check("report: a reason it doesn't know is refused", sam.report("dre", "spam") is False)
+    for _ in range(6):
+        sam.report("dre", "other")
+    try:
+        eleventh = sam.report("dre", "other")
+    except shapes.TransportError as e:
+        eleventh = e.status
+    check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
+
+
+def test_room_chip_side_v301():
+    """3.0.1: the room chip goes left or right in the top bar (a setting
+    on this computer; AMBOSS puts a chip on the right too)."""
+    from due_crew import account, room_model as rm
+    t0 = datetime.datetime(2026, 9, 24, 18, 0, tzinfo=datetime.timezone.utc)
+    room = rm.make_room("dre", t0, 4, 25, 5)
+    entries = [{"user_id": "dre", "name": "Dre", "you": False, "room": room}]
+    left = rm.widget_js("chip", rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0"), side="left"))
+    right = rm.widget_js("chip", rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0")))
+    check("chip: left puts it 10px from the left, and nothing on the right",
+          "position:fixed;left:10px;top:50%" in left and "right:10px" not in left)
+    check("chip: right is the default, as before",
+          "position:fixed;right:10px;top:50%" in right and "left:10px;top:50%" not in right)
+    check("chip: anything else is right", rm.chip_side("middle") == "right" and rm.chip_side(None) == "right")
+    check("chip: the rest of the runtime is unchanged by the side",
+          left.replace("left:10px;top:50%", "X").replace('"side": "left"', "S")
+          == right.replace("right:10px;top:50%", "X").replace('"side": "right"', "S"))
+    check("chip: removing a widget needs no side", "__SIDE__" not in rm.widget_js("off"))
+    check("chip: a per-computer setting, like the accent", "room_chip_side" not in account.ACCOUNT_KEYS)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

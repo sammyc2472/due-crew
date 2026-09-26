@@ -194,8 +194,10 @@ def refresh_widgets():
         for web in (top, main, bottom):
             _eval(web, room_model.widget_js("off"))
         return
+    c = cfg()
     data = room_model.widget_data(room, _state["entries"], _accent_pair(),
-                                  compact=bool(cfg().get("room_compact")))
+                                  compact=bool(c.get("room_compact")),
+                                  side=c.get("room_chip_side"))
     where = (room_model.placement(_bar_hidden("top"), _bar_hidden("bottom"))
              if mw.state == "review" else "chip")
     _eval(top, room_model.widget_js("chip", data if where == "chip" else None))
@@ -207,8 +209,10 @@ def show_card():
     room = my_room()
     if room is None:
         return
+    c = cfg()
     data = room_model.widget_data(room, _state["entries"], _accent_pair(),
-                                  compact=bool(cfg().get("room_compact")))
+                                  compact=bool(c.get("room_compact")),
+                                  side=c.get("room_chip_side"))
     web = mw.reviewer.web if mw.state == "review" else mw.web
     _eval(web, room_model.widget_js("card", data))
 

@@ -10,6 +10,8 @@ routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 API_VERSION = "1"
 MIN_CLIENT = "3.0.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
+# Where POST /reports mails a report. Unset: reports are only counted in the log.
+# REPORT_TO = "reports@duecrew.com"
 
 # Secrets (wrangler secret put): ADMIN_TOKEN (the one-shot identity import;
 # unset: no admin). RESEND_API_KEY only if mail ever moves off the EMAIL
@@ -40,6 +42,7 @@ routes = [{ pattern = "api-dev.duecrew.com", custom_domain = true }]
 API_VERSION = "1"
 MIN_CLIENT = "3.0.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
+# REPORT_TO = "reports@duecrew.com"
 
 [[env.dev.d1_databases]]
 binding = "DB"

@@ -11,6 +11,8 @@ export interface Env {
   ADMIN_TOKEN?: string;
   /** The 2.x bridge's Google service account key (JSON); unset, the bridge is off. */
   FIREBASE_SA?: string;
+  /** Where reports go (POST /reports). Unset: the log counts them, and they go nowhere. */
+  REPORT_TO?: string;
 }
 
 export class HttpError extends Error {

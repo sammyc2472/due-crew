@@ -75,6 +75,28 @@ def keep(luck, tips, my_exam, today):
     return toasts
 
 
+def tipped_guids(cheers):
+    """The cards a crewmate tipped, from a fetch's cheers."""
+    return {str(ch["guid"]) for ch in cheers or [] if ch.get("guid")}
+
+
+def without_flags(flags, guids):
+    return [f for f in flags or [] if f.get("guid") not in guids]
+
+
+def forget_tipped(cheers):
+    """Main thread. 3.0.1: the first tip on a flag takes it down for the
+    whole crew. The server already took it off my week; this keeps my next
+    sync from putting it back. Flagging the card again is mine to do."""
+    guids = tipped_guids(cheers)
+    cl = client()
+    flags = cl.session.get("tricky") or []
+    left = without_flags(flags, guids)
+    if guids and len(left) != len(flags):
+        cl.session["tricky"] = left
+        cl._save_session()
+
+
 def show_luck_card():
     """On my exam day, once: the card with every line my crew left."""
     w = _wrap_data()
@@ -151,7 +173,17 @@ def send_tip(uid, index):
                     f"On “{text or 'this card'}”. One line; "
                     f"{str(entry['name']).split(' ')[0]} sees it when the card comes up.")
     if tip:
-        _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"])
+        _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
+                    then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
+
+
+def hide_tipped(uid, guid):
+    """Main thread. 3.0.1: a tip sent takes the flag down; my board stops
+    showing it now, not at the next refresh. No request."""
+    for e in _state["entries"] or []:
+        if e["user_id"] == uid:
+            e["tricky"] = without_flags(e.get("tricky"), {guid})
+    app.swap(cfg())
 
 
 def milestone_cheer(uid):

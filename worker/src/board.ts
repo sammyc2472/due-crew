@@ -3,7 +3,7 @@
 // one request). Plus the lazy reads: shared decks, a heatmap, settings.
 
 import type { Session } from "./auth";
-import { listKnocks } from "./social";
+import { listKnocks, withoutFlags } from "./social";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -107,7 +107,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
-  const week = "week" in body ? JSON.stringify(V.week(body.week)) : null;
+  const weekDoc = "week" in body ? V.week(body.week) : null;
   const decks = "decks" in body ? JSON.stringify(V.decks(body.decks)) : null;
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
   const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
@@ -122,6 +122,22 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const db = env.DB;
   const now = nowSec();
   const wrote: Record<string, boolean> = {};
+  let week: string | null = null;
+  if (weekDoc) {
+    // 3.0.1: a flag a crewmate has tipped stays down. A tip still waiting
+    // for me means I haven't read it, so my client doesn't know yet, and
+    // this sync would put the flag back up.
+    const flags = Array.isArray(weekDoc.tricky) ? (weekDoc.tricky as { guid: string }[]).map((t) => t.guid) : [];
+    let tipped = new Set<string>();
+    if (flags.length) {
+      const rows = await db.prepare(
+        `SELECT c.guid FROM cheers c WHERE c.to_uid = ?1 AND c.guid IN (${flags.map((_, i) => `?${i + 2}`).join(",")})
+         AND EXISTS (SELECT 1 FROM friends f WHERE f.owner = c.from_uid AND f.friend = ?1)`,
+      ).bind(s.uid, ...flags).all<{ guid: string }>();
+      tipped = new Set(rows.results.map((r) => r.guid));
+    }
+    week = JSON.stringify(withoutFlags(weekDoc, tipped));
+  }
   const [cur] = await db.batch([
     db.prepare(`SELECT u.name, u.emoji, u.client_version, u.tz, u.rollover, w.doc AS week,
                 d.json AS decks, h.json AS heat, st.v AS sv, st.at AS sat, st.json AS sjson
