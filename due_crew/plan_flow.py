@@ -606,4 +606,7 @@ def add_to_plan(browser):
         return
     refs = P.card_refs(mw.col, cids)  # which cards, never their text
     from .ui.add_cards_dialog import AddCardsDialog
-    AddCardsDialog(browser, client(), refs, _today()).exec()
+    def added(plan, n):
+        tooltip(f"Added {n:,} card{'s' if n != 1 else ''} to {html.escape(plan.get('name') or 'the plan')}.")
+
+    AddCardsDialog(browser, client(), refs, _today(), on_added=added).exec()

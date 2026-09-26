@@ -186,6 +186,17 @@ def danger():
     return "#ef8383" if _night() else "#d32f2f"
 
 
+def warn():
+    """The board's warning colour (its "hours" token), for "not in your copy"."""
+    return "#dda45c" if _night() else "#b26a00"
+
+
+def esc(text):
+    """For rich-text labels: anything from the server or a deck goes through this."""
+    import html
+    return html.escape(str(text))
+
+
 def confirm(parent, title, text, yes):
     """The one way to ask before a step that can't be taken back: the button
     says what happens ("Remove", "Leave"), Cancel is the default, and the

@@ -268,10 +268,71 @@ def main(out):
         if (dlg.reason, dlg.note) != ("other", "keeps knocking"):
             raise RuntimeError(f"report: {dlg.reason!r} {dlg.note!r}")
 
+    def plans():
+        """3.1: Make a plan, Follow a plan (with the tag swap and the late
+        join), Resume's catch-up, and Add to a plan from the browser. Names
+        come from the author: one carries markup, which must stay text."""
+        from due_crew import plans as P
+        from due_crew.ui.plan_dialog import MakePlanDialog
+        from due_crew.ui.follow_dialog import CatchUpDialog, FollowDialog, SwapDialog
+        from due_crew.ui.add_cards_dialog import AddCardsDialog
+        conn = aqt.mw.col.db.conn
+        tags = {1: "Step1_v11::Cardio::Heart_failure", 2: "Step1_v11::Cardio::Heart_failure",
+                3: "Step1_v11::Cardio::Arrhythmia", 4: "Step1_v11::Renal::Physiology",
+                5: "Step1_v11::Renal::Physiology", 6: "Step1_v11::Renal::Pharm"}
+        for nid, tag in tags.items():
+            conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (f" {tag} ", nid))
+        opened = []
+
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append)
+        shoot(dlg, os.path.join(out, "plan-make.png"))
+        dlg = MakePlanDialog(None, CLIENT, aqt.mw.col, "https://duecrew.com", open_link=opened.append)
+        dlg.show()
+        dlg._open()
+        settle()
+        if not opened or "#" not in opened[0] or "/plans/new?deck=AnKing%20Step%201" not in opened[0]:
+            raise RuntimeError(f"make: opened {opened!r} {dlg.status.text()!r} {STORE.log[-3:]}")
+        if ("sam", "AnKing Step 1") not in STORE.plan_trees:
+            raise RuntimeError("make: the tree didn't go")
+
+        today = datetime.date.today()
+        day = lambda n: (today + datetime.timedelta(days=n)).isoformat()
+        units = [
+            {"id": "hf", "name": "Heart failure", "opens": day(-14), "due": day(-7),
+             "tags": ["Step1::Cardio::Heart_failure"]},
+            {"id": "ar", "name": "Arrhythmia <b>", "opens": day(-7), "due": day(0),
+             "tags": ["Step1::Cardio::Arrhythmia"]},
+            {"id": "rp", "name": "Renal physiology", "opens": day(-1), "due": day(6),
+             "tags": ["Step1::Renal::Physiology"], "cards": [["guid000004", 0], ["guidnothere", 0]]},
+            {"id": "pa", "name": "Pulm · Asthma", "opens": day(3), "tags": ["Step1::Pulm::Asthma"]},
+            {"id": "ph", "name": "Renal pharm", "opens": day(6), "tags": ["Step1::Renal::Pharm"]},
+            {"id": "x1", "name": "Extras", "opens": day(13), "decks": ["Step 1::Cardio"]},
+            {"id": "x2", "name": "Review", "opens": day(20), "tags": ["Step1::Cardio"]},
+        ]
+        _pid, code = STORE.add_plan("igk", "Step 1", "Step 1", units)
+        STORE.add_plan("sam", "My plan", "AnKing Step 1", units[:3])
+        asked = []
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(),
+                           swap_prompt=lambda sw, n: asked.append((sw, n)) or True)
+        settle()
+        if not dlg.plan or not asked or asked[0][0] != ("Step1", "Step1_v11"):
+            raise RuntimeError(f"follow: plan {bool(dlg.plan)}, swap asked {asked!r}")
+        names = [w for w in dlg.match.findChildren(QtWidgets.QLabel) if w.text() == "Arrhythmia <b>"]
+        if not names or names[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("follow: a unit's name went in as markup")
+        shoot(dlg, os.path.join(out, "plan-follow.png"))
+        shoot(SwapDialog(None, ("Step1", "Step1_v11"), 1944), os.path.join(out, "plan-swap.png"))
+        shoot(CatchUpDialog(None, 2, 61, {"opens": day(6)}), os.path.join(out, "plan-resume.png"))
+        dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat())
+        settle()
+        if dlg.plan.count() != 1:
+            raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
+        shoot(dlg, os.path.join(out, "plan-add-cards.png"))
+
     for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
-                         ("report", report)):
+                         ("report", report), ("plans", plans)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")
