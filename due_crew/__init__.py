@@ -44,7 +44,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, rooms, together
+from . import account, plan_flow, rooms, together
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -112,12 +112,13 @@ def _after_push(pushed, labels, gone=()):
 
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
-                  heatmap=None, squad_row=None, full=False, fetch=None):
+                  heatmap=None, squad_row=None, full=False, fetch=None, plans=None):
     """Sync (optionally) and fetch, in the background: one request each.
     Main thread only. An upload is never dropped: only pure fetches dedup
     against an in-flight refresh. heatmap: dict to share, "off" to take it
     down, None to leave alone. backfill: last week's studied days. fetch:
-    read the board after the upload (None: see _wants_fetch)."""
+    read the board after the upload (None: see _wants_fetch). plans (3.1):
+    progress on the plans I share it on, sent when it changed."""
     global _fetching
     if not mw.col or not client().signed_in or client().session_dead:
         return  # a refused token can't be retried into working
@@ -167,7 +168,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 pushed, gone = cl.push(labels, c, stats=upload_stats, backfill=backfill,
                                        shared_decks=shared_decks, heatmap=heatmap,
                                        squad_row=row, squads=squads,
-                                       version=ADDON_VERSION, clock=clock)
+                                       version=ADDON_VERSION, clock=clock, plans=plans)
             cl.check_version(labels[0], ADDON_VERSION)  # one real request a day
             if not fetch:
                 mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone))
@@ -196,6 +197,7 @@ def _sync_failed():
     """Main thread. Either the network is down (footer: Couldn't sync) or the
     server refused my sign-in for good (the card asks me back in)."""
     _state["sync_error"] = True
+    plan_flow.maybe_morning(_awaiting_phone())  # 3.1: offline, the morning runs from the cached plans
     if client().session_dead:
         _state["board_shown"] = False
         _rerender()
@@ -363,6 +365,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   pending=data["pending"], ts=time.time(), sync_error=bool(failed),
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
+    # 3.1: plans ride the day's first refresh; the morning follows it
+    plan_flow.maybe_morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")))
+    if data.get("plans"):
+        plan_flow.refresh_progress()
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -417,7 +423,8 @@ def _board_html(c):
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
-                        room=rooms.board_view())
+                        room=rooms.board_view(),
+                        plans=plan_flow.board_view(c) if c.get("period") in ("decks", "squads") else None)
 
 
 def _on_did_render(deck_browser):
@@ -456,6 +463,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
         account.ensure(lambda: _on_sync_done(full=full, light=light, fetch=fetch))
         return
     _last_attempt = time.time()
+    # 3.1: the morning waits for the day's AnkiWeb sync; this may be it
+    plan_flow.maybe_morning(_awaiting_phone())
     c = cfg()
     # independent try blocks: one gatherer failing must not silently stop
     # the others from uploading (that failure mode is invisible in the UI)
@@ -507,8 +516,13 @@ def _on_sync_done(full=False, light=False, fetch=None):
         emoji = clean_emoji(c.get("emoji"))
         if emoji:
             row["emoji"] = emoji
+    plan_prog = None
+    try:
+        plan_prog = plan_flow.for_sync()
+    except Exception:
+        traceback.print_exc()
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat, squad_row=row, full=full, fetch=fetch)
+                  heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog)
 
 
 def _on_js(handled, message, context):
@@ -529,7 +543,9 @@ def _on_js(handled, message, context):
     parts = message.split(":")
     cmd = parts[1] if len(parts) > 1 else ""
     c = cfg()
-    if cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
+    if cmd.startswith("plan"):
+        plan_flow.on_message(cmd, parts)  # 3.1
+    elif cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
         c["sort"] = parts[2]
         save_cfg(c)
         _swap(c)
@@ -778,9 +794,7 @@ def _on_profile_open():
     global _menu_done, _closing, _last_attempt
     if not _menu_done:
         _menu_done = True
-        action = QAction("Due Crew…", mw)
-        action.triggered.connect(open_settings)
-        mw.form.menuTools.addAction(action)
+        _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
     _reset_runtime()          # profile switch: nothing carries over
     _closing = False
@@ -792,6 +806,32 @@ def _on_profile_open():
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)
     QTimer.singleShot(8000, _push_on_open)
+
+
+def _tools_menu():
+    """Tools › Due Crew (3.1: a submenu, for plans)."""
+    from aqt.qt import QMenu
+    menu = QMenu("Due Crew", mw)
+    for label, fn in (("Open Due Crew", _show_board), ("Friends…", open_friends),
+                      ("Squads…", open_squads), None,
+                      ("Make a plan from a deck…", plan_flow.open_make),
+                      ("Follow a plan…", plan_flow.open_follow), None,
+                      ("Settings…", open_settings)):
+        if label is None:
+            menu.addSeparator()
+            continue
+        action = QAction(label, mw)
+        action.triggered.connect(lambda _=False, fn=fn: fn())
+        menu.addAction(action)
+    mw.form.menuTools.addMenu(menu)
+    mw._due_crew_menu = menu  # kept alive with the window
+
+
+def _show_board():
+    if mw.state != "deckBrowser":
+        mw.moveToState("deckBrowser")
+    else:
+        _rerender()
 
 
 def _push_on_open():
@@ -856,6 +896,10 @@ gui_hooks.card_will_show.append(together.card_will_show)
 
 
 gui_hooks.reviewer_will_show_context_menu.append(together.reviewer_menu)
+
+
+# 3.1: single cards onto a plan's date, from Anki's browser
+gui_hooks.browser_will_show_context_menu.append(plan_flow.browser_menu)
 
 
 # 2.12: study rooms. The room follows Anki from screen to screen; the break

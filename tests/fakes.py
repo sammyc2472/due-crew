@@ -1042,7 +1042,8 @@ def install_fake_aqt():
                  "sync_did_finish", "webview_did_receive_js_message",
                  "profile_did_open", "profile_will_close", "card_will_show",
                  "reviewer_will_show_context_menu", "reviewer_did_show_question",
-                 "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw"):
+                 "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw",
+                 "browser_will_show_context_menu"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")
