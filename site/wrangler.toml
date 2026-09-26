@@ -1,6 +1,9 @@
-# duecrew.com: static files, no code. Deploys with the Worker on a v* tag;
-# by hand: `npx wrangler deploy` from site/.
+# duecrew.com: static files, plus a small Worker (src/index.ts) that sends
+# /api/* to the API Worker and serves the app page. Deploys with the API on
+# a v* tag; by hand: `npx wrangler deploy --config ../site/wrangler.toml`
+# from worker/ (the API must be deployed first: the service binding needs it).
 name = "due-crew-site"
+main = "src/index.ts"
 compatibility_date = "2026-08-20"
 routes = [
   { pattern = "duecrew.com", custom_domain = true },
@@ -9,3 +12,9 @@ routes = [
 
 [assets]
 directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/sign-in", "/account", "/plans", "/plans/*", "/p/*"]
+
+[[services]]
+binding = "API"
+service = "due-crew-api"

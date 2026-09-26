@@ -16,6 +16,10 @@ add-on.
   `worker/README.md` has the API, `migrations/` the schema.
   `docs/cloudflare-setup.md` is the one-time setup (Sam's). Nothing runs on
   Google after the cutover.
+- `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
+  plain JS, no framework: sign-in, plans, the builder). Its Worker
+  (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
+  the site's session is a same-site HttpOnly cookie.
 - `firestore.rules` and `tests/rules/` — the 2.x backend, still live for 2.x
   clients until the cutover, then read-only, then gone with the Firebase
   project (anki-leaderboard-f6691). Delete both, the rules CI job and

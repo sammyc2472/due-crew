@@ -71,7 +71,8 @@ total]}}`, written only when it changed.
 ### Site sign-in
 
 The site is served from `duecrew.com`; its API calls go to
-`duecrew.com/api/*`, routed to the same Worker, so the session is a
+`duecrew.com/api/*`, which the site's Worker hands to the API Worker by
+service binding, so the session is a
 same-site `HttpOnly; Secure; SameSite=Strict` cookie and no token is ever
 in page script. The add-on opens `duecrew.com/plans/new#<one-time token>`;
 the fragment never reaches a server log.

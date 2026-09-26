@@ -14,4 +14,6 @@ tools/preview.html
 # the Firestore emulator's log, from the rules test
 firestore-debug.log
 wdev.log
+# wrangler's local state (a local dev session keeps its D1 here)
+.wrangler/
 users.json

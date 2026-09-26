@@ -3,7 +3,7 @@
 
 import * as A from "./auth";
 import * as B from "./board";
-import { bridge } from "./bridge";
+import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
@@ -78,9 +78,6 @@ authed("POST", r(`/squads/${ID}/join`), (_q, s, env, p) => Q.join(s, env, p));
 authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));
-
-/** Every 15 minutes while 2.x clients remain: see bridge.ts. */
-export const BRIDGE_CRON = "*/15 * * * *";
 
 /** Daily: what has expired goes. Nothing anyone would miss. */
 export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)): Promise<void> {

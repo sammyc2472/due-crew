@@ -92,7 +92,9 @@ anyone else sees it. Deploying the dev Worker is manual on purpose.
 
 ## 7. The website
 
-`site/` is duecrew.com: static files, no code. The tag deploys it with the
+`site/` is duecrew.com: static files, plus a small Worker (`site/src/index.ts`)
+that sends `/api/*` to the API Worker through a service binding, and serves
+the app (sign-in, plans, the builder). The API must be deployed first. The tag deploys it with the
 Worker; the first time, or any time by hand, from `worker/`:
 
 ```

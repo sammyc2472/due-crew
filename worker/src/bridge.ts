@@ -13,6 +13,9 @@ import { Env } from "./util";
 import * as V from "./validate";
 
 export const PROJECT = "anki-leaderboard-f6691";
+/** Every 15 minutes while 2.x clients remain (wrangler.toml). Not exported from
+ *  index.ts: a Worker's main module may export only handlers. */
+export const BRIDGE_CRON = "*/15 * * * *";
 const DOCS = `projects/${PROJECT}/databases/(default)/documents`;
 const API = `https://firestore.googleapis.com/v1/${DOCS}`;
 const WEEK_FIELDS = ["v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room"];
