@@ -1,0 +1,11 @@
+# duecrew.com: static files, no code. Deploys with the Worker on a v* tag;
+# by hand: `npx wrangler deploy` from site/.
+name = "due-crew-site"
+compatibility_date = "2026-08-20"
+routes = [
+  { pattern = "duecrew.com", custom_domain = true },
+  { pattern = "www.duecrew.com", custom_domain = true },
+]
+
+[assets]
+directory = "./public"

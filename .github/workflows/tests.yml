@@ -134,3 +134,6 @@ jobs:
       - if: steps.ready.outputs.go == 'true'
         name: The API answers
         run: curl -fsS https://api.duecrew.com/version
+      - if: steps.ready.outputs.go == 'true'
+        name: duecrew.com (static, site/)
+        run: npx wrangler deploy --config ../site/wrangler.toml

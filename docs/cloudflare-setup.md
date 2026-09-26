@@ -90,6 +90,30 @@ curl https://api-dev.duecrew.com/version
 `api-dev.duecrew.com` is the Worker a 3.0 client is tried against before
 anyone else sees it. Deploying the dev Worker is manual on purpose.
 
+## 7. The website
+
+`site/` is duecrew.com: static files, no code. The tag deploys it with the
+Worker; the first time, or any time by hand, from `worker/`:
+
+```
+npx wrangler deploy --config ../site/wrangler.toml
+```
+
+It claims `duecrew.com` and `www.duecrew.com`. If either already has a DNS
+record (a parking page, say), delete that record first; Cloudflare won't
+attach a custom domain over one.
+
+## 8. Settings to check
+
+- Security → Bots: leave **Bot Fight Mode off**. It challenges requests
+  that don't come from a browser, and the add-on's requests don't.
+- SSL/TLS: Full (strict), and Always Use HTTPS on.
+- Optional: Email Routing, for an address like `hello@duecrew.com` that
+  forwards to you, and for DMARC reports.
+- The free Workers plan covers a crew of this size: 100,000 requests a
+  day, and D1's free tier (5 million reads, 100,000 writes a day). The $5
+  paid plan raises all of it; move when the dashboard says you're near.
+
 ## At cutover
 
 1. Export the Firebase accounts:
