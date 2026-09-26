@@ -70,6 +70,7 @@ authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env,
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
+authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
 authed("POST", r("/squads/restore"), Q.restore);
 authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
@@ -103,7 +104,9 @@ export default {
   },
 
   async fetch(req: Request, env: Env): Promise<Response> {
-    const path = new URL(req.url).pathname;
+    let path = new URL(req.url).pathname;
+    // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
+    if (path.startsWith("/api/")) path = path.slice(4);
     try {
       if (Number(req.headers.get("content-length") || 0) > BODY_MAX) throw new HttpError(413, "too_big");
       let allowed = false;

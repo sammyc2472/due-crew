@@ -89,6 +89,10 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
+  if (body.web === true) {
+    // the site (3.1): the session is a same-site cookie, never in page script
+    return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token) });
+  }
   return json({ token, uid: user.uid, new: isNew, name: user.name });
 }
 
@@ -148,7 +152,7 @@ export async function me(s: Session, env: Env): Promise<Response> {
 
 export async function signOut(s: Session, env: Env): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(s.tokenHash).run();
-  return json({ ok: true });
+  return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
 }
 
 export async function signOutAll(s: Session, env: Env): Promise<Response> {

@@ -106,6 +106,8 @@ describe("plans: following", () => {
     expect((await nia.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(false);  // not sharing
     const p = await dre.call("GET", `/plans/${plan.id}/progress`);
     expect(p.body).toEqual({ followers: 2, sharing: 1, units: { hf: { opened: 1, done: 1 }, arr: { opened: 1, done: 0 } } });
+    const b = (await nia.call("GET", "/board?decks=1")).body.plans[0];
+    expect(b).toMatchObject({ followers: 2, crewDone: { hf: 1 } });  // a follower sees counts, never names
     expect(await maya.status("GET", `/plans/${plan.id}/progress`)).toBe(403);
     expect(await maya.status("POST", "/sync", { plans: { [plan.id]: { hf: [49, 1, 48] } } })).toBe(400);
     // sharing off takes what was stored with it
@@ -168,6 +170,25 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     expect(await call("GET", "/plans/mine")).toBe(200);
     expect(await call("POST", "/plans", {}, { name: "X", deck: "D" })).toBe(403);
     expect(await call("POST", "/plans", { "x-due-crew": "1" }, { name: "X", deck: "D" })).toBe(200);
+  });
+
+  it("the site signs in by code with a cookie, and signs out", async () => {
+    const { mailbox } = await import("./helpers");
+    const box = mailbox();
+    await api("POST", "/auth/code", { body: { email: "maya@example.com" } });
+    const v = await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true } });
+    expect(v.status).toBe(200);
+    expect(v.body.token).toBeUndefined();  // never in page script
+    const cookie = (v.headers.get("set-cookie") || "").split(";")[0];
+    expect(cookie).toMatch(/^dc_session=/);
+    const { env } = await import("cloudflare:workers");
+    const worker = (await import("../src/index")).default;
+    const go = (method: string, path: string) => worker.fetch(new Request(`https://duecrew.com${path}`,
+      { method, headers: { cookie, "x-due-crew": "1" } }), { ...env } as any);
+    expect((await go("GET", "/api/squads/mine")).status).toBe(200);
+    const out = await go("POST", "/api/auth/signout");
+    expect(out.headers.get("set-cookie")).toMatch(/^dc_session=; .*Max-Age=0/);
+    expect((await go("GET", "/api/plans/mine")).status).toBe(401);
   });
 
   it("an expired link doesn't work", async () => {
