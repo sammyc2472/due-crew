@@ -262,22 +262,17 @@ class SettingsDialog(QDialog):
         name = name.strip()
         if not ok or not name or name == current:
             return
-        uid = self.client.user_id
-
         def done(ok_result, err):
             if err or not ok_result:
                 tooltip("Couldn't save the name. Try again.")
                 return
-            self.client.session["display_name"] = name
-            self.client._save_session()
             try:
                 self.who_label.setText(self._who_text())
             except RuntimeError:
                 pass  # the You tab was rebuilt meanwhile
             tooltip("Name changed.")
 
-        run_bg(self, lambda: self.client.patch_doc(
-            f"users/{uid}", {"displayName": name}), done)
+        run_bg(self, lambda: self.client.set_display_name(name), done)
 
     def _sign_out(self):
         if not confirm(self, "Sign out?", "Sign out on this device? Your account and "
@@ -291,32 +286,9 @@ class SettingsDialog(QDialog):
         if not confirm(self, "Delete account?", "This deletes your stats, your code, and "
                        "your account for good. No undo.", "Delete Account"):
             return
-        self._delete_attempt(password=None)
-
-    def _delete_attempt(self, password):
-        uid = self.client.user_id
-        email = self.client.email
-
-        def job():
-            if password:
-                self.client.sign_in(email, password)
-            own, _ = self.client.get_doc(f"users/{uid}")
-            self.client.delete_account(
-                uid, (own or {}).get("friendCode"),
-                [sq.get("id") for sq in (self.config.get("squads") or [])
-                 if isinstance(sq, dict) and sq.get("id")])
-            return True
-
-        run_bg(self, job, self._delete_done)
+        run_bg(self, lambda: self.client.delete_account() or True, self._delete_done)
 
     def _delete_done(self, result, err):
-        if err and err.startswith("CREDENTIAL_TOO_OLD"):
-            pw, ok = QInputDialog.getText(
-                self, "Confirm", "Enter your password to confirm deletion:",
-                QLineEdit.EchoMode.Password)
-            if ok and pw:
-                self._delete_attempt(password=pw)
-            return
         if err or not result:
             tooltip("Couldn't delete. Check your connection and try again.")
             return

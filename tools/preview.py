@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "tests"))  # the fake collection/aqt
 import fakes  # noqa: E402
 
-fakes.install_fake_requests(fakes.FakeFirestore())
+fakes.install_fake_requests(fakes.FakeWorker())
 fakes.install_fake_aqt()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from due_crew import board  # noqa: E402

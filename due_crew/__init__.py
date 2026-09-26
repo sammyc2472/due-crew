@@ -8,10 +8,10 @@ thread is the only writer of shared state and renders never see torn data.
 Anki profiles share the add-on folder, so session/streak files live under
 user_files/<profile>/ and all runtime state resets on profile switch.
 
-Document-read budget: a friend on 2.9+ is one read per refresh (their week
-doc); an older client's week is read once per day and on Refresh, and only
-the doc they are writing now otherwise. Profiles ride the day's first fetch,
-knocks that or an hourly one.
+Request budget (3.0): a refresh is one request (GET /board: me, my crew
+with their weeks, cheers, knocks), a sync is one (POST /sync), and the
+server writes only what changed. The Decks tab, a profile's heatmap and a
+squad board each fetch their own, when someone looks.
 """
 
 import datetime
@@ -27,14 +27,12 @@ from aqt.qt import QAction, QTimer
 from aqt.utils import tooltip
 
 from . import app, board
-from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, KNOCK_SECS, SQUAD_CACHE_SECS,
+from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS,
                   STALE_SECS, STREAK_MILESTONES,
-                  _migrate_server_json,
                   _pending_cheers, _profile_files, _reset_runtime, _state, cfg, client,
                   save_cfg)
-from .backend.firebase import TransportError
+from .backend.shapes import TransportError, _clean_day, clean_emoji, shared_numbers
 from .shares import _share, dismiss_review, review_banners
-from .backend.firebase import _clean_day, clean_emoji, shared_numbers
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer, cheer_allowed)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
@@ -84,8 +82,7 @@ def _open_push_due(now, last_attempt):
 
 def _clock():
     """My clock, for the profile: minutes east of UTC and the hour the day
-    rolls over. A friend's client uses it to tell which day label I'm on
-    and skip reading the docs I can't have written yet."""
+    rolls over (the phone check-in and the site will want it)."""
     try:
         roll = datetime.datetime.fromtimestamp(mw.col.sched.day_cutoff).hour
     except Exception:
@@ -99,7 +96,7 @@ def _after_push(pushed, labels, gone=()):
     what was just written, and the footer learns whether it went."""
     _state["sync_error"] = not pushed
     cl = client()
-    own = (cl.session.get("own_days") or {}).get(labels[0])
+    own = cl.my_days(cfg(), labels[0]).get(labels[0])
     if own and _state["entries"]:
         days = _state["days"].setdefault(cl.user_id, {})
         days[labels[0]] = _clean_day(own)
@@ -116,12 +113,11 @@ def _after_push(pushed, labels, gone=()):
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                   heatmap=None, squad_row=None, full=False, fetch=None):
-    """Fetch (and optionally upload first) in the background. Main thread
-    only. An upload is never dropped: only pure fetches dedup against an
-    in-flight refresh. heatmap: dict to upload, "off" to retract, None to
-    leave alone. backfill: last week's studied days, hash-guarded so the
-    steady state stays one daily write per sync. fetch: read the board
-    after the uploads (None: see _wants_fetch)."""
+    """Sync (optionally) and fetch, in the background: one request each.
+    Main thread only. An upload is never dropped: only pure fetches dedup
+    against an in-flight refresh. heatmap: dict to share, "off" to take it
+    down, None to leave alone. backfill: last week's studied days. fetch:
+    read the board after the upload (None: see _wants_fetch)."""
     global _fetching
     if not mw.col or not client().signed_in or client().session_dead:
         return  # a refused token can't be retried into working
@@ -137,23 +133,16 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         labels = [q.day_label(i) for i in range(7)]
         tomorrow = q.day_label(-1)
         cl = client()
-        uid = cl.user_id
-        name = cl.display_name or "Me"
         full = (full or _state["entries"] is None or not _state["labels"]
                 or _state["labels"][0] != labels[0])
         squads = [sq["id"] for sq in _my_squads(c)]
-        # shared-deck docs ride along once a day (the week's baseline, the
+        # shared decks ride the day's first fetch (the week's baseline, the
         # profile card, and the Shared Decks dialog read them); after that
-        # the Decks tab fetches its own when someone actually looks. They
-        # used to ride EVERY full fetch, a read per person per Refresh.
+        # the Decks tab fetches its own when someone actually looks
         with_decks = full and _state["decks_day"] != labels[0]
-        # knocks are rare: the day's first fetch and Refresh read them, and
-        # otherwise an hourly one does. They were a read on every refresh.
-        with_knocks = full or time.time() - _state["knocks_ts"] > KNOCK_SECS
         fetch = _wants_fetch(uploading, _state["entries"] is not None,
                              time.time() - _state["ts"], _closing, fetch)
         clock = _clock()
-        own_days = None if c.get("paused") else dict(cl.session.get("own_days") or {})
     except Exception:
         with _lock:
             _fetching = False
@@ -167,52 +156,24 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
     def job():
         global _fetching
         try:
-            pushed = True
-            if upload_stats is not None:
-                pushed = cl.upload_today(uid, name, labels[0], upload_stats, c,
-                                         version=ADDON_VERSION, clock=clock)
-            if backfill is not None:
-                cl.upload_backfill(uid, backfill, c, labels=labels)
-            if upload_stats is not None or backfill is not None:
-                # 2.9: my week in one doc, from what was just uploaded
-                pushed = cl.upload_week(uid, labels, c) and pushed
-            if shared_decks is not None and not c.get("paused"):
-                cl.upload_shared(uid, shared_decks)
-            if heatmap is not None:
-                if isinstance(heatmap, dict) and not c.get("paused"):
-                    cl.upload_heatmap(uid, heatmap)
-                elif not cl.session.get("heatmap_deleted"):
-                    cl.delete_heatmap(uid)  # share turned off, or paused
-            gone = []
-            if squad_row is not None and squads and not c.get("paused"):
-                srow = dict(squad_row)
-                srow.setdefault("day", labels[0])
-                # a show-up row carries the day it last studied, or none
-                srow = {k: v for k, v in srow.items() if v is not None}
-                gone = cl.upload_squad_rows(uid, srow, squads)
-            cl.check_rules(labels[0])  # cached: one real request per day
+            pushed, gone = True, []
+            if uploading or heatmap is not None or squad_row is not None:
+                row = None
+                if squad_row is not None:
+                    row = dict(squad_row)
+                    row.setdefault("day", labels[0])
+                    # a show-up row carries the day it last studied, or none
+                    row = {k: v for k, v in row.items() if v is not None}
+                pushed, gone = cl.push(labels, c, stats=upload_stats, backfill=backfill,
+                                       shared_decks=shared_decks, heatmap=heatmap,
+                                       squad_row=row, squads=squads,
+                                       version=ADDON_VERSION, clock=clock)
+            cl.check_version(labels[0], ADDON_VERSION)  # one real request a day
             if not fetch:
                 mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone))
                 return
-            # knocks don't depend on the board, so they go alongside it
-            box = {}
-
-            def _knocks():
-                try:
-                    box["knocks"] = cl.list_knocks(uid)  # one list request
-                except Exception:
-                    box["knocks"] = None
-
-            side = threading.Thread(target=_knocks, daemon=True)
-            if with_knocks:
-                side.start()
-            data = cl.fetch_board(uid, labels, tomorrow=tomorrow,
-                                  include_shared=with_decks, check_edges=full,
-                                  light=not full, own_days=own_days,
-                                  cached_people=not full)
-            if with_knocks:
-                side.join(25)
-            knocks = box.get("knocks")
+            data = cl.fetch_board(labels, tomorrow=tomorrow, with_decks=with_decks)
+            knocks = data["knocks"]
             failed = not pushed
             mw.taskman.run_on_main(
                 lambda: _commit(data, c, labels, tomorrow, knocks, gone, failed))
@@ -265,7 +226,7 @@ def _push_if_stale():
 
 def _fetch_decks(force=False):
     """The Decks tab's own fetch: fresh numbers when someone looks, cached a
-    few minutes. One batchGet, a read per person."""
+    few minutes. One request."""
     entries = _state["entries"]
     if not entries or not mw.col or not client().signed_in or client().session_dead:
         return
@@ -273,7 +234,6 @@ def _fetch_decks(force=False):
         return
     _state["decks_ts"] = time.time()
     cl = client()
-    uids = [e["user_id"] for e in entries]
 
     def done(decks):
         if not decks:
@@ -285,20 +245,18 @@ def _fetch_decks(force=False):
         if cfg().get("period") == "decks":
             _swap(cfg())
 
-    _bg(lambda: cl.fetch_decks(uids), done)
+    _bg(cl.fetch_decks, done)
 
 
 def _copy_friend_invite():
-    """The solo board's Copy invite. Accounts made since 2.9 have a code from
-    sign-up; an older one that never opened Friends gets one made here, and
-    the invite is copied when it lands (until 2.9 this opened Friends)."""
+    """The solo board's Copy invite. An account without a code yet gets one
+    made here, and the invite is copied when it lands."""
     from .share import friend_invite
     if _state["my_code"]:
         copy_text(friend_invite(_state["my_code"]))
         tooltip("Invite copied.")
         return
     cl = client()
-    uid = cl.user_id
 
     def done(code):
         if not code:
@@ -309,8 +267,7 @@ def _copy_friend_invite():
         tooltip("Invite copied.")
         _swap(cfg())
 
-    _bg(lambda: cl.ensure_friend_code(uid, (cl.get_doc(f"users/{uid}")[0] or {}).get("friendCode")),
-        done)
+    _bg(lambda: cl.ensure_friend_code(None), done)
 
 
 def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
@@ -390,7 +347,6 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
-        _state["knocks_ts"] = time.time()
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
@@ -428,7 +384,8 @@ def _on_render(deck_browser, content):
             return
         if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
-            content.stats += board.signed_out_card(c, expired=client().session_dead)
+            content.stats += board.signed_out_card(c, expired=client().session_dead,
+                                                   moved=client().was_on_2x)
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)
@@ -499,7 +456,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
     try:
         stats = gather_stats(mw.col, _profile_files())
         if _awaiting_phone():
-            stats.streak = held_streak(stats.streak, client().session.get("own_days"),
+            stats.streak = held_streak(stats.streak, client().sent_days(),
                                        StatsQueries(mw.col).day_label(0))
     except Exception:
         traceback.print_exc()
@@ -534,8 +491,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
                 "reviews": int(stats.reviews), "studyTimeMs": int(stats.time_ms),
                 "streak": int(stats.streak),
                 "accuracy": None if stats.accuracy is None else float(stats.accuracy)}, c))
-            if "reviews" in row and not client().rules_stale:
-                row["newCards"] = int(stats.new_cards)  # rules-v11 lets a row say it
+            if "reviews" in row:
+                row["newCards"] = int(stats.new_cards)  # 2.13: under Reviews, never alone
         try:
             row["week"] = week_days(StatsQueries(mw.col))
         except Exception:
@@ -676,7 +633,7 @@ def _on_js(handled, message, context):
         uid, emoji = parts[2], parts[3]
         entry = next((e for e in (_state["entries"] or [])
                       if e["user_id"] == uid), None)
-        emoji = cheer_allowed(emoji, client().rules_stale)
+        emoji = cheer_allowed(emoji)
         if entry and emoji:
             _send_cheer(uid, entry["name"], emoji)
     else:
@@ -818,7 +775,6 @@ def _on_profile_open():
     client()                  # rebind to this profile's session
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
-    _migrate_server_json()    # v1.x crew-server config, if any
     refresh_board()           # the board, right away
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)

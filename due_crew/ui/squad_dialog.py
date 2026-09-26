@@ -6,7 +6,7 @@ from aqt.qt import (
     QVBoxLayout, Qt,
 )
 
-from ..backend.firebase import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
+from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
 from ..app import _bg
 from . import attach_alive, copy_text, run_bg, shared_words
 
@@ -106,8 +106,7 @@ class SquadDialog(QDialog):
             info, status = cl.peek_squad(code)
             founder = ""
             if info and info.get("founder"):
-                prof, _s = cl.get_doc(f"users/{info['founder']}")
-                founder = str((prof or {}).get("displayName") or "")
+                founder = str((cl.profile(info["founder"]) or {}).get("name") or "")
             return info, status, founder
 
         def done(result, err):
@@ -136,10 +135,9 @@ class SquadDialog(QDialog):
             return
         self.join_btn.setEnabled(False)
         cl = self.client
-        uid, my_name = cl.user_id, cl.display_name or "Me"
         # joins and creates report back even if the dialog was closed
         # meanwhile: the server has the membership, so the board must too
-        _bg(lambda: cl.join_squad(uid, info["id"], my_name),
+        _bg(lambda: cl.join_squad(info["id"]),
             lambda status: self._joined(info, status or 0))
 
     def _joined(self, info, status):
@@ -163,8 +161,7 @@ class SquadDialog(QDialog):
             return
         self.create_btn.setEnabled(False)
         cl = self.client
-        uid, my_name = cl.user_id, cl.display_name or "Me"
-        _bg(lambda: cl.create_squad(uid, name, my_name), self._created)
+        _bg(lambda: cl.create_squad(name), self._created)
 
     def _created(self, squad):
         if squad:

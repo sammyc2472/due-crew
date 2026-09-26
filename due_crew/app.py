@@ -1,4 +1,4 @@
-"""Shared runtime: config, the Firebase client for the open profile, the
+"""Shared runtime: config, the API client for the open profile, the
 board cache, and the one background helper. Everything the other modules
 need and nothing that renders. The four late-bound hooks at the bottom are
 set by __init__ so squads/social/shares can trigger a redraw or a refresh
@@ -10,9 +10,8 @@ import threading
 import traceback
 
 from aqt import mw
-from aqt.utils import tooltip
 
-from .backend.firebase import FirebaseClient
+from .backend.api import ApiClient
 
 
 def _read_version():
@@ -23,14 +22,12 @@ def _read_version():
         return ""
 
 
-ADDON_VERSION = _read_version()   # written to my profile so a stuck build shows
+ADDON_VERSION = _read_version()   # sent with my profile, and checked against /version
 STALE_SECS = 900                  # a board older than this refreshes itself
 
-# the cheer picker's quick row. The first three are all that rules before v8
-# accept, and all a client offers while the server is still on them.
+# the cheer picker's quick row
 CHEER_QUICK = ("\U0001F389", "\U0001F4AA", "\U0001F525",   # party, muscle, fire
                "\U0001F44F", "\U0001F680", "\u2615")       # clap, rocket, coffee
-CHEER_CLASSIC = CHEER_QUICK[:3]
 
 
 STREAK_MILESTONES = (7, 30, 100, 365)
@@ -53,10 +50,6 @@ SQUAD_CACHE_SECS = 300
 
 # after an upload, the board is read again only if it is older than this
 FRESH_SECS = 120
-
-
-# knocks ride full fetches and the Squads tab; otherwise one list an hour
-KNOCK_SECS = 3600
 
 
 _client = None
@@ -91,7 +84,6 @@ _state = {
     "decks_day": "",       # the day shared-deck docs last rode a board fetch
     "decks_ts": 0.0,       # when the Decks tab last fetched them itself
     "my_code": "",         # my friend code, for Copy invite on a solo board
-    "knocks_ts": 0.0,      # when knocks were last listed
     "milestones": [],      # [(uid, name, days)]: a crewmate's 100/365-day streak, today
     "anki_synced": False,  # an AnkiWeb sync finished since the profile opened
     "room_dismissed": set(),  # study-room invites waved off this session
@@ -153,33 +145,12 @@ def client():
     global _client, _client_profile
     key = _profile_key()
     if _client is None or _client_profile != key:
-        _client = FirebaseClient(os.path.join(_profile_files(), "session.json"))
+        # api_base: an unlisted config key for trying a client against the
+        # dev Worker (api-dev.duecrew.com) before the crew gets it
+        _client = ApiClient(os.path.join(_profile_files(), "session.json"),
+                            base=str(cfg().get("api_base") or "") or None)
         _client_profile = key
     return _client
-
-
-def _migrate_server_json():
-    """v1.4–v1.9 kept a per-profile server.json (crew servers). v2.0 runs on
-    one hosted backend. A file pointing at the default project is simply
-    retired; one pointing elsewhere means this account lived on a custom
-    project that the add-on no longer talks to — sign out locally so the
-    board offers a fresh sign-in instead of failing quietly."""
-    path = os.path.join(_profile_files(), "server.json")
-    if not os.path.exists(path):
-        return
-    try:
-        with open(path) as f:
-            conf = json.load(f)
-    except Exception:
-        conf = {}
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-    project = str((conf or {}).get("projectId") or "")
-    if project and project != client().project_id:
-        client().sign_out()
-        tooltip("Due Crew now runs on one server. Sign in again to continue.")
 
 
 def _reset_runtime():
@@ -192,7 +163,7 @@ def _reset_runtime():
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
                   knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
-                  knocks_ts=0.0, milestones=[], anki_synced=False,
+                  milestones=[], anki_synced=False,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
                   settings_failed_ts=0.0)

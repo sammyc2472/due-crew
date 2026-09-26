@@ -30,17 +30,17 @@ def gather_stats(col, user_files_dir):
     )
 
 
-def held_streak(computed, own_days, today_label):
+def held_streak(computed, sent_days, today_label):
     """2.11.1: before Anki's first sync of the session, the phone's reviews
     may not be here yet, so the streak sent to the crew doesn't drop below
-    the last one sent. `own_days` is the session's record of my uploads
+    the last one sent. `sent_days` is the session's record of what I sent
     ({label: doc}). The sync that follows sends the real count, whatever it
     is. Pure."""
-    sent = [lb for lb in (own_days or {}) if lb <= today_label]
+    sent = [lb for lb in (sent_days or {}) if lb <= today_label]
     if not sent:
         return computed
     try:
-        last = int((own_days[max(sent)] or {}).get("streak") or 0)
+        last = int((sent_days[max(sent)] or {}).get("streak") or 0)
     except (TypeError, ValueError, AttributeError):
         return computed
     return max(computed, last)

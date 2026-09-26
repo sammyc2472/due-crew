@@ -69,7 +69,8 @@ newer. Restart Anki after installing.
 
 ## Get started
 
-1. Click **Join** on the Decks screen and sign up.
+1. Click **Join** on the Decks screen and enter your email. Type in the
+   code we send you. There's no password.
 2. Copy your invite and send it to a friend.
 3. When they add you, click **Add back**. You're crew.
 
@@ -79,22 +80,21 @@ Your stats go only to people you've added, and to squads you join, where
 squadmates see your name and today's numbers. Choose what you share in
 Settings → Privacy, or pause sharing at any time. Those choices are saved
 to your account, where only you can read them, so they follow you to other
-computers. Your email is only used to sign in. Deleting your account
-deletes your data.
+computers. Anyone else sees your name and emoji, nothing more.
 
-Until an upcoming update, your profile (name, emoji, exam date, time zone
-and friend list) can be read by anyone with your account id, which your
-squadmates have.
+You sign in with a code sent to your email; there's no password. Your email
+is only used for that. Deleting your account deletes your data.
 
-The server rules that enforce this are in
-[firestore.rules](https://github.com/sammyc2472/due-crew/blob/main/firestore.rules).
+The add-on and the server that enforces all of this are open source, on
+[GitHub](https://github.com/sammyc2472/due-crew).
 
 ## Development
 
-Plain Python and Anki hooks, no build step. Run the tests with
-`python3 tests/test_due_crew.py`; `tests/README.md` has the rest. Issues
-and pull requests are welcome.
+The add-on is plain Python and Anki hooks, no build step; the server is a
+Cloudflare Worker in `worker/`. Run the tests with
+`python3 tests/test_due_crew.py` and, in `worker/`, `npx vitest run`;
+`tests/README.md` has the rest. Issues and pull requests are welcome.
 
 ## License
 
-MIT. Copyright (c) 2026 Sammy Caplan and Claude.
+MIT. Copyright (c) 2026 Sammy Caplan.

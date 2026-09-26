@@ -11,7 +11,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from ..backend.firebase import friend_code_from
+from ..backend.shapes import friend_code_from
 from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
 
 
@@ -105,14 +105,11 @@ class WelcomeDialog(QDialog):
         self._load()
 
     def _load(self):
-        uid = self.uid
         cl = self.client
 
         def job():
-            own, _status = cl.get_doc(f"users/{uid}")
-            code = cl.ensure_friend_code(uid, (own or {}).get("friendCode"))
-            friends = [f for f in ((own or {}).get("friends") or []) if isinstance(f, str)]
-            return code, friends, own is not None
+            code, people, _knocks = cl.friends_view()
+            return code, [uid for uid, _n, _e, _m in people], True
 
         def done(result, err):
             if err or not result:
@@ -142,8 +139,7 @@ class WelcomeDialog(QDialog):
             self.status.setText("That's your own code.")
             return
         self.add_btn.setEnabled(False)
-        cl, uid, mine = self.client, self.uid, list(self.friends)
-        my_name = cl.display_name or "A friend"
+        cl = self.client
 
         def done(result, err):
             self.add_btn.setEnabled(True)
@@ -162,7 +158,7 @@ class WelcomeDialog(QDialog):
             else:
                 self.status.setText(f"Added {name}. Send them your code to finish.")
 
-        run_bg(self, lambda: cl.add_friend(uid, code, mine, my_name), done)
+        run_bg(self, lambda: cl.add_friend(code), done)
 
     def _done(self):
         self.show_up = self.offered and self.show_up_box.isChecked()

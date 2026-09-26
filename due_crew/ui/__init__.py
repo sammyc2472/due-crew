@@ -16,7 +16,7 @@ import sys
 from aqt import mw
 from aqt.qt import QApplication
 
-from ..backend.firebase import AuthError, TransportError
+from ..backend.shapes import AuthError, TransportError
 
 
 def copy_text(text):

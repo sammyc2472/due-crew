@@ -16,7 +16,7 @@ from aqt.qt import (
 )
 
 from . import accent, open_emoji_picker
-from ..backend.firebase import clean_emoji
+from ..backend.shapes import clean_emoji
 
 NOTE_MAX = 80
 # the crew-emoji dialog's quick row: faces for a name, not reactions

@@ -178,3 +178,18 @@ installing — add-ons load at launch).
 - [ ] Week tab: the line adds up the week. Squads tab (rules-v11 published): the same line on your row.
 - [ ] Turn Reviews off in Privacy: the line goes from your friends' boards with the number. Just show up: neither.
 - [ ] Your profile card: "Today: X reviews (N new)". Share today and Share week: "(N new)" after the reviews.
+
+## 3.0: the Worker, and sign-in by code
+
+Against the dev Worker first: in Tools → Add-ons → Due Crew → Config, set
+`"api_base": "https://api-dev.duecrew.com"`, restart Anki. Remove the key
+before trying the real thing.
+
+- [ ] A 2.13 profile, updated to 3.0: the board says Due Crew now signs in with a code by email. Sign in: the email arrives (plain text, no link), the code works, no name is asked.
+- [ ] After the first sync: your friend code is the one you had, your crew is back (anyone not on 3.0 yet shows as waiting), and your squads are there under the same names.
+- [ ] A wrong code says so; five wrong codes kill that code; a sixth locks the address for an hour (then it works again).
+- [ ] A brand-new address: a new account, asked for a name; the welcome screen follows; Friends shows a code.
+- [ ] A refresh is one request: `npx wrangler tail --env dev` shows one GET /board per refresh, one POST /sync per sync.
+- [ ] Flag a card: a crewmate with the same note sees it on the Decks tab with the card's text (from their own copy); the server never has the text (`wrangler d1 execute due-crew-dev --remote --command "SELECT doc FROM weeks"`).
+- [ ] Settings → Sign Out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
+- [ ] Paused, show-up, away dates, exam date, statuses, cheers with notes, good-luck lines, tips, rooms: each still reaches a crewmate on 3.0.
