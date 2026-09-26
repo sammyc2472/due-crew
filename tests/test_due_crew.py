@@ -2635,6 +2635,324 @@ def test_room_chip_side_v301():
     check("chip: a per-computer setting, like the accent", "room_chip_side" not in account.ACCOUNT_KEYS)
 
 
+# ---------------------------------------------------------------- 3.1: plans
+
+def _day(n):
+    return (TODAY + datetime.timedelta(days=n)).isoformat()
+
+
+def _plan_units():
+    return [
+        {"id": "hf", "name": "Heart failure", "opens": _day(-7), "due": _day(-1),
+         "tags": ["Step1::Cardio::Heart_failure"]},
+        {"id": "ar", "name": "Arrhythmia", "opens": _day(0), "due": _day(6),
+         "tags": ["Step1::Cardio::Arrhythmia"]},
+        {"id": "ex", "name": "Extras", "opens": _day(3), "decks": ["Step 1::Extras"]},
+        {"id": "cz", "name": "Cloze two", "opens": _day(7), "cards": [["guid000050", 1]]},
+        {"id": "rn", "name": "Renal", "opens": _day(14), "tags": ["Step1::Renal"]},
+    ]
+
+
+def _plan_col(top="Step1"):
+    """Step 1 (10) with Extras (11), and Other (20). Suspended unless said.
+    1, 2: Heart failure (2 as a child tag, in another case); 3: Arrhythmia;
+    4: in Extras, no tag; 5, 6: c1 and c2 of one cloze note (50); 7: tagged
+    Heart failure but in Other; 8: Renal, open and seen; 9: Cardiology (a
+    name that starts like Cardio, not under it)."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, queue=-1, tags=f"{top}::Cardio::Heart_failure")
+    fakes.add_card(conn, 2, did=10, queue=-1, tags=f"{top.lower()}::cardio::heart_failure::HFrEF")
+    fakes.add_card(conn, 3, did=10, queue=-1, tags=f"{top}::Cardio::Arrhythmia")
+    fakes.add_card(conn, 4, did=11, queue=-1)
+    fakes.add_card(conn, 5, did=10, queue=-1, nid=50, ord_=0)
+    fakes.add_card(conn, 6, did=10, queue=-1, nid=50, ord_=1)
+    fakes.add_card(conn, 7, did=20, queue=-1, tags=f"{top}::Cardio::Heart_failure")
+    fakes.add_card(conn, 8, did=10, ctype=2, queue=2, tags=f"{top}::Renal")
+    fakes.add_card(conn, 9, did=10, queue=-1, tags=f"{top}::Cardiology")
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1", 11: "Step 1::Extras", 20: "Other"})
+    return col
+
+
+def _queues(col):
+    return {cid: q for cid, q in col.db.all("SELECT id, queue FROM cards")}
+
+
+def _open(col):
+    return {cid for cid, q in _queues(col).items() if q != -1}
+
+
+def test_plans_matching_v31():
+    """3.1: a unit's tags (children too, any case), subdecks, and single
+    cards (that card, never its sibling), inside the chosen deck only."""
+    from due_crew import plans as P
+    col = _plan_col()
+    idx = P.DeckIndex(col, 10)
+    u = {x["id"]: x for x in _plan_units()}
+    check("match: a tag brings its children, in any case, and nothing that only starts like it",
+          idx.match(u["hf"], None, "Step 1") == {1, 2})
+    check("match: only inside the deck it runs on", 7 not in idx.match(u["hf"], None, "Step 1"))
+    check("match: a subdeck by its path under the plan's deck", idx.match(u["ex"], None, "Step 1") == {4})
+    check("match: a single card is that card, not its cloze sibling",
+          idx.match(u["cz"], None, "Step 1") == {6})
+    check("match: a whole tag tree", idx.match({"tags": ["Step1::Cardio"]}) == {1, 2, 3})
+    other = _plan_col("Step1_v11")
+    oidx = P.DeckIndex(other, 10)
+    doc = {"deck": "Step 1", "units": _plan_units()}
+    swap = P.detect_swap(oidx, doc)
+    check("swap: my tags start differently, and the add-on sees how", swap == ("Step1", "Step1_v11"), str(swap))
+    check("swap: read through it, the plan lines up",
+          oidx.match(u["hf"], swap, "Step 1") == {1, 2} and oidx.match(u["hf"], None, "Step 1") == set())
+    check("swap: none when the tags already line up", P.detect_swap(idx, doc) is None)
+    check("best deck: the one named like the plan's", P.best_deck(col, doc) == (10, None))
+    col.decks = fakes.FakeDecks({10: "AnKing v11", 11: "AnKing v11::Extras", 20: "Other"})
+    check("best deck: else the one where most of it is found", P.best_deck(col, doc)[0] == 10)
+    prog = P.progress(idx, doc)
+    check("progress: [opened, seen, total] per unit",
+          prog["hf"] == [0, 0, 2] and prog["rn"] == [1, 1, 1] and prog["cz"] == [0, 0, 1])
+    tags, decks = P.DeckIndex(_plan_col(), 10).tree()
+    check("tree: names and counts only, a tag counting everything under it",
+          ["Step1::Cardio", 3] in tags and ["Step 1::Extras", 1] in decks
+          and all(isinstance(n, int) for _p, n in tags + decks))
+    check("code: typed, spaced, or a pasted link",
+          P.code_from("7kq4 mx2d") == "7KQ4MX2D" == P.code_from("https://duecrew.com/p/7KQ4MX2D"))
+
+
+def test_plans_morning_v31():
+    """3.1: the morning opens what's due in one undo step and never
+    suspends: not on a stop, not when a unit goes, not when a date moves
+    later. Late joins both ways, dates moved earlier, cards added."""
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    plan, status = maya.follow_plan(code)
+    plan0 = plan
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    check("follow: runs on the deck named like the plan's", status == 200 and state[pid]["deck_id"] == 10)
+    res = F.run(col, [plan], state, _day(0))
+    check("morning: what has opened opens, and only that",
+          _open(col) == {1, 2, 3, 8} and res["n"] == 3, str(_open(col)))
+    check("morning: one undo step, named for it",
+          [s[0] for s in col.undo_steps] == ["Due Crew: open 2 dates"]
+          and sorted(col.undo_steps[0][1]) == [1, 2, 3] and res["label"] == P.step_label(["a", "b"]))
+    check("morning: the toast's names and count", res["names"] == ["Heart failure", "Arrhythmia"]
+          and res["per"][pid] == [["Heart failure", "Arrhythmia"], 3])
+    again = F.run(col, [plan], state, _day(0))
+    check("morning: a second run the same day does nothing, and makes no step",
+          again["n"] == 0 and len(col.undo_steps) == 1)
+    one = F.run(col, [plan], state, _day(3))
+    check("morning: one unit's step says its name", col.undo_steps[-1][0] == "Due Crew: open Extras"
+          and one["n"] == 1 and 4 in _open(col))
+    col.undo()
+    check("undo: Anki's undo puts that step's cards back, nothing else", 4 not in _open(col) and 1 in _open(col))
+
+    # nothing suspends: a unit taken out, a date moved later, a stop
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    before = _queues(col)
+    units = [dict(u, opens=_day(10), due=_day(12)) if u["id"] == "ar" else u for u in _plan_units() if u["id"] != "hf"]
+    store.edit_plan(pid, units)
+    moved = maya.fetch_board([_day(0)], with_decks=True)["plans"][0]
+    F.run(col, [moved], state, _day(1))
+    check("never suspends: a unit taken out, a date moved later", _queues(col) == before)
+    later = F.run(col, [moved], state, _day(10))
+    check("moved later: its cards stay open, and it isn't opened again when the date comes",
+          "Arrhythmia" not in later["names"] and 3 in _open(col))
+    was_open = _open(col)
+    maya.unfollow_plan(pid)
+    state.pop(pid)
+    check("never suspends: stopping", _open(col) == was_open and store.follows.get((pid, "maya")) is None
+          and not maya.session["plans"])
+
+    # moved earlier, and cards added to an applied unit: both the next morning
+    store.edit_plan(pid, _plan_units())
+    plan, _ = maya.follow_plan(code)
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    store.edit_plan(pid, [dict(u, opens=_day(1)) if u["id"] == "cz" else u for u in _plan_units()])
+    got, status = new_client(store, "dre", "Dre").add_plan_cards(pid, [["guid000009", 0]], unit="hf")
+    check("add cards: the author puts a single card on a date", status == 200
+          and got["doc"]["units"][0]["cards"] == [["guid000009", 0]] and got["version"] == store.plans[pid]["version"])
+    plan = maya.fetch_board([_day(1)], with_decks=True)["plans"][0]
+    res = F.run(col, [plan], state, _day(1))
+    check("moved earlier: it opens the next morning (the cloze's c2, not c1)",
+          6 in _open(col) and 5 not in _open(col))
+    check("cards added to an opened unit open the next morning, and only they",
+          9 in _open(col) and res["n"] == 2, f"{res}")
+
+    # joining late, both ways
+    plan = plan0
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    check("late join: what's waiting", F.waiting(col, plan, state[pid], _day(0)) == (2, 3))
+    F.run(col, [plan], state, _day(0), mode="skip")
+    check("late join, start from the next unit: nothing opens now, or later",
+          _open(col) == {8} and F.run(col, [plan], state, _day(2))["n"] == 0 and not col.undo_steps)
+    F.run(col, [plan], state, _day(3))
+    check("late join: the next unit opens on its morning", _open(col) == {4, 8})
+    F.run(col, [plan], state, _day(3), everything=True)
+    check("open everything now: the whole plan, skipped units too, in one step",
+          _open(col) == {1, 2, 3, 4, 6, 8} and len(col.undo_steps) == 2
+          and col.undo_steps[-1][0].startswith("Due Crew: open "))
+
+    # Change deck: opened units open on the new deck, skipped ones stay skipped
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    col.decks = fakes.FakeDecks({10: "Step 1", 11: "Step 1::Extras", 20: "Other"})
+    state[pid]["deck_id"] = 20
+    F.run(col, [plan], state, _day(0))
+    check("change deck: what had opened opens on the new deck", 7 in _open(col))
+
+
+def test_plans_glue_v31():
+    """3.1 glue: the morning waits for the AnkiWeb sync and runs once a
+    day; pause; progress rides the sync only when it changed and only
+    while sharing; the board's plans only on decks=1; the budget."""
+    from due_crew import plan_flow as F
+    from due_crew.app import _state
+    store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
+    pid, code = store.add_plan("dre", "Step 1 <i>", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    col = _plan_col()
+    box = {"cfg": {}}
+    toasts = []
+    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "client", "_today", "tooltip")}
+    saved_col, saved_swap = F.mw.col, F.app.swap
+    F.cfg = lambda: box["cfg"]
+    F.save_cfg = lambda c: box.update(cfg=c)
+    F.client = lambda: maya
+    today = {"d": _day(0)}
+    F._today = lambda: today["d"]
+    F.tooltip = lambda text, **kw: toasts.append(text)
+    F.mw.col = col
+    F.app.swap = lambda c: None
+    labels = [_day(-i) for i in range(7)]
+    try:
+        maya.follow_plan(code)
+        n = len(store.log)
+        light = maya.fetch_board(labels)
+        full = maya.fetch_board(labels, with_decks=True)
+        check("board: plans ride the decks=1 refresh only, and a light one still has them",
+              len(store.log) - n == 2 and full["plans_fresh"] and not light["plans_fresh"]
+              and full["plans"][0]["id"] == pid and maya.fetch_board(labels)["plans"][0]["id"] == pid)
+        F.maybe_morning(awaiting_sync=True, fresh=True)
+        check("morning: waits for the day's AnkiWeb sync", _open(col) == {8} and "plans_day" not in box["cfg"])
+        F.maybe_morning(awaiting_sync=False)
+        check("morning: then runs, on the deck that matches, and says so",
+              _open(col) == {1, 2, 3, 8} and box["cfg"]["plans_day"] == _day(0)
+              and toasts == ["Due Crew opened 2 dates: 3 cards"], str(toasts))
+        F.maybe_morning(awaiting_sync=False)
+        check("morning: once a day", len(col.undo_steps) == 1)
+
+        # progress: the sync carries it when it changed, while sharing
+        prog = F.for_sync()
+        check("progress: per unit, [opened, seen, total]", prog[pid]["hf"] == [2, 0, 2] and prog[pid]["rn"] == [1, 1, 1])
+        n = len(store.log)
+        maya.push(labels, {}, plans=prog)
+        maya.push(labels, {}, plans=F.for_sync())
+        sent = [b for m, p, b in store.bodies if p == "/sync"][-2:]
+        check("progress: one sync is one request, and an unchanged one isn't sent again",
+              len(store.log) - n == 2 and "plans" in sent[0] and "plans" not in sent[1])
+        check("progress: the server keeps it", json.loads(store.follows[(pid, "maya")]["progress"])["hf"] == [2, 0, 2])
+        kai = new_client(store, "kai", "Kai")
+        kai.follow_plan(code)
+        store.follows[(pid, "kai")]["progress"] = json.dumps({"hf": [2, 2, 2]})
+        board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
+        check("crew: followers and units done, counts only",
+              board_plan["followers"] == 2 and board_plan["crewDone"] == {"hf": 1, "rn": 1}, str(board_plan))
+        maya.set_follow(pid, share=False)
+        check("sharing off: my stored progress goes", store.follows[(pid, "maya")]["progress"] is None)
+        check("sharing off: and the sync carries none", F.for_sync() == {})
+        maya.set_follow(pid, share=True)
+        maya.push(labels, {}, plans=F.for_sync())
+        check("sharing back on: the next sync sends it whole",
+              json.loads(store.follows[(pid, "maya")]["progress"] or "{}").get("hf") == [2, 0, 2])
+
+        # pause: no mornings until resumed
+        maya.set_follow(pid, paused=True)
+        today["d"] = _day(3)
+        F.maybe_morning(awaiting_sync=False)
+        check("pause: the morning skips a paused plan", 4 not in _open(col)
+              and box["cfg"]["plans_day"] == _day(3))
+        maya.set_follow(pid, paused=False)
+        check("resume: what opened meanwhile is waiting",
+              F.waiting(col, F.followed()[0], box["cfg"]["plans"][pid], _day(3)) == (1, 1))
+
+        # the card: names escaped, crew counts, today's step, ahead and behind, the change note
+        _state["labels"] = labels
+        _state["plan_progress"] = F.progress(col, F.followed(), box["cfg"]["plans"])
+        box["cfg"]["plans_opened"] = {"day": _day(0), "label": "Due Crew: open 2 dates",
+                                      "per": {pid: [["Heart <b>failure", "Arrhythmia"], 3]}}
+        col.undo_steps.append(("Due Crew: open 2 dates", []))
+        view = F.board_view(box["cfg"])
+        html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                            {"period": "decks"}, 0, plans=view)
+        check("card: the plan's title, week and followers",
+              "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
+        check("card: names escaped, crew done as N of followers, Undo while it's Anki's latest step",
+              "Heart &lt;b&gt;failure" in html and "1 of 2" in html and "duecrew:planundo" in html
+              and "<b>failure" not in html)
+        col.undo_steps.append(("Edit note", []))
+        html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                            {"period": "decks"}, 0, plans=F.board_view(box["cfg"]))
+        check("card: no Undo once Anki has done something since", "duecrew:planundo" not in html
+              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning: 3 cards" in html)
+        check("card: behind, only for me",
+              "Heart failure</b> was due Mon. 2 cards not seen yet." in html
+              or "was due Monday. 2 cards not seen yet." in html, "")
+        store.edit_plan(pid, [dict(u, name="Arrhythmia & co") if u["id"] == "ar" else
+                              dict(u, opens=_day(21)) if u["id"] == "rn" else u for u in _plan_units()])
+        maya.fetch_board(labels, with_decks=True)
+        card = F.card_view(F.followed()[0], box["cfg"]["plans"][pid], {}, _day(0))
+        check("change note: the author moved a date", card["change"] is not None
+              and "moved " in "".join(t for t, _b in card["change"]) and "Renal" in [t for t, _b in card["change"]])
+        F.seen_change(pid)
+        check("change note: OK puts it away",
+              F.card_view(F.followed()[0], box["cfg"]["plans"][pid], {}, _day(0))["change"] is None)
+        ahead = F.card_view(F.followed()[0], dict(box["cfg"]["plans"][pid]), {"ex": [1, 0, 1]}, _day(1))
+        check("ahead: the next unit already open",
+              ahead["lines"][0][0] == "ahead" and "early" in "".join(t for t, _b in ahead["lines"][0][1]))
+
+        # offers: from my squads, escaped, Look opens the follow
+        sq = new_client(store, "dre", "Dre").create_squad("busm")
+        store._join(sq["id"], "maya")
+        store.add_plan("dre", "Pharm <script>", "Pharm", [], audience="squad", squad=sq["id"])
+        box["cfg"]["squads"] = [dict(sq)]
+        maya.fetch_board(labels, with_decks=True)
+        view = F.board_view(box["cfg"])
+        html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                            {"period": "squads"}, 0, plans=view)
+        check("offer: my squad's plan, as a banner with Look, escaped",
+              "offered busm a plan: Pharm &lt;script&gt;" in html and "duecrew:planlook:" in html
+              and "<script>" not in html)
+        opt = next(o for o in maya.session["plan_offers"])
+        check("offer: a squad plan can't be followed from outside the squad",
+              new_client(store, "kai", "Kai").peek_plan(opt["code"])[1] == 404
+              and maya.peek_plan(opt["code"])[1] == 200)
+        box["cfg"]["plan_offers_dismissed"] = [opt["id"]]
+        check("offer: waved off, it stays off", F.board_view(box["cfg"])["offers"] == [])
+        check("site link: one request, a token for the fragment", maya.site_link() and
+              store.log[-1] == ("POST", "/auth/link", 200))
+        check("tree: names and counts go up", maya.put_tree("Step 1", [["Step1::Cardio", 3]], [])
+              and store.plan_trees[("maya", "Step 1")]["tags"] == [["Step1::Cardio", 3]])
+        check("add cards: only the author", new_client(store, "kai", "Kai").add_plan_cards(
+            pid, [["guid000001", 0]], unit="hf")[1] == 403)
+        mine = maya.my_plans()
+        check("my plans: the ones I follow", [p["id"] for p in mine] == [pid] and mine[0]["following"])
+    finally:
+        for k, v in saved.items():
+            setattr(F, k, v)
+        F.mw.col, F.app.swap = saved_col, saved_swap
+        _state["labels"], _state["plan_progress"] = [], {}
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
