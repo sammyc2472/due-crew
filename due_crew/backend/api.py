@@ -176,7 +176,11 @@ class ApiClient:
             raise AuthError(str(data.get("error") or "wrong_code"))
         uid = str(data["uid"])
         same = self.session.get("user_id") == uid
-        from_2x = same and bool(self.session.get("refresh_token"))
+        # what this computer knew comes back once per server: from 2.x, and
+        # again on a server it hasn't restored to (a dev Worker, then the real one)
+        from_2x = same and (bool(self.session.get("refresh_token"))
+                            or (bool(self.session.get("friend_ids") or self.session.get("friend_code"))
+                                and self.session.get("restored_to") != self.base))
         if not same:
             self.session = {}  # another account: nothing carries over
         for k in _LEGACY_AUTH:
@@ -452,6 +456,7 @@ class ApiClient:
                 "code": sq["code"], "name": clean_note(sq.get("name"), 24) or "squad",
                 "founder": sq.get("founder") or ""})
         self.session.pop("needs_restore", None)
+        self.session["restored_to"] = self.base
         self._save_session()
         return True
 

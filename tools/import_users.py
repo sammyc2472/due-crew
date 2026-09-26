@@ -6,7 +6,7 @@
 Reads the export (uid and email for every account) and sends it to the
 Worker's POST /admin/import-users in chunks. --firestore also reads each
 profile's display name and friend code from Firestore, with your own login
-(`gcloud auth print-access-token`, as the project's owner), so everyone
+(the one `firebase auth:export` just used, or gcloud's), so everyone
 keeps the name and the code they had: a 2.x install never kept its code
 locally, and invites already sent would otherwise stop working. Without
 --go it only says what it would send. Safe to run twice: the Worker
@@ -64,6 +64,26 @@ def profiles(token):
             return out
 
 
+def google_token():
+    """An access token for Firestore as the project's owner: gcloud's, or the
+    one firebase-tools keeps after `firebase auth:export` (it refreshes it
+    on every command, so run this right after the export)."""
+    try:
+        return subprocess.run(["gcloud", "auth", "print-access-token"], capture_output=True,
+                              text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    path = os.path.expanduser("~/.config/configstore/firebase-tools.json")
+    try:
+        with open(path) as f:
+            token = (json.load(f).get("tokens") or {}).get("access_token")
+    except (OSError, ValueError):
+        token = None
+    if not token:
+        sys.exit("no Google login: run `firebase auth:export ...` first (or install gcloud)")
+    return token
+
+
 def post(api, token, users):
     req = urllib.request.Request(api.rstrip("/") + "/admin/import-users", method="POST",
                                  data=json.dumps({"users": users}).encode())
@@ -84,9 +104,7 @@ def main(argv=None):
     users = accounts(args.export)
     print(f"{len(users)} accounts with an email in the export")
     if args.firestore:
-        gtoken = subprocess.run(["gcloud", "auth", "print-access-token"], capture_output=True,
-                                text=True, check=True).stdout.strip()
-        found = profiles(gtoken)
+        found = profiles(google_token())
         for u in users:
             name, code = found.get(u["uid"], ("", ""))
             if name.strip():

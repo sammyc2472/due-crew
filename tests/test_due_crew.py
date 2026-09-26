@@ -2378,6 +2378,17 @@ def test_sign_in_v30():
           and old.session["friend_ids"] == ["dre"] and old.session["cheers_seen"] == {"dre": "t"}
           and old.session.get("needs_restore") is True
           and "refresh_token" not in old.session and not old.was_on_2x)
+    old.push([TODAY.isoformat()], {})
+    check("restore: remembered per server", old.session.get("restored_to") == old.base
+          and "needs_restore" not in old.session)
+    old.request_code("sam@example.com")
+    old.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("restore: signing in again to the same server doesn't repeat it", "needs_restore" not in old.session)
+    old.base = "https://api-dev.duecrew.com"
+    old.request_code("sam@example.com")
+    old.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("restore: a server it hasn't restored to gets it once (a dev Worker, then the real one)",
+          old.session.get("needs_restore") is True)
     other = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
     other.session = {"user_id": "someone-else", "refresh_token": "r", "friend_ids": ["x"]}
     other.request_code("sam@example.com")
