@@ -992,6 +992,10 @@ class FakeWorker:
                 else:
                     del self.squads[sid]
         self.members = {k: v for k, v in self.members.items() if k[1] != me}
+        mine = {pid for pid, p in self.plans.items() if p["owner"] == me}
+        self.follows = {k: v for k, v in self.follows.items() if k[1] != me and k[0] not in mine}
+        self.plans = {pid: p for pid, p in self.plans.items() if pid not in mine}
+        self.plan_trees = {k: v for k, v in self.plan_trees.items() if k[0] != me}
         self.friends = {e for e in self.friends if me not in e}
         self.cheers = {k: v for k, v in self.cheers.items() if me not in k}
         self.knocks = {k: v for k, v in self.knocks.items() if me not in k}

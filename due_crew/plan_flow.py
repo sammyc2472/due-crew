@@ -340,7 +340,8 @@ def board_view(c):
     fresh_open = opened.get("day") == today
     undo = fresh_open and _undo_ok(opened.get("label"))
     prog = _state.get("plan_progress") or {}
-    cards = [card_view(p, state.get(p["id"]), prog.get(p["id"]), today,
+    here = lambda st: st if st and mw.col and _deck_ok(mw.col, st.get("deck_id")) else None
+    cards = [card_view(p, here(state.get(p["id"])), prog.get(p["id"]), today,
                        opened=(opened.get("per") or {}).get(p["id"]) if fresh_open else None,
                        undo_ok=undo)
              for p in plan_list]
