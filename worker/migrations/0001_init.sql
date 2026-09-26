@@ -10,7 +10,7 @@ CREATE TABLE users (
   name TEXT,
   emoji TEXT,
   client_version TEXT,
-  tz TEXT,
+  tz INTEGER,
   rollover INTEGER,
   last_seen INTEGER,
   code TEXT,

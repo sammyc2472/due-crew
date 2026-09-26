@@ -54,3 +54,26 @@ export async function signIn(email: string, box: ReturnType<typeof mailbox>, dev
 }
 
 export const db = () => env.DB;
+
+/** A signed-in person without the mail round trip: a user row and a
+ *  session, straight into D1. Returns a caller bound to their token. */
+export async function person(uid: string, name = uid[0].toUpperCase() + uid.slice(1)) {
+  const { newToken, sha256Hex } = await import("../src/util");
+  const token = newToken();
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO users (uid, email, name, created_at) VALUES (?, ?, ?, ?)").bind(uid, `${uid}@example.com`, name, now),
+    env.DB.prepare("INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, 'test', ?, ?)")
+      .bind(await sha256Hex(token), uid, now, now),
+  ]);
+  const call = (method: string, path: string, body?: unknown) => api(method, path, { token, body });
+  return { uid, token, call, status: async (method: string, path: string, body?: unknown) => (await call(method, path, body)).status };
+}
+
+export async function befriend(a: { call: Function }, b: { uid: string }) {
+  const r = await (a.call as any)("PUT", `/friends/${b.uid}`);
+  if (r.status !== 200) throw new Error(`befriend ${r.status}`);
+}
+
+export const WEEK = (label: string, reviews = 10) =>
+  ({ v: 1, paused: false, days: { [label]: { studied: true, reviews, studyTimeMs: 1000, accuracy: 90.5, streak: 3 } } });

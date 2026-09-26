@@ -1,28 +1,67 @@
 // Due Crew API. One Worker, D1 underneath; every consent rule the Firestore
 // rules used to hold lives in this code now. JSON in, JSON out.
 
-import {
-  authenticate, deleteAccount, importUsers, me, requestCode, signOut, signOutAll, verifyCode,
-} from "./auth";
+import * as A from "./auth";
+import * as B from "./board";
+import * as Q from "./squads";
+import * as S from "./social";
 import { Env, HttpError, json } from "./util";
 
-type Handler = (req: Request, env: Env, params: string[]) => Promise<Response>;
+const BODY_MAX = 512 * 1024;
 
-const routes: [string, RegExp, Handler][] = [
-  ["GET", /^\/version$/, async (_r, env) => json({ api: Number(env.API_VERSION), minClient: env.MIN_CLIENT })],
-  ["POST", /^\/auth\/code$/, requestCode],
-  ["POST", /^\/auth\/verify$/, verifyCode],
-  ["GET", /^\/auth\/me$/, async (r, env) => me(await authenticate(r, env), env)],
-  ["POST", /^\/auth\/signout$/, async (r, env) => signOut(await authenticate(r, env), env)],
-  ["POST", /^\/auth\/signout-all$/, async (r, env) => signOutAll(await authenticate(r, env), env)],
-  ["DELETE", /^\/account$/, async (r, env) => deleteAccount(await authenticate(r, env), env)],
-  ["POST", /^\/admin\/import-users$/, importUsers],
-];
+type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
+type Authed = (req: Request, s: A.Session, env: Env, params: string[]) => Promise<Response>;
+
+const routes: [string, RegExp, Open][] = [];
+const open = (method: string, re: RegExp, h: Open) => routes.push([method, re, h]);
+const authed = (method: string, re: RegExp, h: Authed) =>
+  routes.push([method, re, async (req, env, p) => h(req, await A.authenticate(req, env), env, p)]);
+
+const ID = "([A-Za-z0-9_-]{1,128})";
+const r = (path: string) => new RegExp(`^${path}$`);
+
+open("GET", r("/version"), async (_q, env) => json({ api: Number(env.API_VERSION), minClient: env.MIN_CLIENT }));
+open("POST", r("/auth/code"), A.requestCode);
+open("POST", r("/auth/verify"), A.verifyCode);
+open("POST", r("/admin/import-users"), A.importUsers);
+authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
+authed("POST", r("/auth/signout"), (_q, s, env) => A.signOut(s, env));
+authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
+authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
+
+authed("GET", r("/board"), B.board);
+authed("POST", r("/sync"), B.sync);
+authed("GET", r("/decks"), (_q, s, env) => B.getDecks(s, env));
+authed("GET", r(`/heatmap/${ID}`), (_q, s, env, p) => B.getHeatmap(s, env, p));
+authed("GET", r("/settings"), (_q, s, env) => B.getSettings(s, env));
+authed("PUT", r("/settings"), B.putSettings);
+
+authed("GET", r(`/users/${ID}`), (_q, s, env, p) => S.getUser(s, env, p));
+authed("PUT", r("/friends"), S.restoreFriends);
+authed("PUT", r(`/friends/${ID}`), S.putFriend);
+authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, p));
+authed("POST", r("/codes"), S.newCode);
+authed("POST", r("/codes/([A-Za-z0-9]{1,12})/add"), (_q, s, env, p) => S.addByCode(s, env, p));
+authed("POST", r(`/cheers/${ID}`), S.sendCheer);
+authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
+authed("POST", r(`/knocks/${ID}`), S.sendKnock);
+authed("DELETE", r(`/knocks/${ID}`), (_q, s, env, p) => S.deleteKnock(s, env, p));
+
+authed("POST", r("/squads"), Q.create);
+authed("GET", r("/squads/peek"), Q.peek);
+authed("POST", r("/squads/restore"), Q.restore);
+authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
+authed("PATCH", r(`/squads/${ID}`), Q.patch);
+authed("POST", r(`/squads/${ID}/join`), (_q, s, env, p) => Q.join(s, env, p));
+authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
+authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
+authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const path = new URL(req.url).pathname;
     try {
+      if (Number(req.headers.get("content-length") || 0) > BODY_MAX) throw new HttpError(413, "too_big");
       let allowed = false;
       for (const [method, re, handler] of routes) {
         const m = re.exec(path);
