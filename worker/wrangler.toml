@@ -17,7 +17,7 @@ MAIL_FROM = "Due Crew <codes@duecrew.com>"
 [[d1_databases]]
 binding = "DB"
 database_name = "due-crew"
-database_id = "00000000-0000-0000-0000-000000000000"  # from `wrangler d1 create due-crew`
+database_id = "64b685e7-9051-45e0-9511-5124cbf1280c"
 migrations_dir = "migrations"
 
 # Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
@@ -38,7 +38,7 @@ MAIL_FROM = "Due Crew <codes@duecrew.com>"
 [[env.dev.d1_databases]]
 binding = "DB"
 database_name = "due-crew-dev"
-database_id = "00000000-0000-0000-0000-000000000000"  # from `wrangler d1 create due-crew-dev`
+database_id = "693a0afd-6164-4637-9ad9-6f04a97e38a8"
 migrations_dir = "migrations"
 
 [env.dev.triggers]
