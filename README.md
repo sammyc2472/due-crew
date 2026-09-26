@@ -97,4 +97,4 @@ Cloudflare Worker in `worker/`. Run the tests with
 
 ## License
 
-MIT. Copyright (c) 2026 Sammy Caplan and Claude.
+MIT. Copyright (c) 2026 Sammy Caplan.
