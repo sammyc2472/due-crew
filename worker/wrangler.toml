@@ -28,7 +28,7 @@ allowed_sender_addresses = ["codes@duecrew.com"]
 
 # Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
 [triggers]
-crons = ["17 4 * * *"]
+crons = ["17 4 * * *", "*/15 * * * *"]
 
 # A second Worker and database for trying a client before the crew does:
 # `wrangler deploy --env dev`, served at api-dev.duecrew.com.
@@ -48,7 +48,7 @@ database_id = "693a0afd-6164-4637-9ad9-6f04a97e38a8"
 migrations_dir = "migrations"
 
 [env.dev.triggers]
-crons = ["17 4 * * *"]
+crons = ["17 4 * * *", "*/15 * * * *"]
 
 [[env.dev.send_email]]
 name = "EMAIL"

@@ -78,6 +78,11 @@ add-on.
   (`ApiClient.restore_from_2x`): its code (when `session.friend_code` has
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
+- The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
+  `FIREBASE_SA` secret): weeks and names of people still on 2.x come from
+  Firestore into D1, and weeks of people on 3.x go out to Firestore (no
+  flags), so both versions see each other's squares. Cheers, knocks and
+  squads don't cross. Delete it, its cron and the secret with Firestore.
 - 2.10's together features: "studying now" and flags ride my week;
   good-luck lines (`luck`) and card tips (`guid`) ride cheers, and on
   arrival they're kept in wrap.json (`luck`, `tips`), not played.

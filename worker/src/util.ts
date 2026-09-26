@@ -9,6 +9,8 @@ export interface Env {
   /** Cloudflare Email Service's send_email binding, when configured. */
   EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
   ADMIN_TOKEN?: string;
+  /** The 2.x bridge's Google service account key (JSON); unset, the bridge is off. */
+  FIREBASE_SA?: string;
 }
 
 export class HttpError extends Error {
