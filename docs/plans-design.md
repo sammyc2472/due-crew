@@ -97,7 +97,10 @@ the fragment never reaches a server log.
 - **Progress** per unit: `total` found, `opened` = found and not suspended,
   `seen` = reviewed at least once. Done = seen == total.
 - Local state (config, per computer): `plans: {id: {deck_id, swap,
-  applied: {unitId: version}, paused}}`. Follow and share are on the server.
+  applied: {unitId: sig | "skip:" + sig}, seen_version, snapshot}}`. A
+  unit's sig (`plans.unit_sig`) names its sources, the deck and the swap:
+  a date that moves keeps it, a unit the author adds cards to gets a new
+  one. Follow, share and pause are on the server.
 
 ## Tests
 
