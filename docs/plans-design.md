@@ -50,17 +50,19 @@ A plan offered to a squad shows as an offer on that squad's members' boards.
 
 | | |
 |---|---|
-| `PUT /plans/trees/{deck}` `{tags: [[path, n]], decks: [[path, n]]}` | The add-on's "Make a plan from a deck". Names and counts only. |
-| `POST /auth/link` | A one-time sign-in link for the site (five minutes, hashed, single use). |
-| `POST /auth/link/redeem` `{token}` | The site trades it for a session cookie. |
-| `POST /plans` `{name, deck}` | A draft plan; I'm its author. |
+| `PUT /plans/trees` `{deck, tags: [[path, n]], decks: [[path, n]]}` | The add-on's "Make a plan from a deck". Names and counts only; `GET /plans/trees` lists mine. |
+| `POST /auth/link` | A one-time sign-in token for the site (five minutes, hashed, single use). |
+| `POST /auth/link/redeem` `{token}` | The site trades it for a session cookie (`HttpOnly; Secure; SameSite=Strict`). Cookie requests that change anything must carry `x-due-crew: 1`. |
+| `POST /plans` `{name, deck, line?}` | A new plan, no dates yet; I'm its author. |
 | `GET /plans/mine` | Plans I wrote and plans I follow. |
-| `GET /plans/{id}` | The author, a follower, or anyone with the code (`?code=`) for a code plan; squad members for a squad plan. |
-| `PUT /plans/{id}` `{name, line, audience, squad, doc, version}` | Author only. `version` must match (someone else's save wins nothing silently). |
-| `POST /plans/{id}/cards` `{unit? , opens?, cards}` | Author only: add single cards to a unit, or to a new date. |
-| `POST /plans/{code}/follow` `{share}` | Follow. |
-| `PATCH /plans/{id}/follow` `{share?, paused?}` / `DELETE` | Change or stop. |
-| `GET /plans/{id}/progress` | Author: per unit, opened / done counts from followers who share. |
+| `GET /plans/peek?code=` | The plan behind a code, before following (60 an hour). |
+| `GET /plans/{id}` | The author, a follower, or (with `?code=`) anyone who may follow it. |
+| `PUT /plans/{id}` `{version, name?, line?, audience?, squad?, doc?}` | Author only. A stale `version` gets 409 with the current one. An unchanged save writes nothing. |
+| `POST /plans/{id}/cards` `{cards, unit? \| opens (+ name?)}` | Author only: single cards onto a date that exists, or a new date. |
+| `DELETE /plans/{id}` | Author only. Followers keep every card they have open. |
+| `POST /plans/follow` `{code, share?}` | Follow. A squad plan needs membership as well as the code. |
+| `PATCH /plans/{id}/follow` `{share?, paused?}` / `DELETE` | Change or stop. Sharing off clears my stored progress. |
+| `GET /plans/{id}/progress` | Author: per unit, how many sharing followers have it opened and done. Counts only. |
 
 `GET /board?decks=1` gains `plans` (the docs and versions of plans I follow)
 and `planOffers`. `POST /sync` gains `plans: {id: {unitId: [opened, seen,

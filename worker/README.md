@@ -70,6 +70,13 @@ import takes `Authorization: Bearer <token>`.
 | `POST /knocks/{to} {squad}` | Only between two members of that squad. |
 | `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
 
+### Plans (3.1)
+
+See `docs/plans-design.md` for the endpoints (`/plans/*`, `/auth/link`), the
+doc shape and the rules. `GET /board?decks=1` adds `plans` (the plans I
+follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
+`plans: {id: {unitId: [opened, seen, total]}}`.
+
 ### Squads
 
 | | |

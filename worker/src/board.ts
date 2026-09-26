@@ -4,6 +4,7 @@
 
 import type { Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
+import * as P from "./plans";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -67,6 +68,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     friends, cheers, knocks: await listKnocks(env, s.uid),
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
+  if (withDecks) Object.assign(out, await P.forBoard(env, s.uid));  // 3.1: the plans I follow, and offers
   await touchSeen(env, s.uid);
   return json(out);
 }
@@ -103,7 +105,7 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
@@ -111,6 +113,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const decks = "decks" in body ? JSON.stringify(V.decks(body.decks)) : null;
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
   const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
+  const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;
@@ -212,6 +215,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
       ).bind(id, s.uid, r.name, r.day, r.reviews, r.study_time_ms, r.accuracy, r.streak, r.week,
              r.emoji, r.new_cards, now));
     }
+  }
+  if (planProgress) {
+    const pw = await P.progressWrites(env, s.uid, planProgress);
+    wrote.plans = pw.length > 0;
+    writes.push(...pw);
   }
   if (writes.length) {
     const results = await db.batch(writes);  // one transaction
