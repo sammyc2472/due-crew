@@ -173,10 +173,12 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
-/** POST /admin/import-users {users: [{uid, email, name?}]}: the one-shot
- *  import of `firebase auth:export`, so a first 3.0 sign-in lands on the
- *  account's old uid. Idempotent by uid. An address already on another uid
- *  (someone signed in to 3.0 before the import) is skipped and reported. */
+/** POST /admin/import-users {users: [{uid, email, name?, code?}]}: the
+ *  one-shot import of `firebase auth:export`, so a first 3.0 sign-in lands
+ *  on the account's old uid, under the name and friend code it had (when
+ *  the import carries them). Idempotent by uid. An address already on
+ *  another uid (someone signed in to 3.0 before the import) is skipped and
+ *  reported; a code someone already holds stays theirs. */
 export async function importUsers(req: Request, env: Env): Promise<Response> {
   const want = env.ADMIN_TOKEN;
   const got = (req.headers.get("authorization") || "").replace(/^Bearer /, "");
@@ -187,7 +189,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
   const now = nowSec();
   let imported = 0;
   const skipped: string[] = [];
-  const rows: { uid: string; email: string; name: string | null }[] = [];
+  const rows: { uid: string; email: string; name: string | null; code: string | null }[] = [];
   for (const u of body.users as Record<string, unknown>[]) {
     const email = normEmail(u?.email);
     const uid = typeof u?.uid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(u.uid) ? u.uid : null;
@@ -196,13 +198,23 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
       continue;
     }
     const name = typeof u.name === "string" && u.name.trim() ? u.name.trim().slice(0, 60) : null;
-    rows.push({ uid, email, name });
+    const code = typeof u.code === "string" && /^[A-Z0-9]{6}$/.test(u.code) ? u.code : null;
+    rows.push({ uid, email, name, code });
   }
   for (let i = 0; i < rows.length; i += 50) {
     const chunk = rows.slice(i, i + 50);
     const results = await env.DB.batch(chunk.map((r) => env.DB.prepare(
       `INSERT INTO users (uid, email, name, created_at) VALUES (?, ?, ?, ?)
        ON CONFLICT DO NOTHING`).bind(r.uid, r.email, r.name, now)));
+    const coded = chunk.filter((r, j) => results[j].meta.changes && r.code);
+    if (coded.length) {
+      const claims = await env.DB.batch(coded.map((r) => env.DB.prepare(
+        "INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(r.code, r.uid)));
+      const won = coded.filter((_r, j) => claims[j].meta.changes);
+      if (won.length) {
+        await env.DB.batch(won.map((r) => env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(r.code, r.uid)));
+      }
+    }
     for (let j = 0; j < chunk.length; j++) {
       if (results[j].meta.changes) {
         imported++;

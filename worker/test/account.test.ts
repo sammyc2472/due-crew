@@ -96,6 +96,17 @@ describe("identity import", () => {
     expect(dre.name).toBeNull();
   });
 
+  it("carries the name and friend code across, when the import has them", async () => {
+    const box = mailbox();
+    const withCodes = [{ ...users[0], code: "SAM123" }, { ...users[1], code: "bad" },
+                       { uid: "fbEve0000000000000000000003", email: "eve@example.com", code: "SAM123" }];
+    expect((await api("POST", "/admin/import-users", { body: { users: withCodes }, token: "test-admin" })).body.imported).toBe(3);
+    const sam = await signIn("sam@example.com", box);
+    expect((await api("GET", "/board", { token: sam.token })).body.me.code).toBe("SAM123");
+    expect(await db().prepare("SELECT code FROM users WHERE uid = ?").bind(withCodes[2].uid).first("code")).toBeNull();
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM codes").first("n")).toBe(1);
+  });
+
   it("an address that already signed in to 3.0 under a new uid is skipped and reported", async () => {
     const box = mailbox();
     const early = await signIn("dre@example.com", box);

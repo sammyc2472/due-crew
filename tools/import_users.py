@@ -1,12 +1,16 @@
 """The one-shot identity import at 3.0's cutover.
 
     firebase auth:export users.json --format=json --project anki-leaderboard-f6691
-    DUE_CREW_ADMIN_TOKEN=... python3 tools/import_users.py users.json [--api https://api.duecrew.com] [--go]
+    DUE_CREW_ADMIN_TOKEN=... python3 tools/import_users.py users.json [--firestore] [--go]
 
-Reads the export (uid and email for every account, and a display name where
-Firebase Auth has one) and sends it to the Worker's POST /admin/import-users
-in chunks. Without --go it only says what it would send. Safe to run twice:
-the Worker imports by uid and skips what it already has.
+Reads the export (uid and email for every account) and sends it to the
+Worker's POST /admin/import-users in chunks. --firestore also reads each
+profile's display name and friend code from Firestore, with your own login
+(`gcloud auth print-access-token`, as the project's owner), so everyone
+keeps the name and the code they had: a 2.x install never kept its code
+locally, and invites already sent would otherwise stop working. Without
+--go it only says what it would send. Safe to run twice: the Worker
+imports by uid and skips what it already has.
 
 Standard library only. Prints counts, never addresses.
 """
@@ -14,11 +18,15 @@ Standard library only. Prints counts, never addresses.
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 CHUNK = 500
+PROJECT = "anki-leaderboard-f6691"
+FIRESTORE = f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents"
 
 
 def accounts(path):
@@ -35,6 +43,27 @@ def accounts(path):
     return out
 
 
+def profiles(token):
+    """{uid: (displayName, friendCode)} from Firestore's users collection,
+    two fields each, page by page. Needs an owner's access token."""
+    out, page = {}, ""
+    while True:
+        url = (f"{FIRESTORE}/users?pageSize=300&mask.fieldPaths=displayName&mask.fieldPaths=friendCode"
+               + (f"&pageToken={urllib.parse.quote(page, safe='')}" if page else ""))
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read())
+        for doc in data.get("documents") or []:
+            f = doc.get("fields") or {}
+            out[doc["name"].rsplit("/", 1)[-1]] = (
+                (f.get("displayName") or {}).get("stringValue", ""),
+                (f.get("friendCode") or {}).get("stringValue", ""))
+        page = data.get("nextPageToken") or ""
+        if not page:
+            return out
+
+
 def post(api, token, users):
     req = urllib.request.Request(api.rstrip("/") + "/admin/import-users", method="POST",
                                  data=json.dumps({"users": users}).encode())
@@ -48,10 +77,24 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("export")
     ap.add_argument("--api", default="https://api.duecrew.com")
+    ap.add_argument("--firestore", action="store_true",
+                    help="also carry each profile's name and friend code (gcloud login)")
     ap.add_argument("--go", action="store_true", help="send it (default: a dry run)")
     args = ap.parse_args(argv)
     users = accounts(args.export)
     print(f"{len(users)} accounts with an email in the export")
+    if args.firestore:
+        gtoken = subprocess.run(["gcloud", "auth", "print-access-token"], capture_output=True,
+                                text=True, check=True).stdout.strip()
+        found = profiles(gtoken)
+        for u in users:
+            name, code = found.get(u["uid"], ("", ""))
+            if name.strip():
+                u["name"] = name.strip()[:60]
+            if code:
+                u["code"] = code
+        print(f"{sum(1 for u in users if 'name' in u)} names and "
+              f"{sum(1 for u in users if 'code' in u)} codes from Firestore")
     if not args.go:
         print("dry run: nothing sent (add --go)")
         return 0

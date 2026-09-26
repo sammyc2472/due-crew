@@ -27,7 +27,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /auth/me` | `{uid, email, name, emoji}`. |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
-| `POST /admin/import-users {users: [{uid, email, name?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`). Idempotent by uid; `{imported, skipped}`. |
+| `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
 **Sign-in details**
 - Codes and tokens are stored as SHA-256 hashes; tokens are 32 random bytes, base64url.

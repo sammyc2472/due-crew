@@ -96,6 +96,7 @@ anyone else sees it. Deploying the dev Worker is manual on purpose.
    `firebase auth:export users.json --format=json --project anki-leaderboard-f6691`.
 2. Feed them to the import (uid, email, and the display name when there
    is one): `DUE_CREW_ADMIN_TOKEN=... python3 tools/import_users.py
-   users.json --go` (without `--go` it's a dry run).
+   users.json --firestore --go` (without `--go` it's a dry run; `--firestore`
+   carries each name and friend code across, with your `gcloud` login).
 3. Tag 3.0.0. The crew updates; the Firebase project stays up read-only
    for stragglers, then goes.
