@@ -444,8 +444,17 @@ class ApiClient:
         raises, and the next sync tries again; a refusal (a squad locked by
         whoever got there first, a name the server won't take) won't change
         by asking twice, so it's done."""
+        # the code this computer knew, else keep whatever the account has
+        # (the cutover import carried it); only an account with none gets one.
+        # POST /codes without a code always makes a new one and retires the
+        # old: 3.0.0 did that here, and everyone's imported code was lost.
         code = friend_code_from(self.session.get("friend_code") or "")
-        self._call("POST", "/codes", {"code": code} if code else {})
+        if code:
+            self._call("POST", "/codes", {"code": code})
+        else:
+            status, data = self._call("GET", "/friends")
+            if status == 200 and not data.get("code"):
+                self._call("POST", "/codes", {})
         ids = [f for f in self.session.get("friend_ids") or [] if isinstance(f, str)]
         if ids:
             self._call("PUT", "/friends", {"ids": ids[:500]})

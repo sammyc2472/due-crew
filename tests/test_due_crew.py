@@ -2408,6 +2408,17 @@ def test_restore_from_2x():
     ok, _gone = sam.push([TODAY.isoformat()], cfg)
     sid = shapes.squad_id("ABCD2345")
     check("restore: my code comes back as it was", store.codes.get("SAM123") == "sam")
+    store.add_user("kai", "Kai", code="KAI777")  # imported with its code, which this computer never knew
+    kai = new_client(store, "kai", "Kai")
+    kai.session["needs_restore"] = True
+    kai.push([TODAY.isoformat()], {})
+    check("restore: a code the import carried stays, when this computer didn't know it",
+          store.codes.get("KAI777") == "kai" and store.users["kai"]["code"] == "KAI777")
+    store.add_user("lee", "Lee")
+    lee = new_client(store, "lee", "Lee")
+    lee.session["needs_restore"] = True
+    lee.push([TODAY.isoformat()], {})
+    check("restore: an account with no code at all gets one", bool(store.users["lee"]["code"]))
     check("restore: my crew comes back by uid; who added me back is crew at once",
           ("sam", "dre") in store.friends and ("sam", "eve") in store.friends and store.mutual("sam", "dre")
           and not store.mutual("sam", "eve"))
