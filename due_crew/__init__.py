@@ -366,8 +366,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
-    plan_flow.maybe_morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")))
-    if data.get("plans"):
+    opened = plan_flow.maybe_morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False)
+    if opened:
+        toasts.append(opened)
+    elif data.get("plans"):
         plan_flow.refresh_progress()
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
@@ -803,6 +805,8 @@ def _on_profile_open():
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
     refresh_board()           # the board, right away
+    # 3.1: a profile that syncs but didn't today still gets its morning
+    QTimer.singleShot(180000, _morning_fallback)
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)
     QTimer.singleShot(8000, _push_on_open)
@@ -832,6 +836,21 @@ def _show_board():
         mw.moveToState("deckBrowser")
     else:
         _rerender()
+
+
+def _morning_fallback():
+    """Three minutes after opening: if no AnkiWeb sync has come (none set
+    to run on open, or offline), the plans' morning runs anyway, unless a
+    sync is still busy with the collection."""
+    try:
+        if mw.progress.busy():
+            QTimer.singleShot(60000, _morning_fallback)
+            return
+    except Exception:
+        pass
+    plan_flow.maybe_morning(False)
+    if _state["board_shown"] and mw.state == "deckBrowser":
+        _swap(cfg())
 
 
 def _push_on_open():

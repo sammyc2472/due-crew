@@ -219,16 +219,17 @@ def _after_change():
         pass
 
 
-def _toast_opened(res):
-    if not res["n"]:
-        return
+def opened_line(res):
+    """The toast: "Due Crew opened Renal physiology: 204 cards", escaped."""
+    if not res or not res["n"]:
+        return None
     what = res["names"][0] if len(res["names"]) == 1 else f"{len(res['names'])} dates"
-    tooltip(f"Due Crew opened {html.escape(what)}: {res['n']:,} card{'s' if res['n'] != 1 else ''}",
-            period=5000)
+    return f"Due Crew opened {html.escape(what)}: {res['n']:,} card{'s' if res['n'] != 1 else ''}"
 
 
-def _open_now(plan_list, mode=None, everything=False):
-    """Main thread: run, remember, say so, redraw."""
+def _open_now(plan_list, mode=None, everything=False, toast=True):
+    """Main thread: run, remember, say so (or leave the line to the
+    caller's toast), redraw."""
     if not mw.col:
         return None
     c = cfg()
@@ -245,19 +246,21 @@ def _open_now(plan_list, mode=None, everything=False):
     save_cfg(c)
     if res["n"]:
         _after_change()
-        _toast_opened(res)
+        if toast:
+            tooltip(opened_line(res), period=5000)
     refresh_progress()
     return res
 
 
-def maybe_morning(awaiting_sync, fresh=False):
+def maybe_morning(awaiting_sync, fresh=False, toast=True):
     """Main thread. Once per Anki day, for each followed, unpaused plan:
     open what's due. Waits for the day's AnkiWeb sync when this profile
     syncs (the phone's reviews, and the other computer's opened cards,
     come in with it). fresh: the plans just came with the day's refresh,
-    so plans no longer followed are forgotten here."""
+    so plans no longer followed are forgotten here. toast=False returns
+    the line for the caller's own toast (one tooltip replaces another)."""
     if not mw.col or not client().signed_in:
-        return
+        return None
     try:
         c = cfg()
         state = _state_cfg(c)
@@ -280,7 +283,7 @@ def maybe_morning(awaiting_sync, fresh=False):
                 save_cfg(c)
         today = _today()
         if awaiting_sync or c.get("plans_day") == today:
-            return
+            return None
         for p in plan_list:
             if p["id"] not in state:
                 st = new_state(mw.col, p)  # followed on another computer
@@ -290,9 +293,10 @@ def maybe_morning(awaiting_sync, fresh=False):
         c["plans"] = state
         c["plans_day"] = today
         save_cfg(c)
-        _open_now([p for p in plan_list if not p.get("paused")])
+        return opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
     except Exception:
         traceback.print_exc()
+        return None
 
 
 def refresh_progress():
