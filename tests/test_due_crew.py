@@ -2411,6 +2411,8 @@ def test_restore_from_2x():
     check("restore: my crew comes back by uid; who added me back is crew at once",
           ("sam", "dre") in store.friends and ("sam", "eve") in store.friends and store.mutual("sam", "dre")
           and not store.mutual("sam", "eve"))
+    check("restore: someone re-added who hasn't added me back is knocked, so a forgetful computer can add back",
+          ("eve", "sam") in store.knocks and ("dre", "sam") not in store.knocks)
     check("restore: my squad comes back under its old id, with its founder, and me in it",
           store.squads.get(sid, {}).get("founder") == "dre" and (sid, "sam") in store.members)
     check("restore: done, once", ok and "needs_restore" not in sam.session)

@@ -173,6 +173,12 @@ describe("friends and codes", () => {
     expect(r.body.added).toEqual(["dre", "sam"]);
     expect((await sam.call("GET", "/board")).body.friends.find((f: any) => f.uid === "nia").mutual).toBe(true);
     expect((await nia.call("PUT", "/friends", { ids: "sam" })).status).toBe(400);
+    // sam added nia before; dre hasn't added nia: dre is knocked, sam isn't
+    expect((await dre.call("GET", "/knocks")).body.knocks.map((k: any) => k.from)).toEqual(["nia"]);
+    expect((await sam.call("GET", "/knocks")).body.knocks).toEqual([]);
+    await dre.call("PUT", "/friends", { ids: ["nia"] });
+    expect((await nia.call("GET", "/knocks")).body.knocks, "restoring back clears nothing it shouldn't").toEqual([]);
+    expect((await dre.call("GET", "/knocks")).body.knocks, "and a restore that makes it mutual clears the knock").toEqual([]);
   });
 
   it("GET /friends: the dialog's view, and it consumes nothing", async () => {

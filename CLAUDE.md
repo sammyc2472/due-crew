@@ -124,6 +124,9 @@ add-on.
    new D1 migration goes in `worker/migrations/`, numbered; the deploy job
    applies it before the Worker. Never edit a migration that has shipped.
 3. `cd due_crew && zip -r ../due_crew.ankiaddon . -x "*.DS_Store" -x "user_files/*"`
+   `manifest.json`'s `package` is `2035408484`, AnkiWeb's folder name, so a
+   file installed by hand replaces the AnkiWeb copy (and keeps its
+   user_files) instead of running beside it.
 4. Commit, push, wait for the Actions run: every job green is the release
    gate — no zip goes out on a red run. Then tag and
    `gh release create vX.Y.Z due_crew.ankiaddon`; the tag deploys the

@@ -474,6 +474,10 @@ class FakeWorker:
             added = sorted({i for i in ids if i in self.users and i != me})
             for f in added:
                 self.friends.add((me, f))
+                if (f, me) in self.friends:
+                    self.knocks.pop((me, f), None)
+                else:
+                    self.knocks.setdefault((f, me), {"squad": "", "at": _now()})
             return 200, {"added": added}
         fid = rest[0] if rest else ""
         if method == "PUT":

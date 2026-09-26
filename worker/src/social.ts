@@ -81,8 +81,19 @@ export async function restoreFriends(req: Request, s: Session, env: Env): Promis
   const ok = found.results.map((r) => r.uid);
   const now = nowSec();
   if (ok.length) {
-    await env.DB.batch(ok.map((fid) => env.DB.prepare(
-      "INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(s.uid, fid, now)));
+    // each one I add back who hasn't added me gets a knock, so a computer
+    // that forgot its list sees "added you" and adds back in one click; one
+    // who already added me is crew now, and their knock to me is done
+    await env.DB.batch(ok.flatMap((fid) => [
+      env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(s.uid, fid, now),
+      env.DB.prepare(
+        `INSERT INTO knocks (to_uid, from_uid, squad, at) SELECT ?1, ?2, NULL, ?3
+         WHERE NOT EXISTS (SELECT 1 FROM friends WHERE owner = ?1 AND friend = ?2)
+         ON CONFLICT(to_uid, from_uid) DO NOTHING`).bind(fid, s.uid, now),
+      env.DB.prepare(
+        `DELETE FROM knocks WHERE to_uid = ?2 AND from_uid = ?1
+         AND EXISTS (SELECT 1 FROM friends WHERE owner = ?1 AND friend = ?2)`).bind(fid, s.uid),
+    ]));
   }
   return json({ added: ok.sort() });
 }
