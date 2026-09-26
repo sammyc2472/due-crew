@@ -24,6 +24,8 @@ Raw keys, for reference:
 | `paused` | true/false | Crew sees "on a break" instead of numbers |
 | `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
+| `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
+| `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 
 Sign-in state (account, name, tokens) lives in `user_files/<profile>/`,
 not here — restoring defaults never signs you out.

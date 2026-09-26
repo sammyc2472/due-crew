@@ -686,8 +686,10 @@ def _row_html(row, rank, cfg):
     else:
         cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
                  f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
+        # 3.0.1: right-click for Mute cheers and Report…
         name = (f'<a class="dc-pl" href="#" title="Open profile" '
-                f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{name}</a>')
+                f'onclick="{_pycmd("profile:" + str(row["user_id"]))}" '
+                f'oncontextmenu="{_pycmd("rowmenu:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
             f'<td class="nm">{name}{exam}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 

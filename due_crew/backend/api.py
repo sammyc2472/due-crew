@@ -24,7 +24,7 @@ import requests
 
 from ..room_model import clean_room, is_over
 from .shapes import (
-    AuthError, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
+    AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_tricky,
     day_doc, friend_code_from, live_now,
 )
@@ -281,7 +281,9 @@ class ApiClient:
                            "note": clean_note(c.get("note")), "luck": c.get("luck") is True,
                            "guid": str(c.get("guid") or "")[:40]})
         friends = [str(f.get("uid")) for f in data.get("friends") or [] if f.get("uid")]
-        if friends != self.session.get("friend_ids"):
+        # until the restore has sent it, the list this computer remembers from
+        # 2.x is the only copy: 3.0.0 replaced it here and lost most crews
+        if friends != self.session.get("friend_ids") and not self.session.get("needs_restore"):
             self.session["friend_ids"] = friends
             self._save_session()
         return {"entries": entries,
@@ -557,6 +559,16 @@ class ApiClient:
 
     def delete_knock(self, sender_uid):
         status, _ = self._call("DELETE", f"/knocks/{sender_uid}")
+        return status == 200
+
+    def report(self, uid, reason, note=""):
+        """3.0.1: a report to Due Crew. The server stores nothing and tells
+        no one; it mails their name, emoji and last cheer to us."""
+        body = {"uid": str(uid), "reason": str(reason)}
+        note = " ".join(str(note or "").split())[:REPORT_NOTE_MAX]
+        if note:
+            body["note"] = note
+        status, _ = self._call("POST", "/reports", body)
         return status == 200
 
     # ---- squads ----

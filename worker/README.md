@@ -53,6 +53,7 @@ import takes `Authorization: Bearer <token>`.
 - `{v, days: {label: {studied, reviews, studyTimeMs, accuracy, streak, newCards, status}}, paused, examDate, awayFrom, awayTo, liveUntil, tricky, room}`.
 - At most 9 days.
 - A flagged card (`tricky`) is `{guid, deck, at}`. Any `text` is dropped on the way in; crewmates read the text from their own copy of the note.
+- A flag with a tip still waiting for me is dropped on the way in, so a sync before I've read the tip doesn't put it back up.
 
 ### People
 
@@ -64,9 +65,17 @@ import takes `Authorization: Bearer <token>`.
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
-| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. |
+| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |
 | `POST /knocks/{to} {squad}` | Only between two members of that squad. |
+| `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
+
+### Plans (3.1)
+
+See `docs/plans-design.md` for the endpoints (`/plans/*`, `/auth/link`), the
+doc shape and the rules. `GET /board?decks=1` adds `plans` (the plans I
+follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
+`plans: {id: {unitId: [opened, seen, total]}}`.
 
 ### Squads
 

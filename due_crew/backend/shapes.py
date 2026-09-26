@@ -19,6 +19,11 @@ TRICKY_MAX = 3      # 2.10: cards flagged "this one's getting me", newest kept
 TRICKY_DAYS = 7     # ...for this long
 GUID_MAX = 40
 WEEK_WINDOW = 8     # the week doc: my last eight days (the week, and one before)
+# 3.0.1: POST /reports: (the Worker's value, what the dialog says)
+REPORT_REASONS = (("cheers", "Unwanted cheers or knocks"),
+                  ("name", "A name or emoji that shouldn't be here"),
+                  ("other", "Something else"))
+REPORT_NOTE_MAX = 500
 
 
 class AuthError(Exception):

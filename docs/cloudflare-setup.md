@@ -124,3 +124,20 @@ attach a custom domain over one.
    carries each name and friend code across, with your `gcloud` login).
 3. Tag 3.0.0. The crew updates; the Firebase project stays up read-only
    for stragglers, then goes.
+
+## The 2.x bridge (while people update)
+
+A Google service account the Worker uses to copy weeks between Firestore
+and D1 every 15 minutes (`worker/src/bridge.ts`).
+
+1. console.cloud.google.com, project anki-leaderboard-f6691: IAM & Admin ›
+   Service Accounts › Create. Name it `due-crew-bridge`, give it the role
+   **Cloud Datastore User**, Done.
+2. Open it › Keys › Add key › Create new key › JSON. A file downloads.
+3. From `worker/`: `npx wrangler secret put FIREBASE_SA --env="" < ~/Downloads/<that file>.json`,
+   then delete the file.
+4. `npx wrangler deploy --env=""`. `npx wrangler tail --env=""` shows
+   `bridge: pulled N, pushed M` every quarter hour.
+
+When Firestore goes: `npx wrangler secret delete FIREBASE_SA --env=""`,
+delete the key in Google Cloud, and remove the bridge and its cron.

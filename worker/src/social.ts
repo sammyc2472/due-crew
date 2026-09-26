@@ -7,6 +7,7 @@
 
 import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
+import { sendMail } from "./mail";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -205,7 +206,35 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET emoji = excluded.emoji, note = excluded.note,
        luck = excluded.luck, guid = excluded.guid, at = excluded.at`,
   ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, nowSec()).run();
+  // 3.0.1: the first tip on a flagged card takes the flag down for the whole
+  // crew. Only a tip from someone the flag was shown to (mutual) counts.
+  if (c.guid && (await added(env, s.uid, to))) await unflag(env, to, c.guid);
   return json({ ok: true });
+}
+
+/** Take `guid` off `uid`'s flagged cards. Written only when it was there,
+ *  and only over the doc just read, so a sync landing in between wins.
+ *  updated_at stays: a tip isn't the owner being active. */
+export async function unflag(env: Env, uid: string, guid: string): Promise<void> {
+  const doc = await env.DB.prepare("SELECT doc FROM weeks WHERE uid = ?").bind(uid).first<string>("doc");
+  if (!doc) return;
+  const week = JSON.parse(doc);
+  const next = withoutFlags(week, new Set([guid]));
+  if (next === week) return;
+  await env.DB.prepare("UPDATE weeks SET doc = ? WHERE uid = ? AND doc = ?")
+    .bind(JSON.stringify(next), uid, doc).run();
+}
+
+/** The week without the flags on these guids; the same object when none
+ *  of them is flagged. An empty list goes, as the client leaves it out. */
+export function withoutFlags<T extends Record<string, unknown>>(week: T, guids: Set<string>): T {
+  const tricky = week.tricky;
+  if (!Array.isArray(tricky) || !tricky.some((t) => guids.has(t?.guid))) return week;
+  const out: Record<string, unknown> = { ...week };
+  const left = tricky.filter((t) => !guids.has(t?.guid));
+  if (left.length) out.tricky = left;
+  else delete out.tricky;
+  return out as T;
 }
 
 // ---- knocks ----
@@ -241,5 +270,57 @@ export async function getKnocks(s: Session, env: Env): Promise<Response> {
 
 export async function deleteKnock(s: Session, env: Env, [from]: string[]): Promise<Response> {
   await env.DB.prepare("DELETE FROM knocks WHERE to_uid = ? AND from_uid = ?").bind(s.uid, checkUid(from)).run();
+  return json({ ok: true });
+}
+
+// ---- reports ----
+
+export const REPORT_REASONS: Record<string, string> = {
+  cheers: "Unwanted cheers or knocks",
+  name: "A name or emoji that shouldn't be here",
+  other: "Something else",
+};
+export const REPORT_NOTE_MAX = 500;
+
+/** POST /reports {uid, reason, note?}: stores nothing. The report goes by
+ *  mail to REPORT_TO: who reported whom, the reported name and emoji, the
+ *  reason and note, and their last cheer to me if one is waiting. Never
+ *  the reporter's email. Muting is the client's; nobody is told. */
+export async function report(req: Request, s: Session, env: Env): Promise<Response> {
+  const body = await readJson(req);
+  for (const k of Object.keys(body)) if (!["uid", "reason", "note"].includes(k)) throw V.bad("report");
+  if (typeof body.uid !== "string") throw new HttpError(404, "no_user");
+  const uid = checkUid(body.uid);
+  const reason = body.reason;
+  if (typeof reason !== "string" || !Object.prototype.hasOwnProperty.call(REPORT_REASONS, reason)) throw V.bad("reason");
+  if (body.note !== undefined && body.note !== null && !V.isStr(body.note, REPORT_NOTE_MAX)) throw V.bad("note");
+  if (uid === s.uid) throw new HttpError(400, "self");
+  const who = await nameOf(env, uid);
+  if (!who) throw new HttpError(404, "no_user");
+  await limitOrThrow(env, `report:${s.uid}`, 10, 3600);
+  const note = typeof body.note === "string" ? V.oneLine(body.note, REPORT_NOTE_MAX) : "";
+  if (!env.REPORT_TO) {
+    console.log("due crew: report received");
+    return json({ ok: true });
+  }
+  const c = await env.DB.prepare(
+    "SELECT emoji, note, luck, guid, at FROM cheers WHERE to_uid = ? AND from_uid = ?",
+  ).bind(s.uid, uid).first<{ emoji: string; note: string | null; luck: number | null; guid: string | null; at: number }>();
+  const cheer = c
+    ? `${c.emoji}${c.note ? ` "${c.note}"` : ""}${c.luck ? " (good-luck line)" : ""}${c.guid ? " (tip on a card)" : ""}`
+      + `, ${new Date(c.at * 1000).toISOString()}`
+    : "none waiting (cheers go once they're read)";
+  const text = [
+    `Reason: ${REPORT_REASONS[reason]}`,
+    `Note: ${note || "(none)"}`,
+    "",
+    `Reported: ${uid}`,
+    `Name: ${who.name}`,
+    `Emoji: ${who.emoji || "(none)"}`,
+    `Last cheer to the reporter: ${cheer}`,
+    "",
+    `Reporter: ${s.uid}`,
+  ].join("\n");
+  await sendMail(env, env.REPORT_TO, "Due Crew report", text);
   return json({ ok: true });
 }

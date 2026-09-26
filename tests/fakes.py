@@ -158,6 +158,7 @@ class FakeWorker:
         self.bans = set()    # (sid, uid)
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
+        self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.otp = {}        # email -> code
         self.log = []        # (method, path, status)
         self.bodies = []     # (method, path, json body)
@@ -263,6 +264,8 @@ class FakeWorker:
             return self._cheer(me, parts[1], body or {})
         if parts[:1] == ["knocks"]:
             return self._knock(method, me, parts[1:], body or {})
+        if m == ("POST", "reports") and len(parts) == 1:
+            return self._report(me, body)
         if parts[:1] == ["squads"]:
             return self._squad(method, me, parts[1:], query, body or {})
         if m == ("DELETE", "account"):
@@ -404,6 +407,11 @@ class FakeWorker:
             if prof.get("emoji") not in (None, "") and not _is_emoji(prof["emoji"]):
                 raise Bad(400, "bad_emoji")
         week = self._clean_week(body["week"]) if "week" in body else None
+        if week is not None:
+            # 3.0.1: a flag whose tip is still waiting for me stays down
+            tipped = {c.get("guid") for (to, frm), c in self.cheers.items()
+                      if to == me and c.get("guid") and (frm, me) in self.friends}
+            week = self._without_flags(week, tipped)
         row = names = None
         if "squads" in body:
             row, names = self._clean_row(body["squads"].get("row"))
@@ -541,6 +549,51 @@ class FakeWorker:
             raise Bad(403, "not_friends")
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
                                  "guid": body.get("guid"), "at": _now()}
+        # 3.0.1: a tip from someone the flag was shown to takes it down
+        if body.get("guid") and (me, to) in self.friends and to in self.weeks:
+            text, at = self.weeks[to]
+            new = json.dumps(self._without_flags(json.loads(text), {body["guid"]}), sort_keys=True)
+            if new != text:
+                self.weeks[to] = (new, at)  # a tip isn't the owner being active
+                self._count("weeks")
+        return 200, {"ok": True}
+
+    @staticmethod
+    def _without_flags(week, guids):
+        flags = week.get("tricky")
+        if not isinstance(flags, list) or not any(t.get("guid") in guids for t in flags):
+            return week
+        out = dict(week)
+        left = [t for t in flags if t.get("guid") not in guids]
+        if left:
+            out["tricky"] = left
+        else:
+            out.pop("tricky")
+        return out
+
+    def _report(self, me, body):
+        if not isinstance(body, dict) or not set(body) <= {"uid", "reason", "note"}:
+            raise Bad(400, "bad_report")
+        uid = body.get("uid")
+        if not isinstance(uid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", uid):
+            raise Bad(404, "no_user")
+        if body.get("reason") not in ("cheers", "name", "other"):
+            raise Bad(400, "bad_reason")
+        note = body.get("note")
+        if note is not None and (not isinstance(note, str) or len(note) > 500):
+            raise Bad(400, "bad_note")
+        if uid == me:
+            raise Bad(400, "self")
+        if uid not in self.users:
+            raise Bad(404, "no_user")
+        if sum(1 for r in self.reports if r["reporter"] == me) >= 10:
+            raise Bad(429, "slow_down")
+        # the Worker stores nothing and mails this; the fake keeps the mail
+        u = self.users[uid]
+        c = self.cheers.get((me, uid))
+        self.reports.append({"reporter": me, "uid": uid, "name": u["name"] or "?", "emoji": u["emoji"] or "",
+                             "reason": body["reason"], "note": " ".join(str(note or "").split()),
+                             "cheer": dict(c) if c else None})
         return 200, {"ok": True}
 
     def _knock(self, method, me, rest, body):

@@ -34,7 +34,7 @@ from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS
 from .backend.shapes import TransportError, _clean_day, clean_emoji, shared_numbers
 from .shares import _share, dismiss_review, review_banners
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
-                     _play_cheers, _send_cheer, cheer_allowed)
+                     _play_cheers, _send_cheer, cheer_allowed, drop_muted, muted_uids, row_menu)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
@@ -331,7 +331,14 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     _state["prev_counts"] = counts
 
     cl = client()
-    fresh, seen = _fresh_cheers(data.get("cheers", []), cl.session.get("cheers_seen"),
+    # 3.0.1: someone I muted is dropped here, quietly; their tips don't
+    # count either, so a flag they tipped comes back with my next sync
+    cheers, kept_knocks = drop_muted(data.get("cheers", []),
+                                     [tuple(k) for k in knocks or []], muted_uids(c))
+    if knocks is not None:
+        knocks = kept_knocks
+    together.forget_tipped(cheers)  # a tipped flag stays down
+    fresh, seen = _fresh_cheers(cheers, cl.session.get("cheers_seen"),
                                 cl.session.get("cheers_seen_ts", ""))
     if seen != cl.session.get("cheers_seen"):
         cl.session["cheers_seen"] = seen
@@ -564,6 +571,8 @@ def _on_js(handled, message, context):
         open_auth(join=(parts[2] == "join") if len(parts) > 2 else None)
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
+    elif cmd == "rowmenu" and len(parts) > 2:
+        row_menu(parts[2])  # 3.0.1: right-click a crewmate: mute, report
     elif cmd == "status":
         _edit_status()
     elif cmd == "emoji":
@@ -692,7 +701,8 @@ def open_friends(focus_add=False):
         return
     from .ui.friends_dialog import FriendsDialog
     dlg = FriendsDialog(mw, client(),
-                        muted=list(_wrap_data().get("muted_knocks") or []),
+                        muted=list(_wrap_data().get("muted_knocks") or [])
+                        + sorted(muted_uids(cfg())),
                         on_mute=_mute_knocker, focus_add=focus_add)
     dlg.exec()
     if dlg.new_code:
@@ -748,9 +758,12 @@ def _on_settings_saved(changed):
     snapshot of the whole config."""
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
+    chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
     c.update(changed)
     save_cfg(c)
     _rerender()
+    if chip:
+        rooms.refresh_widgets()  # 3.0.1: the room chip moves now
     if push:
         # sharing choices apply now, not at whenever the next sync happens
         _on_sync_done()

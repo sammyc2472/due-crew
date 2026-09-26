@@ -98,10 +98,32 @@ export interface Session {
 }
 
 /** The session behind `Authorization: Bearer <token>`: one indexed read. */
+export const COOKIE = "dc_session";
+
+/** The session cookie the site signs in with (3.1): same-site only. */
+export function sessionCookie(token: string, maxAge = SESSION_IDLE): string {
+  return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+}
+
+function cookieToken(req: Request): string | null {
+  for (const part of (req.headers.get("cookie") || "").split(";")) {
+    const [k, v] = part.trim().split("=");
+    if (k === COOKIE && /^[A-Za-z0-9_-]{43}$/.test(v || "")) return v;
+  }
+  return null;
+}
+
 export async function authenticate(req: Request, env: Env): Promise<Session> {
   const m = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.get("authorization") || "");
-  if (!m) throw new HttpError(401, "auth");
-  const tokenHash = await sha256Hex(m[1]);
+  let token = m ? m[1] : null;
+  if (!token) {
+    // the site: a cookie, and for anything that changes something a header
+    // no other site can make a browser send (a cross-site form can't)
+    token = cookieToken(req);
+    if (token && req.method !== "GET" && req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
+  }
+  if (!token) throw new HttpError(401, "auth");
+  const tokenHash = await sha256Hex(token);
   const row = await env.DB.prepare("SELECT uid, last_used FROM sessions WHERE token_hash = ?")
     .bind(tokenHash).first<{ uid: string; last_used: number }>();
   if (!row) throw new HttpError(401, "auth");
@@ -164,6 +186,11 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM decks WHERE uid = ?1",
     "DELETE FROM heatmaps WHERE uid = ?1",
     "DELETE FROM settings WHERE uid = ?1",
+    // 3.1: my plans go (followers keep every card they have open), and my follows
+    "DELETE FROM plan_follows WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    "DELETE FROM plans WHERE owner = ?1",
+    "DELETE FROM plan_trees WHERE uid = ?1",
+    "DELETE FROM login_links WHERE uid = ?1",
     "DELETE FROM codes WHERE uid = ?1",
     "DELETE FROM sessions WHERE uid = ?1",
     "DELETE FROM users WHERE uid = ?1",
@@ -244,4 +271,36 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
     }
   }
   return json({ imported, skipped, reclaimed });
+}
+
+// ---- the site, signed in from the add-on (3.1) ----
+
+const LINK_TTL = 300;
+
+/** POST /auth/link: a one-time token the add-on puts in a duecrew.com link
+ *  (after the #, so no server log sees it). Five minutes, single use. */
+export async function createLink(s: Session, env: Env): Promise<Response> {
+  await limitOrThrow(env, `link:${s.uid}`, 20, 3600);
+  const token = newToken();
+  await env.DB.prepare("INSERT INTO login_links (hash, uid, expires_at) VALUES (?, ?, ?)")
+    .bind(await sha256Hex(token), s.uid, nowSec() + LINK_TTL).run();
+  return json({ token, expiresIn: LINK_TTL });
+}
+
+/** POST /auth/link/redeem {token}: the site trades the link for a session
+ *  cookie. The link dies on first use. */
+export async function redeemLink(req: Request, env: Env): Promise<Response> {
+  await limitOrThrow(env, `redeem:${clientIp(req)}`, 60, 3600);
+  const body = await readJson(req);
+  if (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) throw new HttpError(400, "bad_token");
+  const hash = await sha256Hex(body.token);
+  const row = await env.DB.prepare("DELETE FROM login_links WHERE hash = ? RETURNING uid, expires_at")
+    .bind(hash).first<{ uid: string; expires_at: number }>();
+  const now = nowSec();
+  if (!row || row.expires_at <= now) throw new HttpError(401, "link_expired");
+  const token = newToken();
+  await env.DB.prepare(
+    "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
+  ).bind(await sha256Hex(token), row.uid, "duecrew.com", now, now).run();
+  return json({ ok: true, uid: row.uid }, 200, { "set-cookie": sessionCookie(token) });
 }

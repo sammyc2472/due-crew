@@ -64,6 +64,9 @@ add-on.
   day, never its text; a crewmate's client reads the text from its own
   copy of the note (`together.tricky_view`), so it shows only to crewmates
   who have the same note. At most the first 60 characters, clozes as […].
+- 3.0.1 mute is the client's: a muted person's cheers and knocks are
+  dropped on arrival, nobody is told, and you stay friends. `POST /reports`
+  stores nothing; it mails REPORT_TO (never the reporter's email).
 - Friendship is two edges, one per person (`friends(owner, friend)`).
   Mutual = both exist. Only mutual friends read my week, decks and heatmap;
   a cheer lands only if its recipient added the sender; a knock needs a
@@ -78,9 +81,18 @@ add-on.
   (`ApiClient.restore_from_2x`): its code (when `session.friend_code` has
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
+- The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
+  `FIREBASE_SA` secret): weeks and names of people still on 2.x come from
+  Firestore into D1, and weeks of people on 3.x go out to Firestore (no
+  flags), so both versions see each other's squares. Cheers, knocks and
+  squads don't cross. Delete it, its cron and the secret with Firestore.
 - 2.10's together features: "studying now" and flags ride my week;
   good-luck lines (`luck`) and card tips (`guid`) ride cheers, and on
   arrival they're kept in wrap.json (`luck`, `tips`), not played.
+  3.0.1: the first tip on a flag takes it down for the whole crew: the
+  Worker drops that guid from the recipient's week when the tip is stored,
+  and a sync drops a flag whose tip is still unread; on arrival the client
+  drops it from `session.tricky`, so it stays down.
 - 2.12's study rooms: a room is `{host, start, rounds, round, brk}` on my
   week (`room`), joining copies it to mine, and every screen computes the
   clock from `start` (`room_model.phase`, and the same arithmetic in its
@@ -95,10 +107,10 @@ add-on.
   Closing Anki leaves the room.
 - 2.13: settings that belong to a person (`account.ACCOUNT_KEYS`: privacy
   switches, show-up, paused, exam and away dates, status, emoji, squads,
-  crew label, shared decks by id and name) live on the server
-  (`GET/PUT /settings`), mine only. Accent, theme, sort and tab stay per
-  computer. An install pulls before it uploads: `_on_sync_done` waits for
-  `account.ensure()` at profile open, sign-in and the day's first sync, so
+  crew label, shared decks by id and name, muted uids) live on the server
+  (`GET/PUT /settings`), mine only. Accent, theme, sort, tab and the room
+  chip's side stay per computer. An install pulls before it uploads:
+  `_on_sync_done` waits for `account.ensure()` at profile open, sign-in and the day's first sync, so
   a new computer never sends defaults over the account's. Newest save
   wins. `app.save_cfg` pushes when an account key changes. An install that
   has never set a deck list (and couldn't pull one) doesn't upload an

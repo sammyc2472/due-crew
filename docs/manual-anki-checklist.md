@@ -193,3 +193,17 @@ before trying the real thing.
 - [ ] Flag a card: a crewmate with the same note sees it on the Decks tab with the card's text (from their own copy); the server never has the text (`wrangler d1 execute due-crew-dev --remote --command "SELECT doc FROM weeks"`).
 - [ ] Settings → Sign Out, then sign in on another computer: both work; Delete Account from one signs the other out at its next request.
 - [ ] Paused, show-up, away dates, exam date, statuses, cheers with notes, good-luck lines, tips, rooms: each still reaches a crewmate on 3.0.
+
+## 3.0.1: a tip clears the flag, mute and report, the room chip's side
+
+Deploy the Worker first (the tag does), dev first as for 3.0.
+
+- [ ] A flags a card; B (same note) sees it under "Flagged by the crew" and sends a tip: the flag goes from B's Decks tab at once, and from C's (same note) at C's next refresh. A gets the tip under the card's answer.
+- [ ] The race: A flags two cards; B tips one. A clicks Anki's Sync before any refresh (a sync uploads before it reads the board): the tipped flag stays down for B and C, the other stays up, and A gets the tip. A syncs again: still down. A flags the card again: it's back up.
+- [ ] A plain cheer (no tip) leaves A's flags alone.
+- [ ] Right-click a crewmate's name on Today or Week: Mute cheers, Report…. Right-click your own name: no menu. A normal click still opens the profile.
+- [ ] Mute B: B's cheers and knocks (a knock from a shared squad) no longer arrive; B is still crew on both boards, and B's board says nothing. The menu now says Unmute cheers; unmute and B's next cheer plays.
+- [ ] A second computer signed in to the same account: B is muted there too after its next settings pull (restart Anki).
+- [ ] B, muted, tips A's flag: the flag goes down for the crew, then comes back up at A's next sync (a muted tip doesn't count).
+- [ ] Report… on B: "Report B", three choices, a note, "Sends their name, emoji and last cheer to Due Crew. Reporting also mutes them.", Cancel / Report. Cancel does nothing. Report: tooltip says reported and muted; B is muted. With REPORT_TO set, the mail arrives with both uids, B's name and emoji, the reason, the note, and B's cheer to you if it was still unread; your address isn't in it. Without REPORT_TO, `wrangler tail` shows "report received" and no ids.
+- [ ] Settings → Board → Room chip: Left. Open a room: the chip sits at the left end of the top bar (Decks screen and while reviewing); with AMBOSS installed, the two chips don't overlap. Right puts it back. Reset Board puts it back on the right. A second computer keeps its own choice.

@@ -3,7 +3,8 @@
 // one request). Plus the lazy reads: shared decks, a heatmap, settings.
 
 import type { Session } from "./auth";
-import { listKnocks } from "./social";
+import { listKnocks, withoutFlags } from "./social";
+import * as P from "./plans";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -67,6 +68,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     friends, cheers, knocks: await listKnocks(env, s.uid),
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
+  if (withDecks) Object.assign(out, await P.forBoard(env, s.uid));  // 3.1: the plans I follow, and offers
   await touchSeen(env, s.uid);
   return json(out);
 }
@@ -103,14 +105,15 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
-  const week = "week" in body ? JSON.stringify(V.week(body.week)) : null;
+  const weekDoc = "week" in body ? V.week(body.week) : null;
   const decks = "decks" in body ? JSON.stringify(V.decks(body.decks)) : null;
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
   const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
+  const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;
@@ -122,6 +125,22 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const db = env.DB;
   const now = nowSec();
   const wrote: Record<string, boolean> = {};
+  let week: string | null = null;
+  if (weekDoc) {
+    // 3.0.1: a flag a crewmate has tipped stays down. A tip still waiting
+    // for me means I haven't read it, so my client doesn't know yet, and
+    // this sync would put the flag back up.
+    const flags = Array.isArray(weekDoc.tricky) ? (weekDoc.tricky as { guid: string }[]).map((t) => t.guid) : [];
+    let tipped = new Set<string>();
+    if (flags.length) {
+      const rows = await db.prepare(
+        `SELECT c.guid FROM cheers c WHERE c.to_uid = ?1 AND c.guid IN (${flags.map((_, i) => `?${i + 2}`).join(",")})
+         AND EXISTS (SELECT 1 FROM friends f WHERE f.owner = c.from_uid AND f.friend = ?1)`,
+      ).bind(s.uid, ...flags).all<{ guid: string }>();
+      tipped = new Set(rows.results.map((r) => r.guid));
+    }
+    week = JSON.stringify(withoutFlags(weekDoc, tipped));
+  }
   const [cur] = await db.batch([
     db.prepare(`SELECT u.name, u.emoji, u.client_version, u.tz, u.rollover, w.doc AS week,
                 d.json AS decks, h.json AS heat, st.v AS sv, st.at AS sat, st.json AS sjson
@@ -196,6 +215,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
       ).bind(id, s.uid, r.name, r.day, r.reviews, r.study_time_ms, r.accuracy, r.streak, r.week,
              r.emoji, r.new_cards, now));
     }
+  }
+  if (planProgress) {
+    const pw = await P.progressWrites(env, s.uid, planProgress);
+    wrote.plans = pw.length > 0;
+    writes.push(...pw);
   }
   if (writes.length) {
     const results = await db.batch(writes);  // one transaction

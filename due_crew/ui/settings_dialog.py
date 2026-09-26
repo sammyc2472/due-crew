@@ -30,16 +30,18 @@ DEFAULTS = {
     "show_up": False,
     "paused": False, "exam_date": "",
     "crew_label": "Crew", "accent": "green",
-    "away_from": "", "away_to": "",
+    "away_from": "", "away_to": "", "room_chip_side": "right",
 }
 # what Reset Board puts back: the Board tab, and never anything on Privacy
 BOARD_KEYS = ("show_leaderboard", "show_stale", "show_last_active", "sync_notifications",
-              "theme", "accent", "compact", "highlight_me", "crew_label")
+              "theme", "accent", "compact", "highlight_me", "crew_label", "room_chip_side")
 TABS = ("you", "board", "privacy")
 
 THEMES = [("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")]
 ACCENTS = [("green", "Green"), ("blue", "Blue"), ("purple", "Purple"),
            ("teal", "Teal"), ("amber", "Amber"), ("rose", "Rose")]
+# 3.0.1: the study-room chip's end of Anki's top bar (other add-ons put chips there)
+CHIP_SIDES = [("left", "Left"), ("right", "Right")]
 NUMBERS, SHOW_UP, PAUSED = 0, 1, 2   # the three Privacy choices
 
 
@@ -370,6 +372,7 @@ class SettingsDialog(QDialog):
         self._combo(lay, "accent", "Accent", ACCENTS, icons)
         self._check(lay, "compact", "Compact rows")
         self._check(lay, "highlight_me", "Highlight my row")
+        self._combo(lay, "room_chip_side", "Room chip", CHIP_SIDES)
         lay.addSpacing(6)
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
         # two short lines, unwrapped: a wrapped note got clipped by _shrink

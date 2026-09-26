@@ -23,5 +23,7 @@
   "away_to": "",
   "squads": [],
   "squad": "",
-  "emoji": ""
+  "emoji": "",
+  "room_chip_side": "right",
+  "muted": []
 }

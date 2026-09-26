@@ -11,7 +11,7 @@ from aqt.utils import tooltip
 from . import app, board
 from .app import SQUAD_CACHE_SECS, _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
-from .social import _open_profile
+from .social import _open_profile, drop_muted, muted_uids
 from .stats.queries import StatsQueries
 from .ui import confirm, copy_text
 from .wrap import _mute_knocker, _wrap_data
@@ -95,7 +95,7 @@ def _fetch_squad(force=False):
     def commit(result):
         data, state, knocks = result or (None, "error", None)
         if knocks is not None:
-            _state["knocks"] = [tuple(k) for k in knocks]
+            _state["knocks"] = drop_muted([], [tuple(k) for k in knocks], muted_uids(cfg()))[1]
         if sq["id"] != sid:
             return  # switched meanwhile
         if data is not None:

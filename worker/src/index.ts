@@ -3,6 +3,8 @@
 
 import * as A from "./auth";
 import * as B from "./board";
+import { bridge } from "./bridge";
+import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
 import { Env, HttpError, json } from "./util";
@@ -24,6 +26,8 @@ open("GET", r("/version"), async (_q, env) => json({ api: Number(env.API_VERSION
 open("POST", r("/auth/code"), A.requestCode);
 open("POST", r("/auth/verify"), A.verifyCode);
 open("POST", r("/admin/import-users"), A.importUsers);
+open("POST", r("/auth/link/redeem"), A.redeemLink);
+authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (_q, s, env) => A.signOut(s, env));
 authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
@@ -47,6 +51,22 @@ authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
 authed("POST", r(`/knocks/${ID}`), S.sendKnock);
 authed("DELETE", r(`/knocks/${ID}`), (_q, s, env, p) => S.deleteKnock(s, env, p));
+authed("POST", r("/reports"), S.report);
+
+// 3.1: plans (the fixed paths before /plans/{id})
+authed("PUT", r("/plans/trees"), P.putTree);
+authed("GET", r("/plans/trees"), (_q, s, env) => P.getTrees(s, env));
+authed("GET", r("/plans/mine"), (_q, s, env) => P.mine(s, env));
+authed("GET", r("/plans/peek"), P.peek);
+authed("POST", r("/plans/follow"), P.follow);
+authed("POST", r("/plans"), P.create);
+authed("GET", r(`/plans/${ID}`), P.get);
+authed("PUT", r(`/plans/${ID}`), P.put);
+authed("DELETE", r(`/plans/${ID}`), (_q, s, env, p) => P.remove(s, env, p));
+authed("POST", r(`/plans/${ID}/cards`), P.addCards);
+authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
+authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
+authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
@@ -58,17 +78,27 @@ authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));
 
+/** Every 15 minutes while 2.x clients remain: see bridge.ts. */
+export const BRIDGE_CRON = "*/15 * * * *";
+
 /** Daily: what has expired goes. Nothing anyone would miss. */
 export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)): Promise<void> {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM otp WHERE expires_at <= ?").bind(now),
     env.DB.prepare("DELETE FROM limits WHERE window_start <= ?").bind(now - 86400),
     env.DB.prepare("DELETE FROM sessions WHERE last_used <= ?").bind(now - A.SESSION_IDLE),
+    env.DB.prepare("DELETE FROM login_links WHERE expires_at <= ?").bind(now),
   ]);
 }
 
 export default {
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === BRIDGE_CRON) {
+      // the 2.x bridge; counts only in the log
+      ctx.waitUntil(bridge(env).then((r) => { if (r) console.log(`bridge: pulled ${r.pulled}, pushed ${r.pushed}`); },
+        (e) => console.log(`bridge failed: ${String(e?.message || e).slice(0, 120)}`)));
+      return;
+    }
     ctx.waitUntil(housekeeping(env));
   },
 
