@@ -29,7 +29,7 @@ open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
-authed("POST", r("/auth/signout"), (_q, s, env) => A.signOut(s, env));
+authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
 authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
 
