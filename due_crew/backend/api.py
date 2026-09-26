@@ -281,7 +281,9 @@ class ApiClient:
                            "note": clean_note(c.get("note")), "luck": c.get("luck") is True,
                            "guid": str(c.get("guid") or "")[:40]})
         friends = [str(f.get("uid")) for f in data.get("friends") or [] if f.get("uid")]
-        if friends != self.session.get("friend_ids"):
+        # until the restore has sent it, the list this computer remembers from
+        # 2.x is the only copy: 3.0.0 replaced it here and lost most crews
+        if friends != self.session.get("friend_ids") and not self.session.get("needs_restore"):
             self.session["friend_ids"] = friends
             self._save_session()
         return {"entries": entries,

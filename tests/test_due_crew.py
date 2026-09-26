@@ -2453,6 +2453,24 @@ def test_restore_from_2x():
           and store.codes and "dre" in store.codes.values())
 
 
+
+def test_refresh_before_restore_keeps_the_crew():
+    """3.0.0: the board refresh at sign-in ran before the first sync, and
+    replaced the crew this computer remembered from 2.x with the server's
+    empty list, so the restore had nobody to bring back."""
+    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    sam.session.update(needs_restore=True, friend_ids=["dre", "eve"])
+    sam.fetch_board([TODAY.isoformat()])
+    check("restore: a refresh first leaves the remembered crew alone",
+          sam.session.get("friend_ids") == ["dre", "eve"])
+    sam.push([TODAY.isoformat()], {})
+    check("restore: and the first sync still brings all of it back",
+          ("sam", "dre") in store.friends and ("sam", "eve") in store.friends)
+    sam.fetch_board([TODAY.isoformat()])
+    check("restore: after that, the board's list is the one kept",
+          sorted(sam.session.get("friend_ids")) == ["dre", "eve"])
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
