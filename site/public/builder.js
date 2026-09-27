@@ -85,8 +85,8 @@ async function builder(id) {
     subKinds.set(key, s);
     return s;
   };
-  const views = [["resource", "By resource"], ["system", "By system"], ["other", "Other tags"]].filter(([k]) => kindsBelow("root:tag").has(k));
-  if (tree.decks.length) views.push(["deck", tree.decks.length > 1 ? "Deck and subdecks" : "Whole deck"]);
+  const views = [["resource", "Resource"], ["system", "System"], ["other", "Other"]].filter(([k]) => kindsBelow("root:tag").has(k));
+  if (tree.decks.length) views.push(["deck", "Deck"]);
 
   // ---- the working copy ----
   let doc = structuredClone(plan.doc);
@@ -104,6 +104,10 @@ async function builder(id) {
   let anchor = today() >= start ? today() : start;
   let picked = null;        // the day open in the day panel
   let splitting = null;     // {u, key} while the split panel is open
+  let moving = null;        // the day whose "Move this day…" is open
+  let sideTab = "cover";
+  let shareOpen = false;    // the Share menu, open across redraws
+  let flash = false;        // B8: "Saved" shows for a moment    // B1: the side panel shows what to cover, or the picked day
   let treeView = views[0]?.[0] || "deck";
   let note = "";            // the last thing Lay it out or a split did
   const opened = new Set(); // the tree's expanded nodes
@@ -112,13 +116,17 @@ async function builder(id) {
   const status = h("span", { class: "status", role: "status" });
   const saveBtn = h("button", { onclick: () => save() }, "Save");
   const mark = () => {
-    dirty = true; status.className = "status"; status.textContent = "Not saved";
+    dirty = true; status.className = "status"; status.textContent = "Unsaved changes";
     document.querySelector(".savebar")?.classList.remove("clean");  // C6: on a phone, Save shows now
   };
   const narrow = () => matchMedia("(max-width: 700px)").matches;
   let coverOpen = null;   // H3: What to cover, open or not, across redraws (a phone opens it while there are no dates)
   let paceOpen = false;   // C6: the pace, folded to one line on a phone
   window.onbeforeunload = () => (dirty ? true : undefined);
+  // B8: ⌘S / Ctrl+S saves (only while this page is the one showing)
+  document.onkeydown = (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && document.contains(saveBtn)) { e.preventDefault(); if (dirty) save(); }
+  };
 
   // ---- units and sources ----
   const srcs = (u) => [...(u.tags || []).map((t) => `tag:${t}`), ...(u.decks || []).map((d) => `deck:${d}`)];
@@ -383,7 +391,7 @@ async function builder(id) {
       else if (!covered(k)) for (const x of inView(k)) { for (const c of [...cover]) if (under(x, c)) cover.delete(c); cover.add(x); }
       mark(); draw();
     };
-    const row = (k, depth, full) => {
+    const row = (k, depth, full, dup) => {
       const hasKids = kidsOf(k).length > 0 && !full;
       const p = pathOf(k);
       const seg = p.split("::").pop();
@@ -397,8 +405,7 @@ async function builder(id) {
       const onCal = isPlaced(k, placed);
       const el = h("div", { class: `tn${onCal ? " used" : ""}`, draggable: "true", style: `padding-left:${4 + depth * 14}px`, title: `${p}${onCal ? " · on the calendar" : ""}` },
         tw, cb,
-        h("span", { class: "nm" }, full ? Tags.name(p) : Tags.word(seg),
-          (full ? Tags.name(p) !== p : Tags.word(seg) !== seg) ? h("span", { class: "raw" }, full ? p : seg) : null),
+        h("span", { class: "nm" }, full ? Tags.name(p) : Tags.word(seg), dup ? h("span", { class: "raw" }, full ? p : seg) : null),
         h("small", {}, n(k).toLocaleString()),
         h("button", { class: "add", title: picked ? `Put it on ${pretty(picked)}` : "Put it on the next free day", "aria-label": `Put ${Tags.word(seg)} on ${picked ? pretty(picked) : "the next free day"}`,
           onclick: () => { const d = picked || firstStudy(lastDay() ? addDays(lastDay(), 1) : start); dropped(d, { key: k }); } }, "+"));
@@ -412,22 +419,24 @@ async function builder(id) {
       if (term) {
         for (const k of order.keys()) {
           const p = pathOf(k);
-          if (p.toLowerCase().includes(term) || Tags.name(p).toLowerCase().includes(term)) out.push(row(k, 0, true));
+          if (n(k) && (p.toLowerCase().includes(term) || Tags.name(p).toLowerCase().includes(term))) out.push(row(k, 0, true, false));
           if (out.length >= 200) break;
         }
       } else {
         const shown = (k) => (treeView === "deck" ? kindOf(k) === "deck" : kindOf(k) === "tag" && kindsBelow(k).has(treeView));
         const rec = (key, depth) => {
-          for (const k of kidsOf(key)) {
-            if (!shown(k)) continue;
-            out.push(row(k, depth, false));
+          const ks = kidsOf(key).filter((k) => shown(k) && n(k) > 0);
+          const words = new Map();
+          for (const k of ks) { const w = Tags.word(pathOf(k).split("::").pop()); words.set(w, (words.get(w) || 0) + 1); }
+          for (const k of ks) {
+            out.push(row(k, depth, false, words.get(Tags.word(pathOf(k).split("::").pop())) > 1));
             if (opened.has(k)) rec(k, depth + 1);
           }
         };
         const root = treeView === "deck" ? "root:deck" : "root:tag";
         // one root with one path down it: open the way to the first choice
-        let only = kidsOf(root).filter(shown);
-        while (only.length === 1 && !opened.has(`seen:${only[0]}`)) { opened.add(only[0]); opened.add(`seen:${only[0]}`); only = kidsOf(only[0]).filter(shown); }
+        let only = kidsOf(root).filter((k) => shown(k) && n(k) > 0);
+        while (only.length === 1 && !opened.has(`seen:${only[0]}`)) { opened.add(only[0]); opened.add(`seen:${only[0]}`); only = kidsOf(only[0]).filter((k) => shown(k) && n(k) > 0); }
         rec(root, 0);
       }
       if (!out.length) out.push(h("p", { class: "muted small" }, count.size ? "Nothing matches." : "No tags yet. In Anki: Tools › Due Crew › Make a plan from a deck."));
@@ -439,22 +448,23 @@ async function builder(id) {
       h("button", { role: "tab", "aria-selected": String(treeView === k), class: treeView === k ? "on" : "", onclick: () => { treeView = k; draw(); } }, t))) : null;
     const tot = coverTotal();
     return h("div", { class: "tree2" },
-      h("div", { class: "thead" }, h("b", {}, "What to cover"), h("small", { class: "muted" }, tot ? `${tot.toLocaleString()} cards ticked` : "")),
+      h("div", { class: "thead" }, h("small", { class: "muted" }, tot ? `${tot.toLocaleString()} cards ticked` : "Tick what the plan covers.")),
+      picked ? h("div", { class: "adding" }, h("b", {}, `Adding to ${pretty(picked)}`), h("span", { class: "muted" }, " · + puts a tag there")) : null,
       seg, q, list);
   }
 
   // ---- the pace ----
   function pacePanel() {
-    const mode = (m, title, body) => h("button", { class: `pc${pace.mode === m ? " on" : ""}`, "aria-pressed": String(pace.mode === m),
-      onclick: () => { if (pace.mode !== m) { pace.mode = m; if (m === "end" && !doc.end) doc.end = addDays(start, 55); mark(); draw(); } } },
-      h("span", { class: "muted small" }, title), body);
-    const endIn = h("input", { type: "date", value: doc.end || "", "aria-label": "Finish by", onclick: (e) => e.stopPropagation(),
+    // B2: one line; the kind of pace is a menu, and only its own field shows
+    const kind = h("select", { "aria-label": "Pace", onchange: (e) => {
+      pace.mode = e.target.value; if (pace.mode === "end" && !doc.end) doc.end = addDays(start, 55); mark(); draw(); } },
+      [["end", "Finish by"], ["daily", "Cards a day"], ["placed", "I'll place each day"]].map(([v, t]) => h("option", { value: v, selected: pace.mode === v }, t)));
+    const endIn = h("input", { type: "date", value: doc.end || "", "aria-label": "Finish by",
       onchange: (e) => { if (e.target.value) doc.end = e.target.value; else delete doc.end; if (!doc.end && doc.phases) { doc.phases.taper = 0; } mark(); draw(); } });
-    const dailyIn = h("input", { type: "number", min: 1, max: 5000, value: pace.daily || 20, "aria-label": "New cards a day", style: "width:6em", onclick: (e) => e.stopPropagation(),
+    const dailyIn = h("input", { type: "number", min: 1, max: 5000, value: pace.daily || 20, "aria-label": "New cards a day", style: "width:5.5em",
       onchange: (e) => { pace.daily = Math.max(1, Math.min(5000, Math.round(Number(e.target.value) || 1))); mark(); draw(); } });
     const d1 = pace.mode === "end" ? endDaily() : 0;
     const fin = pace.mode === "daily" ? finishBy(pace.daily || 20) : null;
-    const leftN = coverLeft();
     const startIn = h("input", { type: "date", value: start, "aria-label": "Starts",
       onchange: (e) => {
         if (!e.target.value) return;
@@ -466,13 +476,13 @@ async function builder(id) {
     const dayBtns = h("span", { class: "wdays", role: "group", "aria-label": "Study days" }, ["M", "T", "W", "T", "F", "S", "S"].map((l, i) =>
       h("button", { class: pace.days[i] ? "on" : "", "aria-pressed": String(!!pace.days[i]), title: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][i],
         onclick: () => { const next = pace.days.slice(); next[i] = next[i] ? 0 : 1; if (next.some(Boolean)) { pace.days = next; study.days = next; mark(); draw(); } } }, l)));
+    const how = pace.mode === "end" ? h("span", { class: "row", style: "gap:6px" }, endIn, h("small", { class: "muted" }, d1 ? `≈ ${d1.toLocaleString()} new a day` : ""))
+      : pace.mode === "daily" ? h("span", { class: "row", style: "gap:6px" }, dailyIn, h("small", { class: "muted" }, fin ? `done ≈ ${pretty(fin)}` : ""))
+      : h("small", { class: "muted" }, "drag a tag onto a day, or use +");
     return h("div", { class: "pace2" },
-      h("div", { class: "prow2" }, h("span", {}, "Starts ", startIn), h("span", {}, "Study days ", dayBtns),
-        h("span", { class: "muted small" }, leftN ? `${leftN.toLocaleString()} ticked, not on a day yet` : "")),
-      h("div", { class: "pcs" },
-        mode("end", "Finish by", h("span", {}, endIn, h("small", {}, d1 ? ` ≈ ${d1.toLocaleString()} new a day` : doc.end ? " " : ""))),
-        mode("daily", "New cards a day", h("span", {}, dailyIn, h("small", {}, fin ? ` finishes ≈ ${pretty(fin)}` : ""))),
-        mode("placed", "I'll place each day", h("small", {}, "drag or + onto a day"))));
+      h("span", { class: "pi" }, "Starts ", startIn), h("span", { class: "psep" }),
+      h("span", { class: "pi" }, "Study days ", dayBtns), h("span", { class: "psep" }),
+      h("span", { class: "pi" }, kind, how));
   }
 
   // ---- the calendar ----
@@ -508,14 +518,14 @@ async function builder(id) {
       const chips = e.chips.map((c) => {
         const el = h("button", { class: `ch ${c.review ? "rv" : c.cards ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
-          onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
+          onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; moving = null; sideTab = "day"; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
         return el;
       });
       const bar = e.load ? h("div", { class: `load${heavy ? " hi" : ""}` }, h("i", { style: `width:${Math.min(100, Math.round((100 * e.load) / (cap || maxLoad)))}%` })) : null;
       const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "review-only days"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
-        onclick: () => { picked = picked === d ? null : d; splitting = null; draw(); },
-        onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; draw(); } } },
+        onclick: () => { picked = picked === d ? null : d; splitting = null; moving = null; sideTab = picked ? "day" : "cover"; draw(); },
+        onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; moving = null; sideTab = picked ? "day" : "cover"; draw(); } } },
         h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...chips, bar);
       if (author) dropOn(cell, (what) => dropped(d, what));
       cells.push(cell);
@@ -534,13 +544,13 @@ async function builder(id) {
       if (e.load <= cap * 1.25) continue;
       const big = e.chips.filter((c) => !c.even && !c.cards).sort((x, y) => y.n - x.n)[0];
       return h("div", { class: "hnote" }, h("span", {}, h("b", {}, pretty(d)), ` is heavy: ${e.load.toLocaleString()} new (pace ${cap.toLocaleString()}).`),
-        big ? h("button", { class: "ghost", onclick: () => { picked = d; splitting = { u: big.u, key: big.key }; draw(); } }, `Split ${big.text}`) : null);
+        big ? h("button", { class: "ghost", onclick: () => { picked = d; splitting = { u: big.u, key: big.key }; sideTab = "day"; draw(); } }, `Split ${big.text}`) : null);
     }
     return null;
   }
 
   // ---- a day: what opens, split, searches, a review day, notes ----
-  function dayPanel() {
+  function dayPanel(inSide) {
     if (!picked) return null;
     const d = picked;
     const e = dayMap(d, d).get(d) || { chips: [], load: 0 };
@@ -559,9 +569,9 @@ async function builder(id) {
     for (const u of own) {
       const chips = e.chips.filter((c) => c.u === u).map((c) => chipEl(u, c));
       if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips))); continue; }
-      const name = h("input", { class: "uname", value: u.name, maxlength: 60, "aria-label": "Name",
+      const name = h("input", { class: "uname", value: u.name, maxlength: 60, placeholder: "Name this day",
         oninput: (ev) => { u.name = ev.target.value; auto.delete(u.id); mark(); } });
-      rows.push(h("div", { class: "du" }, name, h("div", { class: "chips2" }, chips)));
+      rows.push(h("div", { class: "du" }, h("label", { class: "dl" }, h("span", { class: "lbl" }, "Name"), name), h("div", { class: "chips2" }, chips)));
     }
     for (const u of spans) {
       const total = unitTotal(u);
@@ -571,24 +581,30 @@ async function builder(id) {
           h("button", { class: "quiet", onclick: () => { delete u.even; delete u.due; renameAll(); mark(); draw(); } }, `All on ${pretty(u.opens)}`),
           h("button", { class: "quiet", onclick: () => { doc.units = doc.units.filter((x) => x !== u); mark(); draw(); } }, "Take it off")) : null));
     }
-    const moveIn = author && own.length ? h("input", { type: "date", "aria-label": "Move this day to", onchange: (ev) => {
+    // B7: the date picker opens on this day, never on today
+    const moveIn = author && own.length && moving === d ? h("input", { type: "date", value: d, "aria-label": "Move this day to", onchange: (ev) => {
       const to = ev.target.value; if (!to || to === d) return;
       for (const u of own) { const other = doc.units.find((x) => x.opens === to && !x.even && x !== u); if (other) { for (const k of srcs(u)) addTo(to, k); other.cards = [...(other.cards || []), ...(u.cards || [])]; for (const q of u.search || []) { other.search = [...new Set([...(other.search || []), q])]; if (u.sn?.[q] != null) other.sn = { ...(other.sn || {}), [q]: u.sn[q] }; } for (const r of doc.reviews || []) { if (r.from === u.id) r.from = other.id; if (r.to === u.id) r.to = other.id; } doc.units = doc.units.filter((x) => x !== u); } else shiftUnit(u, Sched.diff(to, u.opens)); }
-      picked = to; renameAll(); byOpens(); mark(); draw(); } }) : null;
-    return h("section", { class: "dayp", "aria-label": pretty(d) },
-      h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `${pretty(d)}${e.load ? ` · ${e.load.toLocaleString()} cards` : ""}`),
-        h("button", { class: "quiet", "aria-label": "Close", onclick: () => { picked = null; splitting = null; draw(); } }, "×")),
+      picked = to; moving = null; renameAll(); byOpens(); mark(); draw(); } }) : null;
+    const rv = reviewBox(d);
+    const rvLink = rv && rv.tagName === "BUTTON" ? rv : null;
+    const moveLink = author && own.length && moving !== d ? h("button", { class: "linkish", onclick: () => { moving = d; draw(); } }, "Move this day…") : null;
+    return h("section", { class: `dayp${inSide ? " side" : ""}`, "aria-label": pretty(d) },
+      inSide ? null : h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `${pretty(d)}${e.load ? ` · ${e.load.toLocaleString()} cards` : ""}`),
+        h("button", { class: "quiet", "aria-label": "Close", onclick: () => { picked = null; splitting = null; moving = null; draw(); } }, "×")),
+      inSide && e.load ? h("span", { class: "muted small" }, `${e.load.toLocaleString()} new cards`) : null,
       splitting ? splitPanel() : null,
-      rows.length ? rows : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here." : "Nothing new this day."),
-      author ? searchBox(d) : null,
-      reviewBox(d),
-      moveIn ? h("label", { class: "inline" }, "Move to ", moveIn) : null,
-      inPlan ? notesBox(d) : null);
+      rows.length ? rows : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here, or use + in What to cover." : "Nothing new this day."),
+      author ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "Add cards"), searchBox(d)) : null,
+      moveIn ? h("label", { class: "inline" }, "Move to ", moveIn, h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); moving = null; draw(); } }, "Cancel")) : null,
+      moveLink || rvLink ? h("div", { class: "acts" }, moveLink, rvLink) : null,
+      rv && !rvLink ? rv : null,
+      inPlan ? h("div", { class: "notesw" }, author ? h("span", { class: "lbl" }, "Notes for followers") : null, notesBox(d)) : null);
   }
 
   /** 3.3, C3: an Anki search as part of a day; each follower's Anki runs it. */
   function searchBox(d) {
-    const input = h("input", { class: "mono", placeholder: "Paste an Anki search", maxlength: 500, "aria-label": `An Anki search for ${pretty(d)}`, style: "flex:1" });
+    const input = h("input", { class: "mono", placeholder: "An Anki search", maxlength: 500, "aria-label": `An Anki search for ${pretty(d)}`, style: "flex:1" });
     const why = h("small", { class: "warn", role: "status" });
     const add = () => {
       const q = input.value.trim(); if (!q) return;
@@ -611,7 +627,7 @@ async function builder(id) {
     const before = us.filter((u) => u.opens <= d);
     if (!before.length) return null;
     if (!r) return h("button", { class: "linkish", onclick: () => {
-      (doc.reviews ||= []).push({ day: d, from: before[Math.max(0, before.length - 5)].id, to: before[before.length - 1].id }); mark(); draw(); } }, "+ Review day");
+      (doc.reviews ||= []).push({ day: d, from: before[Math.max(0, before.length - 5)].id, to: before[before.length - 1].id }); mark(); draw(); } }, "Make it a review day");
     const pick = (k) => h("select", { "aria-label": k === "from" ? "Review from" : "Review to", onchange: (e) => { r[k] = e.target.value; mark(); draw(); } },
       us.map((u) => h("option", { value: u.id, selected: r[k] === u.id }, `${u.name} · ${pretty(u.opens)}`)));
     return h("div", { class: "rvbox" }, h("b", {}, "Review day"),
@@ -892,13 +908,29 @@ async function builder(id) {
       h("div", { style: "margin-top:18px" }, del));
   }
 
+  /** B4: under the name, one line: whose it is, with whom, who follows. */
+  function subline() {
+    const eds = (plan.editors || []).filter((x) => x.uid !== me.uid).map((x) => x.name);
+    const whose = plan.owner === me.uid ? "Yours" : `${plan.ownerName}'s plan`;
+    const with_ = author && plan.owner !== me.uid ? ["you", ...eds] : eds;
+    const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck];
+    return bits.filter(Boolean).join(" · ");
+  }
+
+  /** B4: everything about sharing the plan, in one menu. */
   function share() {
     const url = `${location.origin}/p/${plan.code}`;
-    return h("div", { class: "share" },
-      h("div", { class: "row" }, h("span", { class: "code" }, spaced(plan.code)),
-        h("button", { class: "quiet", title: "Send this to your class: the page says how to follow", onclick: (e) => copy(url, e.target) }, "Copy link")),
-      h("div", { class: "row" }, h("span", { class: "muted small" }, `${plan.followers} following`),
-        meta.audience === "squad" ? null : calMenu(plan.code)));
+    return h("details", { class: "sharemenu", open: shareOpen, ontoggle: (e) => { shareOpen = e.target.open; } },
+      h("summary", {}, "Share"),
+      h("div", { class: "sharepop" },
+        plan.code && meta.audience !== "squad" ? [
+          h("span", { class: "lbl" }, "The plan's code"),
+          h("div", { class: "row", style: "justify-content:space-between" }, h("span", { class: "code" }, spaced(plan.code)),
+            h("button", { class: "ghost", title: "Send this to your class: the page says how to follow", onclick: (e) => copy(url, e.target) }, "Copy link")),
+          calMenu(plan.code)]
+          : h("p", { class: "muted small" }, "Only your squad can follow it. They'll find it in Anki."),
+        h("span", { class: "lbl" }, "Planning it with"),
+        people()));
   }
 
   /** The people who write the plan; the owner adds co-authors from the crew. */
@@ -931,15 +963,17 @@ async function builder(id) {
   function calendarTab() {
     const vbtn = (k, t) => h("button", { class: view === k ? "on" : "", "aria-pressed": String(view === k), onclick: () => { view = k; draw(); } }, t);
     const placedTotal = doc.units.reduce((a, u) => a + unitTotal(u), 0);
+    // B1: on a wide screen the picked day lives in the side panel, so there are never three columns
+    const sideDay = author && !narrow();
     const nav = h("div", { class: "caltool2" },
-      view !== "list" ? h("span", { class: "row", style: "gap:4px" },
+      view === "month" || view === "week" ? h("span", { class: "row", style: "gap:4px" },
         h("button", { class: "quiet", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
         h("button", { class: "quiet", onclick: () => { anchor = today(); draw(); } }, "Today"),
         h("button", { class: "quiet", "aria-label": "Later", onclick: () => step(1) }, "›"),
-        h("b", { class: "ctitle" }, calTitle())) : h("b", {}, `${doc.units.length} dates`),
+        h("b", { class: "ctitle" }, calTitle())) : h("b", {}, view === "text" ? "As text" : `${doc.units.length} dates`),
       h("span", { class: "sp" }),
-      author && placedTotal ? h("span", { class: "muted small" }, `${placedTotal.toLocaleString()} cards`) : null,
-      h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), author ? vbtn("list", "List") : null));
+      // B5: the plan as text is a view of the calendar
+      h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), author ? vbtn("list", "List") : null, author ? vbtn("text", "Text") : null));
     const paceLine = () => {
       const days = ["M", "T", "W", "T", "F", "S", "S"].filter((_, i) => pace.days[i]).join("");
       const how = pace.mode === "end" && doc.end ? `Finish by ${pretty(doc.end)}` : pace.mode === "daily" ? `${pace.daily || 20} new a day` : "I'll place each day";
@@ -948,16 +982,33 @@ async function builder(id) {
     const paceBox = author ? (narrow()
       ? h("details", { class: "pacefold", open: paceOpen, ontoggle: (e) => { paceOpen = e.target.open; } }, h("summary", {}, h("b", {}, paceLine())), pacePanel())
       : pacePanel()) : null;
+    // B3: one fill button, named for what it does; none when placing by hand
+    const left = coverLeft();
+    const fillLabel = pace.mode === "end" && doc.end ? `Fill to ${pretty(doc.end)}` : `Fill at ${(pace.daily || 20).toLocaleString()} a day`;
+    const fillRow = author && view !== "text" ? h("div", { class: "caltool2" },
+      pace.mode !== "placed" ? h("button", { onclick: () => fillOrSay(false) }, fillLabel) : null,
+      pace.mode !== "placed" ? h("button", { class: "linkish", onclick: () => fillOrSay(true) }, "just next week") : null,
+      h("span", { class: "muted small" }, left ? `${left.toLocaleString()} card${left === 1 ? "" : "s"} not on a day yet` : placedTotal ? `${placedTotal.toLocaleString()} cards on the calendar` : ""),
+      note ? h("span", { class: "muted small", role: "status" }, note) : null) : null;
+    const inner = view === "text" && author ? textTab()
+      : view === "list" && author ? h("div", {}, sideDay ? null : dayPanel(), listView())
+      : sideDay ? calendar()
+      : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel());
     const main = h("div", { class: "main2" },
       paceBox,
-      nav,
-      author ? h("div", { class: "caltool2" },
-        h("button", { onclick: () => fillOrSay(false) }, "Fill the calendar"),
-        h("button", { class: "ghost", onclick: () => fillOrSay(true) }, "Fill next week"),
-        note ? h("span", { class: "muted small", role: "status" }, note) : null) : null,
-      heavyNote(),
-      view === "list" && author ? h("div", {}, dayPanel(), listView()) : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel()));
+      h("div", { class: "calcard" }, nav, fillRow, view === "text" ? null : heavyNote(), inner));
     if (!author) return main;
+    if (sideDay) {
+      if (!picked) sideTab = "cover";
+      const ptab = (k, label, extra) => h("div", { class: `ptab${sideTab === k ? " on" : ""}` },
+        h("button", { role: "tab", "aria-selected": String(sideTab === k), onclick: () => { sideTab = k; draw(); } }, label), extra);
+      return h("div", { class: "bl2" },
+        h("div", { class: "side3" },
+          h("div", { class: "ptabs", role: "tablist" }, ptab("cover", "What to cover"),
+            picked ? ptab("day", pretty(picked), h("button", { class: "x", "aria-label": "Close the day", onclick: () => { picked = null; splitting = null; moving = null; sideTab = "cover"; draw(); } }, "×")) : null),
+          sideTab === "day" && picked ? dayPanel(true) : treePanel()),
+        main);
+    }
     return h("div", { class: "bl2" },
       h("details", { class: "side2", open: !narrow() || (coverOpen ?? !doc.units.length), ontoggle: (e) => { if (narrow()) coverOpen = e.target.open; } },
         h("summary", {}, h("b", {}, "What to cover"), h("span", { class: "muted" }, ` · ${cover.size ? `${coverItems().length} ticked` : "nothing ticked"}`)), treePanel()),
@@ -1009,20 +1060,20 @@ async function builder(id) {
 
   function draw() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
-    const tabs = author ? [["calendar", "Calendar"], ["text", "As text"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
+    const tabs = author ? [["calendar", "Calendar"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
-    const body = tab === "text" ? textTab() : tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
+    const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
         h("div", {}, owner ? h("input", { class: "tname", value: meta.name, maxlength: 60, "aria-label": "The plan's name",
           oninput: (e) => { meta.name = e.target.value; mark(); } }) : h("h1", {}, meta.name || "Untitled"),
-          author && meta.name === plan.doc.deck ? null : h("p", { class: "muted" }, author ? plan.doc.deck : `${plan.ownerName}'s plan · ${plan.doc.deck}`), people()),
+          h("p", { class: "muted small bsub" }, subline())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
       !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
-      author ? h("div", { class: `savebar${dirty ? "" : " clean"}` }, saveBtn, status) : null);
+      author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status, saveBtn) : null);
     $app().classList.add("wide");
   }
 
@@ -1111,7 +1162,8 @@ async function builder(id) {
       base = structuredClone(plan.doc);
       dirty = false; history = null; progressData = null;
       status.textContent = merged ? "Saved, with the other changes kept" : "Saved";
-      draw();
+      flash = true; draw();
+      setTimeout(() => { flash = false; if (!dirty) document.querySelector(".savebar")?.classList.add("clean"); }, merged ? 5000 : 2200);
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 409 ? "It changed again while saving. Save once more."

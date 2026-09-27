@@ -250,6 +250,13 @@ add-on.
   open). A plan's link shows the plan signed out (`/plans/public`), and a
   phone can email itself the link (`POST /links/email`, fixed text). The
   "last active" switch is gone.
+- The builder, calmer (mock "Builder, calmer"): one side panel with two
+  tabs (What to cover, the picked day), so never three columns; the pace
+  is one line with a menu; one fill button named for the pace (none when
+  placing by hand); Share holds the code, Add to calendar and co-authors;
+  the plan as text is a view (Text), not a tab; Save is a pill only while
+  something's unsaved (⌘S). The calendar sits in its own card. A plan is
+  one deck and everything under it: two decks go under one parent.
 
 ## Releasing
 
