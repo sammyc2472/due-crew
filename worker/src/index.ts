@@ -7,9 +7,8 @@ import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
-import { Env, HttpError, json } from "./util";
+import { BODY_MAX, Env, HttpError, json } from "./util";
 
-const BODY_MAX = 512 * 1024;
 
 type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
 type Authed = (req: Request, s: A.Session, env: Env, params: string[]) => Promise<Response>;

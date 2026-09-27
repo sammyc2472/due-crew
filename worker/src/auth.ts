@@ -93,6 +93,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
   if (body.web === true) {
+    if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
     // the site (3.1): the session is a same-site cookie, never in page script
     return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
   }
@@ -299,6 +300,7 @@ export async function createLink(s: Session, env: Env): Promise<Response> {
 /** POST /auth/link/redeem {token}: the site trades the link for a session
  *  cookie. The link dies on first use. */
 export async function redeemLink(req: Request, env: Env): Promise<Response> {
+  if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");  // only the site's own script
   await limitOrThrow(env, `redeem:${clientIp(req)}`, 60, 3600);
   const body = await readJson(req);
   if (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) throw new HttpError(400, "bad_token");

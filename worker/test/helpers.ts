@@ -7,9 +7,9 @@ export const BASE = "https://api.duecrew.com";
 /** One request to the Worker, as a client would send it. */
 export async function api(
   method: string, path: string,
-  opts: { body?: unknown; token?: string; ip?: string; raw?: string; env?: Partial<Cloudflare.Env> } = {},
+  opts: { body?: unknown; token?: string; ip?: string; raw?: string; env?: Partial<Cloudflare.Env>; headers?: Record<string, string> } = {},
 ): Promise<{ status: number; body: any; headers: Headers }> {
-  const headers: Record<string, string> = { "CF-Connecting-IP": opts.ip ?? "203.0.113.7" };
+  const headers: Record<string, string> = { "CF-Connecting-IP": opts.ip ?? "203.0.113.7", ...(opts.headers ?? {}) };
   if (opts.token) headers.authorization = `Bearer ${opts.token}`;
   const init: RequestInit = { method, headers };
   if (opts.raw !== undefined) init.body = opts.raw;

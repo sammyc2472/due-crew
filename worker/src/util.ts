@@ -32,10 +32,39 @@ export function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+export const BODY_MAX = 512 * 1024;
+
+/** The body as text, at most BODY_MAX bytes: counted as it streams, since a
+ *  chunked request has no content-length to check first. */
+export async function readText(req: Request): Promise<string> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > BODY_MAX) {
+      await reader.cancel();
+      throw new HttpError(413, "too_big");
+    }
+    parts.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    all.set(p, at);
+    at += p.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
+  const text = await readText(req);
   let body: unknown;
   try {
-    body = await req.json();
+    body = JSON.parse(text);
   } catch {
     throw new HttpError(400, "bad_json");
   }

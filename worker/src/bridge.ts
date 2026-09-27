@@ -231,7 +231,7 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
         }
       }
       if (prof) {
-        const name = typeof prof.displayName === "string" ? prof.displayName.trim().slice(0, 60) : "";
+        const name = typeof prof.displayName === "string" ? V.oneLine(prof.displayName, V.NAME_MAX) : "";
         const emoji = V.isEmoji(prof.emoji) ? prof.emoji : null;
         if ((name && name !== r.name) || emoji !== r.emoji) {
           d1.push(db.prepare("UPDATE users SET name = ?, emoji = ? WHERE uid = ?").bind(name || r.name, emoji, r.uid));

@@ -9,7 +9,7 @@ import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
 import { sendMail } from "./mail";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson } from "./util";
+import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
 
 export const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 export const CODE_LEN = 6;
@@ -58,7 +58,7 @@ async function addEdge(env: Env, me: string, fid: string) {
 /** PUT /friends/{uid}: add someone by uid (add back, a knock's Add). */
 export async function putFriend(req: Request, s: Session, env: Env, [fid]: string[]): Promise<Response> {
   checkUid(fid);
-  const text = await req.text();
+  const text = await readText(req);
   if (text.trim() && text.trim() !== "{}") throw V.bad("friend");  // an edge carries nothing I set
   if (fid === s.uid) throw new HttpError(400, "self");
   const u = await nameOf(env, fid);
@@ -76,6 +76,12 @@ export async function restoreFriends(req: Request, s: Session, env: Env): Promis
   if (!Array.isArray(ids) || ids.length > 500) throw V.bad("ids");
   const want = [...new Set(ids.filter((x): x is string => typeof x === "string" && UID_RE.test(x) && x !== s.uid))];
   if (!want.length) return json({ added: [] });
+  // 3.0's first sync brings back a 2.x crew, once: only before this account
+  // has synced from 3.x, and rarely. Otherwise it would let anyone knock
+  // anyone, again and again, with no code and no squad in common.
+  const version = await env.DB.prepare("SELECT client_version FROM users WHERE uid = ?").bind(s.uid).first<string | null>("client_version");
+  if (/^3\./.test(version || "")) return json({ added: [] });
+  await limitOrThrow(env, `restore:${s.uid}`, 3, 86400);
   // D1 binds at most 100 parameters a query and runs at most 1,000 queries
   // a request: 90 at a time keeps a 500-friend restore well inside both
   const ok: string[] = [];
@@ -146,7 +152,7 @@ function drawCode(): string {
  *  working. `code` asks for a particular one: 3.0's first sync keeps the
  *  code a person already handed out, when it's free. */
 export async function newCode(req: Request, s: Session, env: Env): Promise<Response> {
-  const text = await req.text();
+  const text = await readText(req);
   let want: string | null = null;
   if (text) {
     let body: unknown;
@@ -161,7 +167,9 @@ export async function newCode(req: Request, s: Session, env: Env): Promise<Respo
     }
   }
   const old = await env.DB.prepare("SELECT code FROM users WHERE uid = ?").bind(s.uid).first<string>("code");
-  if (want && want === old) return json({ code: old });
+  // a wanted code is only for an account without one (the 2.x restore):
+  // it must never undo a code someone chose to change
+  if (want && old) return json({ code: old });
   for (let i = 0; i < 5; i++) {
     const code = want && i === 0 ? want : drawCode();
     const r = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")

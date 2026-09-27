@@ -19,6 +19,8 @@ const DOC_MAX = 256 * 1024;
 const TREE_MAX = 5000;
 const LINE_MAX = 120;
 export const FOLLOWS_MAX = 20;
+const TREES_MAX = 20;
+const PLANS_MAX = 50;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
 
 type Obj = Record<string, unknown>;
@@ -122,8 +124,9 @@ async function following(env: Env, plan: string, uid: string) {
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
 async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<boolean> {
-  if (p.owner === uid || (await following(env, p.id, uid))) return true;
-  if (p.audience === "squad") return isMember(env, p.squad, uid);
+  if (p.owner === uid) return true;
+  if (p.audience === "squad") return isMember(env, p.squad, uid);  // leaving the squad ends it, follow or not
+  if (await following(env, p.id, uid)) return true;
   return (!!code && normalizeCode(code) === p.code) || isMember(env, p.squad, uid);
 }
 
@@ -164,6 +167,13 @@ export async function putTree(req: Request, s: Session, env: Env): Promise<Respo
     });
   };
   const doc = JSON.stringify({ tags: list(body.tags ?? []), decks: list(body.decks ?? []) });
+  await limitOrThrow(env, `tree:${s.uid}`, 30, 3600);
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_trees WHERE uid = ? AND deck != ?").bind(s.uid, deck).first<number>("n");
+  if ((n ?? 0) >= TREES_MAX) {
+    // the oldest tree makes room: a tree is only ever the latest upload
+    await env.DB.prepare("DELETE FROM plan_trees WHERE uid = ?1 AND deck = (SELECT deck FROM plan_trees WHERE uid = ?1 ORDER BY at LIMIT 1)")
+      .bind(s.uid).run();
+  }
   const now = nowSec();
   await env.DB.prepare(
     `INSERT INTO plan_trees (uid, deck, doc, at) VALUES (?, ?, ?, ?)
@@ -188,6 +198,8 @@ export async function create(req: Request, s: Session, env: Env): Promise<Respon
   const doc = JSON.stringify(planDoc({ deck: body.deck, units: [] }));
   const line = planLine(body.line);
   await limitOrThrow(env, `plannew:${s.uid}`, 20, 3600);
+  const mine = await env.DB.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ?").bind(s.uid).first<number>("n");
+  if ((mine ?? 0) >= PLANS_MAX) throw new HttpError(409, "too_many_plans");
   const now = nowSec();
   for (let i = 0; i < 3; i++) {
     const id = draw(16).toLowerCase();
@@ -406,7 +418,8 @@ export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
     `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
-      WHERE f.uid = ?`,
+      WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
+            OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
   ).bind(uid).all<any>();
   const offers = await env.DB.prepare(
     `SELECT p.id, p.name, p.code, p.squad, u.name AS owner_name FROM plans p

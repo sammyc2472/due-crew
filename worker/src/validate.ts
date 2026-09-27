@@ -215,14 +215,14 @@ export function memberRow(v: unknown) {
     accuracy = v.accuracy;
   }
   return {
-    name: typeof v.name === "string" ? v.name : null,
+    name: typeof v.name === "string" ? oneLine(v.name, NAME_MAX) : null,
     day: (v.day as string | undefined) ?? null,
     reviews: int("reviews"),
     study_time_ms: int("studyTimeMs"),
     accuracy,
     streak: int("streak"),
     week: int("week", 7),
-    emoji: (v.emoji as string | undefined) || null,
+    emoji: isEmoji(v.emoji) ? v.emoji : null,  // what the slot shows: an emoji or nothing
     new_cards: int("newCards"),
   };
 }
