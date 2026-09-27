@@ -36,7 +36,15 @@ function fakeFirestore(docs: Record<string, Record<string, unknown>>) {
     }
     if (url.endsWith(":commit")) {
       log.commits.push(body.writes);
+      // like Firestore: a failed precondition fails the whole commit
       for (const w of body.writes) {
+        if (w.currentDocument?.exists && !docs[w.update.name.slice(DOCS.length + 1)]) return new Response("precondition", { status: 400 });
+      }
+      for (const w of body.writes) {
+        if (w.delete) {
+          delete docs[w.delete.slice(DOCS.length + 1)];
+          continue;
+        }
         const path = w.update.name.slice(DOCS.length + 1);
         const next = { ...(docs[path] || {}) };
         for (const f of w.updateMask.fieldPaths) delete next[f];
@@ -111,7 +119,7 @@ describe("the 2.x bridge", () => {
     fs.docs["users/old"].displayName = "Dre C";
     await env.DB.prepare("UPDATE weeks SET doc = ?, updated_at = ? WHERE uid = 'new'").bind(JSON.stringify(week(40)), 1_790_000_900).run();
     const r = await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
-    expect(r?.pulled).toBe(1);
+    expect(r?.pulled).toBe(2);  // the week and the name
     const dre = await env.DB.prepare("SELECT u.name, w.doc FROM users u JOIN weeks w ON w.uid = u.uid WHERE u.uid = 'old'").first<any>();
     expect(dre.name).toBe("Dre C");
     expect(JSON.parse(dre.doc).days["2026-09-26"].reviews).toBe(5);
@@ -136,5 +144,70 @@ describe("the 2.x bridge", () => {
     const r = await bridge({ ...env, FIREBASE_SA: await serviceAccount() } as any, fs.fetcher);
     expect(r?.pulled).toBe(1);
     expect(await env.DB.prepare("SELECT 1 FROM weeks WHERE uid = 'bad'").first()).toBeNull();
+  });
+
+  it("carries shared decks, heatmaps and emoji both ways; a heatmap turned off goes on the other side", async () => {
+    const deck = { name: "Step 1", sig: ["g1", "g2"], total: 100, seen: 40, mature: 10 };
+    await user("old", "Dre", "2.13.0");
+    await user("new", "Sam", "3.0.1", week(1));
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET emoji = '🔥' WHERE uid = 'new'"),
+      env.DB.prepare("INSERT INTO decks (uid, json) VALUES ('new', ?)").bind(JSON.stringify([{ ...deck, seen: 70 }])),
+      env.DB.prepare("INSERT INTO heatmaps (uid, json) VALUES ('new', ?)").bind(JSON.stringify({ counts: { "2026-09-25": 30 } })),
+    ]);
+    const fs = fakeFirestore({
+      "users/old": { displayName: "Dre", emoji: "🌿" },
+      "users/old/shared/decks": { decks: [deck] },
+      "users/old/shared/heatmap": { counts: { "2026-09-24": 12 } },
+      "users/new": { displayName: "Sam", clientVersion: "2.13.0" },
+      "users/new/shared/heatmap": { counts: { "2026-01-01": 1 } },
+    });
+    const sa = await serviceAccount();
+    await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
+    const old = await env.DB.prepare(
+      "SELECT u.emoji, d.json AS decks, h.json AS heat FROM users u LEFT JOIN decks d ON d.uid = u.uid LEFT JOIN heatmaps h ON h.uid = u.uid WHERE u.uid = 'old'",
+    ).first<any>();
+    expect(old.emoji).toBe("🌿");
+    expect(JSON.parse(old.decks)[0].seen).toBe(40);
+    expect(JSON.parse(old.heat).counts["2026-09-24"]).toBe(12);
+    expect((fs.docs["users/new/shared/decks"].decks as any)[0].seen).toBe(70);
+    expect((fs.docs["users/new/shared/heatmap"].counts as any)["2026-09-25"]).toBe(30);
+    expect(fs.docs["users/new"].emoji).toBe("🔥");
+    // Sam turns the heatmap off in 3.x; Dre turns his off in 2.x
+    await env.DB.prepare("DELETE FROM heatmaps WHERE uid = 'new'").run();
+    delete fs.docs["users/old/shared/heatmap"];
+    await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
+    expect(fs.docs["users/new/shared/heatmap"]).toBeUndefined();
+    expect(await env.DB.prepare("SELECT 1 FROM heatmaps WHERE uid = 'old'").first()).toBeNull();
+    expect(await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher)).toEqual({ pulled: 0, pushed: 0 });
+  });
+
+  it("squad rows cross as updates only: nobody is made a member on either side", async () => {
+    await user("old", "Dre", "2.13.0");
+    await user("new", "Sam", "3.0.1", week(1));
+    await user("gone", "Nia", "2.13.0");
+    const now = 1_790_000_000;
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('sq', 'Busm', 'new', 1, 0)"),
+      env.DB.prepare("INSERT INTO members (squad, uid, name, joined_at, reviews) VALUES ('sq', 'old', 'Dre', 0, 1)"),
+      env.DB.prepare("INSERT INTO members (squad, uid, name, joined_at, reviews, day, updated_at) VALUES ('sq', 'new', 'Sam', 0, 88, '2026-09-26', ?)").bind(now),
+    ]);
+    const fs = fakeFirestore({
+      "squads/sq/members/old": { name: "Dre", reviews: 150, day: "2026-09-26", streak: 9 },
+      "squads/sq/members/gone": { name: "Nia", reviews: 5 },   // removed in 3.x: no D1 row
+      "users/old": { displayName: "Dre" },
+      "users/new": { displayName: "Sam" },
+    });
+    const sa = await serviceAccount();
+    await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
+    const dre = await env.DB.prepare("SELECT reviews, streak FROM members WHERE squad = 'sq' AND uid = 'old'").first<any>();
+    expect(dre).toEqual({ reviews: 150, streak: 9 });
+    expect(await env.DB.prepare("SELECT 1 FROM members WHERE uid = 'gone'").first()).toBeNull();  // never a join
+    expect(fs.docs["squads/sq/members/new"]).toBeUndefined();  // Sam has no row in 2.x's squad: none made
+    // once Sam's 2.x row exists, it follows D1
+    fs.docs["squads/sq/members/new"] = { name: "Sam", reviews: 1 };
+    await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
+    expect(fs.docs["squads/sq/members/new"]).toMatchObject({ reviews: 88, day: "2026-09-26" });
+    expect(await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher)).toEqual({ pulled: 0, pushed: 0 });
   });
 });
