@@ -163,6 +163,10 @@ class RequestException(Exception):
     pass
 
 
+class ConnectTimeout(RequestException):
+    """requests.exceptions.ConnectTimeout: the request never got out."""
+
+
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 EMOJI_RE = re.compile(r"[^A-Za-z0-9 ]+")
 SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -267,7 +271,8 @@ class FakeWorker:
     # -- transport ---------------------------------------------------------
     def handle(self, method, url, headers=None, json_body=None):
         if self.down:
-            raise RequestException("offline")
+            self.tries = getattr(self, "tries", 0) + 1
+            raise (ConnectTimeout if self.down == "connect" else RequestException)("offline")
         if self.fail_status:
             self.log.append((method, url.split("?")[0], self.fail_status))
             return FakeResponse(self.fail_status, {"error": "server"})
@@ -1247,6 +1252,7 @@ def install_fake_requests(store):
     mod = types.ModuleType("requests")
     mod.Session = lambda: FakeSession(store)
     mod.RequestException = RequestException
+    mod.exceptions = types.SimpleNamespace(ConnectTimeout=ConnectTimeout, RequestException=RequestException)
     mod.request = lambda method, url, **kw: FakeSession(store).request(
         method, url, headers=kw.get("headers"), json=kw.get("json"))
     sys.modules["requests"] = mod

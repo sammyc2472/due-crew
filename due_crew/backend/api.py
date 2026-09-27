@@ -133,8 +133,14 @@ class ApiClient:
             kw["json"] = body
         try:
             r = self.http.request(method, f"{self.base}{path}", **kw)
-        except requests.RequestException:
-            if retry:
+        except requests.RequestException as e:
+            # once more, when sending it twice can't do a thing twice: a read,
+            # a PUT/PATCH/DELETE, a sync (the server writes only what
+            # changed), or a request that never got out. A POST that may
+            # have landed (a new squad, a plan, cards added) isn't repeated.
+            again = (method != "POST" or path.startswith("/sync")
+                     or isinstance(e, requests.exceptions.ConnectTimeout))
+            if retry and again:
                 return self._call(method, path, body, auth, retry=False)
             raise TransportError(f"{method} {path.split('?')[0]} failed")
         try:

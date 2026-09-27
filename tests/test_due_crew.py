@@ -2610,6 +2610,39 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+def test_retry_only_what_is_safe_twice():
+    """Review: a request that fails is sent once more only when sending it
+    twice can't do a thing twice. A POST that may have landed (a new squad)
+    isn't repeated; a read, a sync, or one that never got out is."""
+    store = world({"maya": "Maya"})
+    cl = new_client(store, "maya", "Maya")
+    for down, method, path, want in ((True, "POST", "/squads", 1), (True, "GET", "/friends", 2),
+                                     (True, "POST", "/sync", 2), ("connect", "POST", "/squads", 2)):
+        store.down, store.tries = down, 0
+        try:
+            cl._call(method, path, {"name": "x"} if method == "POST" else None)
+        except shapes.TransportError:
+            pass
+        check(f"retry: {method} {path} ({'never sent' if down == 'connect' else 'may have landed'}) tried {want}x",
+              store.tries == want, str(store.tries))
+    store.down = False
+
+
+def test_room_commands_from_the_card_page_need_the_key():
+    """Review: the reviewer's page runs the card's own script too. From
+    there a bare duecrew: command (a card cheering the room, joining or
+    leaving it) is dropped; the room widget's own buttons carry a key that
+    lives only in its script. The board and the bars need no key."""
+    from due_crew import room_model as rm
+    js = rm.widget_js("break", {"title": "x"})
+    check("room: the widget's commands carry this run's key", rm.CMD_KEY in js and "'|'" in js)
+    check("room: a keyed command from the card page counts, without its key",
+          rm.trusted(f"duecrew:roomcheer|{rm.CMD_KEY}", True) == ("duecrew:roomcheer", True))
+    check("room: a bare one from the card page doesn't", rm.trusted("duecrew:roomcheer", True)[1] is False)
+    check("room: a wrong key doesn't either", rm.trusted("duecrew:roomleave|0000", True)[1] is False)
+    check("room: the board's commands need none", rm.trusted("duecrew:roomjoin:abc:1", False) == ("duecrew:roomjoin:abc:1", True))
+
+
 def test_room_chip_side_v301():
     """3.0.1: the room chip goes left or right in the top bar (a setting
     on this computer; AMBOSS puts a chip on the right too)."""
