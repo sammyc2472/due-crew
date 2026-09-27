@@ -329,8 +329,12 @@ a copy when shared; keep note ids for tag and subdeck dates).
   `col.find_cards(q)` and is kept to the plan's deck; `unit_sig` includes
   searches, so a new one opens what it adds. From Anki's browser, Add to
   a plan offers the search in the box (with its count, `sn`) or exactly
-  the selected cards. On the site a day takes a pasted search. 50,000
-  single cards a plan (docs up to 1.5 MB).
+  the selected cards (those, when any are selected). On the site a day
+  takes a pasted search. A search about one person's own Anki
+  (`deck:current`, the browser's default; `is:due`, `flag:`, `rated:`…)
+  finds different cards for everyone, so neither side takes it
+  (`plans.shareable_search`, `PERSONAL` in builder.js). 50,000 single
+  cards a plan (docs up to 1.5 MB).
 - **C4 Study and review days.** Study on a date's row builds "Due Crew ·
   <date>" (its seen cards, most lapses first) and opens it. `reviews:
   [{day, from, to}]`: on that morning (up to three late) "Review · A – B",
@@ -349,8 +353,9 @@ a copy when shared; keep note ids for tag and subdeck dates).
 A deck's tags, note ids and subdecks are kept between refreshes
 (`plans._STATIC`) while a fingerprint holds (card count, newest note
 edit, newest card, deck and card-number sums; a few ms); only each
-card's state is read again. On a 35,000-card AnKing-shaped deck a
-refresh's plan work is ~110 ms after the first (~550 ms). `tools/real_anki.py`
+card's state is read again, and so are a date's searches (they depend
+on notes and cards, never on reviews). On a 35,000-card AnKing-shaped
+deck a refresh's plan work is ~50 ms after the first (~550 ms). `tools/real_anki.py`
 checks it, with Anki's own package, before a release.
 
 ## 3.4: a pasted search's count, and the plan in your calendar

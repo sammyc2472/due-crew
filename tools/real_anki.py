@@ -157,6 +157,9 @@ def check(path):
     n0.tags.append("NewTag::Here"); col.update_note(n0)
     i6 = P.DeckIndex(col, did)
     ok("…and a tag edit reads them again", "newtag::here" in i6.by_tag)
+    ok("a date's search is run once, then kept while the notes are the same",
+       units[-1]["search"][0] in i5._searches and not i6._searches)
+    ok("…and after an edit it finds what the edit changed", len(i6.search_cards("tag:NewTag::Here")) == 1)
     col.close()
 
 

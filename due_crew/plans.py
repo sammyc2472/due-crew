@@ -123,7 +123,7 @@ def swapped(path, swap):
 # ---- the deck, read once ----
 
 _STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
-_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of")
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "_searches")
 
 
 class DeckIndex:
@@ -175,7 +175,6 @@ class DeckIndex:
             if cid in home:
                 self.cards[cid] = (int(queue), int(ctype))
                 self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
-        self._searches = {}
         self.fell_back = set()  # unit ids matched by their note ids (C5)
 
     def _read_static(self, col, tree, where):
@@ -209,6 +208,9 @@ class DeckIndex:
         for (g, _o), cid in self.by_ref.items():
             self.by_guid.setdefault(g, []).append(cid)
         self.guid_of = {cid: g for (g, _o), cid in self.by_ref.items()}
+        # a search's answer, kept with the rest: it changes when notes or cards
+        # do (a plan's searches are about the deck, never one person's reviews)
+        self._searches = {}
 
     # -- sources --
 
@@ -682,6 +684,17 @@ def change_note(owner, old, doc):
 
 
 # ---- the browser: which cards ----
+
+# searches whose answer is this person's own Anki, not the deck: another
+# follower's would find something else (deck:current is the browser's default)
+_PERSONAL = re.compile(r"(?i)(?:^|[\s(\"-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|"
+                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:)")
+
+
+def shareable_search(q):
+    """3.3, C3: a search worth giving a plan (not empty, not about my Anki)."""
+    q = str(q or "").strip()
+    return bool(q) and not _PERSONAL.search(q)
 
 def card_refs(col, cids):
     """[[note guid, card ord]] for the picked cards: which cards, never text."""

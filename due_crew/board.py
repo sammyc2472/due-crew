@@ -943,10 +943,9 @@ def _plan_card_html(card):
     status, one bar a date, no legend."""
     e = _html.escape
     pid = str(card.get("id", ""))
-    sched = ""
     out = (f'<div class="dc-pc"><div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
            f'<span>{e(str(card.get("sub") or ""))}</span>'
-           f'<span class="acts">{sched}<a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
+           f'<span class="acts"><a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')

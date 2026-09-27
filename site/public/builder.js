@@ -23,6 +23,9 @@ const Tags = (() => {
   return { word, name, kind, natural };
 })();
 
+/** Searches about one person's own Anki (due_crew/plans.py, _PERSONAL). */
+const PERSONAL = /(?:^|[\s("-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|rated:|prop:|introduced:|added:|edited:|resched:|flag:)/i;
+
 /** The plan's page. Its authors (the owner and co-authors) edit it; anyone
  *  following sees the same calendar, read-only, with the notes. */
 async function builder(id) {
@@ -569,14 +572,17 @@ async function builder(id) {
   /** 3.3, C3: an Anki search as part of a day; each follower's Anki runs it. */
   function searchBox(d) {
     const input = h("input", { class: "mono", placeholder: "Paste an Anki search", maxlength: 500, "aria-label": `An Anki search for ${pretty(d)}`, style: "flex:1" });
+    const why = h("small", { class: "warn", role: "status" });
     const add = () => {
       const q = input.value.trim(); if (!q) return;
+      // the same rule as the add-on's (plans.shareable_search): nothing about one person's own Anki
+      if (PERSONAL.test(q)) { why.textContent = "That finds different cards in each person's Anki. Use tags or decks."; return; }
       const u = unitOn(d);
       u.search = [...new Set([...(u.search || []), q])];
       renameAll(); mark(); draw();
     };
     input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") add(); });
-    return h("div", { class: "row" }, input, h("button", { class: "quiet", onclick: add }, "Add"));
+    return h("div", {}, h("div", { class: "row" }, input, h("button", { class: "quiet", onclick: add }, "Add")), why);
   }
 
   /** 3.3, C4: a review day: that morning, a filtered deck of a range of dates. */
@@ -719,6 +725,7 @@ async function builder(id) {
         } else name = name ? `${name} ${part}` : part;
       }
       if (!opens) { errors.push(`Line ${i + 1}: starts with a date (2026-10-05) or "week 3".`); return; }
+      if (searches.some((q) => PERSONAL.test(q))) { errors.push(`Line ${i + 1}: that search finds different cards in each person's Anki; use tags.`); return; }
       if (!tags.length && !decks.length && !searches.length) { errors.push(`Line ${i + 1}: needs a tag:, a deck: or a search:.`); return; }
       if (due && due < opens) { errors.push(`Line ${i + 1}: due is before it opens.`); return; }
       if (even && !(due && due > opens)) { errors.push(`Line ${i + 1}: "even" needs a due date after it opens.`); return; }

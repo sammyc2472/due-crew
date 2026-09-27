@@ -640,13 +640,18 @@ def study_date(pid, uid):
     if not cids:
         tooltip("Nothing from this date studied yet.")
         return
-    name = f"Due Crew · {u.get('name') or 'date'}"
+    name = _deck_name(f"Due Crew · {u.get('name') or 'date'}")
     if _filtered(mw.col, name, cids):
         _after_change()
         did = mw.col.decks.id_for_name(name)
         if did:
             mw.col.decks.select(did)
             mw.moveToState("overview")
+
+
+def _deck_name(name):
+    """A filtered deck's name from a date's: "::" in it would make a parent deck."""
+    return " ".join(str(name).replace("::", ": ").split())[:120]
 
 
 def check_cards(col, idx, cids, n=CHECK_CARDS):
@@ -704,7 +709,7 @@ def build_checks(plan_list):
             for u in span:
                 pool |= idx.match(u, _swap(st), p["doc"].get("deck", ""))
             cids = check_cards(mw.col, idx, pool, cap)
-            ok = bool(cids) and _filtered(mw.col, name, cids)
+            ok = bool(cids) and _filtered(mw.col, _deck_name(name), cids)
             st.setdefault("checks", {})[key] = {"day": today, "at": int(_time.time() * 1000), "name": name,
                                                 "cids": cids if ok else []}
             if ok:
@@ -806,7 +811,8 @@ def raise_limit(pid):
         except Exception:
             pass
     _after_change()
-    tooltip(f"New cards a day in {html.escape(col.decks.get(did)['name'])}: {want:,} (was {was:,}).")
+    was_s = f" (was {was:,})" if was is not None else ""
+    tooltip(f"New cards a day in {html.escape(col.decks.get(did)['name'])}: {want:,}{was_s}.")
     refresh_progress()
     app.swap(cfg())
 
@@ -1352,6 +1358,8 @@ def add_to_plan(browser):
         search = browser.form.searchEdit.lineEdit().text().strip()
     except Exception:
         search = ""
+    if not P.shareable_search(search):
+        search = ""  # Anki's own deck:current, or a search about my reviews: not for a plan
     try:
         search_n = len(mw.col.find_cards(search)) if search else 0
     except Exception:
@@ -1365,7 +1373,7 @@ def add_to_plan(browser):
             cids = browser.selectedCards()
     if not cids and not search:
         tooltip("Switch the browser to Cards to add single cards to a plan." if notes_mode
-                else "Search for the cards, or select them, first.")
+                else "Search for the cards (a tag, say), or select them, first.")
         return
     refs = P.card_refs(mw.col, cids) if cids else []  # which cards, never their text
     from .ui.add_cards_dialog import AddCardsDialog

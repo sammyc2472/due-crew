@@ -3213,6 +3213,31 @@ def test_plans_notes_mode_v311():
               not asked and g.toasts and "Cards" in g.toasts[-1], str(g.toasts))
 
 
+def test_plan_search_is_the_decks_v34():
+    """3.4 review: the browser's search goes to a plan only when it finds the
+    same cards in everyone's copy. Anki's own deck:current (the browser's
+    default) would open a follower's whole deck; is:due, flags and ratings
+    are one person's."""
+    from due_crew import plans
+    for q in ("deck:current", '"deck:current" tag:x', "is:due", "-is:suspended tag:a", "flag:1", "(rated:1 or tag:x)", " "):
+        check(f"search: {q!r} isn't a plan's", not plans.shareable_search(q))
+    for q in ("tag:*Cardio* -tag:*Pharm*", "tag:Step1::Renal", "current events", '"deck:Step 1::Renal"'):
+        check(f"search: {q!r} is", plans.shareable_search(q))
+    maya = new_client(world({"maya": "Maya"}), "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        edit = types.SimpleNamespace(lineEdit=lambda: types.SimpleNamespace(text=lambda: "deck:current"))
+        browser = types.SimpleNamespace(table=types.SimpleNamespace(is_notes_mode=lambda: False),
+                                        form=types.SimpleNamespace(searchEdit=edit), selected_cards=lambda: [])
+        try:
+            g.F.add_to_plan(browser)
+        except Exception:
+            pass
+        check("search: the default search with nothing picked asks for a search or cards",
+              g.toasts and "Search for the cards" in g.toasts[-1], str(g.toasts))
+        check("review: a date named with :: makes no parent deck for its filtered deck",
+              g.F._deck_name("Checkpoint · Renal::Pharm") == "Checkpoint · Renal: Pharm")
+
+
 def test_restore_only_from_2x_v311():
     """3.1.1: a 3.x session that signs in again (a 401) isn't a 2.x one: the
     restore would re-add people removed elsewhere and rejoin squads. And a

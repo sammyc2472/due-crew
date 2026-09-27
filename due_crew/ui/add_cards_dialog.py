@@ -80,7 +80,7 @@ class AddCardsDialog(QDialog):
         self.by_search.setVisible(bool(self.search))
         shown.setVisible(bool(self.search))
         self.by_cards.setVisible(bool(n))
-        (self.by_search if self.search else self.by_cards).setChecked(True)
+        (self.by_cards if n else self.by_search).setChecked(True)  # what I picked, unless I picked nothing
         self.status = QLabel("Looking for your plans…")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
