@@ -895,7 +895,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -944,6 +944,16 @@ class FakeWorker:
                 nu["sn"] = dict(u["sn"])
             if u.get("ids"):
                 nu["ids"] = list(dict.fromkeys(u["ids"]))
+            for k in ("nids", "cids"):  # E1
+                got = u.get(k)
+                if got is None:
+                    continue
+                if not isinstance(got, list) or len(got) > 5000 or not all(_is_int(x, 1, 2 ** 53) for x in got):
+                    raise Bad(400, "plan")
+                if got:
+                    nu[k] = list(dict.fromkeys(got))
+            if u.get("idn") is not None and (nu.get("nids") or nu.get("cids")):
+                nu["idn"] = u["idn"]
             if u.get("even"):
                 if u["even"] is not True or not u.get("due") or u["due"] == u["opens"]:
                     raise Bad(400, "plan")
@@ -1100,6 +1110,8 @@ class FakeWorker:
                     sn = {q: n for q, n in v.items() if q in (u.get("search") or [])}
                     if sn:
                         u["sn"] = dict(u.get("sn") or {}, **sn)
+                    if "#ids" in v and (u.get("nids") or u.get("cids")):
+                        u["idn"] = v["#ids"]  # E1
             for uid, (tags, decks, ids) in (body.get("units") or {}).items():
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and u["tags"] == tags and u["decks"] == decks:
@@ -1204,8 +1216,9 @@ class FakeWorker:
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
-            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}))
-            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search")]}}
+            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
+                 **{k: u[k] for k in ("nids", "cids") if u.get(k)})
+            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")]}}
             for pid, p in sorted(self.plans.items()) if p["owner"] == me]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 

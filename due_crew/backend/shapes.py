@@ -458,6 +458,10 @@ def _clean_unit(u):
     ids = [g for g in u.get("ids") or [] if isinstance(g, str) and g][:50000]
     if ids:
         out["ids"] = ids  # 3.3, C5: the note ids behind its tags, from the author's Anki
+    for k in ("nids", "cids"):  # E1: note or card ids pasted onto the date
+        got = [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
+        if got:
+            out[k] = got
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
     return out
@@ -518,7 +522,9 @@ def clean_authored(a):
     d = a["doc"]
     units = [{"id": str(u["id"]), "tags": [t for t in u.get("tags") or [] if isinstance(t, str)],
               "decks": [x for x in u.get("decks") or [] if isinstance(x, str)],
-              "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10]}  # 3.4, D1
+              "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10],  # 3.4, D1
+              **{k: [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
+                 for k in ("nids", "cids") if u.get(k)}}  # E1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 

@@ -113,6 +113,10 @@ The UI review: `GET /plans/public?code=` (no sign-in, code plans only) is
 what a plan's link shows before signing in: `{name, ownerName, line,
 deck, followers, units: [{name, opens, due?, n}]}`, days and counts, never
 what's in them (300 an hour an address).
+E1: a date may carry `nids` and `cids` (positive whole numbers, up to 5,000
+each), counted into the plan's 50,000 single cards; `PUT /plans/{id}/ids`
+takes `counts: {unitId: {"#ids": n}}`, kept as the date's `idn`, and the
+lean `authored` docs carry them.
 
 ### Squads
 

@@ -62,3 +62,28 @@ describe("H1: a code, looked up before it's added", () => {
     expect(await maya.status("GET", "/codes/ZZZZZZ")).toBe(404);
   });
 });
+
+describe("E1: note and card ids pasted onto a date", () => {
+  it("whole positive numbers, deduped, up to 5,000 a date; the author's Anki counts them; the public page counts them", async () => {
+    const { priya, p } = await plan();
+    const base = p.doc.units;
+    const put = (units: unknown[], version: number) => priya.call("PUT", `/plans/${p.id}`, { version, doc: { deck: "Step 1", units } });
+    const ok = await put([{ ...base[0], nids: [1628174531284, 1628174531284, 1628174531301], cids: [] }, base[1]], p.version);
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.units[0].nids).toEqual([1628174531284, 1628174531301]);
+    expect(ok.body.doc.units[0].cids).toBeUndefined();
+    for (const bad of [[0], [-3], [1.5], ["123"], Array.from({ length: 5001 }, (_, i) => i + 1)]) {
+      expect((await put([{ ...base[0], nids: bad }, base[1]], ok.body.version)).status).toBe(400);
+    }
+    // the author's Anki: "#ids" is how many cards they found
+    const ids = await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { [base[0].id]: { "#ids": 3 } } });
+    expect(ids.status).toBe(200);
+    const after = await priya.call("GET", `/plans/${p.id}`);
+    expect(after.body.doc.units[0].idn).toBe(3);
+    const pub = await api("GET", `/plans/public?code=${p.code}`);
+    expect(pub.body.units[0].n).toBe(84 + 3);
+    // the lean copy the author's Anki counts from carries them
+    const board = await priya.call("GET", "/board?decks=1");
+    expect(board.body.authored[0].doc.units.find((u: { id: string }) => u.id === base[0].id).nids).toEqual([1628174531284, 1628174531301]);
+  });
+});

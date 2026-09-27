@@ -257,6 +257,14 @@ add-on.
   the plan as text is a view (Text), not a tab; Save is a pill only while
   something's unsaved (⌘S). The calendar sits in its own card. A plan is
   one deck and everything under it: two decks go under one parent.
+- E1 cards by ID: a date's `nids` (note ids: all their cards) and `cids`
+  (card ids: that card), pasted in the day's Add cards box or `nids:` in
+  Text; up to 5,000 each a date, inside the plan's 50,000 single cards.
+  Each follower's Anki finds them inside the plan's deck
+  (`DeckIndex.id_cards`); the author's Anki counts them (`"#ids"` in the
+  counts, kept as `idn`). Numbers only. Not C5's `ids`, which are guids.
+  E2 print: a Print view (authors and followers) lays the dates out as a
+  list by week, topics grouped by resource, for printing or a PDF.
 
 ## Releasing
 

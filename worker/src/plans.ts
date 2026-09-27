@@ -15,6 +15,7 @@ const UNITS_MAX = 200;
 const CARDS_MAX = 50000;  // 3.3: a class lead's own lecture tags, for a year
 const IDS_MAX = 50000;    // 3.3, C5: note ids kept behind a plan's tags and subdecks
 const SEARCH_MAX = 10;
+const IDLIST_MAX = 5000;  // E1: note or card ids pasted onto one date
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
 export const PLAN_BODY_MAX = 1600 * 1024;
@@ -55,6 +56,14 @@ function path(v: unknown): string {
   return v;
 }
 
+/** A date's new cards as far as the server knows: its tags' and subdecks'
+ *  count, single cards, what its searches and pasted ids found. */
+function unitCount(u: Obj): number {
+  return ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
+    + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0)
+    + ((u.idn as number | undefined) ?? (((u.nids as unknown[]) || []).length + ((u.cids as unknown[]) || []).length));
+}
+
 function cardRef(v: unknown): [string, number] {
   if (!Array.isArray(v) || v.length !== 2 || !V.isStr(v[0], V.GUID_MAX, 1) || !V.isInt(v[1], 0, 1000)) throw V.bad("plan");
   return [v[0], v[1]];
@@ -62,7 +71,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -115,6 +124,19 @@ function unit(v: unknown): Obj {
   if (!Array.isArray(cards)) throw V.bad("plan");
   const seen = new Set<string>();
   out.cards = cards.map(cardRef).filter(([g, o]) => !seen.has(`${g}:${o}`) && seen.add(`${g}:${o}`));
+  // E1: note ids and card ids pasted onto the date, run in each follower's
+  // Anki inside the plan's deck; numbers only, and `idn` how many cards they
+  // found in the author's Anki
+  for (const k of ["nids", "cids"]) {
+    const a = v[k];
+    if (a === undefined || a === null) continue;
+    if (!Array.isArray(a) || a.length > IDLIST_MAX || !a.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) throw V.bad("plan");
+    if (a.length) out[k] = [...new Set(a as number[])];
+  }
+  if (v.idn !== undefined && v.idn !== null) {
+    if (!V.isInt(v.idn, 0, 1_000_000)) throw V.bad("plan");
+    if (out.nids || out.cids) out.idn = v.idn;
+  }
   return out;
 }
 
@@ -179,7 +201,8 @@ export function planDoc(v: unknown): Obj {
   if (!Array.isArray(v.units) || v.units.length > UNITS_MAX) throw V.bad("plan");
   const units = v.units.map(unit);
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
-  if (units.reduce((n, u) => n + (u.cards as unknown[]).length, 0) > CARDS_MAX) throw V.bad("plan");
+  const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0);
+  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) > CARDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (v.reviews !== undefined && v.reviews !== null) {
     // 3.3, C4: a review day: that morning, a filtered deck of the dates from `from` to `to`
@@ -492,6 +515,8 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     const qs = (u.search as string[]) || [];
     const sn: Obj = { ...((u.sn as Obj) || {}) };
     for (const [q, n] of Object.entries(v)) {
+      // E1: "#ids" is how many cards the date's pasted ids found
+      if (q === "#ids") { if ((u.nids || u.cids) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -696,8 +721,7 @@ export async function ics(req: Request, env: Env): Promise<Response> {
     `SUMMARY:${icsText(summary)}`, `DESCRIPTION:${icsText(p.name)}`, `URL:${link}`, "TRANSP:TRANSPARENT", "END:VEVENT");
   const byId = new Map(doc.units.map((u) => [u.id as string, u]));
   for (const u of doc.units) {
-    const n = ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
-      + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+    const n = unitCount(u);
     const last = u.even && u.due ? (u.due as string) : (u.opens as string);
     event(u.id as string, u.opens as string, dayAfter(last), `${u.name}${n ? ` · ${n.toLocaleString("en-US")} new` : ""}`);
   }
@@ -727,8 +751,7 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   ).bind(code).first<{ id: string; name: string; line: string; audience: string; doc: string; owner_name: string | null; followers: number }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
   const doc = JSON.parse(p.doc) as { deck: string; units: Obj[] };
-  const n = (u: Obj) => ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
-    + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+  const n = unitCount;
   return json({
     name: p.name, ownerName: p.owner_name || "?", line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
@@ -914,14 +937,16 @@ export async function forBoard(env: Env, uid: string) {
   const authored = await env.DB.prepare(
     `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
-                      'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search')))
+                      'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
+                      'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
-                    + coalesce(json_array_length(x.value, '$.search'), 0) > 0) AS units
+                    + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
+                    + coalesce(json_array_length(x.value, '$.cids'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
   ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
   const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search ? u : { id: u.id, tags: u.tags, decks: u.decks })) });
+    .map((u) => (u.search || u.nids || u.cids ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",

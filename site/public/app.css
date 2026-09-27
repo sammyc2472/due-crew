@@ -403,3 +403,42 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .notesw { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .notesw .notes { border-top: 0; padding-top: 0; }
 @media (max-width: 700px) { .sharepop { left: 0; right: auto; } }
+
+/* E1: pasting ids */
+.addin { flex: 1; resize: vertical; min-height: 34px; font-size: 12.5px; }
+.found { background: var(--you); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; display: grid; gap: 4px; }
+.found .seg { border-radius: 8px; }
+
+/* E2: print */
+.printbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+.printbar input[type=date] { font-size: 13px; padding: 3px 6px; }
+.paperwrap { background: var(--well); border-radius: 12px; padding: 20px; overflow-x: auto; }
+.printout { background: #ffffff; color: #1f1f1c; max-width: 720px; margin: 0 auto; padding: 32px 36px 36px; box-shadow: 0 6px 24px rgba(0,0,0,.14); font-size: 13px; line-height: 1.4; }
+.printout h2 { font-size: 22px; margin: 0; color: #1f1f1c; }
+.printout .pm { color: #6b6b64; margin: 2px 0 14px; }
+.printout .wk { font-weight: 700; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #6b6b64; margin: 14px 0 4px; }
+.printout table { width: 100%; border-collapse: collapse; }
+.printout td { border-top: 1px solid #deded6; padding: 6px; vertical-align: top; color: #1f1f1c; }
+.printout tr { break-inside: avoid; }
+.printout td.bx { width: 16px; }
+.printout td.bx i { display: inline-block; width: 11px; height: 11px; border: 1.3px solid #6b6b64; border-radius: 2px; margin-top: 3px; }
+.printout td.dt { width: 88px; white-space: nowrap; font-weight: 600; }
+.printout td.n { width: 48px; text-align: right; font-variant-numeric: tabular-nums; color: #6b6b64; }
+.printout .t { display: block; font-weight: 600; }
+.printout .t.muted { color: #a3a39b; font-weight: 400; }
+.printout .src { display: block; color: #3d3d38; }
+.printout .src b { font-weight: 600; color: #6b6b64; font-size: 11.5px; }
+.printout .nt { display: block; font-style: italic; color: #6b6b64; }
+.printout tr.rv td { background: #f6f1e6; }
+.printout tr.off td { color: #a3a39b; }
+.printout .pfoot { margin-top: 16px; color: #8a8a82; font-size: 11px; }
+@media print {
+  @page { margin: 14mm; }
+  body { background: #fff !important; }
+  body * { visibility: hidden; }
+  .printout, .printout * { visibility: visible; }
+  .printout { position: absolute; left: 0; top: 0; width: 100%; max-width: none; box-shadow: none; padding: 0; }
+  .printout tr.rv td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .savebar { display: none !important; }
+}
+.found[hidden] { display: none; }

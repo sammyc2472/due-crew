@@ -73,6 +73,8 @@ def unit_sources(unit, deck_id=None, swap=None):
            [list(c) for c in unit.get("cards") or []]]
     if unit.get("search"):
         out.append(list(unit["search"]))  # 3.3, C3
+    if unit.get("nids") or unit.get("cids"):
+        out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
     return out
 
 
@@ -84,7 +86,9 @@ def unit_sig(unit, deck_id=None, swap=None):
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
                        sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
-                      + ([sorted(unit["search"])] if unit.get("search") else []))
+                      + ([sorted(unit["search"])] if unit.get("search") else [])
+                      + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
+                         if unit.get("nids") or unit.get("cids") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -123,7 +127,7 @@ def swapped(path, swap):
 # ---- the deck, read once ----
 
 _STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
-_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "_searches")
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "by_nid", "_searches")
 
 
 class DeckIndex:
@@ -179,20 +183,22 @@ class DeckIndex:
 
     def _read_static(self, col, tree, where):
         rows = col.db.all(
-            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags "
+            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags, n.id "
             f"FROM cards c JOIN notes n ON n.id = c.nid {where}")
         self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
         self.by_deck = {}    # did -> [cid]
         self.by_ref = {}     # (guid, ord) -> cid
         self.home = set()    # the cids in this deck and its subdecks
+        self.by_nid = {}     # E1: note id -> [cid]
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
         treeset = set(tree)
-        for cid, home, ord_, guid, tags in rows:
+        for cid, home, ord_, guid, tags, nid in rows:
             if int(home) not in treeset:
                 continue
             cid = int(cid)
             self.home.add(cid)
+            self.by_nid.setdefault(int(nid), []).append(cid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -284,6 +290,17 @@ class DeckIndex:
             cid = self.by_ref.get((str(g), int(o)))
             if cid is not None:
                 out.add(cid)
+        out |= self.id_cards(unit)
+        return out
+
+    def id_cards(self, unit):
+        """E1: the cards of a date's pasted note ids and card ids, in this deck."""
+        out = set()
+        for n in unit.get("nids") or []:
+            out.update(c for c in self.by_nid.get(int(n), ()) if c in self.cards)
+        for c in unit.get("cids") or []:
+            if int(c) in self.cards:
+                out.add(int(c))
         return out
 
     def single_found(self, unit):
@@ -480,10 +497,14 @@ def match_rows(idx, doc, swap=None, shown=5):
             continue
         name = u.get("name") or "?"
         if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[]), swap, doc.get("deck", "")))
+            n = len(idx.match(dict(u, cards=[], nids=[], cids=[]), swap, doc.get("deck", "")))
             of = u.get("n")  # the author's count, when the builder saved one
             text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
             rows.append((name, text, not n))
+        if u.get("nids") or u.get("cids"):
+            found = len(idx.id_cards(u))
+            label = f"{name} · by ID" if (u.get("tags") or u.get("decks") or u.get("cards")) else name
+            rows.append((label, _cards(found) if found else "not in your copy", not found))
         if u.get("cards"):
             found, total = idx.single_found(u), len(u["cards"])
             label = f"{name} · single cards" if (u.get("tags") or u.get("decks")) else name
@@ -586,9 +607,16 @@ def note_ids(idx, unit, plan_deck=""):
 
 
 def search_counts(idx, lean_doc):
-    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write."""
-    return {u["id"]: {q: len(idx.search_cards(q)) for q in u["search"]}
-            for u in lean_doc.get("units") or [] if u.get("search")}
+    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write;
+    E1: "#ids" is how many cards its pasted ids find."""
+    out = {}
+    for u in lean_doc.get("units") or []:
+        c = {q: len(idx.search_cards(q)) for q in u.get("search") or []}
+        if u.get("nids") or u.get("cids"):
+            c["#ids"] = len(idx.id_cards(u))
+        if c:
+            out[u["id"]] = c
+    return out
 
 
 def ids_snapshot(idx, lean_doc, cap=50000):

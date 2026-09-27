@@ -2762,6 +2762,30 @@ def _open(col):
     return {cid for cid, q in _queues(col).items() if q != -1}
 
 
+def test_plans_ids_e1():
+    """E1: note ids and card ids pasted onto a date: a note id brings every
+    card of it, a card id that one card, only inside the plan's deck; they
+    change the date's sig; the author's Anki counts them as "#ids"."""
+    from due_crew import plans as P
+    from due_crew.backend import shapes
+    col = _plan_col()
+    idx = P.DeckIndex(col, 10)
+    check("ids: a note id brings both cards of the cloze", idx.match({"nids": [50]}) == {5, 6})
+    check("ids: a card id brings just that card", idx.match({"cids": [6]}) == {6})
+    check("ids: never outside the deck the plan runs on", idx.match({"nids": [7], "cids": [7]}) == set())
+    check("ids: an id this copy doesn't have finds nothing", idx.match({"nids": [999999]}) == set())
+    base = {"id": "u1", "tags": [], "decks": [], "cards": []}
+    check("ids: new ids give the date a new sig (so they open)",
+          P.unit_sig(base) != P.unit_sig(dict(base, nids=[50])) != P.unit_sig(dict(base, nids=[50], cids=[3])))
+    counts = P.search_counts(idx, {"units": [dict(base, nids=[50, 999999], cids=[1])]})
+    check("ids: the author's Anki counts what they find", counts == {"u1": {"#ids": 3}}, str(counts))
+    u = shapes._clean_unit({"id": "u1", "name": "x", "opens": "2026-10-06", "nids": [50, "x", True, -1, 7], "cids": []})
+    check("ids: cleaned on arrival to positive whole numbers", u.get("nids") == [50, 7] and "cids" not in u, str(u))
+    rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
+                                                          "tags": [], "decks": [], "cards": [], "nids": [50]}]})
+    check("ids: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""
