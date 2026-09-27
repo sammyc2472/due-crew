@@ -4,6 +4,7 @@
 
 import type { Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
+import * as C from "./cards";
 import * as P from "./plans";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
@@ -102,7 +103,7 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
@@ -111,6 +112,9 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
   const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
   const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
+  const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
+  const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
+  const log = "log" in body ? C.logPart(body.log) : null;
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;
@@ -140,9 +144,10 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   }
   const [cur] = await db.batch([
     db.prepare(`SELECT u.name, u.emoji, u.client_version, u.tz, u.rollover, w.doc AS week,
-                d.json AS decks, h.json AS heat, st.v AS sv, st.at AS sat, st.json AS sjson
+                d.json AS decks, h.json AS heat, st.v AS sv, st.at AS sat, st.json AS sjson, lg.json AS log
                 FROM users u LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN decks d ON d.uid = u.uid
                 LEFT JOIN heatmaps h ON h.uid = u.uid LEFT JOIN settings st ON st.uid = u.uid
+                LEFT JOIN logs lg ON lg.uid = u.uid
                 WHERE u.uid = ?`).bind(s.uid),
   ]);
   const have = cur.results[0] as any;
@@ -218,13 +223,29 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     wrote.plans = pw.length > 0;
     writes.push(...pw);
   }
+  if (knows) {
+    const kw = C.knowsWrites(env, s.uid, knows);
+    wrote.knows = kw.length > 0;
+    writes.push(...kw);
+  }
+  if (log) {
+    const next = C.logMerge(have.log ?? null, log);
+    wrote.log = next !== null;
+    if (next !== null) {
+      writes.push(db.prepare(
+        "INSERT INTO logs (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at",
+      ).bind(s.uid, next, now));
+    }
+  }
   if (writes.length) {
     const results = await db.batch(writes);  // one transaction
     // a row UPDATE that matched nothing had nothing new to say
     if (squads) wrote.squads = squadAt.some((i) => (results[i].meta.changes ?? 0) > 0);
   } else if (squads) wrote.squads = false;
+  // 3.2: the cards I'm stuck on: who has them down, and their tips
+  const cards = stuck ? await C.forStuck(env, s.uid, stuck) : undefined;
   await touchSeen(env, s.uid);
-  return json({ ok: true, gone, wrote });
+  return json({ ok: true, gone, wrote, ...(cards ? { cards } : {}) });
 }
 
 // ---- settings (2.13): mine only ----

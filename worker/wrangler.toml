@@ -14,7 +14,8 @@ MAIL_FROM = "Due Crew <codes@duecrew.com>"
 # REPORT_TO = "reports@duecrew.com"
 
 # Secrets (wrangler secret put): ADMIN_TOKEN (the one-shot identity import;
-# unset: no admin). RESEND_API_KEY only if mail ever moves off the EMAIL
+# unset: no admin). ADMIN_UIDS (3.2: comma-separated uids that may open
+# duecrew.com/admin; unset: nobody). RESEND_API_KEY only if mail ever moves off the EMAIL
 # binding below.
 
 [[d1_databases]]

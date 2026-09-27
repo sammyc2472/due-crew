@@ -3,6 +3,7 @@
 
 import * as A from "./auth";
 import * as B from "./board";
+import * as C from "./cards";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
@@ -51,6 +52,11 @@ authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
 authed("POST", r(`/knocks/${ID}`), S.sendKnock);
 authed("DELETE", r(`/knocks/${ID}`), (_q, s, env, p) => S.deleteKnock(s, env, p));
 authed("POST", r("/reports"), S.report);
+
+// 3.2: tips, my log, the admin's counts
+authed("POST", r("/tips/helped"), C.helped);
+authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
+authed("GET", r("/admin/stats"), (_q, s, env) => C.stats(s, env));
 
 // 3.1: plans (the fixed paths before /plans/{id})
 authed("PUT", r("/plans/trees"), P.putTree);
