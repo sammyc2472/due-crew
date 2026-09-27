@@ -708,10 +708,10 @@ def open_auth(join=None):
     """join: open the dialog on Join (True) or Sign In (False); None lets it
     choose. A new account gets the welcome screen before its first upload,
     so what the crew will see is said before any of it is shared."""
+    global _fetching
     from .ui.auth_dialog import AuthDialog
     dlg = AuthDialog(mw, client(), join=join)
     if dlg.exec() and dlg.user:
-        global _fetching
         _uid, name = dlg.user
         _reset_runtime(keep_sync=True)
         with _lock:

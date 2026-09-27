@@ -230,3 +230,16 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Share my progress off (follow with it unchecked): Dre's progress page doesn't count Maya; the Crew: done bars on other followers' cards don't include her.
 - [ ] A plan or date name with <b>markup</b>: shown as text on the card, in the dialogs, and in the toast.
 - [ ] `wrangler tail`: a normal day is still one GET /board and one POST /sync per refresh and sync; the plans ride the day's first refresh (`decks=1`).
+
+### 3.1.1: plan fixes
+
+- [ ] Two profiles, A following a plan and B following none: open B, then A. A's card still shows its opened dates, and A's next morning opens only the new date (nothing it opened before). `user_files/<profile>/plans.json` exists for each; the add-on's config (Tools → Add-ons → Config) has no `plans` keys.
+- [ ] Upgrading from 3.1.0 with a plan followed: the first profile opened whose decks the plan runs on keeps it (its card, its opened dates); the other profile doesn't show it as running.
+- [ ] Switch profiles while the board is still loading (right after opening): the second profile's board shows its own crew and code, never the first's.
+- [ ] Follow a plan on computer 1 with Start from the next unit. On computer 2 (after its sync): only today's date opens, not the earlier ones.
+- [ ] Dre adds a tag to a date Maya already opened; Maya suspends one of its cards by hand, and one card of it is a leech. Next morning: only the added tag's cards open; the hand-suspended card and the leech stay suspended.
+- [ ] The board's Undo: the cards go back to suspended, then the card's "Opened … this morning" line goes and the counts drop. Edit → Undo is not offered for that step again.
+- [ ] Browse in Notes mode → Due Crew: add to a plan…: a tooltip asks to switch to Cards; nothing opens. In Cards mode it works as before.
+- [ ] Plan ▾ → Change deck… on a plan named with <b>markup</b>: the question shows the name as text.
+- [ ] Signed out, AnkiWeb sync done at open, then sign in: the plans' morning runs with the sign-in's refresh, not three minutes later.
+- [ ] Close Anki with a sync on close on a new day before the morning ran: no plan cards open during the close.

@@ -96,11 +96,14 @@ the fragment never reaches a server log.
   "Start from the next unit" marks them applied without opening.
 - **Progress** per unit: `total` found, `opened` = found and not suspended,
   `seen` = reviewed at least once. Done = seen == total.
-- Local state (config, per computer): `plans: {id: {deck_id, swap,
-  applied: {unitId: sig | "skip:" + sig}, seen_version, snapshot}}`. A
-  unit's sig (`plans.unit_sig`) names its sources, the deck and the swap:
-  a date that moves keeps it, a unit the author adds cards to gets a new
-  one. Follow, share and pause are on the server.
+- Local state (per profile and computer, `user_files/<profile>/plans.json`):
+  `plans: {id: {deck_id, swap, applied: {unitId: sig | "skip:" + sig},
+  src: {unitId: [deck_id, swap, tags, decks, cards]}, seen_version,
+  snapshot}}`. A unit's sig (`plans.unit_sig`) names its sources, the deck
+  and the swap: a date that moves keeps it, a unit the author adds cards
+  to gets a new one, and then only the cards the new sources add to what
+  `src` matched open (a card suspended since stays so). A leech never
+  opens. Follow, share and pause are on the server.
 
 ## Tests
 

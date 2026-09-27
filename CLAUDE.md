@@ -145,12 +145,20 @@ add-on.
   /sync` when it changed (`plans_hash`). Follow, pause, stop, the deck's
   tree, the site link and adding cards are one request each, on a click.
   `plans.py` is pure (matching, progress, the undo step); `plan_flow.py`
-  is the glue: per-computer state in config `plans`, and the morning,
-  once per Anki day (`plans_day`) after the day's AnkiWeb sync, or at the
-  first refresh when the profile doesn't sync (a fallback three minutes
-  after opening): due units' suspended cards open in one undo step. A plan
-  never suspends anything: not on stop, not when a unit goes or a date
-  moves later.
+  is the glue: per-profile state in `user_files/<profile>/plans.json`
+  (`plans`, `plans_day`, `plans_opened`, `plan_offers_dismissed`; deck
+  ids belong to one collection, so never the shared add-on config; 3.1.1
+  moved them out of it once), and the morning, once per Anki day
+  (`plans_day`) after the day's AnkiWeb sync, or at the first refresh
+  when the profile doesn't sync (a fallback three minutes after opening),
+  never while Anki closes; the day's fresh plans get one more look: due
+  units' suspended cards open in one undo step. A plan first seen here
+  (followed elsewhere) opens today's unit only. A unit the author changes
+  opens only what its new sources add (`src`, what it matched with when
+  applied); a leech never opens. A plan never suspends anything: not on
+  stop, not when a unit goes or a date moves later. Background jobs
+  capture `app.generation` (bumped at profile open/close, sign-in/out)
+  and drop their commit when it changed.
 
 ## Releasing
 
