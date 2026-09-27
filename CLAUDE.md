@@ -201,6 +201,20 @@ add-on.
   3.2.x add-ons open an even date whole. As text carries a prompt for the
   person's own AI (tag names and counts, never a card) and reads its
   answer back with a preview. The site home is the add-on's board.
+- 3.3 following is simpler: a follower does each date on its day (the
+  plan's study days, `schedule.weight` falls back to `pace.days`); the
+  add-on no longer asks for a schedule, and a 3.2 `sched` still runs. The
+  add-on's board has a Plans tab while I follow a plan (the cards left
+  Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
+  ids last), so deep tags reach the builder.
+- 3.3 plans together (migration 0006): co-authors from the owner's crew
+  (`plan_editors`; they edit, the owner alone deletes, picks the audience
+  and the co-authors), notes on a day from anyone in the plan
+  (`plan_notes`), and the history (`plan_log`, the last 30 saves with who,
+  a summary the site writes, and what each replaced; the latest undoes).
+  Save-based: a save that meets another merges onto it in the page
+  (`merge` in builder.js). `/plans/{id}` is the one plan page: the authors
+  edit, a follower sees the calendar and the notes.
 
 ## Releasing
 

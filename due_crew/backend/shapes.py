@@ -504,6 +504,7 @@ def clean_plan(p):
     crew = p.get("crewDone") if isinstance(p.get("crewDone"), dict) else {}
     return {"id": p["id"], "name": clean_note(p.get("name"), 60) or "Plan",
             "owner": str(p.get("owner") or ""), "ownerName": clean_note(p.get("ownerName"), 60) or "?",
+            "role": p.get("role") if p.get("role") in ("owner", "editor", "follower", "reader") else "",
             "version": _as_int(p.get("version")) or 0, "doc": clean_plan_doc(p.get("doc")),
             "share": bool(p.get("share", following.get("share", True))),
             "paused": bool(p.get("paused", following.get("paused", False))),

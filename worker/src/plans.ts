@@ -22,6 +22,11 @@ const NEST_MAX = 100000;  // names in a nested tree; the body's size binds first
 const TREE_BODY_MAX = 1536 * 1024;  // a big deck's tags, nested; one D1 row holds 2 MB
 const NEST_DEPTH = 20;
 const LINE_MAX = 120;
+const SUMMARY_MAX = 120;
+const LOG_KEEP = 30;
+const EDITORS_MAX = 10;
+const NOTES_MAX = 500;
+const NOTE_TEXT_MAX = 280;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
 const PLANS_MAX = 50;
@@ -202,10 +207,29 @@ async function following(env: Env, plan: string, uid: string) {
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
 async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<boolean> {
-  if (p.owner === uid) return true;
+  if (p.owner === uid || (await isEditor(env, p.id, uid))) return true;
   if (p.audience === "squad") return isMember(env, p.squad, uid);  // leaving the squad ends it, follow or not
   if (await following(env, p.id, uid)) return true;
   return (!!code && normalizeCode(code) === p.code) || isMember(env, p.squad, uid);
+}
+
+/** 3.3: the owner and co-authors edit; the owner alone deletes, picks the
+ *  audience and the co-authors. */
+async function isEditor(env: Env, plan: string, uid: string): Promise<boolean> {
+  return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(plan, uid).first());
+}
+
+async function authorOnly(env: Env, id: string, s: Session): Promise<Plan> {
+  const p = await getPlan(env, id);
+  if (p.owner !== s.uid && !(await isEditor(env, id, s.uid))) throw new HttpError(403, "not_author");
+  return p;
+}
+
+async function role(env: Env, p: Plan, uid: string): Promise<"owner" | "editor" | "follower" | "reader"> {
+  if (p.owner === uid) return "owner";
+  if (await isEditor(env, p.id, uid)) return "editor";
+  if (await following(env, p.id, uid)) return "follower";
+  return "reader";
 }
 
 async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
@@ -221,12 +245,18 @@ async function ownerName(env: Env, uid: string): Promise<string> {
 async function view(env: Env, p: Plan, uid: string) {
   const f = await following(env, p.id, uid);
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id).first<number>("n");
+  const eds = await env.DB.prepare(
+    "SELECT e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at",
+  ).bind(p.id).all<{ uid: string; name: string; emoji: string | null }>();
+  const editors = eds.results.map((e) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }));
+  const r = p.owner === uid ? "owner" : editors.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
   return {
+    role: r, editors,
     id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: await ownerName(env, p.owner),
     audience: p.audience, version: p.version, doc: JSON.parse(p.doc), followers: n ?? 0,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
-    ...(p.owner === uid ? { code: p.code } : {}),
+    ...(r === "owner" || r === "editor" ? { code: p.code } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null,
                            progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
@@ -341,9 +371,12 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 /** PUT /plans/{id} {version, name?, line?, audience?, squad?, doc?}: the
  *  author's save. A stale version is refused with the current one. */
 export async function put(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
-  const p = await ownerOnly(env, id, s);
+  const p = await authorOnly(env, id, s);
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (!["version", "name", "line", "audience", "squad", "doc"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(body)) if (!["version", "name", "line", "audience", "squad", "doc", "summary"].includes(k)) throw V.bad("plan");
+  if (p.owner !== s.uid && ((body.audience !== undefined && body.audience !== p.audience)
+      || (body.squad !== undefined && body.squad !== p.squad))) throw new HttpError(403, "not_owner");
+  const summary = body.summary === undefined ? "" : V.oneLine(String(body.summary), SUMMARY_MAX);
   if (!V.isInt(body.version, 1)) throw V.bad("version");
   const next = {
     name: body.name !== undefined ? V.displayName(body.name) : p.name,
@@ -370,13 +403,120 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
      WHERE id = ? AND version = ?`,
   ).bind(next.name, next.line, next.audience, next.squad, next.doc, nowSec(), id, body.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+/** One row of the plan's history: who saved, what they said it did, and
+ *  the doc it replaced (for Undo). The last LOG_KEEP stay. */
+async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO plan_log (plan, version, uid, at, summary, prev) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(plan, version, uid, nowSec(), summary, prev),
+    env.DB.prepare("DELETE FROM plan_log WHERE plan = ? AND version <= ?").bind(plan, version - LOG_KEEP),
+  ]);
+}
+
+/** GET /plans/{id}/log: the history, newest first, for the authors. */
+export async function log(s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  const rows = await env.DB.prepare(
+    `SELECT l.version, l.uid, l.at, l.summary, l.prev IS NOT NULL AS undoable, u.name FROM plan_log l
+       LEFT JOIN users u ON u.uid = l.uid WHERE l.plan = ? ORDER BY l.version DESC LIMIT ?`,
+  ).bind(id, LOG_KEEP).all<{ version: number; uid: string; at: number; summary: string; undoable: number; name: string | null }>();
+  return json({ log: rows.results.map((r) => ({ version: r.version, uid: r.uid, name: r.name || "?", at: r.at, summary: r.summary,
+    undo: r.version === p.version && r.undoable === 1 })) });
+}
+
+/** POST /plans/{id}/undo {version}: puts back what the latest save replaced. */
+export async function undo(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  const body = await readJson(req);
+  if (body.version !== p.version) throw new HttpError(409, "stale", { version: p.version });
+  const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? AND version = ?").bind(id, p.version)
+    .first<{ summary: string; prev: string | null }>();
+  if (!row || !row.prev) throw new HttpError(404, "nothing_to_undo");
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(row.prev, nowSec(), id, p.version).run();
+  if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  await logSave(env, id, p.version + 1, s.uid, V.oneLine(`undid: ${row.summary}`, SUMMARY_MAX), p.doc);
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+// ---- co-authors ----
+
+/** POST /plans/{id}/editors {uid}: the owner adds a co-author from their crew. */
+export async function addEditor(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await ownerOnly(env, id, s);
+  const body = await readJson(req);
+  if (!V.isStr(body.uid, 128, 1) || body.uid === s.uid) throw V.bad("editor");
+  const mutual = await env.DB.prepare(
+    "SELECT 1 FROM friends a JOIN friends b ON b.owner = a.friend AND b.friend = a.owner WHERE a.owner = ? AND a.friend = ?",
+  ).bind(s.uid, body.uid).first();
+  if (!mutual) throw new HttpError(403, "not_crew");
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_editors WHERE plan = ?").bind(id).first<number>("n");
+  if ((n ?? 0) >= EDITORS_MAX) throw new HttpError(409, "too_many_editors");
+  await env.DB.prepare("INSERT INTO plan_editors (plan, uid, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(id, body.uid, nowSec()).run();
+  return json(await view(env, p, s.uid));
+}
+
+/** DELETE /plans/{id}/editors/{uid}: the owner removes a co-author, or one leaves. */
+export async function removeEditor(s: Session, env: Env, [id, uid]: string[]): Promise<Response> {
+  const p = await getPlan(env, id);
+  if (p.owner !== s.uid && uid !== s.uid) throw new HttpError(403, "not_owner");
+  await env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid).run();
+  return json({ ok: true });
+}
+
+// ---- notes on a day ----
+
+/** Who may read and write a plan's notes: its authors and followers. */
+async function inPlan(env: Env, id: string, uid: string): Promise<Plan> {
+  const p = await getPlan(env, id);
+  if ((await role(env, p, uid)) === "reader") throw new HttpError(404, "no_plan");
+  return p;
+}
+
+/** GET /plans/{id}/notes: every note, oldest first. Names as on the board. */
+export async function notes(s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await inPlan(env, id, s.uid);
+  const rows = await env.DB.prepare(
+    `SELECT n.id, n.uid, n.day, n.text, n.at, u.name, u.emoji FROM plan_notes n LEFT JOIN users u ON u.uid = n.uid
+      WHERE n.plan = ? ORDER BY n.id LIMIT ?`,
+  ).bind(id, NOTES_MAX).all<{ id: number; uid: string; day: string; text: string; at: number; name: string | null; emoji: string | null }>();
+  const author = p.owner === s.uid || (await isEditor(env, id, s.uid));
+  return json({ notes: rows.results.map((r) => ({ id: r.id, uid: r.uid, name: r.name || "?", emoji: r.emoji || "", day: r.day,
+    text: r.text, at: r.at, mine: r.uid === s.uid, remove: r.uid === s.uid || author })) });
+}
+
+/** POST /plans/{id}/notes {day, text}: a note on a day ("lab day, keep it light"). */
+export async function addNote(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  await inPlan(env, id, s.uid);
+  const body = await readJson(req);
+  if (!V.isDate(body.day) || !V.isStr(body.text, NOTE_TEXT_MAX * 4, 1)) throw V.bad("note");
+  const text = V.oneLine(body.text as string, NOTE_TEXT_MAX);
+  if (!text) throw V.bad("note");
+  await limitOrThrow(env, `plannote:${s.uid}`, 60, 3600);
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_notes WHERE plan = ?").bind(id).first<number>("n");
+  if ((n ?? 0) >= NOTES_MAX) throw new HttpError(409, "too_many_notes");
+  const r = await env.DB.prepare("INSERT INTO plan_notes (plan, uid, day, text, at) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, s.uid, body.day, text, nowSec()).run();
+  return json({ id: r.meta.last_row_id, day: body.day, text });
+}
+
+/** DELETE /plans/{id}/notes/{nid}: its writer, or an author (done with it). */
+export async function removeNote(s: Session, env: Env, [id, nid]: string[]): Promise<Response> {
+  const p = await inPlan(env, id, s.uid);
+  const author = p.owner === s.uid || (await isEditor(env, id, s.uid));
+  await env.DB.prepare(`DELETE FROM plan_notes WHERE plan = ? AND id = ?${author ? "" : " AND uid = ?"}`)
+    .bind(...(author ? [id, Number(nid)] : [id, Number(nid), s.uid])).run();
+  return json({ ok: true });
 }
 
 /** POST /plans/{id}/cards {cards, unit? | opens (+ name?)}: single cards
  *  picked in Anki's browser, added to a date that exists or a new one. */
 export async function addCards(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
-  const p = await ownerOnly(env, id, s);
+  const p = await authorOnly(env, id, s);
   const body = await readJson(req);
   if (!Array.isArray(body.cards) || !body.cards.length) throw V.bad("cards");
   const cards = body.cards.map(cardRef);
@@ -397,6 +537,7 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
     .bind(clean, nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  await logSave(env, id, p.version + 1, s.uid, `added ${cards.length} single card${cards.length === 1 ? "" : "s"} in Anki`, p.doc);
   return json(await view(env, await getPlan(env, id), s.uid));
 }
 
@@ -406,6 +547,9 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
   await ownerOnly(env, id, s);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM plan_follows WHERE plan = ?").bind(id),
+    env.DB.prepare("DELETE FROM plan_editors WHERE plan = ?").bind(id),
+    env.DB.prepare("DELETE FROM plan_notes WHERE plan = ?").bind(id),
+    env.DB.prepare("DELETE FROM plan_log WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plans WHERE id = ?").bind(id),
   ]);
   return json({ ok: true });
@@ -463,7 +607,8 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
 /** GET /plans/mine: plans I wrote and plans I follow. */
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
-    `SELECT * FROM plans WHERE id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1)
+    `SELECT * FROM plans WHERE id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1
+                                      UNION SELECT plan FROM plan_editors WHERE uid = ?1)
      ORDER BY updated_at DESC`,  // both halves by index, not a scan of every plan
   ).bind(s.uid).all<Plan>();
   const out = [];

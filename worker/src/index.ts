@@ -77,6 +77,14 @@ authed("POST", r(`/plans/${ID}/cards`), P.addCards);
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
+// 3.3: plans together
+authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));
+authed("POST", r(`/plans/${ID}/undo`), P.undo);
+authed("POST", r(`/plans/${ID}/editors`), P.addEditor);
+authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEditor(s, env, p));
+authed("GET", r(`/plans/${ID}/notes`), (_q, s, env, p) => P.notes(s, env, p));
+authed("POST", r(`/plans/${ID}/notes`), P.addNote);
+authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.removeNote(s, env, p));
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);

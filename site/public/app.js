@@ -172,11 +172,12 @@ function nameStep(next) {
 
 async function plansList() {
   const { plans } = await api("GET", "/plans/mine");
-  const mineP = plans.filter((p) => p.owner === me.uid);
-  const followed = plans.filter((p) => p.owner !== me.uid);
-  const row = (p) => h("a", { class: "plan-row", href: p.owner === me.uid ? `/plans/${p.id}/edit` : `/plans/${p.id}`, "data-go": "" },
+  const writes = (p) => p.role === "owner" || p.role === "editor";
+  const mineP = plans.filter(writes);
+  const followed = plans.filter((p) => !writes(p));
+  const row = (p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
     h("b", {}, p.name), h("small", {}, `${p.followers} following`),
-    h("small", {}, p.owner === me.uid ? `${p.doc.units.length} dates · ${p.doc.deck}` : `${p.ownerName}'s plan · ${p.doc.deck}`), h("span"));
+    h("small", {}, writes(p) ? `${p.doc.units.length} dates · ${p.doc.deck}${p.role === "editor" ? ` · with ${p.ownerName}` : ""}` : `${p.ownerName}'s plan · ${p.doc.deck}`), h("span"));
   page(
     h("h1", {}, "Plans"),
     h("h2", {}, "Yours"),
@@ -228,31 +229,6 @@ async function newPlan() {
 // ---- the builder: builder.js ----
 
 // ---- a plan's own page (author: progress; follower: the dates) ----
-
-async function planPage(id) {
-  const plan = await api("GET", `/plans/${id}`);
-  const units = plan.doc.units;
-  const parts = [h("h1", {}, plan.name), h("p", { class: "muted" }, `${plan.ownerName}'s plan · ${plan.doc.deck} · ${plan.followers} following`)];
-  if (plan.line) parts.push(h("p", {}, plan.line));
-  if (plan.owner === me.uid) {
-    const pr = await api("GET", `/plans/${id}/progress`);
-    parts.push(h("div", { class: "row" }, link(`/plans/${id}/edit`, "Edit", "btn ghost")),
-      h("h2", {}, "Progress"),
-      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress. Counts only.`),
-      h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
-        units.flatMap((u) => {
-          const c = pr.units[u.id] || { opened: 0, done: 0 };
-          const w = (n) => `${pr.sharing ? Math.round((100 * n) / pr.sharing) : 0}%`;
-          return [h("span", {}, u.name), h("span", { class: "bar" }, h("i", { style: `width:${w(c.opened)}` })),
-            h("span", { class: "bar" }, h("i", { style: `width:${w(c.done)}` })), h("span", { class: "n" }, `${c.opened} · ${c.done}`)];
-        })));
-  } else {
-    if (plan.following) parts.push(onTrack(plan, false), onTrackChart(plan));
-    parts.push(h("h2", {}, "Dates"), h("div", { class: "plans" }, units.map((u) =>
-      h("div", { class: "plan-row" }, h("b", {}, u.name), h("small", {}, pretty(u.opens)), h("small", {}, u.due ? `due ${pretty(u.due)}` : ""), h("span")))));
-  }
-  page(...parts);
-}
 
 /** /p/CODE: what a shared link shows. */
 async function codePage(code) {
@@ -598,7 +574,7 @@ function onTrack(p, compact) {
   const want = Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, today()), 0);
   const gap = want - seen;
   const words = !total ? "Your progress shows once you share it (in Anki: Plan ▾)." :
-    gap > 0 ? `${gap.toLocaleString()} behind your schedule` : "on track";
+    gap > 0 ? `${gap.toLocaleString()} behind` : "on track";
   if (compact) {
     return h("div", { class: "prow" }, link(`/plans/${p.id}`, p.name), h("span", { class: "bar" }, h("i", { style: `width:${total ? Math.round((100 * seen) / total) : 0}%` })),
       h("small", { class: gap > 0 ? "warn" : "muted" }, total ? words : ""));
@@ -779,7 +755,7 @@ async function route() {
     if (path === "/admin") return await adminPage();
     if (path === "/account") return account();
     if ((m = /^\/plans\/([a-z0-9]{16})\/edit$/.exec(path))) return await builder(m[1]);
-    if ((m = /^\/plans\/([a-z0-9]{16})$/.exec(path))) return await planPage(m[1]);
+    if ((m = /^\/plans\/([a-z0-9]{16})$/.exec(path))) return await builder(m[1]);
     page(h("h1", {}, "Not here"), link("/plans", "Your plans"));
   } catch (err) {
     if (err.status === 401) { me = null; renderNav(); return needSignIn(); }

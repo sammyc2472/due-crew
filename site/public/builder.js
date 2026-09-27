@@ -23,10 +23,18 @@ const Tags = (() => {
   return { word, name, kind, natural };
 })();
 
+/** The plan's page. Its authors (the owner and co-authors) edit it; anyone
+ *  following sees the same calendar, read-only, with the notes. */
 async function builder(id) {
   let plan = await api("GET", `/plans/${id}`);
-  if (plan.owner !== me.uid) return go(`/plans/${id}`);
-  const [{ trees }, { squads }] = await Promise.all([api("GET", `/plans/trees?deck=${encodeURIComponent(plan.doc.deck)}`), api("GET", "/squads/mine")]);
+  const author = plan.role === "owner" || plan.role === "editor";
+  const owner = plan.role === "owner";
+  const inPlan = plan.role !== "reader";
+  const [{ trees }, { squads }, notesR] = await Promise.all([
+    author ? api("GET", `/plans/trees?deck=${encodeURIComponent(plan.doc.deck)}`) : { trees: [] },
+    owner ? api("GET", "/squads/mine") : { squads: [] },
+    inPlan ? api("GET", `/plans/${id}/notes`).catch(() => ({ notes: [] })) : { notes: [] }]);
+  let notes = notesR.notes;
   const raw = trees.find((t) => t.deck === plan.doc.deck) || { tags: [], decks: [] };
   // 3.3's add-on sends it nested, each name once: [name, n, [children]?]
   const flat = (rows) => {
@@ -79,6 +87,7 @@ async function builder(id) {
 
   // ---- the working copy ----
   let doc = structuredClone(plan.doc);
+  let base = structuredClone(plan.doc);  // what this page loaded: a save that meets another merges onto it
   let meta = { name: plan.name, line: plan.line || "", audience: plan.audience, squad: plan.squad || "" };
   const pace = { mode: "placed", days: [1, 1, 1, 1, 1, 1, 1], ...(doc.pace || {}) };
   if (!doc.pace && doc.end) pace.mode = "end";
@@ -111,7 +120,7 @@ async function builder(id) {
   }
   /** A source's cards not already on another date through a tag below it. */
   const eff = (key, placed) => Math.max(0, n(key) - placedBelow(key, placed).reduce((a, p) => a + n(p), 0));
-  const unitTotal = (u, placed = placedKeys()) => srcs(u).reduce((a, k) => a + eff(k, placed), 0) + (u.cards || []).length;
+  const unitTotal = (u, placed = placedKeys()) => (count.size ? srcs(u).reduce((a, k) => a + eff(k, placed), 0) : u.n || 0) + (u.cards || []).length;
   const label = (key, placed) => {
     const w = kindOf(key) === "deck" ? Tags.word(pathOf(key).split("::").pop()) : Tags.word(pathOf(key).split("::").pop());
     return placedBelow(key, placed).length ? `${w} · the rest` : w;
@@ -279,11 +288,15 @@ async function builder(id) {
           e.chips.push({ u, key: srcs(u)[0], text: `${u.name || autoName(u)} (${i + 1}/${days.length})`, n: s, even: true });
           e.load += s;
         });
-        continue;
+        if (days.length) continue;  // no count to slice (a follower's view): on its first day
       }
       if (u.opens < from || u.opens > to) continue;
       const e = at(u.opens);
-      for (const k of srcs(u)) { const c = eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c; }
+      if (!count.size) {
+        // a follower's view: the author's count for the date, its names
+        for (const k of srcs(u)) e.chips.push({ u, key: k, text: label(k, placed), n: null, raw: pathOf(k) });
+        e.load += u.n || 0;
+      } else for (const k of srcs(u)) { const c = eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c; }
       if ((u.cards || []).length) { e.chips.push({ u, cards: true, text: `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`, n: u.cards.length }); e.load += u.cards.length; }
     }
     return out;
@@ -386,8 +399,7 @@ async function builder(id) {
     const tot = coverTotal();
     return h("div", { class: "tree2" },
       h("div", { class: "thead" }, h("b", {}, "What to cover"), h("small", { class: "muted" }, tot ? `${tot.toLocaleString()} cards ticked` : "")),
-      seg, q, list,
-      h("p", { class: "muted small" }, "Tick what the plan covers, then Lay it out. Or drag a tag onto a day (or press +). A tag brings everything under it."));
+      seg, q, list);
   }
 
   // ---- the pace ----
@@ -415,11 +427,11 @@ async function builder(id) {
         onclick: () => { const next = pace.days.slice(); next[i] = next[i] ? 0 : 1; if (next.some(Boolean)) { pace.days = next; study.days = next; mark(); draw(); } } }, l)));
     return h("div", { class: "pace2" },
       h("div", { class: "prow2" }, h("span", {}, "Starts ", startIn), h("span", {}, "Study days ", dayBtns),
-        h("span", { class: "muted small" }, leftN ? `${leftN.toLocaleString()} ticked cards not on a day yet` : cover.size ? "Everything ticked is on a day" : "")),
+        h("span", { class: "muted small" }, leftN ? `${leftN.toLocaleString()} ticked, not on a day yet` : "")),
       h("div", { class: "pcs" },
         mode("end", "Finish by", h("span", {}, endIn, h("small", {}, d1 ? ` ≈ ${d1.toLocaleString()} new a day` : doc.end ? " " : ""))),
         mode("daily", "New cards a day", h("span", {}, dailyIn, h("small", {}, fin ? ` finishes ≈ ${pretty(fin)}` : ""))),
-        mode("placed", "Day by day", h("small", {}, "each day is what's on it: a class's syllabus"))));
+        mode("placed", "Day by day", h("small", {}, "as you place it"))));
   }
 
   // ---- the calendar ----
@@ -458,23 +470,26 @@ async function builder(id) {
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
       const chips = e.chips.map((c) => {
-        const el = h("button", { class: `ch ${c.cards ? "single" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: "true", title: `${c.raw || c.text} · ${c.n.toLocaleString()} cards`,
-          onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; draw(); } }, h("span", {}, c.text), h("small", {}, c.n.toLocaleString()));
-        el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
+        const el = h("button", { class: `ch ${c.cards ? "single" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author ? "true" : null,
+          title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
+          onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
+        if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
         return el;
       });
       const bar = e.load ? h("div", { class: `load${heavy ? " hi" : ""}` }, h("i", { style: `width:${Math.min(100, Math.round((100 * e.load) / (cap || maxLoad)))}%` })) : null;
       const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "taper"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
         onclick: () => { picked = picked === d ? null : d; splitting = null; draw(); },
         onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; draw(); } } },
-        h("div", { class: "dn2" }, h("span", {}, num), e.load ? h("b", {}, e.load.toLocaleString()) : null), ...chips, bar);
-      dropOn(cell, (what) => dropped(d, what));
+        h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...chips, bar);
+      if (author) dropOn(cell, (what) => dropped(d, what));
       cells.push(cell);
     }
     return h("div", { class: `cal2 ${view}`, role: "grid", "aria-label": calTitle() },
       ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((x) => h("div", { class: "dh" }, x)), cells);
   }
+  const nNotes = (d) => notes.filter((x) => x.day === d).length;
   function heavyNote() {
+    if (!author) return null;
     const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
     if (!cap) return null;
     const [a, b] = range();
@@ -492,43 +507,66 @@ async function builder(id) {
   function dayPanel() {
     if (!picked) return null;
     const d = picked;
-    const [a, b] = [d, d];
-    const e = dayMap(a, b).get(d) || { chips: [], load: 0 };
+    const e = dayMap(d, d).get(d) || { chips: [], load: 0 };
     const own = doc.units.filter((u) => u.opens === d && !u.even);
     const spans = doc.units.filter((u) => u.even && u.due && u.opens <= d && d <= u.due);
     const rows = [];
+    const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards ? "single" : hue(c.key)}`, title: c.raw || "" },
+      h("span", {}, c.text, c.raw ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
+      author && !c.cards ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
+      author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
+        if (c.cards) u.cards = []; else takeOut(u, c.key);
+        cleanup(); renameAll(); mark(); draw(); } }, "×") : null);
     for (const u of own) {
-      const name = h("input", { class: "uname", value: u.name, maxlength: 60, "aria-label": "This date's name",
+      const chips = e.chips.filter((c) => c.u === u).map((c) => chipEl(u, c));
+      if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips), u.check ? h("span", { class: "muted small" }, `Checkpoint ${pretty(u.check)}`) : null)); continue; }
+      const name = h("input", { class: "uname", value: u.name, maxlength: 60, "aria-label": "Name",
         oninput: (ev) => { u.name = ev.target.value; auto.delete(u.id); mark(); } });
       const check = h("input", { type: "date", value: u.check || "", min: u.opens, "aria-label": "Checkpoint",
+        title: "That morning, followers get a filtered deck of this date's most-missed cards",
         onchange: (ev) => { u.check = ev.target.value && ev.target.value >= u.opens ? ev.target.value : undefined; mark(); } });
-      const chips = e.chips.filter((c) => c.u === u).map((c) => h("span", { class: `ch2 ${c.cards ? "single" : hue(c.key)}`, title: c.raw || "" },
-        h("span", {}, c.text, c.raw ? h("span", { class: "raw" }, c.raw) : null), h("small", {}, c.n.toLocaleString()),
-        c.cards ? null : h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split…"),
-        h("button", { class: "x", "aria-label": `Take ${c.text} off this day`, onclick: () => {
-          if (c.cards) u.cards = []; else takeOut(u, c.key);
-          cleanup(); renameAll(); mark(); draw(); } }, "×")));
-      rows.push(h("div", { class: "du" }, name, h("div", { class: "chips2" }, chips),
-        h("label", { class: "inline" }, "Checkpoint ", check, h("span", { class: "muted small" }, " that morning, followers get Anki's filtered deck of this date's most-missed cards"))));
+      rows.push(h("div", { class: "du" }, name, h("div", { class: "chips2" }, chips), h("label", { class: "inline" }, "Checkpoint ", check)));
     }
     for (const u of spans) {
       const total = unitTotal(u);
       rows.push(h("div", { class: "du" }, h("b", {}, u.name || autoName(u)),
-        h("p", { class: "muted small" }, `${total.toLocaleString()} cards evenly over ${pretty(u.opens)} – ${pretty(u.due)}, the same slices for everyone, on the plan's study days.`),
-        h("div", { class: "row" },
+        h("span", { class: "muted small" }, `${total.toLocaleString()} cards, ${pretty(u.opens)} to ${pretty(u.due)}, evenly`),
+        author ? h("div", { class: "row" },
           h("button", { class: "quiet", onclick: () => { delete u.even; delete u.due; renameAll(); mark(); draw(); } }, `All on ${pretty(u.opens)}`),
-          h("button", { class: "quiet", onclick: () => { doc.units = doc.units.filter((x) => x !== u); mark(); draw(); } }, "Take it off"))));
+          h("button", { class: "quiet", onclick: () => { doc.units = doc.units.filter((x) => x !== u); mark(); draw(); } }, "Take it off")) : null));
     }
-    const moveIn = own.length ? h("input", { type: "date", "aria-label": "Move this day's cards to", onchange: (ev) => {
+    const moveIn = author && own.length ? h("input", { type: "date", "aria-label": "Move this day to", onchange: (ev) => {
       const to = ev.target.value; if (!to || to === d) return;
       for (const u of own) { const other = doc.units.find((x) => x.opens === to && !x.even && x !== u); if (other) { for (const k of srcs(u)) addTo(to, k); other.cards = [...(other.cards || []), ...(u.cards || [])]; doc.units = doc.units.filter((x) => x !== u); } else shiftUnit(u, Sched.diff(to, u.opens)); }
       picked = to; renameAll(); byOpens(); mark(); draw(); } }) : null;
     return h("section", { class: "dayp", "aria-label": pretty(d) },
       h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `${pretty(d)}${e.load ? ` · ${e.load.toLocaleString()} cards` : ""}`),
-        h("button", { class: "quiet", onclick: () => { picked = null; splitting = null; draw(); } }, "Close")),
+        h("button", { class: "quiet", "aria-label": "Close", onclick: () => { picked = null; splitting = null; draw(); } }, "×")),
       splitting ? splitPanel() : null,
-      rows.length ? rows : h("p", { class: "muted small" }, isStudy(d) ? "Nothing opens this day. Drag a tag here, or press + beside one on the left." : "A day off in the plan's study days. You can still put something here."),
-      moveIn ? h("label", { class: "inline" }, "Move this day to ", moveIn) : null);
+      rows.length ? rows : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here." : "Nothing new this day."),
+      moveIn ? h("label", { class: "inline" }, "Move to ", moveIn) : null,
+      inPlan ? notesBox(d) : null);
+  }
+
+  /** Notes on a day, from anyone in the plan ("lab day, keep it light"). */
+  function notesBox(d) {
+    const list = notes.filter((x) => x.day === d);
+    const input = h("input", { placeholder: "Add a note", maxlength: 280, "aria-label": `A note on ${pretty(d)}`, style: "width:100%" });
+    const add = async () => {
+      const text = input.value.trim(); if (!text) return;
+      input.disabled = true;
+      try {
+        const r = await api("POST", `/plans/${id}/notes`, { day: d, text });
+        notes.push({ id: r.id, uid: me.uid, name: me.name || "You", emoji: "", day: d, text: r.text, at: Date.now() / 1000, mine: true, remove: true });
+        draw();
+      } catch { input.disabled = false; input.value = text; }
+    };
+    input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") add(); });
+    return h("div", { class: "notes" },
+      list.map((x) => h("div", { class: "note" }, h("b", {}, x.mine ? "You" : x.name), " ", h("span", {}, x.text),
+        x.remove ? h("button", { class: "x", "aria-label": "Remove this note", onclick: async () => {
+          await api("DELETE", `/plans/${id}/notes/${x.id}`).catch(() => {}); notes = notes.filter((y) => y !== x); draw(); } }, "×") : null)),
+      input);
   }
 
   function splitPanel() {
@@ -564,9 +602,10 @@ async function builder(id) {
       h("b", {}, `Split “${label(key, placed)}” · ${total.toLocaleString()} cards`),
       opt("tags", h("span", {}, h("b", {}, "By its tags"), " ", h("span", { class: "muted small" },
         ks.length ? `${ks.slice(0, 6).map((k) => `${Tags.word(pathOf(k).split("::").pop())} ${eff(k, placed)}`).join(" · ")}${ks.length > 6 ? ` · ${ks.length - 6} more` : ""}${rest > 0 ? ` · the rest ${rest}` : ""}, ${cap ? `at ${cap} a day` : "one a study day"}` : "nothing below this tag")), !ks.length),
-      opt("even", h("span", {}, h("b", {}, "Evenly over "), days, " study days ", per, h("span", { class: "muted small" }, " · everyone gets the same cards the same day, in the deck's order"))),
-      opt("anki", h("span", {}, h("b", {}, "Pick single cards in Anki"), h("span", { class: "muted small" }, " · in the browser, search ", h("code", {}, search),
-        ", select cards, then Due Crew: add to a plan, and pick this date "), h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); copy(search, ev.target); } }, "Copy the search"))),
+      opt("even", h("span", {}, h("b", {}, "Evenly over "), days, " study days ", per)),
+      opt("anki", h("span", {}, h("b", {}, "Pick cards in Anki"), " ", h("code", {}, search), " ",
+        h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); copy(search, ev.target); } }, "Copy"),
+        h("span", { class: "muted small" }, " · browse, select, Due Crew: add to a plan"))),
       h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { class: "quiet", onclick: () => { splitting = null; draw(); } }, "Cancel"), h("button", { onclick: go2 }, "Split")));
   }
 
@@ -768,51 +807,163 @@ async function builder(id) {
   }
 
   function share() {
-    const btn1 = h("button", { class: "quiet", onclick: (e) => copy(plan.code, e.target) }, "Copy");
     const url = `${location.origin}/p/${plan.code}`;
-    const btn2 = h("button", { class: "quiet", onclick: (e) => copy(url, e.target) }, "Copy");
     return h("div", { class: "share" },
-      h("span", { class: "muted small" }, "Code"), h("div", { class: "row" }, h("span", { class: "code" }, spaced(plan.code)), btn1),
-      h("div", { class: "row" }, h("span", { class: "mono small" }, url.replace(/^https?:\/\//, "")), btn2),
-      link(`/plans/${id}`, `${plan.followers} following · progress`, "small"));
+      h("div", { class: "row" }, h("span", { class: "code" }, spaced(plan.code)),
+        h("button", { class: "quiet", onclick: (e) => copy(url, e.target) }, "Copy link")),
+      h("span", { class: "muted small" }, `${plan.followers} following`));
+  }
+
+  /** The people who write the plan; the owner adds co-authors from the crew. */
+  function people() {
+    const all = [{ uid: plan.owner, name: plan.ownerName }, ...(plan.editors || [])];
+    const chips = all.map((p) => h("span", { class: "who2", title: p.uid === plan.owner ? "Made it" : "Co-author" },
+      p.uid === me.uid ? "You" : p.name,
+      (owner && p.uid !== plan.owner) || (plan.role === "editor" && p.uid === me.uid)
+        ? h("button", { class: "x", "aria-label": p.uid === me.uid ? "Leave" : `Remove ${p.name}`, onclick: async () => {
+          await api("DELETE", `/plans/${id}/editors/${p.uid}`);
+          if (p.uid === me.uid) return go("/plans");
+          plan = { ...plan, editors: plan.editors.filter((x) => x.uid !== p.uid) }; draw(); } }, "×") : null));
+    const pick = h("span");
+    const addBtn = owner ? h("button", { class: "linkish", onclick: async () => {
+      const b = await api("GET", "/board?keep=1");
+      const have = new Set(all.map((x) => x.uid));
+      const crew = (b.friends || []).filter((f) => f.mutual && !have.has(f.uid));
+      pick.replaceChildren(crew.length
+        ? h("select", { "aria-label": "Add a co-author", onchange: async (e) => {
+          if (!e.target.value) return;
+          try { plan = { ...plan, editors: (await api("POST", `/plans/${id}/editors`, { uid: e.target.value })).editors }; } catch { /* stays as it was */ }
+          pick.replaceChildren(); draw(); } },
+          h("option", { value: "" }, "Pick from your crew"), crew.map((f) => h("option", { value: f.uid }, f.name)))
+        : h("span", { class: "muted small" }, "Co-authors come from your crew."));
+    } }, "+ Co-author") : null;
+    return h("div", { class: "people2" }, chips, addBtn, pick);
   }
 
   function calendarTab() {
     const vbtn = (k, t) => h("button", { class: view === k ? "on" : "", "aria-pressed": String(view === k), onclick: () => { view = k; draw(); } }, t);
     const placedTotal = doc.units.reduce((a, u) => a + unitTotal(u), 0);
+    const nav = h("div", { class: "caltool2" },
+      view !== "list" ? h("span", { class: "row", style: "gap:4px" },
+        h("button", { class: "quiet", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
+        h("button", { class: "quiet", onclick: () => { anchor = today(); draw(); } }, "Today"),
+        h("button", { class: "quiet", "aria-label": "Later", onclick: () => step(1) }, "›"),
+        h("b", { class: "ctitle" }, calTitle())) : h("b", {}, `${doc.units.length} dates`),
+      h("span", { class: "sp" }),
+      author && placedTotal ? h("span", { class: "muted small" }, `${placedTotal.toLocaleString()} cards`) : null,
+      h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), author ? vbtn("list", "List") : null));
+    const main = h("div", { class: "main2" },
+      author ? pacePanel() : null,
+      nav,
+      author ? h("div", { class: "caltool2" },
+        h("button", { onclick: () => layOut(false) }, "Lay it out"),
+        h("button", { class: "ghost", onclick: () => layOut(true) }, "Plan next week"),
+        note ? h("span", { class: "muted small", role: "status" }, note) : null) : null,
+      heavyNote(),
+      view === "list" && author ? h("div", {}, dayPanel(), listView()) : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel()));
+    if (!author) return main;
     return h("div", { class: "bl2" },
       h("details", { class: "side2", open: !matchMedia("(max-width: 700px)").matches }, h("summary", {}, "What to cover"), treePanel()),
-      h("div", { class: "main2" },
-        pacePanel(),
-        h("div", { class: "caltool2" },
-          view !== "list" ? h("span", { class: "row", style: "gap:4px" },
-            h("button", { class: "quiet", "aria-label": "Earlier", onclick: () => step(-1) }, "‹"),
-            h("button", { class: "quiet", onclick: () => { anchor = today(); draw(); } }, "Today"),
-            h("button", { class: "quiet", "aria-label": "Later", onclick: () => step(1) }, "›"),
-            h("b", { class: "ctitle" }, calTitle())) : h("b", {}, `${doc.units.length} dates`),
-          h("span", { class: "sp" }),
-          h("span", { class: "muted small" }, `${placedTotal.toLocaleString()} cards on the calendar`),
-          h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), vbtn("list", "List"))),
-        h("div", { class: "caltool2" },
-          h("button", { onclick: () => layOut(false), title: "Put what you ticked on the study days, in order, at the pace" }, "Lay it out"),
-          h("button", { class: "ghost", onclick: () => layOut(true), title: "Just the coming week" }, "Plan next week"),
-          note ? h("span", { class: "muted small", role: "status" }, note) : null),
-        heavyNote(),
-        view === "list" ? h("div", {}, dayPanel(), listView()) : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel()),
-        h("p", { class: "muted small", style: "margin-top:8px" }, "Single cards come from Anki: select them in the browser, then Due Crew: add to a plan, and pick a date. Shaded weeks open nothing new (catch-up weeks, the taper).")));
+      main);
+  }
+
+  // ---- progress (the authors'): counts only ----
+  let progressData = null;
+  function progressTab() {
+    if (!progressData) {
+      api("GET", `/plans/${id}/progress`).then((r) => { progressData = r; draw(); }).catch(() => {});
+      return h("p", { class: "muted" }, "Loading…");
+    }
+    const pr = progressData;
+    byOpens();
+    return h("div", {},
+      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress.`),
+      h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
+        doc.units.flatMap((u) => {
+          const c = pr.units[u.id] || { opened: 0, done: 0 };
+          const w = (k) => `${pr.sharing ? Math.round((100 * k) / pr.sharing) : 0}%`;
+          return [h("span", {}, u.name), h("span", { class: "bar" }, h("i", { style: `width:${w(c.opened)}` })),
+            h("span", { class: "bar" }, h("i", { style: `width:${w(c.done)}` })), h("span", { class: "n" }, `${c.opened} · ${c.done}`)];
+        })));
+  }
+
+  // ---- history: every save, who and what; the latest undoes ----
+  let history = null;
+  function historyTab() {
+    if (!history) {
+      api("GET", `/plans/${id}/log`).then((r) => { history = r.log; draw(); }).catch(() => { history = []; draw(); });
+      return h("p", { class: "muted" }, "Loading…");
+    }
+    if (!history.length) return h("p", { class: "muted" }, "Nothing yet. Each save shows here.");
+    const ago2 = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : pretty(iso(new Date(t * 1000))); };
+    return h("div", { class: "hist" }, history.map((l) => h("div", { class: "hrow" },
+      h("span", {}, h("b", {}, l.uid === me.uid ? "You" : l.name), ` ${l.summary}`), h("small", { class: "muted" }, ago2(l.at)),
+      l.undo ? h("button", { class: "linkish", onclick: async () => {
+        if (dirty && !confirm("Undo drops your unsaved changes here too.")) return;
+        try {
+          plan = await api("POST", `/plans/${id}/undo`, { version: l.version });
+          doc = structuredClone(plan.doc); base = structuredClone(plan.doc); dirty = false; history = null;
+          status.className = "status"; status.textContent = "Undone";
+        } catch { status.className = "status bad"; status.textContent = "That changed since. Reload."; }
+        draw(); } }, "Undo") : h("span"))));
   }
 
   function draw() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
+    const tabs = author ? [["calendar", "Calendar"], ["text", "As text"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
+    if (!tabs.some(([k]) => k === tab)) tab = "calendar";
+    const body = tab === "text" ? textTab() : tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
-        h("div", {}, h("h1", {}, meta.name || "Untitled"), h("p", { class: "muted" }, `${plan.doc.deck} · ${meta.line || "no line yet"}`)),
-        share()),
-      h("div", { class: "tabs", role: "tablist" }, tabBtn("calendar", "Calendar"), tabBtn("text", "As text"), tabBtn("settings", "Settings")),
-      tab === "calendar" ? calendarTab() : tab === "text" ? textTab() : settingsTab(),
-      h("div", { class: "savebar" }, saveBtn, status,
-        h("span", { class: "muted small" }, "Followers get changes the next morning. Nothing they've opened is ever suspended again.")));
+        h("div", {}, h("h1", {}, meta.name || "Untitled"),
+          h("p", { class: "muted" }, author ? plan.doc.deck : `${plan.ownerName}'s plan · ${plan.doc.deck}`), people()),
+        author ? share() : null),
+      !author && plan.following ? onTrack(plan, false) : null,
+      !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
+      tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
+      body,
+      author ? h("div", { class: "savebar" }, saveBtn, status) : null);
     $app().classList.add("wide");
+  }
+
+  // a date the same but for its refreshed card count hasn't changed
+  const same = (x, y) => JSON.stringify({ ...x, n: 0 }) === JSON.stringify({ ...y, n: 0 });
+
+  /** What a save did, in a few words, for the history. */
+  function describe(before, after) {
+    const b = new Map((before.units || []).map((u) => [u.id, u]));
+    const a = new Map((after.units || []).map((u) => [u.id, u]));
+    const out = [];
+    const added = [...a.values()].filter((u) => !b.has(u.id));
+    const gone = [...b.values()].filter((u) => !a.has(u.id));
+    const moved = [...a.values()].filter((u) => b.has(u.id) && b.get(u.id).opens !== u.opens);
+    const changed = [...a.values()].filter((u) => b.has(u.id) && b.get(u.id).opens === u.opens && !same(b.get(u.id), u));
+    if (moved.length === 1) out.push(`moved ${moved[0].name} to ${pretty(moved[0].opens)}`); else if (moved.length) out.push(`moved ${moved.length} dates`);
+    if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
+    if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
+    if (changed.length === 1) out.push(`changed ${changed[0].name}`); else if (changed.length) out.push(`changed ${changed.length} dates`);
+    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"]]) {
+      if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null) && !(k === "pace" && out.length)) out.push(`changed ${w}`);
+    }
+    return (out.join("; ") || "changed the plan").slice(0, 120);
+  }
+
+  /** Two authors saved: put my changes (against what I loaded) onto theirs. */
+  function merge(mine, mineBase, theirs) {
+    const out = structuredClone(theirs);
+    const b = new Map((mineBase.units || []).map((u) => [u.id, u]));
+    const m = new Map((mine.units || []).map((u) => [u.id, u]));
+    let units = out.units || [];
+    for (const [uid] of b) if (!m.has(uid)) units = units.filter((u) => u.id !== uid);
+    for (const [uid, u] of m) {
+      if (b.has(uid) && same(b.get(uid), u)) continue;
+      units = units.filter((x) => x.id !== uid).concat([structuredClone(u)]);
+    }
+    out.units = units.sort((x, y) => x.opens.localeCompare(y.opens));
+    for (const k of ["pace", "end", "phases"]) {
+      if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
+    }
+    return out;
   }
 
   async function save() {
@@ -823,7 +974,7 @@ async function builder(id) {
       // each date keeps its tags' and subdecks' card count here, for a follower's "204 of 212"
       for (const u of doc.units) {
         const c = srcs(u).reduce((a, k) => a + n(k), 0);
-        if (count.size && srcs(u).length) u.n = c; else delete u.n;
+        if (count.size && srcs(u).length) u.n = c; else if (count.size) delete u.n;
         delete u.lead;
         if (!u.check) delete u.check;
         if (!u.due) delete u.due;
@@ -837,18 +988,31 @@ async function builder(id) {
       doc.pace = p;
       if (doc.phases && doc.phases.taper && !doc.end) doc.phases.taper = 0;
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
-      const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc };
-      if (meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
-      if (meta.audience !== plan.audience) body.audience = meta.audience;
-      plan = await api("PUT", `/plans/${id}`, body);
+      const summary = describe(base, doc);
+      const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc, summary };
+      if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
+      if (owner && meta.audience !== plan.audience) body.audience = meta.audience;
+      let merged = false;
+      try {
+        plan = await api("PUT", `/plans/${id}`, body);
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        // someone else saved first: theirs, with mine on top
+        const theirs = await api("GET", `/plans/${id}`);
+        body.version = theirs.version;
+        body.doc = merge(doc, base, theirs.doc);
+        plan = await api("PUT", `/plans/${id}`, body);
+        merged = true;
+      }
       doc = structuredClone(plan.doc);
-      dirty = false;
-      status.textContent = "Saved";
+      base = structuredClone(plan.doc);
+      dirty = false; history = null; progressData = null;
+      status.textContent = merged ? "Saved, with the other changes kept" : "Saved";
       draw();
     } catch (err) {
       status.className = "status bad";
-      status.textContent = err.status === 409 ? "This plan changed somewhere else. Reload to see it (your changes here will be lost)."
-        : err.body?.error === "bad_plan" ? "Something in the plan isn't valid: check the dates (due and checkpoints can't be before a date opens; a taper needs an end date)."
+      status.textContent = err.status === 409 ? "It changed again while saving. Save once more."
+        : err.body?.error === "bad_plan" ? "A date isn't valid: a due date or checkpoint can't be before it opens, and a taper needs an end date."
         : "That didn't save. Try again.";
     } finally { saveBtn.disabled = false; }
   }

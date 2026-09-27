@@ -100,6 +100,11 @@ mdoc = {"deck": "Step 1", "units": [
   {"id": "m3", "name": "Pulm", "opens": (real + datetime.timedelta(days=10)).isoformat(), "due": (real + datetime.timedelta(days=24)).isoformat(), "tags": ["Step1::Pulm"], "decks": [], "cards": []}]}
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
            f"('mayaplanpreview1', 'M4YA2PLN', 'maya', 'Boards sprint', '', 'code', NULL, {q(json.dumps(mdoc))}, 1, {now}, {now});")
+# 3.3: Maya co-authors Dre's plan; notes on a day; Maya's plan has a note from Dre
+out.append(f"INSERT INTO plan_editors (plan, uid, at) VALUES ('stepplanpreview1', 'maya', {now});")
+out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('stepplanpreview1', 'nia', {q(d(2))}, 'Lab day, keep it light?', {now});")
+out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('mayaplanpreview1', 'maya', {q(wk(0))}, 'Big one today, go early', {now});")
+out.append(f"INSERT INTO plan_log (plan, version, uid, at, summary, prev) VALUES ('stepplanpreview1', 3, 'maya', {now - 600}, 'moved Renal pharm to Mon', NULL);")
 sched = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 90}
 out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, sched, at) VALUES ('mayaplanpreview1', 'dre', 1, 0, "
            f"{q(json.dumps({'m1': [312, 250, 312], 'm2': [60, 30, 402], 'm3': [0, 0, 288]}))}, {q(json.dumps(sched))}, {now});")

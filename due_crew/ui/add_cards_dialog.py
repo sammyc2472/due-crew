@@ -82,7 +82,7 @@ class AddCardsDialog(QDialog):
 
         me = client.user_id
         run_bg(self, client.my_plans, lambda plans, err: self._loaded(
-            None if err else [p for p in plans or [] if p.get("owner") == me]))
+            None if err else [p for p in plans or [] if p.get("owner") == me or p.get("role") == "editor"]))
 
     def _loaded(self, plans):
         if plans is None:

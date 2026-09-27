@@ -307,3 +307,14 @@ body:has(main.wide) > .top { max-width: 1320px; }
 .pv { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 10px 12px; display: grid; gap: 6px; }
 .pvrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 700px) { .pvrow { grid-template-columns: 1fr; gap: 2px; } }
+/* 3.3: plans together */
+.people2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; font-size: 13px; }
+.who2 { display: inline-flex; align-items: center; gap: 2px; background: var(--well); border-radius: 99px; padding: 2px 10px; }
+.who2 .x, .note .x { background: none; border: 0; color: var(--muted); padding: 0 2px 0 4px; font-size: 14px; font-weight: 400; }
+.notes { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.note { font-size: 13px; background: var(--well); border-radius: 8px; padding: 5px 8px; display: flex; gap: 4px; align-items: baseline; }
+.note span { flex: 1; }
+.dn2 .nb { font-size: 11px; margin-left: auto; margin-right: 6px; }
+.hist { display: grid; gap: 0; max-width: 720px; }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto 50px; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; align-items: baseline; }
+.share .row .code { font-size: 18px; }
