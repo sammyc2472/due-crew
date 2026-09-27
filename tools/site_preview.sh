@@ -44,11 +44,19 @@ units[2]["check"] = d(24)
 doc = {"deck": "Step 1", "end": d(55), "phases": {"catchup": 4, "taper": 10}, "units": units}
 out = []
 for uid, name in [("dre", "Dre"), ("maya", "Maya"), ("nia", "Nia"), ("jonah", "Jonah")]:
-    out.append(f"INSERT INTO users (uid, email, name, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {now});")
+    code = uid.upper().ljust(6, "X")[:6]
+    out.append(f"INSERT INTO users (uid, email, name, code, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {q(code)}, {now});")
+    out.append(f"INSERT INTO codes (code, uid) VALUES ({q(code)}, {q(uid)});")
 out.append(f"INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES ({q(h)}, 'dre', 'preview', {now}, {now});")
 out.append(f"INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busmpreview', 'Busm', 'dre', 1, {now});")
 for uid in ["dre", "maya", "nia"]:
     out.append(f"INSERT INTO members (squad, uid, name, joined_at) VALUES ('busmpreview', {q(uid)}, {q(uid.title())}, {now});")
+    if uid != "nia":
+        rv = {"dre": 180, "maya": 240}.get(uid, 90)
+        out.append(f"UPDATE members SET day = {q(today.isoformat())}, reviews = {rv}, study_time_ms = {rv * 17000}, accuracy = 88.5, streak = 4, week = 5, new_cards = 30 "
+                   f"WHERE squad = 'busmpreview' AND uid = {q(uid)};")
+    else:
+        out.append(f"UPDATE members SET day = {q((today - datetime.timedelta(days=1)).isoformat())}, reviews = 292, week = 6 WHERE squad = 'busmpreview' AND uid = 'nia';")
 out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Step 1', {q(json.dumps({'tags': tags, 'decks': decks}))}, {now});")
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
            f"('stepplanpreview1', '7KQ4MX2D', 'dre', 'Step 1', 'Organ systems, one a week, done by January.', 'code', 'busmpreview', {q(json.dumps(doc))}, 3, {now}, {now});")
@@ -70,6 +78,10 @@ for uid, studied in [("dre", [0, 1, 2, 3]), ("maya", [0, 1, 3]), ("nia", [1, 2])
         w["liveUntil"] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
     if uid == "nia":
         w["recap"] = {"name": "Step 1", "n": 2, "day": wk(0)}
+        w["days"].pop(wk(0), None)  # studied yesterday, not yet today
+        w["days"][wk(1)] = {"studied": True, "reviews": 292, "newCards": 249, "studyTimeMs": 129 * 60000, "accuracy": 87.7, "streak": 13}
+    if uid == "maya":
+        w["days"].setdefault(wk(0), {"studied": True, "reviews": 0})["status"] = "doing the bare minimum for the #streak"
     out.append(f"INSERT INTO weeks (uid, doc, updated_at) VALUES ({q(uid)}, {q(json.dumps(w))}, {now});")
 out.append(f"INSERT INTO cheers (to_uid, from_uid, emoji, note, at) VALUES ('dre', 'maya', '🔥', 'go go go', {now});")
 mdoc = {"deck": "Step 1", "units": [

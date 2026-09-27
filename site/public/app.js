@@ -641,85 +641,264 @@ const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6]
   return h("i", { class: v?.studied || v?.reviews ? "on" : d > today() ? "later" : "", title: pretty(d) });
 }));
 
+// ---- 3.3: the board, as the add-on draws it (due_crew/board.py) ----
+
+const Board = (() => {
+  const MEDALS = ["🥇", "🥈", "🥉"];
+  const HEADS = [["reviews", "📚 Reviews"], ["time", "⏱ Time"], ["retention", "🎯 Retention"], ["streak", "🔥 Streak"]];
+  const SQUAD_HEADS = [...HEADS, ["week", "📅 7 days"]];
+  const QUICK = ["🎉", "💪", "🔥", "👏", "🚀", "☕"];
+  const fmtTime = (ms) => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
+  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return v; };
+  function ago(ts) {
+    if (!ts) return ["", "faded"];
+    const s = Math.max(0, (Date.now() - Date.parse(ts)) / 1000);
+    if (isNaN(s)) return ["", "faded"];
+    if (s < 300) return ["just now", "fresh"];
+    if (s < 3600) return [`${Math.floor(s / 60)}m ago`, "fresh"];
+    if (s < 86400) return [`${Math.floor(s / 3600)}h ago`, "hours"];
+    return [`${Math.floor(s / 86400)}d ago`, "faded"];
+  }
+  const showed = (d) => !!d && ("studied" in d ? !!d.studied : !!(d.reviews || d.studyTimeMs || "accuracy" in d));
+  const metrics = (d) => ({ reviews: d.reviews ?? null, time: d.studyTimeMs ?? null, retention: d.accuracy ?? null, streak: d.streak ?? null, new: d.newCards ?? null });
+  function weekAgg(days, labels) {
+    const found = labels.map((l) => days[l]).filter(Boolean);
+    if (!found.length) return null;
+    const sum = (k) => { const v = found.filter((d) => k in d).map((d) => d[k]); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
+    const accs = found.filter((d) => "accuracy" in d);
+    let ret = null;
+    if (accs.length) { const w = accs.reduce((n, d) => n + Math.max(d.reviews || 1, 1), 0); ret = accs.reduce((n, d) => n + d.accuracy * Math.max(d.reviews || 1, 1), 0) / w; }
+    return { reviews: sum("reviews"), time: sum("studyTimeMs"), retention: ret, streak: (found.find((d) => "streak" in d) || {}).streak ?? null, new: sum("newCards") };
+  }
+  function examText(iso, today) {
+    if (!iso) return "";
+    const d = Sched.diff(iso, today);
+    if (d < 0 || d > 14) return "";
+    if (d === 0) return "exam today";
+    if (d === 1) return "exam tomorrow";
+    const x = parseIso(iso);
+    return d < 7 ? `exam ${DAYS[x.getUTCDay()]}` : `exam ${MONTHS[x.getUTCMonth()]} ${x.getUTCDate()}`;
+  }
+  function awayText(week, today) {
+    if (!week?.awayFrom || !(week.awayFrom <= today && today <= week.awayTo)) return "";
+    const back = addDays(week.awayTo, 1);
+    return back === addDays(today, 1) ? "back tomorrow" : `back ${MONTHS[parseIso(back).getUTCMonth()]} ${parseIso(back).getUTCDate()}`;
+  }
+  /** rows for Today or Week, sorted as the add-on sorts them: [fresh, dormant]. */
+  function rows(people, period, sort, today) {
+    const yest = addDays(today, -1), tomorrow = addDays(today, 1);
+    const mon = Sched.monday(today);
+    const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
+    const fresh = [], dormant = [];
+    for (const p of people) {
+      const w = p.week || {}; const days = w.days || {};
+      const r = { p, you: p.you, paused: !!w.paused, last: p.updatedAt || "", reviews: null, time: null, retention: null, streak: null, new: null,
+        stale: false, quiet: false, status: "", exam: examText(w.examDate, today), away: awayText(w, today),
+        live: !!(w.liveUntil && Date.parse(w.liveUntil) > Date.now()), recap: w.recap && w.recap.day === today ? w.recap : null,
+        daysWk: wk.filter((l) => showed(days[l])).length };
+      if (r.paused) { dormant.push(r); continue; }
+      if (period === "week") {
+        const agg = weekAgg(days, wk);
+        if (!agg) { if (r.you) fresh.push(r); else { r.quiet = true; dormant.push(r); } continue; }
+        Object.assign(r, agg);
+        fresh.push(r);
+      } else {
+        const t = days[tomorrow] || days[today]; const y = days[yest];
+        if (t) { Object.assign(r, metrics(t)); r.status = t.status || ""; r.showup = showed(t) && [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
+        else if (y && !r.you) { Object.assign(r, metrics(y)); r.status = y.status || ""; r.stale = true; dormant.push(r); }
+        else if (r.you) fresh.push(r);
+        else { r.quiet = true; dormant.push(r); }
+      }
+    }
+    const key = { reviews: "reviews", time: "time", retention: "retention", streak: "streak" }[sort] || "reviews";
+    const val = (r) => (r[key] ?? -1);
+    fresh.sort((a, b) => val(b) - val(a));
+    const stale = dormant.filter((r) => r.stale).sort((a, b) => val(b) - val(a));
+    const quiet = dormant.filter((r) => r.quiet).sort((a, b) => (b.last || "").localeCompare(a.last || ""));
+    const paused = dormant.filter((r) => r.paused);
+    return [fresh, [...stale, ...quiet, ...paused]];
+  }
+
+  function cheerMenu(uid, anchor) {
+    document.querySelectorAll(".cheer-pop").forEach((x) => x.remove());
+    const pop = h("div", { class: "cheer-pop", role: "menu" }, QUICK.map((e) => h("button", { class: "linkish", title: `Send ${e}`, onclick: async () => {
+      pop.remove();
+      try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; }
+      catch { anchor.title = "Couldn't send. Try again."; }
+    } }, e)));
+    anchor.after(pop);
+    setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { pop.remove(); document.removeEventListener("click", off); } }), 0);
+  }
+
+  function nameCell(r) {
+    const p = r.p;
+    const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}${r.you ? "" : ""}`));
+    if (r.paused) cell.append(h("span", { class: "note" }, " · on a break"));
+    else if (r.quiet) { const [t, tone] = ago(r.last); if (t) cell.append(h("span", { class: `ago ${tone}` }, ` (${t})`)); }
+    else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
+    else { const [t, tone] = ago(r.last); if (t) cell.append(h("span", { class: `ago ${tone}` }, ` (${t})`)); }
+    if (r.live) cell.append(h("span", { class: "ago fresh" }, " · studying now"));
+    if (r.exam) cell.append(h("span", { class: "badge" }, ` 📖 ${r.exam}`));
+    if (r.away) cell.append(h("span", { class: "badge" }, ` ✈️ ${r.away}`));
+    if (r.recap) cell.append(h("span", { class: "ago fresh", title: r.recap.name }, ` · week ${r.recap.n} done`));
+    if (r.status) cell.append(h("div", {}, h("span", { class: "bub", title: r.status }, r.status)));
+    return cell;
+  }
+
+  function table(people, period, today, onSort) {
+    const kept = store("dc-sort") || "reviews";  // "week" is the squads' own column
+    const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
+    const [fresh, dormant] = rows(people, period, sort, today);
+    const head = h("tr", {}, h("th"), h("th"), HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
+    let n = 0;
+    const tr = (r, rank) => {
+      const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
+      const dash = r.paused || r.quiet;
+      const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
+      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused ? "dim" : ""].join(" ").trim() },
+        h("td", { class: "rk" }, rank), nameCell(r),
+        h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n" }, dash || r.time === null ? "—" : fmtTime(r.time)),
+        h("td", { class: "n" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
+        h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
+    };
+    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }), ...dormant.map((r) => tr(r, "—"))];
+    return h("div", { class: "scrollx" }, h("table", { class: "brdt" }, h("thead", {}, head), h("tbody", {}, body)));
+  }
+
+  /** show-up mode: a square a day, Monday to today, nothing ranked. */
+  function presence(people, today) {
+    const mon = Sched.monday(today); const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
+    const lit = (p) => wk.filter((l) => showed((p.week?.days || {})[l])).length;
+    const sorted = [...people].sort((a, b) => lit(b) - lit(a) || (a.name || "").localeCompare(b.name || ""));
+    const todayN = people.filter((p) => showed((p.week?.days || {})[today])).length;
+    return h("div", { class: "scrollx" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, h("th", { class: "lt", colspan: 2 }, `${todayN} showed up today`), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
+      h("tbody", {}, sorted.map((p) => h("tr", { class: p.you ? "you" : "" }, h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name}`)),
+        wk.map((l) => h("td", { class: "sqc" }, h("i", { class: `sq${showed((p.week?.days || {})[l]) ? " on" : ""}` }))))))));
+  }
+
+  function decks(me, crew, decksBy) {
+    const mine = decksBy[me.uid] || [];
+    if (!mine.length) return h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks.");
+    const match = (a, b) => { const x = new Set(a.sig || []); return (b.sig || []).some((g) => x.has(g)); };
+    const bar = (name, d, isMe) => {
+      const total = Math.max(d.total || 0, 1); const pct = (v) => Math.min(100, Math.round((100 * (v || 0)) / total));
+      return h("div", { class: `dr${isMe ? " me" : ""}`, title: `${(d.seen || 0).toLocaleString()} seen · ${(d.mature || 0).toLocaleString()} mature · ${(d.total || 0).toLocaleString()} total` },
+        h("span", { class: "dn" }, name), h("span", { class: "dtrack" }, h("i", { class: "fo", style: `left:${pct(d.seen)}%;width:${Math.max(0, pct(d.open) - pct(d.seen))}%` }),
+          h("i", { class: "fs", style: `width:${pct(d.seen)}%` }), h("i", { class: "fm", style: `width:${pct(d.mature)}%` })),
+        h("span", { class: "n" }, `${(d.seen || 0).toLocaleString()} / ${(d.total || 0).toLocaleString()}`));
+    };
+    return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
+      bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
+      h("p", { class: "muted small" }, "solid = mature · faded = seen · hatched = unlocked · % of each person's own copy"));
+  }
+
+  /** A squad board, as _squads_html: plain ranks, no medals, no cheers;
+   *  these aren't necessarily people you know. */
+  async function squads(showUp, crewUids, onSort) {
+    const { squads: list } = await api("GET", "/squads/mine");
+    if (!list.length) return h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads.");
+    const sort = store("dc-sort") || "reviews";
+    const field = { reviews: "reviews", time: "studyTimeMs", retention: "accuracy", streak: "streak", week: "week" }[sort] || "reviews";
+    const day = todayLocal(), yday = addDays(day, -1);
+    const out = [];
+    for (const sq of await Promise.all(list.map((q) => api("GET", `/squads/${q.id}`)))) {
+      const rows = sq.rows || [];
+      const live = rows.filter((r) => r.day === day);
+      const rest = rows.filter((r) => r.day !== day).sort((x, y) => (y.day || "").localeCompare(x.day || ""));
+      if (showUp) live.sort((x, y) => (y.week || 0) - (x.week || 0) || x.name.localeCompare(y.name));
+      else live.sort((x, y) => (y[field] ?? -1) - (x[field] ?? -1));
+      const together = live.reduce((n, r) => n + (r.reviews || 0), 0);
+      let line = `${rows.length.toLocaleString()} in ${sq.name}` + (sq.open === false ? " · locked" : "");
+      if (live.length) line += showUp ? ` · ${live.length.toLocaleString()} showed up today` : ` · ${live.length.toLocaleString()} studying today · ${together.toLocaleString()} reviews together`;
+      const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+        h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
+      const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
+      let n = 0;
+      const body = [...live, ...rest].map((r) => {
+        const you = r.uid === me.uid, today = r.day === day;
+        const note = you ? null : crewUids.has(r.uid) ? h("span", { class: "ago faded" }, " · crew") : null;
+        const when = today ? null : h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`);
+        const rank = !today ? "" : showUp || numberless(r) ? "✓" : `#${++n}`;
+        const cells = showUp ? [h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—")] : [
+          h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
+          h("td", { class: "n" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
+          h("td", { class: "n" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
+          h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"),
+          h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—")];
+        return h("tr", { class: [you ? "you" : "", today ? "" : "dim"].join(" ").trim() },
+          h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), note, when), cells);
+      });
+      out.push(h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
+        h("thead", {}, h("tr", {}, h("th", { class: "sqh", colspan: 2 }, line), heads)), h("tbody", {}, body))));
+    }
+    return h("div", {}, out);
+  }
+
+  function shareText(people, today) {
+    const me = people.find((p) => p.you); const d = (me?.week?.days || {})[today] || {};
+    const bits = [d.reviews != null ? `${d.reviews.toLocaleString()} reviews` : null, d.studyTimeMs ? fmtTime(d.studyTimeMs) : null, d.accuracy != null ? `${d.accuracy.toFixed(1)}%` : null, d.streak ? `🔥 ${d.streak}` : null].filter(Boolean);
+    return `Due Crew · ${pretty(today)}: ${bits.join(" · ") || "showed up"}`;
+  }
+
+  return { table, presence, decks, squads, shareText, ago, store };
+})();
+
+const todayLocal = () => today();
+
 async function home() {
-  const [b, plansR, sett] = await Promise.all([api("GET", "/board?keep=1"), api("GET", "/plans/mine"), api("GET", "/settings").catch(() => null)]);
-  const mon = Sched.monday(today());
+  const [b, plansR, sett] = await Promise.all([api("GET", "/board?keep=1&decks=1"), api("GET", "/plans/mine"), api("GET", "/settings").catch(() => null)]);
+  const t = today();
+  const mon = Sched.monday(t);
   const showUp = !!sett?.settings?.show_up;
+  const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
+  const crew = b.friends.filter((f) => f.mutual);
+  const waiting = b.friends.filter((f) => !f.mutual);
+  const tabs = showUp ? [["today", "Crew"], ["decks", "Decks"], ["squads", "Squads"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"], ["squads", "Squads"]];
+  let tab = Board.store("dc-tab") || "today";
+  if (!tabs.some(([k]) => k === tab)) tab = "today";
+  const pills = h("span", { class: "pills" });
+  const panel = h("div");
+  const fetched = Date.now();
+  const updated = h("span", { class: "muted" });
+  async function draw() {
+    pills.replaceChildren(...tabs.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; Board.store("dc-tab", k); draw(); } }, l)));
+    const mins = Math.floor((Date.now() - fetched) / 60000);
+    updated.textContent = mins < 1 ? "Updated just now" : `Updated ${mins}m ago`;
+    if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}));
+    if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), draw)); }
+    panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw),
+      crew.length ? null : h("p", { class: "muted small" }, "Just you so far. ", b.me.code ? `Your code ${spaced(b.me.code)} · ` : "", "add your crew in Anki: Tools › Due Crew › Friends."),
+      waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null].filter(Boolean));
+  }
+  const friendsBox = h("div", { class: "note-inline", hidden: true },
+    h("span", {}, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—"), ". Friends add you by it in Anki (Tools › Due Crew › Friends)."),
+    b.me.code ? h("button", { class: "quiet", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy") : null);
+  const shareBtn = h("button", { class: "linkish", onclick: async () => {
+    try { await navigator.clipboard.writeText(Board.shareText(people, t)); shareBtn.textContent = "Copied"; } catch { shareBtn.textContent = Board.shareText(people, t); }
+    setTimeout(() => { shareBtn.textContent = "Share today"; }, 1800);
+  } }, "Share today");
+  await draw();
   const my = b.me.week?.days || {};
   const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
   const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
-  const t = my[today()] || {};
-  const cheerBtn = (f) => {
-    const btn = h("button", { class: "linkish", onclick: async () => {
-      btn.disabled = true;
-      try { await api("POST", `/cheers/${f.uid}`, { emoji: "🎉" }); btn.textContent = "Cheered"; }
-      catch { btn.textContent = "Try again"; btn.disabled = false; }
-    } }, "Cheer");
-    return btn;
-  };
-  const crewRow = (f, you) => {
-    const days = f.week?.days || {}; const d = days[today()] || {};
-    const live = f.week?.liveUntil && Date.parse(f.week.liveUntil) > Date.now();
-    const away = f.week?.awayFrom && f.week.awayFrom <= today() && today() <= f.week.awayTo;
-    const state = live ? "studying now" : d.studied || d.reviews ? "studied" : away ? "away" : "not yet";
-    return h("tr", { class: you ? "you" : "" },
-      h("td", {}, f.emoji || ""), h("td", { class: "nm" }, you ? `${f.name || "You"} (you)` : f.name,
-        f.week?.recap && f.week.recap.day === today() ? h("small", { class: "muted" }, ` · week ${f.week.recap.n} done`) : null),
-      h("td", {}, squares(days, mon)),
-      showUp ? null : h("td", { class: "n" }, d.reviews ? `${d.reviews.toLocaleString()}` : ""),
-      h("td", { class: state === "not yet" || state === "away" ? "muted" : "ok" }, state),
-      h("td", {}, you ? "" : cheerBtn(f)));
-  };
-  const crew = b.friends.filter((f) => f.mutual);
-  const waiting = b.friends.filter((f) => !f.mutual);
-  const order = [...crew].sort((x, y) => ((y.week?.days?.[today()]?.reviews || 0) - (x.week?.days?.[today()]?.reviews || 0)));
-  const table = h("table", { class: "crew" }, h("tbody", {}, crewRow(b.me, true), order.map((f) => crewRow(f, false))));
-  const squadsBox = h("div", { class: "stack" });
-  let tab = "crew";
-  const panel = h("div");
-  const tabs = h("div", { class: "pills" });
-  async function drawTab() {
-    tabs.replaceChildren(...[["crew", "Crew"], ["squads", "Squads"]].map(([k, l]) =>
-      h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; drawTab(); } }, l)));
-    if (tab === "crew") {
-      panel.replaceChildren(crew.length ? table : h("p", { class: "muted" }, "Nobody yet. Add your crew in Anki: Tools › Due Crew › Friends."),
-        waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null);
-      return;
-    }
-    panel.replaceChildren(squadsBox);
-    squadsBox.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
-    const { squads } = await api("GET", "/squads/mine");
-    if (!squads.length) { squadsBox.replaceChildren(h("p", { class: "muted" }, "No squads. Start or join one in Anki: Tools › Due Crew › Squads.")); return; }
-    const out = [];
-    for (const sq of squads) {
-      const s = await api("GET", `/squads/${sq.id}`);
-      out.push(h("h3", {}, sq.name), h("table", { class: "crew" }, h("tbody", {}, s.rows.map((r) => h("tr", { class: r.uid === me.uid ? "you" : "" },
-        h("td", {}, r.emoji || ""), h("td", { class: "nm" }, r.name),
-        h("td", { class: "n" }, r.day === today() && r.reviews != null ? r.reviews.toLocaleString() : ""),
-        h("td", { class: "muted" }, r.week != null ? `${r.week} of 7 days` : ""))))));
-    }
-    squadsBox.replaceChildren(...out);
-  }
-  drawTab();
   const followed = plansR.plans.filter((p) => p.following);
-  page(
-    h("div", { class: "home" },
-      h("div", { class: "col" },
-        h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
-          h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
-        h("section", { class: "panel" }, h("h4", {}, "Today"),
-          h("div", { class: "tiles" },
-            h("div", {}, h("b", {}, (t.reviews || 0).toLocaleString()), h("small", {}, "reviews")),
-            h("div", {}, h("b", {}, (t.newCards || 0).toLocaleString()), h("small", {}, "new")),
-            h("div", {}, h("b", {}, `${Math.round((t.studyTimeMs || 0) / 60000)}m`), h("small", {}, "studied"))),
-          h("small", { class: "muted" }, "From your last sync. Study in Anki.")),
-        h("section", { class: "panel" }, h("h4", {}, "Cheers", h("span", { class: "muted" }, String(b.cheers.length))),
-          b.cheers.length ? b.cheers.map((c) => h("div", { class: "cheer" }, h("b", {}, `${c.emoji} ${c.name}`), c.note ? ` ${c.note}` : ""))
-            : h("p", { class: "muted small" }, "None waiting."),
-          b.cheers.length ? h("small", { class: "muted" }, "They play in Anki too.") : null),
-        followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")),
-          followed.map((p) => onTrack(p, true))) : null),
-      h("div", { class: "col" }, h("section", { class: "panel" }, tabs, panel))));
+  page(h("div", { class: "wb" },
+    h("section", { class: "brd" },
+      h("div", { class: "top2" }, pills),
+      panel,
+      h("div", { class: "foot" },
+        h("span", {}, h("button", { class: "linkish", onclick: () => { friendsBox.hidden = !friendsBox.hidden; } }, "Friends"), " · ", shareBtn),
+        h("span", {}, updated, " · ", h("button", { class: "linkish", onclick: () => route() }, "Refresh"))),
+      friendsBox),
+    h("aside", { class: "rail" },
+      h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
+        h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
+      h("section", { class: "panel" }, h("h4", {}, "Cheers", h("span", { class: "muted" }, String(b.cheers.length))),
+        b.cheers.length ? b.cheers.map((c) => h("div", { class: "cheer" }, h("b", {}, `${c.emoji} ${c.name}`), c.note ? ` ${c.note}` : "")) : h("p", { class: "muted small" }, "None waiting."),
+        b.cheers.length ? h("small", { class: "muted" }, "They play in Anki too.") : null),
+      followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null)));
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */
