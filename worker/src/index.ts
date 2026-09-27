@@ -3,7 +3,7 @@
 
 import * as A from "./auth";
 import * as B from "./board";
-import { bridge } from "./bridge";
+import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
@@ -29,7 +29,7 @@ open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
-authed("POST", r("/auth/signout"), (_q, s, env) => A.signOut(s, env));
+authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
 authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
 
@@ -70,6 +70,7 @@ authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env,
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
+authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
 authed("POST", r("/squads/restore"), Q.restore);
 authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
@@ -77,9 +78,6 @@ authed("POST", r(`/squads/${ID}/join`), (_q, s, env, p) => Q.join(s, env, p));
 authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));
-
-/** Every 15 minutes while 2.x clients remain: see bridge.ts. */
-export const BRIDGE_CRON = "*/15 * * * *";
 
 /** Daily: what has expired goes. Nothing anyone would miss. */
 export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)): Promise<void> {
@@ -103,7 +101,9 @@ export default {
   },
 
   async fetch(req: Request, env: Env): Promise<Response> {
-    const path = new URL(req.url).pathname;
+    let path = new URL(req.url).pathname;
+    // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
+    if (path.startsWith("/api/")) path = path.slice(4);
     try {
       if (Number(req.headers.get("content-length") || 0) > BODY_MAX) throw new HttpError(413, "too_big");
       let allowed = false;

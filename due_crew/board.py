@@ -592,6 +592,34 @@ def _css(cfg):
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    /* 3.1: a plan I follow, on the Decks tab */
+    #due-crew .dc-pc {{ margin-bottom: 14px; }}
+    #due-crew .dc-pc .pk {{ display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 2px 0 6px; }}
+    #due-crew .dc-pc .pk b {{ font-size: 12.5px; }}
+    #due-crew .dc-pc .pk span {{ font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: 130px minmax(0,1fr) minmax(0,1fr) 120px;
+      gap: 10px; align-items: center; font-size: 12px; padding: 3px 0; }}
+    #due-crew .dc-pc .u3 .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .dc-pc .u3.hd {{ color: var(--dc-muted); font-size: 10.5px; font-weight: 700; }}
+    #due-crew .dc-pc .u3.now .u {{ font-weight: 700; }}
+    #due-crew .dc-pc .u3.later {{ color: var(--dc-faded); }}
+    #due-crew .dc-pc .bar {{ display: block; height: 8px; background: var(--dc-well); border-radius: 2px;
+      overflow: hidden; position: relative; }}
+    #due-crew .dc-pc .bar i {{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); }}
+    #due-crew .dc-pc .bar i.part {{ opacity: 0.35; }}
+    #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
+    #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
+      white-space: nowrap; font-size: 11px; }}
+    #due-crew .dc-pc .pn {{ font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--dc-well);
+      display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }}
+    #due-crew .dc-pc .pn.warn {{ color: var(--dc-hours); }}
+    #due-crew .dc-pc .pn a, #due-crew .dc-pc .pl a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
+      text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-pc .pl {{ display: flex; gap: 10px; }}
+    @media (max-width: 560px) {{
+      #due-crew .dc-pc .u3 {{ grid-template-columns: 90px 1fr 1fr; }}
+      #due-crew .dc-pc .u3 .n {{ grid-column: 1 / -1; text-align: left; }}
+    }}
     </style>
     """
 
@@ -864,9 +892,83 @@ def _tricky_html(tricky):
     return out
 
 
-def _decks_html(data, deltas=None, tricky=None):
+def _decks_html(data, deltas=None, tricky=None, plans=None):
     flags = _tricky_html(tricky)
-    return flags + _decks_body(data, deltas)
+    cards = "".join(_plan_card_html(card) for card in (plans or {}).get("cards") or [])
+    return flags + cards + _decks_body(data, deltas)
+
+
+def _segs(segments):
+    """[(text, bold)] from plans.py, escaped."""
+    return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
+
+
+def _pbar(done, total, solid=True):
+    pct = 0 if not total else max(0, min(100, round(100 * int(done) / int(total))))
+    return f'<span class="bar"><i class="{"" if solid else "part"}" style="width:{pct}%"></i></span>'
+
+
+def _plan_card_html(card):
+    """3.1: a plan I follow, on the Decks tab (plan_flow.card_view). Plan
+    and unit names are the author's: escaped here."""
+    e = _html.escape
+    pid = str(card.get("id", ""))
+    out = (f'<div class="dc-pc"><div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
+           f'<span>{e(str(card.get("sub") or ""))}</span></div>')
+    rows = ""
+    for r in card.get("rows") or []:
+        name = f'<span class="u">{e(str(r.get("name") or "?"))}</span>'
+        if r.get("state") == "later":
+            rows += f'<div class="u3 later">{name}<span></span><span></span><span class="n">{e(str(r.get("n") or ""))}</span></div>'
+            continue
+        s, t = r.get("seen") or [0, 0]
+        mine = ('<span class="miss">not in your copy</span>' if r.get("missing")
+                else _pbar(s, t, solid=int(s) >= int(t)))
+        d, f = r.get("crew") or [0, 0]
+        cls = "u3 now" if r.get("state") == "now" else "u3"
+        rows += (f'<div class="{cls}">{name}<span title="{int(s):,} of {int(t):,} seen">{mine}</span>'
+                 f'{_pbar(d, f)}<span class="n">{e(str(r.get("n") or ""))}</span></div>')
+    head = ('<div class="u3 hd"><span>Unit</span><span>You: seen</span>'
+            '<span>Crew: done</span><span></span></div>')
+    n_rows = len(card.get("rows") or [])
+    if card.get("no_deck"):
+        out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
+                f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
+    elif n_rows:
+        out += head + (f'<div class="dc-scroll">{rows}</div>' if n_rows > ROW_CAP else rows)
+    op = card.get("opened")
+    if op:
+        names = [str(n) for n in op.get("names") or []]
+        what = (" and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2
+                else f"<b>{len(names)} dates</b>")
+        undo = (f'<a href="#" title="Anki&rsquo;s Edit › Undo" onclick="{_pycmd("planundo")}">Undo</a>'
+                if op.get("undo") else "")
+        n = int(op.get("n") or 0)
+        out += (f'<div class="pn"><span>&#10003; Opened {what} this morning: '
+                f'{n:,} card{"s" if n != 1 else ""}</span>{undo}</div>')
+    for kind, segments in card.get("lines") or []:
+        out += f'<div class="pn{" warn" if kind == "behind" else ""}"><span>{_segs(segments)}</span></div>'
+    if card.get("change"):
+        out += (f'<div class="pn"><span>{_segs(card["change"])}</span>'
+                f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
+    out += ('<div class="dc-line pl"><span>&ldquo;Seen&rdquo; is cards you&rsquo;ve reviewed at least once. '
+            '&ldquo;Done&rdquo; is a unit fully seen.</span>'
+            f'<a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></div>')
+    return out + "</div>"
+
+
+def _offer_banners(offers):
+    """3.1: a plan offered to one of my squads. Names escaped."""
+    e = _html.escape
+    out = ""
+    for o in offers or []:
+        oid = str(o.get("id", ""))
+        out += (f'<div class="dc-wrap"><span>&#128197;</span>'
+                f'<span><b>{e(str(o.get("owner") or "?"))}</b> offered {e(str(o.get("squad") or ""))} '
+                f'a plan: {e(str(o.get("name") or ""))}</span>'
+                f'<a class="wc" href="#" onclick="{_pycmd("planlook:" + oid)}">Look</a>'
+                f'<a class="wx" href="#" title="Not now" onclick="{_pycmd("planofferx:" + oid)}">&times;</a></div>')
+    return out
 
 
 def _decks_body(data, deltas=None):
@@ -1046,20 +1148,23 @@ def _review_banner(kind, info):
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
-           sync_error=False, live=False, tricky=None, milestones=None, room=None):
+           sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None):
     """live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
     room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
-    see room_html."""
+    see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
+    the cards on the Decks tab, a squad's offers on Decks and Squads."""
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
     show_up = bool(cfg.get("show_up"))
-    body = (_decks_html(data, deltas, tricky) if period == "decks"
+    body = (_decks_html(data, deltas, tricky, plans) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
             else _table_html(data, cfg, period))
+    if period in ("decks", "squads"):
+        body = _offer_banners((plans or {}).get("offers")) + body
     for kind in ("year", "month"):
         if reviews and reviews.get(kind):
             body = _review_banner(kind, reviews[kind]) + body

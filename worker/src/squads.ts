@@ -201,3 +201,11 @@ export async function patch(req: Request, s: Session, env: Env, [id]: string[]):
   if (stmts.length) await env.DB.batch(stmts);
   return json(info(await getSquad(env, id)));
 }
+
+/** GET /squads/mine: the squads I'm in, for the site's plan settings (3.1). */
+export async function mine(s: Session, env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    "SELECT q.id, q.name, q.founder FROM members m JOIN squads q ON q.id = m.squad WHERE m.uid = ? ORDER BY q.name",
+  ).bind(s.uid).all<{ id: string; name: string; founder: string }>();
+  return json({ squads: rows.results });
+}

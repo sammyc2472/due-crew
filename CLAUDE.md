@@ -16,6 +16,10 @@ add-on.
   `worker/README.md` has the API, `migrations/` the schema.
   `docs/cloudflare-setup.md` is the one-time setup (Sam's). Nothing runs on
   Google after the cutover.
+- `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
+  plain JS, no framework: sign-in, plans, the builder). Its Worker
+  (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
+  the site's session is a same-site HttpOnly cookie.
 - `firestore.rules` and `tests/rules/` — the 2.x backend, still live for 2.x
   clients until the cutover, then read-only, then gone with the Firebase
   project (anki-leaderboard-f6691). Delete both, the rules CI job and
@@ -126,6 +130,20 @@ add-on.
   labelled as such. Crew totals accrue through the per-day ledger in
   wrap.json: a day is added to the all-time total exactly once, when it
   leaves the seven-day window. Never accrue from a rolling sum.
+- 3.1 plans (`docs/plans-design.md`): a plan is dates (units) of tags,
+  subdecks and single cards (`[note guid, card ord]`) for one deck. The
+  plans I follow and squad offers ride the day's first `GET /board`
+  (`decks=1`) and are cached in the session; progress per unit
+  (`[opened, seen, total]`, only for plans I share it on) rides `POST
+  /sync` when it changed (`plans_hash`). Follow, pause, stop, the deck's
+  tree, the site link and adding cards are one request each, on a click.
+  `plans.py` is pure (matching, progress, the undo step); `plan_flow.py`
+  is the glue: per-computer state in config `plans`, and the morning,
+  once per Anki day (`plans_day`) after the day's AnkiWeb sync, or at the
+  first refresh when the profile doesn't sync (a fallback three minutes
+  after opening): due units' suspended cards open in one undo step. A plan
+  never suspends anything: not on stop, not when a unit goes or a date
+  moves later.
 
 ## Releasing
 

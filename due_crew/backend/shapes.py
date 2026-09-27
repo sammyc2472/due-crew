@@ -372,3 +372,61 @@ def _clean_member(row):
             "retention": acc if acc is not None and 0 <= acc <= 100 else None,
             "streak": _as_int(row.get("streak")),
             "week": week if week is not None and 0 <= week <= 7 else None}
+
+
+# ---- 3.1: plans ----
+
+_UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
+_PLAN_ID = re.compile(r"[a-z0-9]{1,32}")
+_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _clean_unit(u):
+    if not isinstance(u, dict) or not _UNIT_ID.fullmatch(str(u.get("id") or "")):
+        return None
+    if not _ISO.fullmatch(str(u.get("opens") or "")):
+        return None
+    out = {"id": u["id"], "name": clean_note(u.get("name"), 60) or "?", "opens": u["opens"],
+           "tags": [t for t in u.get("tags") or [] if isinstance(t, str) and t][:50],
+           "decks": [d for d in u.get("decks") or [] if isinstance(d, str) and d][:50],
+           "cards": [[c[0], c[1]] for c in u.get("cards") or []
+                     if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str)
+                     and isinstance(c[1], int) and not isinstance(c[1], bool)]}
+    if _ISO.fullmatch(str(u.get("due") or "")):
+        out["due"] = u["due"]
+    return out
+
+
+def clean_plan_doc(doc):
+    """{deck, units}: units sorted by when they open, as plans.py reads them."""
+    doc = doc if isinstance(doc, dict) else {}
+    units = [u for u in map(_clean_unit, doc.get("units") or []) if u][:200]
+    units.sort(key=lambda u: u["opens"])
+    return {"deck": str(doc.get("deck") or ""), "units": units}
+
+
+def clean_plan(p):
+    """A plan from GET /board or /plans/*, coerced; None if unusable. The
+    board's rows carry share/paused; the others carry `following`."""
+    if not isinstance(p, dict) or not _PLAN_ID.fullmatch(str(p.get("id") or "")):
+        return None
+    following = p.get("following") if isinstance(p.get("following"), dict) else {}
+    crew = p.get("crewDone") if isinstance(p.get("crewDone"), dict) else {}
+    return {"id": p["id"], "name": clean_note(p.get("name"), 60) or "Plan",
+            "owner": str(p.get("owner") or ""), "ownerName": clean_note(p.get("ownerName"), 60) or "?",
+            "version": _as_int(p.get("version")) or 0, "doc": clean_plan_doc(p.get("doc")),
+            "share": bool(p.get("share", following.get("share", True))),
+            "paused": bool(p.get("paused", following.get("paused", False))),
+            "followers": _as_int(p.get("followers")) or 0,
+            "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
+            "code": normalize_code(p.get("code")) if p.get("code") else "",
+            "following": bool(following) or "share" in p}
+
+
+def clean_offer(o):
+    """A plan offered to one of my squads, from the board."""
+    if not isinstance(o, dict) or not _PLAN_ID.fullmatch(str(o.get("id") or "")):
+        return None
+    return {"id": o["id"], "name": clean_note(o.get("name"), 60) or "Plan",
+            "code": normalize_code(o.get("code")), "squad": str(o.get("squad") or ""),
+            "ownerName": clean_note(o.get("ownerName"), 60) or "?"}

@@ -45,7 +45,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "tags", "decks", "cards"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "tags", "decks", "cards", "n"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -56,6 +56,12 @@ function unit(v: unknown): Obj {
   if (v.lead !== undefined && v.lead !== null) {
     if (!V.isStr(v.lead, 128, 1)) throw V.bad("plan");
     out.lead = v.lead;
+  }
+  if (v.n !== undefined && v.n !== null) {
+    // how many cards the tags and subdecks hold in the author's copy, so a
+    // follower sees "204 of 212"; a number, never which cards
+    if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
+    out.n = v.n;
   }
   for (const k of ["tags", "decks"] as const) {
     const x = v[k] ?? [];
@@ -399,9 +405,28 @@ export async function forBoard(env: Env, uid: string) {
        JOIN members m ON m.squad = p.squad AND m.uid = ?1 LEFT JOIN users u ON u.uid = p.owner
       WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1)`,
   ).bind(uid).all<any>();
+  // per plan: how many follow, and per unit how many sharing followers have it done. Counts only.
+  const crew = new Map<string, { followers: number; done: Record<string, number> }>();
+  if (mineRows.results.length) {
+    const ids = mineRows.results.map((r) => r.id);
+    const rows = await env.DB.prepare(
+      `SELECT plan, share, progress FROM plan_follows WHERE plan IN (${ids.map(() => "?").join(",")})`,
+    ).bind(...ids).all<{ plan: string; share: number; progress: string | null }>();
+    for (const r of rows.results) {
+      const c = crew.get(r.plan) ?? { followers: 0, done: {} };
+      c.followers++;
+      if (r.share === 1 && r.progress) {
+        for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
+          if (total > 0 && seen >= total) c.done[u] = (c.done[u] ?? 0) + 1;
+        }
+      }
+      crew.set(r.plan, c);
+    }
+  }
   return {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
-      version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1 })),
+      version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
+      followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
   };
 }

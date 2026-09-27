@@ -89,6 +89,10 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
+  if (body.web === true) {
+    // the site (3.1): the session is a same-site cookie, never in page script
+    return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
+  }
   return json({ token, uid: user.uid, new: isNew, name: user.name });
 }
 
@@ -101,8 +105,10 @@ export interface Session {
 export const COOKIE = "dc_session";
 
 /** The session cookie the site signs in with (3.1): same-site only. */
-export function sessionCookie(token: string, maxAge = SESSION_IDLE): string {
-  return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+export function sessionCookie(token: string, maxAge = SESSION_IDLE, req?: Request): string {
+  // Secure everywhere but a local preview on http://localhost, where some browsers drop it
+  const secure = req && new URL(req.url).hostname === "localhost" ? "" : "; Secure";
+  return `${COOKIE}=${token}; Path=/; HttpOnly${secure}; SameSite=Strict; Max-Age=${maxAge}`;
 }
 
 function cookieToken(req: Request): string | null {
@@ -146,9 +152,9 @@ export async function me(s: Session, env: Env): Promise<Response> {
   return json(u);
 }
 
-export async function signOut(s: Session, env: Env): Promise<Response> {
+export async function signOut(s: Session, env: Env, req?: Request): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(s.tokenHash).run();
-  return json({ ok: true });
+  return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
 export async function signOutAll(s: Session, env: Env): Promise<Response> {
@@ -302,5 +308,5 @@ export async function redeemLink(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), row.uid, "duecrew.com", now, now).run();
-  return json({ ok: true, uid: row.uid }, 200, { "set-cookie": sessionCookie(token) });
+  return json({ ok: true, uid: row.uid }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
 }

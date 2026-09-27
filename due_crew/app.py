@@ -93,6 +93,7 @@ _state = {
     "settings_ready": False,   # 2.13: my account settings were pulled (or can't be)
     "settings_pulling": False,
     "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
+    "plan_progress": {},   # 3.1: {plan id: {unit id: [opened, seen, total]}}, counted here
 }
 
 
@@ -166,7 +167,7 @@ def _reset_runtime():
                   milestones=[], anki_synced=False,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
-                  settings_failed_ts=0.0)
+                  settings_failed_ts=0.0, plan_progress={})
     _pending_cheers.clear()
 
 

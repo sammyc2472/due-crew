@@ -35,14 +35,52 @@ class FakeDB:
 
 
 class FakeSched:
-    def __init__(self, day_cutoff):
+    def __init__(self, day_cutoff, db=None):
         self.day_cutoff = day_cutoff
+        self.db = db
+        self.col = None
+
+    def unsuspend_cards(self, ids):
+        """Anki's: a suspended card goes back to the queue its type says
+        (new 0, learning 1, review 2, relearning 1). An undoable op."""
+        ids = [int(i) for i in ids]
+        for cid in ids:
+            self.db.conn.execute("UPDATE cards SET queue = CASE type WHEN 0 THEN 0 WHEN 2 THEN 2 ELSE 1 END "
+                                 "WHERE id = ? AND queue = -1", (cid,))
+        if self.col is not None:
+            self.col.undo_steps.append(("Unsuspend", ids))
 
 
 class FakeCol:
+    """A collection over a real sqlite database. The undo queue is a list
+    of (name, card ids) steps, as far as the add-on uses it: a custom step,
+    ops after it, and a merge that folds them into it."""
+
     def __init__(self, conn, day_cutoff):
         self.db = FakeDB(conn)
-        self.sched = FakeSched(day_cutoff)
+        self.sched = FakeSched(day_cutoff, self.db)
+        self.sched.col = self
+        self.undo_steps = []
+
+    def add_custom_undo_entry(self, name):
+        self.undo_steps.append((name, []))
+        return len(self.undo_steps) - 1
+
+    def merge_undo_entries(self, pos):
+        name, ids = self.undo_steps[pos]
+        for _n, more in self.undo_steps[pos + 1:]:
+            ids = ids + list(more)
+        self.undo_steps[pos:] = [(name, ids)]
+        return types.SimpleNamespace(card=True)
+
+    def undo_status(self):
+        return types.SimpleNamespace(undo=self.undo_steps[-1][0] if self.undo_steps else "")
+
+    def undo(self):
+        """The latest step, undone: its cards go back to suspended."""
+        _name, ids = self.undo_steps.pop()
+        for cid in ids:
+            self.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = ?", (cid,))
 
 
 def make_collection(conn):
@@ -52,8 +90,9 @@ def make_collection(conn):
                  "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
-                 "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0)")
-    conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, flds TEXT DEFAULT '')")
+                 "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, flds TEXT DEFAULT '', "
+                 "tags TEXT DEFAULT '')")
     return conn
 
 
@@ -66,11 +105,15 @@ def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0):
     return ts_ms
 
 
-def add_card(conn, cid, did, ctype=0, queue=0, ivl=0, odid=0):
-    """ctype 0 new / 2 review; queue -1 suspended; ivl >= 21 is mature."""
-    conn.execute("INSERT INTO notes (id, guid) VALUES (?, ?)", (cid, f"guid{cid:06d}"))
-    conn.execute("INSERT INTO cards (id, nid, did, odid, type, queue, ivl) VALUES (?,?,?,?,?,?,?)",
-                 (cid, cid, did, odid, ctype, queue, ivl))
+def add_card(conn, cid, did, ctype=0, queue=0, ivl=0, odid=0, tags="", nid=None, ord_=0):
+    """ctype 0 new / 2 review; queue -1 suspended; ivl >= 21 is mature.
+    nid: a sibling of that note's other cards (a cloze's c2 is ord 1);
+    tags: Anki's own " a b " spacing is not needed, space-separated is."""
+    nid = cid if nid is None else nid
+    if not conn.execute("SELECT 1 FROM notes WHERE id = ?", (nid,)).fetchone():
+        conn.execute("INSERT INTO notes (id, guid, tags) VALUES (?, ?, ?)", (nid, f"guid{nid:06d}", f" {tags} "))
+    conn.execute("INSERT INTO cards (id, nid, did, odid, type, queue, ivl, ord) VALUES (?,?,?,?,?,?,?,?)",
+                 (cid, nid, did, odid, ctype, queue, ivl, ord_))
 
 
 class FakeDecks:
@@ -160,6 +203,11 @@ class FakeWorker:
         self.codes = {}      # code -> uid
         self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.otp = {}        # email -> code
+        # 3.1: plans (worker/src/plans.ts)
+        self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
+        self.plan_trees = {}  # (uid, deck) -> {tags, decks}
+        self.follows = {}    # (plan, uid) -> {share, paused, progress (json text or None)}
+        self.links = {}      # one-time site sign-in tokens -> uid
         self.log = []        # (method, path, status)
         self.bodies = []     # (method, path, json body)
         self.writes = 0      # rows written, all tables
@@ -268,6 +316,8 @@ class FakeWorker:
             return self._report(me, body)
         if parts[:1] == ["squads"]:
             return self._squad(method, me, parts[1:], query, body or {})
+        if parts[:1] == ["plans"]:
+            return self._plans(method, me, parts[1:], query, body or {})
         if m == ("DELETE", "account"):
             self._delete_account(me)
             return 200, {"ok": True}
@@ -303,6 +353,10 @@ class FakeWorker:
         if what == "me" and method == "GET":
             u = self.users[me]
             return 200, {"uid": me, "email": u["email"], "name": u["name"], "emoji": u["emoji"]}
+        if what == "link" and method == "POST" and len(rest) == 1:
+            token = f"link-{me}-{len(self.links)}".ljust(43, "x")[:43]
+            self.links[token] = me
+            return 200, {"token": token, "expiresIn": 300}
         if what == "signout" and method == "POST":
             self.tokens = {t: u for t, u in self.tokens.items() if t != auth[7:]}
             return 200, {"ok": True}
@@ -343,6 +397,7 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me)}
         if with_decks:
             out["decks"] = self._decks_for(me)
+            out.update(self._plans_for_board(me))  # 3.1
         return out
 
     def _decks_for(self, me):
@@ -398,7 +453,7 @@ class FakeWorker:
         return {k: r.get(k) for k in self.ROW_KEYS - {"name"}}, r.get("name")
 
     def _sync(self, me, body):
-        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings"}:
+        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans"}:
             raise Bad(400, "bad_sync")
         prof = body.get("profile")
         if prof is not None:
@@ -412,6 +467,7 @@ class FakeWorker:
             tipped = {c.get("guid") for (to, frm), c in self.cheers.items()
                       if to == me and c.get("guid") and (frm, me) in self.friends}
             week = self._without_flags(week, tipped)
+        progress = self._progress_part(body["plans"]) if "plans" in body else None
         row = names = None
         if "squads" in body:
             row, names = self._clean_row(body["squads"].get("row"))
@@ -446,6 +502,16 @@ class FakeWorker:
             self._count("heatmaps", wrote["heatmap"])
         if "settings" in body:
             self._put_settings(me, body["settings"])
+        if progress is not None:
+            # only for plans I follow with sharing on, and only where it changed
+            wrote["plans"] = False
+            for pid, units in progress.items():
+                f = self.follows.get((pid, me))
+                text = json.dumps(units, sort_keys=True)
+                if f and f["share"] and f["progress"] != text:
+                    f["progress"] = text
+                    wrote["plans"] = True
+                    self._count("plan_follows")
         gone = []
         if "squads" in body:
             wrote["squads"] = False
@@ -709,6 +775,217 @@ class FakeWorker:
             return 200, self._info(sid)
         raise Bad(405, "method")
 
+    # -- plans (3.1): worker/src/plans.ts --------------------------------------
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "tags", "decks", "cards", "n"}
+    UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
+
+    def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
+        """Setup helper: a plan as the builder saved it. (id, code)."""
+        pid = f"p{len(self.plans):015d}"
+        code = code or "".join(SQUAD_ALPHABET[(len(self.plans) * 5 + i * 7 + 3) % 32] for i in range(8))
+        self.plans[pid] = {"code": code, "owner": owner, "name": name, "line": "", "audience": audience,
+                           "squad": squad, "doc": self._plan_doc({"deck": deck, "units": units}), "version": 1}
+        return pid, code
+
+    def edit_plan(self, pid, units):
+        """The author saves new dates on the site: version + 1."""
+        p = self.plans[pid]
+        p["doc"] = self._plan_doc(dict(p["doc"], units=units))
+        p["version"] += 1
+
+    def _plan_doc(self, v):
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "units"}:
+            raise Bad(400, "plan")
+        units = v.get("units")
+        if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
+            raise Bad(400, "plan")
+        out = []
+        for u in units:
+            if not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id"))):
+                raise Bad(400, "plan")
+            if not DATE_RE.fullmatch(str(u.get("opens"))) or (u.get("due") is not None and (
+                    not DATE_RE.fullmatch(str(u["due"])) or u["due"] < u["opens"])):
+                raise Bad(400, "plan")
+            cards, seen = [], set()
+            for c in u.get("cards") or []:
+                if not (isinstance(c, (list, tuple)) and len(c) == 2 and isinstance(c[0], str)
+                        and _is_int(c[1], 0, 1000)):
+                    raise Bad(400, "plan")
+                if f"{c[0]}:{c[1]}" not in seen:
+                    seen.add(f"{c[0]}:{c[1]}")
+                    cards.append([c[0], c[1]])
+            nu = {"id": u["id"], "name": " ".join(str(u.get("name") or "").split())[:60] or "?",
+                  "opens": u["opens"], "tags": list(dict.fromkeys(u.get("tags") or [])),
+                  "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
+            if u.get("due"):
+                nu["due"] = u["due"]
+            if u.get("n") is not None:
+                if not _is_int(u["n"], 0, 1_000_000):
+                    raise Bad(400, "plan")
+                nu["n"] = u["n"]
+            out.append(nu)
+        if len({u["id"] for u in out}) != len(out) or sum(len(u["cards"]) for u in out) > 5000:
+            raise Bad(400, "plan")
+        out.sort(key=lambda u: u["opens"])
+        doc = {"deck": v["deck"], "units": out}
+        if v.get("exam"):
+            doc["exam"] = v["exam"]
+        return doc
+
+    def _may_read(self, p, pid, me, code=None):
+        """The author, a follower, or whoever may follow it."""
+        if p["owner"] == me or (pid, me) in self.follows:
+            return True
+        member = bool(p["squad"]) and (p["squad"], me) in self.members
+        if p["audience"] == "squad":
+            return member
+        return (bool(code) and code == p["code"]) or member
+
+    def _plan_view(self, pid, me):
+        p = self.plans[pid]
+        f = self.follows.get((pid, me))
+        out = {"id": pid, "name": p["name"], "line": p["line"], "owner": p["owner"],
+               "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?", "audience": p["audience"],
+               "squad": p["squad"], "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
+               "followers": sum(1 for (pl, _u) in self.follows if pl == pid)}
+        if p["owner"] == me:
+            out["code"] = p["code"]
+        if f:
+            out["following"] = {"share": f["share"], "paused": f["paused"]}
+        return out
+
+    @staticmethod
+    def _norm(code):
+        return "".join(ch for ch in str(code or "").upper() if ch in SQUAD_ALPHABET)
+
+    def _by_code(self, code):
+        return next((pid for pid, p in self.plans.items() if p["code"] == code), None)
+
+    def _plans(self, method, me, rest, query, body):
+        if rest == ["trees"] and method == "PUT":
+            if not isinstance(body.get("deck"), str) or not body["deck"]:
+                raise Bad(400, "plan")
+            for k in ("tags", "decks"):
+                for x in body.get(k) or []:
+                    if not (isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _is_int(x[1])):
+                        raise Bad(400, "tree")
+            doc = {"tags": body.get("tags") or [], "decks": body.get("decks") or []}
+            if self.plan_trees.get((me, body["deck"])) != doc:
+                self.plan_trees[(me, body["deck"])] = doc
+                self._count("plan_trees")
+            return 200, {"ok": True}
+        if rest == ["mine"] and method == "GET":
+            ids = [pid for pid, p in self.plans.items() if p["owner"] == me or (pid, me) in self.follows]
+            return 200, {"plans": [self._plan_view(pid, me) for pid in ids]}
+        if rest == ["peek"] and method == "GET":
+            code = self._norm(query.get("code"))
+            pid = self._by_code(code) if len(code) == 8 else None
+            if not pid or not self._may_read(self.plans[pid], pid, me, code):
+                raise Bad(404, "no_plan")
+            return 200, self._plan_view(pid, me)
+        if rest == ["follow"] and method == "POST":
+            if not isinstance(body.get("code"), str):
+                raise Bad(400, "code")
+            code = self._norm(body["code"])
+            pid = self._by_code(code)
+            if not pid or not self._may_read(self.plans[pid], pid, me, code):
+                raise Bad(404, "no_plan")
+            old = self.follows.get((pid, me))
+            self.follows[(pid, me)] = {"share": body.get("share") is not False, "paused": False,
+                                       "progress": old["progress"] if old else None}
+            self._count("plan_follows")
+            return 200, self._plan_view(pid, me)
+        pid = rest[0] if rest else ""
+        if rest[1:] == ["follow"] and method == "DELETE":
+            self.follows.pop((pid, me), None)  # stopping: my progress goes with it
+            return 200, {"ok": True}
+        if pid not in self.plans:
+            raise Bad(404, "no_plan")
+        p = self.plans[pid]
+        if rest[1:] == ["follow"] and method == "PATCH":
+            if not set(body) <= {"share", "paused"}:
+                raise Bad(400, "follow")
+            f = self.follows.get((pid, me))
+            if not f:
+                raise Bad(404, "not_following")
+            share = body["share"] if isinstance(body.get("share"), bool) else f["share"]
+            paused = body["paused"] if isinstance(body.get("paused"), bool) else f["paused"]
+            if (share, paused) != (f["share"], f["paused"]):
+                f.update(share=share, paused=paused)
+                if not share:
+                    f["progress"] = None  # sharing off clears what I shared
+                self._count("plan_follows")
+            return 200, {"share": share, "paused": paused}
+        if rest[1:] == ["cards"] and method == "POST":
+            if p["owner"] != me:
+                raise Bad(403, "not_author")
+            cards = body.get("cards")
+            if not isinstance(cards, list) or not cards:
+                raise Bad(400, "cards")
+            doc = json.loads(json.dumps(p["doc"]))
+            if "unit" in body:
+                u = next((x for x in doc["units"] if x["id"] == body["unit"]), None)
+                if not u:
+                    raise Bad(404, "no_unit")
+            else:
+                if not DATE_RE.fullmatch(str(body.get("opens"))):
+                    raise Bad(400, "opens")
+                u = {"id": f"n{len(doc['units']):07d}", "name": body.get("name") or f"Cards · {body['opens']}",
+                     "opens": body["opens"], "tags": [], "decks": [], "cards": []}
+                doc["units"].append(u)
+            u["cards"] = u["cards"] + list(cards)
+            clean = self._plan_doc(doc)
+            if clean != p["doc"]:
+                p["doc"] = clean
+                p["version"] += 1
+                self._count("plans")
+            return 200, self._plan_view(pid, me)
+        if len(rest) == 1 and method == "GET":
+            if not self._may_read(p, pid, me, self._norm(query.get("code"))):
+                raise Bad(404, "no_plan")
+            return 200, self._plan_view(pid, me)
+        raise Bad(405, "method")
+
+    def _progress_part(self, v):
+        if not isinstance(v, dict) or len(v) > 50:
+            raise Bad(400, "plans")
+        out = {}
+        for pid, units in v.items():
+            if not re.fullmatch(r"[a-z0-9]{1,32}", pid) or not isinstance(units, dict) or len(units) > 200:
+                raise Bad(400, "plans")
+            out[pid] = {}
+            for uid, t in units.items():
+                if (not self.UNIT_ID.fullmatch(uid) or not isinstance(t, list) or len(t) != 3
+                        or not all(_is_int(n) for n in t) or t[0] > t[2] or t[1] > t[2]):
+                    raise Bad(400, "plans")
+                out[pid][uid] = list(t)
+        return out
+
+    def _plans_for_board(self, me):
+        """The plans I follow (with crew counts), and squad offers."""
+        plans = []
+        for (pid, uid), f in sorted(self.follows.items()):
+            if uid != me or pid not in self.plans:
+                continue
+            p = self.plans[pid]
+            rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
+            done = {}
+            for g in rows:
+                if g["share"] and g["progress"]:
+                    for unit, (_o, seen, total) in json.loads(g["progress"]).items():
+                        if total > 0 and seen >= total:
+                            done[unit] = done.get(unit, 0) + 1
+            plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
+                          "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
+                          "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
+                          "share": f["share"], "paused": f["paused"], "followers": len(rows), "crewDone": done})
+        offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
+                   "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
+                  for pid, p in sorted(self.plans.items())
+                  if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
+                  and (pid, me) not in self.follows]
+        return {"plans": plans, "planOffers": offers}
+
     def _delete_account(self, me):
         email = self.users[me]["email"]
         for sid, sq in list(self.squads.items()):
@@ -719,6 +996,10 @@ class FakeWorker:
                 else:
                     del self.squads[sid]
         self.members = {k: v for k, v in self.members.items() if k[1] != me}
+        mine = {pid for pid, p in self.plans.items() if p["owner"] == me}
+        self.follows = {k: v for k, v in self.follows.items() if k[1] != me and k[0] not in mine}
+        self.plans = {pid: p for pid, p in self.plans.items() if pid not in mine}
+        self.plan_trees = {k: v for k, v in self.plan_trees.items() if k[0] != me}
         self.friends = {e for e in self.friends if me not in e}
         self.cheers = {k: v for k, v in self.cheers.items() if me not in k}
         self.knocks = {k: v for k, v in self.knocks.items() if me not in k}
@@ -769,7 +1050,8 @@ def install_fake_aqt():
                  "sync_did_finish", "webview_did_receive_js_message",
                  "profile_did_open", "profile_will_close", "card_will_show",
                  "reviewer_will_show_context_menu", "reviewer_did_show_question",
-                 "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw"):
+                 "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw",
+                 "browser_will_show_context_menu"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")

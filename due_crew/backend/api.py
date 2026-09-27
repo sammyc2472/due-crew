@@ -25,8 +25,8 @@ import requests
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_tricky,
-    day_doc, friend_code_from, live_now,
+    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan,
+    clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
 )
 
 API_BASE = "https://api.duecrew.com"
@@ -286,7 +286,17 @@ class ApiClient:
         if friends != self.session.get("friend_ids") and not self.session.get("needs_restore"):
             self.session["friend_ids"] = friends
             self._save_session()
+        # 3.1: plans ride the day's first refresh; later ones render the last
+        if with_decks:
+            plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
+            offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
+            if plans != self.session.get("plans") or offers != self.session.get("plan_offers"):
+                self.session["plans"], self.session["plan_offers"] = plans, offers
+                self._save_session()
         return {"entries": entries,
+                "plans": list(self.session.get("plans") or []),
+                "plan_offers": list(self.session.get("plan_offers") or []),
+                "plans_fresh": bool(with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
                 "my_friends": friends,
@@ -392,10 +402,13 @@ class ApiClient:
         return doc
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
-             squad_row=None, squads=(), version=None, clock=None):
+             squad_row=None, squads=(), version=None, clock=None, plans=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
-        "off" to take it down, None to leave it. Raises TransportError."""
+        "off" to take it down, None to leave it. plans (3.1): {plan id:
+        {unit id: [opened, seen, total]}} for the plans I share progress
+        on, sent only when it changed since the last sync that went.
+        Raises TransportError."""
         if self.session.get("needs_restore"):
             try:
                 self.restore_from_2x(cfg)
@@ -423,6 +436,8 @@ class ApiClient:
                 body["heatmap"] = want
         if squad_row is not None and squads and not paused:
             body["squads"] = {"row": squad_row, "ids": list(squads)}
+        if plans is not None and not paused and _digest(plans) != self.session.get("plans_hash", _digest({})):
+            body["plans"] = plans
         status, data = self._call("POST", "/sync", body)
         if status != 200:
             print(f"due crew: sync refused ({status}: {data.get('error', '?')})")
@@ -432,6 +447,8 @@ class ApiClient:
             self.session["decks_hash"] = _digest(body["decks"])
         if "heatmap" in body:
             self.session["heatmap_hash"] = _digest(body["heatmap"])
+        if "plans" in body:
+            self.session["plans_hash"] = _digest(body["plans"])
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]
@@ -618,6 +635,88 @@ class ApiClient:
                 "open": data.get("open") is True,
                 "banned": [b for b in data.get("banned") or [] if isinstance(b, str)],
                 "rows": [r for r in map(_clean_member, data.get("rows") or []) if r]}
+
+    # ---- 3.1: plans (each one request, on a click) ----
+
+    def put_tree(self, deck, tags, decks):
+        """The deck's tag and subdeck names with card counts, for the
+        builder. Names and counts only."""
+        status, _ = self._call("PUT", "/plans/trees", {"deck": str(deck), "tags": tags, "decks": decks})
+        return status == 200
+
+    def site_link(self):
+        """A one-time sign-in token for the site (five minutes, single use),
+        or None. It goes in the URL's fragment and is never printed."""
+        status, data = self._call("POST", "/auth/link")
+        token = data.get("token") if status == 200 else None
+        return token if isinstance(token, str) and token else None
+
+    def peek_plan(self, code):
+        """(plan, status) for a code, before following. 404: no such plan,
+        or one I may not follow (a squad plan outside the squad)."""
+        code = normalize_code(code)
+        status, data = self._call("GET", f"/plans/peek?code={code}")
+        return (clean_plan(data) if status == 200 else None), status
+
+    def follow_plan(self, code, share=True):
+        status, data = self._call("POST", "/plans/follow", {"code": normalize_code(code), "share": bool(share)})
+        if status == 200:
+            self.session.pop("plans_hash", None)  # my progress goes out whole at the next sync
+            self._save_session()
+        return (clean_plan(data) if status == 200 else None), status
+
+    def set_follow(self, plan_id, share=None, paused=None):
+        """PATCH my follow: {share, paused} as the server has it, or None."""
+        body = {k: bool(v) for k, v in (("share", share), ("paused", paused)) if v is not None}
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", body)
+        if status != 200:
+            return None
+        if share:
+            self.session.pop("plans_hash", None)  # sharing off cleared it on the server
+        self._note_follow(plan_id, share=data.get("share") is True, paused=data.get("paused") is True)
+        return {"share": data.get("share") is True, "paused": data.get("paused") is True}
+
+    def unfollow_plan(self, plan_id):
+        status, _ = self._call("DELETE", f"/plans/{plan_id}/follow")
+        if status == 200:
+            self.session["plans"] = [p for p in self.session.get("plans") or [] if p.get("id") != plan_id]
+            self._save_session()
+        return status == 200
+
+    def _note_follow(self, plan_id, **kw):
+        """Keep the cached board plan in step with a change made here."""
+        for p in self.session.get("plans") or []:
+            if p.get("id") == plan_id:
+                p.update(kw)
+        self._save_session()
+
+    def remember_plan(self, plan):
+        """A plan just followed joins the cached board plans at once, so the
+        Decks tab shows it before the next day's first refresh."""
+        plans = [p for p in self.session.get("plans") or [] if p.get("id") != plan["id"]]
+        plans.append(dict(plan, crewDone=plan.get("crewDone") or {}))
+        self.session["plans"] = plans
+        self.session["plan_offers"] = [o for o in self.session.get("plan_offers") or []
+                                       if o.get("id") != plan["id"]]
+        self._save_session()
+
+    def add_plan_cards(self, plan_id, cards, unit=None, opens=None):
+        """Single cards onto a date of a plan I wrote ([[guid, ord]]), or
+        onto a new date. (plan, status)."""
+        body = {"cards": [[str(g), int(o)] for g, o in cards]}
+        if unit:
+            body["unit"] = str(unit)
+        else:
+            body["opens"] = str(opens)
+        status, data = self._call("POST", f"/plans/{plan_id}/cards", body)
+        return (clean_plan(data) if status == 200 else None), status
+
+    def my_plans(self):
+        """[plan]: the plans I wrote and the ones I follow. Raises TransportError."""
+        status, data = self._call("GET", "/plans/mine")
+        if status != 200:
+            raise TransportError(f"plans: {status}", status)
+        return [p for p in map(clean_plan, data.get("plans") or []) if p]
 
 
 def _now_iso():
