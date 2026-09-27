@@ -398,3 +398,19 @@ Signed-off mock "Plans 3.4" (D1, D2).
   Sketchy), searches by name, ids and picked cards as counts; review days
   shaded; notes and days off optional. The page's own print style; no
   server change.
+
+### Events, and the dates that prep for them (F1)
+
+- An event is a named day (`events: [{id, day, name}]`): a lecture, a
+  quiz, the block exam. It holds no cards and opens nothing. A date's
+  `for` names the event it preps for; the calendar marks the event with
+  its count of prep days and each prep day with "for Micro quiz", and
+  pointing at an event lights its prep days up.
+- In the builder: Prep for on a day (or + New event), Make it an event on
+  an empty day, and the event's own box (rename, Move it, Take it off).
+  Finish by can aim at an event: the finish date is the day before it,
+  and the dates Fill makes are for it.
+- Text: `2026-10-15 | event | Micro quiz`, and a date line ends with
+  `for Micro quiz`. The print list, the calendar feed and the add-on's
+  plan card (`plans.prep_for`: "For Micro quiz on Thu · 2 more days of
+  prep") show them.

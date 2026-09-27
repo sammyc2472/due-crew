@@ -464,6 +464,8 @@ def _clean_unit(u):
             out[k] = got
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
+    if isinstance(u.get("for"), str) and u["for"]:
+        out["for"] = u["for"][:12]  # F1: the event it preps for
     return out
 
 
@@ -498,6 +500,11 @@ def clean_plan_doc(doc):
                if isinstance(r, dict) and _ISO.fullmatch(str(r.get("day") or "")) and r.get("from") in ids and r.get("to") in ids]
     if reviews:
         out["reviews"] = reviews[:60]  # 3.3, C4: review days
+    events = [{"id": str(e["id"])[:12], "day": e["day"], "name": clean_note(e.get("name"), 60) or "?"}
+              for e in doc.get("events") or []
+              if isinstance(e, dict) and e.get("id") and _ISO.fullmatch(str(e.get("day") or ""))][:200]
+    if events:
+        out["events"] = sorted(events, key=lambda e: e["day"])  # F1: named days the dates prep for
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over

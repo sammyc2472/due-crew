@@ -517,6 +517,23 @@ def match_rows(idx, doc, swap=None, shown=5):
     return rows
 
 
+def prep_for(doc, today):
+    """F1: the next event (today or later) that today's dates, or the next
+    ones, prep for: {name, day, left}, `left` the prep days after today."""
+    evs = {e["id"]: e for e in (doc or {}).get("events") or [] if str(e.get("day") or "") >= today}
+    if not evs:
+        return None
+    us = units(doc)
+    now = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") <= today]
+    ahead = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") > today]
+    pick = (now[-1] if now else ahead[0] if ahead else None)
+    if not pick:
+        return None
+    ev = evs[pick["for"]]
+    left = sum(1 for u in us if u.get("for") == ev["id"] and today < str(u.get("opens") or "") <= ev["day"])
+    return {"name": ev.get("name") or "?", "day": ev["day"], "left": left, "today": ev["day"] == today}
+
+
 def opened_by_date(doc, today):
     return [u for u in units(doc) if str(u.get("opens") or "9999") <= today]
 

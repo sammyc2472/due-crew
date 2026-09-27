@@ -265,6 +265,14 @@ add-on.
   counts, kept as `idn`). Numbers only. Not C5's `ids`, which are guids.
   E2 print: a Print view (authors and followers) lays the dates out as a
   list by week, topics grouped by resource, for printing or a PDF.
+- F1 events: `events: [{id, day, name}]` on the plan (a lecture, a quiz,
+  the exam; they open nothing), and a date's `for` names the one it preps
+  for (a `for` whose event went is dropped by the Worker). The calendar
+  marks the event ("3 days of prep") and its prep days; Fill can aim at an
+  event (finish the day before; the new dates are for it); Text writes
+  `DATE | event | Name` and `for Name`; the calendar feed and the print
+  show them; the add-on's plan card says what today preps for
+  (`plans.prep_for`).
 
 ## Releasing
 

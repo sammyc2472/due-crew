@@ -442,3 +442,17 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
   .savebar { display: none !important; }
 }
 .found[hidden] { display: none; }
+
+/* F1: events, and the days that prep for them */
+.cal2 .ch.evc { background: var(--card); border: 1.5px solid var(--ink); color: var(--ink); display: grid; text-align: left; }
+.cal2 .ch.evc small { font-weight: 400; color: var(--muted); }
+.cal2 .for { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.cal2 .for b { color: var(--ink); font-weight: 600; }
+.cal2 .d.lead { box-shadow: inset 0 -3px 0 var(--ink); }
+.cal2 .d.hl { outline: 2px solid var(--ink); outline-offset: 1px; }
+.evbox { border: 1.5px solid var(--ink); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+.evbox input { font-weight: 600; }
+.evform { display: grid; gap: 6px; background: var(--well); border-radius: 8px; padding: 8px; }
+.printout .t.evt { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
+.printout .fx { font-weight: 400; color: #6b6b64; }
+.printout tr.evr td { border-top: 1.5px solid #1f1f1c; }

@@ -12,6 +12,7 @@ import { Env, HttpError, clientIp, json, nowSec, readJson } from "./util";
 
 export const PLAN_CODE_LEN = 8;
 const UNITS_MAX = 200;
+const EVENTS_MAX = 200;  // F1: named days (a lecture, a quiz, the exam) the dates prep for
 const CARDS_MAX = 50000;  // 3.3: a class lead's own lecture tags, for a year
 const IDS_MAX = 50000;    // 3.3, C5: note ids kept behind a plan's tags and subdecks
 const SEARCH_MAX = 10;
@@ -71,7 +72,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -133,6 +134,11 @@ function unit(v: unknown): Obj {
     if (!Array.isArray(a) || a.length > IDLIST_MAX || !a.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) throw V.bad("plan");
     if (a.length) out[k] = [...new Set(a as number[])];
   }
+  // F1: the event this date preps for, by its id
+  if (v.for !== undefined && v.for !== null) {
+    if (!V.isStr(v.for, 12) || !UNIT_ID.test(v.for)) throw V.bad("plan");
+    out.for = v.for;
+  }
   if (v.idn !== undefined && v.idn !== null) {
     if (!V.isInt(v.idn, 0, 1_000_000)) throw V.bad("plan");
     if (out.nids || out.cids) out.idn = v.idn;
@@ -180,7 +186,7 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
@@ -215,6 +221,23 @@ export function planDoc(v: unknown): Obj {
     });
     if (rs.length) out.reviews = rs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
   }
+  // F1: events: a name on a day; a date's `for` names one (a `for` whose
+  // event went, in a merge, is dropped rather than refused)
+  const evIds = new Set<string>();
+  if (v.events !== undefined && v.events !== null) {
+    if (!Array.isArray(v.events) || v.events.length > EVENTS_MAX) throw V.bad("plan");
+    const evs = v.events.map((e) => {
+      if (!V.isObj(e) || Object.keys(e).some((k) => !["id", "day", "name"].includes(k)) || !V.isStr(e.id, 12) || !UNIT_ID.test(e.id as string)
+          || !V.isDate(e.day)) throw V.bad("plan");
+      const name = V.displayName(e.name);
+      if (!name) throw V.bad("plan");
+      if (evIds.has(e.id as string)) throw V.bad("plan");
+      evIds.add(e.id as string);
+      return { id: e.id, day: e.day, name };
+    });
+    if (evs.length) out.events = evs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
+  }
+  for (const u of units) if (u.for && !evIds.has(u.for as string)) delete u.for;
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
   if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");
@@ -711,7 +734,7 @@ export async function ics(req: Request, env: Env): Promise<Response> {
   await limitOrThrow(env, `ics:ip:${clientIp(req)}`, 1000, 3600);
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
-  const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[] };
+  const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[]; events?: { id: string; day: string; name: string }[] };
   const stamp = new Date(p.updated_at * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const link = `https://duecrew.com/p/${p.code}`;
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Due Crew//Plans//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
@@ -724,6 +747,11 @@ export async function ics(req: Request, env: Env): Promise<Response> {
     const n = unitCount(u);
     const last = u.even && u.due ? (u.due as string) : (u.opens as string);
     event(u.id as string, u.opens as string, dayAfter(last), `${u.name}${n ? ` · ${n.toLocaleString("en-US")} new` : ""}`);
+  }
+  // F1: an event is its own day, with how many dates prep for it
+  for (const ev of doc.events || []) {
+    const prep = doc.units.filter((u) => u.for === ev.id).length;
+    event(`e${ev.id}`, ev.day, dayAfter(ev.day), `${ev.name}${prep ? ` · ${prep} day${prep === 1 ? "" : "s"} of prep` : ""}`);
   }
   for (const r of doc.reviews || []) {
     const a = byId.get(r.from), b = byId.get(r.to);

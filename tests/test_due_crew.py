@@ -2762,6 +2762,27 @@ def _open(col):
     return {cid for cid, q in _queues(col).items() if q != -1}
 
 
+def test_plans_events_f1():
+    """F1: events are named days the dates prep for; the plan card says
+    what today's studying leads up to, and how many prep days are left."""
+    from due_crew import plans as P, board
+    from due_crew.backend import shapes
+    doc = shapes.clean_plan_doc({"deck": "Step 1",
+        "events": [{"id": "q1", "day": "2026-10-15", "name": "Micro <quiz>"}, {"id": "x", "day": "soon", "name": "bad"}],
+        "units": [{"id": "a", "name": "Staph", "opens": "2026-10-12", "for": "q1"},
+                  {"id": "b", "name": "Strep", "opens": "2026-10-13", "for": "q1"},
+                  {"id": "c", "name": "Entero", "opens": "2026-10-14", "for": "q1"},
+                  {"id": "d", "name": "Clostridium", "opens": "2026-10-16"}]})
+    check("events: cleaned on arrival, a bad day dropped", [e["id"] for e in doc.get("events", [])] == ["q1"], str(doc.get("events")))
+    pf = P.prep_for(doc, "2026-10-12")
+    check("events: today preps for the quiz, two more days to go", pf == {"name": "Micro <quiz>", "day": "2026-10-15", "left": 2, "today": False}, str(pf))
+    check("events: on its day it says so", P.prep_for(doc, "2026-10-15")["today"] is True)
+    check("events: nothing once it's past", P.prep_for(doc, "2026-10-16") is None)
+    html = board._plan_card_html({"id": "p", "title": "Plan", "prep": dict(pf, when="Thu")})
+    check("events: the card line, the name escaped",
+          "For <b>Micro &lt;quiz&gt;</b> on Thu &middot; 2 more days of prep" in html, html)
+
+
 def test_plans_ids_e1():
     """E1: note ids and card ids pasted onto a date: a note id brings every
     card of it, a card id that one card, only inside the plan's deck; they

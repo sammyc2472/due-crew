@@ -176,6 +176,22 @@ async function builder(id) {
     return `${[a ? w(a, "note") : "", b ? w(b, "card") : ""].filter(Boolean).join(" + ")} by ID`;
   };
   function takeIds(u) { delete u.nids; delete u.cids; delete u.idn; }
+  // F1: events: named days (a lecture, a quiz, the exam) that dates prep for
+  const events = () => doc.events || [];
+  const evById = (id) => events().find((x) => x.id === id);
+  const evOn = (d) => events().filter((x) => x.day === d);
+  const prepOf = (id) => doc.units.filter((u) => u.for === id);
+  function addEvent(day, name) {
+    const ev = { id: uid8(), day, name: (name || "").trim().slice(0, 60) || "Event" };
+    doc.events = [...events(), ev].sort((a, b) => a.day.localeCompare(b.day));
+    return ev;
+  }
+  function takeEvent(ev) {
+    doc.events = events().filter((x) => x !== ev);
+    if (!doc.events.length) delete doc.events;
+    for (const u of doc.units) if (u.for === ev.id) delete u.for;
+  }
+  let aimFor = null;        // F1: Fill aims at this event (its day before is the finish date)
   /** "Search: Cardio…", by its first tag (3.4 review, N7). */
   const searchName = (q) => { const m = /tag:"?([^\s"]+)/i.exec(q); const w = m ? Tags.word(m[1].split("::").filter((x) => x.replace(/\*/g, "")).pop() || "").replace(/\*/g, "") : ""; return w ? `Search: ${w}` : "Search"; };
 
@@ -294,7 +310,14 @@ async function builder(id) {
   }
   /** 3.4 review, H2: Fill with nothing to place says why, and the panel on the left flashes. */
   function fillOrSay(weekAhead) {
-    if (coverLeft()) return layOut(weekAhead);
+    if (coverLeft()) {
+      const before = new Set(doc.units.map((u) => u.id));
+      layOut(weekAhead);
+      // F1: aimed at an event, the new dates before it prep for it
+      const ev = pace.mode === "end" && aimFor && evById(aimFor);
+      if (ev) { for (const u of doc.units) if (!before.has(u.id) && u.opens < ev.day && !u.for) u.for = ev.id; draw(); }
+      return;
+    }
     note = cover.size ? "Everything ticked is on the calendar already." : "Tick what to cover on the left first.";
     if (!cover.size) coverOpen = true;
     draw();
@@ -487,7 +510,13 @@ async function builder(id) {
     const dayBtns = h("span", { class: "wdays", role: "group", "aria-label": "Study days" }, ["M", "T", "W", "T", "F", "S", "S"].map((l, i) =>
       h("button", { class: pace.days[i] ? "on" : "", "aria-pressed": String(!!pace.days[i]), title: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][i],
         onclick: () => { const next = pace.days.slice(); next[i] = next[i] ? 0 : 1; if (next.some(Boolean)) { pace.days = next; study.days = next; mark(); draw(); } } }, l)));
-    const how = pace.mode === "end" ? h("span", { class: "row", style: "gap:6px" }, endIn, h("small", { class: "muted" }, d1 ? `≈ ${d1.toLocaleString()} new a day` : ""))
+    // F1: or aim at an event: finish the day before it, and the new dates prep for it
+    const aim = events().length ? h("select", { "aria-label": "Or an event", onchange: (e) => {
+      const ev = evById(e.target.value); aimFor = ev ? ev.id : null;
+      if (ev) doc.end = addDays(ev.day, -1);
+      mark(); draw(); } },
+      h("option", { value: "" }, "or an event…"), events().map((x) => h("option", { value: x.id, selected: aimFor === x.id }, `${x.name} · ${pretty(x.day)}`))) : null;
+    const how = pace.mode === "end" ? h("span", { class: "row", style: "gap:6px" }, aimFor && evById(aimFor) ? null : endIn, aim, h("small", { class: "muted" }, d1 ? `≈ ${d1.toLocaleString()} new a day` : ""))
       : pace.mode === "daily" ? h("span", { class: "row", style: "gap:6px" }, dailyIn, h("small", { class: "muted" }, fin ? `done ≈ ${pretty(fin)}` : ""))
       : h("small", { class: "muted" }, "drag a tag onto a day, or use +");
     return h("div", { class: "pace2" },
@@ -523,9 +552,21 @@ async function builder(id) {
       const ph = Sched.phase(doc, d, 0);
       const off = !pace.days[(parseIso(d).getUTCDay() + 6) % 7];
       const heavy = cap && e.load > cap * 1.25;
-      const cls = ["d", off ? "off" : "", ph !== "build" ? ph : "", d === t ? "today" : "", d === picked ? "picked" : "", heavy ? "heavy" : ""].filter(Boolean).join(" ");
+      const cls = ["d", off ? "off" : "", ph !== "build" ? ph : "", d === t ? "today" : "", d === picked ? "picked" : "", heavy ? "heavy" : "",
+        doc.units.some((u) => u.opens === d && u.for && evById(u.for)) ? "lead" : ""].filter(Boolean).join(" ");
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
+      const evs = evOn(d).map((x) => {
+        const k = prepOf(x.id).length;
+        const el = h("button", { class: "ch evc", title: `${x.name}${k ? ` · ${k} day${k === 1 ? "" : "s"} of prep` : ""}`,
+          onclick: (ev) => { ev.stopPropagation(); picked = d; moving = null; sideTab = "day"; draw(); } },
+          h("span", {}, x.name), k ? h("small", {}, `${k} day${k === 1 ? "" : "s"} of prep`) : null);
+        // pointing at an event lights up the days that prep for it
+        el.addEventListener("mouseenter", () => document.querySelectorAll(`.cal2 .d[data-for~="${x.id}"]`).forEach((c) => c.classList.add("hl")));
+        el.addEventListener("mouseleave", () => document.querySelectorAll(".cal2 .d.hl").forEach((c) => c.classList.remove("hl")));
+        return el;
+      });
+      const fors = [...new Set(doc.units.filter((u) => u.opens === d && u.for && evById(u.for)).map((u) => u.for))];
       const chips = e.chips.map((c) => {
         const el = h("button", { class: `ch ${c.review ? "rv" : c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
@@ -537,7 +578,9 @@ async function builder(id) {
       const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "review-only days"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
         onclick: () => { picked = picked === d ? null : d; splitting = null; moving = null; sideTab = picked ? "day" : "cover"; draw(); },
         onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; moving = null; sideTab = picked ? "day" : "cover"; draw(); } } },
-        h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...chips, bar);
+        h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...evs, ...chips,
+        fors.map((id) => h("span", { class: "for" }, "for ", h("b", {}, evById(id).name))), bar);
+      if (fors.length) cell.dataset.for = fors.join(" ");
       if (author) dropOn(cell, (what) => dropped(d, what));
       cells.push(cell);
     }
@@ -598,6 +641,9 @@ async function builder(id) {
       for (const u of own) { const other = doc.units.find((x) => x.opens === to && !x.even && x !== u); if (other) { for (const k of srcs(u)) addTo(to, k); other.cards = [...(other.cards || []), ...(u.cards || [])]; for (const k of ["nids", "cids"]) if ((u[k] || []).length) { other[k] = [...new Set([...(other[k] || []), ...u[k]])]; delete other.idn; } for (const q of u.search || []) { other.search = [...new Set([...(other.search || []), q])]; if (u.sn?.[q] != null) other.sn = { ...(other.sn || {}), [q]: u.sn[q] }; } for (const r of doc.reviews || []) { if (r.from === u.id) r.from = other.id; if (r.to === u.id) r.to = other.id; } doc.units = doc.units.filter((x) => x !== u); } else shiftUnit(u, Sched.diff(to, u.opens)); }
       picked = to; moving = null; renameAll(); byOpens(); mark(); draw(); } }) : null;
     const rv = reviewBox(d);
+    const evBoxes = evOn(d).map((x) => eventBox(x));
+    const prep = own.length ? prepBox(d, own) : null;
+    const makeEv = author && !own.length && !evOn(d).length ? newEventLink(d, null, "Make it an event") : null;
     const rvLink = rv && rv.tagName === "BUTTON" ? rv : null;
     const moveLink = author && own.length && moving !== d ? h("button", { class: "linkish", onclick: () => { moving = d; draw(); } }, "Move this day…") : null;
     return h("section", { class: `dayp${inSide ? " side" : ""}`, "aria-label": pretty(d) },
@@ -605,12 +651,64 @@ async function builder(id) {
         h("button", { class: "quiet", "aria-label": "Close", onclick: () => { picked = null; splitting = null; moving = null; draw(); } }, "×")),
       inSide && e.load ? h("span", { class: "muted small" }, `${e.load.toLocaleString()} new cards`) : null,
       splitting ? splitPanel() : null,
-      rows.length ? rows : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here, or use + in What to cover." : "Nothing new this day."),
+      evBoxes,
+      rows.length ? rows : evBoxes.length ? null : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here, or use + in What to cover." : "Nothing new this day."),
+      prep,
       author ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "Add cards"), searchBox(d)) : null,
       moveIn ? h("label", { class: "inline" }, "Move to ", moveIn, h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); moving = null; draw(); } }, "Cancel")) : null,
-      moveLink || rvLink ? h("div", { class: "acts" }, moveLink, rvLink) : null,
+      moveLink || rvLink || makeEv ? h("div", { class: "acts" }, moveLink, rvLink, makeEv) : null,
       rv && !rvLink ? rv : null,
       inPlan ? h("div", { class: "notesw" }, author ? h("span", { class: "lbl" }, "Notes for followers") : null, notesBox(d)) : null);
+  }
+
+  /** F1: "Prep for": the event this day's dates lead up to. */
+  let newEv = null;  // {day, forDay}: the new-event form, open
+  function prepBox(d, own) {
+    const cur = own[0].for && evById(own[0].for);
+    if (!author) return cur ? h("p", { class: "muted small" }, "For ", h("b", {}, cur.name), ` on ${pretty(cur.day)}`) : null;
+    const later = events().filter((x) => x.day >= d);
+    const sel = h("select", { "aria-label": "Prep for", onchange: (e) => {
+      if (e.target.value === "+") { newEv = { day: addDays(d, 3), forDay: d }; draw(); return; }
+      for (const u of own) { if (e.target.value) u.for = e.target.value; else delete u.for; }
+      mark(); draw(); } },
+      h("option", { value: "" }, "Nothing"),
+      later.map((x) => h("option", { value: x.id, selected: cur && cur.id === x.id }, `${x.name} · ${pretty(x.day)}`)),
+      h("option", { value: "+" }, "+ New event…"));
+    return h("div", { class: "addc" }, h("span", { class: "lbl" }, "Prep for"), sel, newEv && newEv.forDay === d ? newEventForm(d, own) : null);
+  }
+  function newEventForm(d, own) {
+    const name = h("input", { placeholder: "Lecture 12, Micro quiz, Block 2 exam", maxlength: 60, "aria-label": "The event's name" });
+    const day = h("input", { type: "date", value: newEv.day, min: d, "aria-label": "Its day" });
+    const make = () => {
+      if (!name.value.trim() || !day.value) { name.focus(); return; }
+      const ev = addEvent(day.value, name.value);
+      for (const u of own || []) u.for = ev.id;
+      newEv = null; mark(); draw();
+    };
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") make(); });
+    setTimeout(() => name.focus(), 0);
+    return h("div", { class: "evform" }, name, h("div", { class: "row" }, day, h("button", { onclick: make }, "Add event"),
+      h("button", { class: "quiet", onclick: () => { newEv = null; draw(); } }, "Cancel")));
+  }
+  function newEventLink(d, own, text) {
+    if (newEv && newEv.day === d && newEv.forDay === null) return h("span", {}, newEventForm(d, own));
+    return h("button", { class: "linkish", onclick: () => { newEv = { day: d, forDay: null }; draw(); } }, text);
+  }
+  /** F1: an event's own day: its name, the days that prep for it. */
+  let movingEv = null;
+  function eventBox(x) {
+    const prep = prepOf(x.id).sort((a, b) => a.opens.localeCompare(b.opens));
+    const n = prep.reduce((a, u) => a + unitTotal(u), 0);
+    const say = prep.length ? `${prep.length} day${prep.length === 1 ? "" : "s"} of prep: ${prep.slice(0, 4).map((u) => pretty(u.opens)).join(", ")}${prep.length > 4 ? "…" : ""}${n ? ` · ${n.toLocaleString()} cards` : ""}`
+      : "No days prep for it yet. Pick it under Prep for on a day.";
+    if (!author) return h("div", { class: "evbox" }, h("span", { class: "lbl" }, "Event"), h("b", {}, x.name), h("span", { class: "muted small" }, say));
+    const name = h("input", { value: x.name, maxlength: 60, "aria-label": "The event's name", oninput: (e) => { x.name = e.target.value.slice(0, 60); mark(); } });
+    const move = movingEv === x.id ? h("label", { class: "inline" }, "Move to ", h("input", { type: "date", value: x.day, "aria-label": "Move the event to", onchange: (e) => {
+      if (!e.target.value) return; x.day = e.target.value; doc.events.sort((a, b) => a.day.localeCompare(b.day)); picked = x.day; movingEv = null; mark(); draw(); } }),
+      h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); movingEv = null; draw(); } }, "Cancel")) : null;
+    return h("div", { class: "evbox" }, h("span", { class: "lbl" }, "Event"), name, h("span", { class: "muted small" }, say), move,
+      h("div", { class: "acts" }, movingEv === x.id ? null : h("button", { class: "linkish", onclick: () => { movingEv = x.id; draw(); } }, "Move it…"),
+        h("button", { class: "linkish", onclick: () => { takeEvent(x); mark(); draw(); } }, "Take it off")));
   }
 
   /** 3.3, C3: an Anki search as part of a day; each follower's Anki runs it.
@@ -767,11 +865,12 @@ async function builder(id) {
   }
 
   // ---- as text ----
-  const toText = () => { byOpens(); return doc.units.map((u) => [u.opens, u.name,
+  const toText = () => { byOpens(); return [...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.decks || []).map((d) => `deck:${d}`)].join(", "),
     ...(u.search || []).map((q) => `search:${q}`),
     (u.nids || []).length ? `nids:${u.nids.join(",")}` : "", (u.cids || []).length ? `cids:${u.cids.join(",")}` : "",
-    u.due ? `due ${u.due}` : "", u.even ? "even" : "", (u.cards || []).length ? `${u.cards.length} single cards` : ""].filter(Boolean).join(" | ")).join("\n"); };
+    u.due ? `due ${u.due}` : "", u.even ? "even" : "", (u.cards || []).length ? `${u.cards.length} single cards` : "",
+    u.for && evById(u.for) ? `for ${evById(u.for).name}` : ""].filter(Boolean).join(" | "))].sort().join("\n"); };
 
   // what an AI (or a person) might write for a tag: the exact path, any
   // case, or its readable name
@@ -783,11 +882,20 @@ async function builder(id) {
     const errors = [];
     const units = [];
     const notes = [];
+    const evs = [];     // F1: "2026-10-15 | event | Micro quiz"
+    const forName = new Map();  // unit id -> the event name it's for
     text.split("\n").forEach((raw, i) => {
       let line = raw.trim().replace(/^[-*•]\s+/, "").replace(/`/g, "");
       if (!line || /^```/.test(raw.trim())) return;
       if (line.startsWith("#")) { if (/\bpick\b|single|anki/i.test(line)) notes.push(line.replace(/^#+\s*/, "")); return; }
       const parts = line.split(/\s*\|\s*|\s{2,}/).filter(Boolean);
+      if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^event$/i.test(parts[1])) {
+        const name = parts.slice(2).join(" ").slice(0, 60);
+        const old = events().find((x) => x.name.toLowerCase() === name.toLowerCase());
+        evs.push({ id: old?.id || uid8(), day: parts[0], name });
+        return;
+      }
+      let forN = null;
       let opens = null; let due; let even = false; let name = ""; const tags = []; const decks = []; const searches = []; const ids = { nids: [], cids: [] };
       for (const part of parts) {
         let m;
@@ -795,6 +903,7 @@ async function builder(id) {
         else if (!opens && (m = /^week\s+(\d+)$/i.exec(part))) opens = addDays(start, (Number(m[1]) - 1) * 7);
         else if ((m = /^due\s+(\d{4}-\d{2}-\d{2})$/i.exec(part))) due = m[1];
         else if (/^even(ly)?$/i.test(part)) even = true;
+        else if ((m = /^for\s+(.+)$/i.exec(part))) forN = m[1].trim();
         else if (/^\d+ single cards?$/.test(part)) continue;
         else if (/^search:/i.test(part)) searches.push(part.slice(7).trim());
         else if ((m = /^(nids|cids|ids):\s*([\d\s,;]+)$/i.exec(part))) ids[m[1].toLowerCase() === "cids" ? "cids" : "nids"].push(...m[2].split(/[\s,;]+/).filter(Boolean).map(Number).filter((x) => Number.isSafeInteger(x) && x > 0));
@@ -822,12 +931,18 @@ async function builder(id) {
       }
       for (const k of ["nids", "cids"]) if (ids[k].length) u[k] = [...new Set(ids[k])];
       if (hasIds(u) && old && JSON.stringify([old.nids, old.cids]) === JSON.stringify([u.nids, u.cids]) && old.idn != null) u.idn = old.idn;
+      if (forN) forName.set(u.id, forN);
       if (!u.due) delete u.due;
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
       units.push(u);
     });
     const missing = units.flatMap((u) => [...u.tags.map((t) => `tag:${t}`), ...u.decks.map((d) => `deck:${d}`)]).filter((k) => count.size && !count.has(k));
-    return { units, errors, missing, notes };
+    for (const u of units) {
+      const n = forName.get(u.id); if (!n) continue;
+      const ev = [...evs, ...events()].find((x) => x.name.toLowerCase() === n.toLowerCase());
+      if (ev) u.for = ev.id; else errors.push(`"for ${n}": no event by that name. Add a line like 2026-10-15 | event | ${n}`);
+    }
+    return { units, errors, missing, notes, events: evs };
   }
 
   /** The prompt for your own AI: the plan so far, the format, the deck's tags. */
@@ -900,6 +1015,11 @@ async function builder(id) {
         h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), " ", h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
         h("span", { class: "muted small" }, `${u.due ? `to ${pretty(u.due)}${u.even ? ", evenly" : ""} · ` : ""}${unitTotal(u, placed).toLocaleString()} cards`)));
       const use = (replace) => {
+        if (r.events.length || replace) {
+          const keep = replace ? [] : events().filter((x) => !r.events.some((y) => y.id === x.id));
+          doc.events = [...keep, ...r.events].sort((a, b) => a.day.localeCompare(b.day));
+          if (!doc.events.length) delete doc.events;
+        }
         if (replace) doc.units = r.units;
         else for (const u of r.units) { if (!doc.units.some((x) => x.id === u.id)) doc.units.push(u); }
         byOpens(); mark(); preview.replaceChildren(); out.className = "status"; out.textContent = replace ? `Now ${doc.units.length} dates. Save to keep them.` : `Added. Now ${doc.units.length} dates. Save to keep them.`;
@@ -1036,7 +1156,8 @@ async function builder(id) {
       : pacePanel()) : null;
     // B3: one fill button, named for what it does; none when placing by hand
     const left = coverLeft();
-    const fillLabel = pace.mode === "end" && doc.end ? `Fill to ${pretty(doc.end)}` : `Fill at ${(pace.daily || 20).toLocaleString()} a day`;
+    const fillLabel = pace.mode === "end" && aimFor && evById(aimFor) ? `Fill up to ${evById(aimFor).name}`
+      : pace.mode === "end" && doc.end ? `Fill to ${pretty(doc.end)}` : `Fill at ${(pace.daily || 20).toLocaleString()} a day`;
     const fillRow = author && view !== "text" && view !== "print" ? h("div", { class: "caltool2" },
       pace.mode !== "placed" ? h("button", { onclick: () => fillOrSay(false) }, fillLabel) : null,
       pace.mode !== "placed" ? h("button", { class: "linkish", onclick: () => fillOrSay(true) }, "just next week") : null,
@@ -1108,22 +1229,25 @@ async function builder(id) {
       const spans = doc.units.filter((u) => u.even && u.due && u.opens < d && d <= u.due && !off);
       const r = reviews.get(d);
       const dn = printOpt.notes ? notes.filter((x) => x.day === d) : [];
-      if (!own.length && !spans.length && !r && !(off && printOpt.off)) continue;
+      const evd = evOn(d);
+      if (!own.length && !spans.length && !r && !evd.length && !(off && printOpt.off)) continue;
       const m = Sched.monday(d);
       if (!week || week.m !== m) { week = { m, rows: [] }; weeks.push(week); }
       const dd = parseIso(d);
       const when = `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}`;
       const cells = [];
+      for (const x of evd) cells.push(h("span", { class: "t evt" }, x.name));
       for (const u of [...own, ...spans]) {
         const part = u.even && u.due ? ` (${u.opens === d ? "starts; " : ""}evenly to ${pretty(u.due)})` : "";
-        cells.push(h("span", { class: "t" }, `${u.name}${part}`),
+        const fx = u.for && evById(u.for);
+        cells.push(h("span", { class: "t" }, `${u.name}${part}`, fx ? h("span", { class: "fx" }, ` · for ${fx.name}, ${pretty(fx.day)}`) : null),
           h("span", { class: "src" }, topics(u).flatMap(([g, xs], i) => [i ? " · " : "", g ? h("b", {}, `${g} `) : null, xs.join(" · ")])));
       }
       if (r && byId.get(r.from)) cells.push(h("span", { class: "t" }, "Review day"), h("span", { class: "src" }, `${byId.get(r.from).name}${r.to !== r.from && byId.get(r.to) ? ` – ${byId.get(r.to).name}` : ""}, in Anki's own filtered deck`));
       if (off && !cells.length) cells.push(h("span", { class: "t muted" }, "Day off"));
       for (const x of dn) cells.push(h("span", { class: "nt" }, `${x.mine ? "You" : x.name}: ${x.text}`));
       const n = own.reduce((a, u) => a + unitTotal(u), 0);
-      week.rows.push(h("tr", { class: r && !own.length ? "rv" : off && !own.length ? "off" : "" },
+      week.rows.push(h("tr", { class: evd.length ? "evr" : r && !own.length ? "rv" : off && !own.length ? "off" : "" },
         h("td", { class: "bx" }, h("i")), h("td", { class: "dt" }, when), h("td", {}, cells),
         h("td", { class: "n" }, printOpt.counts && n ? n.toLocaleString() : "")));
     }
@@ -1215,7 +1339,7 @@ async function builder(id) {
     if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
     if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
     if (changed.length === 1) out.push(`changed ${changed[0].name}`); else if (changed.length) out.push(`changed ${changed.length} dates`);
-    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"]]) {
+    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"], ["events", "the events"]]) {
       if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null) && !(k === "pace" && out.length)) out.push(`changed ${w}`);
     }
     return (out.join("; ") || "changed the plan").slice(0, 120);
@@ -1233,7 +1357,7 @@ async function builder(id) {
       units = units.filter((x) => x.id !== uid).concat([structuredClone(u)]);
     }
     out.units = units.sort((x, y) => x.opens.localeCompare(y.opens));
-    for (const k of ["pace", "end", "phases", "reviews"]) {
+    for (const k of ["pace", "end", "phases", "reviews", "events"]) {
       if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
     }
     // a review day of a date one of us took off goes with it

@@ -987,6 +987,14 @@ def _plan_card_html(card):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
     out += _session_html(card, pid)
+    pf = card.get("prep")
+    if pf:
+        # F1: what today's studying leads up to (the author's names: escaped)
+        left = int(pf.get("left") or 0)
+        what = (f'<b>{e(str(pf.get("name") or "?"))}</b> is today' if pf.get("today")
+                else f'For <b>{e(str(pf.get("name") or "?"))}</b> on {e(str(pf.get("when") or ""))}'
+                + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else ""))
+        out += f'<div class="pn"><span>{what}</span></div>'
     rows = ""
     for r in card.get("rows") or []:
         name = f'<span class="u">{e(str(r.get("name") or "?"))}</span>'

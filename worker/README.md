@@ -117,6 +117,9 @@ E1: a date may carry `nids` and `cids` (positive whole numbers, up to 5,000
 each), counted into the plan's 50,000 single cards; `PUT /plans/{id}/ids`
 takes `counts: {unitId: {"#ids": n}}`, kept as the date's `idn`, and the
 lean `authored` docs carry them.
+F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
+`for` (an event's id; one naming no event is dropped). The calendar feed
+has each event as its own day, with how many dates prep for it.
 
 ### Squads
 

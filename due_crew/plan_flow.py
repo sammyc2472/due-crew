@@ -421,6 +421,9 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
         rows.append({"name": nxt.get("name") or "?", "state": "later", "seen": None, "crew": None,
                      "n": f"opens {P.fmt_day(nxt['opens'])}", "missing": False})
     no_deck = not st
+    prep = None if plan.get("paused") else P.prep_for(doc, today)
+    if prep:
+        prep["when"] = _short_day(prep["day"], today)
     change = None
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], doc)
@@ -432,6 +435,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
             "session": None if no_deck or plan.get("paused") else session,
             "today": P.fmt_day(today), "sched": bool(plan.get("sched")),
             "early": int(plan.get("early") or 0),
+            "prep": prep,
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"]))}
 
 

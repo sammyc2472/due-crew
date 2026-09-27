@@ -895,7 +895,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -913,7 +913,7 @@ class FakeWorker:
         p["version"] += 1
 
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -954,6 +954,8 @@ class FakeWorker:
                     nu[k] = list(dict.fromkeys(got))
             if u.get("idn") is not None and (nu.get("nids") or nu.get("cids")):
                 nu["idn"] = u["idn"]
+            if u.get("for"):
+                nu["for"] = u["for"]  # F1
             if u.get("even"):
                 if u["even"] is not True or not u.get("due") or u["due"] == u["opens"]:
                     raise Bad(400, "plan")
@@ -973,6 +975,16 @@ class FakeWorker:
         doc = {"deck": v["deck"], "units": out}
         if v.get("exam"):
             doc["exam"] = v["exam"]
+        evs = v.get("events") or []  # F1
+        if len(evs) > 200 or not all(isinstance(e, dict) and set(e) <= {"id", "day", "name"} and e.get("id")
+                                     and DATE_RE.fullmatch(str(e.get("day") or "")) and str(e.get("name") or "").strip() for e in evs):
+            raise Bad(400, "plan")
+        if evs:
+            doc["events"] = sorted((dict(e) for e in evs), key=lambda e: e["day"])
+        ev_ids = {e["id"] for e in evs}
+        for u in out:
+            if u.get("for") and u["for"] not in ev_ids:
+                del u["for"]
         if v.get("end"):
             doc["end"] = v["end"]
         if v.get("reviews"):

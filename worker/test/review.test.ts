@@ -1,7 +1,9 @@
 // The UI review's server side: a plan's link before signing in (C1), a
 // phone emailing itself the link (C2), and a code looked up before it's
 // added (H1).
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import worker from "../src/index";
 import { api, befriend, mailbox, person } from "./helpers";
 
 const SITE = { "x-due-crew": "1" };
@@ -85,5 +87,28 @@ describe("E1: note and card ids pasted onto a date", () => {
     // the lean copy the author's Anki counts from carries them
     const board = await priya.call("GET", "/board?decks=1");
     expect(board.body.authored[0].doc.units.find((u: { id: string }) => u.id === base[0].id).nids).toEqual([1628174531284, 1628174531301]);
+  });
+});
+
+describe("F1: events, and the dates that prep for them", () => {
+  it("named days a date can be for; a for whose event went is dropped; the calendar feed shows them", async () => {
+    const { priya, p } = await plan();
+    const [a, b] = p.doc.units;
+    const events = [{ id: "quiz1", day: "2026-10-09", name: "Micro quiz" }];
+    const ok = await priya.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", events, units: [{ ...a, for: "quiz1" }, { ...b, for: "quiz1" }] } });
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.events).toEqual(events);
+    expect(ok.body.doc.units.map((u: { for?: string }) => u.for)).toEqual(["quiz1", "quiz1"]);
+    const gone = await priya.call("PUT", `/plans/${p.id}`, { version: ok.body.version, doc: { deck: "Step 1", units: [{ ...a, for: "quiz1" }, b] } });
+    expect(gone.status).toBe(200);
+    expect(gone.body.doc.units[0].for).toBeUndefined();
+    for (const bad of [[{ id: "x", day: "soon", name: "Quiz" }], [{ id: "x", day: "2026-10-09", name: "" }],
+                       [{ id: "x", day: "2026-10-09", name: "A" }, { id: "x", day: "2026-10-10", name: "B" }]]) {
+      expect((await priya.call("PUT", `/plans/${p.id}`, { version: gone.body.version, doc: { deck: "Step 1", events: bad, units: [a, b] } })).status).toBe(400);
+    }
+    const again = await priya.call("PUT", `/plans/${p.id}`, { version: gone.body.version, doc: { deck: "Step 1", events, units: [{ ...a, for: "quiz1" }, { ...b, for: "quiz1" }] } });
+    expect(again.status).toBe(200);
+    const feed = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
+    expect(await feed.text()).toContain("SUMMARY:Micro quiz · 2 days of prep");
   });
 });
