@@ -74,7 +74,7 @@ authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
 authed("POST", r("/squads/restore"), Q.restore);
 authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
-authed("POST", r(`/squads/${ID}/join`), (_q, s, env, p) => Q.join(s, env, p));
+authed("POST", r(`/squads/${ID}/join`), Q.join);
 authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));

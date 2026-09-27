@@ -137,7 +137,7 @@ class SquadDialog(QDialog):
         cl = self.client
         # joins and creates report back even if the dialog was closed
         # meanwhile: the server has the membership, so the board must too
-        _bg(lambda: cl.join_squad(info["id"]),
+        _bg(lambda: cl.join_squad(info["id"], info.get("code") or ""),
             lambda status: self._joined(info, status or 0))
 
     def _joined(self, info, status):

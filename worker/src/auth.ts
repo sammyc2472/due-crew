@@ -57,24 +57,27 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
   if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
 
-  const row = await env.DB.prepare("SELECT code_hash, expires_at, attempts FROM otp WHERE email = ?")
-    .bind(email).first<{ code_hash: string; expires_at: number; attempts: number }>();
-  if (!row || row.expires_at <= nowSec()) {
-    if (row) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
+  // Claim one try in one statement, before comparing: a flood of parallel
+  // guesses gets at most CODE_ATTEMPTS claims between them, never more.
+  const claim = await env.DB.prepare(
+    `UPDATE otp SET attempts = attempts + 1 WHERE email = ? AND attempts < ? AND expires_at > ?
+     RETURNING code_hash, attempts`,
+  ).bind(email, CODE_ATTEMPTS, nowSec()).first<{ code_hash: string; attempts: number }>();
+  if (!claim) {
+    await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();  // expired or out of tries
     throw new HttpError(400, "expired");
   }
-  const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), row.code_hash);
+  const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), claim.code_hash);
   if (!good) {
-    const attempts = row.attempts + 1;
-    await (attempts >= CODE_ATTEMPTS
-      ? env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email)
-      : env.DB.prepare("UPDATE otp SET attempts = ? WHERE email = ?").bind(attempts, email)).run();
+    if (claim.attempts >= CODE_ATTEMPTS) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
     await hit(env, await emailKey("fail", email), FAILS_TO_LOCK, LIMIT_WINDOW);
-    throw new HttpError(400, attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
+    throw new HttpError(400, claim.attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
   }
 
-  // a code works once: gone before the session exists
-  await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
+  // a code works once: consumed in one statement, so one request wins it
+  const won = await env.DB.prepare("DELETE FROM otp WHERE email = ? AND code_hash = ? RETURNING email")
+    .bind(email, claim.code_hash).first();
+  if (!won) throw new HttpError(400, "expired");
   const now = nowSec();
   let user = await env.DB.prepare("SELECT uid, name FROM users WHERE email = ?")
     .bind(email).first<{ uid: string; name: string | null }>();

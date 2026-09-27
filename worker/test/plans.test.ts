@@ -94,6 +94,17 @@ describe("plans: following", () => {
     expect(await maya.status("POST", "/plans/follow", { code: plan.code })).toBe(200);
     expect((await maya.call("GET", "/board?decks=1")).body.planOffers).toEqual([]);
     expect(await dre.status("PUT", `/plans/${plan.id}`, { version: 3, squad: "someone-elses" })).toBe(400);
+    // a plan's code shows outsiders nothing about the squad: an id isn't an invite
+    const outsider = (await zed.call("GET", `/plans/peek?code=${plan.code}`));
+    expect(outsider.status).toBe(404);  // a squad-only plan: not even a peek
+    await dre.call("PUT", `/plans/${plan.id}`, { version: 3, audience: "code" });
+    const peeked = await zed.call("GET", `/plans/peek?code=${plan.code}`);
+    expect(peeked.status).toBe(200);
+    expect(peeked.body.squad).toBeNull();
+    expect((await maya.call("GET", `/plans/${plan.id}`)).body.squad).toBe(sq.id);  // a member still sees it
+    // and a join that sends a code must send that squad's
+    expect(await zed.status("POST", `/squads/${sq.id}/join`, { code: "WRONGCOD" })).toBe(403);
+    expect(await zed.status("POST", `/squads/${sq.id}/join`, { code: sq.code })).toBe(200);
   });
 
   it("progress: stored only while sharing, only when it changed; the author sees counts", async () => {

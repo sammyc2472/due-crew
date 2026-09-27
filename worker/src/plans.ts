@@ -142,7 +142,9 @@ async function view(env: Env, p: Plan, uid: string) {
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id).first<number>("n");
   return {
     id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: await ownerName(env, p.owner),
-    audience: p.audience, squad: p.squad, version: p.version, doc: JSON.parse(p.doc), followers: n ?? 0,
+    audience: p.audience, version: p.version, doc: JSON.parse(p.doc), followers: n ?? 0,
+    // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
+    squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
     ...(p.owner === uid ? { code: p.code } : {}),
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1 } } : {}),
   };
