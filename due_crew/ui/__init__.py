@@ -219,7 +219,7 @@ def _plain_input(parent, title, label):
     """A QInputDialog whose label is plain text: names in it come from the
     server, and Qt reads a label with a tag in it as rich text."""
     from aqt.qt import QInputDialog, QLabel, Qt
-    dlg = QInputDialog(parent or mw)
+    dlg = QInputDialog(parent)
     dlg.setWindowTitle(title)
     dlg.setLabelText(label)
     for lb in dlg.findChildren(QLabel):

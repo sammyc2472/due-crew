@@ -55,6 +55,12 @@ FRESH_SECS = 120
 _client = None
 
 
+# bumped at profile open and close, sign-in and sign-out: a background job
+# captures it, and drops what it brings back when it has changed (an old
+# profile's board must not land in the next one's)
+generation = 0
+
+
 _client_profile = None
 
 
@@ -154,7 +160,12 @@ def client():
     return _client
 
 
-def _reset_runtime():
+def _reset_runtime(keep_sync=False):
+    """keep_sync: signing in or out mid-session; whether AnkiWeb has synced
+    is about the collection, which hasn't changed."""
+    global generation
+    generation += 1
+    synced = _state["anki_synced"] if keep_sync else False
     from .stats.decks import clear_cache
     clear_cache()  # fingerprints belong to the last profile's collection
     _state.update(entries=None, days={}, decks={}, labels=[], tomorrow="",
@@ -164,7 +175,7 @@ def _reset_runtime():
                   squad={"id": "", "data": None, "day": "", "ts": 0.0,
                          "state": "loading"},
                   knocks=[], sync_error=False, decks_day="", decks_ts=0.0, my_code="",
-                  milestones=[], anki_synced=False,
+                  milestones=[], anki_synced=synced,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
                   settings_failed_ts=0.0, plan_progress={})

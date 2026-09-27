@@ -65,6 +65,13 @@ def units(doc):
     return [u for u in (doc or {}).get("units") or [] if isinstance(u, dict) and u.get("id")]
 
 
+def unit_sources(unit, deck_id=None, swap=None):
+    """What a unit matched with when it was applied here: its deck, swap and
+    sources. A later change opens only what the new sources add."""
+    return [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
+            [list(c) for c in unit.get("cards") or []]]
+
+
 def unit_sig(unit, deck_id=None, swap=None):
     """What a unit opens on this computer: its sources, the deck it runs on
     and the tag swap. Remembered once applied; a unit whose date moves keeps
@@ -135,6 +142,7 @@ class DeckIndex:
             f"n.guid, n.tags FROM cards c JOIN notes n ON n.id = c.nid "
             f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})")
         self.cards = {}      # cid -> (queue, type)
+        self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
         self.by_deck = {}    # did -> [cid]
         self.by_ref = {}     # (guid, ord) -> cid
         by_tag = {}          # lowercased tag -> [cid]
@@ -149,6 +157,8 @@ class DeckIndex:
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
                 low = t.lower()
+                if low == "leech":
+                    self.leech.add(cid)
                 by_tag.setdefault(low, []).append(cid)
                 self.tag_names.setdefault(low, t)
         self.by_tag = by_tag
@@ -221,6 +231,10 @@ class DeckIndex:
 
     def suspended(self, cids):
         return {cid for cid in cids if self.cards[cid][0] == -1}
+
+    def openable(self, cids):
+        """The suspended ones a plan may open: never a leech Anki suspended."""
+        return {cid for cid in cids if self.cards[cid][0] == -1 and cid not in self.leech}
 
     # -- the builder's tree --
 
@@ -374,15 +388,18 @@ def next_unit(doc, today):
 
 def open_cards(col, cids, label):
     """Unsuspend the suspended ones among `cids`, as one undo step named
-    `label`. Only queue -1 is touched; never suspends. Returns how many
-    opened (0: nothing was suspended, and no undo step is made)."""
+    `label`. Only queue -1 is touched, and never a leech (Anki suspended it
+    for a reason); never suspends. Returns how many opened (0: nothing was
+    suspended, and no undo step is made)."""
     if not cids:
         return 0
     ids = []
     cl = sorted(int(c) for c in cids)
     for i in range(0, len(cl), 500):
         chunk = ",".join(str(c) for c in cl[i:i + 500])
-        ids += col.db.list(f"SELECT id FROM cards WHERE queue = -1 AND id IN ({chunk})")
+        ids += col.db.list(
+            f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.queue = -1 "
+            f"AND c.id IN ({chunk}) AND (' ' || lower(n.tags) || ' ') NOT LIKE '% leech %'")
     if not ids:
         return 0
     pos = None

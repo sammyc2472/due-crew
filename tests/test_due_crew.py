@@ -2831,10 +2831,10 @@ def test_plans_glue_v31():
     col = _plan_col()
     box = {"cfg": {}}
     toasts = []
-    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "client", "_today", "tooltip")}
+    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "_pcfg", "_psave", "client", "_today", "tooltip")}
     saved_col, saved_swap = F.mw.col, F.app.swap
-    F.cfg = lambda: box["cfg"]
-    F.save_cfg = lambda c: box.update(cfg=c)
+    F.cfg = F._pcfg = lambda: box["cfg"]
+    F.save_cfg = F._psave = lambda c: box.update(cfg=c)
     F.client = lambda: maya
     today = {"d": _day(0)}
     F._today = lambda: today["d"]
@@ -2843,7 +2843,9 @@ def test_plans_glue_v31():
     F.app.swap = lambda c: None
     labels = [_day(-i) for i in range(7)]
     try:
-        maya.follow_plan(code)
+        plan, _ = maya.follow_plan(code)
+        # followed here before its first date, and Anki not opened since
+        box["cfg"]["plans"] = {pid: F.new_state(col, plan)}
         n = len(store.log)
         light = maya.fetch_board(labels)
         full = maya.fetch_board(labels, with_decks=True)

@@ -91,9 +91,25 @@ def _clock():
     return {"tz": tz, "rollover": roll}
 
 
-def _after_push(pushed, labels, gone=()):
+def _current(gen):
+    """Whether a background job started under `gen` may still commit: no
+    profile switch, sign-in or sign-out since."""
+    return gen == app.generation
+
+
+def _morning(awaiting_sync, **kw):
+    """3.1: the plans' morning, never while Anki is closing (the close's
+    own AnkiWeb sync lands after profile_will_close)."""
+    if _closing:
+        return None
+    return plan_flow.maybe_morning(awaiting_sync, **kw)
+
+
+def _after_push(pushed, labels, gone=(), gen=None):
     """Main thread. An upload that skipped the fetch: my own row follows
     what was just written, and the footer learns whether it went."""
+    if gen is not None and not _current(gen):
+        return
     _state["sync_error"] = not pushed
     cl = client()
     own = cl.my_days(cfg(), labels[0]).get(labels[0])
@@ -144,6 +160,7 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
         fetch = _wants_fetch(uploading, _state["entries"] is not None,
                              time.time() - _state["ts"], _closing, fetch)
         clock = _clock()
+        gen = app.generation
     except Exception:
         with _lock:
             _fetching = False
@@ -171,24 +188,25 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                                        version=ADDON_VERSION, clock=clock, plans=plans)
             cl.check_version(labels[0], ADDON_VERSION)  # one real request a day
             if not fetch:
-                mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone))
+                mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone, gen=gen))
                 return
             data = cl.fetch_board(labels, tomorrow=tomorrow, with_decks=with_decks)
             knocks = data["knocks"]
             failed = not pushed
             mw.taskman.run_on_main(
-                lambda: _commit(data, c, labels, tomorrow, knocks, gone, failed))
+                lambda: _current(gen) and _commit(data, c, labels, tomorrow, knocks, gone, failed))
         except TransportError:
             # expected when offline or flaky — stderr raises Anki's error
             # dialog, so this stays off that channel; the cache is untouched
             # and the footer now SAYS the sync failed instead of just aging
             print("due crew: refresh failed (network); keeping the cached board")
-            mw.taskman.run_on_main(_sync_failed)
+            mw.taskman.run_on_main(lambda: _current(gen) and _sync_failed())
         except Exception:
             traceback.print_exc()  # cache stays untouched on failure
         finally:
             with _lock:
-                _fetching = False
+                if _current(gen):  # else the next profile's refresh owns the flag
+                    _fetching = False
 
     threading.Thread(target=job, daemon=True).start()
 
@@ -197,7 +215,7 @@ def _sync_failed():
     """Main thread. Either the network is down (footer: Couldn't sync) or the
     server refused my sign-in for good (the card asks me back in)."""
     _state["sync_error"] = True
-    plan_flow.maybe_morning(_awaiting_phone())  # 3.1: offline, the morning runs from the cached plans
+    _morning(_awaiting_phone())  # 3.1: offline, the morning runs from the cached plans
     if client().session_dead:
         _state["board_shown"] = False
         _rerender()
@@ -366,7 +384,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
-    opened = plan_flow.maybe_morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False)
+    opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False)
     if opened:
         toasts.append(opened)
     elif data.get("plans"):
@@ -466,7 +484,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
         return
     _last_attempt = time.time()
     # 3.1: the morning waits for the day's AnkiWeb sync; this may be it
-    plan_flow.maybe_morning(_awaiting_phone())
+    _morning(_awaiting_phone())
     c = cfg()
     # independent try blocks: one gatherer failing must not silently stop
     # the others from uploading (that failure mode is invisible in the UI)
@@ -693,14 +711,20 @@ def open_auth(join=None):
     from .ui.auth_dialog import AuthDialog
     dlg = AuthDialog(mw, client(), join=join)
     if dlg.exec() and dlg.user:
+        global _fetching
         _uid, name = dlg.user
-        _reset_runtime()
+        _reset_runtime(keep_sync=True)
+        with _lock:
+            _fetching = False  # the last session's refresh can't commit now
         if dlg.joined:
             _welcome()
         else:
             tooltip(f"Welcome back, {html.escape(name)}.")
         _on_sync_done()
         _rerender()
+        # 3.1: signed in on a profile that syncs but hasn't yet: the morning's fallback
+        gen = app.generation
+        QTimer.singleShot(180000, lambda: _morning_fallback(gen))
 
 
 def _welcome():
@@ -788,17 +812,22 @@ def _on_settings_saved(changed):
 
 
 def _on_signed_out():
-    _reset_runtime()
+    global _fetching
+    _reset_runtime(keep_sync=True)
+    with _lock:
+        _fetching = False
     _rerender()
 
 
 def _on_profile_open():
-    global _menu_done, _closing, _last_attempt
+    global _menu_done, _closing, _last_attempt, _fetching
     if not _menu_done:
         _menu_done = True
         _tools_menu()
         mw.addonManager.setConfigAction(__name__, open_settings)
     _reset_runtime()          # profile switch: nothing carries over
+    with _lock:
+        _fetching = False     # the last profile's refresh can't commit here
     _closing = False
     _last_attempt = 0.0
     client()                  # rebind to this profile's session
@@ -806,7 +835,8 @@ def _on_profile_open():
         account.ensure()      # 2.13: my settings, before anything uploads
     refresh_board()           # the board, right away
     # 3.1: a profile that syncs but didn't today still gets its morning
-    QTimer.singleShot(180000, _morning_fallback)
+    gen = app.generation
+    QTimer.singleShot(180000, lambda: _morning_fallback(gen))
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)
     QTimer.singleShot(8000, _push_on_open)
@@ -834,17 +864,20 @@ def _tools_menu():
     mw._due_crew_menu = menu  # kept alive with the window
 
 
-def _morning_fallback():
+def _morning_fallback(gen=None):
     """Three minutes after opening: if no AnkiWeb sync has come (none set
     to run on open, or offline), the plans' morning runs anyway, unless a
-    sync is still busy with the collection."""
+    sync is still busy with the collection. Not for a profile, or a
+    sign-in, that has gone since."""
+    if gen is not None and not _current(gen):
+        return
     try:
         if mw.progress.busy():
-            QTimer.singleShot(60000, _morning_fallback)
+            QTimer.singleShot(60000, lambda: _morning_fallback(gen))
             return
     except Exception:
         pass
-    plan_flow.maybe_morning(False)
+    _morning(False)
     if _state["board_shown"] and mw.state == "deckBrowser":
         _swap(cfg())
 
@@ -877,6 +910,7 @@ def _awaiting_phone():
 def _on_profile_close():
     global _closing
     _closing = True
+    app.generation += 1  # nothing in flight lands after this
     try:
         rooms.on_close()  # 2.12: closing Anki leaves the room
     except Exception:

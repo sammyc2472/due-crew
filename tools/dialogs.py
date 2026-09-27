@@ -328,6 +328,15 @@ def main(out):
         if dlg.plan.count() != 1:
             raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
         shoot(dlg, os.path.join(out, "plan-add-cards.png"))
+        # Change deck's question carries the plan's name: plain text, as the tip prompts
+        from due_crew.ui import _plain_input
+        dlg = _plain_input(None, "Change deck", "Run Arrhythmia <b> on")
+        dlg.setComboBoxItems(["AnKing Step 1", "Other"])
+        dlg.setComboBoxEditable(False)
+        labels = [w for w in dlg.findChildren(QtWidgets.QLabel) if "Arrhythmia" in w.text()]
+        if not labels or labels[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("change deck: the plan's name went in as markup")
+        shoot(dlg, os.path.join(out, "plan-change-deck.png"))
 
     def tools_menu():
         """Tools › Due Crew as profile open builds it, on a real QMenu (3.1:
