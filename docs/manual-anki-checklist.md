@@ -214,7 +214,7 @@ Against the dev Worker and a dev site first (`api_base`, and `site_base`
 for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 (follower), in one squad.
 
-- [ ] Tools → Due Crew is a submenu: Open Due Crew, Friends…, Squads…, Make a plan from a deck…, Follow a plan…, Settings…. Each opens what it says.
+- [ ] Tools → Due Crew is a submenu: Friends…, Squads…, Make a plan from a deck…, Follow a plan…, Settings…. Each opens what it says.
 - [ ] Dre: Make a plan from a deck… → pick a deck: "Sends N tag names and M subdeck names, with how many cards each has. No card text." Tags only / Subdecks only change the numbers. Open the builder: the browser opens duecrew.com/plans/new signed in as Dre, with that deck's tree. The link works once: reload it after five minutes and it asks for a sign-in.
 - [ ] Dre builds three dates (one opening today, one yesterday, one next week), publishes, offers it to the squad.
 - [ ] Dre: Browse → select three cards (one of them c2 of a cloze) → right-click → Due Crew: add to a plan… → the plan, "With <date>" → Add. The site shows 3 single cards on that date. Again with "On its own date": a new date appears.

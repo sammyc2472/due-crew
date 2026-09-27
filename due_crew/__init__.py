@@ -818,7 +818,7 @@ def _tools_menu():
     if getattr(mw, "_due_crew_menu", None) is not None:
         return  # a second profile open: the submenu is already there
     menu = QMenu("Due Crew", mw)
-    for item in (("Open Due Crew", _show_board), ("Friends…", open_friends),
+    for item in (("Friends…", open_friends),
                  ("Squads…", open_squads), None,
                  ("Make a plan from a deck…", plan_flow.open_make),
                  ("Follow a plan…", plan_flow.open_follow), None,
@@ -832,13 +832,6 @@ def _tools_menu():
         menu.addAction(action)
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
-
-
-def _show_board():
-    if mw.state != "deckBrowser":
-        mw.moveToState("deckBrowser")
-    else:
-        _rerender()
 
 
 def _morning_fallback():
