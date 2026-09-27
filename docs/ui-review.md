@@ -26,6 +26,25 @@ rules win, and the item says so.
 
 ---
 
+## Status (Sam's sign-off, built)
+
+Built: C1–C6, H1 (one "Got a code?" box), H2, H3, H5, H6, H8, H9, H10,
+N1–N11, and the table: one chip in colour (T1, T2), headings as words
+(T3), status as it was (T4), new cards on the Week tab only (T5), the
+cheer as it was (T6). "This half year" became "since {Month}".
+
+Not built: H4 (dialogs keep Title Case), H7 (medals stay, option A).
+
+Changed on the way:
+- H9: no "catch up over 3 days". Catch-up exists only for 3.2 schedules,
+  so home says today's new cards and how far behind, with the plan's link.
+- N1: phones get an HTML crop of the board that follows the theme; the
+  desktop keeps the light board.png.
+- H1: a plan followed on the site asks "hold back" in Anki on its first
+  morning; a squad joined on the site shows in Anki the next time it opens.
+
+---
+
 ## Critical: people leave here
 
 ### C1. A plan link shows a signed-out visitor nothing about the plan [U][D]

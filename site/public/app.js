@@ -105,10 +105,13 @@ async function whoami() {
 
 function renderNav() {
   const nav = document.getElementById("nav");
-  nav.replaceChildren(...(me
-    ? [link("/home", "Home"), link("/plans", "Plans"), link("/log", "Log"), me.admin ? link("/admin", "Admin") : null,
-       link("/account", me.name || "Account")].filter(Boolean)
-    : [link("/sign-in", "Sign in")]));
+  if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
+  // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
+  const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
+  nav.replaceChildren(link("/home", "Home"), link("/plans", "Plans"),
+    h("span", { class: "wide-only" }, rest()),
+    h("details", { class: "navme calmenu" }, h("summary", { "aria-label": "More" }, (me.name || "?").slice(0, 1).toUpperCase()),
+      h("div", { class: "calpop" }, rest())));
 }
 
 function needSignIn() {
@@ -125,9 +128,15 @@ function signIn() {
   m.className = "narrow";
   const status = h("p", { class: "status", role: "status" });
   const email = h("input", { type: "email", id: "email", autocomplete: "email", required: true, style: "width:100%" });
+  const title = h("h1", {}, "Sign in");
+  const plan = /^\/p\/([A-Za-z0-9]{8})/.exec(next);
+  if (plan) {
+    title.textContent = "Sign in to open the plan";
+    api("GET", `/plans/public?code=${plan[1]}`).then((p) => { title.textContent = `Sign in to open ${p.name}`; }).catch(() => {});
+  }
   const form = h("form", { class: "stack", novalidate: true },
-    h("h1", {}, "Sign in"),
-    h("p", { class: "muted" }, "The same email you use in Anki. We send a six-digit code."),
+    title,
+    h("p", { class: "muted" }, "The same email you use in Anki. New here? The same code makes your account."),
     h("label", { for: "email" }, "Email"), email,
     h("div", {}, h("button", { type: "submit" }, "Send code")), status);
   form.addEventListener("submit", async (e) => {
@@ -198,17 +207,23 @@ async function plansList() {
   const writes = (p) => p.role === "owner" || p.role === "editor";
   const mineP = plans.filter(writes);
   const followed = plans.filter((p) => !writes(p));
+  // 3.4 review, H10: the name, then what it runs on and when, and who follows
+  const span = (p) => { const u = Sched.units(p.doc); return u.length ? `${pretty(u[0].opens)} – ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : "no dates yet"; };
   const row = (p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
-    h("b", {}, p.name), h("small", {}, `${p.followers} following`),
-    h("small", {}, writes(p) ? `${p.doc.units.length} dates · ${p.doc.deck}${p.role === "editor" ? ` · with ${p.ownerName}` : ""}` : `${p.ownerName}'s plan · ${p.doc.deck}`), h("span"));
+    h("b", {}, p.name), h("small", { class: "fol" }, `${p.followers} following`),
+    h("small", {}, [writes(p) ? (p.role === "editor" ? `with ${p.ownerName}` : null) : `${p.ownerName}'s plan`,
+      p.doc.deck !== p.name ? p.doc.deck : null, `${p.doc.units.length} date${p.doc.units.length === 1 ? "" : "s"}`, span(p)].filter(Boolean).join(" · ")));
+  const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
   page(
     h("h1", {}, "Plans"),
-    h("h2", {}, "Yours"),
+    codeBox(),
+    h("div", { class: "row", style: "justify-content:space-between;margin-top:18px" }, h("h2", { style: "margin:0" }, "Yours"),
+      h("button", { class: "ghost", onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
     mineP.length ? h("div", { class: "plans" }, mineP.map(row))
-      : h("p", { class: "muted" }, "To make one: in Anki, Tools › Due Crew › Make a plan from a deck."),
+      : h("p", { class: "muted" }, "None yet."),
     h("h2", {}, "Following"),
     followed.length ? h("div", { class: "plans" }, followed.map(row))
-      : h("p", { class: "muted" }, "To follow one: in Anki, Tools › Due Crew › Follow a plan, then paste its code."),
+      : h("p", { class: "muted" }, "None yet. A plan's code goes in the box above."),
   );
 }
 
@@ -253,6 +268,67 @@ async function newPlan() {
 
 // ---- a plan's own page (author: progress; follower: the dates) ----
 
+/** 3.4 review, H1: any code someone sent: a friend's (6), a plan's or a
+ *  squad's (8). It says what it is before anything happens. */
+function codeBox() {
+  const input = h("input", { id: "anycode", placeholder: "A friend's, a plan's or a squad's code", "aria-label": "A code", autocomplete: "off" });
+  const out = h("div", { class: "codeout", role: "status" });
+  const say = (cls, ...kids) => out.replaceChildren(h("div", { class: `res ${cls}` }, ...kids));
+  const code = () => {
+    const t = input.value.toUpperCase();
+    const bare = t.replace(/[^A-Z0-9]/g, "");
+    if (bare.length === 6 || bare.length === 8) return bare;
+    const m = /(?:^|[^A-Z0-9])([A-Z0-9]{4}\s?[A-Z0-9]{4}|[A-Z0-9]{6})(?:[^A-Z0-9]|$)/.exec(t);  // pasted with its invite
+    return m ? m[1].replace(/\s/g, "") : "";
+  };
+  const done = (text) => { say("ok", h("span", {}, text)); input.value = ""; };
+  async function look() {
+    const c = code();
+    if (!c) { say("bad", h("span", {}, "Codes are 6 or 8 letters and numbers. Pasting the whole invite works too.")); return; }
+    say("", h("span", { class: "muted" }, "Looking…"));
+    try {
+      if (c.length === 6) {
+        const f = await api("GET", `/codes/${c}`);
+        const who = `${f.emoji ? `${f.emoji} ` : ""}${f.name}`;
+        if (f.mine) return say("bad", h("span", {}, "That's your own code."));
+        if (f.added) return say("", h("b", {}, who), h("span", { class: "muted" }, "already in your crew"));
+        return say("", h("b", {}, who), h("span", { class: "muted" }, "a friend's code"), h("button", { onclick: async () => {
+          try { const r = await api("POST", `/codes/${c}/add`); done(r.mutual ? `You and ${r.name} are crew.` : `Added ${r.name}. You're crew once they add you back.`); }
+          catch { say("bad", h("span", {}, "That didn't work. Try again.")); }
+        } }, `Add ${f.name}`));
+      }
+      let plan = null;
+      try { plan = await api("GET", `/plans/peek?code=${c}`); } catch (err) { if (err.status === 429) throw err; }
+      if (plan) {
+        if (plan.following) return say("", h("b", {}, plan.name), h("span", { class: "muted" }, "you follow it"), link(`/plans/${plan.id}`, "Open"));
+        return say("", h("b", {}, plan.name), h("span", { class: "muted" }, `${plan.ownerName}'s plan · ${plan.doc.units.length} dates`), h("button", { onclick: async () => {
+          try { await api("POST", "/plans/follow", { code: c }); done("Following. Each date's cards open in Anki on their day; the first time, Anki asks about holding later ones back."); }
+          catch { say("bad", h("span", {}, "That didn't work. Try again.")); }
+        } }, "Follow"));
+      }
+      const sq = await api("GET", `/squads/peek?code=${c}`);
+      return say("", h("b", {}, sq.name), h("span", { class: "muted" }, sq.open ? "a squad" : "a squad · locked"), sq.open ? h("button", { onclick: async () => {
+        try {
+          await api("POST", `/squads/${sq.id}/join`, { code: c });
+          // the add-on keeps my squads in my settings: this one joins them there too
+          let doc = null;
+          try { doc = await api("GET", "/settings"); } catch { doc = null; }
+          const set = { ...(doc?.settings || {}) };
+          const list = Array.isArray(set.squads) ? set.squads.filter((q) => q && q.id !== sq.id) : [];
+          set.squads = [...list, { id: sq.id, code: sq.code, name: sq.name, founder: sq.founder }];
+          await api("PUT", "/settings", { v: doc?.v || 1, at: new Date().toISOString(), settings: set }).catch(() => {});
+          done(`You're in ${sq.name}. It shows in Anki's Squads next time Anki opens.`);
+        } catch { say("bad", h("span", {}, "That didn't work. The squad may have just closed.")); }
+      } }, "Join") : null);
+    } catch (err) {
+      say("bad", h("span", {}, err.status === 429 ? "That's a lot of codes. Try again in an hour." : "That code doesn't match a friend, a plan or a squad."));
+    }
+  }
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
+  return h("div", { class: "codebox" }, h("label", { for: "anycode" }, "Got a code?"),
+    h("div", { class: "row" }, input, h("button", { class: "ghost", onclick: look }, "Look up")), out);
+}
+
 /** 3.4: a plan's dates in any calendar, as a subscription that follows changes. */
 function calMenu(code) {
   const https = `${location.origin}/p/${code}.ics`;
@@ -264,6 +340,36 @@ function calMenu(code) {
       h("button", { class: "linkish", onclick: (e) => copy(https, e.target) }, "Copy the calendar link")));
 }
 
+/** 3.4 review, C2: on a phone, send yourself the link for the computer. */
+function emailMe(path) {
+  const email = h("input", { type: "email", id: "mailme", autocomplete: "email", placeholder: "you@school.edu", "aria-label": "Your email" });
+  const status = h("p", { class: "status", role: "status" });
+  const send = h("button", { class: "ghost", onclick: async () => {
+    if (!email.value.trim()) return;
+    send.disabled = true; status.className = "status"; status.textContent = "Sending…";
+    try { await api("POST", "/links/email", { email: email.value, path }); status.textContent = `Sent. Open it on your computer.`; email.value = ""; }
+    catch (err) { status.className = "status bad"; status.textContent = err.status === 429 ? "That's a few already. Try again later." : "That doesn't look like an email address."; }
+    finally { send.disabled = false; }
+  } }, "Email it");
+  return h("div", { class: "phone-only mailme" },
+    h("p", {}, "It's for Anki on a computer. Send yourself the link:"),
+    h("div", { class: "row" }, email, send),
+    h("p", { class: "muted small" }, "One email with this link. No account, nothing else."), status);
+}
+
+/** A plan as its link shows it: name, whose, the dates. From
+ *  /plans/public (signed out) or a peek (signed in). */
+function planIntro(p) {
+  const u = p.units || [];
+  const last = u.length ? u[u.length - 1] : null;
+  const shown = u.slice(0, 4);
+  return [h("h1", {}, p.name),
+    h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} date${u.length === 1 ? "" : "s"}${u.length ? `, ${pretty(u[0].opens)} to ${pretty(last.due || last.opens)}` : ""} · ${p.followers} following`),
+    p.line ? h("p", {}, p.line) : null,
+    u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? x.n.toLocaleString() : ""))),
+      u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
+}
+
 /** /p/CODE: what a shared link shows. */
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
@@ -272,21 +378,27 @@ async function codePage(code) {
     h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, "."),
     h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
     h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email."));
-  if (!me) {
-    page(h("h1", {}, "Follow this plan in Anki"), steps(null), calMenu(code),
-      h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck. ", link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " to see the plan here."));
+  let p = null;
+  try {
+    if (me) {
+      const peek = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
+      const n = (x) => (x.n || 0) + (x.cards || []).length + Object.values(x.sn || {}).reduce((a, v) => a + v, 0);
+      p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience,
+            units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })) };
+    } else p = await api("GET", `/plans/public?code=${encodeURIComponent(code)}`);
+  } catch { p = null; }
+  if (!p) {
+    page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."),
+      me ? null : h("p", { class: "muted small" }, link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " if it's your squad's."));
     return;
   }
-  try {
-    const p = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
-    const u = p.doc.units;
-    page(h("h1", {}, p.name),
-      h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} dates${u.length ? `, ${pretty(u[0].opens)} to ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : ""} · ${p.followers} following`),
-      p.line ? h("p", {}, p.line) : null,
-      h("h2", {}, "To follow it"), steps(p.doc.deck), p.audience === "squad" ? null : calMenu(code));
-  } catch {
-    page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."));
-  }
+  const cal = p.audience === "squad" ? null : calMenu(code);
+  page(...planIntro(p),
+    cal ? h("div", { class: "phone-only" }, cal) : null,
+    emailMe(`/p/${code}`),
+    h("h2", {}, "Follow it in Anki"), steps(p.deck),
+    cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
+    me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
 }
 
 async function account() {
@@ -351,8 +463,9 @@ const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6]
 
 const Board = (() => {
   const MEDALS = ["🥇", "🥈", "🥉"];
-  const HEADS = [["reviews", "📚 Reviews"], ["time", "⏱ Time"], ["retention", "🎯 Retention"], ["streak", "🔥 Streak"]];
-  const SQUAD_HEADS = [...HEADS, ["week", "📅 7 days"]];
+  // 3.4 review, T3: headings as words (the medals keep the emoji)
+  const HEADS = [["reviews", "Reviews"], ["time", "Time"], ["retention", "Retention"], ["streak", "Streak"]];
+  const SQUAD_HEADS = [...HEADS, ["week", "7 days"]];
   const QUICK = ["🎉", "💪", "🔥", "👏", "🚀", "☕"];
   const fmtTime = (ms) => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
   const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return v; };
@@ -439,14 +552,17 @@ const Board = (() => {
   function nameCell(r) {
     const p = r.p;
     const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}`));
+    // 3.4 review, T1/T2 (board.py _chip): one chip, the most time-bound;
+    // green only for studying now, amber only for an exam
     if (r.paused) cell.append(h("span", { class: "note" }, " · on a break"));
-    else if (r.quiet) { const [t, tone] = ago(r.last); if (t) cell.append(h("span", { class: `ago ${tone}` }, ` (${t})`)); }
+    else if (r.quiet) { const [t] = ago(r.last); if (t) cell.append(h("span", { class: "ago faded" }, ` (${t})`)); }
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
-    else { const [t, tone] = ago(r.last); if (t) cell.append(h("span", { class: `ago ${tone}` }, ` (${t})`)); }
-    if (r.live) cell.append(h("span", { class: "ago fresh" }, " · studying now"));
-    if (r.exam) cell.append(h("span", { class: "badge" }, ` 📖 ${r.exam}`));
-    if (r.away) cell.append(h("span", { class: "badge" }, ` ✈️ ${r.away}`));
-    if (r.recap) cell.append(h("span", { class: "ago fresh", title: r.recap.name }, ` · week ${r.recap.n} done`));
+    if (!r.quiet && !r.paused) {
+      if (r.live) cell.append(h("span", { class: "chip live" }, "studying now"));
+      else if (r.exam) cell.append(h("span", { class: "chip exam" }, r.exam));
+      else if (r.away) cell.append(h("span", { class: "chip" }, r.away === "away" ? "away" : `away · ${r.away}`));
+      else if (r.recap) cell.append(h("span", { class: "chip", title: r.recap.name }, `week ${r.recap.n} done`));
+    }
     if (r.status) cell.append(h("div", {}, h("span", { class: "bub", title: r.status }, r.status)));
     return cell;
   }
@@ -459,7 +575,8 @@ const Board = (() => {
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
     let n = 0;
     const tr = (r, rank) => {
-      const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
+      // T5: how many were new, on the Week tab
+      const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
       const dash = r.paused || r.quiet;
       const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
       return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused ? "dim" : ""].join(" ").trim() },
@@ -582,12 +699,14 @@ async function home() {
     if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}));
     if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), draw)); }
     panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw),
-      crew.length ? null : h("p", { class: "muted small" }, "Just you so far. ", b.me.code ? `Your code ${spaced(b.me.code)} · ` : "", "add your crew in Anki: Tools › Due Crew › Friends."),
+      crew.length ? null : h("p", { class: "muted small" }, "Just you so far. Your crew shows up here once they add you back."),
       waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null].filter(Boolean));
   }
-  const friendsBox = h("div", { class: "note-inline", hidden: true },
-    h("span", {}, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—"), ". Friends add you by it in Anki (Tools › Due Crew › Friends)."),
-    b.me.code ? h("button", { class: "quiet", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy") : null);
+  // 3.4 review, H1: my code to give, and any code I was sent
+  const friendsBox = h("div", { class: "stack friends", hidden: crew.length > 0 },
+    h("div", { class: "note-inline" }, h("span", {}, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
+      b.me.code ? h("button", { class: "quiet", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy invite") : null),
+    codeBox());
   const shareBtn = h("button", { class: "linkish", onclick: async () => {
     try { await navigator.clipboard.writeText(Board.shareText(people, t)); shareBtn.textContent = "Copied"; } catch { shareBtn.textContent = Board.shareText(people, t); }
     setTimeout(() => { shareBtn.textContent = "Share today"; }, 1800);
@@ -597,7 +716,7 @@ async function home() {
   const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
   const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
   const followed = plansR.plans.filter((p) => p.following);
-  page(h("div", { class: "wb" },
+  page(todayLine(followed), h("div", { class: "wb" },
     h("section", { class: "brd" },
       h("div", { class: "top2" }, pills),
       panel,
@@ -610,8 +729,25 @@ async function home() {
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       h("section", { class: "panel" }, h("h4", {}, "Cheers", h("span", { class: "muted" }, String(b.cheers.length))),
         b.cheers.length ? b.cheers.map((c) => h("div", { class: "cheer" }, h("b", {}, `${c.emoji} ${c.name}`), c.note ? ` ${c.note}` : "")) : h("p", { class: "muted small" }, "None waiting."),
-        b.cheers.length ? h("small", { class: "muted" }, "They play in Anki too.") : null),
+        b.cheers.length ? h("small", { class: "muted" }, "They'll rain on your Anki screen next time you open it.") : null),
       followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null)));
+}
+
+/** 3.4 review, H9: what's on today, from the plans I follow, above the board. */
+function todayLine(followed) {
+  const bits = followed.filter((p) => !p.following?.paused).map((p) => {
+    const prog = p.following?.progress || {};
+    const sched = p.following?.sched || null;
+    const t = today(), y = addDays(t, -1);
+    const q = (d) => Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, d), 0);
+    const fresh = Math.max(0, q(t) - q(y));
+    const seen = Object.values(prog).reduce((n, x) => n + x[1], 0);
+    const behind = Math.max(0, q(t) - seen);
+    if (!fresh && !behind) return null;
+    return h("span", {}, fresh ? `${fresh.toLocaleString()} new from ` : "", link(`/plans/${p.id}`, p.name),
+      behind ? h("span", { class: "warn" }, ` · ${behind.toLocaleString()} behind`) : null);
+  }).filter(Boolean);
+  return bits.length ? h("div", { class: "todayline" }, h("b", {}, "Today"), bits) : null;
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */

@@ -533,11 +533,13 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
         today = _today()
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
+        new_here = []
         for p in plan_list:
             if p["id"] not in state:
-                st = new_state(mw.col, p)  # followed on another computer
+                st = new_state(mw.col, p)  # followed on another computer, or on the site
                 if st:
                     state[p["id"]] = skip_past(st, p, today)
+                    new_here.append(p["id"])
         c["plans"] = state
         c["plans_day"] = today
         _psave(c)
@@ -545,10 +547,52 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
         built = build_checks([p for p in plan_list if not p.get("paused")])  # 3.2
         if built and toast:
             tooltip(f"Due Crew built {html.escape(built[0])}.", period=5000)
+        if new_here:
+            # a plan followed on the site asks Follow's question here, once
+            from aqt.qt import QTimer
+            QTimer.singleShot(0, lambda: offer_hold(new_here))
         return line
     except Exception:
         traceback.print_exc()
         return None
+
+
+def offer_hold(pids, ask=None):
+    """3.4 review, H1: a plan first seen on this computer (followed on the
+    site, or elsewhere) asks what Follow asks: hold back its later dates'
+    cards until their day? Only when there are some (a computer that held
+    them already has them suspended, which AnkiWeb brought here)."""
+    if not mw.col:
+        return
+    if ask is None:
+        from .ui import confirm
+
+        def ask(name, n):
+            return confirm(mw, "Hold back later cards",
+                           f"{name} is new on this computer. Hold back {n:,} card{'s' if n != 1 else ''} "
+                           "of its later dates until their day?\n\nThey open on their day. "
+                           "One undo step; stopping the plan opens them again.", "Hold back")
+    c = _pcfg()
+    state = _state_cfg(c)
+    changed = False
+    for pid in pids:
+        p = next((x for x in followed() if x["id"] == pid), None)
+        st = state.get(pid)
+        if not p or not st or not _deck_ok(mw.col, st.get("deck_id")):
+            continue
+        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), p["doc"], _today(), _swap(st))
+        if not cids or not ask(p.get("name") or "The plan", len(cids)):
+            continue
+        n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
+        if n:
+            st["held"] = sorted(set(st.get("held") or []) | {int(x) for x in cids})
+            changed = True
+    if changed:
+        c["plans"] = state
+        _psave(c)
+        _after_change()
+        refresh_progress()
+        app.swap(cfg())
 
 
 def send_ids():

@@ -238,6 +238,18 @@ add-on.
   Save-based: a save that meets another merges onto it in the page
   (`merge` in builder.js). `/plans/{id}` is the one plan page: the authors
   edit, a follower sees the calendar and the notes.
+- 3.4 the UI review (`docs/ui-review.md`, mocks on "Due Crew UI Review"):
+  a row carries at most one chip (studying now > exam > back > away,
+  coloured), headings are words (icons only when narrow), the ago text
+  only on quiet rows, new cards only on the Week tab; banners show one at
+  a time; the footer is Crew ▾ plus Refresh and Settings; one person's
+  board is an invite card with a code box. The site's "Got a code?" box
+  (home, Plans) looks a code up first (`GET /codes/{code}`, `GET
+  /plans/public`) and says what it is: add a friend, follow a plan, join
+  a squad (a squad goes into the settings doc, so Anki shows it next
+  open). A plan's link shows the plan signed out (`/plans/public`), and a
+  phone can email itself the link (`POST /links/email`, fixed text). The
+  "last active" switch is gone.
 
 ## Releasing
 

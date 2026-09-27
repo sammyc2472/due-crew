@@ -3179,6 +3179,19 @@ def test_plans_followed_elsewhere_v311():
         check("follow again: what was applied here is kept (the skipped unit stays shut)",
               _open(col) == {3, 8} and g.state()["plans"][pid]["applied"]["hf"].startswith("skip:"),
               str(_open(col)))
+        # 3.4 review, H1: a plan first seen here (followed on the site) asks
+        # Follow's hold-back question, once, only when there's something to hold
+        asked = []
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("hold on first sight: nothing active to hold, nothing asked", asked == [], str(asked))
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
+        before = _open(col)
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("hold on first sight: asked, and a no leaves everything open", asked and _open(col) == before, str(asked))
+        F.offer_hold([pid], ask=lambda name, n: True)
+        held = g.state()["plans"][pid].get("held") or []
+        check("hold on first sight: a yes holds back the later dates' cards, remembered for stop",
+              held and all(c not in _open(col) for c in held) and len(held) == asked[-1], str(held))
 
 
 def test_plans_changed_unit_v311():

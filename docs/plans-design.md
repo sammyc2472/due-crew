@@ -302,6 +302,9 @@ plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
   suspends them in one undo step (`plans.hold_cards`) and keeps their ids
   in `held`; the morning opens them on their day as any suspended card;
   Stop following opens what's still held. Nothing else ever suspends.
+- A plan followed elsewhere (the site's code box, another computer) asks
+  the same question once, on its first morning here (`plan_flow.offer_hold`,
+  "… is new on this computer"), in one undo step.
 - The deck itself is in the tree (`DeckIndex.tree`), so a deck with no
   tags or subdecks is planned in its own order: tick it, 20 a day, Fill
   the calendar.

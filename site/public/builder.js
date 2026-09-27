@@ -111,7 +111,13 @@ async function builder(id) {
 
   const status = h("span", { class: "status", role: "status" });
   const saveBtn = h("button", { onclick: () => save() }, "Save");
-  const mark = () => { dirty = true; status.className = "status"; status.textContent = "Not saved"; };
+  const mark = () => {
+    dirty = true; status.className = "status"; status.textContent = "Not saved";
+    document.querySelector(".savebar")?.classList.remove("clean");  // C6: on a phone, Save shows now
+  };
+  const narrow = () => matchMedia("(max-width: 700px)").matches;
+  let coverOpen = null;   // H3: What to cover, open or not, across redraws (a phone opens it while there are no dates)
+  let paceOpen = false;   // C6: the pace, folded to one line on a phone
   window.onbeforeunload = () => (dirty ? true : undefined);
 
   // ---- units and sources ----
@@ -153,6 +159,8 @@ async function builder(id) {
     if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
   };
   const searchN = (u) => (u.search || []).reduce((a, q) => a + (u.sn?.[q] || 0), 0);
+  /** "Search: Cardio…", by its first tag (3.4 review, N7). */
+  const searchName = (q) => { const m = /tag:"?([^\s"]+)/i.exec(q); const w = m ? Tags.word(m[1].split("::").filter((x) => x.replace(/\*/g, "")).pop() || "").replace(/\*/g, "") : ""; return w ? `Search: ${w}` : "Search"; };
 
   function unitOn(d) {
     let u = doc.units.find((x) => x.opens === d && !x.even);
@@ -267,6 +275,15 @@ async function builder(id) {
     if (r.lastD) requestAnimationFrame(() => document.querySelector(".cal2")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
     draw();
   }
+  /** 3.4 review, H2: Fill with nothing to place says why, and the panel on the left flashes. */
+  function fillOrSay(weekAhead) {
+    if (coverLeft()) return layOut(weekAhead);
+    note = cover.size ? "Everything ticked is on the calendar already." : "Tick what to cover on the left first.";
+    if (!cover.size) coverOpen = true;
+    draw();
+    const t = document.querySelector(".tree2");
+    if (t) { t.classList.add("flash"); setTimeout(() => t.classList.remove("flash"), 900); }
+  }
   function endDaily() {
     if (!doc.end) return pace.daily || 0;
     const after = lastDay() ? addDays(lastDay(), 1) : start;
@@ -313,7 +330,7 @@ async function builder(id) {
         e.load += u.n || 0;
       } else for (const k of srcs(u)) { const c = eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c; }
       if ((u.cards || []).length) { e.chips.push({ u, cards: true, text: `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`, n: u.cards.length }); e.load += u.cards.length; }
-      for (const q of u.search || []) { const c = u.sn?.[q] ?? null; e.chips.push({ u, search: q, text: "Search", raw: q, n: c }); e.load += c || 0; }
+      for (const q of u.search || []) { const c = u.sn?.[q] ?? null; e.chips.push({ u, search: q, text: searchName(q), raw: q, n: c }); e.load += c || 0; }
     }
     const byId = new Map(doc.units.map((u) => [u.id, u]));
     for (const r of doc.reviews || []) {
@@ -455,7 +472,7 @@ async function builder(id) {
       h("div", { class: "pcs" },
         mode("end", "Finish by", h("span", {}, endIn, h("small", {}, d1 ? ` ≈ ${d1.toLocaleString()} new a day` : doc.end ? " " : ""))),
         mode("daily", "New cards a day", h("span", {}, dailyIn, h("small", {}, fin ? ` finishes ≈ ${pretty(fin)}` : ""))),
-        mode("placed", "Day by day", h("small", {}, "as you place it"))));
+        mode("placed", "I'll place each day", h("small", {}, "drag or + onto a day"))));
   }
 
   // ---- the calendar ----
@@ -676,7 +693,7 @@ async function builder(id) {
       const even = h("input", { type: "checkbox", checked: !!u.even, disabled: !u.due || u.due === u.opens, onchange: (e) => { if (e.target.checked) u.even = true; else delete u.even; mark(); draw(); } });
       const chips = h("div", { class: "chips2" }, srcs(u).map((k) => h("span", { class: `ch2 ${hue(k)}`, title: pathOf(k) }, h("span", {}, label(k, placed), h("span", { class: "raw" }, pathOf(k))), h("small", {}, eff(k, placed).toLocaleString()),
         h("button", { class: "x", "aria-label": `Remove ${pathOf(k)}`, onclick: () => { takeOut(u, k); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
-        (u.search || []).map((q) => h("span", { class: `ch2 ${u.sn?.[q] === 0 ? "warn" : "c2"}`, title: q }, h("span", {}, "Search", h("span", { class: "raw" }, q)),
+        (u.search || []).map((q) => h("span", { class: `ch2 ${u.sn?.[q] === 0 ? "warn" : "c2"}`, title: q }, h("span", {}, searchName(q), h("span", { class: "raw" }, q)),
           u.sn?.[q] != null ? h("small", {}, u.sn[q].toLocaleString()) : null,
           h("button", { class: "x", "aria-label": `Remove the search ${q}`, onclick: () => { takeSearch(u, q); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
         (u.cards || []).length ? h("span", { class: "ch2 single" }, `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`) : null);
@@ -825,6 +842,9 @@ async function builder(id) {
         h("div", { class: "row" }, h("button", { onclick: () => use(true) }, "Replace the plan's dates"), h("button", { class: "ghost", onclick: () => use(false) }, "Add to the plan"),
           h("button", { class: "quiet", onclick: () => { preview.replaceChildren(); out.textContent = ""; } }, "Cancel"))));
     };
+    // N6: Read it turns solid once the text is new
+    const readBtn = h("button", { class: "ghost", onclick: read }, "Read it");
+    ta.addEventListener("input", () => readBtn.classList.remove("ghost"));
     const aiBox = h("div", { class: "aibox" },
       h("b", {}, "Draft it with your own AI"),
       h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into the box below. The prompt carries the plan's dates and your deck's tag names with counts; never a card."),
@@ -832,9 +852,10 @@ async function builder(id) {
         h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, aiPrompt()))));
     return h("div", { class: "stack" },
       aiBox,
-      h("p", { class: "muted small" }, "One line per date: when it opens, a name, the tags and subdecks, and an optional due date, separated by |. Add even to split a date evenly up to its due date. For example:"),
-      h("pre", { class: "mono small muted", style: "margin:0;white-space:pre-wrap" }, "2026-10-05 | Heart failure | tag:Step1::Cardio::Heart_failure | due 2026-10-09 | even\nweek 2 | Arrhythmia | tag:Step1::Cardio::Arrhythmia"),
-      ta, h("div", { class: "row" }, h("button", { class: "ghost", onclick: read }, "Read it")), out, preview);
+      h("details", { class: "fmt" }, h("summary", { class: "small" }, "Format"),
+        h("p", { class: "muted small" }, "One line per date: when it opens, a name, the tags and subdecks, and an optional due date, separated by |. Add even to split a date evenly up to its due date. For example:"),
+        h("pre", { class: "mono small muted", style: "margin:0;white-space:pre-wrap" }, "2026-10-05 | Heart failure | tag:Step1::Cardio::Heart_failure | due 2026-10-09 | even\nweek 2 | Arrhythmia | tag:Step1::Cardio::Arrhythmia")),
+      ta, h("div", { class: "row" }, readBtn), out, preview);
   }
 
   // ---- settings ----
@@ -919,18 +940,27 @@ async function builder(id) {
       h("span", { class: "sp" }),
       author && placedTotal ? h("span", { class: "muted small" }, `${placedTotal.toLocaleString()} cards`) : null,
       h("span", { class: "seg" }, vbtn("month", "Month"), vbtn("week", "Week"), author ? vbtn("list", "List") : null));
+    const paceLine = () => {
+      const days = ["M", "T", "W", "T", "F", "S", "S"].filter((_, i) => pace.days[i]).join("");
+      const how = pace.mode === "end" && doc.end ? `Finish by ${pretty(doc.end)}` : pace.mode === "daily" ? `${pace.daily || 20} new a day` : "I'll place each day";
+      return `${how} · ${days === "MTWTFSS" ? "every day" : days}`;
+    };
+    const paceBox = author ? (narrow()
+      ? h("details", { class: "pacefold", open: paceOpen, ontoggle: (e) => { paceOpen = e.target.open; } }, h("summary", {}, h("b", {}, paceLine())), pacePanel())
+      : pacePanel()) : null;
     const main = h("div", { class: "main2" },
-      author ? pacePanel() : null,
+      paceBox,
       nav,
       author ? h("div", { class: "caltool2" },
-        h("button", { onclick: () => layOut(false), disabled: !coverLeft() }, "Fill the calendar"),
-        h("button", { class: "ghost", onclick: () => layOut(true), disabled: !coverLeft() }, "Fill next week"),
+        h("button", { onclick: () => fillOrSay(false) }, "Fill the calendar"),
+        h("button", { class: "ghost", onclick: () => fillOrSay(true) }, "Fill next week"),
         note ? h("span", { class: "muted small", role: "status" }, note) : null) : null,
       heavyNote(),
       view === "list" && author ? h("div", {}, dayPanel(), listView()) : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel()));
     if (!author) return main;
     return h("div", { class: "bl2" },
-      h("details", { class: "side2", open: !matchMedia("(max-width: 700px)").matches }, h("summary", {}, "What to cover"), treePanel()),
+      h("details", { class: "side2", open: !narrow() || (coverOpen ?? !doc.units.length), ontoggle: (e) => { if (narrow()) coverOpen = e.target.open; } },
+        h("summary", {}, h("b", {}, "What to cover"), h("span", { class: "muted" }, ` · ${cover.size ? `${coverItems().length} ticked` : "nothing ticked"}`)), treePanel()),
       main);
   }
 
@@ -992,7 +1022,7 @@ async function builder(id) {
       !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
-      author ? h("div", { class: "savebar" }, saveBtn, status) : null);
+      author ? h("div", { class: `savebar${dirty ? "" : " clean"}` }, saveBtn, status) : null);
     $app().classList.add("wide");
   }
 
