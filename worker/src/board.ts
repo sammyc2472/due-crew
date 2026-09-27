@@ -229,6 +229,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     wrote.plans = pw.length > 0;
     writes.push(...pw);
   }
+  if (knows && knows.add.length) {
+    // a ceiling on what one person keeps: past it, new ones aren't taken
+    const n = knows.reset ? 0 : (await db.prepare("SELECT COUNT(*) AS n FROM knows WHERE uid = ?").bind(s.uid).first<number>("n")) ?? 0;
+    knows.add = knows.add.slice(0, Math.max(0, C.KNOWS_MAX - n + knows.del.length));
+  }
   if (knows) {
     const kw = C.knowsWrites(env, s.uid, knows);
     wrote.knows = kw.length > 0;

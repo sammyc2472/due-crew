@@ -32,7 +32,7 @@ open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
-authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
+authed("POST", r("/auth/signout-all"), (q, s, env) => A.signOutAll(s, env, q));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
 
 authed("GET", r("/board"), B.board);

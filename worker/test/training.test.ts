@@ -115,9 +115,30 @@ describe("who knows this", () => {
     expect(await dre.status("POST", "/sync", { knows: { add: [...many, "x"] } })).toBe(400);
     expect(await sam.status("POST", "/sync", { stuck: [...stuck, "x"] })).toBe(400);
   });
+
+  it("keeps at most 100,000 a person: past it new ones aren't taken, and one out lets one in", async () => {
+    const { sam, dre } = await crew();
+    await db().prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 100000)
+      INSERT INTO knows (uid, guid) SELECT 'dre', 'k' || x FROM c`).run();
+    expect((await dre.call("POST", "/sync", { knows: { add: ["new1"] } })).status).toBe(200);
+    expect((await sam.call("POST", "/sync", { stuck: ["new1"] })).body.cards).toEqual({});
+    await dre.call("POST", "/sync", { knows: { del: ["k1"], add: ["new2"] } });
+    expect((await sam.call("POST", "/sync", { stuck: ["new2"] })).body.cards).toEqual({ new2: { knows: ["dre"], tips: [] } });
+  });
 });
 
 describe("tips stay on the card", () => {
+  it("a person keeps at most 5,000 tips; one already kept still changes", async () => {
+    const { sam, dre } = await crew();
+    await db().prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5000)
+      INSERT INTO tips (guid, uid, text, at) SELECT 't' || x, 'dre', 'old', 0 FROM c`).run();
+    expect(await dre.status("POST", "/cheers/sam", { emoji: "💡", note: "one more", guid: "fresh" })).toBe(200);  // the cheer still goes
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM tips WHERE guid = 'fresh'").first<number>("n")).toBe(0);
+    await dre.call("POST", "/cheers/sam", { emoji: "💡", note: "better", guid: "t1" });
+    expect(await db().prepare("SELECT text FROM tips WHERE guid = 't1' AND uid = 'dre'").first<string>("text")).toBe("better");
+  });
+
+
   it("a tip with words is kept, shown to mutual friends stuck on it, the most helpful first", async () => {
     const { sam, dre, mo } = await crew();
     await befriend(dre, mo);

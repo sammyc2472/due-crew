@@ -248,6 +248,8 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     const { mailbox } = await import("./helpers");
     const box = mailbox();
     await api("POST", "/auth/code", { body: { email: "maya@example.com" } });
+    // another site's page can't make the request (no header), and doesn't spend the code trying
+    expect((await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true } })).status).toBe(403);
     const v = await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true }, headers: SITE });
     expect(v.status).toBe(200);
     expect(v.body.token).toBeUndefined();  // never in page script

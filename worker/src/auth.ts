@@ -56,6 +56,9 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   const code = typeof body.code === "string" ? body.code.replace(/\s+/g, "") : "";
   const device = typeof body.device === "string" ? body.device.slice(0, 60) : "";
   if (!email) throw new HttpError(400, "bad_email");
+  // the site's sign-in comes only from its own script: checked before the
+  // code is spent, so another page can't use up someone's code
+  if (body.web === true && req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
   await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
   if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
 
@@ -95,7 +98,6 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
   if (body.web === true) {
-    if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
     // the site (3.1): the session is a same-site cookie, never in page script
     return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
   }
@@ -163,9 +165,9 @@ export async function signOut(s: Session, env: Env, req?: Request): Promise<Resp
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
-export async function signOutAll(s: Session, env: Env): Promise<Response> {
+export async function signOutAll(s: Session, env: Env, req?: Request): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE uid = ?").bind(s.uid).run();
-  return json({ ok: true });
+  return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
 /** DELETE /account: everything of mine, sessions included. A squad I
