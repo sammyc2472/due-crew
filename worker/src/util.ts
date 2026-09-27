@@ -37,6 +37,10 @@ export function nowSec(): number {
 }
 
 export const BODY_MAX = 512 * 1024;
+/** The most any route reads (a plan, a deck's tree, its note ids). Each
+ *  route's own limit (readJson's `max`) is checked as it streams; this is
+ *  only the early refusal of a declared length past all of them. */
+export const ANY_BODY_MAX = 1600 * 1024;
 
 /** The body as text, at most `max` bytes: counted as it streams, since a
  *  chunked request has no content-length to check first. */

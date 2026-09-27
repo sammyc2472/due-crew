@@ -9,7 +9,7 @@ import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
-import { BODY_MAX, Env, HttpError, json } from "./util";
+import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
 type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
@@ -124,7 +124,7 @@ export default {
     // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
     if (path.startsWith("/api/")) path = path.slice(4);
     try {
-      if (Number(req.headers.get("content-length") || 0) > BODY_MAX) throw new HttpError(413, "too_big");
+      if (Number(req.headers.get("content-length") || 0) > ANY_BODY_MAX) throw new HttpError(413, "too_big");
       let allowed = false;
       for (const [method, re, handler] of routes) {
         const m = re.exec(path);

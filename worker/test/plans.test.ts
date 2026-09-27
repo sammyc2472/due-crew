@@ -197,6 +197,19 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     // past the usual 512 KB body: a big deck's tags still fit
     const many = Array.from({ length: 30000 }, (_, i) => [`Lecture_${String(i).padStart(5, "0")}_Some_Topic`, 3]);
     expect(await dre.status("PUT", "/plans/trees", { deck: "Big", v: 2, tags: [["Big", 90000, many]] })).toBe(200);
+    // as a real client sends it, its length declared: the early check lets a tree's size through
+    const { env } = await import("cloudflare:workers");
+    const worker = (await import("../src/index")).default;
+    const body = JSON.stringify({ deck: "Big2", v: 2, tags: [["Big2", 90000, many]] });
+    expect(body.length).toBeGreaterThan(512 * 1024);
+    const res = await worker.fetch(new Request("https://api.duecrew.com/plans/trees", {
+      method: "PUT", body, headers: { authorization: `Bearer ${dre.token}`, "content-type": "application/json",
+        "content-length": String(body.length) } }), { ...env } as any);
+    expect(res.status).toBe(200);
+    // …while an ordinary route still stops at 512 KB
+    const sync = await worker.fetch(new Request("https://api.duecrew.com/sync", {
+      method: "POST", body, headers: { authorization: `Bearer ${dre.token}`, "content-length": String(body.length) } }), { ...env } as any);
+    expect(sync.status).toBe(413);
   });
 
   it("a one-time link signs the site in once, with a same-site cookie", async () => {
