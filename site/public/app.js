@@ -438,7 +438,7 @@ const Board = (() => {
 
   function nameCell(r) {
     const p = r.p;
-    const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}${r.you ? "" : ""}`));
+    const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}`));
     if (r.paused) cell.append(h("span", { class: "note" }, " · on a break"));
     else if (r.quiet) { const [t, tone] = ago(r.last); if (t) cell.append(h("span", { class: `ago ${tone}` }, ` (${t})`)); }
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
@@ -502,14 +502,19 @@ const Board = (() => {
 
   /** A squad board, as _squads_html: plain ranks, no medals, no cheers;
    *  these aren't necessarily people you know. */
+  let squadsGot = null;  // {at, list, boards}: a sort redraws from these, not the network
   async function squads(showUp, crewUids, onSort) {
-    const { squads: list } = await api("GET", "/squads/mine");
+    if (!squadsGot || Date.now() - squadsGot.at > 60000) {
+      const { squads: got } = await api("GET", "/squads/mine");
+      squadsGot = { at: Date.now(), list: got, boards: await Promise.all(got.map((q) => api("GET", `/squads/${q.id}`))) };
+    }
+    const list = squadsGot.list;
     if (!list.length) return h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads.");
     const sort = store("dc-sort") || "reviews";
     const field = { reviews: "reviews", time: "studyTimeMs", retention: "accuracy", streak: "streak", week: "week" }[sort] || "reviews";
     const day = todayLocal(), yday = addDays(day, -1);
     const out = [];
-    for (const sq of await Promise.all(list.map((q) => api("GET", `/squads/${q.id}`)))) {
+    for (const sq of squadsGot.boards) {
       const rows = sq.rows || [];
       const live = rows.filter((r) => r.day === day);
       const rest = rows.filter((r) => r.day !== day).sort((x, y) => (y.day || "").localeCompare(x.day || ""));
@@ -537,7 +542,7 @@ const Board = (() => {
           h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), note, when), cells);
       });
       out.push(h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
-        h("thead", {}, h("tr", {}, h("th", { class: "sqh", colspan: 2 }, line), heads)), h("tbody", {}, body))));
+        h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))));
     }
     return h("div", {}, out);
   }
@@ -548,12 +553,14 @@ const Board = (() => {
     return `Due Crew · ${pretty(today)}: ${bits.join(" · ") || "showed up"}`;
   }
 
-  return { table, presence, decks, squads, shareText, ago, store };
+  const forget = () => { squadsGot = null; };  // a page load or Refresh reads them again
+  return { table, presence, decks, squads, shareText, ago, store, forget };
 })();
 
 const todayLocal = () => today();
 
 async function home() {
+  Board.forget();
   const [b, plansR, sett] = await Promise.all([api("GET", "/board?keep=1&decks=1"), api("GET", "/plans/mine"), api("GET", "/settings").catch(() => null)]);
   const t = today();
   const mon = Sched.monday(t);

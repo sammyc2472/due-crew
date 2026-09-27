@@ -37,7 +37,6 @@ input, select, textarea { font: inherit; font-size: 14px; color: var(--ink); bac
 textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
 .row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
 .stack { display: grid; gap: 10px; }
 .otp { letter-spacing: 0.3em; font-size: 22px; width: 11ch; text-align: center; font-family: ui-monospace, Menlo, monospace; }
 .status { font-size: 13px; color: var(--muted); min-height: 1.4em; }
@@ -55,33 +54,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); margin: 16px 0 12px; }
 .tabs button { background: none; border: 0; border-radius: 0; color: var(--muted); padding: 6px 0; font-weight: 600; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom: 2px solid var(--accent); }
-.tool { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
-.builder { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
-@media (max-width: 800px) { .builder { grid-template-columns: 1fr; } }
-.tree { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--card); display: grid; gap: 2px; max-height: 70vh; overflow: auto; font-size: 13px; }
-.tree input[type=search] { width: 100%; margin-bottom: 6px; }
-.tnode { display: grid; grid-template-columns: 16px 1fr auto auto; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 6px; cursor: grab; }
-.tnode:hover { background: var(--well); }
-.tnode .tw { color: var(--faint); cursor: pointer; user-select: none; background: none; border: 0; padding: 0; font-size: 11px; }
-.tnode small { color: var(--muted); font-variant-numeric: tabular-nums; }
-.tnode.used { color: var(--faint); }
-.tnode .add { border: 1px solid var(--line); background: var(--card); color: var(--accent); border-radius: 6px; padding: 0 7px; font-size: 13px; line-height: 20px; }
-.tsec { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 8px 6px 2px; }
 .units { display: grid; gap: 6px; }
 .unit { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 6px 10px; align-items: start; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
-.unit.over { outline: 2px dashed var(--accent); }
-.unit .grip { color: var(--faint); cursor: grab; font-family: ui-monospace, Menlo, monospace; padding-top: 5px; }
 .unit .uname { width: 100%; font-weight: 600; border-color: transparent; background: transparent; padding: 3px 5px; }
 .unit .uname:hover, .unit .uname:focus { border-color: var(--line); background: var(--card); }
 .unit .dates { display: grid; gap: 4px; justify-items: end; font-size: 12px; color: var(--muted); }
 .unit .dates input { font-size: 12px; padding: 3px 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 5px 0; }
-.chip { display: inline-flex; align-items: center; gap: 4px; font: 11.5px ui-monospace, Menlo, monospace; background: var(--well); border-radius: 99px; padding: 1px 4px 1px 9px; }
-.chip button { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 13px; line-height: 1; }
-.chip.cards { background: var(--you); padding-right: 9px; }
 .unit .del { background: none; border: 0; color: var(--faint); font-size: 16px; padding: 0 4px; }
-.drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 12px; text-align: center; color: var(--muted); font-size: 13px; }
-.drop.over { border-color: var(--accent); color: var(--accent); }
 .savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; margin-top: 14px; border-top: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
 /* progress */
@@ -128,7 +107,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brd .foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; padding-top: 10px; border-top: 1px solid var(--line); }
 .brd .foot button.linkish { font-size: 13px; }
 .note-inline { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 13px; background: var(--well); border-radius: 8px; padding: 8px 10px; }
-.brd h3.sqn { font-size: 14px; margin: 10px 0 2px; }
 .dg { display: grid; gap: 4px; margin-bottom: 10px; }
 .dgh { font-size: 13px; }
 .dr { display: grid; grid-template-columns: 110px minmax(0, 1fr) 110px; gap: 10px; align-items: center; font-size: 12.5px; }
@@ -175,14 +153,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .key i { display: inline-block; width: 16px; vertical-align: middle; margin-right: 6px; }
 .key .k-you { height: 8px; width: 8px; border-radius: 50%; background: var(--accent); }
 .key .k-plan { border-top: 2px dashed var(--muted); }
-.phases { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 3px; margin-bottom: 12px; font-size: 10.5px; }
-.phases .ph { padding: 5px 2px; text-align: center; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
-.phases .ph.catchup { background: var(--you); color: var(--ink); }
-.phases .ph.taper { background: var(--well); color: var(--muted); }
-.phases .ph.cp { box-shadow: inset 0 0 0 2px var(--warn); }
 .rail .prow { grid-template-columns: 1fr; gap: 4px; margin-bottom: 10px; }
 .rail .prow .bar { width: 100%; }
-.brdt th.sqh { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); }
+.brdt th.sqt { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); }  /* a squad's own line; .sqh is a day's letter */
 .sqb + .sqb { margin-top: 18px; }
 @media (max-width: 560px) {
   .brdt td.nm { white-space: normal; overflow: visible; min-width: 100px; }

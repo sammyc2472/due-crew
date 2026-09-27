@@ -201,6 +201,10 @@ describe("the site's home", () => {
     const anki = await sam.call("GET", "/board");
     expect(anki.body.cheers.map((c: any) => c.from)).toEqual(["dre"]);  // still there for Anki
     expect((await sam.call("GET", "/board")).body.cheers).toEqual([]);
+    // the site's home has its decks, and reads its plans elsewhere (/plans/mine)
+    const home = await sam.call("GET", "/board?keep=1&decks=1");
+    expect(home.body.decks).toBeDefined();
+    expect(home.body.plans).toBeUndefined();
   });
 
   it("my plan view carries my own progress, and nobody else's", async () => {

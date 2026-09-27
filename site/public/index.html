@@ -88,6 +88,11 @@
     navigator.clipboard.writeText("2035408484").then(function () {
       b.textContent = "Copied";
       setTimeout(function () { b.textContent = "Copy code"; }, 1600);
+    }, function () {
+      // no clipboard here (an old browser, or it said no): the code is selected to copy by hand
+      var r = document.createRange();
+      r.selectNodeContents(document.getElementById("code"));
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     });
   });
 </script>

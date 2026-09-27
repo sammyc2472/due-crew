@@ -72,7 +72,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
-  if (withDecks) Object.assign(out, await P.forBoard(env, s.uid));  // 3.1: the plans I follow, and offers
+  // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
+  if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
   await touchSeen(env, s.uid);
   return json(out);
 }
