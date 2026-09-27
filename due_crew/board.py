@@ -284,6 +284,8 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                "room": (room_model.title(entries, e["room"]) if e.get("room")
                         and not e["paused"] else ""),
                "status": "", "away": "",
+               # 3.2: their last plan week done, the day it's new
+               "recap": (e.get("recap") or {}) if not e["paused"] and (e.get("recap") or {}).get("day") == today_lb else {},
                "exam": "" if e["paused"] else
                        _exam_badge(e.get("exam_date"), today_lb)}
         if e["paused"]:
@@ -616,6 +618,14 @@ def _css(cfg):
     #due-crew .dc-pc .pn a, #due-crew .dc-pc .pl a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-pc .pl {{ display: flex; gap: 10px; }}
+    /* 3.2: today's session, the week's recap */
+    #due-crew .dc-pc .ss {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }}
+    #due-crew .dc-pc .ss div {{ background: var(--dc-well); border-radius: 8px; padding: 6px 9px; display: grid; }}
+    #due-crew .dc-pc .ss b {{ font-size: 16px; font-variant-numeric: tabular-nums; }}
+    #due-crew .dc-pc .ss b small {{ font-size: 11px; color: var(--dc-muted); font-weight: 400; }}
+    #due-crew .dc-pc .ss span {{ font-size: 10.5px; color: var(--dc-muted); }}
+    #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
+    #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
     @media (max-width: 560px) {{
       #due-crew .dc-pc .u3 {{ grid-template-columns: 90px 1fr 1fr; }}
       #due-crew .dc-pc .u3 .n {{ grid-column: 1 / -1; text-align: left; }}
@@ -684,6 +694,10 @@ def _row_html(row, rank, cfg):
         exam = ' <span class="bkb">&#128075; back</span>' + exam
     if row.get("away"):
         exam += f' <span class="awb">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
+    if row.get("recap") and not row["quiet"]:
+        r = row["recap"]
+        exam += (f' <span class="la fresh" title="{_html.escape(str(r.get("name") or ""))}">'
+                 f'&middot; week {int(r.get("n") or 0)} done</span>')
     if row.get("room") and not row["quiet"]:
         # 2.12: in a study room (the room's title is escaped: a friend's name)
         exam = (' <span class="dc-live"></span><span class="la fresh">in '
@@ -953,15 +967,78 @@ def _plan_card_html(card):
         n = int(op.get("n") or 0)
         out += (f'<div class="pn"><span>&#10003; Opened {what} this morning: '
                 f'{n:,} card{"s" if n != 1 else ""}</span>{undo}</div>')
+    out += _session_html(card, pid)
     for kind, segments in card.get("lines") or []:
         out += f'<div class="pn{" warn" if kind == "behind" else ""}"><span>{_segs(segments)}</span></div>'
     if card.get("change"):
         out += (f'<div class="pn"><span>{_segs(card["change"])}</span>'
                 f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
+    sched = ("" if card.get("sched") or card.get("no_deck") else
+             f' <a href="#" onclick="{_pycmd("plansched:" + pid)}">Set my schedule</a>')
     out += ('<div class="dc-line pl"><span>&ldquo;Seen&rdquo; is cards you&rsquo;ve reviewed at least once. '
             '&ldquo;Done&rdquo; is a unit fully seen.</span>'
-            f'<a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></div>')
+            f'{sched}<a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></div>')
     return out + "</div>"
+
+
+def _session_html(card, pid):
+    """3.2: today's session on my schedule, the missed-days question, the
+    week's recap, checkpoints. Numbers only (the plan's names are escaped)."""
+    e = _html.escape
+    s = card.get("session")
+    if not s:
+        return ""
+    out = ""
+    kind = s.get("kind")
+    target, done = int(s.get("target") or 0), int(s.get("done") or 0)
+    due = s.get("due")
+    if kind == "study" or (target and kind not in ("catchup", "taper")):
+        new = f'<b>{min(done, target):,}<small> / {target:,}</small></b><span>new today</span>'
+    else:
+        word = {"rest": "rest day", "catchup": "catch-up week", "taper": "taper"}.get(kind, "")
+        new = f'<b>&mdash;</b><span>{e(word)}: no new</span>'
+    rev = f'<b>{int(due):,}</b><span>reviews due</span>' if due is not None else '<b>&mdash;</b><span>reviews</span>'
+    mins = int(s.get("minutes") or 0)
+    left = f'<b>~{mins:,} min</b><span>left today</span>' if mins else '<b>&#10003;</b><span>done for today</span>'
+    out += f'<div class="ss"><div>{new}</div><div>{rev}</div><div>{left}</div></div>'
+    behind = int(s.get("behind") or 0)
+    ask = s.get("ask")
+    if ask:
+        days = [str(d) for d in ask.get("days") or []]
+        when = " and ".join(_short(d) for d in days[-2:]) if len(days) <= 2 else f"{len(days)} study days"
+        acts = (f'<a href="#" onclick="{_pycmd("planspread:" + pid)}">Spread them (+{int(ask["spread"]):,} a day)</a>')
+        if ask.get("push"):
+            n = int(ask["push"])
+            acts += f'<a href="#" onclick="{_pycmd("planpush:" + pid)}">Push my dates back {n} day{"s" if n != 1 else ""}</a>'
+        acts += f'<a href="#" onclick="{_pycmd("planleave:" + pid)}">Leave them open</a>'
+        out += (f'<div class="pn warn"><span>You missed <b>{e(when)}</b>: {int(ask["waiting"]):,} new '
+                f'card{"s" if int(ask["waiting"]) != 1 else ""} waiting.</span><span class="acts">{acts}</span></div>')
+    elif kind == "study":
+        state = (f'{behind:,} behind.' if behind else "On track.")
+        out += (f'<div class="pn"><span>{state}</span>'
+                f'<a href="#" onclick="{_pycmd("planstudy:" + pid)}">Study now</a></div>')
+    r = s.get("recap")
+    if r:
+        a, b = r.get("sessions") or [0, 0]
+        out += (f'<div class="pn"><span><b>Week {int(r["n"])} done</b>: {int(a)} of {int(b)} sessions, '
+                f'{int(r.get("new") or 0):,} new cards{", on track" if r.get("on_track") else ""}.</span></div>')
+    for c in s.get("checks") or []:
+        n, got = int(c.get("n") or 0), int(c.get("answered") or 0)
+        if got >= n and n:
+            out += (f'<div class="pn"><span>Checkpoint <b>{e(str(c.get("name") or ""))}</b> done: '
+                    f'<b>{int(c.get("right") or 0):,} of {n:,}</b> right first time.</span></div>')
+        elif n:
+            out += (f'<div class="pn"><span>&#10003; Built <b>Checkpoint &middot; {e(str(c.get("name") or ""))}</b>: '
+                    f'{n:,} cards you&rsquo;ve missed most. {got:,} done.</span></div>')
+    return out
+
+
+def _short(iso):
+    try:
+        d = _dt.date.fromisoformat(str(iso))
+    except ValueError:
+        return str(iso)
+    return f"{d:%a}"
 
 
 def _offer_banners(offers):

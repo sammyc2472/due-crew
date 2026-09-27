@@ -3033,6 +3033,7 @@ def test_plans_per_profile_v311():
     with _PlanGlue({"A": maya, "B": kai}, {"A": _plan_col(), "B": col_b}) as g:
         F = g.F
         plan, _ = maya.follow_plan(code)
+        F.open_schedule = _skip_schedule
         F.on_followed(plan, 10, None, "open")
         col_a = g.cols["A"]
         g.profile("B")
@@ -3090,6 +3091,7 @@ def test_plans_followed_elsewhere_v311():
         st = g.state()["plans"][pid]
         check("elsewhere: only today's unit opens", _open(col) == {3, 8}, str(_open(col)))
         check("elsewhere: the units before today are marked skipped", st["applied"]["hf"].startswith("skip:"))
+        F.open_schedule = _skip_schedule
         F.on_followed(plan, 10, None, "open")
         check("follow again: what was applied here is kept (the skipped unit stays shut)",
               _open(col) == {3, 8} and g.state()["plans"][pid]["applied"]["hf"].startswith("skip:"),
@@ -3178,6 +3180,7 @@ def test_plans_undo_waits_v311():
         with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
             F, col = g.F, g.cols["A"]
             plan, _ = maya.follow_plan(code)
+            F.open_schedule = _skip_schedule
             F.on_followed(plan, 10, None, "open")
             check("undo: set up", g.state().get("plans_opened", {}).get("label") == "Due Crew: open 2 dates")
             F.undo_morning()
@@ -3409,6 +3412,12 @@ def test_anki_day_labels_v311():
         _time.tzset()
 
 
+def _skip_schedule(pid, then=None):
+    """The schedule dialog, as if Cancel was pressed (no Qt here)."""
+    if then:
+        then()
+
+
 def _spread_col(n=10):
     """Step 1 (10): n suspended new cards tagged Renal, positions n..1 (so
     the deck's order is the reverse of their ids), one of them a leech."""
@@ -3612,6 +3621,70 @@ def test_who_knows_v32():
     sam.push(labels, {})
     check("recap: rides my week, and a crewmate sees it",
           dre.fetch_board(labels)["entries"][1]["recap"] == {"name": "Step 1", "n": 3, "day": _day(0)})
+
+
+def test_session_card_v32():
+    """3.2: today's session on my schedule, the missed-days question, the
+    recap on a new plan week, checkpoints; the board draws them escaped."""
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    col = _spread_col(20)
+    start = TODAY - datetime.timedelta(days=3)  # opened three days ago, due in four
+    unit = {"id": "rn", "name": "Renal <i>", "opens": start.isoformat(), "due": _day(3), "tags": ["Step1::Renal"],
+            "check": _day(0)}
+    plan = {"id": "p1", "name": "Step 1", "ownerName": "Dre", "version": 1, "followers": 3,
+            "doc": {"deck": "Step 1", "units": [unit]}, "sched": {"days": [1] * 7, "minutes": 60}}
+    st = F.new_state(col, plan)
+    F.run(col, [plan], {"p1": st}, _day(0))
+    idx = P.DeckIndex(col, 10)
+    # nothing seen on the three days before: all three missed
+    v = F.session_view(plan, st, idx, {}, _day(0), (8.0, 30.0), due=40)
+    check("session: today's share and what's waiting", v["share"] == 3 and v["behind"] == 9 and v["kind"] == "study", str(v))
+    check("session: the question, with how much spreading adds a day and how far pushing goes",
+          v["ask"] and v["ask"]["waiting"] == 9 and v["ask"]["spread"] == 3 and v["ask"]["push"] == 3
+          and len(v["ask"]["days"]) == 3, str(v["ask"]))
+    check("session: minutes from my pace: reviews due and today's new", v["minutes"] == round((40 * 8 + 3 * 30) / 60))
+    st["catch"] = {"mode": "spread", "day": _day(0)}
+    v2 = F.session_view(plan, st, idx, {}, _day(0), (8.0, 30.0), due=40)
+    check("session: answered, the question goes, and spreading adds a quarter a day",
+          v2["ask"] is None and v2["target"] == 3 + 3)
+    seen_today = {c: 0 for c in list(idx.cards)[:4]}
+    v3 = F.session_view(plan, dict(st, catch=None), idx, seen_today, _day(0))
+    check("session: cards first seen today count toward today", v3["done"] == 4)
+    html_ = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v2))
+    check("board: the session tiles, and Study now", "new today" in html_ and "reviews due" in html_
+          and "planstudy:p1" in html_ and "<i>" not in html_.replace("<i style", "").replace("<i class", ""))
+    html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
+    check("board: the missed-days question, three ways",
+          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
+    check("board: no schedule yet offers one", "plansched:p1" in board._plan_card_html(
+        F.card_view(dict(plan, sched=None), st, {}, _day(0))))
+    # the recap: on the first day of a plan week
+    monday = TODAY + datetime.timedelta(days=(7 - TODAY.weekday()) % 7)
+    mon_plan = dict(plan, doc=dict(plan["doc"], units=[dict(unit, opens=(monday - datetime.timedelta(days=7)).isoformat(),
+                                                             due=(monday + datetime.timedelta(days=6)).isoformat())]))
+    rv = F.session_view(mon_plan, st, idx, {}, monday.isoformat())
+    check("recap: week 1 done, the first day of week 2", rv["recap"] and rv["recap"]["n"] == 1
+          and rv["recap"]["sessions"][1] == 7, str(rv["recap"]))
+    # checkpoints
+    due = F.checks_due(plan["doc"], st, plan["sched"], _day(0))
+    check("checkpoint: due on its morning", [u["id"] for u in due] == ["rn"])
+    check("checkpoint: not built late past three mornings", F.checks_due(plan["doc"], st, plan["sched"], _day(4)) == [])
+    col.db.conn.execute("UPDATE cards SET type = 2, queue = 2, lapses = id - 100 WHERE id IN (105, 106, 107)")
+    idx = P.DeckIndex(col, 10)
+    picked = F.check_cards(col, idx, idx.match(unit, None, "Step 1"), n=2)
+    check("checkpoint: seen cards, most lapses first", picked == [107, 106], str(picked))
+    st["checks"] = {"rn": {"day": _day(0), "at": 0, "cids": [107, 106]}}
+    cv = F.session_view(plan, st, idx, {}, _day(0), answered={107: (3, 1), 106: (1, 2)})
+    check("checkpoint: the score, first answers since it was built",
+          cv["checks"] == [{"name": "Renal <i>", "n": 2, "answered": 2, "right": 1, "day": _day(0)}])
+    ch = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=cv))
+    check("board: the checkpoint's score, its name escaped", "1 of 2" in ch and "Renal &lt;i&gt;" in ch)
+    rows_ = board.build_rows([{"user_id": "dre", "name": "Dre", "you": False, "paused": False, "last_updated": "",
+                               "days": {}, "recap": {"name": "Step 1", "n": 3, "day": _day(0)}}],
+                             [_day(0)], "", "today", {})
+    allrows = rows_[0] + rows_[1]
+    check("recap: on a crewmate's row the day it's new", allrows and allrows[0]["recap"]["n"] == 3)
 
 
 def main():

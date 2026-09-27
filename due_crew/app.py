@@ -100,6 +100,7 @@ _state = {
     "settings_pulling": False,
     "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
     "plan_progress": {},   # 3.1: {plan id: {unit id: [opened, seen, total]}}, counted here
+    "plan_session": {},    # 3.2: {plan id: today's session}, for plans on my schedule
 }
 
 
@@ -178,7 +179,7 @@ def _reset_runtime(keep_sync=False):
                   milestones=[], anki_synced=synced,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
-                  settings_failed_ts=0.0, plan_progress={})
+                  settings_failed_ts=0.0, plan_progress={}, plan_session={})
     _pending_cheers.clear()
 
 

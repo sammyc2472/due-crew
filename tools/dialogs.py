@@ -338,6 +338,37 @@ def main(out):
             raise RuntimeError("change deck: the plan's name went in as markup")
         shoot(dlg, os.path.join(out, "plan-change-deck.png"))
 
+    def schedule():
+        """3.2: my schedule for a plan: start, days, time, and the load chart.
+        The plan's name is the author's: plain text in the title only."""
+        from due_crew.ui.schedule_dialog import ScheduleDialog
+        units = [{"id": "c", "name": "Cardio", "opens": "2026-10-05", "due": "2026-10-18"},
+                 {"id": "r", "name": "Renal", "opens": "2026-10-19", "due": "2026-11-08"},
+                 {"id": "p", "name": "Pulm", "opens": "2026-11-09", "due": "2026-11-29"}]
+        plan = {"id": "p1", "name": "Step 1 <b>", "doc": {"deck": "Step 1", "end": "2026-12-12",
+                "phases": {"catchup": 4, "taper": 10}, "units": units}}
+        totals = {"c": 420, "r": 610, "p": 560}
+        dlg = ScheduleDialog(None, plan, "2026-10-01", totals, [120] * 190, (9.0, 35.0))
+        if dlg.windowTitle() != "My schedule · Step 1 <b>":
+            raise RuntimeError(f"schedule: title {dlg.windowTitle()!r}")
+        shoot(dlg, os.path.join(out, "plan-schedule.png"))
+        dlg._tap(6)
+        dlg._tap(5)
+        if dlg.value()["days"] != [1, 1, 1, 1, 1, 2, 1]:
+            raise RuntimeError(f"schedule: days {dlg.value()}")
+        dlg.later.setChecked(True)
+        dlg.start.setDate(QtCore.QDate(2026, 10, 12))
+        if dlg.value().get("start") != "2026-10-12":
+            raise RuntimeError(f"schedule: start {dlg.value()}")
+        dlg = ScheduleDialog(None, dict(plan, sched={"days": [1] * 7, "minutes": 30}), "2026-10-01",
+                             totals, [300] * 190, (9.0, 35.0))
+        shoot(dlg, os.path.join(out, "plan-schedule-over.png"))
+        if "go past" not in dlg.summary.text():
+            raise RuntimeError(f"schedule: no warning in {dlg.summary.text()!r}")
+        dlg._no_schedule()
+        if dlg.value() is not None:
+            raise RuntimeError("schedule: No schedule didn't clear it")
+
     def tools_menu():
         """Tools › Due Crew as profile open builds it, on a real QMenu (3.1:
         a separator entry once crashed every start, and no test loaded it)."""
@@ -365,7 +396,7 @@ def main(out):
     for label, build in (("tools menu", tools_menu), ("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
-                         ("report", report), ("plans", plans)):
+                         ("report", report), ("plans", plans), ("schedule", schedule)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")
