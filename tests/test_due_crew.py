@@ -2947,7 +2947,7 @@ def test_plans_glue_v31():
         check("site link: one request, a token for the fragment", maya.site_link() and
               store.log[-1] == ("POST", "/auth/link", 200))
         check("tree: names and counts go up", maya.put_tree("Step 1", [["Step1::Cardio", 3]], [])
-              and store.plan_trees[("maya", "Step 1")]["tags"] == [["Step1::Cardio", 3]])
+              and store.plan_trees[("maya", "Step 1")]["tags"] == [["Step1", 0, [["Cardio", 3]]]])
         check("add cards: only the author", new_client(store, "kai", "Kai").add_plan_cards(
             pid, [["guid000001", 0]], unit="hf")[1] == 403)
         mine = maya.my_plans()
@@ -3528,6 +3528,35 @@ def test_schedule_morning_v32():
     check("board: my schedule rides the day's first refresh", b["plans"][0]["sched"]["start"] == _day(3))
     check("my schedule: a bad one doesn't take", maya.set_schedule(pid, {"days": [0] * 7, "minutes": 60}) is False)
     del start
+
+
+def test_tree_nested_v33():
+    """3.3: the tree goes up nested, each name once, so deep tags fit: the
+    most useful first (question ids last), a kept tag keeps its parents,
+    and it stays under the server's body limit."""
+    from due_crew import plans as P
+    rows = [["#AK", 9000], ["#AK::#Bootcamp", 3000], ["#AK::#Bootcamp::Cardiology", 900],
+            ["#AK::#Bootcamp::Cardiology::02_Anatomy", 120],
+            ["#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
+            ["#AK::#UWorld", 5000]]
+    rows += [[f"#AK::#UWorld::{10000 + i}", 2] for i in range(40000)]
+    tree, kept, left = P.nest(rows, budget=60_000)
+    flat = []
+
+    def walk(level, pre=""):
+        for x in level:
+            p = f"{pre}::{x[0]}" if pre else x[0]
+            flat.append(p)
+            if len(x) == 3:
+                walk(x[2], p)
+    walk(tree)
+    check("tree: a tag five levels down goes up", "#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
+    check("tree: question ids fill what's left, and some are left out", left > 0 and kept == len(flat))
+    check("tree: every kept tag has its parents", all("::" not in p or p.rsplit("::", 1)[0] in set(flat) for p in flat))
+    check("tree: it fits the budget", len(json.dumps(tree)) <= 60_000, str(len(json.dumps(tree))))
+    store = world({"dre": "Dre"})
+    dre = new_client(store, "dre", "Dre")
+    check("tree: the server takes it", dre.put_tree("Step 1", rows[:6], []) and store.plan_trees[("dre", "Step 1")].get("v") == 2)
 
 
 def test_even_split_v33():

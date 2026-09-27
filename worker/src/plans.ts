@@ -18,6 +18,9 @@ const PATH_MAX = 200;
 const COVER_MAX = 500;
 const DOC_MAX = 256 * 1024;
 const TREE_MAX = 5000;
+const NEST_MAX = 100000;  // names in a nested tree; the body's size binds first
+const TREE_BODY_MAX = 1536 * 1024;  // a big deck's tags, nested; one D1 row holds 2 MB
+const NEST_DEPTH = 20;
 const LINE_MAX = 120;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
@@ -232,9 +235,24 @@ async function view(env: Env, p: Plan, uid: string) {
 
 // ---- the deck's tree, from the add-on ----
 
-/** PUT /plans/trees {deck, tags: [[path, n]], decks: [[path, n]]}: names and counts only. */
+/** A tree as the add-on sends it since 3.3: nested, each name once,
+ *  [name, n, [children]?]; paths (the names joined by ::) up to PATH_MAX. */
+function nested(v: unknown, budget: { nodes: number }, prefix = 0, depth = 0): unknown[] {
+  if (!Array.isArray(v) || depth > NEST_DEPTH) throw V.bad("tree");
+  return v.map((x) => {
+    if (!Array.isArray(x) || x.length < 2 || x.length > 3 || !V.isInt(x[1])) throw V.bad("tree");
+    const name = x[0];
+    if (!V.isStr(name, PATH_MAX, 1) || /[\u0000-\u001f]/.test(name) || name.includes("::")) throw V.bad("tree");
+    const len = prefix + (prefix ? 2 : 0) + name.length;
+    if (len > PATH_MAX || --budget.nodes < 0) throw V.bad("tree");
+    return x.length === 3 ? [name, x[1], nested(x[2], budget, len, depth + 1)] : [name, x[1]];
+  });
+}
+
+/** PUT /plans/trees {deck, tags, decks}: names and counts only. 3.3 sends
+ *  them nested ({v: 2}); 3.1 and 3.2 send [[path, n]] lists. */
 export async function putTree(req: Request, s: Session, env: Env): Promise<Response> {
-  const body = await readJson(req);
+  const body = await readJson(req, TREE_BODY_MAX);
   const deck = path(body.deck);
   const list = (v: unknown) => {
     if (!Array.isArray(v) || v.length > TREE_MAX) throw V.bad("tree");
@@ -243,7 +261,13 @@ export async function putTree(req: Request, s: Session, env: Env): Promise<Respo
       return [path(x[0]), x[1]];
     });
   };
-  const doc = JSON.stringify({ tags: list(body.tags ?? []), decks: list(body.decks ?? []) });
+  let doc: string;
+  if (body.v === 2) {
+    const budget = { nodes: NEST_MAX };
+    doc = JSON.stringify({ v: 2, tags: nested(body.tags ?? [], budget), decks: nested(body.decks ?? [], budget) });
+  } else {
+    doc = JSON.stringify({ tags: list(body.tags ?? []), decks: list(body.decks ?? []) });
+  }
   await limitOrThrow(env, `tree:${s.uid}`, 30, 3600);
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_trees WHERE uid = ? AND deck != ?").bind(s.uid, deck).first<number>("n");
   if ((n ?? 0) >= TREES_MAX) {
@@ -259,11 +283,18 @@ export async function putTree(req: Request, s: Session, env: Env): Promise<Respo
   return json({ ok: true });
 }
 
-/** GET /plans/trees: my decks' trees, for the builder. */
-export async function getTrees(s: Session, env: Env): Promise<Response> {
-  const rows = await env.DB.prepare("SELECT deck, doc, at FROM plan_trees WHERE uid = ? ORDER BY at DESC").bind(s.uid)
-    .all<{ deck: string; doc: string; at: number }>();
-  return json({ trees: rows.results.map((r) => ({ deck: r.deck, at: r.at, ...JSON.parse(r.doc) })) });
+/** GET /plans/trees?deck=: that deck's tree, for the builder; without a
+ *  deck, which decks I have trees for (names and when, not the trees). */
+export async function getTrees(req: Request, s: Session, env: Env): Promise<Response> {
+  const deck = new URL(req.url).searchParams.get("deck");
+  if (deck !== null) {
+    const r = await env.DB.prepare("SELECT deck, doc, at FROM plan_trees WHERE uid = ? AND deck = ?").bind(s.uid, deck)
+      .first<{ deck: string; doc: string; at: number }>();
+    return json({ trees: r ? [{ deck: r.deck, at: r.at, ...JSON.parse(r.doc) }] : [] });
+  }
+  const rows = await env.DB.prepare("SELECT deck, at FROM plan_trees WHERE uid = ? ORDER BY at DESC").bind(s.uid)
+    .all<{ deck: string; at: number }>();
+  return json({ trees: rows.results });
 }
 
 // ---- authoring ----

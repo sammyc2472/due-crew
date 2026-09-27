@@ -244,7 +244,7 @@ class DeckIndex:
 
     # -- the builder's tree --
 
-    def tree(self, with_tags=True, with_decks=True, cap=5000):
+    def tree(self, with_tags=True, with_decks=True, cap=None):
         """(tags, decks) for PUT /plans/trees: [[path, cards]] each, names and
         counts only. A tag counts every card under it; a subdeck, every card
         in it and below. At most `cap` of each, shallowest and biggest first."""
@@ -261,7 +261,7 @@ class DeckIndex:
                 merged.setdefault(path.lower(), [path, set()])[1].update(cids)
             tags = [[p, len(c)] for p, c in merged.values()]
             tags.sort(key=lambda x: (x[0].count(_SEP), -x[1], x[0].lower()))
-            tags = sorted(tags[:cap], key=lambda x: x[0].lower())
+            tags = sorted(tags[:cap] if cap else tags, key=lambda x: x[0].lower())
         decks = []
         if with_decks:
             for rel, d in self.rel.items():
@@ -272,7 +272,7 @@ class DeckIndex:
                 if n:
                     decks.append([f"{self.name}{_SEP}{self.spelled[rel]}", n])
             decks.sort(key=lambda x: x[0].lower())
-            decks = decks[:cap]
+            decks = decks[:cap] if cap else decks
         return tags, decks
 
     def top_tags(self):
@@ -282,6 +282,49 @@ class DeckIndex:
             first = self.tag_names[low].split(_SEP)[0]
             out.setdefault(first.lower(), first)
         return out
+
+
+# ---- the tree as it goes up (3.3) ----
+
+TREE_BUDGET = 1_400_000  # bytes of JSON: under the server's 1.5 MB for a tree, with room for decks
+
+
+def _qid(path):
+    """A question-bank id (UWorld's, AMBOSS's…): a leaf that's only digits.
+    Thousands of them, one card or two each; they go last."""
+    return path.rsplit(_SEP, 1)[-1].strip().isdigit()
+
+
+def nest(rows, budget=TREE_BUDGET):
+    """[[path, n]] as the builder's tree: nested, each name once
+    ([name, n] or [name, n, [children]]), the most useful first while it
+    fits `budget` bytes: tags that aren't question ids, shallow before
+    deep, big before small. A kept tag keeps its parents. Returns (tree,
+    kept, left out)."""
+    counts = {p: n for p, n in rows}
+    order = sorted(rows, key=lambda r: (_qid(r[0]), r[0].count(_SEP), -r[1], r[0].lower()))
+    kept, size, dropped = set(), 0, 0
+    for p, _n in order:
+        if p in kept:
+            continue
+        parts = p.split(_SEP)
+        new = [a for a in (_SEP.join(parts[:i]) for i in range(1, len(parts) + 1)) if a not in kept]
+        cost = sum(len(json.dumps(a.rsplit(_SEP, 1)[-1])) + len(str(counts.get(a, 0))) + 8 for a in new)
+        if size + cost > budget:
+            dropped += 1
+            continue
+        kept.update(new)
+        size += cost
+    root = {}
+    for p in sorted(kept, key=lambda x: x.lower()):
+        node = root
+        parts = p.split(_SEP)
+        for i, part in enumerate(parts):
+            node = node.setdefault(part, {"n": counts.get(_SEP.join(parts[:i + 1]), 0), "k": {}})["k"]
+
+    def out(level):
+        return [[name, v["n"], out(v["k"])] if v["k"] else [name, v["n"]] for name, v in level.items()]
+    return out(root), len(kept), dropped
 
 
 # ---- following ----

@@ -746,7 +746,15 @@ class ApiClient:
     def put_tree(self, deck, tags, decks):
         """The deck's tag and subdeck names with card counts, for the
         builder. Names and counts only."""
-        status, _ = self._call("PUT", "/plans/trees", {"deck": str(deck), "tags": tags, "decks": decks})
+        from .. import plans as P
+        # 3.3: nested, each name once, so a deep deck's tags fit
+        nt, _kept, _left = P.nest(tags)
+        nd, _k2, _l2 = P.nest(decks, budget=40_000)
+        status, data = self._call("PUT", "/plans/trees", {"deck": str(deck), "v": 2, "tags": nt, "decks": nd})
+        if status == 400:
+            # a 3.2 server: the old lists, as many as it takes
+            first = sorted(tags, key=lambda r: (r[0].count("::"), -r[1]))[:5000]
+            status, _ = self._call("PUT", "/plans/trees", {"deck": str(deck), "tags": first, "decks": decks[:5000]})
         return status == 200
 
     def site_link(self):

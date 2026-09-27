@@ -179,8 +179,24 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     expect(await dre.status("PUT", "/plans/trees", tree)).toBe(200);
     expect(await dre.status("PUT", "/plans/trees", tree)).toBe(200);
     expect(await dre.status("PUT", "/plans/trees", { deck: "Step 1", tags: [["Step1::Cardio", "312 cards"]] })).toBe(400);
-    const got = await dre.call("GET", "/plans/trees");
+    const got = await dre.call("GET", "/plans/trees?deck=Step%201");
     expect(got.body.trees).toEqual([expect.objectContaining({ deck: "Step 1", tags: [["Step1::Cardio", 312]] })]);
+    const list = await dre.call("GET", "/plans/trees");
+    expect(list.body.trees).toEqual([{ deck: "Step 1", at: expect.any(Number) }]);  // which decks, not the trees
+  });
+
+  it("3.3: a nested tree, each name once, deep tags and a big deck", async () => {
+    const dre = await person("dre");
+    const deep = ["#AK", 9000, [["#Bootcamp", 3000, [["Cardiology", 900, [["02_Anatomy", 120, [["04_Penetrating_Cardiac_Trauma", 7]]]]]]]]];
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [deep], decks: [] })).toBe(200);
+    const got = await dre.call("GET", "/plans/trees?deck=AnKing");
+    expect(got.body.trees[0].v).toBe(2);
+    expect(got.body.trees[0].tags).toEqual([deep]);
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["A::B", 1]] })).toBe(400);  // a name, not a path
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["x".repeat(150), 1, [["y".repeat(60), 1]]]] })).toBe(400);  // path over 200
+    // past the usual 512 KB body: a big deck's tags still fit
+    const many = Array.from({ length: 30000 }, (_, i) => [`Lecture_${String(i).padStart(5, "0")}_Some_Topic`, 3]);
+    expect(await dre.status("PUT", "/plans/trees", { deck: "Big", v: 2, tags: [["Big", 90000, many]] })).toBe(200);
   });
 
   it("a one-time link signs the site in once, with a same-site cookie", async () => {
@@ -247,7 +263,7 @@ describe("limits the audit asked for", () => {
     const { env } = await import("cloudflare:workers");
     const worker = (await import("../src/index")).default;
     const big = new ReadableStream({
-      start(c) { for (let i = 0; i < 40; i++) c.enqueue(new TextEncoder().encode("x".repeat(20_000))); c.close(); },
+      start(c) { for (let i = 0; i < 90; i++) c.enqueue(new TextEncoder().encode("x".repeat(20_000))); c.close(); },  // 1.8 MB: past even a tree's 1.5 MB
     });
     const res = await worker.fetch(new Request("https://api.duecrew.com/plans/trees", {
       method: "PUT", body: big, headers: { authorization: `Bearer ${dre.token}` }, duplex: "half",

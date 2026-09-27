@@ -65,7 +65,7 @@ authed("DELETE", r("/admin/notices/([0-9]{1,9})"), (_q, s, env, p) => N.remove(s
 
 // 3.1: plans (the fixed paths before /plans/{id})
 authed("PUT", r("/plans/trees"), P.putTree);
-authed("GET", r("/plans/trees"), (_q, s, env) => P.getTrees(s, env));
+authed("GET", r("/plans/trees"), (q, s, env) => P.getTrees(q, s, env));
 authed("GET", r("/plans/mine"), (_q, s, env) => P.mine(s, env));
 authed("GET", r("/plans/peek"), P.peek);
 authed("POST", r("/plans/follow"), P.follow);

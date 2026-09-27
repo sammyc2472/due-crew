@@ -993,11 +993,26 @@ class FakeWorker:
         if rest == ["trees"] and method == "PUT":
             if not isinstance(body.get("deck"), str) or not body["deck"]:
                 raise Bad(400, "plan")
+            def nested(v, prefix=0):
+                for x in v:
+                    if not (isinstance(x, list) and len(x) in (2, 3) and isinstance(x[0], str) and x[0]
+                            and "::" not in x[0] and _is_int(x[1])):
+                        raise Bad(400, "tree")
+                    ln = prefix + (2 if prefix else 0) + len(x[0])
+                    if ln > 200:
+                        raise Bad(400, "tree")
+                    if len(x) == 3:
+                        nested(x[2], ln)
             for k in ("tags", "decks"):
+                if body.get("v") == 2:
+                    nested(body.get(k) or [])
+                    continue
                 for x in body.get(k) or []:
                     if not (isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _is_int(x[1])):
                         raise Bad(400, "tree")
             doc = {"tags": body.get("tags") or [], "decks": body.get("decks") or []}
+            if body.get("v") == 2:
+                doc["v"] = 2
             if self.plan_trees.get((me, body["deck"])) != doc:
                 self.plan_trees[(me, body["deck"])] = doc
                 self._count("plan_trees")

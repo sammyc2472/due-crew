@@ -26,8 +26,17 @@ const Tags = (() => {
 async function builder(id) {
   let plan = await api("GET", `/plans/${id}`);
   if (plan.owner !== me.uid) return go(`/plans/${id}`);
-  const [{ trees }, { squads }] = await Promise.all([api("GET", "/plans/trees"), api("GET", "/squads/mine")]);
-  const tree = trees.find((t) => t.deck === plan.doc.deck) || { tags: [], decks: [] };
+  const [{ trees }, { squads }] = await Promise.all([api("GET", `/plans/trees?deck=${encodeURIComponent(plan.doc.deck)}`), api("GET", "/squads/mine")]);
+  const raw = trees.find((t) => t.deck === plan.doc.deck) || { tags: [], decks: [] };
+  // 3.3's add-on sends it nested, each name once: [name, n, [children]?]
+  const flat = (rows) => {
+    if (raw.v !== 2) return rows || [];
+    const out = [];
+    const walk = (level, pre) => { for (const [name, n, kids] of level) { const p = pre ? `${pre}::${name}` : name; out.push([p, n]); if (kids) walk(kids, p); } };
+    walk(rows || [], "");
+    return out;
+  };
+  const tree = { tags: flat(raw.tags), decks: flat(raw.decks) };
 
   // ---- the deck's tree: counts, children, order ----
   const count = new Map();
