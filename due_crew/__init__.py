@@ -815,15 +815,18 @@ def _on_profile_open():
 def _tools_menu():
     """Tools › Due Crew (3.1: a submenu, for plans)."""
     from aqt.qt import QMenu
+    if getattr(mw, "_due_crew_menu", None) is not None:
+        return  # a second profile open: the submenu is already there
     menu = QMenu("Due Crew", mw)
-    for label, fn in (("Open Due Crew", _show_board), ("Friends…", open_friends),
-                      ("Squads…", open_squads), None,
-                      ("Make a plan from a deck…", plan_flow.open_make),
-                      ("Follow a plan…", plan_flow.open_follow), None,
-                      ("Settings…", open_settings)):
-        if label is None:
+    for item in (("Open Due Crew", _show_board), ("Friends…", open_friends),
+                 ("Squads…", open_squads), None,
+                 ("Make a plan from a deck…", plan_flow.open_make),
+                 ("Follow a plan…", plan_flow.open_follow), None,
+                 ("Settings…", open_settings)):
+        if item is None:
             menu.addSeparator()
             continue
+        label, fn = item
         action = QAction(label, mw)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)

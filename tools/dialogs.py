@@ -329,7 +329,31 @@ def main(out):
             raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
         shoot(dlg, os.path.join(out, "plan-add-cards.png"))
 
-    for label, build in (("settings", settings), ("friends", friends), ("decks", decks),
+    def tools_menu():
+        """Tools › Due Crew as profile open builds it, on a real QMenu (3.1:
+        a separator entry once crashed every start, and no test loaded it)."""
+        import due_crew
+        tools = QtWidgets.QMenu("Tools")
+        win = QtWidgets.QMainWindow()  # the real parent Anki's main window is
+        win.form = types.SimpleNamespace(menuTools=tools)
+        win._due_crew_menu = None
+        saved = due_crew.mw
+        due_crew.mw = win
+        try:
+            due_crew._tools_menu()
+            due_crew._tools_menu()  # a second profile open adds nothing
+        finally:
+            due_crew.mw = saved
+        subs = [a.menu() for a in tools.actions() if a.menu()]
+        if len(subs) != 1:
+            raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
+        items = [a.text() or "—" for a in subs[0].actions()]
+        want = ["Open Due Crew", "Friends…", "Squads…", "—", "Make a plan from a deck…",
+                "Follow a plan…", "—", "Settings…"]
+        if items != want:
+            raise RuntimeError(f"tools menu: {items}")
+
+    for label, build in (("tools menu", tools_menu), ("settings", settings), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans)):
