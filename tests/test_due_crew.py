@@ -2050,8 +2050,6 @@ def test_together_v210():
     check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
-    tip = board.tip_html([("Dre <i>", "Ken-tuck-y")])
-    check("tips: under the answer, escaped", "Dre &lt;i&gt;" in tip and "Ken-tuck-y" in tip)
 
     # L3 + tips: cheers carry luck / guid
     check("luck: a line goes out marked", dre.send_cheer("sam", "\U0001F340", "Go get it", luck=True) is True
@@ -2077,12 +2075,10 @@ def test_together_v210():
     check("keeping: the line and the tip are held locally, and each says so",
           w["luck"]["exam"] == exam and w["luck"]["lines"][0]["note"] == "Go"
           and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
-    class Card:
-        def note(self):
-            return types.SimpleNamespace(guid="guid000003")
-    check("tips: on the answer only",
-          "Kentucky" in together.card_will_show("A", Card(), "reviewAnswer")
-          and together.card_will_show("Q", Card(), "reviewQuestion") == "Q")
+    from due_crew import cards as crew_cards
+    chip = crew_cards.chip_view(None, together.tips_for("guid000003"), {})
+    check("tips: 3.2, a chip beside Edit, never inside the card",
+          chip == {"kind": "tip", "text": "\U0001F4A1 Eve’s tip", "cmd": "knowstip"})
     js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
     check("good-luck card: lines go in as text, and Thanks is wired",
           "textContent" in js and "innerHTML" not in js and "duecrew:luckthanks" in js
@@ -3522,6 +3518,100 @@ def test_schedule_morning_v32():
     check("board: my schedule rides the day's first refresh", b["plans"][0]["sched"]["start"] == _day(3))
     check("my schedule: a bad one doesn't take", maya.set_schedule(pid, {"days": [0] * 7, "minutes": 60}) is False)
     del start
+
+
+def _knows_col():
+    """Step 1 (10) with Sub (11), and Other (20). 1: mature and clean;
+    2: mature but missed yesterday; 3: lapsed three times; 4: young, missed
+    today; 5: mature, in Other; 6: mature, in Sub."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, ctype=2, queue=2, ivl=40)
+    fakes.add_card(conn, 2, did=10, ctype=2, queue=2, ivl=40)
+    fakes.add_card(conn, 3, did=10, ctype=2, queue=2, ivl=3, lapses=3)
+    fakes.add_card(conn, 4, did=10, ctype=2, queue=2, ivl=2)
+    fakes.add_card(conn, 5, did=20, ctype=2, queue=2, ivl=90)
+    fakes.add_card(conn, 6, did=11, ctype=2, queue=2, ivl=30)
+    noon = int(datetime.datetime.combine(TODAY, datetime.time(12)).timestamp() * 1000)
+    fakes.add_review(conn, noon - 86400000, ease=1, cid=2)
+    fakes.add_review(conn, noon, ease=1, cid=4)
+    fakes.add_review(conn, noon + 60000, ease=3, time_ms=90000, rtype=0, cid=4)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1", 11: "Step 1::Sub", 20: "Other"})
+    return col
+
+
+def test_who_knows_v32():
+    """3.2: the cards I know and the ones I'm stuck on (in decks I share),
+    sent as changes; who knows mine comes back in the same sync; the chip;
+    an ask; This helped; my log."""
+    from due_crew import cards as K
+    col = _knows_col()
+    known, stuck = K.known_and_stuck(col, [10], fakes.day_cutoff_for(TODAY))
+    check("known: mature, no miss in 30 days, in the deck I share and its subdecks",
+          known == {"guid000001", "guid000006"}, str(known))
+    check("stuck: lapsed twice or more, or missed today; most lapses first",
+          stuck == ["guid000003", "guid000004"], str(stuck))
+    check("known and stuck: nothing without a shared deck", K.known_and_stuck(col, [], 0) == (set(), []))
+    labels = [_day(0)]
+    store = world({"sam": "Sam", "dre": "Dre", "mo": "Mo"},
+                  {"sam": ["dre", "mo"], "dre": ["sam"], "mo": ["sam"]})
+    sam, dre = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre")
+    ok, _g = dre.push(labels, {}, known={"guid000003", "guid000009"})
+    check("knows: the first upload starts from nothing", ok and store.bodies[-1][2]["knows"]["reset"] is True
+          and store.knows == {("dre", "guid000003"), ("dre", "guid000009")})
+    dre.push(labels, {}, known={"guid000003", "guid000010"})
+    check("knows: then only what changed", store.bodies[-1][2]["knows"] == {"add": ["guid000010"], "del": ["guid000009"]})
+    dre.push(labels, {}, known={"guid000003", "guid000010"})
+    check("knows: nothing changed, nothing sent", "knows" not in store.bodies[-1][2])
+    many = {f"g{i:05d}" for i in range(2500)}
+    other = new_client(store, "mo", "Mo")
+    other.push(labels, {}, known=many)
+    other.push(labels, {}, known=many)
+    check("knows: at most 2,000 a sync, the rest at the next",
+          len(store.bodies[-2][2]["knows"]["add"]) == 2000 and len(store.bodies[-1][2]["knows"]["add"]) == 500
+          and sum(1 for u, _g in store.knows if u == "mo") == 2500)
+    dre.send_cheer("sam", "\U0001F4A1", "Loop of Henle", guid="guid000003")
+    sam.push(labels, {}, stuck=["guid000003", "guid000004"])
+    cardsin = sam.session["cards"]
+    check("stuck: who knows it and their tips come back in the same sync",
+          cardsin == {"guid000003": {"knows": ["dre"], "tips": [{"from": "dre", "text": "Loop of Henle", "helped": False}]}},
+          str(cardsin))
+    check("helped: one request, and the session keeps it",
+          sam.tip_helped("guid000003", "dre") and cardsin["guid000003"]["tips"][0]["helped"] is True
+          and ("guid000003", "dre", "sam") in store.helped)
+    names = {"dre": ("Dre Ng", "\U0001F419"), "mo": ("Mo", "")}
+    v = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names)
+    check("chip: who knows it, and Ask", v["text"] == "\U0001F419 Dre and 1 more know this" and v["cmd"] == "knowsask")
+    check("chip: a tip comes first", K.chip_view(cardsin["guid000003"], [], names)["cmd"] == "knowstip")
+    check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1)])
+    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
+    check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
+    sam.fetch_board(labels)  # Dre's tip is read, so a flag on that card may go up again
+    sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
+    doc = sam.week_doc(labels, {})
+    check("ask: rides my week as the guid and my line, never the card's text",
+          doc["tricky"] == [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "q": "Trick?"}])
+    sam.push(labels, {})
+    board_ = dre.fetch_board(labels)
+    check("ask: the crewmate reads it", board_["entries"][1]["tricky"][0]["q"] == "Trick?")
+    check("ask: a card I know is known", K.i_know(col, ["guid000001", "guid000003"]) == {"guid000001"})
+    log = K.log_days(col, 8)
+    check("log: minutes, reviews, new cards and retention, studied days only",
+          log == {_day(-1): [0, 1, 1, 0.0], _day(0): [2, 2, 1, 50.0]}, str(log))
+    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)})
+    check("log: the long first upload marks it sent", sam.session["log_full"] == "sam" and len(store.logs["sam"]) == 18)
+    sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
+    sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
+    check("log: unchanged, not sent again", "log" not in store.bodies[-1][2])
+    got = sam._call("GET", "/log")[1]
+    check("log: mine to read", len(got["days"]) == 19)
+    sam.session["recap"] = {"name": "Step 1", "n": 3, "day": _day(0)}
+    sam.push(labels, {})
+    check("recap: rides my week, and a crewmate sees it",
+          dre.fetch_board(labels)["entries"][1]["recap"] == {"name": "Step 1", "n": 3, "day": _day(0)})
 
 
 def main():

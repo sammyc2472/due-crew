@@ -45,6 +45,7 @@ from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
 from . import account, plan_flow, rooms, together
+from . import cards as crew_cards
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
@@ -128,13 +129,14 @@ def _after_push(pushed, labels, gone=(), gen=None):
 
 
 def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
-                  heatmap=None, squad_row=None, full=False, fetch=None, plans=None):
+                  heatmap=None, squad_row=None, full=False, fetch=None, plans=None, extras=None):
     """Sync (optionally) and fetch, in the background: one request each.
     Main thread only. An upload is never dropped: only pure fetches dedup
     against an in-flight refresh. heatmap: dict to share, "off" to take it
     down, None to leave alone. backfill: last week's studied days. fetch:
     read the board after the upload (None: see _wants_fetch). plans (3.1):
-    progress on the plans I share it on, sent when it changed."""
+    progress on the plans I share it on, sent when it changed. extras
+    (3.2): {known, stuck, log} for the sync, as cards.for_sync gives them."""
     global _fetching
     if not mw.col or not client().signed_in or client().session_dead:
         return  # a refused token can't be retried into working
@@ -185,7 +187,8 @@ def refresh_board(upload_stats=None, backfill=None, shared_decks=None,
                 pushed, gone = cl.push(labels, c, stats=upload_stats, backfill=backfill,
                                        shared_decks=shared_decks, heatmap=heatmap,
                                        squad_row=row, squads=squads,
-                                       version=ADDON_VERSION, clock=clock, plans=plans)
+                                       version=ADDON_VERSION, clock=clock, plans=plans,
+                                       **(extras or {}))
             cl.check_version(labels[0], ADDON_VERSION)  # one real request a day
             if not fetch:
                 mw.taskman.run_on_main(lambda: _after_push(pushed, labels, gone, gen=gen))
@@ -541,13 +544,26 @@ def _on_sync_done(full=False, light=False, fetch=None):
         plan_prog = plan_flow.for_sync()
     except Exception:
         traceback.print_exc()
+    extras = None
+    try:
+        extras = crew_cards.for_sync(c, light=light)  # 3.2: cards I know and I'm stuck on, my log
+    except Exception:
+        traceback.print_exc()
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
-                  heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog)
+                  heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
 
 
 def _on_js(handled, message, context):
     if rooms.swallow(message):
         return (True, None)  # 2.12: no answering under the break
+    if message.startswith("duecrew:knows"):
+        # 3.2: the chip in the reviewer's bottom bar
+        try:
+            parts = message.split(":")
+            crew_cards.on_message(parts[1], parts)
+        except Exception:
+            traceback.print_exc()
+        return (True, None)
     if message.startswith("duecrew:room"):
         # 2.12: study rooms answer from the top bar and the review screen too
         parts = message.split(":")
@@ -939,12 +955,12 @@ gui_hooks.profile_did_open.append(_on_profile_open)
 gui_hooks.profile_will_close.append(_on_profile_close)
 
 
-# 2.10: tips under the answer of the card they're for, and the flag on the
-# reviewer's More menu. Both hooks exist on every Anki the add-on supports.
-gui_hooks.card_will_show.append(together.card_will_show)
-
-
+# 2.10: the flag on the reviewer's More menu. 3.2: a tip no longer goes
+# under the answer; the chip beside Edit shows it, and who knows the card
+# (nothing is drawn inside a card).
 gui_hooks.reviewer_will_show_context_menu.append(together.reviewer_menu)
+gui_hooks.reviewer_did_show_answer.append(crew_cards.on_answer)
+gui_hooks.reviewer_did_show_question.append(crew_cards.on_question)
 
 
 # 3.1: single cards onto a plan's date, from Anki's browser

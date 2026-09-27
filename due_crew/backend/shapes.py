@@ -246,8 +246,49 @@ def clean_tricky(value, today_label=None):
         text = clean_note(t.get("text"), 60)
         if text:
             flag["text"] = text
+        q = clean_note(t.get("q"))
+        if q:
+            flag["q"] = q  # 3.2: an ask, one line to whoever has the card down
         out.append(flag)
     return out[-TRICKY_MAX:]
+
+
+def clean_recap(value, today_label=None):
+    """3.2: a crewmate's last plan week done, {name, n, day}; None when
+    unusable or older than a week."""
+    if not isinstance(value, dict) or not _ISO.fullmatch(str(value.get("day") or "")):
+        return None
+    n = value.get("n")
+    name = clean_note(value.get("name"), 60)
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 200 or not name:
+        return None
+    if today_label:
+        try:
+            if (datetime.date.fromisoformat(today_label) - datetime.date.fromisoformat(value["day"])).days > 6:
+                return None
+        except ValueError:
+            return None
+    return {"name": name, "n": n, "day": value["day"]}
+
+
+def clean_cards(value):
+    """3.2: what a sync says about the cards I'm stuck on: {guid: {knows:
+    [uid], tips: [{from, text, at, helped}]}}."""
+    out = {}
+    if not isinstance(value, dict):
+        return out
+    for guid, v in list(value.items())[:300]:
+        if not isinstance(guid, str) or not guid or len(guid) > GUID_MAX or not isinstance(v, dict):
+            continue
+        knows = [str(u)[:128] for u in v.get("knows") or [] if isinstance(u, str) and u][:5]
+        tips = []
+        for t in v.get("tips") or []:
+            if isinstance(t, dict) and isinstance(t.get("from"), str) and clean_note(t.get("text")):
+                tips.append({"from": t["from"][:128], "text": clean_note(t.get("text")),
+                             "helped": t.get("helped") is True})
+        if knows or tips:
+            out[guid] = {"knows": knows, "tips": tips[:3]}
+    return out
 
 
 def _live_room(value):

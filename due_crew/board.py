@@ -885,10 +885,17 @@ def _tricky_html(tricky):
         text = _html.escape(str(t.get("text") or "a card"))
         deck = _html.escape(str(t.get("deck") or ""))
         cmd = f'tricktip:{t.get("uid", "")}:{int(t.get("index", 0))}'
-        out += (f'<div class="dc-flag"><span>&#129513; <b>{who}</b> finds '
-                f'&ldquo;{text}&rdquo; tricky{" &middot; " + deck if deck else ""}</span>'
+        q = _html.escape(str(t.get("q") or ""))
+        if q and t.get("known"):
+            # 3.2: an ask, on a card I have down
+            say = (f'&#129504; <b>{who}</b> asks about a card you know: &ldquo;{q}&rdquo;'
+                   f'<br><small>&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}</small>')
+        else:
+            say = (f'&#129513; <b>{who}</b> finds &ldquo;{text}&rdquo; tricky{" &middot; " + deck if deck else ""}'
+                   + (f': &ldquo;{q}&rdquo;' if q else ""))
+        out += (f'<div class="dc-flag"><span>{say}</span>'
                 f'<a href="#" title="One line; it shows when the card comes up for them" '
-                f'onclick="{_pycmd(cmd)}">Send a tip</a></div>')
+                f'onclick="{_pycmd(cmd)}">{"Tip" if q and t.get("known") else "Send a tip"}</a></div>')
     return out
 
 
@@ -1637,19 +1644,6 @@ def luck_card_js(name, lines):
         document.body.appendChild(back);
     })();
     """ % (title, items)
-
-
-def tip_html(tips):
-    """2.10: tips crewmates sent on this card, for the bottom of its answer.
-    `tips`: [(name, note)]. Escaped; plain inline styles, since the card's
-    own template owns the page."""
-    if not tips:
-        return ""
-    rows = "".join(
-        f'<div>&#128161; {_html.escape(str(n))}: &ldquo;{_html.escape(str(t))}&rdquo;</div>'
-        for n, t in tips[:3])
-    return ('<div id="dc-tip" style="margin-top:18px;padding-top:8px;font-size:0.8em;'
-            'opacity:0.75;border-top:1px solid rgba(128,128,128,0.35);">' + rows + '</div>')
 
 
 HEAT_LEVELS = ((1, 1), (10, 2), (50, 3), (150, 4))
