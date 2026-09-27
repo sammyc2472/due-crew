@@ -160,6 +160,30 @@ def check(path):
     ok("a date's search is run once, then kept while the notes are the same",
        units[-1]["search"][0] in i5._searches and not i6._searches)
     ok("…and after an edit it finds what the edit changed", len(i6.search_cards("tag:NewTag::Here")) == 1)
+
+    # 3.2's who-knows-it, on two years of answers (400,000): every sync reads it
+    import random
+    from due_crew import cards as C
+    random.seed(2)
+    cut = int(col.sched.day_cutoff)
+    studied = col.find_cards('deck:"AnKing Step Deck"')[:12000]
+    col.db.execute("UPDATE cards SET type = 2, queue = 2, ivl = abs(random()) % 90 + 1, lapses = abs(random()) % 4 "
+                   f"WHERE id IN ({','.join(map(str, studied))})")
+    rid, rows = (cut - 730 * 86400) * 1000, []
+    for _ in range(400000):
+        rid += random.randint(50000, 157000)
+        rows.append((rid, random.choice(studied), -1, random.choice([1, 3, 3, 3, 4]), 10, 5, 2500, 8000, 1))
+    col.db.executemany("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    t = tm(); known, stuck = C.known_and_stuck(col, [did], cut); t_full = tm() - t
+    t = tm(); C.known_and_stuck(col, [did], cut, with_known=False); t_light = tm() - t
+    tree = f"(c.did IN ({did}) OR c.odid IN ({did}))"
+    by_card = set(col.db.list(  # the per-card form it replaced, for the answer
+        f"SELECT DISTINCT n.guid FROM cards c JOIN notes n ON n.id = c.nid WHERE {tree} AND c.type = 2 AND c.queue = 2 "
+        "AND c.ivl >= 21 AND NOT EXISTS (SELECT 1 FROM revlog r WHERE r.cid = c.id AND r.ease = 1 AND r.id >= ?)",
+        (cut - 30 * 86400) * 1000)) - set(stuck)
+    ok("who knows it: the same cards as a card-by-card look", known == by_card and len(stuck) == 300, f"{len(known):,} known")
+    ok("…read in one pass of the recent answers", t_full < 60 and t_light < 20,
+       f"{t_full*1000:.0f} ms a full sync, {t_light*1000:.0f} ms a light one")
     col.close()
 
 
