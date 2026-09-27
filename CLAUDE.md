@@ -270,6 +270,11 @@ add-on.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 
+`tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
+`tools/check_prod.sh` checks the live API and site after the deploy
+(no sign-in, no mail). `docs/go-live.md` is the 3.3.0 go-live: the first
+production deploy of 3.x, with the 2.x import and the rollback.
+
 ## Rules of the road
 
 - Simplicity is the product rule. Friendship framing, never competition —
