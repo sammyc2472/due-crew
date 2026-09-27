@@ -84,8 +84,27 @@ def same_numbers(a, b):
     return a == b
 
 
+def _int(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
 def deck_key(decks):
-    return sorted((str(d.get("name")), d.get("total"), d.get("seen"), d.get("mature")) for d in decks or [])
+    """The decks as the Worker keeps them (validate.ts decks): entries with a
+    sig and a total only, seen and mature capped."""
+    out = []
+    for d in decks or []:
+        if not isinstance(d, dict) or not isinstance(d.get("sig"), list) or not _int(d.get("total")):
+            continue
+        total = d["total"]
+        seen = min(_int(d.get("seen")) or 0, total)
+        name = " ".join(str(d.get("name")).split())[:200] if isinstance(d.get("name"), str) else "?"
+        out.append((name, total, seen, min(_int(d.get("mature")) or 0, seen)))
+    return sorted(out)
+
+
+def emoji_key(e):
+    """An emoji as the Worker keeps it: one, or none."""
+    return e if isinstance(e, str) and 1 <= len(e) <= 16 and not any(c.isalnum() or c == " " for c in e) else ""
 
 
 def main():
@@ -139,7 +158,8 @@ def main():
         if prof is None:
             mark("name", None)
         else:
-            ok = (prof.get("displayName") or "") == (r["name"] or "") and (prof.get("emoji") or "") == (r["emoji"] or "")
+            ok = ((prof.get("displayName") or "").strip()[:60] or (r["name"] or "")) == (r["name"] or "") \
+                and emoji_key(prof.get("emoji")) == (r["emoji"] or "")
             mark("name/emoji", ok, "differ")
             if v3:
                 # 2.x reads a friend's week doc only when their profile says 2.9 or newer
