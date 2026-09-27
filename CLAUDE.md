@@ -250,6 +250,42 @@ add-on.
   open). A plan's link shows the plan signed out (`/plans/public`), and a
   phone can email itself the link (`POST /links/email`, fixed text). The
   "last active" switch is gone.
+- The builder, calmer (mock "Builder, calmer"): one side panel with two
+  tabs (What to cover, the picked day), so never three columns; the pace
+  is one line with a menu; one fill button named for the pace (none when
+  placing by hand); Share holds the code, Add to calendar and co-authors;
+  the plan as text is a view (Text), not a tab; Save is a pill only while
+  something's unsaved (⌘S). The calendar sits in its own card. A plan is
+  one deck and everything under it: two decks go under one parent.
+- E1 cards by ID: a date's `nids` (note ids: all their cards) and `cids`
+  (card ids: that card), pasted in the day's Add cards box or `nids:` in
+  Text; up to 5,000 each a date, inside the plan's 50,000 single cards.
+  Each follower's Anki finds them inside the plan's deck
+  (`DeckIndex.id_cards`); the author's Anki counts them (`"#ids"` in the
+  counts, kept as `idn`). Numbers only. Not C5's `ids`, which are guids.
+  E2 print: a Print view (authors and followers) lays the dates out as a
+  list by week, topics grouped by resource, for printing or a PDF.
+- F1 events: `events: [{id, day, name}]` on the plan (a lecture, a quiz,
+  the exam; they open nothing), and a date's `for` names the one it preps
+  for (a `for` whose event went is dropped by the Worker). The calendar
+  marks the event ("3 days of prep") and its prep days; Fill can aim at an
+  event (finish the day before; the new dates are for it); Text writes
+  `DATE | event | Name` and `for Name`; the calendar feed and the print
+  show them; the add-on's plan card says what today preps for
+  (`plans.prep_for`).
+- G1-G7 a follower's own days (migration 0007): `shift` (my dates run
+  that many days later), a pause's `since`/`until`, and `skipped` (dates
+  that never open for me) live on my follow (`PATCH /plans/{id}/follow`),
+  mine only; the plan never changes and events never move.
+  `plan_flow.mine` gives the add-on my view (`plans.my_doc`); the
+  snapshot and change notes keep reading the plan itself (`_plan_doc`).
+  On the plan card: Open now on the next date (`open_one`), Not today in
+  place of Undo (the undo, then `put_off`: tomorrow's morning opens them),
+  Undo skip, "N new cards from earlier dates waiting · Catch up…" (G5:
+  Anki's today-only deck limit, set each morning while it runs, so
+  nothing to put back). Pause until… (from my Away dates), and the day
+  after it asks: move my dates later by the days away, or open what I
+  missed. The site shows a follower their own progress per date (G6).
 
 ## Releasing
 
@@ -272,8 +308,9 @@ add-on.
 
 `tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
 `tools/check_prod.sh` checks the live API and site after the deploy
-(no sign-in, no mail). `docs/go-live.md` is the 3.3.0 go-live: the first
-production deploy of 3.x, with the 2.x import and the rollback.
+(no sign-in, no mail). The tags' deploy job stands down until the GitHub
+secrets exist, so production is deployed by hand from `worker/`: the
+migrations, the API, then the site (`docs/go-live.md`, 2b).
 
 ## Rules of the road
 

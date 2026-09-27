@@ -32,6 +32,11 @@ class MakePlanDialog(QDialog):
             self.deck.addItem(name, did)
         form.addRow("Deck", self.deck)
         root.addLayout(form)
+        # a plan is one deck and everything under it
+        two = QLabel("To plan two decks, put them under one parent deck in Anki.")
+        two.setWordWrap(True)
+        two.setStyleSheet("font-size: 12px;")
+        root.addWidget(two)
 
         self.found = QLabel("")
         self.found.setWordWrap(True)

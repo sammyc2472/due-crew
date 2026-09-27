@@ -1,7 +1,9 @@
 // The UI review's server side: a plan's link before signing in (C1), a
 // phone emailing itself the link (C2), and a code looked up before it's
 // added (H1).
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import worker from "../src/index";
 import { api, befriend, mailbox, person } from "./helpers";
 
 const SITE = { "x-due-crew": "1" };
@@ -60,5 +62,74 @@ describe("H1: a code, looked up before it's added", () => {
     expect((await maya.call("GET", `/codes/${code}`)).body.added).toBe(true);
     expect((await dre.call("GET", `/codes/${code}`)).body.mine).toBe(true);
     expect(await maya.status("GET", "/codes/ZZZZZZ")).toBe(404);
+  });
+});
+
+describe("E1: note and card ids pasted onto a date", () => {
+  it("whole positive numbers, deduped, up to 5,000 a date; the author's Anki counts them; the public page counts them", async () => {
+    const { priya, p } = await plan();
+    const base = p.doc.units;
+    const put = (units: unknown[], version: number) => priya.call("PUT", `/plans/${p.id}`, { version, doc: { deck: "Step 1", units } });
+    const ok = await put([{ ...base[0], nids: [1628174531284, 1628174531284, 1628174531301], cids: [] }, base[1]], p.version);
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.units[0].nids).toEqual([1628174531284, 1628174531301]);
+    expect(ok.body.doc.units[0].cids).toBeUndefined();
+    for (const bad of [[0], [-3], [1.5], ["123"], Array.from({ length: 5001 }, (_, i) => i + 1)]) {
+      expect((await put([{ ...base[0], nids: bad }, base[1]], ok.body.version)).status).toBe(400);
+    }
+    // the author's Anki: "#ids" is how many cards they found
+    const ids = await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { [base[0].id]: { "#ids": 3 } } });
+    expect(ids.status).toBe(200);
+    const after = await priya.call("GET", `/plans/${p.id}`);
+    expect(after.body.doc.units[0].idn).toBe(3);
+    const pub = await api("GET", `/plans/public?code=${p.code}`);
+    expect(pub.body.units[0].n).toBe(84 + 3);
+    // the lean copy the author's Anki counts from carries them
+    const board = await priya.call("GET", "/board?decks=1");
+    expect(board.body.authored[0].doc.units.find((u: { id: string }) => u.id === base[0].id).nids).toEqual([1628174531284, 1628174531301]);
+  });
+});
+
+describe("F1: events, and the dates that prep for them", () => {
+  it("named days a date can be for; a for whose event went is dropped; the calendar feed shows them", async () => {
+    const { priya, p } = await plan();
+    const [a, b] = p.doc.units;
+    const events = [{ id: "quiz1", day: "2026-10-09", name: "Micro quiz" }];
+    const ok = await priya.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", events, units: [{ ...a, for: "quiz1" }, { ...b, for: "quiz1" }] } });
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.events).toEqual(events);
+    expect(ok.body.doc.units.map((u: { for?: string }) => u.for)).toEqual(["quiz1", "quiz1"]);
+    const gone = await priya.call("PUT", `/plans/${p.id}`, { version: ok.body.version, doc: { deck: "Step 1", units: [{ ...a, for: "quiz1" }, b] } });
+    expect(gone.status).toBe(200);
+    expect(gone.body.doc.units[0].for).toBeUndefined();
+    for (const bad of [[{ id: "x", day: "soon", name: "Quiz" }], [{ id: "x", day: "2026-10-09", name: "" }],
+                       [{ id: "x", day: "2026-10-09", name: "A" }, { id: "x", day: "2026-10-10", name: "B" }]]) {
+      expect((await priya.call("PUT", `/plans/${p.id}`, { version: gone.body.version, doc: { deck: "Step 1", events: bad, units: [a, b] } })).status).toBe(400);
+    }
+    const again = await priya.call("PUT", `/plans/${p.id}`, { version: gone.body.version, doc: { deck: "Step 1", events, units: [{ ...a, for: "quiz1" }, { ...b, for: "quiz1" }] } });
+    expect(again.status).toBe(200);
+    const feed = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
+    expect(await feed.text()).toContain("SUMMARY:Micro quiz · 2 days of prep");
+  });
+});
+
+describe("G3, G4: a follower's own days", () => {
+  it("shift, a pause's days and skips are mine, kept on the server, and come back on the board and the page", async () => {
+    const { p } = await plan();
+    const maya = await person("maya", "Maya");
+    expect((await maya.call("POST", "/plans/follow", { code: p.code })).status).toBe(200);
+    const [a] = p.doc.units;
+    const ok = await maya.call("PATCH", `/plans/${p.id}/follow`, { paused: true, since: "2026-10-12", until: "2026-10-18", shift: 5, skipped: [a.id, a.id] });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ paused: true, shift: 5, until: "2026-10-18", since: "2026-10-12", skipped: [a.id] });
+    for (const bad of [{ shift: -1 }, { shift: 400 }, { until: "soon" }, { skipped: ["NOT OK"] }, { skipped: "x" }, { other: 1 }]) {
+      expect((await maya.call("PATCH", `/plans/${p.id}/follow`, bad)).status).toBe(400);
+    }
+    const board = await maya.call("GET", "/board?decks=1");
+    expect(board.body.plans[0]).toMatchObject({ shift: 5, until: "2026-10-18", since: "2026-10-12", skipped: [a.id] });
+    const page = await maya.call("GET", `/plans/${p.id}`);
+    expect(page.body.following).toMatchObject({ shift: 5, skipped: [a.id] });
+    const back = await maya.call("PATCH", `/plans/${p.id}/follow`, { paused: false, until: null, since: null, skipped: [] });
+    expect(back.body).toMatchObject({ paused: false, until: null, since: null, skipped: [], shift: 5 });
   });
 });

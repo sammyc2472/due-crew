@@ -70,7 +70,7 @@ window.addEventListener("popstate", () => {
 });
 // a menu (Add to calendar) closes when you click anywhere else
 document.addEventListener("click", (e) => {
-  for (const d of document.querySelectorAll("details.calmenu[open]")) if (!d.contains(e.target)) d.open = false;
+  for (const d of document.querySelectorAll("details.calmenu[open], details.sharemenu[open]")) if (!d.contains(e.target)) d.open = false;
 });
 
 const link = (href, text, cls) => h("a", { href, "data-go": "", class: cls }, text);

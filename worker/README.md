@@ -113,6 +113,17 @@ The UI review: `GET /plans/public?code=` (no sign-in, code plans only) is
 what a plan's link shows before signing in: `{name, ownerName, line,
 deck, followers, units: [{name, opens, due?, n}]}`, days and counts, never
 what's in them (300 an hour an address).
+E1: a date may carry `nids` and `cids` (positive whole numbers, up to 5,000
+each), counted into the plan's 50,000 single cards; `PUT /plans/{id}/ids`
+takes `counts: {unitId: {"#ids": n}}`, kept as the date's `idn`, and the
+lean `authored` docs carry them.
+F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
+`for` (an event's id; one naming no event is dropped). The calendar feed
+has each event as its own day, with how many dates prep for it.
+G3, G4 (migration 0007): `PATCH /plans/{id}/follow` also takes `shift`
+(0-365 days my dates run later), `until` and `since` (a pause's last and
+first day, or null) and `skipped` (unit ids, up to 200). They're mine
+only, on the board's plans and on the plan's `following`.
 
 ### Squads
 

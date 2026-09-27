@@ -458,8 +458,14 @@ def _clean_unit(u):
     ids = [g for g in u.get("ids") or [] if isinstance(g, str) and g][:50000]
     if ids:
         out["ids"] = ids  # 3.3, C5: the note ids behind its tags, from the author's Anki
+    for k in ("nids", "cids"):  # E1: note or card ids pasted onto the date
+        got = [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
+        if got:
+            out[k] = got
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
+    if isinstance(u.get("for"), str) and u["for"]:
+        out["for"] = u["for"][:12]  # F1: the event it preps for
     return out
 
 
@@ -494,6 +500,11 @@ def clean_plan_doc(doc):
                if isinstance(r, dict) and _ISO.fullmatch(str(r.get("day") or "")) and r.get("from") in ids and r.get("to") in ids]
     if reviews:
         out["reviews"] = reviews[:60]  # 3.3, C4: review days
+    events = [{"id": str(e["id"])[:12], "day": e["day"], "name": clean_note(e.get("name"), 60) or "?"}
+              for e in doc.get("events") or []
+              if isinstance(e, dict) and e.get("id") and _ISO.fullmatch(str(e.get("day") or ""))][:200]
+    if events:
+        out["events"] = sorted(events, key=lambda e: e["day"])  # F1: named days the dates prep for
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -518,7 +529,9 @@ def clean_authored(a):
     d = a["doc"]
     units = [{"id": str(u["id"]), "tags": [t for t in u.get("tags") or [] if isinstance(t, str)],
               "decks": [x for x in u.get("decks") or [] if isinstance(x, str)],
-              "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10]}  # 3.4, D1
+              "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10],  # 3.4, D1
+              **{k: [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
+                 for k in ("nids", "cids") if u.get(k)}}  # E1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 
@@ -541,7 +554,19 @@ def clean_plan(p):
             "code": normalize_code(p.get("code")) if p.get("code") else "",
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
-            "early": _early(p.get("early", following.get("early")))}
+            "early": _early(p.get("early", following.get("early"))),
+            **clean_days(p if "shift" in p or "skipped" in p else following)}
+
+
+def clean_days(v):
+    """G3, G4: my follow's own days: how many days my dates run later than
+    the plan's, a pause's first and last day, the dates I skip."""
+    v = v if isinstance(v, dict) else {}
+    shift = v.get("shift")
+    return {"shift": shift if isinstance(shift, int) and not isinstance(shift, bool) and 0 <= shift <= 365 else 0,
+            "until": v["until"] if _ISO.fullmatch(str(v.get("until") or "")) else None,
+            "since": v["since"] if _ISO.fullmatch(str(v.get("since") or "")) else None,
+            "skipped": [u for u in v.get("skipped") or [] if isinstance(u, str) and u][:200]}
 
 
 def clean_offer(o):

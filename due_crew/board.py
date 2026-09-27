@@ -621,12 +621,14 @@ def _css(cfg):
     #due-crew .dc-pc .pk span {{ font-size: 11px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pk .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pk .acts a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; }}
-    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px 36px;
+    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px 58px;
       gap: 10px; align-items: center; font-size: 12px; padding: 3px 0; }}
     #due-crew .dc-pc .u3 .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     #due-crew .dc-pc .u3.hd {{ color: var(--dc-muted); font-size: 10.5px; font-weight: 700; }}
     #due-crew .dc-pc .u3.now .u {{ font-weight: 700; }}
     #due-crew .dc-pc .u3.later {{ color: var(--dc-faded); }}
+    #due-crew .dc-pc .u3.skip {{ color: var(--dc-faded); }}
+    #due-crew .dc-pc .u3.skip .u {{ text-decoration: line-through; }}
     #due-crew .dc-pc .bar {{ display: block; height: 8px; background: var(--dc-well); border-radius: 2px;
       overflow: hidden; position: relative; }}
     #due-crew .dc-pc .bar i {{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); }}
@@ -987,11 +989,38 @@ def _plan_card_html(card):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
     out += _session_html(card, pid)
+    if card.get("put_off"):
+        # G2: what Not today put off
+        names = [str(n) for n in card["put_off"]]
+        what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        out += (f'<div class="pn"><span>{what} open{"s" if len(names) == 1 else ""} again tomorrow morning.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("planputback:" + pid)}">Open it now</a></span></div>')
+    if card.get("catch"):
+        c = card["catch"]
+        out += (f'<div class="pn"><span>Catching up: {int(c.get("extra") or 0):,} more new a day, to {e(str(c.get("until") or ""))}.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("plancatchstop:" + pid)}">Stop</a></span></div>')
+    elif int(card.get("waiting") or 0):
+        # G5: new cards from earlier dates, waiting; catching up is optional
+        w = int(card["waiting"])
+        out += (f'<div class="pn"><span><b>{w:,}</b> new card{"s" if w != 1 else ""} from earlier dates waiting.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></span></div>')
+    pf = card.get("prep")
+    if pf:
+        # F1: what today's studying leads up to (the author's names: escaped)
+        left = int(pf.get("left") or 0)
+        what = (f'<b>{e(str(pf.get("name") or "?"))}</b> is today' if pf.get("today")
+                else f'For <b>{e(str(pf.get("name") or "?"))}</b> on {e(str(pf.get("when") or ""))}'
+                + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else ""))
+        out += f'<div class="pn"><span>{what}</span></div>'
     rows = ""
     for r in card.get("rows") or []:
         name = f'<span class="u">{e(str(r.get("name") or "?"))}</span>'
-        if r.get("state") == "later":
-            rows += f'<div class="u3 later">{name}<span></span><span class="n">{e(str(r.get("n") or ""))}</span><span></span></div>'
+        if r.get("state") in ("later", "skip"):
+            # G1: the next date opens now on a click; G3: a skipped date comes back
+            cmd = ("plannow:" if r["state"] == "later" else "planunskip:") + pid + ":" + str(r.get("uid") or "")
+            act = (f'<a href="#" onclick="{_pycmd(cmd)}">{"Open now" if r["state"] == "later" else "Undo skip"}</a>'
+                   if r.get("uid") else "<span></span>")
+            rows += f'<div class="u3 {r["state"]}">{name}<span></span><span class="n">{e(str(r.get("n") or ""))}</span>{act}</div>'
             continue
         s_, t = r.get("seen") or [0, 0]
         mine = ('<span class="miss">not in your copy</span>' if r.get("missing")
@@ -1049,7 +1078,7 @@ def _session_html(card, pid):
         bits.append(f'opened {what} this morning ({n:,} card{"s" if n != 1 else ""}'
                     + (f', {early} day{"s" if early != 1 else ""} early)' if early else ")"))
         if op.get("undo"):
-            acts.append(f'<a href="#" title="Anki&rsquo;s Edit › Undo" onclick="{_pycmd("planundo")}">Undo</a>')
+            acts.append(f'<a href="#" title="Close them again; they open tomorrow morning" onclick="{_pycmd("plannottoday")}">Not today</a>')
     if s and kind == "study" and not ask:
         acts.append(f'<a href="#" onclick="{_pycmd("planstudy:" + pid)}">Study now</a>')
     if bits:

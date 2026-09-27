@@ -895,7 +895,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -913,7 +913,7 @@ class FakeWorker:
         p["version"] += 1
 
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -944,6 +944,18 @@ class FakeWorker:
                 nu["sn"] = dict(u["sn"])
             if u.get("ids"):
                 nu["ids"] = list(dict.fromkeys(u["ids"]))
+            for k in ("nids", "cids"):  # E1
+                got = u.get(k)
+                if got is None:
+                    continue
+                if not isinstance(got, list) or len(got) > 5000 or not all(_is_int(x, 1, 2 ** 53) for x in got):
+                    raise Bad(400, "plan")
+                if got:
+                    nu[k] = list(dict.fromkeys(got))
+            if u.get("idn") is not None and (nu.get("nids") or nu.get("cids")):
+                nu["idn"] = u["idn"]
+            if u.get("for"):
+                nu["for"] = u["for"]  # F1
             if u.get("even"):
                 if u["even"] is not True or not u.get("due") or u["due"] == u["opens"]:
                     raise Bad(400, "plan")
@@ -963,6 +975,16 @@ class FakeWorker:
         doc = {"deck": v["deck"], "units": out}
         if v.get("exam"):
             doc["exam"] = v["exam"]
+        evs = v.get("events") or []  # F1
+        if len(evs) > 200 or not all(isinstance(e, dict) and set(e) <= {"id", "day", "name"} and e.get("id")
+                                     and DATE_RE.fullmatch(str(e.get("day") or "")) and str(e.get("name") or "").strip() for e in evs):
+            raise Bad(400, "plan")
+        if evs:
+            doc["events"] = sorted((dict(e) for e in evs), key=lambda e: e["day"])
+        ev_ids = {e["id"] for e in evs}
+        for u in out:
+            if u.get("for") and u["for"] not in ev_ids:
+                del u["for"]
         if v.get("end"):
             doc["end"] = v["end"]
         if v.get("reviews"):
@@ -1074,8 +1096,12 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched", "early"} or (
-                    "early" in body and not _is_int(body["early"], 0, 7)):
+            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped"} or (
+                    "early" in body and not _is_int(body["early"], 0, 7)) or (
+                    "shift" in body and not _is_int(body["shift"], 0, 365)) or any(
+                    body.get(k) is not None and not DATE_RE.fullmatch(str(body[k])) for k in ("until", "since") if k in body) or (
+                    "skipped" in body and not (isinstance(body["skipped"], list) and len(body["skipped"]) <= 200
+                                               and all(isinstance(u, str) and u for u in body["skipped"]))):
                 raise Bad(400, "follow")
             f = self.follows.get((pid, me))
             if not f:
@@ -1089,7 +1115,15 @@ class FakeWorker:
                 if not share:
                     f["progress"] = None  # sharing off clears what I shared
                 self._count("plan_follows")
-            return 200, {"share": share, "paused": paused, "sched": sched, "early": early}
+            for k in ("shift", "until", "since"):  # G3, G4: my own days
+                if k in body and body[k] != f.get(k):
+                    f[k] = body[k]
+                    self._count("plan_follows")
+            if "skipped" in body and list(dict.fromkeys(body["skipped"])) != f.get("skipped", []):
+                f["skipped"] = list(dict.fromkeys(body["skipped"]))
+                self._count("plan_follows")
+            return 200, {"share": share, "paused": paused, "sched": sched, "early": early,
+                         "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", [])}
         if rest[1:] == ["ids"] and method == "PUT":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1100,6 +1134,8 @@ class FakeWorker:
                     sn = {q: n for q, n in v.items() if q in (u.get("search") or [])}
                     if sn:
                         u["sn"] = dict(u.get("sn") or {}, **sn)
+                    if "#ids" in v and (u.get("nids") or u.get("cids")):
+                        u["idn"] = v["#ids"]  # E1
             for uid, (tags, decks, ids) in (body.get("units") or {}).items():
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and u["tags"] == tags and u["decks"] == decks:
@@ -1197,6 +1233,7 @@ class FakeWorker:
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
                           "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
+                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "followers": len(rows), "crewDone": done})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
@@ -1204,8 +1241,9 @@ class FakeWorker:
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
-            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}))
-            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search")]}}
+            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
+                 **{k: u[k] for k in ("nids", "cids") if u.get(k)})
+            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")]}}
             for pid, p in sorted(self.plans.items()) if p["owner"] == me]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 

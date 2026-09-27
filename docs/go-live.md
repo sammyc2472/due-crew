@@ -1,10 +1,14 @@
 # Going live: 3.3.0
 
-The v3.0.0 tag's deploy job stood down ("Cloudflare isn't set up"), so this
-is the first production deploy of 3.x. It takes everyone from 2.x to 3.3.0
-in one step: D1 migrations 0001–0006, the API at `api.duecrew.com`, the
-site at `duecrew.com`, and the add-on on AnkiWeb. Commands run from the
-repo root unless they say `cd worker`.
+Production already runs 3.x: the API at `api.duecrew.com` and the site at
+`duecrew.com`, deployed by hand from Sam's Mac. The tags' deploy job has
+always stood down, because the GitHub secrets (§0, `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID`) aren't set. So a tag deploys nothing: deploy
+by hand (step 2b). The 2.x accounts were imported at 3.0 (`ADMIN_TOKEN` is
+gone, as the import leaves it), and the bridge's `FIREBASE_SA` is set.
+
+What 3.3.0 adds: migration 0006, the API, the site, and the add-on on
+AnkiWeb. Commands run from the repo root unless they say `cd worker`.
 
 ## 0. One-time setup (`docs/cloudflare-setup.md`)
 
@@ -46,11 +50,19 @@ tools/release.sh           # the checks and due_crew.ankiaddon; nothing is pushe
 tools/release.sh --tag     # the same, then tags v3.3.0 and pushes the tag
 ```
 
-The tag's Actions run tests everything again, then migrates D1, deploys
-the API, checks that `/version` answers, and deploys the site. Watch it
-under Actions; the deploy job is last.
+Until the GitHub secrets exist, the tag's deploy job stands down. Deploy by hand:
 
-## 3. Bring the 2.x accounts over (right after the deploy)
+### 2b. By hand, from `worker/`
+
+```
+npx wrangler d1 migrations apply due-crew --remote --env=""
+npx wrangler deploy --env=""
+npx wrangler deploy --config ../site/wrangler.toml
+```
+
+The migration only adds tables, so the running API is fine before its deploy.
+
+## 3. The 2.x accounts (done at 3.0; only for a fresh setup)
 
 Until this runs, someone who signs in on the site with a 2.x email gets a
 brand-new account instead of their old one, so do it straight away:

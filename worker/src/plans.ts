@@ -12,9 +12,11 @@ import { Env, HttpError, clientIp, json, nowSec, readJson } from "./util";
 
 export const PLAN_CODE_LEN = 8;
 const UNITS_MAX = 200;
+const EVENTS_MAX = 200;  // F1: named days (a lecture, a quiz, the exam) the dates prep for
 const CARDS_MAX = 50000;  // 3.3: a class lead's own lecture tags, for a year
 const IDS_MAX = 50000;    // 3.3, C5: note ids kept behind a plan's tags and subdecks
 const SEARCH_MAX = 10;
+const IDLIST_MAX = 5000;  // E1: note or card ids pasted onto one date
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
 export const PLAN_BODY_MAX = 1600 * 1024;
@@ -55,6 +57,14 @@ function path(v: unknown): string {
   return v;
 }
 
+/** A date's new cards as far as the server knows: its tags' and subdecks'
+ *  count, single cards, what its searches and pasted ids found. */
+function unitCount(u: Obj): number {
+  return ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
+    + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0)
+    + ((u.idn as number | undefined) ?? (((u.nids as unknown[]) || []).length + ((u.cids as unknown[]) || []).length));
+}
+
 function cardRef(v: unknown): [string, number] {
   if (!Array.isArray(v) || v.length !== 2 || !V.isStr(v[0], V.GUID_MAX, 1) || !V.isInt(v[1], 0, 1000)) throw V.bad("plan");
   return [v[0], v[1]];
@@ -62,7 +72,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -115,6 +125,24 @@ function unit(v: unknown): Obj {
   if (!Array.isArray(cards)) throw V.bad("plan");
   const seen = new Set<string>();
   out.cards = cards.map(cardRef).filter(([g, o]) => !seen.has(`${g}:${o}`) && seen.add(`${g}:${o}`));
+  // E1: note ids and card ids pasted onto the date, run in each follower's
+  // Anki inside the plan's deck; numbers only, and `idn` how many cards they
+  // found in the author's Anki
+  for (const k of ["nids", "cids"]) {
+    const a = v[k];
+    if (a === undefined || a === null) continue;
+    if (!Array.isArray(a) || a.length > IDLIST_MAX || !a.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) throw V.bad("plan");
+    if (a.length) out[k] = [...new Set(a as number[])];
+  }
+  // F1: the event this date preps for, by its id
+  if (v.for !== undefined && v.for !== null) {
+    if (!V.isStr(v.for, 12) || !UNIT_ID.test(v.for)) throw V.bad("plan");
+    out.for = v.for;
+  }
+  if (v.idn !== undefined && v.idn !== null) {
+    if (!V.isInt(v.idn, 0, 1_000_000)) throw V.bad("plan");
+    if (out.nids || out.cids) out.idn = v.idn;
+  }
   return out;
 }
 
@@ -158,7 +186,7 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
@@ -179,7 +207,8 @@ export function planDoc(v: unknown): Obj {
   if (!Array.isArray(v.units) || v.units.length > UNITS_MAX) throw V.bad("plan");
   const units = v.units.map(unit);
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
-  if (units.reduce((n, u) => n + (u.cards as unknown[]).length, 0) > CARDS_MAX) throw V.bad("plan");
+  const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0);
+  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) > CARDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (v.reviews !== undefined && v.reviews !== null) {
     // 3.3, C4: a review day: that morning, a filtered deck of the dates from `from` to `to`
@@ -192,6 +221,23 @@ export function planDoc(v: unknown): Obj {
     });
     if (rs.length) out.reviews = rs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
   }
+  // F1: events: a name on a day; a date's `for` names one (a `for` whose
+  // event went, in a merge, is dropped rather than refused)
+  const evIds = new Set<string>();
+  if (v.events !== undefined && v.events !== null) {
+    if (!Array.isArray(v.events) || v.events.length > EVENTS_MAX) throw V.bad("plan");
+    const evs = v.events.map((e) => {
+      if (!V.isObj(e) || Object.keys(e).some((k) => !["id", "day", "name"].includes(k)) || !V.isStr(e.id, 12) || !UNIT_ID.test(e.id as string)
+          || !V.isDate(e.day)) throw V.bad("plan");
+      const name = V.displayName(e.name);
+      if (!name) throw V.bad("plan");
+      if (evIds.has(e.id as string)) throw V.bad("plan");
+      evIds.add(e.id as string);
+      return { id: e.id, day: e.day, name };
+    });
+    if (evs.length) out.events = evs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
+  }
+  for (const u of units) if (u.for && !evIds.has(u.for as string)) delete u.for;
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
   if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");
@@ -233,9 +279,17 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
   return !!squad && !!(await env.DB.prepare("SELECT 1 FROM members WHERE squad = ? AND uid = ?").bind(squad, uid).first());
 }
 
+// a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped";
+
 async function following(env: Env, plan: string, uid: string) {
-  return env.DB.prepare("SELECT share, paused, sched, progress, early FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
-    .first<{ share: number; paused: number; sched: string | null; progress: string | null; early: number }>();
+  return env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(plan, uid).first<Follow>();
+}
+
+/** My follow's own days, as the add-on and the site read them. */
+function followDays(f: { shift?: number | null; pause_until?: string | null; pause_since?: string | null; skipped?: string | null }) {
+  return { shift: f.shift ?? 0, until: f.pause_until ?? null, since: f.pause_since ?? null,
+    skipped: f.skipped ? JSON.parse(f.skipped) as string[] : [] };
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -271,7 +325,8 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
   return p;
 }
 
-type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number };
+type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
+  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null };
 type Editor = { uid: string; name: string; emoji: string };
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
@@ -289,7 +344,7 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
     ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") ? { code: p.code } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
-                           progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
+                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f) } } : {}),
   };
 }
 
@@ -300,7 +355,7 @@ const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
 
 async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
-    env.DB.prepare("SELECT share, paused, sched, progress, early FROM plan_follows WHERE plan = ? AND uid = ?").bind(p.id, uid),
+    env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
     env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id),
     env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
     env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
@@ -492,6 +547,8 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     const qs = (u.search as string[]) || [];
     const sn: Obj = { ...((u.sn as Obj) || {}) };
     for (const [q, n] of Object.entries(v)) {
+      // E1: "#ids" is how many cards the date's pasted ids found
+      if (q === "#ids") { if ((u.nids || u.cids) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -686,7 +743,7 @@ export async function ics(req: Request, env: Env): Promise<Response> {
   await limitOrThrow(env, `ics:ip:${clientIp(req)}`, 1000, 3600);
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
-  const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[] };
+  const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[]; events?: { id: string; day: string; name: string }[] };
   const stamp = new Date(p.updated_at * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const link = `https://duecrew.com/p/${p.code}`;
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Due Crew//Plans//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
@@ -696,10 +753,14 @@ export async function ics(req: Request, env: Env): Promise<Response> {
     `SUMMARY:${icsText(summary)}`, `DESCRIPTION:${icsText(p.name)}`, `URL:${link}`, "TRANSP:TRANSPARENT", "END:VEVENT");
   const byId = new Map(doc.units.map((u) => [u.id as string, u]));
   for (const u of doc.units) {
-    const n = ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
-      + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+    const n = unitCount(u);
     const last = u.even && u.due ? (u.due as string) : (u.opens as string);
     event(u.id as string, u.opens as string, dayAfter(last), `${u.name}${n ? ` · ${n.toLocaleString("en-US")} new` : ""}`);
+  }
+  // F1: an event is its own day, with how many dates prep for it
+  for (const ev of doc.events || []) {
+    const prep = doc.units.filter((u) => u.for === ev.id).length;
+    event(`e${ev.id}`, ev.day, dayAfter(ev.day), `${ev.name}${prep ? ` · ${prep} day${prep === 1 ? "" : "s"} of prep` : ""}`);
   }
   for (const r of doc.reviews || []) {
     const a = byId.get(r.from), b = byId.get(r.to);
@@ -727,8 +788,7 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   ).bind(code).first<{ id: string; name: string; line: string; audience: string; doc: string; owner_name: string | null; followers: number }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
   const doc = JSON.parse(p.doc) as { deck: string; units: Obj[] };
-  const n = (u: Obj) => ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
-    + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+  const n = unitCount;
   return json({
     name: p.name, ownerName: p.owner_name || "?", line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
@@ -761,11 +821,17 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   return json(await view(env, p, s.uid));
 }
 
-/** PATCH /plans/{id}/follow {share?, paused?, sched?}. */
+/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?}.
+ *  G3, G4: my own days: how many days my dates run later than the plan's
+ *  (0-365), a pause's first and last day, the dates I skip (unit ids). */
 export async function patchFollow(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early"].includes(k)) throw V.bad("follow");
+  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped"].includes(k)) throw V.bad("follow");
   if (body.early !== undefined && !V.isInt(body.early, 0, 7)) throw V.bad("follow");
+  if (body.shift !== undefined && !V.isInt(body.shift, 0, 365)) throw V.bad("follow");
+  for (const k of ["until", "since"]) if (body[k] !== undefined && body[k] !== null && !V.isDate(body[k])) throw V.bad("follow");
+  if (body.skipped !== undefined && (!Array.isArray(body.skipped) || body.skipped.length > UNITS_MAX
+      || !body.skipped.every((u) => typeof u === "string" && UNIT_ID.test(u)))) throw V.bad("follow");
   const f = await following(env, id, s.uid);
   if (!f) throw new HttpError(404, "not_following");
   const share = typeof body.share === "boolean" ? (body.share ? 1 : 0) : f.share;
@@ -773,12 +839,19 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
   const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
   const sj = sched === undefined ? f.sched : sched === null ? null : JSON.stringify(sched);
   const early = body.early !== undefined ? body.early as number : f.early ?? 0;
-  if (share !== f.share || paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0)) {
+  const shift = body.shift !== undefined ? body.shift as number : f.shift ?? 0;
+  const until = body.until !== undefined ? (body.until as string | null) : f.pause_until;
+  const since = body.since !== undefined ? (body.since as string | null) : f.pause_since;
+  const skipped = body.skipped !== undefined ? ((body.skipped as string[]).length ? JSON.stringify([...new Set(body.skipped as string[])]) : null) : f.skipped;
+  if (share !== f.share || paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0) || shift !== (f.shift ?? 0)
+      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped) {
     await env.DB.prepare(
-      `UPDATE plan_follows SET share = ?, paused = ?, sched = ?, early = ?${share ? "" : ", progress = NULL"} WHERE plan = ? AND uid = ?`,
-    ).bind(share, paused, sj, early, id, s.uid).run();
+      `UPDATE plan_follows SET share = ?, paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?${share ? "" : ", progress = NULL"}
+        WHERE plan = ? AND uid = ?`,
+    ).bind(share, paused, sj, early, shift, until, since, skipped, id, s.uid).run();
   }
-  return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early });
+  return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early,
+    ...followDays({ shift, pause_until: until, pause_since: since, skipped }) });
 }
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
@@ -804,7 +877,7 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   if (!ids.length) return json({ plans: [] });
   const inIds = ids.map(() => "?").join(",");
   const [fs, ns, eds, sq] = await Promise.all([
-    env.DB.prepare(`SELECT plan, share, paused, sched, progress, early FROM plan_follows WHERE uid = ?`).bind(s.uid)
+    env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
     env.DB.prepare(`SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${inIds}) GROUP BY plan`).bind(...ids)
       .all<{ plan: string; n: number }>(),
@@ -881,7 +954,8 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
  *  offered to my squads that I don't follow yet. */
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, f.sched, f.early, u.name AS owner_name
+    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, f.sched, f.early,
+            f.shift, f.pause_until, f.pause_since, f.skipped, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
             OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
@@ -914,19 +988,21 @@ export async function forBoard(env: Env, uid: string) {
   const authored = await env.DB.prepare(
     `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
-                      'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search')))
+                      'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
+                      'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
-                    + coalesce(json_array_length(x.value, '$.search'), 0) > 0) AS units
+                    + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
+                    + coalesce(json_array_length(x.value, '$.cids'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
   ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
   const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search ? u : { id: u.id, tags: u.tags, decks: u.decks })) });
+    .map((u) => (u.search || u.nids || u.cids ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
-      sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0,
+      sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
   };

@@ -326,6 +326,11 @@ def main(out):
         shoot(dlg, os.path.join(out, "plan-follow.png"))
         shoot(SwapDialog(None, ("Step1", "Step1_v11"), 1944), os.path.join(out, "plan-swap.png"))
         shoot(CatchUpDialog(None, 2, 61, {"opens": day(6)}), os.path.join(out, "plan-resume.png"))
+        # G4, G7: a follower's own days
+        from due_crew.ui.days_dialog import BackDialog, PauseDialog, ShiftDialog
+        shoot(PauseDialog(None, "MS2 <Micro> block", day(0), day(6), from_away=True), os.path.join(out, "plan-pause.png"))
+        shoot(BackDialog(None, 4, 5, ("Micro quiz", "Thu 15 Oct")), os.path.join(out, "plan-back.png"))
+        shoot(ShiftDialog(None, "MS2 Micro block", 3), os.path.join(out, "plan-shift.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat())
         settle()
         if dlg.plan.count() != 1:

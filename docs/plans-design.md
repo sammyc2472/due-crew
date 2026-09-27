@@ -379,3 +379,60 @@ Signed-off mock "Plans 3.4" (D1, D2).
   authors and code-plan followers, and the shared link's page): Google
   Calendar (subscribe by URL), Apple Calendar or Outlook (`webcal:`), or
   the link. Followers of a code plan now see its code.
+
+### Cards by ID, and printing (E1, E2)
+
+- A date can hold note ids (`nids`: every card of each note) and card ids
+  (`cids`: that card), pasted as a list in the day's Add cards box (a
+  spreadsheet column, or ids with commas or spaces) or as `nids:1,2` in
+  Text. Up to 5,000 of each a date, counted into the plan's 50,000 single
+  cards. They're numbers, so they work wherever the deck is the same (an
+  AnKing copy, a class deck imported from one file); a follower missing
+  some gets the rest. Each follower's Anki finds them inside the plan's
+  deck; the author's Anki counts them at its next refresh (`"#ids"`, kept
+  as `idn`), as it does a pasted search. They are not C5's `ids` (guids
+  behind a date's tags).
+- Print (a view beside Month, Week, List and Text, for authors and
+  followers): the dates from a range as a list, one row per study day by
+  week, a box to tick, the day's topics grouped by resource (B&B, Pathoma,
+  Sketchy), searches by name, ids and picked cards as counts; review days
+  shaded; notes and days off optional. The page's own print style; no
+  server change.
+
+### Events, and the dates that prep for them (F1)
+
+- An event is a named day (`events: [{id, day, name}]`): a lecture, a
+  quiz, the block exam. It holds no cards and opens nothing. A date's
+  `for` names the event it preps for; the calendar marks the event with
+  its count of prep days and each prep day with "for Micro quiz", and
+  pointing at an event lights its prep days up.
+- In the builder: Prep for on a day (or + New event), Make it an event on
+  an empty day, and the event's own box (rename, Move it, Take it off).
+  Finish by can aim at an event: the finish date is the day before it,
+  and the dates Fill makes are for it.
+- Text: `2026-10-15 | event | Micro quiz`, and a date line ends with
+  `for Micro quiz`. The print list, the calendar feed and the add-on's
+  plan card (`plans.prep_for`: "For Micro quiz on Thu · 2 more days of
+  prep") show them.
+
+### A follower's own days (G1-G7)
+
+A plan is the crew's shared guide; a follower can shuffle their own week.
+Only their copy changes: never the plan, the author's calendar, or anyone
+else's cards; events never move.
+
+- **Open now** (G1) on the next date's row: that date, today, one undo
+  step; the morning leaves it.
+- **Not today** (G2) replaces the morning's Undo: Anki's undo, then those
+  dates open on tomorrow's morning (`later` in plans.json).
+- **Skip a date** (G3): it never opens for me and isn't "waiting"; the
+  row stays, crossed out, with Undo skip. Kept on my follow (`skipped`).
+- **Pause until…** (G4), filled in from my Away dates. The morning after
+  it asks: move my dates later by the days I was away (`shift`), or open
+  what opened meanwhile. **Push my dates back…** sets `shift` directly.
+- **Catch up** (G5): "N new cards from earlier dates waiting · Catch up…"
+  over 3, 5 or 7 days: each of those mornings sets Anki's today-only
+  new-card limit on the plan's deck (its own plus the extra). Nothing to
+  put back: a today-only limit ends at midnight.
+- **My progress on the site** (G6): a follower who shares their progress
+  sees it on each date, and their skips; nobody else does.

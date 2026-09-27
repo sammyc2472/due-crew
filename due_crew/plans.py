@@ -73,6 +73,8 @@ def unit_sources(unit, deck_id=None, swap=None):
            [list(c) for c in unit.get("cards") or []]]
     if unit.get("search"):
         out.append(list(unit["search"]))  # 3.3, C3
+    if unit.get("nids") or unit.get("cids"):
+        out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
     return out
 
 
@@ -84,7 +86,9 @@ def unit_sig(unit, deck_id=None, swap=None):
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
                        sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
-                      + ([sorted(unit["search"])] if unit.get("search") else []))
+                      + ([sorted(unit["search"])] if unit.get("search") else [])
+                      + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
+                         if unit.get("nids") or unit.get("cids") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -123,7 +127,7 @@ def swapped(path, swap):
 # ---- the deck, read once ----
 
 _STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
-_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "_searches")
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "by_nid", "_searches")
 
 
 class DeckIndex:
@@ -179,20 +183,22 @@ class DeckIndex:
 
     def _read_static(self, col, tree, where):
         rows = col.db.all(
-            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags "
+            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags, n.id "
             f"FROM cards c JOIN notes n ON n.id = c.nid {where}")
         self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
         self.by_deck = {}    # did -> [cid]
         self.by_ref = {}     # (guid, ord) -> cid
         self.home = set()    # the cids in this deck and its subdecks
+        self.by_nid = {}     # E1: note id -> [cid]
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
         treeset = set(tree)
-        for cid, home, ord_, guid, tags in rows:
+        for cid, home, ord_, guid, tags, nid in rows:
             if int(home) not in treeset:
                 continue
             cid = int(cid)
             self.home.add(cid)
+            self.by_nid.setdefault(int(nid), []).append(cid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -284,6 +290,17 @@ class DeckIndex:
             cid = self.by_ref.get((str(g), int(o)))
             if cid is not None:
                 out.add(cid)
+        out |= self.id_cards(unit)
+        return out
+
+    def id_cards(self, unit):
+        """E1: the cards of a date's pasted note ids and card ids, in this deck."""
+        out = set()
+        for n in unit.get("nids") or []:
+            out.update(c for c in self.by_nid.get(int(n), ()) if c in self.cards)
+        for c in unit.get("cids") or []:
+            if int(c) in self.cards:
+                out.add(int(c))
         return out
 
     def single_found(self, unit):
@@ -480,10 +497,14 @@ def match_rows(idx, doc, swap=None, shown=5):
             continue
         name = u.get("name") or "?"
         if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[]), swap, doc.get("deck", "")))
+            n = len(idx.match(dict(u, cards=[], nids=[], cids=[]), swap, doc.get("deck", "")))
             of = u.get("n")  # the author's count, when the builder saved one
             text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
             rows.append((name, text, not n))
+        if u.get("nids") or u.get("cids"):
+            found = len(idx.id_cards(u))
+            label = f"{name} · by ID" if (u.get("tags") or u.get("decks") or u.get("cards")) else name
+            rows.append((label, _cards(found) if found else "not in your copy", not found))
         if u.get("cards"):
             found, total = idx.single_found(u), len(u["cards"])
             label = f"{name} · single cards" if (u.get("tags") or u.get("decks")) else name
@@ -494,6 +515,68 @@ def match_rows(idx, doc, swap=None, shown=5):
             cids |= idx.match(u, swap, doc.get("deck", ""))
         rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
+
+
+def _later(iso, days):
+    try:
+        return (datetime.date.fromisoformat(str(iso)) + datetime.timedelta(days=days)).isoformat()
+    except ValueError:
+        return iso
+
+
+def my_doc(doc, shift=0, skipped=()):
+    """G3, G4: the plan as this follower runs it: every date `shift` days
+    later (their due dates, checkpoints, review days and end with them),
+    the dates they skip left out. Events are fixed days: they never move.
+    The plan itself never changes."""
+    skipped = set(skipped or ())
+    if not shift and not skipped:
+        return doc
+    out = dict(doc or {})
+    us = []
+    for u in units(doc):
+        if u["id"] in skipped:
+            continue
+        v = dict(u)
+        if shift:
+            for k in ("opens", "due", "check"):
+                if v.get(k):
+                    v[k] = _later(v[k], shift)
+        us.append(v)
+    out["units"] = us
+    if shift:
+        if out.get("end"):
+            out["end"] = _later(out["end"], shift)
+        if out.get("reviews"):
+            out["reviews"] = [dict(r, day=_later(r["day"], shift)) for r in out["reviews"]]
+    return out
+
+
+def waiting_new(doc, prog, today):
+    """G5: new cards of dates opened before today that I haven't seen yet."""
+    n = 0
+    for u in units(doc):
+        if str(u.get("opens") or "9999") < today:
+            _o, s, t = prog.get(u["id"], [0, 0, 0])
+            n += max(0, int(t) - int(s))
+    return n
+
+
+def prep_for(doc, today):
+    """F1: the next event (today or later) that today's dates, or the next
+    ones, prep for: {name, day, left}, `left` the prep days after today."""
+    evs = {e["id"]: e for e in (doc or {}).get("events") or [] if str(e.get("day") or "") >= today}
+    if not evs:
+        return None
+    us = units(doc)
+    now = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") <= today]
+    ahead = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") > today]
+    pick = (now[-1] if now else ahead[0] if ahead else None)
+    if not pick:
+        return None
+    ev = evs[pick["for"]]
+    left = sum(1 for u in us if u.get("for") == ev["id"] and today < str(u.get("opens") or "") <= ev["day"])
+    return {"name": ev.get("name") or "?", "day": ev["day"], "left": left, "today": ev["day"] == today}
 
 
 def opened_by_date(doc, today):
@@ -586,9 +669,16 @@ def note_ids(idx, unit, plan_deck=""):
 
 
 def search_counts(idx, lean_doc):
-    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write."""
-    return {u["id"]: {q: len(idx.search_cards(q)) for q in u["search"]}
-            for u in lean_doc.get("units") or [] if u.get("search")}
+    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write;
+    E1: "#ids" is how many cards its pasted ids find."""
+    out = {}
+    for u in lean_doc.get("units") or []:
+        c = {q: len(idx.search_cards(q)) for q in u.get("search") or []}
+        if u.get("nids") or u.get("cids"):
+            c["#ids"] = len(idx.id_cards(u))
+        if c:
+            out[u["id"]] = c
+    return out
 
 
 def ids_snapshot(idx, lean_doc, cap=50000):
