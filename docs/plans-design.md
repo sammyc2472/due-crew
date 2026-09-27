@@ -309,3 +309,36 @@ plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
   after the deck; the title edits in place), at 20 new cards a day.
 - The shared link (`/p/CODE`) is three steps for someone new: Anki, the
   add-on's code, Follow a plan with this code.
+
+## 3.3: a class through Step (C1–C5)
+
+Signed-off mock: "A class through Step", with Sam's picks (the preset:
+a copy when shared; keep note ids for tag and subdeck dates).
+
+- **C1 Anki's daily limit.** `plan_flow.new_limit` reads what Anki will
+  show today (the deck's today-only or own limit, else its preset). When
+  today's target is above it, the card says so with Raise to N:
+  `raise_limit` sets the deck's own limit if it has one, else the preset
+  when only this deck uses it, else a copy of the preset for this deck
+  ("<deck> (Due Crew)"). One undo step; never without the click.
+- **C2 Open early.** `early` on my follow, 0–7 days, from Plan ▾ › Open
+  early. The morning runs as if it were that many days later
+  (`run(..., when)`); the tiles and "behind" stay on today.
+- **C3 Searches.** A date's `search: [q]` runs through
+  `col.find_cards(q)` and is kept to the plan's deck; `unit_sig` includes
+  searches, so a new one opens what it adds. From Anki's browser, Add to
+  a plan offers the search in the box (with its count, `sn`) or exactly
+  the selected cards. On the site a day takes a pasted search. 50,000
+  single cards a plan (docs up to 1.5 MB).
+- **C4 Study and review days.** Study on a date's row builds "Due Crew ·
+  <date>" (its seen cards, most lapses first) and opens it. `reviews:
+  [{day, from, to}]`: on that morning (up to three late) "Review · A – B",
+  the dates from A to B, 200 cards. The site's day panel sets them
+  (+ Review day); a 3.2 checkpoint loads as a one-date review day.
+- **C5 AnKing updates.** A date's `ids`: the note ids behind its tags and
+  subdecks in the author's copy. The day's first board carries
+  `authored` (my plans, lean); `send_ids` computes each plan's ids from
+  the deck of the same name and sends them when they changed
+  (`PUT /plans/{id}/ids`, kept only while the tags are the same). A
+  follower's tag or subdeck that finds nothing falls back to the ids;
+  the card says so once.

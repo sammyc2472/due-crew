@@ -94,6 +94,13 @@ the owner and co-authors (with an optional `summary` for the history);
 `GET /plans/{id}/log` and `POST /plans/{id}/undo {version}` (the latest
 save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
+C1–C5: `PATCH /plans/{id}/follow {early}` (0–7); a date's `search`
+(up to 10) and `sn` (their counts), `ids` (note ids, 50,000 a plan);
+`reviews: [{day, from, to}]` on the doc; 50,000 single cards and 1.5 MB
+docs; `POST /plans/{id}/cards {search, n}`; `PUT /plans/{id}/ids
+{units: {unitId: [tags, decks, [guid]]}}` (kept only while the date's
+tags are unchanged); `GET /board?decks=1` adds `authored` (the plans I
+write, lean) and each plan's `early`.
 
 ### Squads
 

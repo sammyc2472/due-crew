@@ -292,3 +292,11 @@ deck both share (Settings › Shared decks).
 - [ ] A student imports the deck (all cards active) and follows: Follow shows "Hold back N cards of later dates until their day", checked. After Follow, only today's date is active; Edit › Undo undoes the hold. The next date opens on its morning. Stop following: everything held opens again.
 - [ ] Not signed in: Make a plan / Follow a plan open the sign-in, then carry on.
 - [ ] The plan's link in a private window: three steps, each with Copy.
+
+### 3.3: a class through Step (C1–C5)
+
+- [ ] C1: set the deck's New cards/day to 20 and follow a plan with 60 today: the card says "Anki shows 20 new a day in this deck; today has 60" with Raise to 60. Click: Deck Options shows 60 (a shared preset: this deck now has its own "(Due Crew)" copy; the others still 20). Edit › Undo puts it back.
+- [ ] C2: Plan ▾ › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
+- [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
+- [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
+- [ ] C5: rename a tag in a follower's copy (like a new AnKing): the date still opens its cards, and the card says the tags differ, with OK.

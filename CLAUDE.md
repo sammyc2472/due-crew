@@ -215,6 +215,19 @@ add-on.
   plan still never suspends on its own. The whole deck is coverable
   (a deck with no tags or subdecks), and a new plan goes straight from
   Anki to its calendar at 20 new cards a day.
+- 3.3 a class through Step (C1–C5, mock "A class through Step"):
+  C1 the plan card says when Anki's new cards/day is below today's plan
+  (Raise: the deck's own limit, or its preset when only this deck uses
+  it, else a copy for this deck; one undo step). C2 `early` on my follow
+  (0–7 days): the morning looks that far ahead, for studying on a phone.
+  C3 a date's `search` (Anki searches, run in each follower's Anki, kept
+  to the plan's deck; `sn` the count when added from the browser); a plan
+  holds 50,000 single cards. C4 Study on a date's row (its filtered deck)
+  and review days (`reviews: [{day, from, to}]`, replacing checkpoints on
+  the site). C5 `ids` on a date: the author's Anki sends the note ids
+  behind its tags (`PUT /plans/{id}/ids`, one request a plan when they
+  changed, on the day's first refresh; `authored` rides that board); a
+  follower whose tag matches nothing falls back to them.
 - 3.3 plans together (migration 0006): co-authors from the owner's crew
   (`plan_editors`; they edit, the owner alone deletes, picks the audience
   and the co-authors), notes on a day from anyone in the plan
