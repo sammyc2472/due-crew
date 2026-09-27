@@ -93,7 +93,7 @@ def weight(doc, sched, day, shift=0):
     week or in the taper; 2 on a double day."""
     if phase(doc, day, shift) != "build":
         return 0
-    days = (sched or {}).get("days") or [1] * 7
+    days = (sched or {}).get("days") or plan_days(doc)  # 3.3: no schedule of mine, the plan's days
     return int(days[day.weekday()] or 0)
 
 

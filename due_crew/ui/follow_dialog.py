@@ -30,8 +30,8 @@ def late_counts(idx, doc, today, swap=None):
 
 def late_label(n_units, n_cards, while_paused=False):
     if while_paused:
-        return f"{n_units} unit{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
-    return (f"{n_units} unit{'s have' if n_units != 1 else ' has'} already opened "
+        return f"{n_units} date{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
+    return (f"{n_units} date{'s have' if n_units != 1 else ' has'} already opened "
             f"({n_cards:,} cards)")
 
 
@@ -76,8 +76,8 @@ class CatchUpDialog(QDialog):
         root.addWidget(QLabel(late_label(n_units, n_cards, while_paused=True)))
         self.now = QRadioButton("Open them now")
         self.now.setChecked(True)
-        self.next = QRadioButton(f"Start from the next unit, {P.fmt_day(nxt['opens'])}" if nxt
-                                 else "Start from the next unit")
+        self.next = QRadioButton(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
+                                 else "Start from the next date")
         self.next.setEnabled(bool(nxt))
         group = QButtonGroup(self)
         group.addButton(self.now)
@@ -161,7 +161,7 @@ class FollowDialog(QDialog):
         lrow = QHBoxLayout()
         self.late_open = QRadioButton("Open them now")
         self.late_open.setChecked(True)
-        self.late_skip = QRadioButton("Start from the next unit")
+        self.late_skip = QRadioButton("Start from the next date")
         group = QButtonGroup(self)
         group.addButton(self.late_open)
         group.addButton(self.late_skip)
@@ -169,11 +169,10 @@ class FollowDialog(QDialog):
         lrow.addWidget(self.late_skip)
         lrow.addStretch()
         root.addLayout(lrow)
-        self.share = QCheckBox("Share my progress on this plan with the crew")
+        self.share = QCheckBox("Share my progress with the crew")
         self.share.setChecked(True)
         root.addWidget(self.share)
-        self.about = QLabel("Each morning the add-on unsuspends the cards that open that day. It never "
-                            "suspends anything, and cards you've already opened stay as they are.")
+        self.about = QLabel("Each morning, that day's cards open. Nothing is ever suspended.")
         self.about.setWordWrap(True)
         self.about.setStyleSheet("font-size: 12px;")
         root.addWidget(self.about)
@@ -307,8 +306,8 @@ class FollowDialog(QDialog):
         if late:
             self.late_label.setText(late_label(n_units, n_cards))
             nxt = P.next_unit(doc, self.today)
-            self.late_skip.setText(f"Start from the next unit, {P.fmt_day(nxt['opens'])}" if nxt
-                                   else "Start from the next unit")
+            self.late_skip.setText(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
+                                   else "Start from the next date")
             self.late_skip.setEnabled(bool(nxt))
             if not nxt:
                 self.late_open.setChecked(True)

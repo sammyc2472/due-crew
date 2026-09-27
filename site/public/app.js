@@ -299,14 +299,14 @@ const Sched = (() => {
     if (ph.catchup >= 2 && first && pd >= first && ((diff(monday(pd), monday(first)) / 7 + 1) % ph.catchup) === 0) return "catchup";
     return "build";
   }
-  const weight = (doc, sched, d, sh) => (phase(doc, d, sh) !== "build" ? 0 : ((sched?.days || [1, 1, 1, 1, 1, 1, 1])[(parseIso(d).getUTCDay() + 6) % 7] || 0));
+  const planDays = (doc) => { const p = doc.pace?.days; return Array.isArray(p) && p.length === 7 && p.some(Boolean) ? p.map((x) => (x ? 1 : 0)) : [1, 1, 1, 1, 1, 1, 1]; };
+  const weight = (doc, sched, d, sh) => (phase(doc, d, sh) !== "build" ? 0 : ((sched?.days || planDays(doc))[(parseIso(d).getUTCDay() + 6) % 7] || 0));
   function win(doc, u, sh) {
     let last = u.due;
     if (!last) { const later = units(doc).map((x) => x.opens).filter((o) => o > u.opens).sort(); last = later.length ? addDays(later[0], -1) : u.opens; }
     if (last < u.opens) last = u.opens;
     return [addDays(u.opens, sh), addDays(last, sh)];
   }
-  const planDays = (doc) => { const p = doc.pace?.days; return Array.isArray(p) && p.length === 7 && p.some(Boolean) ? p.map((x) => (x ? 1 : 0)) : [1, 1, 1, 1, 1, 1, 1]; };
   function quota(doc, u, sched, total, d) {
     const sh = shift(doc, sched); const [a, b] = win(doc, u, sh);
     if (d < a || total <= 0) return 0;

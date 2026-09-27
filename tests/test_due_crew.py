@@ -2899,17 +2899,17 @@ def test_plans_glue_v31():
         col.undo_steps.append(("Due Crew: open 2 dates", []))
         view = F.board_view(box["cfg"])
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
-                            {"period": "decks"}, 0, plans=view)
+                            {"period": "plans"}, 0, plans=view)
         check("card: the plan's title, week and followers",
               "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
         check("card: names escaped, crew done as N of followers, Undo while it's Anki's latest step",
-              "Heart &lt;b&gt;failure" in html and "1 of 2" in html and "duecrew:planundo" in html
+              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:planundo" in html
               and "<b>failure" not in html)
         col.undo_steps.append(("Edit note", []))
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
-                            {"period": "decks"}, 0, plans=F.board_view(box["cfg"]))
+                            {"period": "plans"}, 0, plans=F.board_view(box["cfg"]))
         check("card: no Undo once Anki has done something since", "duecrew:planundo" not in html
-              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning: 3 cards" in html)
+              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning (3 cards)" in html)
         check("card: behind, only for me",
               "Heart failure</b> was due Mon. 2 cards not seen yet." in html
               or "was due Monday. 2 cards not seen yet." in html, "")
@@ -3559,6 +3559,22 @@ def test_tree_nested_v33():
     check("tree: the server takes it", dre.put_tree("Step 1", rows[:6], []) and store.plan_trees[("dre", "Step 1")].get("v") == 2)
 
 
+def test_plans_tab_v33():
+    """3.3: a Plans tab, only while I follow a plan; Decks is decks again."""
+    from due_crew import board
+    card = {"id": "p1", "title": "Step 1 · Dre’s plan", "sub": "week 1 of 4", "rows": [], "lines": [], "change": None,
+            "no_deck": False, "paused": False, "today": "Mon", "sched": False}
+    data = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
+    with_plan = board.render(data, {"period": "plans"}, 0, plans={"cards": [card], "offers": []})
+    check("plans tab: there while I follow one, the card on it",
+          "period:plans" in with_plan and "Step 1 · Dre’s plan" in with_plan)
+    decks = board.render(data, {"period": "decks"}, 0, plans={"cards": [card], "offers": []})
+    check("plans tab: the card isn't on Decks any more", "Step 1 · Dre’s plan" not in decks)
+    none = board.render(data, {"period": "plans"}, 0, plans={"cards": [], "offers": []})
+    check("plans tab: following nothing, no tab, and a saved Plans period falls back to Today",
+          "period:plans" not in none and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in none)
+
+
 def test_even_split_v33():
     """3.3: a date the author split evenly opens in the same slices for
     someone without a schedule: the plan's days, the deck's order; the
@@ -3767,8 +3783,11 @@ def test_session_card_v32():
     html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
     check("board: the missed-days question, three ways",
           "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
-    check("board: no schedule yet offers one", "plansched:p1" in board._plan_card_html(
+    check("board: 3.3, no schedule to set: the plan's days are it", "plansched:p1" not in board._plan_card_html(
         F.card_view(dict(plan, sched=None), st, {}, _day(0))))
+    v0 = F.session_view(dict(plan, sched=None), st, idx, seen_today, _day(0))
+    check("session: 3.3, without a schedule the plan's own days give today, and no missed-days question",
+          v0 is not None and v0["ask"] is None and "target" in v0)
     # the recap: on the first day of a plan week
     monday = TODAY + datetime.timedelta(days=(7 - TODAY.weekday()) % 7)
     mon_plan = dict(plan, doc=dict(plan["doc"], units=[dict(unit, opens=(monday - datetime.timedelta(days=7)).isoformat(),

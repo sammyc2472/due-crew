@@ -451,7 +451,7 @@ def _board_html(c):
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
                         room=rooms.board_view(),
-                        plans=plan_flow.board_view(c) if c.get("period") in ("decks", "squads") else None)
+                        plans=plan_flow.board_view(c))  # 3.3: the Plans tab shows while I follow one
 
 
 def _on_did_render(deck_browser):

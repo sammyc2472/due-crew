@@ -303,8 +303,8 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     schedule. first_seen: {cid: days ago} (0 today); due: reviews due in
     the plan's deck now, when known; answered: {cid: (first answer ease,
     ms)} since each checkpoint was built. Pure over the index."""
-    sched = plan.get("sched")
-    if not sched or not st:
+    sched = plan.get("sched")  # 3.3: without one, the plan's own days: each date on its day
+    if not st:
         return None
     doc = plan["doc"]
     day = S.d(today)
@@ -332,7 +332,7 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     missed = S.missed_study_days(doc, sched, day, new_by_day, shares)
     asked = (st.get("catch") or {}).get("day") or ""
     ask = None
-    if missed and view["behind"] and S.iso(missed[0]) > asked:
+    if sched and missed and view["behind"] and S.iso(missed[0]) > asked:
         waiting = view["behind"]
         push = S.pushed_start(doc, sched, len(missed))
         ask = {"days": [S.iso(x) for x in reversed(missed)], "waiting": waiting,
@@ -398,7 +398,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
     for u in open_units:
         o, s, t = (prog or {}).get(u["id"], [0, 0, 0])
         done = int(crew.get(u["id"]) or 0)
-        n = f"{done:,} of {followers:,}"
+        n = f"crew {done:,}/{followers:,}"
         if u["id"] == now_id and u.get("due") and u["due"] >= today:
             n += f" · due {_short_day(u['due'], today)}"
         rows.append({"name": u.get("name") or "?", "state": "now" if u["id"] == now_id else "open",
@@ -666,7 +666,7 @@ def sessions(col, plan_list, state, today):
     """{plan id: session_view} for the plans on my schedule, on this computer."""
     from .stats.queries import StatsQueries
     q = StatsQueries(col)
-    todo = [(p, state.get(p["id"])) for p in plan_list if p.get("sched") and not p.get("paused")]
+    todo = [(p, state.get(p["id"])) for p in plan_list if not p.get("paused")]
     todo = [(p, st) for p, st in todo if st and _deck_ok(col, st.get("deck_id"))]
     if not todo:
         return {}
@@ -827,7 +827,8 @@ def plan_menu(pid):
         return
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
-    menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
+    if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
+        menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
     menu.addAction("Open everything now").triggered.connect(lambda: open_everything(pid))
     menu.addAction("Change deck…").triggered.connect(lambda: change_deck(pid))
     menu.addSeparator()
@@ -1093,15 +1094,15 @@ def on_followed(plan, deck_id, swap, late):
     _psave(c)
 
     def finish():
+        c2 = cfg()
+        c2["period"] = "plans"  # 3.3: where it lives now
+        save_cfg(c2)
         fresh = next((x for x in followed() if x["id"] == plan["id"]), plan)
         res = _open_now([fresh], mode=late)
         if res is not None and not res["n"]:
             tooltip(f"Following {html.escape(plan.get('name') or 'the plan')}.")
         app.swap(cfg())
-    if plan.get("sched") or late == "skip":
-        finish()
-    else:
-        open_schedule(plan["id"], then=finish)  # 3.2: my days and time, before anything opens
+    finish()  # 3.3: the plan's days are the schedule; nothing to ask
 
 
 def open_make():

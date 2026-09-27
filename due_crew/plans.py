@@ -423,7 +423,7 @@ def match_rows(idx, doc, swap=None, shown=5):
         cids = set()
         for u in rest:
             cids |= idx.match(u, swap, doc.get("deck", ""))
-        rows.append((f"… {len(rest)} more unit{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+        rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
 
 
