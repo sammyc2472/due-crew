@@ -318,9 +318,10 @@ a copy when shared; keep note ids for tag and subdeck dates).
 - **C1 Anki's daily limit.** `plan_flow.new_limit` reads what Anki will
   show today (the deck's today-only or own limit, else its preset). When
   today's target is above it, the card says so with Raise to N:
-  `raise_limit` sets the deck's own limit if it has one, else the preset
-  when only this deck uses it, else a copy of the preset for this deck
-  ("<deck> (Due Crew)"). One undo step; never without the click.
+  `raise_limit` sets the deck's own limit (Deck Options › This deck), so
+  no other deck changes and no preset is copied. Anki records that as an
+  undo step (a preset change it doesn't), so Edit › Undo puts it back;
+  checked against the real engine (`tools/real_anki.py`).
 - **C2 Open early.** `early` on my follow, 0–7 days, from Plan ▾ › Open
   early. The morning runs as if it were that many days later
   (`run(..., when)`); the tiles and "behind" stay on today.
@@ -342,3 +343,12 @@ a copy when shared; keep note ids for tag and subdeck dates).
   (`PUT /plans/{id}/ids`, kept only while the tags are the same). A
   follower's tag or subdeck that finds nothing falls back to the ids;
   the card says so once.
+
+### Speed (3.3)
+
+A deck's tags, note ids and subdecks are kept between refreshes
+(`plans._STATIC`) while a fingerprint holds (card count, newest note
+edit, newest card, deck and card-number sums; a few ms); only each
+card's state is read again. On a 35,000-card AnKing-shaped deck a
+refresh's plan work is ~110 ms after the first (~550 ms). `tools/real_anki.py`
+checks it, with Anki's own package, before a release.

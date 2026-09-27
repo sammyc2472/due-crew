@@ -217,8 +217,7 @@ add-on.
   Anki to its calendar at 20 new cards a day.
 - 3.3 a class through Step (C1–C5, mock "A class through Step"):
   C1 the plan card says when Anki's new cards/day is below today's plan
-  (Raise: the deck's own limit, or its preset when only this deck uses
-  it, else a copy for this deck; one undo step). C2 `early` on my follow
+  (Raise: the deck's own limit, which Anki can undo; no other deck changes). C2 `early` on my follow
   (0–7 days): the morning looks that far ahead, for studying on a phone.
   C3 a date's `search` (Anki searches, run in each follower's Anki, kept
   to the plan's deck; `sn` the count when added from the browser); a plan
@@ -277,6 +276,9 @@ add-on.
 - Process: propose features as mockups on the design-spec artifact first
   (ask Sam for the link if needed), build after sign-off. Ask Sam before
   changing anything users see.
+- Before a release, `tools/real_anki.py` runs the plan code on Anki's own
+  engine with an AnKing-sized collection (searches, suspend and undo,
+  deck limits, filtered decks, timings); `pip install anki` in a venv.
 - Code changes are compile- and logic-tested here; anything under
   `due_crew/ui/` also gets `tools/dialogs.py` (offscreen PyQt6 render of
   every dialog, see tests/README.md); flows still deserve a click-test in

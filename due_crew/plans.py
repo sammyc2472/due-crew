@@ -16,6 +16,7 @@ Nothing here ever suspends a card. open_cards unsuspends, in one undo step.
 """
 
 import bisect
+import weakref
 import datetime
 import hashlib
 import json
@@ -121,6 +122,10 @@ def swapped(path, swap):
 
 # ---- the deck, read once ----
 
+_STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of")
+
+
 class DeckIndex:
     """One deck and its subdecks, read in one query: every card's id, home
     deck, ord, queue and type, with its note's guid and tags. Cards in a
@@ -141,24 +146,54 @@ class DeckIndex:
             self.rel[rel.lower()] = d
             self.spelled[rel.lower()] = rel
         ids = ",".join(str(d) for d in tree) or "0"
-        rows = col.db.all(
-            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, c.queue, c.type, "
-            f"n.guid, n.tags, c.due FROM cards c JOIN notes n ON n.id = c.nid "
-            f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})")
+        where = f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})"
+        self.col = col
+        # 3.3: the tags, note ids and subdecks change only when notes do;
+        # kept between refreshes while this fingerprint holds (a few ms),
+        # and only each card's state is read again
+        sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
+               tuple(col.db.first("SELECT count(), max(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+                                  f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
+        key = (id(col), self.did)
+        kept = _STATIC.get(key)
+        if kept and kept[2]() is col and kept[0] == sig:
+            self.__dict__.update(kept[1])
+        else:
+            self._read_static(col, tree, where)
+            try:
+                ref = weakref.ref(col)  # never keeps a closed collection alive
+            except TypeError:
+                ref = (lambda: None)
+            for k in [k for k, v in _STATIC.items() if v[2]() is None]:
+                _STATIC.pop(k, None)  # a closed profile's decks
+            _STATIC[key] = (sig, {k: getattr(self, k) for k in _STATIC_KEYS}, ref)
         self.cards = {}      # cid -> (queue, type)
+        self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
+        home = self.home
+        for cid, queue, ctype, due in col.db.all(f"SELECT c.id, c.queue, c.type, c.due FROM cards c {where}"):
+            cid = int(cid)
+            if cid in home:
+                self.cards[cid] = (int(queue), int(ctype))
+                self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+        self._searches = {}
+        self.fell_back = set()  # unit ids matched by their note ids (C5)
+
+    def _read_static(self, col, tree, where):
+        rows = col.db.all(
+            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags "
+            f"FROM cards c JOIN notes n ON n.id = c.nid {where}")
         self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
         self.by_deck = {}    # did -> [cid]
         self.by_ref = {}     # (guid, ord) -> cid
+        self.home = set()    # the cids in this deck and its subdecks
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
-        self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
         treeset = set(tree)
-        for cid, home, ord_, queue, ctype, guid, tags, due in rows:
+        for cid, home, ord_, guid, tags in rows:
             if int(home) not in treeset:
                 continue
             cid = int(cid)
-            self.cards[cid] = (int(queue), int(ctype))
-            self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+            self.home.add(cid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -169,14 +204,11 @@ class DeckIndex:
                 self.tag_names.setdefault(low, t)
         self.by_tag = by_tag
         self.tag_keys = sorted(by_tag)
-        # 3.3: searches run through the collection; note ids back a renamed tag
-        self.col = col
+        # searches run through the collection; note ids back a renamed tag
         self.by_guid = {}
         for (g, _o), cid in self.by_ref.items():
             self.by_guid.setdefault(g, []).append(cid)
         self.guid_of = {cid: g for (g, _o), cid in self.by_ref.items()}
-        self._searches = {}
-        self.fell_back = set()  # unit ids matched by their note ids (C5)
 
     # -- sources --
 

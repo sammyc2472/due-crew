@@ -286,14 +286,24 @@ def waiting(col, plan, st, today):
     return len(due), len(cids)
 
 
-def progress(col, plan_list, state):
+def _index(col, st, idxs):
+    """One read of a deck per refresh: shared by progress and today's session."""
+    did = int(st["deck_id"])
+    if idxs is None:
+        return P.DeckIndex(col, did)
+    if did not in idxs:
+        idxs[did] = P.DeckIndex(col, did)
+    return idxs[did]
+
+
+def progress(col, plan_list, state, idxs=None):
     """{plan id: {unit id: [opened, seen, total]}} for the plans that run here."""
     out = {}
     for p in plan_list:
         st = state.get(p["id"])
         if not st or not _deck_ok(col, st.get("deck_id")):
             continue
-        idx = P.DeckIndex(col, st["deck_id"])
+        idx = _index(col, st, idxs)
         out[p["id"]] = P.progress(idx, p["doc"], _swap(st))
     return out
 
@@ -708,14 +718,15 @@ def refresh_progress():
     (3.2) today's session for the plans on my schedule."""
     if not mw.col:
         return {}
+    idxs = {}  # each deck read once for both
     try:
-        prog = progress(mw.col, followed(), _state_cfg())
+        prog = progress(mw.col, followed(), _state_cfg(), idxs)
     except Exception:
         traceback.print_exc()
         return {}
     _state["plan_progress"] = prog
     try:
-        _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today())
+        _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today(), idxs)
         _note_recap(_state["plan_session"])
     except Exception:
         traceback.print_exc()
@@ -762,9 +773,9 @@ def new_limit(col, did):
 
 
 def raise_limit(pid):
-    """3.3, C1: Raise to today's plan. The deck's own limit if it has one;
-    else its preset when only this deck uses it; else this deck gets a copy
-    of the preset, so the other decks stay as they are. One undo step."""
+    """3.3, C1: Raise to today's plan, on this deck's own limit (Deck
+    Options › This deck), so every other deck stays as it is. Anki's own
+    undo step: Edit › Undo puts it back."""
     v = (_state.get("plan_session") or {}).get(pid) or {}
     st = _state_cfg().get(pid)
     want = int(v.get("target") or 0)
@@ -779,19 +790,9 @@ def raise_limit(pid):
         pos = None
     try:
         deck = col.decks.get(did)
-        if deck.get("newLimit") is not None or (deck.get("newLimitToday") or {}).get("limit") is not None:
-            deck["newLimit"] = want
-            deck.pop("newLimitToday", None)
-            col.decks.save(deck)
-        else:
-            conf = col.decks.config_dict_for_deck_id(did)
-            if len(col.decks.decks_using_config(conf)) > 1:
-                cid = col.decks.add_config_returning_id(f"{deck['name']} (Due Crew)", clone_from=conf)
-                conf = col.decks.get_config(cid)
-                deck["conf"] = cid
-                col.decks.save(deck)
-            conf["new"]["perDay"] = want
-            col.decks.update_config(conf)
+        deck["newLimit"] = want
+        deck.pop("newLimitToday", None)
+        col.decks.save(deck)
     except Exception:
         traceback.print_exc()
         tooltip("Couldn't change it. Deck Options › New cards/day.")
@@ -807,7 +808,7 @@ def raise_limit(pid):
     app.swap(cfg())
 
 
-def sessions(col, plan_list, state, today):
+def sessions(col, plan_list, state, today, idxs=None):
     """{plan id: session_view} for the plans on my schedule, on this computer."""
     from .stats.queries import StatsQueries
     q = StatsQueries(col)
@@ -819,7 +820,8 @@ def sessions(col, plan_list, state, today):
     pace = q.pace()
     out = {}
     for p, st in todo:
-        idx = P.DeckIndex(col, st["deck_id"])
+        idx = _index(col, st, idxs)
+        idx.fell_back = set()
         v = session_view(p, st, idx, first, today, pace, _due_in(col, st["deck_id"]),
                          _answered(col, st.get("checks") or {}))
         if v is not None:

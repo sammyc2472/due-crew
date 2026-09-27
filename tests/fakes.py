@@ -101,7 +101,10 @@ def make_collection(conn):
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
                  "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, flds TEXT DEFAULT '', "
-                 "tags TEXT DEFAULT '')")
+                 "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
+    # Anki bumps a note's mod on every edit; the plan index keeps tags by it
+    conn.execute("CREATE TRIGGER notes_mod AFTER UPDATE OF tags, guid, flds ON notes "
+                 "BEGIN UPDATE notes SET mod = mod + 1 WHERE id = NEW.id; END")
     return conn
 
 
