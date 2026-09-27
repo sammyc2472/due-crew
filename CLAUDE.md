@@ -287,8 +287,9 @@ add-on.
 
 `tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
 `tools/check_prod.sh` checks the live API and site after the deploy
-(no sign-in, no mail). `docs/go-live.md` is the 3.3.0 go-live: the first
-production deploy of 3.x, with the 2.x import and the rollback.
+(no sign-in, no mail). The tags' deploy job stands down until the GitHub
+secrets exist, so production is deployed by hand from `worker/`: the
+migrations, the API, then the site (`docs/go-live.md`, 2b).
 
 ## Rules of the road
 
