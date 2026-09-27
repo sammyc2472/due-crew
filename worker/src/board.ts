@@ -5,6 +5,7 @@
 import type { Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
 import * as C from "./cards";
+import * as N from "./notices";
 import * as P from "./plans";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
@@ -32,7 +33,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const db = env.DB;
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
-      `SELECT u.uid, u.name, u.emoji, u.code, w.doc, w.updated_at FROM users u
+      `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added
     db.prepare(
@@ -68,6 +69,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     me: { uid: me.uid, name: me.name || "", emoji: me.emoji || "", code: me.code || "",
           week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at) },
     friends, cheers, knocks: await listKnocks(env, s.uid),
+    notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
   if (withDecks) Object.assign(out, await P.forBoard(env, s.uid));  // 3.1: the plans I follow, and offers

@@ -3,6 +3,7 @@
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 
+import { isAdmin } from "./notices";
 import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
 import { sendCode } from "./mail";
@@ -154,7 +155,7 @@ export async function me(s: Session, env: Env): Promise<Response> {
   const u = await env.DB.prepare("SELECT uid, email, name, emoji FROM users WHERE uid = ?")
     .bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null }>();
   if (!u) throw new HttpError(401, "auth");
-  return json(u);
+  return json(isAdmin(env, u.uid) ? { ...u, admin: true } : u);  // 3.2.1: the site shows Admin
 }
 
 export async function signOut(s: Session, env: Env, req?: Request): Promise<Response> {

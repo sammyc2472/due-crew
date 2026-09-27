@@ -214,6 +214,7 @@ class FakeWorker:
         self.tips = {}       # (guid, uid) -> {text, at}
         self.helped = set()  # (guid, tip_uid, by_uid)
         self.logs = {}       # uid -> {date: row}
+        self.notices = []    # 3.2.1: [{id, text, link, below}], newest last (live ones only)
         self.log = []        # (method, path, status)
         self.bodies = []     # (method, path, json body)
         self.writes = 0      # rows written, all tables
@@ -414,11 +415,20 @@ class FakeWorker:
             del self.cheers[key]
         out = {"me": {"uid": me, "name": u["name"] or "", "emoji": u["emoji"] or "", "code": u["code"] or "",
                       "week": week, "updatedAt": at},
-               "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me)}
+               "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
+               "notice": self._notice_for(u.get("client_version"))}
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
         return out
+
+    def _notice_for(self, version):
+        """3.2.1 (worker/src/notices.ts): the newest notice for this version."""
+        ver = lambda v: [int(x) for x in str(v).split(".")]
+        for n in reversed(self.notices):
+            if not n.get("below") or (version and ver(version) < ver(n["below"])):
+                return {"id": n["id"], "text": n["text"], "link": n.get("link")}
+        return None
 
     def _decks_for(self, me):
         return {u: d for u, d in self.decks.items() if u == me or self.mutual(me, u)}

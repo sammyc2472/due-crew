@@ -1041,6 +1041,18 @@ def _short(iso):
     return f"{d:%a}"
 
 
+def notice_html(notice):
+    """3.2.1: the admin's notice, one line on top of the board: the text,
+    More when it has a link, and a dismiss. Escaped; the link never goes in
+    the page (Python opens it)."""
+    nid = int(notice.get("id") or 0)
+    more = (f'<a class="wc" href="#" title="Opens in your browser" onclick="{_pycmd("noticeopen")}">More</a>'
+            if notice.get("link") else "")
+    return (f'<div class="dc-wrap notice"><span>&#128227;</span>'
+            f'<span>{_html.escape(str(notice.get("text") or ""))}</span>{more}'
+            f'<a class="wx" href="#" title="Dismiss" onclick="{_pycmd(f"noticex:{nid}")}">&times;</a></div>')
+
+
 def _offer_banners(offers):
     """3.1: a plan offered to one of my squads. Names escaped."""
     e = _html.escape
@@ -1232,13 +1244,15 @@ def _review_banner(kind, info):
 
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
-           sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None):
+           sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
+           notice=None):
     """live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
     room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
-    the cards on the Decks tab, a squad's offers on Decks and Squads."""
+    the cards on the Decks tab, a squad's offers on Decks and Squads.
+    notice (3.2.1): the admin's {id, text, link}, on top of every tab."""
     period = cfg.get("period", "today")
     if period not in PERIODS:
         period = "today"
@@ -1286,6 +1300,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                 f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
                 f'<a class="wx" href="#" title="Dismiss" '
                 f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
+    if notice:
+        body = notice_html(notice) + body
     if exam_eve and exam_eve.get("people"):
         # 2.10: a line for their exam-morning card, rather than a cheer now
         links = [f'<a class="dc-pl" href="#" title="Add a line to their good-luck card" '

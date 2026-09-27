@@ -10,6 +10,9 @@ routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 API_VERSION = "1"
 MIN_CLIENT = "3.0.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
+# The admin (duecrew.com/admin, notices): Sam's "sammy" account. A uid alone
+# opens nothing; the account still signs in by emailed code.
+ADMINS = "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"
 # Where POST /reports mails a report. Unset: reports are only counted in the log.
 # REPORT_TO = "reports@duecrew.com"
 

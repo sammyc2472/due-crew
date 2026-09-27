@@ -85,7 +85,8 @@ async function whoami() {
 function renderNav() {
   const nav = document.getElementById("nav");
   nav.replaceChildren(...(me
-    ? [link("/home", "Home"), link("/plans", "Plans"), link("/log", "Log"), link("/account", me.name || "Account")]
+    ? [link("/home", "Home"), link("/plans", "Plans"), link("/log", "Log"), me.admin ? link("/admin", "Admin") : null,
+       link("/account", me.name || "Account")].filter(Boolean)
     : [link("/sign-in", "Sign in")]));
 }
 
@@ -845,11 +846,55 @@ async function logPage() {
 }
 
 async function adminPage() {
-  const s = await api("GET", "/admin/stats");
+  const [s, nl] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices")]);
   const tile = (v, l) => h("div", {}, h("b", {}, typeof v === "number" ? v.toLocaleString() : v), h("small", {}, l));
-  page(h("h1", {}, "Numbers"), h("p", { class: "muted" }, "Counts only. Never names or emails."),
+
+  // 3.2.1: a notice on everyone's board (3.2.1 and later), one line
+  const status = h("p", { class: "status", role: "status" });
+  const text = h("input", { id: "ntext", maxlength: 200, style: "width:100%", placeholder: "Due Crew 3.2 is out: plans your crew can follow together." });
+  const nlink = h("input", { id: "nlink", type: "url", style: "width:100%", placeholder: "https://duecrew.com (optional)" });
+  const below = h("input", { id: "nbelow", style: "width:8em", placeholder: "3.2.1" });
+  const days = h("input", { id: "ndays", type: "number", min: 1, max: 60, value: 14, style: "width:6em" });
+  const count = h("small", { class: "muted" }, "0 / 200");
+  text.addEventListener("input", () => { count.textContent = `${text.value.length} / 200`; });
+  const list = h("div", { class: "plans" });
+  const drawList = (notices) => list.replaceChildren(...(notices.length ? notices.map((n) => {
+    const rm = h("button", { class: "quiet", onclick: async () => {
+      rm.disabled = true;
+      try { await api("DELETE", `/admin/notices/${n.id}`); drawList((await api("GET", "/admin/notices")).notices); }
+      catch { rm.disabled = false; rm.textContent = "Try again"; }
+    } }, "Take down");
+    const until = new Date(n.until * 1000);
+    return h("div", { class: "plan-row" }, h("b", {}, n.text), rm,
+      h("small", {}, [n.below ? `to add-ons before ${n.below}` : "to everyone", `until ${DAYS[until.getDay()]} ${until.getDate()} ${MONTHS[until.getMonth()]}`, n.link || ""].filter(Boolean).join(" · ")));
+  }) : [h("p", { class: "muted small" }, "No notice showing.")]));
+  drawList(nl.notices);
+  const send = h("button", { onclick: async () => {
+    if (!text.value.trim()) { status.className = "status bad"; status.textContent = "Write the notice first."; return; }
+    send.disabled = true; status.className = "status"; status.textContent = "Posting…";
+    try {
+      await api("POST", "/admin/notices", { text: text.value, link: nlink.value.trim() || null, below: below.value.trim() || null, days: Number(days.value) || 14 });
+      text.value = ""; nlink.value = ""; count.textContent = "0 / 200";
+      status.textContent = "Posted. It shows at each board's next refresh.";
+      drawList((await api("GET", "/admin/notices")).notices);
+    } catch (err) {
+      status.className = "status bad";
+      status.textContent = err.body?.error === "bad_link" ? "The link must start with https://."
+        : err.body?.error === "bad_below" ? "The version looks like 3.2.1." : "That didn't post. Try again.";
+    } finally { send.disabled = false; }
+  } }, "Post notice");
+
+  page(h("h1", {}, "Admin"), h("p", { class: "muted" }, "Counts only. Never names or emails."),
     h("div", { class: "tiles" }, tile(`${s.on3} / ${s.accounts}`, "on 3.x"), tile(s.seenDay, "seen today"), tile(s.seenWeek, "seen this week"),
       tile(s.mutualPairs, "mutual friendships"), tile(s.squads, `squads · ${s.memberships} in them`), tile(s.plans, `plans · ${s.follows} following`), tile(s.tips, "tips on cards")),
+    h("h2", {}, "A notice"),
+    h("p", { class: "muted small" }, "One line at the top of everyone's board in Anki (3.2.1 and later), with More when there's a link, until they dismiss it. The newest one shows."),
+    h("div", { class: "stack", style: "max-width:600px" },
+      h("label", { for: "ntext" }, "Text"), text, count,
+      h("label", { for: "nlink" }, "Link"), nlink,
+      h("div", { class: "row" }, h("span", { class: "muted small" }, "Only to add-ons older than"), below, h("span", { class: "muted small" }, "for"), days, h("span", { class: "muted small" }, "days")),
+      h("div", {}, send), status),
+    h("h2", {}, "Showing now"), list,
     h("h2", {}, "Versions"), h("table", { class: "crew" }, h("tbody", {}, s.versions.map(([v, n]) => h("tr", {}, h("td", { class: "nm" }, v), h("td", { class: "n" }, n.toLocaleString()))))));
 }
 

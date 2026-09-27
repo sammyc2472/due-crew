@@ -271,6 +271,19 @@ def clean_recap(value, today_label=None):
     return {"name": name, "n": n, "day": value["day"]}
 
 
+def clean_notice(value):
+    """3.2.1: the admin's notice, {id, text, link}; None if unusable. The
+    link only when it's https."""
+    if not isinstance(value, dict) or not isinstance(value.get("id"), int) or isinstance(value.get("id"), bool):
+        return None
+    text = clean_note(value.get("text"), 200)
+    if not text:
+        return None
+    link = value.get("link")
+    link = link if isinstance(link, str) and link.startswith("https://") and len(link) <= 300 and not any(c in link for c in "\"'<> ") else ""
+    return {"id": value["id"], "text": text, "link": link}
+
+
 def clean_cards(value):
     """3.2: what a sync says about the cards I'm stuck on: {guid: {knows:
     [uid], tips: [{from, text, at, helped}]}}."""

@@ -3645,6 +3645,30 @@ def test_older_server_v32():
     check("older server: nothing 3.2 is marked sent", "log_hash" not in sam.session and sam._load_known()[1] is None)
 
 
+def test_admin_notice_v321():
+    """3.2.1: the admin's notice rides the board (for my version), shows on
+    top of every tab escaped, with More only for an https link, and a
+    dismiss that sticks by id."""
+    store = world({"sam": "Sam"})
+    store.notices = [{"id": 1, "text": "Everyone <b>hi</b>", "link": "https://duecrew.com/plans"},
+                     {"id": 2, "text": "Please update", "below": "3.2.1", "link": "javascript:x"}]
+    sam = new_client(store, "sam", "Sam")
+    sam.push([_day(0)], {}, version="3.1.1")
+    got = sam.fetch_board([_day(0)])["notice"]
+    check("notice: an older add-on gets the one for older versions, and no unsafe link",
+          got == {"id": 2, "text": "Please update", "link": ""}, str(got))
+    sam.push([_day(0)], {}, version="3.2.1")
+    got = sam.fetch_board([_day(0)])["notice"]
+    check("notice: a current one gets the one for everyone", got["id"] == 1 and got["link"] == "https://duecrew.com/plans")
+    html_ = board.notice_html(got)
+    check("notice: escaped, More opens it from Python, dismiss by id",
+          "&lt;b&gt;hi&lt;/b&gt;" in html_ and "noticeopen" in html_ and "noticex:1" in html_ and "duecrew.com/plans" not in html_)
+    check("notice: no link, no More", "noticeopen" not in board.notice_html({"id": 3, "text": "x", "link": ""}))
+    page = board.render({"entries": [], "labels": [_day(0)], "tomorrow": "", "pending": []}, {"period": "week"}, 0,
+                        notice=got)
+    check("notice: on top of the board", "noticex:1" in page)
+
+
 def test_session_card_v32():
     """3.2: today's session on my schedule, the missed-days question, the
     recap on a new plan week, checkpoints; the board draws them escaped."""
