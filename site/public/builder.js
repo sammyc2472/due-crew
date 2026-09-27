@@ -87,7 +87,8 @@ async function builder(id) {
 
   // ---- the working copy ----
   let doc = structuredClone(plan.doc);
-  let base = structuredClone(plan.doc);  // what this page loaded: a save that meets another merges onto it
+  for (const u of doc.units) if (u.check) { (doc.reviews ||= []).push({ day: u.check, from: u.id, to: u.id }); delete u.check; }
+  let base = structuredClone(doc);  // what this page loaded: a save that meets another merges onto it
   let meta = { name: plan.name, line: plan.line || "", audience: plan.audience, squad: plan.squad || "" };
   // a new plan starts at Anki's own 20 new cards a day
   const pace = { mode: doc.units.length ? "placed" : "daily", days: [1, 1, 1, 1, 1, 1, 1], daily: 20, ...(doc.pace || {}) };
@@ -121,14 +122,14 @@ async function builder(id) {
   }
   /** A source's cards not already on another date through a tag below it. */
   const eff = (key, placed) => Math.max(0, n(key) - placedBelow(key, placed).reduce((a, p) => a + n(p), 0));
-  const unitTotal = (u, placed = placedKeys()) => (count.size ? srcs(u).reduce((a, k) => a + eff(k, placed), 0) : u.n || 0) + (u.cards || []).length;
+  const unitTotal = (u, placed = placedKeys()) => (count.size ? srcs(u).reduce((a, k) => a + eff(k, placed), 0) : u.n || 0) + (u.cards || []).length + searchN(u);
   const label = (key, placed) => {
     const w = kindOf(key) === "deck" ? Tags.word(pathOf(key).split("::").pop()) : Tags.word(pathOf(key).split("::").pop());
     return placedBelow(key, placed).length ? `${w} · the rest` : w;
   };
   const autoName = (u) => {
     const ks = srcs(u);
-    if (!ks.length) return (u.cards || []).length ? `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}` : "?";
+    if (!ks.length) return (u.search || []).length ? "Search" : (u.cards || []).length ? `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}` : "?";
     return `${label(ks[0])}${ks.length > 1 ? ` + ${ks.length - 1} more` : ""}`.slice(0, 60);
   };
   const auto = new Set(doc.units.filter((u) => !u.name || u.name === autoName(u)).map((u) => u.id));
@@ -143,7 +144,12 @@ async function builder(id) {
   const firstStudy = (d) => (isStudy(d) ? d : nextStudy(d));
   function studyDays(a, b) { let k = 0; for (let x = a; x <= b; x = addDays(x, 1)) if (isStudy(x)) k++; return k; }
   const lastDay = () => doc.units.reduce((m, u) => { const e = u.even && u.due ? u.due : u.opens; return e > m ? e : m; }, "");
-  const cleanup = () => { doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length); };
+  const cleanup = () => {
+    doc.units = doc.units.filter((u) => srcs(u).length || (u.cards || []).length || (u.search || []).length);
+    const ids = new Set(doc.units.map((u) => u.id));
+    if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
+  };
+  const searchN = (u) => (u.search || []).reduce((a, q) => a + (u.sn?.[q] || 0), 0);
 
   function unitOn(d) {
     let u = doc.units.find((x) => x.opens === d && !x.even);
@@ -156,6 +162,11 @@ async function builder(id) {
     u[f] = u[f] || [];
     if (!u[f].includes(pathOf(key))) u[f].push(pathOf(key));
     return u;
+  }
+  function takeSearch(u, q) {
+    u.search = (u.search || []).filter((x) => x !== q);
+    if (u.sn) { delete u.sn[q]; if (!Object.keys(u.sn).length) delete u.sn; }
+    if (!u.search.length) delete u.search;
   }
   function takeOut(u, key) {
     const f = kindOf(key) === "tag" ? "tags" : "decks";
@@ -299,6 +310,13 @@ async function builder(id) {
         e.load += u.n || 0;
       } else for (const k of srcs(u)) { const c = eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c; }
       if ((u.cards || []).length) { e.chips.push({ u, cards: true, text: `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`, n: u.cards.length }); e.load += u.cards.length; }
+      for (const q of u.search || []) { const c = u.sn?.[q] ?? null; e.chips.push({ u, search: q, text: "Search", raw: q, n: c }); e.load += c || 0; }
+    }
+    const byId = new Map(doc.units.map((u) => [u.id, u]));
+    for (const r of doc.reviews || []) {
+      if (r.day < from || r.day > to) continue;
+      const a = byId.get(r.from), b = byId.get(r.to);
+      if (a && b) at(r.day).chips.push({ review: r, text: `Review · ${a.name}${a !== b ? ` – ${b.name}` : ""}`, n: null });
     }
     return out;
   }
@@ -320,6 +338,7 @@ async function builder(id) {
   function moveChip(c, d) {
     if (c.even) { shiftUnit(c.u, Sched.diff(d, c.u.opens)); }
     else if (c.cards) { if (c.u.opens === d) return; const t = unitOn(d); t.cards = [...(t.cards || []), ...c.u.cards]; c.u.cards = []; }
+    else if (c.search) { if (c.u.opens === d) return; const t = unitOn(d); t.search = [...new Set([...(t.search || []), c.search])]; if (c.u.sn?.[c.search] != null) t.sn = { ...(t.sn || {}), [c.search]: c.u.sn[c.search] }; takeSearch(c.u, c.search); }
     else { if (c.u.opens === d) return; takeOut(c.u, c.key); addTo(d, c.key); }
     cleanup(); renameAll(); byOpens(); mark(); draw();
   }
@@ -467,7 +486,7 @@ async function builder(id) {
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
       const chips = e.chips.map((c) => {
-        const el = h("button", { class: `ch ${c.cards ? "single" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author ? "true" : null,
+        const el = h("button", { class: `ch ${c.review ? "rv" : c.cards ? "single" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
@@ -500,7 +519,7 @@ async function builder(id) {
     return null;
   }
 
-  // ---- a day: what opens, split, checkpoint ----
+  // ---- a day: what opens, split, searches, a review day, notes ----
   function dayPanel() {
     if (!picked) return null;
     const d = picked;
@@ -509,20 +528,17 @@ async function builder(id) {
     const spans = doc.units.filter((u) => u.even && u.due && u.opens <= d && d <= u.due);
     const rows = [];
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards ? "single" : hue(c.key)}`, title: c.raw || "" },
-      h("span", {}, c.text, c.raw && Tags.name(c.raw) !== c.raw ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
-      author && !c.cards ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
+      h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
+      author && !c.cards && !c.search ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
-        if (c.cards) u.cards = []; else takeOut(u, c.key);
+        if (c.cards) u.cards = []; else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);
         cleanup(); renameAll(); mark(); draw(); } }, "×") : null);
     for (const u of own) {
       const chips = e.chips.filter((c) => c.u === u).map((c) => chipEl(u, c));
-      if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips), u.check ? h("span", { class: "muted small" }, `Checkpoint ${pretty(u.check)}`) : null)); continue; }
+      if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips))); continue; }
       const name = h("input", { class: "uname", value: u.name, maxlength: 60, "aria-label": "Name",
         oninput: (ev) => { u.name = ev.target.value; auto.delete(u.id); mark(); } });
-      const check = h("input", { type: "date", value: u.check || "", min: u.opens, "aria-label": "Checkpoint",
-        title: "That morning, followers get a filtered deck of this date's most-missed cards",
-        onchange: (ev) => { u.check = ev.target.value && ev.target.value >= u.opens ? ev.target.value : undefined; mark(); } });
-      rows.push(h("div", { class: "du" }, name, h("div", { class: "chips2" }, chips), h("label", { class: "inline" }, "Checkpoint ", check)));
+      rows.push(h("div", { class: "du" }, name, h("div", { class: "chips2" }, chips)));
     }
     for (const u of spans) {
       const total = unitTotal(u);
@@ -541,8 +557,40 @@ async function builder(id) {
         h("button", { class: "quiet", "aria-label": "Close", onclick: () => { picked = null; splitting = null; draw(); } }, "×")),
       splitting ? splitPanel() : null,
       rows.length ? rows : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here." : "Nothing new this day."),
+      author ? searchBox(d) : null,
+      reviewBox(d),
       moveIn ? h("label", { class: "inline" }, "Move to ", moveIn) : null,
       inPlan ? notesBox(d) : null);
+  }
+
+  /** 3.3, C3: an Anki search as part of a day; each follower's Anki runs it. */
+  function searchBox(d) {
+    const input = h("input", { class: "mono", placeholder: "Paste an Anki search", maxlength: 500, "aria-label": `An Anki search for ${pretty(d)}`, style: "flex:1" });
+    const add = () => {
+      const q = input.value.trim(); if (!q) return;
+      const u = unitOn(d);
+      u.search = [...new Set([...(u.search || []), q])];
+      renameAll(); mark(); draw();
+    };
+    input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") add(); });
+    return h("div", { class: "row" }, input, h("button", { class: "quiet", onclick: add }, "Add"));
+  }
+
+  /** 3.3, C4: a review day: that morning, a filtered deck of a range of dates. */
+  function reviewBox(d) {
+    const us = [...doc.units].sort((a, b) => a.opens.localeCompare(b.opens));
+    const r = (doc.reviews || []).find((x) => x.day === d);
+    const byId = new Map(us.map((u) => [u.id, u]));
+    if (!author) return r && byId.get(r.from) ? h("p", { class: "muted small" }, `Review day: ${byId.get(r.from).name} to ${byId.get(r.to).name}.`) : null;
+    const before = us.filter((u) => u.opens <= d);
+    if (!before.length) return null;
+    if (!r) return h("button", { class: "linkish", onclick: () => {
+      (doc.reviews ||= []).push({ day: d, from: before[Math.max(0, before.length - 5)].id, to: before[before.length - 1].id }); mark(); draw(); } }, "+ Review day");
+    const pick = (k) => h("select", { "aria-label": k === "from" ? "Review from" : "Review to", onchange: (e) => { r[k] = e.target.value; mark(); draw(); } },
+      us.map((u) => h("option", { value: u.id, selected: r[k] === u.id }, `${u.name} · ${pretty(u.opens)}`)));
+    return h("div", { class: "rvbox" }, h("b", {}, "Review day"),
+      h("div", { class: "row" }, pick("from"), "to", pick("to"),
+        h("button", { class: "quiet", "aria-label": "No review day", onclick: () => { doc.reviews = doc.reviews.filter((x) => x !== r); if (!doc.reviews.length) delete doc.reviews; mark(); draw(); } }, "×")));
   }
 
   /** Notes on a day, from anyone in the plan ("lab day, keep it light"). */
@@ -616,12 +664,11 @@ async function builder(id) {
       const opens = h("input", { type: "date", value: u.opens, "aria-label": "Opens", onchange: (e) => { if (e.target.value) { const k = Sched.diff(e.target.value, u.opens); shiftUnit(u, k); if (u.check && u.check < u.opens) delete u.check; byOpens(); mark(); draw(); } } });
       const due = h("input", { type: "date", value: u.due || "", min: u.opens, "aria-label": "Due", onchange: (e) => { u.due = e.target.value && e.target.value >= u.opens ? e.target.value : undefined; if (!u.due || u.due === u.opens) delete u.even; mark(); draw(); } });
       const even = h("input", { type: "checkbox", checked: !!u.even, disabled: !u.due || u.due === u.opens, onchange: (e) => { if (e.target.checked) u.even = true; else delete u.even; mark(); draw(); } });
-      const check = h("input", { type: "date", value: u.check || "", min: u.opens, "aria-label": "Checkpoint", onchange: (e) => { u.check = e.target.value && e.target.value >= u.opens ? e.target.value : undefined; mark(); } });
       const chips = h("div", { class: "chips2" }, srcs(u).map((k) => h("span", { class: `ch2 ${hue(k)}`, title: pathOf(k) }, h("span", {}, label(k, placed), h("span", { class: "raw" }, pathOf(k))), h("small", {}, eff(k, placed).toLocaleString()),
         h("button", { class: "x", "aria-label": `Remove ${pathOf(k)}`, onclick: () => { takeOut(u, k); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
         (u.cards || []).length ? h("span", { class: "ch2 single" }, `${u.cards.length} single cards`) : null);
       return h("div", { class: "unit" }, h("span"), h("div", {}, name, chips),
-        h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due), h("label", { class: "inline" }, even, " evenly over its days"), h("span", {}, "Checkpoint ", check),
+        h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due), h("label", { class: "inline" }, even, " evenly over its days"),
           h("button", { class: "del", "aria-label": `Delete ${u.name}`, onclick: () => { doc.units = doc.units.filter((x) => x !== u); mark(); draw(); } }, "×")));
     }));
   }
@@ -629,6 +676,7 @@ async function builder(id) {
   // ---- as text ----
   const toText = () => { byOpens(); return doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.decks || []).map((d) => `deck:${d}`)].join(", "),
+    ...(u.search || []).map((q) => `search:${q}`),
     u.due ? `due ${u.due}` : "", u.even ? "even" : "", (u.cards || []).length ? `${u.cards.length} single cards` : ""].filter(Boolean).join(" | ")).join("\n"); };
 
   // what an AI (or a person) might write for a tag: the exact path, any
@@ -646,7 +694,7 @@ async function builder(id) {
       if (!line || /^```/.test(raw.trim())) return;
       if (line.startsWith("#")) { if (/\bpick\b|single|anki/i.test(line)) notes.push(line.replace(/^#+\s*/, "")); return; }
       const parts = line.split(/\s*\|\s*|\s{2,}/).filter(Boolean);
-      let opens = null; let due; let even = false; let name = ""; const tags = []; const decks = [];
+      let opens = null; let due; let even = false; let name = ""; const tags = []; const decks = []; const searches = [];
       for (const part of parts) {
         let m;
         if (!opens && (m = /^(\d{4}-\d{2}-\d{2})$/.exec(part))) opens = m[1];
@@ -654,6 +702,7 @@ async function builder(id) {
         else if ((m = /^due\s+(\d{4}-\d{2}-\d{2})$/i.exec(part))) due = m[1];
         else if (/^even(ly)?$/i.test(part)) even = true;
         else if (/^\d+ single cards?$/.test(part)) continue;
+        else if (/^search:/i.test(part)) searches.push(part.slice(7).trim());
         else if (/^(tag|deck):/i.test(part)) {
           for (const x of part.split(/\s*[,;]\s*(?=(?:tag|deck):)/i)) {
             const kind = x.slice(0, 4).toLowerCase() === "deck" ? "deck" : "tag";
@@ -663,12 +712,13 @@ async function builder(id) {
         } else name = name ? `${name} ${part}` : part;
       }
       if (!opens) { errors.push(`Line ${i + 1}: starts with a date (2026-10-05) or "week 3".`); return; }
-      if (!tags.length && !decks.length) { errors.push(`Line ${i + 1}: needs a tag: or a deck:.`); return; }
+      if (!tags.length && !decks.length && !searches.length) { errors.push(`Line ${i + 1}: needs a tag:, a deck: or a search:.`); return; }
       if (due && due < opens) { errors.push(`Line ${i + 1}: due is before it opens.`); return; }
       if (even && !(due && due > opens)) { errors.push(`Line ${i + 1}: "even" needs a due date after it opens.`); return; }
       const old = doc.units.find((u) => u.opens === opens && u.name === (name || leaf(tags[0] || decks[0])));
       const u = { id: old?.id || uid8(), name: (name || "").slice(0, 60), opens, due, tags: [...new Set(tags)], decks: [...new Set(decks)], cards: old?.cards || [] };
       if (even) u.even = true;
+      if (searches.length) u.search = [...new Set(searches)];
       if (!u.due) delete u.due;
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
       units.push(u);
@@ -711,6 +761,7 @@ async function builder(id) {
       "- The first part is the date those cards open: YYYY-MM-DD, or \"week 3\" for the Monday of the plan's third week.",
       "- A tag brings every card under it. A whole chapter is its tag; a smaller part is a deeper tag (a section, a lecture). Copy tags exactly from the list below, the part before the two spaces; never invent one.",
       "- A subdeck works the same way: deck:FULL::DECK::PATH.",
+      "- When a lecture is only part of a tag (two tags at once, or one without another), use an Anki search instead: search:tag:A tag:B -tag:C.",
       "- Several tags can open the same day: separate them with commas on one line.",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
       "- Without a due date, a date's cards are meant to be done before the next date opens.",
@@ -938,7 +989,7 @@ async function builder(id) {
     if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
     if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
     if (changed.length === 1) out.push(`changed ${changed[0].name}`); else if (changed.length) out.push(`changed ${changed.length} dates`);
-    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"]]) {
+    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"]]) {
       if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null) && !(k === "pace" && out.length)) out.push(`changed ${w}`);
     }
     return (out.join("; ") || "changed the plan").slice(0, 120);
@@ -956,7 +1007,7 @@ async function builder(id) {
       units = units.filter((x) => x.id !== uid).concat([structuredClone(u)]);
     }
     out.units = units.sort((x, y) => x.opens.localeCompare(y.opens));
-    for (const k of ["pace", "end", "phases"]) {
+    for (const k of ["pace", "end", "phases", "reviews"]) {
       if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
     }
     return out;
@@ -1008,7 +1059,7 @@ async function builder(id) {
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 409 ? "It changed again while saving. Save once more."
-        : err.body?.error === "bad_plan" ? "A date isn't valid: a due date or checkpoint can't be before it opens, and review-only days need an end date."
+        : err.body?.error === "bad_plan" ? "A date isn't valid: a due date can't be before it opens, and review-only days need an end date."
         : "That didn't save. Try again.";
     } finally { saveBtn.disabled = false; }
   }
