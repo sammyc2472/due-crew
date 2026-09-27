@@ -76,8 +76,8 @@ newer. Restart Anki after installing.
 
 ## Get started
 
-1. Click **Join** on the Decks screen and enter your email. Type in the
-   code we send you. There's no password.
+1. Click **Start with your email** on the Decks screen. Type in the code
+   we send you. There's no password.
 2. Copy your invite and send it to a friend.
 3. When they add you, click **Add back**. You're crew.
 
