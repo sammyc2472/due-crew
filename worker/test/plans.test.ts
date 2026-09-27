@@ -102,6 +102,14 @@ describe("plans: following", () => {
     expect(await maya.status("GET", `/plans/${plan.id}`)).toBe(200);  // a follower reads it without the code
   });
 
+  it("guessing codes through Follow is as slow as through Peek", async () => {
+    const { plan } = await authored();
+    const maya = await person("maya");
+    for (let i = 0; i < 60; i++) expect(await maya.status("POST", "/plans/follow", { code: "NOPE2345" })).toBe(404);
+    expect(await maya.status("POST", "/plans/follow", { code: plan.code })).toBe(429);
+    expect(await maya.status("GET", `/plans/peek?code=${plan.code}`)).toBe(429);
+  });
+
   it("a squad plan: only members follow it, and members are offered it", async () => {
     const { dre, plan } = await authored();
     const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;

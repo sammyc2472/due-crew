@@ -8,7 +8,7 @@ import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
 import { SQUAD_ALPHABET, normalizeCode } from "./squads";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson } from "./util";
+import { Env, HttpError, clientIp, json, nowSec, readJson } from "./util";
 
 export const PLAN_CODE_LEN = 8;
 const UNITS_MAX = 200;
@@ -271,29 +271,46 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
   return p;
 }
 
-async function ownerName(env: Env, uid: string): Promise<string> {
-  return (await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(uid).first<string>("name")) || "?";
-}
+type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number };
+type Editor = { uid: string; name: string; emoji: string };
 
-async function view(env: Env, p: Plan, uid: string) {
-  const f = await following(env, p.id, uid);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id).first<number>("n");
-  const eds = await env.DB.prepare(
-    "SELECT e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at",
-  ).bind(p.id).all<{ uid: string; name: string; emoji: string | null }>();
-  const editors = eds.results.map((e) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }));
+/** A plan as its page shows it. What it needs about me comes in `ctx`, so
+ *  a list of plans reads it in a few queries, not a few per plan. */
+function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unknown,
+               ctx: { f: Follow | null; n: number; editors: Editor[]; mySquads: Set<string> }) {
+  const { f, editors } = ctx;
   const r = p.owner === uid ? "owner" : editors.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
   return {
     role: r, editors,
-    id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: await ownerName(env, p.owner),
-    audience: p.audience, version: p.version, doc: JSON.parse(p.doc), followers: n ?? 0,
+    id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: p.owner_name || "?",
+    audience: p.audience, version: p.version, doc, followers: ctx.n,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
-    squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
+    squad: p.owner === uid || (!!p.squad && ctx.mySquads.has(p.squad)) ? p.squad : null,
     ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") ? { code: p.code } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
                            progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
   };
+}
+
+const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
+  `SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid
+    WHERE e.plan IN (${ids.map(() => "?").join(",")}) ORDER BY e.at`,
+).bind(...ids).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>();
+
+async function view(env: Env, p: Plan, uid: string) {
+  const [f, n, eds, owner, member] = await env.DB.batch<any>([
+    env.DB.prepare("SELECT share, paused, sched, progress, early FROM plan_follows WHERE plan = ? AND uid = ?").bind(p.id, uid),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id),
+    env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
+    env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
+    env.DB.prepare("SELECT squad FROM members WHERE squad = ? AND uid = ?").bind(p.squad ?? "", uid),
+  ]);
+  return shape({ ...p, owner_name: owner.results[0]?.name }, uid, JSON.parse(p.doc), {
+    f: (f.results[0] as Follow) ?? null, n: n.results[0]?.n ?? 0,
+    editors: eds.results.map((e: any) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" })),
+    mySquads: new Set(member.results.map((m: any) => m.squad)),
+  });
 }
 
 // ---- the deck's tree, from the add-on ----
@@ -664,7 +681,9 @@ function fold(line: string): string {
 export async function ics(req: Request, env: Env): Promise<Response> {
   const code = normalizeCode(new URL(req.url).searchParams.get("code") || "");
   if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
-  await limitOrThrow(env, `ics:${code}`, 120, 3600);
+  // by address, not by code: guessing codes stays slow, and nobody holding a
+  // code can use up its calendar for everyone (Google polls from few addresses)
+  await limitOrThrow(env, `ics:ip:${clientIp(req)}`, 1000, 3600);
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
   const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[] };
@@ -701,6 +720,7 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   if (typeof body.code !== "string") throw V.bad("code");
   const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
   const code = normalizeCode(body.code);
+  await limitOrThrow(env, `planpeek:${s.uid}`, 60, 3600);  // the same guesses as peek's
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || !(await mayRead(env, p, s.uid, code))) throw new HttpError(404, "no_plan");
   const share = body.share === false ? 0 : 1;
@@ -744,16 +764,40 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
   return json({ ok: true });
 }
 
-/** GET /plans/mine: plans I wrote and plans I follow. */
+/** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
+ *  single cards and note ids (a list never needs them; they're most of a
+ *  big plan), and everything else in five queries, however many plans. */
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
-    `SELECT * FROM plans WHERE id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1
-                                      UNION SELECT plan FROM plan_editors WHERE uid = ?1)
-     ORDER BY updated_at DESC`,  // both halves by index, not a scan of every plan
-  ).bind(s.uid).all<Plan>();
-  const out = [];
-  for (const p of rows.results) out.push(await view(env, p, s.uid));
-  return json({ plans: out });
+    `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
+            json_remove(p.doc, '$.units') AS rest,
+            (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
+       FROM plans p LEFT JOIN users u ON u.uid = p.owner
+      WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1
+                     UNION SELECT plan FROM plan_editors WHERE uid = ?1)
+      ORDER BY p.updated_at DESC`,  // each part by index, not a scan of every plan
+  ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
+  const ids = rows.results.map((p) => p.id);
+  if (!ids.length) return json({ plans: [] });
+  const inIds = ids.map(() => "?").join(",");
+  const [fs, ns, eds, sq] = await Promise.all([
+    env.DB.prepare(`SELECT plan, share, paused, sched, progress, early FROM plan_follows WHERE uid = ?`).bind(s.uid)
+      .all<Follow & { plan: string }>(),
+    env.DB.prepare(`SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${inIds}) GROUP BY plan`).bind(...ids)
+      .all<{ plan: string; n: number }>(),
+    editorsOf(env, ids),
+    env.DB.prepare("SELECT squad FROM members WHERE uid = ?").bind(s.uid).all<{ squad: string }>(),
+  ]);
+  const follows = new Map(fs.results.map((f) => [f.plan, f]));
+  const counts = new Map(ns.results.map((r) => [r.plan, r.n]));
+  const editors = new Map<string, Editor[]>();
+  for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), { uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }]);
+  const mySquads = new Set(sq.results.map((m) => m.squad));
+  return json({ plans: rows.results.map((p) => {
+    const units = (JSON.parse(p.units) as Obj[]).sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
+    return shape(p, s.uid, { ...JSON.parse(p.rest), units },
+      { f: follows.get(p.id) ?? null, n: counts.get(p.id) ?? 0, editors: editors.get(p.id) ?? [], mySquads });
+  }) });
 }
 
 // ---- progress ----
@@ -789,10 +833,10 @@ export async function progressWrites(env: Env, uid: string, part: ReturnType<typ
     .map(({ r, doc }) => env.DB.prepare("UPDATE plan_follows SET progress = ? WHERE plan = ? AND uid = ?").bind(doc, r.plan, uid));
 }
 
-/** GET /plans/{id}/progress: for the author, per unit, how many followers
+/** GET /plans/{id}/progress: for its authors, per unit, how many followers
  *  (among those sharing) have it opened and done. Counts, never names. */
 export async function progress(s: Session, env: Env, [id]: string[]): Promise<Response> {
-  const p = await ownerOnly(env, id, s);
+  const p = await authorOnly(env, id, s);
   const rows = await env.DB.prepare("SELECT progress FROM plan_follows WHERE plan = ? AND share = 1 AND progress IS NOT NULL")
     .bind(id).all<{ progress: string }>();
   const units: Record<string, { opened: number; done: number }> = {};
@@ -842,19 +886,21 @@ export async function forBoard(env: Env, uid: string) {
       crew.set(r.plan, c);
     }
   }
-  // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their tags
+  // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their
+  // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
-    `SELECT id, version, doc FROM plans WHERE owner = ?1 UNION SELECT p.id, p.version, p.doc FROM plans p
-       JOIN plan_editors e ON e.plan = p.id WHERE e.uid = ?1`,
-  ).bind(uid).all<{ id: string; version: number; doc: string }>();
-  const lean = (doc: string) => {
-    const d = JSON.parse(doc) as { deck: string; units: Obj[] };
-    return { deck: d.deck, units: d.units
-      .filter((u) => (u.tags as unknown[]).length || (u.decks as unknown[]).length || ((u.search as unknown[]) || []).length)
-      .map((u) => ({ id: u.id, tags: u.tags, decks: u.decks, ...(u.search ? { search: u.search } : {}) })) };
-  };
+    `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
+            (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
+                      'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search')))
+               FROM json_each(p.doc, '$.units') x
+              WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
+                    + coalesce(json_array_length(x.value, '$.search'), 0) > 0) AS units
+       FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
+  ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
+  const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
+    .map((u) => (u.search ? u : { id: u.id, tags: u.tags, decks: u.decks })) });
   return {
-    authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r.doc) })),
+    authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0,

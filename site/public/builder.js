@@ -124,7 +124,7 @@ async function builder(id) {
   const eff = (key, placed) => Math.max(0, n(key) - placedBelow(key, placed).reduce((a, p) => a + n(p), 0));
   const unitTotal = (u, placed = placedKeys()) => (count.size ? srcs(u).reduce((a, k) => a + eff(k, placed), 0) : u.n || 0) + (u.cards || []).length + searchN(u);
   const label = (key, placed) => {
-    const w = kindOf(key) === "deck" ? Tags.word(pathOf(key).split("::").pop()) : Tags.word(pathOf(key).split("::").pop());
+    const w = Tags.word(pathOf(key).split("::").pop());
     return placedBelow(key, placed).length ? `${w} · the rest` : w;
   };
   const autoName = (u) => {
@@ -553,7 +553,7 @@ async function builder(id) {
     }
     const moveIn = author && own.length ? h("input", { type: "date", "aria-label": "Move this day to", onchange: (ev) => {
       const to = ev.target.value; if (!to || to === d) return;
-      for (const u of own) { const other = doc.units.find((x) => x.opens === to && !x.even && x !== u); if (other) { for (const k of srcs(u)) addTo(to, k); other.cards = [...(other.cards || []), ...(u.cards || [])]; doc.units = doc.units.filter((x) => x !== u); } else shiftUnit(u, Sched.diff(to, u.opens)); }
+      for (const u of own) { const other = doc.units.find((x) => x.opens === to && !x.even && x !== u); if (other) { for (const k of srcs(u)) addTo(to, k); other.cards = [...(other.cards || []), ...(u.cards || [])]; for (const q of u.search || []) { other.search = [...new Set([...(other.search || []), q])]; if (u.sn?.[q] != null) other.sn = { ...(other.sn || {}), [q]: u.sn[q] }; } for (const r of doc.reviews || []) { if (r.from === u.id) r.from = other.id; if (r.to === u.id) r.to = other.id; } doc.units = doc.units.filter((x) => x !== u); } else shiftUnit(u, Sched.diff(to, u.opens)); }
       picked = to; renameAll(); byOpens(); mark(); draw(); } }) : null;
     return h("section", { class: "dayp", "aria-label": pretty(d) },
       h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `${pretty(d)}${e.load ? ` · ${e.load.toLocaleString()} cards` : ""}`),
@@ -613,7 +613,8 @@ async function builder(id) {
     return h("div", { class: "notes" },
       list.map((x) => h("div", { class: "note" }, h("b", {}, x.mine ? "You" : x.name), " ", h("span", {}, x.text),
         x.remove ? h("button", { class: "x", "aria-label": "Remove this note", onclick: async () => {
-          await api("DELETE", `/plans/${id}/notes/${x.id}`).catch(() => {}); notes = notes.filter((y) => y !== x); draw(); } }, "×") : null)),
+          try { await api("DELETE", `/plans/${id}/notes/${x.id}`); } catch { return; }
+          notes = notes.filter((y) => y !== x); draw(); } }, "×") : null)),
       input);
   }
 
@@ -669,7 +670,10 @@ async function builder(id) {
       const even = h("input", { type: "checkbox", checked: !!u.even, disabled: !u.due || u.due === u.opens, onchange: (e) => { if (e.target.checked) u.even = true; else delete u.even; mark(); draw(); } });
       const chips = h("div", { class: "chips2" }, srcs(u).map((k) => h("span", { class: `ch2 ${hue(k)}`, title: pathOf(k) }, h("span", {}, label(k, placed), h("span", { class: "raw" }, pathOf(k))), h("small", {}, eff(k, placed).toLocaleString()),
         h("button", { class: "x", "aria-label": `Remove ${pathOf(k)}`, onclick: () => { takeOut(u, k); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
-        (u.cards || []).length ? h("span", { class: "ch2 single" }, `${u.cards.length} single cards`) : null);
+        (u.search || []).map((q) => h("span", { class: `ch2 ${u.sn?.[q] === 0 ? "warn" : "c2"}`, title: q }, h("span", {}, "Search", h("span", { class: "raw" }, q)),
+          u.sn?.[q] != null ? h("small", {}, u.sn[q].toLocaleString()) : null,
+          h("button", { class: "x", "aria-label": `Remove the search ${q}`, onclick: () => { takeSearch(u, q); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
+        (u.cards || []).length ? h("span", { class: "ch2 single" }, `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`) : null);
       return h("div", { class: "unit" }, h("span"), h("div", {}, name, chips),
         h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due), h("label", { class: "inline" }, even, " evenly over its days"),
           h("button", { class: "del", "aria-label": `Delete ${u.name}`, onclick: () => { doc.units = doc.units.filter((x) => x !== u); mark(); draw(); } }, "×")));
@@ -721,7 +725,11 @@ async function builder(id) {
       const old = doc.units.find((u) => u.opens === opens && u.name === (name || leaf(tags[0] || decks[0])));
       const u = { id: old?.id || uid8(), name: (name || "").slice(0, 60), opens, due, tags: [...new Set(tags)], decks: [...new Set(decks)], cards: old?.cards || [] };
       if (even) u.even = true;
-      if (searches.length) u.search = [...new Set(searches)];
+      if (searches.length) {
+        u.search = [...new Set(searches)];
+        const sn = Object.fromEntries(u.search.filter((q) => old?.sn?.[q] != null).map((q) => [q, old.sn[q]]));
+        if (Object.keys(sn).length) u.sn = sn;  // a search kept as it was keeps its count
+      }
       if (!u.due) delete u.due;
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
       units.push(u);
@@ -842,7 +850,8 @@ async function builder(id) {
       onchange: (e) => setPh("taper", Math.max(0, Math.min(60, Math.round(Number(e.target.value) || 0)))) });
     const del = h("button", { class: "danger", onclick: async () => {
       if (del.dataset.sure !== "1") { del.dataset.sure = "1"; del.textContent = "Delete it: followers keep their cards open"; return; }
-      await api("DELETE", `/plans/${id}`); dirty = false; go("/plans");
+      try { await api("DELETE", `/plans/${id}`); } catch { del.textContent = "That didn't work. Try again."; del.dataset.sure = ""; return; }
+      dirty = false; go("/plans");
     } }, "Delete this plan");
     return h("div", { class: "stack", style: "max-width:560px" },
       h("label", { for: "sname" }, "Name"), name,
@@ -871,12 +880,13 @@ async function builder(id) {
       p.uid === me.uid ? "You" : p.name,
       (owner && p.uid !== plan.owner) || (plan.role === "editor" && p.uid === me.uid)
         ? h("button", { class: "x", "aria-label": p.uid === me.uid ? "Leave" : `Remove ${p.name}`, onclick: async () => {
-          await api("DELETE", `/plans/${id}/editors/${p.uid}`);
+          try { await api("DELETE", `/plans/${id}/editors/${p.uid}`); } catch { return; }
           if (p.uid === me.uid) return go("/plans");
           plan = { ...plan, editors: plan.editors.filter((x) => x.uid !== p.uid) }; draw(); } }, "×") : null));
     const pick = h("span");
     const addBtn = owner ? h("button", { class: "linkish", onclick: async () => {
-      const b = await api("GET", "/board?keep=1");
+      let b;
+      try { b = await api("GET", "/friends"); } catch { return; }
       const have = new Set(all.map((x) => x.uid));
       const crew = (b.friends || []).filter((f) => f.mutual && !have.has(f.uid));
       pick.replaceChildren(crew.length
@@ -921,10 +931,12 @@ async function builder(id) {
   let progressData = null;
   function progressTab() {
     if (!progressData) {
-      api("GET", `/plans/${id}/progress`).then((r) => { progressData = r; draw(); }).catch(() => {});
+      api("GET", `/plans/${id}/progress`).then((r) => { progressData = r; draw(); })
+        .catch(() => { progressData = { followers: 0, sharing: 0, units: {}, failed: true }; draw(); });
       return h("p", { class: "muted" }, "Loading…");
     }
     const pr = progressData;
+    if (pr.failed) { progressData = null; return h("p", { class: "muted" }, "Couldn't load it. Open the tab again."); }
     byOpens();
     return h("div", {},
       h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress.`),
@@ -1014,6 +1026,9 @@ async function builder(id) {
     for (const k of ["pace", "end", "phases", "reviews"]) {
       if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
     }
+    // a review day of a date one of us took off goes with it
+    const ids = new Set(out.units.map((u) => u.id));
+    if (out.reviews) { out.reviews = out.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!out.reviews.length) delete out.reviews; }
     return out;
   }
 

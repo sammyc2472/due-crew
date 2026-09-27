@@ -104,7 +104,9 @@ write, lean) and each plan's `early`.
 3.4: `PUT /plans/{id}/ids` also takes `counts: {unitId: {search: n}}`;
 the lean `authored` docs carry each date's searches. `GET
 /plans/ics?code=` (no sign-in) is the plan as iCalendar; the site serves
-it at `/p/CODE.ics`.
+it at `/p/CODE.ics` (1,000 an hour an address). `POST /plans/follow`
+shares peek's 60 an hour. `GET /plans/mine` leaves each doc's single
+cards and note ids out; `GET /plans/{id}/progress` is for co-authors too.
 
 ### Squads
 

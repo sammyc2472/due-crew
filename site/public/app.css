@@ -295,6 +295,7 @@ body:has(main.wide) > .top { max-width: 1320px; }
 .calwrap.has-day .cal2.month .ch small { display: none; }
 @media (max-width: 1100px) { .calwrap.has-day { grid-template-columns: 1fr; } .calwrap .dayp { position: static; max-height: none; } }
 .dayp > *, .splitp > *, .du > * { min-width: 0; }
+.dayp > button.linkish { justify-self: start; }
 .dayp { overflow-wrap: anywhere; }
 .opt3 > span { min-width: 0; flex: 1; }
 .opt3 code { word-break: break-all; }

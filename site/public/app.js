@@ -44,13 +44,30 @@ async function api(method, path, body) {
   return data;
 }
 
-function go(path) { history.pushState(null, "", path); route(); }
+// the builder sets onbeforeunload while it has unsaved changes; moving
+// within the site asks the same question a closing tab does
+let here = location.pathname + location.search;
+function leaveOk() {
+  const unsaved = window.onbeforeunload;
+  if (unsaved && unsaved() && !confirm("Leave without saving your changes?")) return false;
+  window.onbeforeunload = null;
+  return true;
+}
+
+function go(path) {
+  if (!leaveOk()) return;
+  history.pushState(null, "", path);
+  route();
+}
 
 document.addEventListener("click", (e) => {
   const a = e.target.closest && e.target.closest("a[data-go]");
   if (a && !e.metaKey && !e.ctrlKey) { e.preventDefault(); go(a.getAttribute("href")); }
 });
-window.addEventListener("popstate", () => route());
+window.addEventListener("popstate", () => {
+  if (!leaveOk()) { history.pushState(null, "", here); return; }
+  route();
+});
 // a menu (Add to calendar) closes when you click anywhere else
 document.addEventListener("click", (e) => {
   for (const d of document.querySelectorAll("details.calmenu[open]")) if (!d.contains(e.target)) d.open = false;
@@ -101,7 +118,9 @@ function needSignIn() {
 // ---- sign in ----
 
 function signIn() {
-  const next = new URLSearchParams(location.search).get("next") || "/home";
+  // only a page of this site: "//elsewhere" would leave it
+  const asked = new URLSearchParams(location.search).get("next") || "";
+  const next = /^\/(?![/\\])/.test(asked) ? asked : "/home";
   const m = page();
   m.className = "narrow";
   const status = h("p", { class: "status", role: "status" });
@@ -234,7 +253,6 @@ async function newPlan() {
 
 // ---- a plan's own page (author: progress; follower: the dates) ----
 
-/** /p/CODE: what a shared link shows. */
 /** 3.4: a plan's dates in any calendar, as a subscription that follows changes. */
 function calMenu(code) {
   const https = `${location.origin}/p/${code}.ics`;
@@ -246,6 +264,7 @@ function calMenu(code) {
       h("button", { class: "linkish", onclick: (e) => copy(https, e.target) }, "Copy the calendar link")));
 }
 
+/** /p/CODE: what a shared link shows. */
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
@@ -271,7 +290,10 @@ async function codePage(code) {
 }
 
 async function account() {
-  const out = async (all) => { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); me = null; renderNav(); go("/sign-in"); };
+  const out = async (all) => {
+    try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
+    me = null; renderNav(); go("/sign-in");
+  };
   page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
     h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
       h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere")),
@@ -762,6 +784,8 @@ async function adminPage() {
 }
 
 async function route() {
+  here = location.pathname + location.search;
+  window.onbeforeunload = null;  // the builder sets it again when it opens
   const path = location.pathname.replace(/\/+$/, "") || "/";
   try {
     if (path === "/sign-in") return signIn();

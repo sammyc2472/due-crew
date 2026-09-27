@@ -30,6 +30,7 @@ describe("3.3: plans together", () => {
     const seen = await maya.call("GET", `/plans/${p.id}`);
     expect(seen.body.role).toBe("editor");
     expect(seen.body.code).toBe(p.code);
+    expect(await maya.status("GET", `/plans/${p.id}/progress`)).toBe(200);  // the counts are the authors'
     const doc = { deck: "Step 1", units: [UNITS[0], { ...UNITS[1], opens: "2026-10-07" }] };
     expect((await maya.call("PUT", `/plans/${p.id}`, { version: p.version, doc, summary: "moved Arrhythmia to Wed" })).status).toBe(200);
     expect(await maya.status("PUT", `/plans/${p.id}`, { version: p.version + 1, audience: "squad" })).toBe(403);
@@ -137,12 +138,30 @@ describe("3.3: a class through Step (C1–C5)", () => {
     expect(again.body.version).toBe(p.version + 1);  // unchanged: nothing written
   });
 
+  it("the list of my plans leaves out single cards and note ids, keeps the rest in order", async () => {
+    const { dre, maya, p } = await plan();
+    const units = [{ ...UNITS[1], cards: [["gA", 0]], n: 40 }, { ...UNITS[0], search: ["tag:x"] }];
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", end: "2026-12-01", units } });
+    await dre.call("PUT", `/plans/${p.id}/ids`, { units: { hf: [UNITS[0].tags, [], ["g1"]] } });
+    await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
+    await maya.call("POST", "/plans/follow", { code: p.code });
+    const [row] = (await maya.call("GET", "/plans/mine")).body.plans;
+    expect(row.doc).toEqual({ deck: "Step 1", end: "2026-12-01", units: [
+      { id: "hf", name: "Heart failure", opens: "2026-10-05", tags: UNITS[0].tags, decks: [], search: ["tag:x"] },
+      { id: "arr", name: "Arrhythmia", opens: "2026-10-06", tags: UNITS[1].tags, decks: [], n: 40 }] });
+    expect(row).toMatchObject({ role: "editor", followers: 1, ownerName: "Dre", code: p.code,
+      editors: [{ uid: "maya", name: "Maya", emoji: "" }], following: { share: true, paused: false, early: 0 } });
+    expect(put.body.version).toBeGreaterThan(p.version);
+    expect((await dre.call("GET", `/plans/${p.id}`)).body.doc.units[1].cards).toEqual([["gA", 0]]);  // the plan itself keeps them
+  });
+
   it("3.4, D1: a pasted search's count comes from the author's Anki; the plans I write carry their searches", async () => {
     const { dre, p } = await plan();
     const q = "tag:*Cardio* -tag:*Pharm*";
     const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: [UNITS[0], { ...UNITS[1], search: [q] }] } });
     const b = await dre.call("GET", "/board?decks=1");
-    expect(b.body.authored[0].doc.units.find((u: any) => u.id === "arr").search).toEqual([q]);
+    expect(b.body.authored[0].doc).toEqual({ deck: "Step 1", units: [
+      { id: "hf", tags: UNITS[0].tags, decks: [] }, { id: "arr", tags: UNITS[1].tags, decks: [], search: [q] }] });
     const r = await dre.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { arr: { [q]: 212, "tag:gone": 5 }, nope: { x: 1 } } });
     expect(r.body.version).toBe(put.body.version + 1);
     const got = await dre.call("GET", `/plans/${p.id}`);
