@@ -49,7 +49,7 @@ describe("plans: authoring", () => {
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05", due: "2026-10-01" }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05", text: "card text" }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05",
-      cards: Array.from({ length: 5001 }, (_, i) => [`g${i}`, 0]) }] })).toBe(400);
+      cards: Array.from({ length: 50001 }, (_, i) => [`g${i}`, 0]) }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [UNITS[0], UNITS[0]] })).toBe(400);  // ids are unique
     expect(await put({ deck: "Step 1", units: [{ ...UNITS[0], n: "212" }] })).toBe(400);  // a count is a number
     const counted = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], n: 212 }] } });
@@ -93,7 +93,7 @@ describe("plans: following", () => {
     const maya = await person("maya");
     const f = await maya.call("POST", "/plans/follow", { code: plan.code });
     expect(f.status).toBe(200);
-    expect(f.body.following).toEqual({ share: true, paused: false, sched: null, progress: null });
+    expect(f.body.following).toEqual({ share: true, paused: false, sched: null, early: 0, progress: null });
     const light = await maya.call("GET", "/board");
     expect(light.body.plans).toBeUndefined();  // not on every refresh
     const first = await maya.call("GET", "/board?decks=1");

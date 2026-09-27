@@ -30,3 +30,6 @@ CREATE TABLE plan_log (
   prev TEXT,
   PRIMARY KEY (plan, version)
 );
+
+-- 3.3, C2: open each date this many days early (for studying on a phone)
+ALTER TABLE plan_follows ADD COLUMN early INTEGER NOT NULL DEFAULT 0;

@@ -87,3 +87,53 @@ describe("3.3: plans together", () => {
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_log").first("n")).toBe(0);
   });
 });
+
+describe("3.3: a class through Step (C1–C5)", () => {
+  it("C2: open early is mine, 0 to 7 days, and rides the board", async () => {
+    const { dre, p } = await plan();
+    const nia = await person("nia");
+    await nia.call("POST", "/plans/follow", { code: p.code });
+    expect(await nia.status("PATCH", `/plans/${p.id}/follow`, { early: 9 })).toBe(400);
+    expect((await nia.call("PATCH", `/plans/${p.id}/follow`, { early: 2 })).body.early).toBe(2);
+    const b = await nia.call("GET", "/board?decks=1");
+    expect(b.body.plans[0].early).toBe(2);
+    expect(b.body.authored).toEqual([]);  // she writes none
+    const mine = await dre.call("GET", "/board?decks=1");
+    expect(mine.body.authored.map((a: any) => a.id)).toEqual([p.id]);
+  });
+
+  it("C3: a date can hold Anki searches; Anki adds one with its count", async () => {
+    const { dre, p } = await plan();
+    const q = "tag:*Cardio* tag:*#B&B* -tag:*Pharm*";
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version,
+      doc: { deck: "Step 1", units: [{ ...UNITS[0], search: [q, q] }, UNITS[1]] } });
+    expect(put.body.doc.units[0].search).toEqual([q]);
+    expect(await dre.status("PUT", `/plans/${p.id}`, { version: put.body.version,
+      doc: { deck: "Step 1", units: [{ ...UNITS[0], search: ["a\nb"] }] } })).toBe(400);
+    const added = await dre.call("POST", `/plans/${p.id}/cards`, { search: "tag:L14", n: 212, unit: "arr" });
+    const arr = added.body.doc.units.find((u: any) => u.id === "arr");
+    expect(arr.search).toEqual(["tag:L14"]);
+    expect(arr.sn).toEqual({ "tag:L14": 212 });
+  });
+
+  it("C4: review days point at dates that exist", async () => {
+    const { dre, p } = await plan();
+    const put = (reviews: unknown) => dre.status("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: UNITS, reviews } });
+    expect(await put([{ day: "2026-10-19", from: "hf", to: "nope" }])).toBe(400);
+    expect(await put([{ day: "2026-10-19", from: "hf", to: "arr" }])).toBe(200);
+  });
+
+  it("C5: an author's Anki keeps the note ids behind a date, only while its tags are the same", async () => {
+    const { dre, maya, p } = await plan();
+    expect(await maya.status("PUT", `/plans/${p.id}/ids`, { units: {} })).toBe(403);
+    const r = await dre.call("PUT", `/plans/${p.id}/ids`, { units: {
+      hf: [UNITS[0].tags, [], ["g1", "g2"]],
+      arr: [["Old::tag"], [], ["g3"]],  // read from tags it no longer has: ignored
+    } });
+    expect(r.body.version).toBe(p.version + 1);
+    const got = await dre.call("GET", `/plans/${p.id}`);
+    expect(got.body.doc.units.map((u: any) => u.ids)).toEqual([["g1", "g2"], undefined]);
+    const again = await dre.call("PUT", `/plans/${p.id}/ids`, { units: { hf: [UNITS[0].tags, [], ["g1", "g2"]] } });
+    expect(again.body.version).toBe(p.version + 1);  // unchanged: nothing written
+  });
+});

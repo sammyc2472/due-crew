@@ -79,6 +79,7 @@ authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
 // 3.3: plans together
 authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));
+authed("PUT", r(`/plans/${ID}/ids`), P.putIds);
 authed("POST", r(`/plans/${ID}/undo`), P.undo);
 authed("POST", r(`/plans/${ID}/editors`), P.addEditor);
 authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEditor(s, env, p));
