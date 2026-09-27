@@ -3,6 +3,7 @@
 // Cards are note guids; never their text. See docs/plans-design.md.
 
 import type { Session } from "./auth";
+import { isAdmin } from "./notices";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -157,8 +158,7 @@ export async function getLog(s: Session, env: Env): Promise<Response> {
 
 /** GET /admin/stats: for the uids in ADMIN_UIDS. Counts, never names. */
 export async function stats(s: Session, env: Env): Promise<Response> {
-  const admins = (env.ADMIN_UIDS || "").split(",").map((x) => x.trim()).filter(Boolean);
-  if (!admins.includes(s.uid)) throw new HttpError(404, "not_found");
+  if (!isAdmin(env, s.uid)) throw new HttpError(404, "not_found");
   const now = nowSec();
   const q = (sql: string, ...b: unknown[]) => env.DB.prepare(sql).bind(...b);
   const rs = await env.DB.batch([

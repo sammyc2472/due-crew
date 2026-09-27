@@ -377,6 +377,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
+    _state["notice"] = data.get("notice")  # 3.2.1
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
@@ -437,7 +438,10 @@ def _on_render(deck_browser, content):
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     show_up = bool(c.get("show_up"))
-    return board.render(_board_data(), c, _state["ts"],
+    notice = _state.get("notice")
+    if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
+        notice = None
+    return board.render(_board_data(), c, _state["ts"], notice=notice,
                         wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
                         rules_stale=client().rules_stale,
@@ -636,6 +640,17 @@ def _on_js(handled, message, context):
         w["eve_dismissed"] = _state["labels"][0] if _state["labels"] else ""
         _save_wrap()
         _swap(c)
+    elif cmd == "noticex" and len(parts) > 2 and parts[2].isdigit():
+        # 3.2.1: the admin's notice, dismissed for good on this profile
+        w = _wrap_data()
+        w["notices_dismissed"] = (list(w.get("notices_dismissed") or []) + [int(parts[2])])[-50:]
+        _save_wrap()
+        _swap(c)
+    elif cmd == "noticeopen":
+        n = _state.get("notice")
+        if n and n.get("link"):
+            from aqt.utils import openLink
+            openLink(n["link"])
     elif cmd == "wrapdismiss":
         w = _wrap_data()
         w["dismissed"] = w.get("week", "")

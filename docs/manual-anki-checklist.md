@@ -260,3 +260,10 @@ deck both share (Settings › Shared decks).
 - [ ] A card with no one who knows it and no tip: no chip. A card on the question side: no chip.
 - [ ] The site, signed in: duecrew.com goes to Home (this week, today, cheers waiting, plans with on track or N behind, the crew with Cheer, Squads). A cheer shown there still plays in Anki. Log: tiles, 12 weeks by minutes/reviews/new/retention, each plan's line against my schedule. /admin: Sam only; anyone else gets Not found.
 - [ ] `wrangler tail`: still one GET /board and one POST /sync per refresh and sync; My schedule and This helped are one request each, on a click.
+
+### 3.2.1: the admin's notice
+
+- [ ] Signed in on duecrew.com as sammy: the nav has Admin. Anyone else: no Admin, and /admin says Not found.
+- [ ] Admin → A notice: post "Testing a notice" with https://duecrew.com as the link. It's under Showing now. In Anki (3.2.1), Refresh: 📣 Testing a notice · More · × on top of every tab. More opens the link in the browser; × hides it, and it stays hidden after a restart.
+- [ ] Post one "only to add-ons older than 3.2.1": a 3.2.1 board doesn't show it. Take down: the next refresh drops it.
+- [ ] A link that isn't https is refused with a plain message.

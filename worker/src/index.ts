@@ -4,6 +4,7 @@
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
+import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
@@ -57,6 +58,10 @@ authed("POST", r("/reports"), S.report);
 authed("POST", r("/tips/helped"), C.helped);
 authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
 authed("GET", r("/admin/stats"), (_q, s, env) => C.stats(s, env));
+// 3.2.1: the admin's notice on everyone's board
+authed("GET", r("/admin/notices"), (_q, s, env) => N.list(s, env));
+authed("POST", r("/admin/notices"), N.post);
+authed("DELETE", r("/admin/notices/([0-9]{1,9})"), (_q, s, env, p) => N.remove(s, env, p));
 
 // 3.1: plans (the fixed paths before /plans/{id})
 authed("PUT", r("/plans/trees"), P.putTree);

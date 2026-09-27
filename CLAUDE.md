@@ -181,7 +181,14 @@ add-on.
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
 - 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
-  which leaves the cheers for Anki); `/log`; `/admin` for `ADMIN_UIDS`.
+  which leaves the cheers for Anki); `/log`; `/admin` for the admin.
+- 3.2.1 the admin's notice: the admin is Sam's "sammy" account (`ADMINS`
+  in wrangler.toml, plus the optional `ADMIN_UIDS` secret). From `/admin`
+  Sam posts one line (a link optional, only to add-ons older than a
+  version optional, for N days); `GET /board` carries the newest live one
+  for the asking add-on's version (`notices`, migration 0005), and the
+  board shows it on top of every tab until it's dismissed (by id, in
+  wrap.json). Only 3.2.1 and later show it.
 
 ## Releasing
 

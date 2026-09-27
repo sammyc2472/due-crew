@@ -15,6 +15,8 @@ export interface Env {
   REPORT_TO?: string;
   /** 3.2: comma-separated uids that may read GET /admin/stats. */
   ADMIN_UIDS?: string;
+  /** 3.2.1: the admin's uid(s), in wrangler.toml [vars]; not a secret, a uid alone opens nothing. */
+  ADMINS?: string;
 }
 
 export class HttpError extends Error {

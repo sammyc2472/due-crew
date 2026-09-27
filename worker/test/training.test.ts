@@ -242,3 +242,39 @@ describe("the week's 3.2 extras", () => {
     expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), recap: { name: "", n: 0, day: "x" } } })).toBe(400);
   });
 });
+
+describe("3.2.1: the admin's notice", () => {
+  it("only an admin posts; the board carries the newest live one for my version", async () => {
+    const sam = await person("sam");
+    const maya = await person("maya");
+    const env = { ADMIN_UIDS: "sam" };
+    const post = (who: { token: string }, body: unknown) => api("POST", "/admin/notices", { token: who.token, body, env });
+    expect((await post(maya, { text: "hi" })).status).toBe(404);
+    expect((await post(sam, { text: "Update to 3.2", link: "http://x.com" })).status).toBe(400);
+    expect((await post(sam, { text: "  " })).status).toBe(400);
+    const all = await post(sam, { text: "New:   plans on duecrew.com", link: "https://duecrew.com/plans" });
+    expect(all.status).toBe(200);
+    expect(all.body.text).toBe("New: plans on duecrew.com");
+    const board = async (who: { token: string }) => (await api("GET", "/board", { token: who.token, env })).body.notice;
+    expect(await board(maya)).toEqual({ id: all.body.id, text: "New: plans on duecrew.com", link: "https://duecrew.com/plans" });
+    // one for older add-ons only: 3.1 sees it, 3.2.1 doesn't
+    const upd = await post(sam, { text: "Please update", below: "3.2.1" });
+    await maya.call("POST", "/sync", { profile: { clientVersion: "3.1.1" } });
+    expect((await board(maya)).text).toBe("Please update");
+    await sam.call("POST", "/sync", { profile: { clientVersion: "3.2.1" } });
+    expect((await board(sam)).text).toBe("New: plans on duecrew.com");
+    // taken down
+    expect((await api("DELETE", `/admin/notices/${upd.body.id}`, { token: sam.token, env })).status).toBe(200);
+    expect((await board(maya)).text).toBe("New: plans on duecrew.com");
+    expect((await api("GET", "/admin/notices", { token: sam.token, env })).body.notices).toHaveLength(1);
+    expect((await api("GET", "/auth/me", { token: sam.token, env })).body.admin).toBe(true);
+    expect((await api("GET", "/auth/me", { token: maya.token, env })).body.admin).toBeUndefined();
+  });
+
+  it("versions compare as numbers", async () => {
+    const { older } = await import("../src/notices");
+    expect(older("3.1.10", "3.2")).toBe(true);
+    expect(older("3.2.1", "3.2.1")).toBe(false);
+    expect(older("3.10.0", "3.9.9")).toBe(false);
+  });
+});
