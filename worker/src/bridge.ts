@@ -1,10 +1,15 @@
 // The 2.x bridge, for the weeks while the crew updates: every 15 minutes,
-// the week of everyone still on 2.x comes from Firestore into D1, and the
-// week of everyone on 3.x goes from D1 to Firestore, so both versions see
-// each other's squares. Weeks only (and names, emoji): cheers, knocks and
-// squads stay on their own side. Off unless FIREBASE_SA (a service account
-// key with Firestore access) is set. Delete this file, its cron and the
-// secret when Firestore goes.
+// what people still on 2.x wrote to Firestore comes into D1, and what
+// people on 3.x wrote to D1 goes out to Firestore, so both versions see
+// each other as they did before the move. Off unless FIREBASE_SA (a service
+// account key with Firestore access) is set. Delete this file, its cron and
+// the secret when Firestore goes.
+//
+// What crosses, per person: the week, name and emoji, shared decks, the
+// heatmap, and their row in each squad they're in on both sides. Squad rows
+// are updates only, in both directions: the bridge never makes anyone a
+// member anywhere, so a removal on either side stays a removal. Cheers,
+// knocks and memberships themselves don't cross.
 //
 // Nothing is logged but counts. Card text never crosses: a 2.x flag's text
 // is dropped by the week validator on the way in, and flags don't go out.
@@ -20,10 +25,16 @@ const DOCS = `projects/${PROJECT}/databases/(default)/documents`;
 const API = `https://firestore.googleapis.com/v1/${DOCS}`;
 const WEEK_FIELDS = ["v", "days", "updatedAt", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room"];
 const DAY_KEYS = new Set(["studied", "reviews", "studyTimeMs", "accuracy", "streak", "newCards", "status"]);
+const ROW_FIELDS = ["name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards"];
+const ROW_COLS = ["day", "reviews", "study_time_ms", "accuracy", "streak", "week", "emoji", "new_cards"] as const;
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 type Row = { uid: string; name: string | null; emoji: string | null; client_version: string | null;
-  doc: string | null; updated_at: number | null };
+  doc: string | null; updated_at: number | null; decks: string | null; heat: string | null };
+type Member = { squad: string; uid: string; name: string; day: string | null; reviews: number | null;
+  study_time_ms: number | null; accuracy: number | null; streak: number | null; week: number | null;
+  emoji: string | null; new_cards: number | null; client_version: string | null };
+export type BridgeCounts = { pulled: number; pushed: number };
 
 // ---- Firestore values ----
 
@@ -56,6 +67,8 @@ export function pv(f: any): unknown {
 function fields(fs: Record<string, unknown> | undefined): Record<string, unknown> {
   return Object.fromEntries(Object.entries(fs || {}).map(([k, x]) => [k, pv(x)]));
 }
+
+const mapFields = (v: Record<string, unknown>) => (fv(v) as any).mapValue.fields;
 
 /** JSON with sorted keys, so two docs compare by content, not key order. */
 export function stable(v: unknown): string {
@@ -100,9 +113,19 @@ async function accessToken(saJson: string, fetcher: Fetch): Promise<string> {
   return data.access_token;
 }
 
-// ---- the two directions ----
+// ---- shapes, each way ----
 
-const on3 = (r: Row) => /^3\./.test(r.client_version || "");
+const on3 = (v: string | null) => /^3\./.test(v || "");
+const isoZ = (sec: number) => new Date(sec * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+const sameTime = (a: unknown, b: unknown) => Date.parse(String(a || "")) === Date.parse(String(b || ""));
+
+function attempt<T>(f: () => T): T | null {
+  try {
+    return f();
+  } catch {
+    return null;
+  }
+}
 
 /** A Firestore week (2.x) as the week D1 keeps, or null if it won't pass. */
 export function inbound(doc: Record<string, unknown>): string | null {
@@ -116,36 +139,57 @@ export function inbound(doc: Record<string, unknown>): string | null {
       w[k] = x;
     }
   }
-  try {
-    return JSON.stringify(V.week(w));
-  } catch {
-    return null;
-  }
+  return attempt(() => JSON.stringify(V.week(w)));
 }
 
 /** A D1 week as the Firestore doc 2.x reads (no flags: 2.x shows their text, which we never hold). */
 export function outbound(doc: string, updatedAt: number): Record<string, unknown> {
   const w = JSON.parse(doc) as Record<string, unknown>;
   delete w.tricky;
-  w.updatedAt = new Date(updatedAt * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  w.updatedAt = isoZ(updatedAt);
   return w;
 }
 
-const sameTime = (a: unknown, b: unknown) => Date.parse(String(a || "")) === Date.parse(String(b || ""));
+/** A 2.x squad row (Firestore) as D1's columns, or null if it won't pass. */
+function rowIn(doc: Record<string, unknown>) {
+  const v = Object.fromEntries(ROW_FIELDS.filter((k) => k in doc && doc[k] !== undefined).map((k) => [k, doc[k]]));
+  return attempt(() => V.memberRow(v));
+}
 
-export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<{ pulled: number; pushed: number } | null> {
+/** A D1 squad row as the fields 2.x writes. */
+function rowOut(m: Member): Record<string, unknown> {
+  return { name: m.name, day: m.day, reviews: m.reviews, studyTimeMs: m.study_time_ms, accuracy: m.accuracy,
+    streak: m.streak, week: m.week, emoji: m.emoji, newCards: m.new_cards };
+}
+
+// ---- one run ----
+
+export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCounts | null> {
   if (!env.FIREBASE_SA) return null;
   const token = await accessToken(env.FIREBASE_SA, fetcher);
   const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-  const rows = (await env.DB.prepare(
-    `SELECT u.uid, u.name, u.emoji, u.client_version, w.doc, w.updated_at
-       FROM users u LEFT JOIN weeks w ON w.uid = u.uid`).all<Row>()).results;
+  const db = env.DB;
+  const [peopleRes, membersRes] = await db.batch([
+    db.prepare(`SELECT u.uid, u.name, u.emoji, u.client_version, w.doc, w.updated_at, d.json AS decks, h.json AS heat
+                  FROM users u LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN decks d ON d.uid = u.uid
+                  LEFT JOIN heatmaps h ON h.uid = u.uid`),
+    db.prepare(`SELECT m.squad, m.uid, m.name, m.day, m.reviews, m.study_time_ms, m.accuracy, m.streak, m.week,
+                       m.emoji, m.new_cards, u.client_version
+                  FROM members m JOIN users u ON u.uid = m.uid`),
+  ]);
+  const people = peopleRes.results as Row[];
+  const members = membersRes.results as Member[];
 
-  // one batchGet per 100 people: their week and their profile
+  // everything this run compares, in batchGets of 100 documents
+  const paths = [
+    ...people.flatMap((r) => [`users/${r.uid}`, `users/${r.uid}/shared/week`, `users/${r.uid}/shared/decks`,
+      `users/${r.uid}/shared/heatmap`]),
+    ...members.map((m) => `squads/${m.squad}/members/${m.uid}`),
+  ];
   const got = new Map<string, Record<string, unknown>>();
-  for (let i = 0; i < rows.length; i += 100) {
-    const names = rows.slice(i, i + 100).flatMap((r) => [`${DOCS}/users/${r.uid}/shared/week`, `${DOCS}/users/${r.uid}`]);
-    const res = await fetcher(`${API}:batchGet`, { method: "POST", headers: auth, body: JSON.stringify({ documents: names }) });
+  for (let i = 0; i < paths.length; i += 100) {
+    const res = await fetcher(`${API}:batchGet`, { method: "POST", headers: auth,
+      body: JSON.stringify({ documents: paths.slice(i, i + 100).map((p) => `${DOCS}/${p}`) }) });
     if (!res.ok) throw new Error(`firestore batchGet: ${res.status}`);
     for (const item of (await res.json()) as { found?: { name: string; fields?: Record<string, unknown> } }[]) {
       if (item.found) got.set(item.found.name.slice(DOCS.length + 1), fields(item.found.fields));
@@ -153,53 +197,104 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<{ pulled
   }
 
   let pulled = 0;
-  const d1 = [];
+  const d1: D1PreparedStatement[] = [];
   const writes: unknown[] = [];
-  for (const r of rows) {
-    const fsWeek = got.get(`users/${r.uid}/shared/week`);
+  const put = (path: string, doc: Record<string, unknown>, mask: string[], mustExist = false) => writes.push({
+    update: { name: `${DOCS}/${path}`, fields: mapFields(doc) }, updateMask: { fieldPaths: mask },
+    ...(mustExist ? { currentDocument: { exists: true } } : {}),
+  });
+
+  for (const r of people) {
     const prof = got.get(`users/${r.uid}`);
-    if (!on3(r)) {
-      // still on 2.x: Firestore is the truth for their week and name
+    const fsWeek = got.get(`users/${r.uid}/shared/week`);
+    const fsDecks = got.get(`users/${r.uid}/shared/decks`);
+    const fsHeat = got.get(`users/${r.uid}/shared/heatmap`);
+    if (!on3(r.client_version)) {
+      // still on 2.x: Firestore is the truth
       if (fsWeek) {
         const doc = inbound(fsWeek);
         if (doc !== null && doc !== r.doc) {
           const at = Math.floor((Date.parse(String(fsWeek.updatedAt || "")) || Date.now()) / 1000);
-          d1.push(env.DB.prepare(
-            `INSERT INTO weeks (uid, doc, updated_at) VALUES (?, ?, ?)
-             ON CONFLICT(uid) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`).bind(r.uid, doc, at));
+          d1.push(db.prepare(`INSERT INTO weeks (uid, doc, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`).bind(r.uid, doc, at));
           pulled++;
         }
       }
-      const name = typeof prof?.displayName === "string" ? prof.displayName.trim().slice(0, 60) : "";
-      if (name && name !== r.name) d1.push(env.DB.prepare("UPDATE users SET name = ? WHERE uid = ?").bind(name, r.uid));
+      if (prof) {
+        const name = typeof prof.displayName === "string" ? prof.displayName.trim().slice(0, 60) : "";
+        const emoji = V.isEmoji(prof.emoji) ? prof.emoji : null;
+        if ((name && name !== r.name) || emoji !== r.emoji) {
+          d1.push(db.prepare("UPDATE users SET name = ?, emoji = ? WHERE uid = ?").bind(name || r.name, emoji, r.uid));
+          pulled++;
+        }
+      }
+      if (fsDecks) {
+        const decks = attempt(() => JSON.stringify(V.decks(fsDecks.decks)));
+        if (decks !== null && decks !== r.decks) {
+          d1.push(db.prepare("INSERT INTO decks (uid, json) VALUES (?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json")
+            .bind(r.uid, decks));
+          pulled++;
+        }
+      }
+      const heat = fsHeat ? attempt(() => JSON.stringify(V.heatmap({ counts: fsHeat.counts }))) : null;
+      if (heat !== r.heat && !(fsHeat && heat === null)) {  // an unreadable heatmap leaves ours alone
+        d1.push(heat === null
+          ? db.prepare("DELETE FROM heatmaps WHERE uid = ?").bind(r.uid)
+          : db.prepare("INSERT INTO heatmaps (uid, json) VALUES (?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json")
+            .bind(r.uid, heat));
+        pulled++;
+      }
       continue;
     }
-    // on 3.x: D1 is the truth; 2.x friends read the copy
+    // on 3.x: D1 is the truth; 2.x friends read the copies
     if (r.doc && r.updated_at) {
       const want = outbound(r.doc, r.updated_at);
-      const have = fsWeek ? { ...fsWeek } : null;
-      const same = have && sameTime(have.updatedAt, want.updatedAt)
-        && stable({ ...have, updatedAt: 0 }) === stable({ ...want, updatedAt: 0 });
+      const same = fsWeek && sameTime(fsWeek.updatedAt, want.updatedAt)
+        && stable({ ...fsWeek, updatedAt: 0 }) === stable({ ...want, updatedAt: 0 });
       if (!same) {
         const { updatedAt, ...rest } = want;
-        writes.push({
-          update: { name: `${DOCS}/users/${r.uid}/shared/week`,
-            fields: (fv({ ...rest, updatedAt: { timestampValue: updatedAt } }) as any).mapValue.fields },
-          updateMask: { fieldPaths: WEEK_FIELDS },
-        });
+        put(`users/${r.uid}/shared/week`, { ...rest, updatedAt: { timestampValue: updatedAt } }, WEEK_FIELDS);
       }
+    }
+    if (r.decks !== null) {
+      const decks = JSON.parse(r.decks);
+      if (!fsDecks || stable(fsDecks.decks ?? null) !== stable(decks)) put(`users/${r.uid}/shared/decks`, { decks }, ["decks"]);
+    }
+    if (r.heat !== null) {
+      const counts = JSON.parse(r.heat).counts;
+      if (!fsHeat || stable(fsHeat.counts ?? null) !== stable(counts)) put(`users/${r.uid}/shared/heatmap`, { counts }, ["counts"]);
+    } else if (fsHeat) {
+      writes.push({ delete: `${DOCS}/users/${r.uid}/shared/heatmap` });  // turned off in 3.x
     }
     // the profile says 2.9+ (so 2.x reads the week doc), with the current name and emoji
     const p = { displayName: r.name || "", emoji: r.emoji || "", clientVersion: r.client_version || "3.0.0" };
     if (prof && (prof.displayName !== p.displayName || (prof.emoji || "") !== p.emoji || prof.clientVersion !== p.clientVersion)) {
-      writes.push({
-        update: { name: `${DOCS}/users/${r.uid}`, fields: (fv(p) as any).mapValue.fields },
-        updateMask: { fieldPaths: ["displayName", "emoji", "clientVersion"] },
-        currentDocument: { exists: true },  // never create a profile 2.x never had
-      });
+      put(`users/${r.uid}`, p, ["displayName", "emoji", "clientVersion"], true);  // never create a profile 2.x never had
     }
   }
-  if (d1.length) await env.DB.batch(d1);
+
+  // squad rows: only where the person is a member on both sides
+  for (const m of members) {
+    const fsRow = got.get(`squads/${m.squad}/members/${m.uid}`);
+    if (!fsRow) continue;
+    if (!on3(m.client_version)) {
+      const r = rowIn(fsRow);
+      if (r && ROW_COLS.some((k) => (r as Record<string, unknown>)[k] !== (m as Record<string, unknown>)[k])) {
+        d1.push(db.prepare(
+          `UPDATE members SET day = ?, reviews = ?, study_time_ms = ?, accuracy = ?, streak = ?, week = ?, emoji = ?,
+             new_cards = ?, updated_at = ? WHERE squad = ? AND uid = ?`,  // an update: never a join
+        ).bind(r.day, r.reviews, r.study_time_ms, r.accuracy, r.streak, r.week, r.emoji, r.new_cards,
+               Math.floor(Date.now() / 1000), m.squad, m.uid));
+        pulled++;
+      }
+    } else {
+      const want = rowOut(m);
+      const have = Object.fromEntries(ROW_FIELDS.map((k) => [k, fsRow[k] ?? null]));
+      if (stable(have) !== stable(want)) put(`squads/${m.squad}/members/${m.uid}`, want, ROW_FIELDS, true);
+    }
+  }
+
+  if (d1.length) await db.batch(d1);
   for (let i = 0; i < writes.length; i += 400) {
     const res = await fetcher(`${API}:commit`, { method: "POST", headers: auth, body: JSON.stringify({ writes: writes.slice(i, i + 400) }) });
     if (!res.ok) throw new Error(`firestore commit: ${res.status}`);
