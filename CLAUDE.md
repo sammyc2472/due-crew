@@ -160,6 +160,29 @@ add-on.
   capture `app.generation` (bumped at profile open/close, sign-in/out)
   and drop their commit when it changed.
 
+- 3.2 plans as training (`docs/plans-design.md`, "3.2"): the plan says
+  what and by when; my schedule (`sched` on my follow: days, a double
+  share or a rest day each, minutes a day, a later start) says when.
+  `schedule.py` is pure: a date's window, catch-up weeks and the taper
+  (`phases`, nothing new opens), today's quota, what I'm behind, the load
+  ahead. The morning opens up to today's quota in the deck's order and
+  never more; the same arithmetic runs on the site (`Sched` in app.js):
+  change one, change both. Missed study days ask once on the plan card
+  (spread, push my dates back, leave open); a checkpoint's morning builds
+  Anki's own filtered deck, and its score stays on this computer. The
+  recap rides my week (`recap`). My log rides a full sync (`log`, 120 days
+  once, then 8), read only by me on the site.
+- 3.2 who knows this one (`cards.py`): no switch. In the decks I share,
+  a card I have down (review, 21+ days, no Again in 30) goes up as its
+  guid (`knows`, as changes, `known.json` beside the session); the cards
+  I'm stuck on (2+ lapses, or Again today) ride every sync (`stuck`) and
+  come back with who knows each and their tips (`cards` in the session).
+  The chip is beside Edit on the answer side, never inside a card: who
+  knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
+  crewmate's ask (Tip). A tip with words stays on its card (`tips`).
+- 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
+  which leaves the cheers for Anki); `/log`; `/admin` for `ADMIN_UIDS`.
+
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.

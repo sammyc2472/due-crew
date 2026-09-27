@@ -3688,6 +3688,46 @@ def test_session_card_v32():
     check("recap: on a crewmate's row the day it's new", allrows and allrows[0]["recap"]["n"] == 3)
 
 
+def test_schedule_parity_v32():
+    """3.2: the site's schedule arithmetic (Sched in site/public/app.js) gives
+    the add-on's quota on every case here. Needs node; skipped without it."""
+    import shutil
+    import subprocess
+    from due_crew import schedule as S
+    node = shutil.which("node")
+    if not node:
+        print("SKIP schedule parity: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    head = js[js.index("const MONTHS"):js.index("const today =")]
+    sched_js = js[js.index("const Sched = (() => {"):js.index("// ---- 3.2: home")]
+    docs = [
+        {"deck": "x", "end": "2026-12-06", "phases": {"catchup": 4, "taper": 10},
+         "units": [{"id": "a", "name": "A", "opens": "2026-10-05", "due": "2026-10-25"},
+                   {"id": "b", "name": "B", "opens": "2026-10-26"},
+                   {"id": "c", "name": "C", "opens": "2026-11-02", "due": "2026-11-30"}]},
+        {"deck": "x", "units": [{"id": "a", "name": "A", "opens": "2026-10-10", "due": "2026-10-11"},
+                                {"id": "b", "name": "B", "opens": "2026-10-12", "due": "2026-10-20"}]},
+    ]
+    scheds = [None, {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60},
+              {"days": [1, 0, 1, 0, 1, 0, 0], "minutes": 60, "start": "2026-10-14"}]
+    cases = []
+    for di, doc in enumerate(docs):
+        for si, sc in enumerate(scheds):
+            for u in doc["units"]:
+                for k in range(0, 70, 3):
+                    day = (datetime.date(2026, 10, 1) + datetime.timedelta(days=k)).isoformat()
+                    cases.append([di, si, u["id"], 97, day, S.quota(doc, u, sc, 97, S.d(day))])
+    prog = head + "\n" + sched_js + (
+        f"const docs = {json.dumps(docs)}; const scheds = {json.dumps(scheds)}; const cases = {json.dumps(cases)};\n"
+        "let bad = 0; for (const [di, si, uid, total, day, want] of cases) {"
+        " const doc = docs[di]; const u = doc.units.find((x) => x.id === uid);"
+        " if (Sched.quota(doc, u, scheds[si], total, day) !== want) bad++; }"
+        " console.log(bad);")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    check("schedule: the site's arithmetic is the add-on's", out.stdout.strip() == "0", out.stdout + out.stderr)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
