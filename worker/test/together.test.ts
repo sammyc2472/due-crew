@@ -136,4 +136,53 @@ describe("3.3: a class through Step (C1–C5)", () => {
     const again = await dre.call("PUT", `/plans/${p.id}/ids`, { units: { hf: [UNITS[0].tags, [], ["g1", "g2"]] } });
     expect(again.body.version).toBe(p.version + 1);  // unchanged: nothing written
   });
+
+  it("3.4, D1: a pasted search's count comes from the author's Anki; the plans I write carry their searches", async () => {
+    const { dre, p } = await plan();
+    const q = "tag:*Cardio* -tag:*Pharm*";
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: [UNITS[0], { ...UNITS[1], search: [q] }] } });
+    const b = await dre.call("GET", "/board?decks=1");
+    expect(b.body.authored[0].doc.units.find((u: any) => u.id === "arr").search).toEqual([q]);
+    const r = await dre.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { arr: { [q]: 212, "tag:gone": 5 }, nope: { x: 1 } } });
+    expect(r.body.version).toBe(put.body.version + 1);
+    const got = await dre.call("GET", `/plans/${p.id}`);
+    expect(got.body.doc.units.find((u: any) => u.id === "arr").sn).toEqual({ [q]: 212 });
+  });
+});
+
+describe("3.4, D2: the plan as a calendar", () => {
+  it("each date and review day as an all-day event, escaped and folded; no sign-in; a squad plan has none", async () => {
+    const { dre, p } = await plan();
+    const long = "Lecture 14, Arrhythmias; the long one with a very long name that goes past seventy-five octets ñ";
+    await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1",
+      units: [{ ...UNITS[0], n: 61, name: long.slice(0, 60) }, { ...UNITS[1], opens: "2026-10-06", due: "2026-10-08", even: true, tags: ["x"] }],
+      reviews: [{ day: "2026-10-09", from: "hf", to: "arr" }] } });
+    const { env } = await import("cloudflare:workers");
+    const worker = (await import("../src/index")).default;
+    const res = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code.toLowerCase()}`), { ...env } as any);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/calendar");
+    const text = await res.text();
+    expect(text.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
+    const unfolded = text.replace(/\r\n /g, "");
+    expect(unfolded).toContain("SUMMARY:Lecture 14\\, Arrhythmias\\; the long one with a very long name · 61 new");
+    expect(unfolded).toContain("DTSTART;VALUE=DATE:20261006\r\nDTEND;VALUE=DATE:20261009");  // evenly to the 8th
+    expect(unfolded).toContain("SUMMARY:Review · Lecture 14");
+    expect(text.split("\r\n").every((l) => new TextEncoder().encode(l).length <= 75)).toBe(true);
+    expect(text).not.toContain("Dre");  // nobody's name
+    const none = await worker.fetch(new Request("https://api.duecrew.com/plans/ics?code=NOPE2345"), { ...env } as any);
+    expect(none.status).toBe(404);
+    const sq = await dre.call("POST", "/squads", { name: "Busm" });
+    await dre.call("PUT", `/plans/${p.id}`, { version: p.version + 1, audience: "squad", squad: sq.body.id });
+    const squad = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
+    expect(squad.status).toBe(404);
+  });
+
+  it("a follower of a plan anyone with the code can follow sees its code; a stranger doesn't", async () => {
+    const { p } = await plan();
+    const nia = await person("nia");
+    expect((await nia.call("GET", `/plans/peek?code=${p.code}`)).body.code).toBeUndefined();
+    await nia.call("POST", "/plans/follow", { code: p.code });
+    expect((await nia.call("GET", `/plans/${p.id}`)).body.code).toBe(p.code);
+  });
 });

@@ -18,6 +18,9 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/api/")) return env.API.fetch(req);
+    // 3.4: a plan's calendar, for Google, Apple and Outlook to subscribe to
+    const cal = /^\/p\/([A-Za-z0-9]{8})\.ics$/.exec(url.pathname);
+    if (cal) return env.API.fetch(new Request(new URL(`/api/plans/ics?code=${cal[1]}`, url), { method: "GET" }));
     // 3.2: signed in, duecrew.com opens on your home, not the landing page.
     // The cookie is only a hint here: the home asks the API who you are.
     if (url.pathname === "/" && /(?:^|;\s*)dc_session=/.test(req.headers.get("cookie") || "")) {

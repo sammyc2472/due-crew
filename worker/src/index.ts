@@ -28,6 +28,7 @@ open("POST", r("/auth/code"), A.requestCode);
 open("POST", r("/auth/verify"), A.verifyCode);
 open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
+open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));

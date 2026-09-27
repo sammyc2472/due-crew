@@ -517,7 +517,8 @@ def clean_authored(a):
         return None
     d = a["doc"]
     units = [{"id": str(u["id"]), "tags": [t for t in u.get("tags") or [] if isinstance(t, str)],
-              "decks": [x for x in u.get("decks") or [] if isinstance(x, str)]}
+              "decks": [x for x in u.get("decks") or [] if isinstance(x, str)],
+              "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10]}  # 3.4, D1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 

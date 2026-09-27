@@ -352,3 +352,22 @@ edit, newest card, deck and card-number sums; a few ms); only each
 card's state is read again. On a 35,000-card AnKing-shaped deck a
 refresh's plan work is ~110 ms after the first (~550 ms). `tools/real_anki.py`
 checks it, with Anki's own package, before a release.
+
+## 3.4: a pasted search's count, and the plan in your calendar
+
+Signed-off mock "Plans 3.4" (D1, D2).
+
+- **D1.** The plans I write ride the day's first board (`authored`) with
+  their searches. My Anki counts each (`plans.search_counts`, kept to the
+  plan's deck) and sends the counts with the note ids (`PUT
+  /plans/{id}/ids {units, counts}`), one request a plan, only when
+  something changed. The site shows a pasted search as "counted in your
+  Anki soon" until then, and "finds nothing" when it finds none.
+- **D2.** `duecrew.com/p/CODE.ics` (the site's Worker passes it to `GET
+  /plans/ics?code=`, no sign-in, 120 an hour a code, cached 3 hours):
+  each date an all-day event ("name · N new"; an even date spans to its
+  due date), each review day one too, a link back to the plan, nobody's
+  name. A plan for one squad has none. Add to calendar (plan page for its
+  authors and code-plan followers, and the shared link's page): Google
+  Calendar (subscribe by URL), Apple Calendar or Outlook (`webcal:`), or
+  the link. Followers of a code plan now see its code.

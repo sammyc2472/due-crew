@@ -3646,6 +3646,17 @@ def test_class_through_step_v33():
     check("authored: my plans ride the day's first board", [a["id"] for a in dre.session.get("plans_authored") or []] == [pid])
     ok = dre.put_ids(pid, {"rn": [["Step1::Renal"], [], ["g1", "g2"]]})
     check("ids: kept on the date", ok and store.plans[pid]["doc"]["units"][0].get("ids") == ["g1", "g2"])
+    # 3.4, D1: a pasted search's count, from my Anki, with the same request
+    store.plans[pid]["doc"]["units"][0]["search"] = ["tag:L14"]
+    dre.fetch_board([_day(0)], with_decks=True)
+    lean = dre.session["plans_authored"][0]["doc"]
+    check("authored: carries its searches", lean["units"][0]["search"] == ["tag:L14"])
+    scol = _spread_col()
+    scol.find_cards = lambda q: [101, 102, 103] if q == "tag:L14" else []
+    counts = P.search_counts(P.DeckIndex(scol, 10), lean)
+    check("search count: from my copy", counts == {"rn": {"tag:L14": 3}}, str(counts))
+    check("search count: rides the ids request", dre.put_ids(pid, {}, counts)
+          and store.plans[pid]["doc"]["units"][0].get("sn") == {"tag:L14": 3})
 
 
 def test_plans_tab_v33():

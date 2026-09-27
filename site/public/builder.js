@@ -486,7 +486,7 @@ async function builder(id) {
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
       const chips = e.chips.map((c) => {
-        const el = h("button", { class: `ch ${c.review ? "rv" : c.cards ? "single" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
+        const el = h("button", { class: `ch ${c.review ? "rv" : c.cards ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
@@ -527,8 +527,11 @@ async function builder(id) {
     const own = doc.units.filter((u) => u.opens === d && !u.even);
     const spans = doc.units.filter((u) => u.even && u.due && u.opens <= d && d <= u.due);
     const rows = [];
-    const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards ? "single" : hue(c.key)}`, title: c.raw || "" },
-      h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
+    // 3.4, D1: a pasted search is counted by an author's Anki at its next refresh
+    const count = (c) => (c.search && c.n == null ? h("small", {}, "counted in your Anki soon")
+      : c.search && c.n === 0 ? h("small", { class: "w" }, "finds nothing") : c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
+    const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
+      h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), count(c),
       author && !c.cards && !c.search ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
         if (c.cards) u.cards = []; else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);
@@ -857,7 +860,8 @@ async function builder(id) {
     return h("div", { class: "share" },
       h("div", { class: "row" }, h("span", { class: "code" }, spaced(plan.code)),
         h("button", { class: "quiet", title: "Send this to your class: the page says how to follow", onclick: (e) => copy(url, e.target) }, "Copy link")),
-      h("span", { class: "muted small" }, `${plan.followers} following`));
+      h("div", { class: "row" }, h("span", { class: "muted small" }, `${plan.followers} following`),
+        meta.audience === "squad" ? null : calMenu(plan.code)));
   }
 
   /** The people who write the plan; the owner adds co-authors from the crew. */
@@ -964,7 +968,7 @@ async function builder(id) {
         h("div", {}, owner ? h("input", { class: "tname", value: meta.name, maxlength: 60, "aria-label": "The plan's name",
           oninput: (e) => { meta.name = e.target.value; mark(); } }) : h("h1", {}, meta.name || "Untitled"),
           author && meta.name === plan.doc.deck ? null : h("p", { class: "muted" }, author ? plan.doc.deck : `${plan.ownerName}'s plan · ${plan.doc.deck}`), people()),
-        author ? share() : null),
+        author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
       !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,

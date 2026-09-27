@@ -289,7 +289,7 @@ async function view(env: Env, p: Plan, uid: string) {
     audience: p.audience, version: p.version, doc: JSON.parse(p.doc), followers: n ?? 0,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
-    ...(r === "owner" || r === "editor" ? { code: p.code } : {}),
+    ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") ? { code: p.code } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
                            progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
@@ -458,7 +458,8 @@ async function logSave(env: Env, plan: string, version: number, uid: string, sum
 export async function putIds(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
   const body = await readJson(req, PLAN_BODY_MAX);
-  if (!V.isObj(body.units) || Object.keys(body).some((k) => k !== "units")) throw V.bad("ids");
+  if (!V.isObj(body.units) || Object.keys(body).some((k) => k !== "units" && k !== "counts")) throw V.bad("ids");
+  if (body.counts !== undefined && !V.isObj(body.counts)) throw V.bad("ids");
   const doc = JSON.parse(p.doc) as Obj & { units: Obj[] };
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   for (const [uid, v] of Object.entries(body.units)) {
@@ -466,6 +467,18 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     const u = doc.units.find((x) => x.id === uid);
     if (!u || !same(u.tags, v[0]) || !same(u.decks, v[1])) continue;  // changed since: the next refresh sends it again
     if (v[2].length) u.ids = v[2]; else delete u.ids;
+  }
+  // 3.4, D1: how many cards each of a date's searches finds in my copy
+  for (const [uid, v] of Object.entries((body.counts as Obj) || {})) {
+    const u = doc.units.find((x) => x.id === uid);
+    if (!u || !V.isObj(v)) continue;
+    const qs = (u.search as string[]) || [];
+    const sn: Obj = { ...((u.sn as Obj) || {}) };
+    for (const [q, n] of Object.entries(v)) {
+      if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
+      sn[q] = n;
+    }
+    if (Object.keys(sn).length) u.sn = sn;
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
@@ -619,6 +632,65 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
     env.DB.prepare("DELETE FROM plans WHERE id = ?").bind(id),
   ]);
   return json({ ok: true });
+}
+
+// ---- 3.4, D2: the plan as a calendar ----
+
+const icsText = (t: string) => t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const icsDate = (d: string) => d.replace(/-/g, "");
+const dayAfter = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+
+/** RFC 5545: lines of at most 75 octets, continued with a space, never
+ *  splitting a character. */
+function fold(line: string): string {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const out: string[] = [];
+  let cur = "";
+  let n = 0;
+  for (const ch of line) {
+    const b = enc.encode(ch).length;
+    if (n + b > (out.length ? 74 : 75)) { out.push(cur); cur = ""; n = 0; }
+    cur += ch;
+    n += b;
+  }
+  out.push(cur);
+  return out.join("\r\n ");
+}
+
+/** GET /plans/ics?code=: the plan's dates as a calendar to subscribe to.
+ *  No sign-in (a calendar app can't), like the shared link; the code opens
+ *  it, and a plan for one squad has none. Names of people never appear. */
+export async function ics(req: Request, env: Env): Promise<Response> {
+  const code = normalizeCode(new URL(req.url).searchParams.get("code") || "");
+  if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
+  await limitOrThrow(env, `ics:${code}`, 120, 3600);
+  const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
+  if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
+  const doc = JSON.parse(p.doc) as { units: Obj[]; reviews?: { day: string; from: string; to: string }[] };
+  const stamp = new Date(p.updated_at * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const link = `https://duecrew.com/p/${p.code}`;
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Due Crew//Plans//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    `X-WR-CALNAME:${icsText(p.name)}`, "REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"];
+  const event = (uid: string, start: string, end: string, summary: string) => lines.push("BEGIN:VEVENT",
+    `UID:${uid}.${p.id}@duecrew.com`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
+    `SUMMARY:${icsText(summary)}`, `DESCRIPTION:${icsText(p.name)}`, `URL:${link}`, "TRANSP:TRANSPARENT", "END:VEVENT");
+  const byId = new Map(doc.units.map((u) => [u.id as string, u]));
+  for (const u of doc.units) {
+    const n = ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
+      + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+    const last = u.even && u.due ? (u.due as string) : (u.opens as string);
+    event(u.id as string, u.opens as string, dayAfter(last), `${u.name}${n ? ` · ${n.toLocaleString("en-US")} new` : ""}`);
+  }
+  for (const r of doc.reviews || []) {
+    const a = byId.get(r.from), b = byId.get(r.to);
+    if (!a || !b) continue;
+    event(`r${icsDate(r.day)}${r.from}${r.to}`, r.day, dayAfter(r.day), `Review · ${a.name}${a !== b ? ` – ${b.name}` : ""}`);
+  }
+  lines.push("END:VCALENDAR");
+  return new Response(lines.map(fold).join("\r\n") + "\r\n", { headers: {
+    "content-type": "text/calendar; charset=utf-8", "cache-control": "public, max-age=10800",
+    "content-disposition": `inline; filename="due-crew-${p.code}.ics"` } });
 }
 
 // ---- following ----
@@ -777,8 +849,9 @@ export async function forBoard(env: Env, uid: string) {
   ).bind(uid).all<{ id: string; version: number; doc: string }>();
   const lean = (doc: string) => {
     const d = JSON.parse(doc) as { deck: string; units: Obj[] };
-    return { deck: d.deck, units: d.units.filter((u) => (u.tags as unknown[]).length || (u.decks as unknown[]).length)
-      .map((u) => ({ id: u.id, tags: u.tags, decks: u.decks, ids: ((u.ids as unknown[]) || []).length })) };
+    return { deck: d.deck, units: d.units
+      .filter((u) => (u.tags as unknown[]).length || (u.decks as unknown[]).length || ((u.search as unknown[]) || []).length)
+      .map((u) => ({ id: u.id, tags: u.tags, decks: u.decks, ...(u.search ? { search: u.search } : {}) })) };
   };
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r.doc) })),

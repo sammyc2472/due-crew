@@ -853,10 +853,14 @@ class ApiClient:
         self._save_session()
         return True
 
-    def put_ids(self, plan_id, units):
-        """3.3, C5: the note ids behind a plan's tags, from my copy. One
-        request, only when they changed. True when it took."""
-        status, _ = self._call("PUT", f"/plans/{plan_id}/ids", {"units": units})
+    def put_ids(self, plan_id, units, counts=None):
+        """3.3, C5: the note ids behind a plan's tags, from my copy, and
+        (3.4, D1) how many cards its searches find here. One request, only
+        when they changed. True when it took."""
+        body = {"units": units}
+        if counts:
+            body["counts"] = counts
+        status, _ = self._call("PUT", f"/plans/{plan_id}/ids", body)
         return status == 200
 
     def my_plans(self):

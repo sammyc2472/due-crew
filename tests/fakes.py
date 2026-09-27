@@ -1089,6 +1089,12 @@ class FakeWorker:
             if p["owner"] != me:
                 raise Bad(403, "not_author")
             doc = json.loads(json.dumps(p["doc"]))
+            for uid, v in (body.get("counts") or {}).items():
+                u = next((x for x in doc["units"] if x["id"] == uid), None)
+                if u:
+                    sn = {q: n for q, n in v.items() if q in (u.get("search") or [])}
+                    if sn:
+                        u["sn"] = dict(u.get("sn") or {}, **sn)
             for uid, (tags, decks, ids) in (body.get("units") or {}).items():
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and u["tags"] == tags and u["decks"] == decks:
@@ -1193,7 +1199,8 @@ class FakeWorker:
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
-            {"id": u["id"], "tags": u["tags"], "decks": u["decks"]} for u in p["doc"]["units"] if u["tags"] or u["decks"]]}}
+            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}))
+            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search")]}}
             for pid, p in sorted(self.plans.items()) if p["owner"] == me]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 

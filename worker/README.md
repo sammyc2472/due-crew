@@ -101,6 +101,10 @@ docs; `POST /plans/{id}/cards {search, n}`; `PUT /plans/{id}/ids
 {units: {unitId: [tags, decks, [guid]]}}` (kept only while the date's
 tags are unchanged); `GET /board?decks=1` adds `authored` (the plans I
 write, lean) and each plan's `early`.
+3.4: `PUT /plans/{id}/ids` also takes `counts: {unitId: {search: n}}`;
+the lean `authored` docs carry each date's searches. `GET
+/plans/ics?code=` (no sign-in) is the plan as iCalendar; the site serves
+it at `/p/CODE.ics`.
 
 ### Squads
 

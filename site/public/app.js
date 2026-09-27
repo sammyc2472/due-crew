@@ -51,6 +51,10 @@ document.addEventListener("click", (e) => {
   if (a && !e.metaKey && !e.ctrlKey) { e.preventDefault(); go(a.getAttribute("href")); }
 });
 window.addEventListener("popstate", () => route());
+// a menu (Add to calendar) closes when you click anywhere else
+document.addEventListener("click", (e) => {
+  for (const d of document.querySelectorAll("details.calmenu[open]")) if (!d.contains(e.target)) d.open = false;
+});
 
 const link = (href, text, cls) => h("a", { href, "data-go": "", class: cls }, text);
 
@@ -231,6 +235,17 @@ async function newPlan() {
 // ---- a plan's own page (author: progress; follower: the dates) ----
 
 /** /p/CODE: what a shared link shows. */
+/** 3.4: a plan's dates in any calendar, as a subscription that follows changes. */
+function calMenu(code) {
+  const https = `${location.origin}/p/${code}.ics`;
+  const webcal = https.replace(/^https?:/, "webcal:");
+  return h("details", { class: "calmenu" }, h("summary", {}, "Add to calendar"),
+    h("div", { class: "calpop" },
+      h("a", { href: `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`, target: "_blank", rel: "noopener" }, "Google Calendar"),
+      h("a", { href: webcal }, "Apple Calendar or Outlook"),
+      h("button", { class: "linkish", onclick: (e) => copy(https, e.target) }, "Copy the calendar link")));
+}
+
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
@@ -239,7 +254,7 @@ async function codePage(code) {
     h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
     h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email."));
   if (!me) {
-    page(h("h1", {}, "Follow this plan in Anki"), steps(null),
+    page(h("h1", {}, "Follow this plan in Anki"), steps(null), calMenu(code),
       h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck. ", link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " to see the plan here."));
     return;
   }
@@ -249,7 +264,7 @@ async function codePage(code) {
     page(h("h1", {}, p.name),
       h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} dates${u.length ? `, ${pretty(u[0].opens)} to ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : ""} · ${p.followers} following`),
       p.line ? h("p", {}, p.line) : null,
-      h("h2", {}, "To follow it"), steps(p.doc.deck));
+      h("h2", {}, "To follow it"), steps(p.doc.deck), p.audience === "squad" ? null : calMenu(code));
   } catch {
     page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."));
   }

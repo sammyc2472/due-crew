@@ -583,11 +583,19 @@ def note_ids(idx, unit, plan_deck=""):
     return sorted({idx.guid_of[c] for c in got if c in idx.guid_of})
 
 
+def search_counts(idx, lean_doc):
+    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write."""
+    return {u["id"]: {q: len(idx.search_cards(q)) for q in u["search"]}
+            for u in lean_doc.get("units") or [] if u.get("search")}
+
+
 def ids_snapshot(idx, lean_doc, cap=50000):
     """{unit id: [tags, decks, [guid]]} for a plan I write, from my copy;
     at most `cap` ids in all."""
     out, n = {}, 0
     for u in lean_doc.get("units") or []:
+        if not (u.get("tags") or u.get("decks")):
+            continue  # a date of searches only: its count is enough (search_counts)
         ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
         n += len(ids)
         out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]

@@ -300,3 +300,8 @@ deck both share (Settings › Shared decks).
 - [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
 - [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
 - [ ] C5: rename a tag in a follower's copy (like a new AnKing): the date still opens its cards, and the card says the tags differ, with OK.
+
+### 3.4: search counts, calendar
+
+- [ ] Paste a search on a day on the site: "counted in your Anki soon". Refresh Anki (the day's first refresh, or tomorrow): the site shows its count; a search that finds nothing says so.
+- [ ] Add to calendar › Google Calendar: Google offers to add "Step 1"; each date shows as an all-day event. Apple Calendar: the Calendar app subscribes. Move a date on the site: the calendar follows within a few hours.

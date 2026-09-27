@@ -555,7 +555,8 @@ def send_ids():
     """3.3, C5: main thread, on the day's first refresh. For each plan I
     write whose deck I have (by its name), the note ids behind each date's
     tags and subdecks go up, one request a plan, only when they changed:
-    a follower whose AnKing renamed a tag still gets the date."""
+    a follower whose AnKing renamed a tag still gets the date. 3.4, D1:
+    with how many cards each of its searches finds here."""
     cl = client()
     auth = cl.session.get("plans_authored") or []
     if not auth or not mw.col:
@@ -568,10 +569,12 @@ def send_ids():
             did = names.get(str(a["doc"].get("deck") or "").lower())
             if did is None or not a["doc"].get("units"):
                 continue
-            units = P.ids_snapshot(P.DeckIndex(mw.col, did), a["doc"])
-            h = hashlib.sha1(json.dumps(units, sort_keys=True).encode()).hexdigest()[:16]
+            idx = P.DeckIndex(mw.col, did)
+            units = P.ids_snapshot(idx, a["doc"])
+            counts = P.search_counts(idx, a["doc"])  # 3.4, D1: a pasted search's count
+            h = hashlib.sha1(json.dumps([units, counts], sort_keys=True).encode()).hexdigest()[:16]
             if sent.get(a["id"]) != h:
-                jobs.append((a["id"], units, h))
+                jobs.append((a["id"], units, counts, h))
     except Exception:
         traceback.print_exc()
         return
@@ -579,7 +582,7 @@ def send_ids():
         return
 
     def job():
-        return [(pid, h) for pid, units, h in jobs if cl.put_ids(pid, units)]
+        return [(pid, h) for pid, units, counts, h in jobs if cl.put_ids(pid, units, counts)]
 
     def done(ok):
         if ok:

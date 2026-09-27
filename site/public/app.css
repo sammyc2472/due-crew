@@ -323,3 +323,15 @@ body:has(main.wide) > .top { max-width: 1320px; }
 .ch.rv { background: transparent; box-shadow: inset 0 0 0 1.5px var(--warn); color: var(--warn); cursor: pointer; }
 .rvbox { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .rvbox select { font-size: 12.5px; padding: 3px 6px; max-width: 130px; }
+.ch.warn, .ch2.warn { background: var(--warn-tint); }
+.ch2 small.w { color: var(--warn); font-weight: 700; }
+/* 3.4: add to calendar */
+.calmenu { position: relative; display: inline-block; font-size: 13px; }
+.calmenu > summary { list-style: none; cursor: pointer; color: var(--accent); font-weight: 600; }
+.calmenu > summary::-webkit-details-marker { display: none; }
+.calmenu > summary::after { content: " ▾"; }
+.calpop { position: absolute; right: 0; top: 1.8em; z-index: 5; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); display: grid; min-width: 220px; padding: 4px 0; text-align: left; }
+.calpop a, .calpop button { padding: 7px 14px; text-decoration: none; color: var(--ink); font-size: 13.5px; text-align: left; font-weight: 500; }
+.calpop a:hover, .calpop button:hover { background: var(--well); }
+main:not(.wide) .calmenu .calpop { left: 0; right: auto; }

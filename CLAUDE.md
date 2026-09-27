@@ -227,6 +227,9 @@ add-on.
   behind its tags (`PUT /plans/{id}/ids`, one request a plan when they
   changed, on the day's first refresh; `authored` rides that board); a
   follower whose tag matches nothing falls back to them.
+- 3.4: a pasted search's count comes from an author's Anki with the
+  note-id request (`counts`), and `/p/CODE.ics` is the plan as a calendar
+  to subscribe to (no sign-in, code plans only, nobody's name).
 - 3.3 plans together (migration 0006): co-authors from the owner's crew
   (`plan_editors`; they edit, the owner alone deletes, picks the audience
   and the co-authors), notes on a day from anyone in the plan
