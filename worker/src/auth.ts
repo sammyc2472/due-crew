@@ -3,6 +3,7 @@
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 
+import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
 import { sendCode } from "./mail";
 import {
@@ -207,6 +208,11 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
   ]) stmts.push(db.prepare(sql).bind(uid));
   if (user) stmts.push(db.prepare("DELETE FROM otp WHERE email = ?").bind(user.email));
   await db.batch(stmts);  // one transaction: all of it or none
+  try {
+    await forget(env, s.uid);  // the 2.x copies the bridge made, while it runs
+  } catch {
+    console.log("due crew: couldn't clear the 2.x copies of a deleted account");
+  }
   return json({ ok: true });
 }
 

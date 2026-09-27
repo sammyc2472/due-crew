@@ -189,6 +189,12 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
   ]);
   const people = peopleRes.results as Row[];
   const members = membersRes.results as Member[];
+  // who may read a 3.x person's copies on 2.x: their mutual friends, and nobody else
+  const mutualRows = await db.prepare(
+    `SELECT a.owner, a.friend FROM friends a JOIN friends b ON b.owner = a.friend AND b.friend = a.owner
+      WHERE a.owner IN (${V3})`).all<{ owner: string; friend: string }>();
+  const mutual = new Map<string, string[]>();
+  for (const r of mutualRows.results) mutual.set(r.owner, [...(mutual.get(r.owner) ?? []), r.friend]);
 
   // everything this run compares, in batchGets of 100 documents
   const paths = [
@@ -276,6 +282,16 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
     } else if (fsHeat) {
       writes.push({ delete: `${DOCS}/users/${r.uid}/shared/heatmap` });  // turned off in 3.x
     }
+    // 2.x's rules let whoever this person's Firestore edges name read those
+    // copies; the edges must say what D1 says (removals, no one-sided adds)
+    if (prof) {
+      const want = [...(mutual.get(r.uid) ?? [])].sort();
+      const have = Array.isArray(prof.friends) ? (prof.friends as unknown[]).map(String).sort() : [];
+      if (stable(have) !== stable(want)) put(`users/${r.uid}`, { friends: want }, ["friends"], true);
+      for (const edge of await listIds(fetcher, auth, `users/${r.uid}/friends`)) {
+        if (!want.includes(edge)) writes.push({ delete: `${DOCS}/users/${r.uid}/friends/${edge}` });
+      }
+    }
     // the profile says 2.9+ (so 2.x reads the week doc), with the current name and emoji
     const p = { displayName: r.name || "", emoji: r.emoji || "", clientVersion: r.client_version || "3.0.0" };
     if (prof && (prof.displayName !== p.displayName || (prof.emoji || "") !== p.emoji || prof.clientVersion !== p.clientVersion)) {
@@ -310,6 +326,36 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
     if (!res.ok) throw new Error(`firestore commit: ${res.status}`);
   }
   return { pulled, pushed: writes.length };
+}
+
+/** The ids in a Firestore collection (names only, no fields read). */
+async function listIds(fetcher: Fetch, auth: Record<string, string>, path: string): Promise<string[]> {
+  const out: string[] = [];
+  let page = "";
+  do {
+    const res = await fetcher(`${API}/${path}?pageSize=300&mask.fieldPaths=__none__${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`,
+      { headers: auth });
+    if (!res.ok) throw new Error(`firestore list: ${res.status}`);
+    const data = (await res.json()) as { documents?: { name: string }[]; nextPageToken?: string };
+    for (const d of data.documents ?? []) out.push(d.name.slice(d.name.lastIndexOf("/") + 1));
+    page = data.nextPageToken ?? "";
+  } while (page);
+  return out;
+}
+
+/** An account deleted in 3.x: its copies on 2.x go too, and nobody can
+ *  read what's left. Best effort: the bridge's next run can't bring any of
+ *  it back (the account is gone from D1). */
+export async function forget(env: Env, uid: string, fetcher: Fetch = fetch): Promise<void> {
+  if (!env.FIREBASE_SA || !/^[A-Za-z0-9_-]{1,128}$/.test(uid)) return;
+  const token = await accessToken(env.FIREBASE_SA, fetcher);
+  const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const writes: unknown[] = ["week", "decks", "heatmap"].map((d) => ({ delete: `${DOCS}/users/${uid}/shared/${d}` }));
+  for (const edge of await listIds(fetcher, auth, `users/${uid}/friends`)) writes.push({ delete: `${DOCS}/users/${uid}/friends/${edge}` });
+  await fetcher(`${API}:commit`, { method: "POST", headers: auth, body: JSON.stringify({ writes }) });
+  await fetcher(`${API}:commit`, { method: "POST", headers: auth, body: JSON.stringify({ writes: [{
+    update: { name: `${DOCS}/users/${uid}`, fields: mapFields({ friends: [] }) }, updateMask: { fieldPaths: ["friends"] },
+    currentDocument: { exists: true } }] }) });  // a profile 2.x never had stays absent
 }
 
 /** For tests: forget the cached Google token. */

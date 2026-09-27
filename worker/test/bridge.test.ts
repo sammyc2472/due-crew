@@ -26,6 +26,12 @@ function fakeFirestore(docs: Record<string, Record<string, unknown>>) {
       return Response.json({ access_token: "tok", expires_in: 3600 });
     }
     expect((init?.headers as any).authorization).toBe("Bearer tok");
+    if (!init?.method || init.method === "GET") {
+      // a collection listing: the docs directly under the path
+      const path = decodeURIComponent(url.split("/documents/")[1].split("?")[0]);
+      const names = Object.keys(docs).filter((d) => d.startsWith(path + "/") && !d.slice(path.length + 1).includes("/"));
+      return Response.json({ documents: names.map((n) => ({ name: `${DOCS}/${n}` })) });
+    }
     const body = JSON.parse(String(init?.body));
     if (url.endsWith(":batchGet")) {
       log.gets++;
@@ -83,6 +89,7 @@ describe("the 2.x bridge", () => {
     await user("old", "Dre", "2.13.0");
     await user("new", "Sam", "3.0.1", week(120));
     await seenBy3("old");
+    await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES ('old', 'new', 0)").run();  // mutual
     const fs = fakeFirestore({
       "users/old": { displayName: "Dre", clientVersion: "2.13.0" },
       "users/old/shared/week": { ...week(88), updatedAt: { timestampValue: "2026-09-26T10:00:00Z" },
@@ -241,5 +248,35 @@ describe("the 2.x bridge", () => {
     const who = new Set(asked.map((d) => d.split("/documents/")[1].split("/")[1]));
     expect([...who].sort()).toEqual(["friend", "mate", "new", "sq"]);  // "sq": the squad rows' documents
     expect(asked.some((d) => d.includes("stranger"))).toBe(false);
+  });
+
+  it("2.x reads a 3.x person's copies only while D1 says they're mutual friends", async () => {
+    await user("new", "Sam", "3.0.1", week(1));
+    await user("pal", "Dre", "2.13.0");
+    await user("ex", "Zed", "2.13.0");
+    await user("fan", "Nia", "2.13.0");
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES ('new', 'pal', 0), ('pal', 'new', 0), ('new', 'fan', 0)"),
+    ]);
+    const fs = fakeFirestore({
+      "users/new": { displayName: "Sam", friends: ["pal", "ex", "fan"] },
+      "users/new/friends/pal": { at: "x" }, "users/new/friends/ex": { at: "x" }, "users/new/friends/fan": { at: "x" },
+    });
+    const sa = await serviceAccount();
+    await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
+    expect(fs.docs["users/new"].friends).toEqual(["pal"]);        // ex was removed; fan never added back
+    expect(Object.keys(fs.docs).filter((d) => d.startsWith("users/new/friends/"))).toEqual(["users/new/friends/pal"]);
+    expect(await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher)).toEqual({ pulled: 0, pushed: 0 });
+  });
+
+  it("a deleted account's 2.x copies go, and its edges with them", async () => {
+    const { forget } = await import("../src/bridge");
+    const fs = fakeFirestore({
+      "users/gone": { displayName: "Sam", friends: ["pal"] }, "users/gone/friends/pal": { at: "x" },
+      "users/gone/shared/week": week(3), "users/gone/shared/decks": { decks: [] }, "users/gone/shared/heatmap": { counts: {} },
+    });
+    await forget({ ...env, FIREBASE_SA: await serviceAccount() } as any, "gone", fs.fetcher);
+    expect(Object.keys(fs.docs).sort()).toEqual(["users/gone"]);
+    expect(fs.docs["users/gone"].friends).toEqual([]);
   });
 });
