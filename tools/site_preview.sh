@@ -31,7 +31,17 @@ q = lambda s: "'" + str(s).replace("'", "''") + "'"
 tags = [["Step1", 1960], ["Step1::Cardio", 312], ["Step1::Cardio::Heart_failure", 48], ["Step1::Cardio::Arrhythmia", 61],
         ["Step1::Cardio::Valves", 39], ["Step1::Cardio::Pharm", 164], ["Step1::Renal", 402], ["Step1::Renal::Physiology", 212],
         ["Step1::Renal::Pharm", 190], ["Step1::Pulm", 288], ["Step1::Pulm::Asthma", 74], ["Step1::Pulm::COPD", 58],
-        ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177]]
+        ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177],
+        # 3.3: AnKing-style tags, for readable names and the resource / system views
+        ["#AK_Step1_v12", 5200], ["#AK_Step1_v12::#Pathoma", 2408], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury", 283],
+        ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::01_Growth", 90], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::02_Cell_Injury", 150],
+        ["#AK_Step1_v12::#Pathoma::02_Inflammation", 210], ["#AK_Step1_v12::#Pathoma::03_Neoplasia", 176],
+        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells", 380], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::01_Microcytic", 96],
+        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::02_Macrocytic", 64], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic", 142],
+        ["#AK_Step1_v12::#B&B", 1900], ["#AK_Step1_v12::#B&B::01_Biochem", 640], ["#AK_Step1_v12::#B&B::01_Biochem::01_Enzymes", 96],
+        ["#AK_Step1_v12::#B&B::01_Biochem::02_Metabolism1", 188], ["#AK_Step1_v12::#B&B::01_Biochem::03_Metabolism2", 120],
+        ["#AK_Step1_v12::^Systems", 3000], ["#AK_Step1_v12::^Systems::Hematology", 700], ["#AK_Step1_v12::^Systems::Cardio", 900],
+        ["lecture04_glycolysis", 64]]
 decks = [["Step 1::Extras", 96], ["Step 1::Extras::Images", 41]]
 units = [
   {"id": "hf", "name": "Heart failure", "opens": d(0), "due": d(7), "tags": ["Step1::Cardio::Heart_failure"], "decks": [], "cards": []},

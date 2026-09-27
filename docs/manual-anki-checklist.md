@@ -267,3 +267,12 @@ deck both share (Settings › Shared decks).
 - [ ] Admin → A notice: post "Testing a notice" with https://duecrew.com as the link. It's under Showing now. In Anki (3.2.1), Refresh: 📣 Testing a notice · More · × on top of every tab. More opens the link in the browser; × hides it, and it stays hidden after a restart.
 - [ ] Post one "only to add-ons older than 3.2.1": a 3.2.1 board doesn't show it. Take down: the next refresh drops it.
 - [ ] A link that isn't https is refused with a plain message.
+
+### 3.3: the calendar builder
+
+- [ ] Anki: Make a plan from a deck… opens the site on the builder. Calendar tab: the left panel lists every tag readably with the raw tag under it; By resource / By system / Other tags / Subdecks when the deck has them. Search finds a tag by its raw or readable name.
+- [ ] Tick two chapters, choose New cards a day (150), Lay it out: the days fill in order, big chapters split by their tags or evenly (a green edge, "1/3"), nothing on days off (untick S S) or in a catch-up week.
+- [ ] Drag a chip to another day; drag a tag from the left onto a day; click a day: its panel on the right (name, Split…, ×, checkpoint, move). A heavy day shows the amber note with Split.
+- [ ] Plan next week: only next Monday to Sunday fills. Save; Maya (no schedule) gets an even date's cards a slice a morning, not all at once.
+- [ ] As text: Copy the prompt, paste it into an AI with a syllabus, paste the answer back, Read it: the preview lists each date; a made-up tag says not found; a "# Pick in Anki" line shows under To pick in Anki. Replace, Save.
+- [ ] On a phone: the week shows as a list of days; What to cover folds.

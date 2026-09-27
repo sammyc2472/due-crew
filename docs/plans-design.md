@@ -204,3 +204,45 @@ logs       (uid PK, json, at)              {days: {date: [min, reviews, new, ret
 - `/log`: this week, 12 weeks (minutes, reviews, new, retention), and each
   plan's cards seen against my schedule.
 - `/admin`: counts only, for `ADMIN_UIDS` (a secret: comma-separated uids).
+
+## 3.3: the builder is a calendar
+
+Signed-off mock: "Building a Plan" (P1–P8, H1). P6 is a prompt for the
+person's own AI, not one the server runs; P8 (co-authors, suggestions,
+comments, the change log) comes after, save-based.
+
+- **What to cover**: every tag, named readably ("#AK_Step1_v12::#Pathoma::
+  01_Growth" reads "Step 1 › Pathoma › 1 · Growth", the raw tag beneath),
+  in three views when the deck has them: by resource (a `#` tag), by
+  system (a `^` tag), other tags; and subdecks. Ticking a tag covers
+  everything under it; a tag holding more than one view covers only what
+  the view shows (AnKing's top tag holds the same cards twice).
+- **The pace**: the plan's study days (`pace.days`), and one of: finish by
+  the end date (cards a day follow), cards a day (the finish follows), or
+  day by day (each day is what's on it, as a class's syllabus).
+- **Lay it out** puts what's ticked and not yet on a day onto the study
+  days from the day after the last date, in the tree's order, chapters
+  whole where they fit the day; a bigger one splits by its own tags, the
+  cards only on it go last, and one with nothing below splits evenly.
+  Catch-up weeks and the taper are skipped. **Plan next week** does the
+  same for one week only, so a plan can be made a week at a time.
+- **The calendar**: month, week or list; drag a chip to another day, a tag
+  from the left onto a day, or use + and the day panel. A day shows its
+  cards and a load bar against the pace; a heavy day offers a split.
+- **Split**: by its tags (over the next study days at the pace), evenly
+  over N study days (`even`), or single cards in Anki (the browser search
+  to copy; Due Crew: add to a plan, onto that date).
+- **As text** has "Copy the prompt": the plan's dates and pace, the line
+  format, and the deck's tags with counts (what's ticked, or three levels,
+  at most 600); never a card. The answer pasted back is read with a
+  preview (tags matched in any case or by their readable name; `#` lines
+  that ask for single cards listed to pick in Anki), then Replace or Add.
+
+### Even dates
+
+`{opens, due, even: true}`: the date's cards open in slices over its
+window, on the plan's study days, skipping catch-up weeks and the taper;
+the same slices for everyone, in the deck's order. With a schedule of my
+own, my schedule spreads it as any date. `schedule.quota` does this for a
+follower without a schedule, and the morning runs such a plan through the
+3.2 spread. A 3.2.x add-on drops `even` and opens the date whole.

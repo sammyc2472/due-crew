@@ -83,7 +83,10 @@ follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
 `plans: {id: {unitId: [opened, seen, total]}}`. 3.2: a plan's doc may have
 `end`, `phases: {catchup, taper}` and a date's `check` (a checkpoint); a
 follow may carry my `sched: {start?, days, minutes}`, and my own view of a
-plan I follow carries my schedule and my progress.
+plan I follow carries my schedule and my progress. 3.3: a date may be
+`even` (split evenly from its opens to its due date, which must be later),
+and the doc may carry the builder's `pace: {mode: "end" | "daily" |
+"placed", days: [7 of 0/1], daily?, cover?: ["tag:…" | "deck:…"]}`.
 
 ### Squads
 

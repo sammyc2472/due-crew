@@ -189,6 +189,18 @@ add-on.
   for the asking add-on's version (`notices`, migration 0005), and the
   board shows it on top of every tab until it's dismissed (by id, in
   wrap.json). Only 3.2.1 and later show it.
+- 3.3 the builder is a calendar (`site/public/builder.js`, loaded before
+  app.js): tags named readably with the raw tag under (`Tags`), by
+  resource / by system / other, ticked into what the plan covers; the pace
+  (finish by, cards a day, or day by day, and the plan's study days) and
+  Lay it out / Plan next week put it on days. A date can be split evenly
+  over its window (`even` on a unit): everyone gets the same slices on the
+  plan's study days (`pace.days`), with or without a schedule of their own
+  (`schedule.quota`; `Sched.quota` the same). `pace` is otherwise the
+  builder's (`mode`, `daily`, `cover`); an add-on keeps only its days, and
+  3.2.x add-ons open an even date whole. As text carries a prompt for the
+  person's own AI (tag names and counts, never a card) and reads its
+  answer back with a preview. The site home is the add-on's board.
 
 ## Releasing
 
