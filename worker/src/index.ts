@@ -7,9 +7,8 @@ import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
-import { Env, HttpError, json } from "./util";
+import { BODY_MAX, Env, HttpError, json } from "./util";
 
-const BODY_MAX = 512 * 1024;
 
 type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
 type Authed = (req: Request, s: A.Session, env: Env, params: string[]) => Promise<Response>;
@@ -74,7 +73,7 @@ authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
 authed("POST", r("/squads/restore"), Q.restore);
 authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
-authed("POST", r(`/squads/${ID}/join`), (_q, s, env, p) => Q.join(s, env, p));
+authed("POST", r(`/squads/${ID}/join`), Q.join);
 authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
 authed("DELETE", r(`/squads/${ID}/members/${ID}`), (_q, s, env, p) => Q.removeMember(s, env, p));
 authed("POST", r(`/squads/${ID}/block/${ID}`), (_q, s, env, p) => Q.block(s, env, p));

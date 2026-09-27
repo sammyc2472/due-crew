@@ -604,9 +604,10 @@ class ApiClient:
         return {"id": data["id"], "code": data["code"], "name": data.get("name") or "?",
                 "founder": str(data.get("founder") or ""), "open": data.get("open") is True}, status
 
-    def join_squad(self, sid):
-        """200, or 403 when the door is locked (or I'm blocked), 404 gone."""
-        return self._call("POST", f"/squads/{sid}/join")[0]
+    def join_squad(self, sid, code=""):
+        """200, or 403 when the door is locked (or I'm blocked, or the code
+        doesn't match), 404 gone. The code is what only a join sends."""
+        return self._call("POST", f"/squads/{sid}/join", {"code": code} if code else None)[0]
 
     def leave_squad(self, sid):
         return self._call("DELETE", f"/squads/{sid}/members/{self.user_id}")[0] == 200

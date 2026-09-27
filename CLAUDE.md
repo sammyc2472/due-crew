@@ -91,6 +91,10 @@ add-on.
   come into D1; for people on 3.x, D1 is the truth and the same go out to
   Firestore (no flags). Squad rows are updates only both ways: the bridge
   never makes anyone a member. Cheers, knocks and memberships don't cross.
+  It reads only people a 3.x screen can show (3.x users, and 2.x people a
+  3.x user added or shares a squad with). A 3.x person's Firestore friend
+  edges are kept to their D1 mutual friends, so a removal also ends 2.x
+  reads, and deleting an account deletes its 2.x copies.
   `tools/bridge_check.py` compares both sides. Delete it all, its cron and
   the secret with Firestore.
 - 2.10's together features: "studying now" and flags ride my week;

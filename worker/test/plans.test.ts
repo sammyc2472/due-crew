@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { api, db, person } from "./helpers";
 
+const SITE = { "x-due-crew": "1" };  // what the site's own script sends
+
 const UNITS = [
   { id: "hf", name: "Heart failure", opens: "2026-10-05", due: "2026-10-12", tags: ["Step1::Cardio::Heart_failure"] },
   { id: "arr", name: "Arrhythmia", opens: "2026-10-12", tags: ["Step1::Cardio::Arrhythmia"], cards: [["g1", 0], ["g1", 0], ["g2", 1]] },
@@ -94,6 +96,17 @@ describe("plans: following", () => {
     expect(await maya.status("POST", "/plans/follow", { code: plan.code })).toBe(200);
     expect((await maya.call("GET", "/board?decks=1")).body.planOffers).toEqual([]);
     expect(await dre.status("PUT", `/plans/${plan.id}`, { version: 3, squad: "someone-elses" })).toBe(400);
+    // a plan's code shows outsiders nothing about the squad: an id isn't an invite
+    const outsider = (await zed.call("GET", `/plans/peek?code=${plan.code}`));
+    expect(outsider.status).toBe(404);  // a squad-only plan: not even a peek
+    await dre.call("PUT", `/plans/${plan.id}`, { version: 3, audience: "code" });
+    const peeked = await zed.call("GET", `/plans/peek?code=${plan.code}`);
+    expect(peeked.status).toBe(200);
+    expect(peeked.body.squad).toBeNull();
+    expect((await maya.call("GET", `/plans/${plan.id}`)).body.squad).toBe(sq.id);  // a member still sees it
+    // and a join that sends a code must send that squad's
+    expect(await zed.status("POST", `/squads/${sq.id}/join`, { code: "WRONGCOD" })).toBe(403);
+    expect(await zed.status("POST", `/squads/${sq.id}/join`, { code: sq.code })).toBe(200);
   });
 
   it("progress: stored only while sharing, only when it changed; the author sees counts", async () => {
@@ -155,11 +168,11 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     const dre = await person("dre");
     const link = await dre.call("POST", "/auth/link");
     expect(link.body.expiresIn).toBe(300);
-    const r = await api("POST", "/auth/link/redeem", { body: { token: link.body.token } });
+    const r = await api("POST", "/auth/link/redeem", { body: { token: link.body.token }, headers: SITE });
     expect(r.status).toBe(200);
     const cookie = r.headers.get("set-cookie") || "";
     expect(cookie).toMatch(/^dc_session=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; Secure; SameSite=Strict/);
-    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token } })).status).toBe(401);  // once
+    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token }, headers: SITE })).status).toBe(401);  // once
 
     // the cookie reads; a change needs the header a cross-site form can't send
     const session = cookie.split(";")[0];
@@ -179,7 +192,7 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     const { mailbox } = await import("./helpers");
     const box = mailbox();
     await api("POST", "/auth/code", { body: { email: "maya@example.com" } });
-    const v = await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true } });
+    const v = await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true }, headers: SITE });
     expect(v.status).toBe(200);
     expect(v.body.token).toBeUndefined();  // never in page script
     const cookie = (v.headers.get("set-cookie") || "").split(";")[0];
@@ -194,10 +207,55 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     expect((await go("GET", "/api/plans/mine")).status).toBe(401);
   });
 
+  it("the endpoints that set a cookie refuse a request another site could make", async () => {
+    const dre = await person("dre");
+    const link = await dre.call("POST", "/auth/link");
+    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token } })).status).toBe(403);
+    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token }, headers: SITE })).status).toBe(200);
+  });
+
   it("an expired link doesn't work", async () => {
     const dre = await person("dre");
     const link = await dre.call("POST", "/auth/link");
     await db().prepare("UPDATE login_links SET expires_at = 0").run();
-    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token } })).status).toBe(401);
+    expect((await api("POST", "/auth/link/redeem", { body: { token: link.body.token }, headers: SITE })).status).toBe(401);
+  });
+});
+
+describe("limits the audit asked for", () => {
+  it("a body past the limit is refused even with no content-length (streamed)", async () => {
+    const dre = await person("dre");
+    const { env } = await import("cloudflare:workers");
+    const worker = (await import("../src/index")).default;
+    const big = new ReadableStream({
+      start(c) { for (let i = 0; i < 40; i++) c.enqueue(new TextEncoder().encode("x".repeat(20_000))); c.close(); },
+    });
+    const res = await worker.fetch(new Request("https://api.duecrew.com/plans/trees", {
+      method: "PUT", body: big, headers: { authorization: `Bearer ${dre.token}` }, duplex: "half",
+    } as any), { ...env } as any);
+    expect(res.status).toBe(413);
+  });
+
+  it("PUT /friends only restores once, before the account's first 3.x sync", async () => {
+    const nia = await person("nia");
+    await person("sam");
+    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual(["sam"]);
+    await nia.call("POST", "/sync", { profile: { name: "Nia", clientVersion: "3.0.1" } });
+    await nia.call("DELETE", "/friends/sam");
+    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM friends WHERE owner = 'nia'").first("n")).toBe(0);
+  });
+
+  it("a squad plan closes to someone who leaves the squad, follow or not", async () => {
+    const { dre, plan } = await authored();
+    const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;
+    const maya = await person("maya");
+    await maya.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
+    await dre.call("PUT", `/plans/${plan.id}`, { version: 2, audience: "squad", squad: sq.id });
+    await maya.call("POST", "/plans/follow", { code: plan.code });
+    expect((await maya.call("GET", "/board?decks=1")).body.plans).toHaveLength(1);
+    await dre.call("DELETE", `/squads/${sq.id}/members/maya`);
+    expect((await maya.call("GET", "/board?decks=1")).body.plans).toEqual([]);
+    expect(await maya.status("GET", `/plans/${plan.id}`)).toBe(404);
   });
 });

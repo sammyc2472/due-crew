@@ -7,7 +7,7 @@ import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
 import { checkUid, nameOf } from "./social";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson } from "./util";
+import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
 
 export const SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no 0/O/1/I
 export const SQUAD_CODE_LEN = 8;
@@ -63,6 +63,7 @@ export async function create(req: Request, s: Session, env: Env): Promise<Respon
   const body = await readJson(req);
   for (const k of Object.keys(body)) if (k !== "name") throw V.bad("squad");  // founder is always me
   const name = V.squadName(body.name);
+  await limitOrThrow(env, `squadnew:${s.uid}`, 10, 86400);
   const me = await myName(env, s.uid);
   for (let i = 0; i < 3; i++) {
     const code = drawCode();
@@ -88,7 +89,21 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 
 /** POST /squads/{id}/join: the only way in. The door must be open and I
  *  mustn't be blocked. Joining twice is a no-op. */
-export async function join(s: Session, env: Env, [id]: string[]): Promise<Response> {
+export async function join(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  // The invite code is what only a join sends. 3.1 sends it and it must
+  // match; 3.0.x sends none (allowed until MIN_CLIENT reaches 3.1).
+  const text = await readText(req);
+  if (text) {
+    let body: unknown;
+    try { body = JSON.parse(text); } catch { throw new HttpError(400, "bad_json"); }
+    const code = V.isObj(body) && typeof body.code === "string" ? body.code : null;
+    if (code === null || (await squadId(code)) !== id) throw new HttpError(403, "wrong_code");
+  }
+  return joinById(s, env, id);
+}
+
+/** The join itself, once whoever called has shown the code (or is 3.0.x). */
+async function joinById(s: Session, env: Env, id: string): Promise<Response> {
   const sq = await getSquad(env, id);
   if (await isMember(env, id, s.uid)) return json(info(sq));
   if (await env.DB.prepare("SELECT 1 FROM bans WHERE squad = ? AND uid = ?").bind(id, s.uid).first()) {
@@ -120,7 +135,7 @@ export async function restore(req: Request, s: Session, env: Env): Promise<Respo
       "INSERT INTO squads (id, name, founder, open, created_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT DO NOTHING",
     ).bind(id, name, founder, nowSec()).run();
   }
-  const r = await join(s, env, [id]);
+  const r = await joinById(s, env, id);  // restore demanded the code
   if (r.status !== 200) return r;
   return json({ ...(await r.json() as object), code });
 }

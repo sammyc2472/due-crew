@@ -24,7 +24,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CHUNK = 500
+CHUNK = 100  # the Worker runs a few queries per row; D1 allows 1,000 a request
 PROJECT = "anki-leaderboard-f6691"
 FIRESTORE = f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents"
 

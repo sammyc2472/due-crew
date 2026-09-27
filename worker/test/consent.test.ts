@@ -249,13 +249,17 @@ describe("a code knocks its owner (v2.9)", () => {
   it("New Code (2.10)", async () => {
     await db().prepare("INSERT INTO codes VALUES ('BOB123', 'bob')").run();
     await db().prepare("UPDATE users SET code = 'BOB123' WHERE uid = 'bob'").run();
-    expect((await bob.call("POST", "/codes", { code: "BOB999" })).body.code, "new code: a fresh code is claimed by its maker").toBe("BOB999");
-    const theirs = (await carol.call("POST", "/codes", { code: "BOB999" })).body.code;
-    expect(theirs, "new code: someone else's code can't be repointed at me").not.toBe("BOB999");
-    expect(await db().prepare("SELECT uid FROM codes WHERE code = 'BOB999'").first("uid"), "new code: nor retired by anyone but its owner").toBe("bob");
+    // 3.x draws new codes on the server; asking for a particular one only
+    // works for an account that has none (the 2.x restore)
+    const fresh = (await bob.call("POST", "/codes", {})).body.code;
+    expect(fresh, "new code: a fresh code is claimed by its maker").not.toBe("BOB123");
+    expect((await bob.call("POST", "/codes", { code: "BOB999" })).body.code, "new code: a wanted code can't replace one I have").toBe(fresh);
+    const theirs = (await carol.call("POST", "/codes", { code: fresh })).body.code;
+    expect(theirs, "new code: someone else's code can't be repointed at me").not.toBe(fresh);
+    expect(await db().prepare("SELECT uid FROM codes WHERE code = ?").bind(fresh).first("uid"), "new code: nor retired by anyone but its owner").toBe("bob");
     expect(await dave.status("POST", "/codes/BOB123/add"), "new code: the owner's new code retires the old one").toBe(404);
     expect(await dave.status("POST", "/codes/BOB123/add"), "new code: a knock on the retired code is refused").toBe(404);
-    expect((await dave.call("POST", "/codes/BOB999/add")).body.knocked, "new code: the new one knocks").toBe(true);
+    expect((await dave.call("POST", `/codes/${fresh}/add`)).body.knocked, "new code: the new one knocks").toBe(true);
   });
 });
 

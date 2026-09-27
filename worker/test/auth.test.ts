@@ -243,4 +243,16 @@ describe("sessions", () => {
     await api("GET", "/auth/me", { token: s.token });
     expect(await at()).toBe(touched);  // same day: no second write
   });
+
+  it("parallel guesses from many addresses get five tries between them, not one each", async () => {
+    const box = mailbox();
+    await api("POST", "/auth/code", { body: { email: "victim@example.com" } });
+    const right = box.code("victim@example.com");
+    const wrong = (i: number) => String((Number(right) + 1 + i) % 1_000_000).padStart(6, "0");
+    const results = await Promise.all(Array.from({ length: 30 }, (_, i) =>
+      api("POST", "/auth/verify", { body: { email: "victim@example.com", code: wrong(i) }, ip: `198.51.100.${i}` })));
+    expect(results.filter((r) => r.body?.error === "wrong_code").length).toBeLessThanOrEqual(4);
+    const last = await api("POST", "/auth/verify", { body: { email: "victim@example.com", code: right }, ip: "198.51.100.200" });
+    expect(last.status).not.toBe(200);  // the code is spent: the right guess after the flood fails too
+  });
 });

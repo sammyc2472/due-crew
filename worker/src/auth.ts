@@ -3,6 +3,7 @@
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 
+import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
 import { sendCode } from "./mail";
 import {
@@ -57,24 +58,27 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
   if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
 
-  const row = await env.DB.prepare("SELECT code_hash, expires_at, attempts FROM otp WHERE email = ?")
-    .bind(email).first<{ code_hash: string; expires_at: number; attempts: number }>();
-  if (!row || row.expires_at <= nowSec()) {
-    if (row) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
+  // Claim one try in one statement, before comparing: a flood of parallel
+  // guesses gets at most CODE_ATTEMPTS claims between them, never more.
+  const claim = await env.DB.prepare(
+    `UPDATE otp SET attempts = attempts + 1 WHERE email = ? AND attempts < ? AND expires_at > ?
+     RETURNING code_hash, attempts`,
+  ).bind(email, CODE_ATTEMPTS, nowSec()).first<{ code_hash: string; attempts: number }>();
+  if (!claim) {
+    await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();  // expired or out of tries
     throw new HttpError(400, "expired");
   }
-  const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), row.code_hash);
+  const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), claim.code_hash);
   if (!good) {
-    const attempts = row.attempts + 1;
-    await (attempts >= CODE_ATTEMPTS
-      ? env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email)
-      : env.DB.prepare("UPDATE otp SET attempts = ? WHERE email = ?").bind(attempts, email)).run();
+    if (claim.attempts >= CODE_ATTEMPTS) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
     await hit(env, await emailKey("fail", email), FAILS_TO_LOCK, LIMIT_WINDOW);
-    throw new HttpError(400, attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
+    throw new HttpError(400, claim.attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
   }
 
-  // a code works once: gone before the session exists
-  await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
+  // a code works once: consumed in one statement, so one request wins it
+  const won = await env.DB.prepare("DELETE FROM otp WHERE email = ? AND code_hash = ? RETURNING email")
+    .bind(email, claim.code_hash).first();
+  if (!won) throw new HttpError(400, "expired");
   const now = nowSec();
   let user = await env.DB.prepare("SELECT uid, name FROM users WHERE email = ?")
     .bind(email).first<{ uid: string; name: string | null }>();
@@ -90,6 +94,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
   if (body.web === true) {
+    if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
     // the site (3.1): the session is a same-site cookie, never in page script
     return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
   }
@@ -203,6 +208,11 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
   ]) stmts.push(db.prepare(sql).bind(uid));
   if (user) stmts.push(db.prepare("DELETE FROM otp WHERE email = ?").bind(user.email));
   await db.batch(stmts);  // one transaction: all of it or none
+  try {
+    await forget(env, s.uid);  // the 2.x copies the bridge made, while it runs
+  } catch {
+    console.log("due crew: couldn't clear the 2.x copies of a deleted account");
+  }
   return json({ ok: true });
 }
 
@@ -296,6 +306,7 @@ export async function createLink(s: Session, env: Env): Promise<Response> {
 /** POST /auth/link/redeem {token}: the site trades the link for a session
  *  cookie. The link dies on first use. */
 export async function redeemLink(req: Request, env: Env): Promise<Response> {
+  if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");  // only the site's own script
   await limitOrThrow(env, `redeem:${clientIp(req)}`, 60, 3600);
   const body = await readJson(req);
   if (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) throw new HttpError(400, "bad_token");

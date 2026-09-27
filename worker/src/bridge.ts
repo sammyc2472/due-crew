@@ -169,16 +169,32 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
   const token = await accessToken(env.FIREBASE_SA, fetcher);
   const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
   const db = env.DB;
+  // Only people it matters for: everyone on 3.x (2.x friends read their
+  // copies), and people on 2.x whom someone on 3.x has added or shares a
+  // squad with (the only ones whose Firestore data a 3.x screen shows).
+  // Firestore's free tier is 50k reads a day; reading everyone every 15
+  // minutes came close to it.
+  const V3 = "SELECT uid FROM users WHERE client_version LIKE '3.%'";
+  const SQUADS3 = `SELECT squad FROM members WHERE uid IN (${V3})`;
   const [peopleRes, membersRes] = await db.batch([
     db.prepare(`SELECT u.uid, u.name, u.emoji, u.client_version, w.doc, w.updated_at, d.json AS decks, h.json AS heat
                   FROM users u LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN decks d ON d.uid = u.uid
-                  LEFT JOIN heatmaps h ON h.uid = u.uid`),
+                  LEFT JOIN heatmaps h ON h.uid = u.uid
+                 WHERE u.client_version LIKE '3.%'
+                    OR u.uid IN (SELECT friend FROM friends WHERE owner IN (${V3}))
+                    OR u.uid IN (SELECT uid FROM members WHERE squad IN (${SQUADS3}))`),
     db.prepare(`SELECT m.squad, m.uid, m.name, m.day, m.reviews, m.study_time_ms, m.accuracy, m.streak, m.week,
                        m.emoji, m.new_cards, u.client_version
-                  FROM members m JOIN users u ON u.uid = m.uid`),
+                  FROM members m JOIN users u ON u.uid = m.uid WHERE m.squad IN (${SQUADS3})`),
   ]);
   const people = peopleRes.results as Row[];
   const members = membersRes.results as Member[];
+  // who may read a 3.x person's copies on 2.x: their mutual friends, and nobody else
+  const mutualRows = await db.prepare(
+    `SELECT a.owner, a.friend FROM friends a JOIN friends b ON b.owner = a.friend AND b.friend = a.owner
+      WHERE a.owner IN (${V3})`).all<{ owner: string; friend: string }>();
+  const mutual = new Map<string, string[]>();
+  for (const r of mutualRows.results) mutual.set(r.owner, [...(mutual.get(r.owner) ?? []), r.friend]);
 
   // everything this run compares, in batchGets of 100 documents
   const paths = [
@@ -221,7 +237,7 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
         }
       }
       if (prof) {
-        const name = typeof prof.displayName === "string" ? prof.displayName.trim().slice(0, 60) : "";
+        const name = typeof prof.displayName === "string" ? V.oneLine(prof.displayName, V.NAME_MAX) : "";
         const emoji = V.isEmoji(prof.emoji) ? prof.emoji : null;
         if ((name && name !== r.name) || emoji !== r.emoji) {
           d1.push(db.prepare("UPDATE users SET name = ?, emoji = ? WHERE uid = ?").bind(name || r.name, emoji, r.uid));
@@ -266,6 +282,16 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
     } else if (fsHeat) {
       writes.push({ delete: `${DOCS}/users/${r.uid}/shared/heatmap` });  // turned off in 3.x
     }
+    // 2.x's rules let whoever this person's Firestore edges name read those
+    // copies; the edges must say what D1 says (removals, no one-sided adds)
+    if (prof) {
+      const want = [...(mutual.get(r.uid) ?? [])].sort();
+      const have = Array.isArray(prof.friends) ? (prof.friends as unknown[]).map(String).sort() : [];
+      if (stable(have) !== stable(want)) put(`users/${r.uid}`, { friends: want }, ["friends"], true);
+      for (const edge of await listIds(fetcher, auth, `users/${r.uid}/friends`)) {
+        if (!want.includes(edge)) writes.push({ delete: `${DOCS}/users/${r.uid}/friends/${edge}` });
+      }
+    }
     // the profile says 2.9+ (so 2.x reads the week doc), with the current name and emoji
     const p = { displayName: r.name || "", emoji: r.emoji || "", clientVersion: r.client_version || "3.0.0" };
     if (prof && (prof.displayName !== p.displayName || (prof.emoji || "") !== p.emoji || prof.clientVersion !== p.clientVersion)) {
@@ -300,6 +326,36 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
     if (!res.ok) throw new Error(`firestore commit: ${res.status}`);
   }
   return { pulled, pushed: writes.length };
+}
+
+/** The ids in a Firestore collection (names only, no fields read). */
+async function listIds(fetcher: Fetch, auth: Record<string, string>, path: string): Promise<string[]> {
+  const out: string[] = [];
+  let page = "";
+  do {
+    const res = await fetcher(`${API}/${path}?pageSize=300&mask.fieldPaths=__none__${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`,
+      { headers: auth });
+    if (!res.ok) throw new Error(`firestore list: ${res.status}`);
+    const data = (await res.json()) as { documents?: { name: string }[]; nextPageToken?: string };
+    for (const d of data.documents ?? []) out.push(d.name.slice(d.name.lastIndexOf("/") + 1));
+    page = data.nextPageToken ?? "";
+  } while (page);
+  return out;
+}
+
+/** An account deleted in 3.x: its copies on 2.x go too, and nobody can
+ *  read what's left. Best effort: the bridge's next run can't bring any of
+ *  it back (the account is gone from D1). */
+export async function forget(env: Env, uid: string, fetcher: Fetch = fetch): Promise<void> {
+  if (!env.FIREBASE_SA || !/^[A-Za-z0-9_-]{1,128}$/.test(uid)) return;
+  const token = await accessToken(env.FIREBASE_SA, fetcher);
+  const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const writes: unknown[] = ["week", "decks", "heatmap"].map((d) => ({ delete: `${DOCS}/users/${uid}/shared/${d}` }));
+  for (const edge of await listIds(fetcher, auth, `users/${uid}/friends`)) writes.push({ delete: `${DOCS}/users/${uid}/friends/${edge}` });
+  await fetcher(`${API}:commit`, { method: "POST", headers: auth, body: JSON.stringify({ writes }) });
+  await fetcher(`${API}:commit`, { method: "POST", headers: auth, body: JSON.stringify({ writes: [{
+    update: { name: `${DOCS}/users/${uid}`, fields: mapFields({ friends: [] }) }, updateMask: { fieldPaths: ["friends"] },
+    currentDocument: { exists: true } }] }) });  // a profile 2.x never had stays absent
 }
 
 /** For tests: forget the cached Google token. */
