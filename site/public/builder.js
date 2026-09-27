@@ -83,13 +83,14 @@ async function builder(id) {
     return s;
   };
   const views = [["resource", "By resource"], ["system", "By system"], ["other", "Other tags"]].filter(([k]) => kindsBelow("root:tag").has(k));
-  if (tree.decks.length) views.push(["deck", "Subdecks"]);
+  if (tree.decks.length) views.push(["deck", tree.decks.length > 1 ? "Deck and subdecks" : "Whole deck"]);
 
   // ---- the working copy ----
   let doc = structuredClone(plan.doc);
   let base = structuredClone(plan.doc);  // what this page loaded: a save that meets another merges onto it
   let meta = { name: plan.name, line: plan.line || "", audience: plan.audience, squad: plan.squad || "" };
-  const pace = { mode: "placed", days: [1, 1, 1, 1, 1, 1, 1], ...(doc.pace || {}) };
+  // a new plan starts at Anki's own 20 new cards a day
+  const pace = { mode: doc.units.length ? "placed" : "daily", days: [1, 1, 1, 1, 1, 1, 1], daily: 20, ...(doc.pace || {}) };
   if (!doc.pace && doc.end) pace.mode = "end";
   let cover = new Set(pace.cover || []);
   let start = Sched.start(doc) || nextMonday();
@@ -99,7 +100,7 @@ async function builder(id) {
   let anchor = today() >= start ? today() : start;
   let picked = null;        // the day open in the day panel
   let splitting = null;     // {u, key} while the split panel is open
-  let treeView = views[0]?.[0] || "resource";
+  let treeView = views[0]?.[0] || "deck";
   let note = "";            // the last thing Lay it out or a split did
   const opened = new Set(); // the tree's expanded nodes
   let term0 = "";
@@ -232,8 +233,7 @@ async function builder(id) {
     const cap = paceDaily();
     const placed = placedKeys();
     const items = coverItems().flatMap((k) => pieces(k, cap, placed));
-    if (!cover.size) { note = "Tick what the plan covers on the left first."; return draw(); }
-    if (!items.length) { note = "Everything you ticked is on the calendar. Tick more, or drop tags on days."; return draw(); }
+    if (!items.length) return draw();
     const after = lastDay() ? addDays(lastDay(), 1) : start;
     let from = after > start ? after : start;
     let until = null;
@@ -247,9 +247,10 @@ async function builder(id) {
     }
     const r = fill(items, from, until, cap);
     renameAll(); byOpens(); mark();
-    note = r.placedN ? `Laid out ${r.placedN.toLocaleString()} cards, ${pretty(firstStudy(from))} to ${pretty(r.lastD)}.`
+    note = r.placedN ? `Put ${r.placedN.toLocaleString()} cards on ${pretty(firstStudy(from))} to ${pretty(r.lastD)}.`
       : weekAhead ? "No study days left in that week." : "Nothing fit.";
     if (!weekAhead && r.lastD) anchor = firstStudy(from);
+    if (r.lastD) requestAnimationFrame(() => document.querySelector(".cal2")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
     draw();
   }
   function endDaily() {
@@ -357,7 +358,8 @@ async function builder(id) {
       const onCal = isPlaced(k, placed);
       const el = h("div", { class: `tn${onCal ? " used" : ""}`, draggable: "true", style: `padding-left:${4 + depth * 14}px`, title: `${p}${onCal ? " · on the calendar" : ""}` },
         tw, cb,
-        h("span", { class: "nm" }, full ? Tags.name(p) : Tags.word(seg), h("span", { class: "raw" }, full ? p : seg)),
+        h("span", { class: "nm" }, full ? Tags.name(p) : Tags.word(seg),
+          (full ? Tags.name(p) !== p : Tags.word(seg) !== seg) ? h("span", { class: "raw" }, full ? p : seg) : null),
         h("small", {}, n(k).toLocaleString()),
         h("button", { class: "add", title: picked ? `Put it on ${pretty(picked)}` : "Put it on the next free day", "aria-label": `Put ${Tags.word(seg)} on ${picked ? pretty(picked) : "the next free day"}`,
           onclick: () => { const d = picked || firstStudy(lastDay() ? addDays(lastDay(), 1) : start); dropped(d, { key: k }); } }, "+"));
@@ -409,10 +411,10 @@ async function builder(id) {
       h("span", { class: "muted small" }, title), body);
     const endIn = h("input", { type: "date", value: doc.end || "", "aria-label": "Finish by", onclick: (e) => e.stopPropagation(),
       onchange: (e) => { if (e.target.value) doc.end = e.target.value; else delete doc.end; if (!doc.end && doc.phases) { doc.phases.taper = 0; } mark(); draw(); } });
-    const dailyIn = h("input", { type: "number", min: 1, max: 5000, value: pace.daily || 100, "aria-label": "New cards a day", style: "width:6em", onclick: (e) => e.stopPropagation(),
+    const dailyIn = h("input", { type: "number", min: 1, max: 5000, value: pace.daily || 20, "aria-label": "New cards a day", style: "width:6em", onclick: (e) => e.stopPropagation(),
       onchange: (e) => { pace.daily = Math.max(1, Math.min(5000, Math.round(Number(e.target.value) || 1))); mark(); draw(); } });
     const d1 = pace.mode === "end" ? endDaily() : 0;
-    const fin = pace.mode === "daily" ? finishBy(pace.daily || 100) : null;
+    const fin = pace.mode === "daily" ? finishBy(pace.daily || 20) : null;
     const leftN = coverLeft();
     const startIn = h("input", { type: "date", value: start, "aria-label": "Starts",
       onchange: (e) => {
@@ -435,29 +437,24 @@ async function builder(id) {
   }
 
   // ---- the calendar ----
+  // 3.3: "Month" is the next five weeks from the week in view, so what's
+  // coming is always on screen (a calendar month hides a plan starting on the 28th)
   function range() {
-    if (view === "week") { const m = Sched.monday(anchor); return [m, addDays(m, 6)]; }
-    const d = parseIso(anchor);
-    const first = iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)));
-    const last = iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)));
-    return [Sched.monday(first), addDays(Sched.monday(last), 6)];
+    const m = Sched.monday(anchor);
+    return view === "week" ? [m, addDays(m, 6)] : [m, addDays(m, 34)];
   }
   function step(k) {
-    if (view === "week") anchor = addDays(Sched.monday(anchor), 7 * k);
-    else { const d = parseIso(anchor); anchor = iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, 1))); }
+    anchor = addDays(Sched.monday(anchor), (view === "week" ? 7 : 28) * k);
     draw();
   }
   function calTitle() {
     const [a, b] = range();
-    if (view === "week") return `${pretty(a)} – ${pretty(b)}`;
-    const d = parseIso(anchor);
-    return `${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    return `${pretty(a)} – ${pretty(b)}`;
   }
   function calendar() {
     const [a, b] = range();
     const days = dayMap(a, b);
     const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
-    const month = parseIso(anchor).getUTCMonth();
     const t = today();
     const maxLoad = Math.max(1, ...[...days.values()].map((e) => e.load));
     const cells = [];
@@ -466,7 +463,7 @@ async function builder(id) {
       const ph = Sched.phase(doc, d, 0);
       const off = !pace.days[(parseIso(d).getUTCDay() + 6) % 7];
       const heavy = cap && e.load > cap * 1.25;
-      const cls = ["d", off ? "off" : "", ph !== "build" ? ph : "", d === t ? "today" : "", view === "month" && parseIso(d).getUTCMonth() !== month ? "other" : "", d === picked ? "picked" : "", heavy ? "heavy" : ""].filter(Boolean).join(" ");
+      const cls = ["d", off ? "off" : "", ph !== "build" ? ph : "", d === t ? "today" : "", d === picked ? "picked" : "", heavy ? "heavy" : ""].filter(Boolean).join(" ");
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
       const chips = e.chips.map((c) => {
@@ -477,7 +474,7 @@ async function builder(id) {
         return el;
       });
       const bar = e.load ? h("div", { class: `load${heavy ? " hi" : ""}` }, h("i", { style: `width:${Math.min(100, Math.round((100 * e.load) / (cap || maxLoad)))}%` })) : null;
-      const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "taper"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
+      const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "review-only days"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
         onclick: () => { picked = picked === d ? null : d; splitting = null; draw(); },
         onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; draw(); } } },
         h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...chips, bar);
@@ -512,7 +509,7 @@ async function builder(id) {
     const spans = doc.units.filter((u) => u.even && u.due && u.opens <= d && d <= u.due);
     const rows = [];
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards ? "single" : hue(c.key)}`, title: c.raw || "" },
-      h("span", {}, c.text, c.raw ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
+      h("span", {}, c.text, c.raw && Tags.name(c.raw) !== c.raw ? h("span", { class: "raw" }, c.raw) : null), c.n != null ? h("small", {}, c.n.toLocaleString()) : null,
       author && !c.cards ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
         if (c.cards) u.cards = []; else takeOut(u, c.key);
@@ -797,12 +794,10 @@ async function builder(id) {
       h("label", { for: "sname" }, "Name"), name,
       h("label", { for: "sline" }, "One line"), line,
       h("label", { for: "ssquad" }, "Offer it to a squad"), sq,
-      h("p", { class: "muted small" }, "Everyone in that squad sees it on their board in Anki."),
       h("label", {}, "Who can follow"), aud("code", "Anyone with the code"), aud("squad", meta.squad ? "Only people in that squad" : "Only people in a squad (choose one above)"),
       h("label", { for: "pend" }, "Ends (optional)"), h("div", { class: "row" }, endIn, h("span", { class: "muted small" }, "the exam, or the course's last day")),
-      h("label", { for: "pcatch" }, "Catch-up weeks"), catchup,
-      h("p", { class: "muted small" }, "Nothing new opens in a catch-up week: anyone behind closes the gap."),
-      h("label", { for: "ptaper" }, "Taper"), h("div", { class: "row" }, taper, h("span", { class: "muted small" }, "days before the end date with no new cards, only reviews")),
+      h("label", { for: "pcatch" }, "Catch-up weeks (nothing new)"), catchup,
+      h("label", { for: "ptaper" }, "Review-only days at the end"), h("div", { class: "row" }, taper, h("span", { class: "muted small" }, "before the end date: no new cards")),
       h("div", { style: "margin-top:18px" }, del));
   }
 
@@ -810,7 +805,7 @@ async function builder(id) {
     const url = `${location.origin}/p/${plan.code}`;
     return h("div", { class: "share" },
       h("div", { class: "row" }, h("span", { class: "code" }, spaced(plan.code)),
-        h("button", { class: "quiet", onclick: (e) => copy(url, e.target) }, "Copy link")),
+        h("button", { class: "quiet", title: "Send this to your class: the page says how to follow", onclick: (e) => copy(url, e.target) }, "Copy link")),
       h("span", { class: "muted small" }, `${plan.followers} following`));
   }
 
@@ -856,8 +851,8 @@ async function builder(id) {
       author ? pacePanel() : null,
       nav,
       author ? h("div", { class: "caltool2" },
-        h("button", { onclick: () => layOut(false) }, "Lay it out"),
-        h("button", { class: "ghost", onclick: () => layOut(true) }, "Plan next week"),
+        h("button", { onclick: () => layOut(false), disabled: !coverLeft() }, "Fill the calendar"),
+        h("button", { class: "ghost", onclick: () => layOut(true), disabled: !coverLeft() }, "Fill next week"),
         note ? h("span", { class: "muted small", role: "status" }, note) : null) : null,
       heavyNote(),
       view === "list" && author ? h("div", {}, dayPanel(), listView()) : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel()));
@@ -915,8 +910,9 @@ async function builder(id) {
     const body = tab === "text" ? textTab() : tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
-        h("div", {}, h("h1", {}, meta.name || "Untitled"),
-          h("p", { class: "muted" }, author ? plan.doc.deck : `${plan.ownerName}'s plan · ${plan.doc.deck}`), people()),
+        h("div", {}, owner ? h("input", { class: "tname", value: meta.name, maxlength: 60, "aria-label": "The plan's name",
+          oninput: (e) => { meta.name = e.target.value; mark(); } }) : h("h1", {}, meta.name || "Untitled"),
+          author && meta.name === plan.doc.deck ? null : h("p", { class: "muted" }, author ? plan.doc.deck : `${plan.ownerName}'s plan · ${plan.doc.deck}`), people()),
         author ? share() : null),
       !author && plan.following ? onTrack(plan, false) : null,
       !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
@@ -982,7 +978,7 @@ async function builder(id) {
       }
       delete doc.exam;
       const p = { mode: pace.mode, days: pace.days };
-      if (pace.mode === "daily") p.daily = pace.daily || 100;
+      if (pace.mode === "daily") p.daily = pace.daily || 20;
       if (pace.mode === "end" && endDaily()) p.daily = endDaily();
       if (cover.size) p.cover = coverItems().slice(0, 500);
       doc.pace = p;
@@ -1012,7 +1008,7 @@ async function builder(id) {
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 409 ? "It changed again while saving. Save once more."
-        : err.body?.error === "bad_plan" ? "A date isn't valid: a due date or checkpoint can't be before it opens, and a taper needs an end date."
+        : err.body?.error === "bad_plan" ? "A date isn't valid: a due date or checkpoint can't be before it opens, and review-only days need an end date."
         : "That didn't save. Try again.";
     } finally { saveBtn.disabled = false; }
   }

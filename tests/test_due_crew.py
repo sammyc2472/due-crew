@@ -3559,6 +3559,33 @@ def test_tree_nested_v33():
     check("tree: the server takes it", dre.put_tree("Step 1", rows[:6], []) and store.plan_trees[("dre", "Step 1")].get("v") == 2)
 
 
+def test_hold_back_v33():
+    """3.3: a deck whose cards are all active (a teacher's shared deck):
+    Follow offers to hold back later dates' never-studied cards; asked,
+    they're suspended in one undo step, open on their day, and stopping
+    opens them again. Nothing studied, and nothing on an opened date, is held."""
+    from due_crew import plans as P
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for i in range(6):  # 100-102 unidad 1 (today), 103-105 unidad 2 (in three days); 105 already studied
+        fakes.add_card(conn, 100 + i, did=10, queue=2 if i == 5 else 0, ctype=2 if i == 5 else 0,
+                       tags="Unidad_1" if i < 3 else "Unidad_2", due=i)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Español 1"})
+    doc = {"deck": "Español 1", "units": [
+        {"id": "u1", "name": "Unidad 1", "opens": _day(0), "tags": ["Unidad_1"], "decks": [], "cards": []},
+        {"id": "u2", "name": "Unidad 2", "opens": _day(3), "tags": ["Unidad_2"], "decks": [], "cards": []}]}
+    idx = P.DeckIndex(col, 10)
+    held = P.holdable(idx, doc, _day(0))
+    check("hold: only later dates' new, active cards", held == {103, 104}, str(held))
+    n = P.hold_cards(col, held, "Due Crew: hold back Español")
+    check("hold: suspended, one undo step", n == 2 and _open(col) == {100, 101, 102, 105}
+          and col.undo_steps[-1][0] == "Due Crew: hold back Español")
+    check("hold: nothing left to hold after", P.holdable(P.DeckIndex(col, 10), doc, _day(0)) == set())
+    P.open_cards(col, held, "Due Crew: stop Español")
+    check("hold: stopping opens them again", _open(col) == {100, 101, 102, 103, 104, 105})
+
+
 def test_plans_tab_v33():
     """3.3: a Plans tab, only while I follow a plan; Decks is decks again."""
     from due_crew import board

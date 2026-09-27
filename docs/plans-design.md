@@ -291,3 +291,21 @@ plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
 - `/plans/{id}` is the one page: authors get Calendar, As text, Progress,
   History (and the owner Settings); a follower gets the calendar, their
   on-track line and the notes.
+
+### Hold back, and a deck with no tags (3.3)
+
+- A teacher's deck, imported by students, has every card active: a plan
+  can't hold anything back. Follow shows, checked when there's anything
+  to hold, "Hold back N cards of later dates until their day"
+  (`plans.holdable`: new, never studied, not suspended, not a leech, on
+  a date that hasn't opened and on no date that has). Following
+  suspends them in one undo step (`plans.hold_cards`) and keeps their ids
+  in `held`; the morning opens them on their day as any suspended card;
+  Stop following opens what's still held. Nothing else ever suspends.
+- The deck itself is in the tree (`DeckIndex.tree`), so a deck with no
+  tags or subdecks is planned in its own order: tick it, 20 a day, Fill
+  the calendar.
+- From Anki, Make a plan opens the new plan's calendar directly (named
+  after the deck; the title edits in place), at 20 new cards a day.
+- The shared link (`/p/CODE`) is three steps for someone new: Anki, the
+  add-on's code, Follow a plan with this code.

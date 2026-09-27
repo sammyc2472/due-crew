@@ -68,6 +68,9 @@ for uid in ["dre", "maya", "nia"]:
     else:
         out.append(f"UPDATE members SET day = {q((today - datetime.timedelta(days=1)).isoformat())}, reviews = 292, week = 6 WHERE squad = 'busmpreview' AND uid = 'nia';")
 out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Step 1', {q(json.dumps({'tags': tags, 'decks': decks}))}, {now});")
+# 3.3: a teacher's language deck: units as subdecks, no tags
+es = {"tags": [], "decks": [["Español 1", 1200], ["Español 1::Unidad 1 · Saludos", 380], ["Español 1::Unidad 2 · La familia", 420], ["Español 1::Unidad 3 · La comida", 400]]}
+out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Español 1', {q(json.dumps(es))}, {now});")
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
            f"('stepplanpreview1', '7KQ4MX2D', 'dre', 'Step 1', 'Organ systems, one a week, done by January.', 'code', 'busmpreview', {q(json.dumps(doc))}, 3, {now}, {now});")
 prog = {"maya": {"hf": [48, 48, 48], "arr": [63, 63, 63], "renp": [212, 120, 212]},
@@ -134,6 +137,7 @@ cat <<EOF
     http://localhost:$PORT/plans/new?deck=Step%201#$LINK
 
   Then try:  http://localhost:$PORT/home                     your home (3.2)
+             http://localhost:$PORT/plans/new?deck=Espa%C3%B1ol%201   a teacher's first plan (3.3)
              http://localhost:$PORT/log                      your log
              http://localhost:$PORT/admin                    the numbers
              http://localhost:$PORT/plans                    your plans

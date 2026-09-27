@@ -104,7 +104,7 @@ class FollowDialog(QDialog):
     def __init__(self, parent, client, col, code="", today="", on_followed=None, swap_prompt=None):
         super().__init__(parent)
         self.client, self.col, self.today = client, col, today
-        self.on_followed = on_followed      # main thread: (plan, deck_id, swap, "open" | "skip")
+        self.on_followed = on_followed      # main thread: (plan, deck_id, swap, "open" | "skip", hold)
         self.swap_prompt = swap_prompt or (lambda sw, n: ask_swap(self, sw, n))
         self.plan = None
         self.choices = P.deck_choices(col)
@@ -169,10 +169,15 @@ class FollowDialog(QDialog):
         lrow.addWidget(self.late_skip)
         lrow.addStretch()
         root.addLayout(lrow)
+        # 3.3: cards that are already active can't wait for their day unless held back
+        self.hold = QCheckBox("")
+        self.hold.setChecked(True)
+        self.hold.setVisible(False)
+        root.addWidget(self.hold)
         self.share = QCheckBox("Share my progress with the crew")
         self.share.setChecked(True)
         root.addWidget(self.share)
-        self.about = QLabel("Each morning, that day's cards open. Nothing is ever suspended.")
+        self.about = QLabel("Each morning, that day's cards open.")
         self.about.setWordWrap(True)
         self.about.setStyleSheet("font-size: 12px;")
         root.addWidget(self.about)
@@ -311,6 +316,10 @@ class FollowDialog(QDialog):
             self.late_skip.setEnabled(bool(nxt))
             if not nxt:
                 self.late_open.setChecked(True)
+        held = len(P.holdable(idx, doc, self.today, swap)) if not self.plan.get("following") else 0
+        self.hold.setVisible(held > 0)
+        if held:
+            self.hold.setText(f"Hold back {held:,} card{'s' if held != 1 else ''} of later dates until their day")
         self.follow_btn.setEnabled(bool(total) or not P.units(doc))
         if not total and P.units(doc):
             self.found.setText("None of this plan's cards are in this deck. Pick another.")
@@ -324,6 +333,7 @@ class FollowDialog(QDialog):
             return
         swap = (self.swaps.get(did) or {}).get("use") if isinstance(self.swaps.get(did), dict) else None
         late = "skip" if (self.late_skip.isVisible() and self.late_skip.isChecked()) else "open"
+        hold = self.hold.isVisible() and self.hold.isChecked()
         share = self.share.isChecked()
         code = self._code
         self.follow_btn.setEnabled(False)
@@ -339,7 +349,7 @@ class FollowDialog(QDialog):
                 return
             got = dict(got, share=share, paused=False, following=True)
             if self.on_followed:
-                self.on_followed(got, did, swap, late)
+                self.on_followed(got, did, swap, late, hold)
             self.accept()
 
         run_bg(self, lambda: cl.follow_plan(code, share), done)

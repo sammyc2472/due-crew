@@ -50,6 +50,14 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Unsuspend", ids))
 
+    def suspend_cards(self, ids):
+        """Anki's: queue -1, whatever it was. An undoable op."""
+        ids = [int(i) for i in ids]
+        for cid in ids:
+            self.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = ?", (cid,))
+        if self.col is not None:
+            self.col.undo_steps.append(("Suspend", ids))
+
 
 class FakeCol:
     """A collection over a real sqlite database. The undo queue is a list

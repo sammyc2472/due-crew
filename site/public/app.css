@@ -318,3 +318,5 @@ body:has(main.wide) > .top { max-width: 1320px; }
 .hist { display: grid; gap: 0; max-width: 720px; }
 .hrow { display: grid; grid-template-columns: minmax(0, 1fr) auto 50px; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; align-items: baseline; }
 .share .row .code { font-size: 18px; }
+.steps { padding-left: 22px; display: grid; gap: 10px; max-width: 620px; } .steps li { line-height: 1.6; } .steps button { padding: 2px 10px; font-size: 13px; }
+.tname { font-family: inherit; font-size: 26px; font-weight: 700; line-height: 1.2; border: 1px solid transparent; background: transparent; padding: 2px 6px; margin: 8px 0 4px -7px; width: min(560px, 100%); color: var(--ink); } .tname:hover, .tname:focus { border-color: var(--line); background: var(--card); }

@@ -1044,8 +1044,9 @@ def stop_following(pid):
     from .ui import confirm
     if not confirm(mw, "Stop following",
                    f"Stop following {p.get('name') or 'this plan'}?\n\n"
-                   "Nothing gets suspended. Cards already open stay open, and the crew "
-                   "stops seeing your progress on this plan.", "Stop"):
+                   "Cards already open stay open"
+                   + (", and the ones it held back open too" if (_state_cfg().get(pid) or {}).get("held") else "")
+                   + ". The crew stops seeing your progress on this plan.", "Stop"):
         return
     cl = client()
 
@@ -1055,6 +1056,10 @@ def stop_following(pid):
             return
         pc = _pcfg()
         state = _state_cfg(pc)
+        held = (state.get(pid) or {}).get("held") or []
+        if held and mw.col:
+            P.open_cards(mw.col, held, f"Due Crew: stop {p.get('name') or 'plan'}")
+            _after_change()
         state.pop(pid, None)
         pc["plans"] = state
         _psave(pc)
@@ -1066,9 +1071,18 @@ def stop_following(pid):
 
 # ---- following ----
 
+def _signed_in():
+    """3.3: a plan needs an account; not signed in, the sign-in opens here
+    and the plan carries on after it."""
+    if client().signed_in:
+        return True
+    from . import open_auth
+    open_auth()
+    return client().signed_in
+
+
 def open_follow(code=""):
-    if not client().signed_in:
-        tooltip("Sign in to Due Crew first.")
+    if not _signed_in():
         return
     if not mw.col:
         return
@@ -1077,10 +1091,13 @@ def open_follow(code=""):
     dlg.exec()
 
 
-def on_followed(plan, deck_id, swap, late):
+def on_followed(plan, deck_id, swap, late, hold=False):
     """Main thread, after POST /plans/follow: this computer runs it on
     `deck_id`; late is "open" (open what has opened) or "skip". Following
-    again keeps what this computer already applied: only the deck changes."""
+    again keeps what this computer already applied: only the deck changes.
+    hold (3.3, asked for at Follow): later dates' active, never-studied
+    cards are suspended now, one undo step, and remembered so stopping
+    opens them again."""
     cl = client()
     cl.remember_plan(plan)
     c = _pcfg()
@@ -1090,6 +1107,13 @@ def on_followed(plan, deck_id, swap, late):
         st.update(deck_id=int(deck_id), swap=list(swap) if swap else None)
     else:
         state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
+    if hold and mw.col:
+        idx = P.DeckIndex(mw.col, deck_id)
+        cids = P.holdable(idx, plan["doc"], _today(), swap)
+        n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {plan.get('name') or 'plan'}")
+        if n:
+            state[plan["id"]]["held"] = sorted(set(state[plan["id"]].get("held") or []) | set(int(c) for c in cids))
+            _after_change()
     c["plans"] = state
     _psave(c)
 
@@ -1106,8 +1130,7 @@ def on_followed(plan, deck_id, swap, late):
 
 
 def open_make():
-    if not client().signed_in:
-        tooltip("Sign in to Due Crew first.")
+    if not _signed_in():
         return
     if not mw.col:
         return

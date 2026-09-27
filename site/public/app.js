@@ -205,24 +205,24 @@ async function newPlan() {
     return;
   }
   const deck = new URLSearchParams(location.search).get("deck") || "";
+  if (!deck) { page(h("h1", {}, "A new plan"), h("p", { class: "muted" }, "Start from Anki: Tools › Due Crew › Make a plan from a deck.")); return; }
   const { plans } = await api("GET", "/plans/mine");
-  const same = plans.filter((p) => p.owner === me.uid && p.doc.deck === deck);
+  const same = plans.filter((p) => (p.role === "owner" || p.role === "editor") && p.doc.deck === deck);
   const status = h("p", { class: "status", role: "status" });
-  const name = h("input", { id: "pname", maxlength: 60, value: deck ? `${deck} plan` : "", style: "width:100%" });
   const make = async () => {
     try {
-      const p = await api("POST", "/plans", { name: name.value.trim() || deck, deck });
-      go(`/plans/${p.id}/edit`);
+      const p = await api("POST", "/plans", { name: deck, deck });
+      history.replaceState(null, "", `/plans/${p.id}`);
+      route();
     } catch { status.className = "status bad"; status.textContent = "That didn't work. Try again."; }
   };
+  // 3.3: straight to the calendar; only a deck that has plans already asks which
+  if (!same.length) return make();
   page(
-    h("h1", {}, deck ? `A plan for ${deck}` : "A new plan"),
-    same.length ? h("div", { class: "stack" }, h("p", { class: "muted" }, "You already have plans for this deck:"),
-      h("div", { class: "plans" }, same.map((p) => h("a", { class: "plan-row", href: `/plans/${p.id}/edit`, "data-go": "" },
-        h("b", {}, p.name), h("small", {}, `${p.doc.units.length} dates`))))) : null,
-    deck ? h("div", { class: "stack", style: "max-width:460px;margin-top:14px" },
-      h("label", { for: "pname" }, "Name"), name, h("div", {}, h("button", { onclick: make }, "Make the plan")), status)
-      : h("p", { class: "muted" }, "Start from Anki: Tools › Due Crew › Make a plan from a deck."),
+    h("h1", {}, deck),
+    h("div", { class: "plans" }, same.map((p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
+      h("b", {}, p.name), h("small", {}, `${p.doc.units.length} dates`)))),
+    h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: make }, "New plan")), status,
   );
 }
 
@@ -232,19 +232,24 @@ async function newPlan() {
 
 /** /p/CODE: what a shared link shows. */
 async function codePage(code) {
-  const how = h("p", {}, "In Anki: ", h("b", {}, "Tools › Due Crew › Follow a plan"), ", then paste ", h("span", { class: "mono" }, code), ".");
+  // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
+  const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
+  const steps = (deck) => h("ol", { class: "steps" },
+    h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, "."),
+    h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
+    h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email."));
   if (!me) {
-    page(h("h1", {}, "A Due Crew plan"), how,
-      h("p", { class: "muted" }, "Due Crew is a free Anki add-on. ", h("a", { href: "/" }, "What it is"), "."),
-      link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in to see the plan", "btn ghost"));
+    page(h("h1", {}, "Follow this plan in Anki"), steps(null),
+      h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck. ", link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " to see the plan here."));
     return;
   }
   try {
     const p = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
     const u = p.doc.units;
     page(h("h1", {}, p.name),
-      h("p", { class: "muted" }, `${p.ownerName}'s plan · ${p.doc.deck} · ${u.length} dates${u.length ? `, ${pretty(u[0].opens)} to ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : ""} · ${p.followers} following`),
-      p.line ? h("p", {}, p.line) : null, how);
+      h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} dates${u.length ? `, ${pretty(u[0].opens)} to ${pretty(u[u.length - 1].due || u[u.length - 1].opens)}` : ""} · ${p.followers} following`),
+      p.line ? h("p", {}, p.line) : null,
+      h("h2", {}, "To follow it"), steps(p.doc.deck));
   } catch {
     page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."));
   }

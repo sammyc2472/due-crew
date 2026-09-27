@@ -285,3 +285,10 @@ deck both share (Settings › Shared decks).
 - [ ] A follower opens the plan on the site: the calendar, read-only, with 💬 on days with notes; click a day, add a note; the author sees it and can take it down.
 - [ ] History: each save with who and what; Undo on the latest puts it back.
 - [ ] Two authors save the same plan from two browsers: the second says "Saved, with the other changes kept" and both changes are there.
+
+### 3.3: a teacher and a class
+
+- [ ] A deck with no tags: Make a plan opens its calendar straight away; tick the deck, Fill the calendar: 20 a day in the deck's order.
+- [ ] A student imports the deck (all cards active) and follows: Follow shows "Hold back N cards of later dates until their day", checked. After Follow, only today's date is active; Edit › Undo undoes the hold. The next date opens on its morning. Stop following: everything held opens again.
+- [ ] Not signed in: Make a plan / Follow a plan open the sign-in, then carry on.
+- [ ] The plan's link in a private window: three steps, each with Copy.

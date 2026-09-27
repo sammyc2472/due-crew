@@ -207,6 +207,14 @@ add-on.
   add-on's board has a Plans tab while I follow a plan (the cards left
   Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
   ids last), so deep tags reach the builder.
+- 3.3 hold back (Sam's call): a deck imported with every card active
+  can't wait for its days, so Follow offers (checked) "Hold back N cards
+  of later dates until their day": the never-studied new cards of dates
+  not yet open, suspended once in one undo step and kept in `held`;
+  stopping opens them again. The only suspend, and only when asked; a
+  plan still never suspends on its own. The whole deck is coverable
+  (a deck with no tags or subdecks), and a new plan goes straight from
+  Anki to its calendar at 20 new cards a day.
 - 3.3 plans together (migration 0006): co-authors from the owner's crew
   (`plan_editors`; they edit, the owner alone deletes, picks the audience
   and the co-authors), notes on a day from anyone in the plan

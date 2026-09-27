@@ -246,8 +246,8 @@ class DeckIndex:
 
     def tree(self, with_tags=True, with_decks=True, cap=None):
         """(tags, decks) for PUT /plans/trees: [[path, cards]] each, names and
-        counts only. A tag counts every card under it; a subdeck, every card
-        in it and below. At most `cap` of each, shallowest and biggest first."""
+        counts only. A tag counts every card under it; a subdeck (and the
+        deck itself, 3.3), every card in it and below. At most `cap` of each, shallowest and biggest first."""
         tags = []
         if with_tags:
             counts = {}
@@ -265,12 +265,11 @@ class DeckIndex:
         decks = []
         if with_decks:
             for rel, d in self.rel.items():
-                if not rel:
-                    continue
                 n = sum(len(self.by_deck.get(dd, ())) for r, dd in self.rel.items()
-                        if r == rel or r.startswith(rel + _SEP))
+                        if not rel or r == rel or r.startswith(rel + _SEP))
                 if n:
-                    decks.append([f"{self.name}{_SEP}{self.spelled[rel]}", n])
+                    # 3.3: the deck itself too, for a deck with no tags or subdecks
+                    decks.append([f"{self.name}{_SEP}{self.spelled[rel]}" if rel else self.name, n])
             decks.sort(key=lambda x: x[0].lower())
             decks = decks[:cap] if cap else decks
         return tags, decks
@@ -458,6 +457,45 @@ def open_cards(col, cids, label):
         except Exception:
             pos = None
     col.sched.unsuspend_cards(ids)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return len(ids)
+
+
+def holdable(idx, doc, today, swap=None):
+    """3.3, "Hold back later dates until their day": the cards of dates
+    that haven't opened yet which are active now and never studied (new,
+    not suspended, not a leech). A card that is also on an opened date is
+    never held. What Follow offers to suspend, once, when asked."""
+    opened, later = set(), set()
+    for u in units(doc):
+        cids = idx.match(u, swap, doc.get("deck", ""))
+        (opened if str(u.get("opens") or "") <= today else later).update(cids)
+    return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
+
+
+def hold_cards(col, cids, label):
+    """Suspend these (still new and active) cards as one undo step. Only
+    ever called when the person asked, at Follow. Returns how many."""
+    if not cids:
+        return 0
+    ids = []
+    cl = sorted(int(c) for c in cids)
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        ids += col.db.list(f"SELECT id FROM cards WHERE queue = 0 AND type = 0 AND id IN ({chunk})")
+    if not ids:
+        return 0
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    col.sched.suspend_cards(ids)
     if pos is not None and hasattr(col, "merge_undo_entries"):
         try:
             col.merge_undo_entries(pos)

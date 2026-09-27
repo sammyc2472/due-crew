@@ -73,7 +73,7 @@ class MakePlanDialog(QDialog):
         self.found.setText("Sends its tag and subdeck names with card counts. Never card text.")
         self.go.setEnabled(bool(tags or decks))
         if not (tags or decks):
-            self.found.setText(f"{esc(name)} has no tags or subdecks to plan with.")
+            self.found.setText(f"{esc(name)} has no cards yet.")
 
     def _open(self):
         name, tags, decks = self._tree()
