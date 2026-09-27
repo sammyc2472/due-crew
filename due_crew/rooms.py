@@ -12,6 +12,7 @@ Rooms add no reads: the room rides my week doc, which friends already read
 """
 
 import datetime
+import html
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -95,7 +96,7 @@ def join(key):
     for e in _state["entries"] or []:
         r = e.get("room")
         if r and room_model.cmd_key(r) == key and not room_model.is_over(r):
-            _set_room(dict(r), f"You're in {room_model.title(_state['entries'], r)}.")
+            _set_room(dict(r), f"You're in {html.escape(room_model.title(_state['entries'], r))}.")  # a crewmate's name
             return
     tooltip("That room has ended.")
 

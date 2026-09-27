@@ -275,6 +275,13 @@ add-on.
   The 2.3 removal test locked the squad first, which hid the bug above.
 - Escape every server-sourced string before webviews, tooltips, or rich-text
   labels.
+- The reviewer's page runs the card's own script too: from there only the
+  room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
+  (`room_model.trusted`); anything that acts for me elsewhere comes from
+  the board, the bars or a dialog.
+- A failed request is sent again only when twice can't do a thing twice
+  (`api._call`: reads, PUT/PATCH/DELETE, a sync, one that never got out).
+  What a person or a request adds on the server has a ceiling.
 - Never log emails, codes or tokens (the Worker, and the client's prints).
 - Process: propose features as mockups on the design-spec artifact first
   (ask Sam for the link if needed), build after sign-off. Ask Sam before

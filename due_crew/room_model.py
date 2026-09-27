@@ -445,13 +445,23 @@ def widget_js(kind, data=None):
             .replace("__KEY__", json.dumps(CMD_KEY)))
 
 
+# what the widget sends from the reviewer's page (the margin card, the
+# break, the room's card): nothing else is ever taken from there
+CARD_PAGE_CMDS = ("roomcard", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave")
+
+
 def trusted(message, from_card_page):
     """(message without its key, whether to act on it). From the reviewer's
-    page only a keyed command counts; elsewhere the key is just dropped."""
+    page only the widget's own commands count, and only with the key; a
+    card's script could still wrap pycmd and learn it, so the list is what
+    bounds it. Elsewhere the key is just dropped."""
     body, sep, key = message.rpartition("|")
-    if sep and key == CMD_KEY:
-        return body, True
-    return message, not from_card_page
+    keyed = bool(sep) and key == CMD_KEY
+    if keyed:
+        message = body
+    if not from_card_page:
+        return message, True
+    return message, keyed and message.split(":")[1:2] in [[c] for c in CARD_PAGE_CMDS]
 
 
 def placement(top_hidden, bottom_hidden):

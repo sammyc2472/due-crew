@@ -2641,6 +2641,9 @@ def test_room_commands_from_the_card_page_need_the_key():
     check("room: a bare one from the card page doesn't", rm.trusted("duecrew:roomcheer", True)[1] is False)
     check("room: a wrong key doesn't either", rm.trusted("duecrew:roomleave|0000", True)[1] is False)
     check("room: the board's commands need none", rm.trusted("duecrew:roomjoin:abc:1", False) == ("duecrew:roomjoin:abc:1", True))
+    check("room: from the card page, even keyed, nothing but the widget's own",
+          rm.trusted(f"duecrew:roomjoin:abc|{rm.CMD_KEY}", True)[1] is False
+          and rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True)[1] is False)
 
 
 def test_room_chip_side_v301():

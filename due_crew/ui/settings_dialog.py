@@ -112,9 +112,12 @@ class SettingsDialog(QDialog):
     def _shrink(self):
         # QTabWidget's sizeHint still spans every page; its minimum hint
         # follows the Ignored policies above, so size to that
-        self.layout().activate()
-        # +12: wrapped notes report a hint a hair short of their last line
-        self.resize(self.width(), self.minimumSizeHint().height() + 12)
+        lay = self.layout()
+        lay.activate()
+        # wrapped notes need their height at this width, which the minimum
+        # hint doesn't know (two notes on Privacy came out squeezed)
+        want = max(self.minimumSizeHint().height(), lay.totalHeightForWidth(self.width()))
+        self.resize(self.width(), want + 6)
 
     @staticmethod
     def _note(lay, text, indent=0):
