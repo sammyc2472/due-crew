@@ -120,6 +120,10 @@ lean `authored` docs carry them.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
+G3, G4 (migration 0007): `PATCH /plans/{id}/follow` also takes `shift`
+(0-365 days my dates run later), `until` and `since` (a pause's last and
+first day, or null) and `skipped` (unit ids, up to 200). They're mine
+only, on the board's plans and on the plan's `following`.
 
 ### Squads
 

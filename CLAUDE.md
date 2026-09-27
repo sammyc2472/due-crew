@@ -273,6 +273,19 @@ add-on.
   `DATE | event | Name` and `for Name`; the calendar feed and the print
   show them; the add-on's plan card says what today preps for
   (`plans.prep_for`).
+- G1-G7 a follower's own days (migration 0007): `shift` (my dates run
+  that many days later), a pause's `since`/`until`, and `skipped` (dates
+  that never open for me) live on my follow (`PATCH /plans/{id}/follow`),
+  mine only; the plan never changes and events never move.
+  `plan_flow.mine` gives the add-on my view (`plans.my_doc`); the
+  snapshot and change notes keep reading the plan itself (`_plan_doc`).
+  On the plan card: Open now on the next date (`open_one`), Not today in
+  place of Undo (the undo, then `put_off`: tomorrow's morning opens them),
+  Undo skip, "N new cards from earlier dates waiting · Catch up…" (G5:
+  Anki's today-only deck limit, set each morning while it runs, so
+  nothing to put back). Pause until… (from my Away dates), and the day
+  after it asks: move my dates later by the days away, or open what I
+  missed. The site shows a follower their own progress per date (G6).
 
 ## Releasing
 

@@ -554,7 +554,19 @@ def clean_plan(p):
             "code": normalize_code(p.get("code")) if p.get("code") else "",
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
-            "early": _early(p.get("early", following.get("early")))}
+            "early": _early(p.get("early", following.get("early"))),
+            **clean_days(p if "shift" in p or "skipped" in p else following)}
+
+
+def clean_days(v):
+    """G3, G4: my follow's own days: how many days my dates run later than
+    the plan's, a pause's first and last day, the dates I skip."""
+    v = v if isinstance(v, dict) else {}
+    shift = v.get("shift")
+    return {"shift": shift if isinstance(shift, int) and not isinstance(shift, bool) and 0 <= shift <= 365 else 0,
+            "until": v["until"] if _ISO.fullmatch(str(v.get("until") or "")) else None,
+            "since": v["since"] if _ISO.fullmatch(str(v.get("since") or "")) else None,
+            "skipped": [u for u in v.get("skipped") or [] if isinstance(u, str) and u][:200]}
 
 
 def clean_offer(o):

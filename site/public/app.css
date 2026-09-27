@@ -456,3 +456,4 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .printout .t.evt { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
 .printout .fx { font-weight: 400; color: #6b6b64; }
 .printout tr.evr td { border-top: 1.5px solid #1f1f1c; }
+.cal2 .you { font-size: 11px; color: var(--muted); }

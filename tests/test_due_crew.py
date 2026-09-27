@@ -3030,13 +3030,13 @@ def test_plans_glue_v31():
                             {"period": "plans"}, 0, plans=view)
         check("card: the plan's title, week and followers",
               "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
-        check("card: names escaped, crew done as N of followers, Undo while it's Anki's latest step",
-              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:planundo" in html
+        check("card: names escaped, crew done as N of followers, Not today while it's Anki's latest step",
+              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:plannottoday" in html
               and "<b>failure" not in html)
         col.undo_steps.append(("Edit note", []))
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "plans"}, 0, plans=F.board_view(box["cfg"]))
-        check("card: no Undo once Anki has done something since", "duecrew:planundo" not in html
+        check("card: no Not today once Anki has done something since", "duecrew:plannottoday" not in html
               and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning (3 cards)" in html)
         check("card: behind, only for me",
               "Heart failure</b> was due Mon. 2 cards not seen yet." in html
@@ -3267,6 +3267,89 @@ def test_plans_changed_unit_v311():
     check("open cards: never a leech, even asked directly", P.open_cards(col, {12, 13}, "x") == 0)
     F.run(col, [changed], state, _day(1), everything=True)
     check("open everything: still no leech", 12 not in _open(col) and 13 not in _open(col) and 1 in _open(col))
+
+
+def test_plans_changed_unit_with_search_and_ids():
+    """A date with a search (C3) or pasted ids (E1) that the author changes
+    after it opened here: the morning opens what the change adds, and no
+    more (it used to stop on the date's longer record)."""
+    from due_crew import plan_flow as F
+    store = world({"dre": "Dre", "maya": "Maya"})
+    units = [dict(u, search=["tag:Step1::Cardio::Arrhythmia"], nids=[50]) if u["id"] == "hf" else u for u in _plan_units()]
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", units)
+    plan, _ = new_client(store, "maya", "Maya").follow_plan(code)
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    check("search+ids: the first morning opens the tag, the search and the note", {1, 2, 3, 5, 6} <= _open(col), str(_open(col)))
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = -1 WHERE id IN (3, 5)")   # closed since, by hand
+    changed_units = [dict(u, tags=u["tags"] + ["Step1::Cardiology"]) if u["id"] == "hf" else u for u in units]
+    changed = dict(plan, doc=dict(plan["doc"], units=changed_units))
+    res = F.run(col, [changed], state, _day(1))
+    check("search+ids: after the author's change only the added card opens", res["n"] == 1 and 9 in _open(col), f"{res} {_open(col)}")
+    check("search+ids: what was closed by hand since stays closed", 3 not in _open(col) and 5 not in _open(col))
+
+
+def test_plans_follower_days_g():
+    """G1-G5: a follower's own days. My dates run `shift` days later and
+    the ones I skip never open (the plan never changes, events never move);
+    one date opens now and the morning leaves it; Not today opens it on
+    tomorrow's morning, not today's; what's waiting from earlier dates is
+    counted; the card offers Open now, Undo skip and Catch up."""
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    doc = {"deck": "Step 1", "units": _plan_units(), "events": [{"id": "q", "day": _day(5), "name": "Quiz"}],
+           "reviews": [{"day": _day(4), "from": "hf", "to": "ar"}]}
+    mine = P.my_doc(doc, 2, ["ex"])
+    check("my view: dates, due dates and review days two days later; a skipped date gone; events stay",
+          [u["id"] for u in mine["units"]] == ["hf", "ar", "cz", "rn"] and mine["units"][1]["opens"] == _day(2)
+          and mine["units"][1]["due"] == _day(8) and mine["reviews"][0]["day"] == _day(6)
+          and mine["events"][0]["day"] == _day(5) and doc["units"][1]["opens"] == _day(0), str(mine["units"][1]))
+    check("my view: nothing to change, the plan itself", P.my_doc(doc) is doc)
+
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    plan, _ = new_client(store, "maya", "Maya").follow_plan(code)
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    shifted = dict(plan, shift=2, skipped=["hf"])
+    F.run(col, [shifted], state, _day(0))
+    check("shift: today's date waits two days; a skipped date never opens", _open(col) == {8}, str(_open(col)))
+    F.run(col, [shifted], state, _day(2))
+    check("shift: two days later it opens", 3 in _open(col) and 1 not in _open(col), str(_open(col)))
+
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    res = F.open_one(col, plan, state[pid], "ex", _day(0))
+    check("open now: one date, one undo step, today", res["n"] == 1 and 4 in _open(col) and res["names"] == ["Extras"])
+    before = len(col.undo_steps)
+    F.run(col, [plan], state, _day(3))
+    check("open now: its morning leaves it be", 4 in _open(col) and "Extras" not in str(col.undo_steps[before:]))
+
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    res = F.run(col, [plan], state, _day(0))
+    check("the morning says which dates it opened", set(res["units"][pid]) == {"hf", "ar"}, str(res["units"]))
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = -1 WHERE id IN (1, 2, 3)")  # Anki's undo put them back
+    F.put_off(state[pid], res["units"][pid], _day(0))
+    again = F.run(col, [plan], state, _day(0))
+    check("not today: not again today", again["n"] == 0 and not ({1, 2, 3} & _open(col)))
+    tomorrow = F.run(col, [plan], state, _day(1))
+    check("not today: tomorrow's morning opens them", {1, 2, 3} <= _open(col) and tomorrow["n"] == 3, str(tomorrow))
+
+    check("waiting: new cards of earlier dates not seen yet",
+          P.waiting_new({"units": _plan_units()}, {"hf": [2, 0, 2], "ar": [1, 1, 1]}, _day(1)) == 2)
+    card = F.card_view(dict(plan, skipped=["ex"]), state[pid], {"hf": [2, 0, 2]}, _day(1))
+    rows = {r["name"]: r for r in card["rows"]}
+    check("card: the skipped date, with its id, crossed out", rows.get("Extras", {}).get("state") == "skip", str(card["rows"]))
+    check("card: the next date carries its id, for Open now", rows.get("Cloze two", {}).get("uid") == "cz")
+    check("card: what's waiting from earlier dates", card["waiting"] == 2)
+    from due_crew import board
+    html = board._plan_card_html(dict(card, id=pid))
+    check("card: Open now, Undo skip and Catch up on it", f"plannow:{pid}:cz" in html and f"planunskip:{pid}:ex" in html
+          and f"plancatch:{pid}" in html, html[:400])
 
 
 def test_plans_fresh_after_cached_morning_v311():

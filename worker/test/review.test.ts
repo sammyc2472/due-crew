@@ -112,3 +112,24 @@ describe("F1: events, and the dates that prep for them", () => {
     expect(await feed.text()).toContain("SUMMARY:Micro quiz · 2 days of prep");
   });
 });
+
+describe("G3, G4: a follower's own days", () => {
+  it("shift, a pause's days and skips are mine, kept on the server, and come back on the board and the page", async () => {
+    const { p } = await plan();
+    const maya = await person("maya", "Maya");
+    expect((await maya.call("POST", "/plans/follow", { code: p.code })).status).toBe(200);
+    const [a] = p.doc.units;
+    const ok = await maya.call("PATCH", `/plans/${p.id}/follow`, { paused: true, since: "2026-10-12", until: "2026-10-18", shift: 5, skipped: [a.id, a.id] });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ paused: true, shift: 5, until: "2026-10-18", since: "2026-10-12", skipped: [a.id] });
+    for (const bad of [{ shift: -1 }, { shift: 400 }, { until: "soon" }, { skipped: ["NOT OK"] }, { skipped: "x" }, { other: 1 }]) {
+      expect((await maya.call("PATCH", `/plans/${p.id}/follow`, bad)).status).toBe(400);
+    }
+    const board = await maya.call("GET", "/board?decks=1");
+    expect(board.body.plans[0]).toMatchObject({ shift: 5, until: "2026-10-18", since: "2026-10-12", skipped: [a.id] });
+    const page = await maya.call("GET", `/plans/${p.id}`);
+    expect(page.body.following).toMatchObject({ shift: 5, skipped: [a.id] });
+    const back = await maya.call("PATCH", `/plans/${p.id}/follow`, { paused: false, until: null, since: null, skipped: [] });
+    expect(back.body).toMatchObject({ paused: false, until: null, since: null, skipped: [], shift: 5 });
+  });
+});

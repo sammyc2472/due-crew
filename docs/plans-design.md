@@ -414,3 +414,25 @@ Signed-off mock "Plans 3.4" (D1, D2).
   `for Micro quiz`. The print list, the calendar feed and the add-on's
   plan card (`plans.prep_for`: "For Micro quiz on Thu · 2 more days of
   prep") show them.
+
+### A follower's own days (G1-G7)
+
+A plan is the crew's shared guide; a follower can shuffle their own week.
+Only their copy changes: never the plan, the author's calendar, or anyone
+else's cards; events never move.
+
+- **Open now** (G1) on the next date's row: that date, today, one undo
+  step; the morning leaves it.
+- **Not today** (G2) replaces the morning's Undo: Anki's undo, then those
+  dates open on tomorrow's morning (`later` in plans.json).
+- **Skip a date** (G3): it never opens for me and isn't "waiting"; the
+  row stays, crossed out, with Undo skip. Kept on my follow (`skipped`).
+- **Pause until…** (G4), filled in from my Away dates. The morning after
+  it asks: move my dates later by the days I was away (`shift`), or open
+  what opened meanwhile. **Push my dates back…** sets `shift` directly.
+- **Catch up** (G5): "N new cards from earlier dates waiting · Catch up…"
+  over 3, 5 or 7 days: each of those mornings sets Anki's today-only
+  new-card limit on the plan's deck (its own plus the extra). Nothing to
+  put back: a today-only limit ends at midnight.
+- **My progress on the site** (G6): a follower who shares their progress
+  sees it on each date, and their skips; nobody else does.

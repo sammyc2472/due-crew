@@ -25,7 +25,7 @@ import requests
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
+    _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
 )
 
@@ -847,6 +847,17 @@ class ApiClient:
             body["opens"] = str(opens)
         status, data = self._call("POST", f"/plans/{plan_id}/cards", body)
         return (clean_plan(data) if status == 200 else None), status
+
+    def set_days(self, plan_id, **fields):
+        """G3, G4: PATCH my follow's own days (any of paused, shift, until,
+        since, skipped). The follow as the server has it, or None."""
+        body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped")}
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", body)
+        if status != 200:
+            return None
+        got = dict(clean_days(data), paused=data.get("paused") is True)
+        self._note_follow(plan_id, **got)
+        return got
 
     def set_early(self, plan_id, days):
         """3.3, C2: open each date `days` early (0-7). True when it took."""

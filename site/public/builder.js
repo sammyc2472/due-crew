@@ -567,6 +567,7 @@ async function builder(id) {
         return el;
       });
       const fors = [...new Set(doc.units.filter((u) => u.opens === d && u.for && evById(u.for)).map((u) => u.for))];
+      const you = myLine(d);
       const chips = e.chips.map((c) => {
         const el = h("button", { class: `ch ${c.review ? "rv" : c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
@@ -579,7 +580,8 @@ async function builder(id) {
         onclick: () => { picked = picked === d ? null : d; splitting = null; moving = null; sideTab = picked ? "day" : "cover"; draw(); },
         onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; moving = null; sideTab = picked ? "day" : "cover"; draw(); } } },
         h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...evs, ...chips,
-        fors.map((id) => h("span", { class: "for" }, "for ", h("b", {}, evById(id).name))), bar);
+        fors.map((id) => h("span", { class: "for" }, "for ", h("b", {}, evById(id).name))), bar,
+        you ? h("span", { class: "you" }, you) : null);
       if (fors.length) cell.dataset.for = fors.join(" ");
       if (author) dropOn(cell, (what) => dropped(d, what));
       cells.push(cell);
@@ -588,6 +590,19 @@ async function builder(id) {
       ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((x) => h("div", { class: "dh" }, x)), cells);
   }
   const nNotes = (d) => notes.filter((x) => x.day === d).length;
+  /** G6: a follower's own progress on a date, from what their Anki sends (only
+   *  when they share it), and the dates they skip. Theirs alone to see. */
+  function myLine(d) {
+    const f = !author && plan.following;
+    if (!f || d > today()) return null;
+    const us = doc.units.filter((u) => u.opens === d && !u.even);
+    if (!us.length) return null;
+    if (us.every((u) => (f.skipped || []).includes(u.id))) return "you: skipped";
+    const pr = us.map((u) => (f.progress || {})[u.id]).filter(Boolean);
+    if (!pr.length) return null;
+    const seen = pr.reduce((a, x) => a + x[1], 0), tot = pr.reduce((a, x) => a + x[2], 0);
+    return tot && seen >= tot ? "you: all seen" : `you: ${seen.toLocaleString()} of ${tot.toLocaleString()}`;
+  }
   function heavyNote() {
     if (!author) return null;
     const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
@@ -1085,7 +1100,10 @@ async function builder(id) {
     const eds = (plan.editors || []).filter((x) => x.uid !== me.uid).map((x) => x.name);
     const whose = plan.owner === me.uid ? "Yours" : `${plan.ownerName}'s plan`;
     const with_ = author && plan.owner !== me.uid ? ["you", ...eds] : eds;
-    const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck];
+    const f = !author && plan.following;
+    const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck,
+      f && f.shift ? `your dates run ${f.shift} day${f.shift === 1 ? "" : "s"} later` : null,
+      f && f.paused ? (f.until ? `paused until ${pretty(f.until)}` : "paused") : null];
     return bits.filter(Boolean).join(" · ");
   }
 

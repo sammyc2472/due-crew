@@ -1096,8 +1096,12 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched", "early"} or (
-                    "early" in body and not _is_int(body["early"], 0, 7)):
+            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped"} or (
+                    "early" in body and not _is_int(body["early"], 0, 7)) or (
+                    "shift" in body and not _is_int(body["shift"], 0, 365)) or any(
+                    body.get(k) is not None and not DATE_RE.fullmatch(str(body[k])) for k in ("until", "since") if k in body) or (
+                    "skipped" in body and not (isinstance(body["skipped"], list) and len(body["skipped"]) <= 200
+                                               and all(isinstance(u, str) and u for u in body["skipped"]))):
                 raise Bad(400, "follow")
             f = self.follows.get((pid, me))
             if not f:
@@ -1111,7 +1115,15 @@ class FakeWorker:
                 if not share:
                     f["progress"] = None  # sharing off clears what I shared
                 self._count("plan_follows")
-            return 200, {"share": share, "paused": paused, "sched": sched, "early": early}
+            for k in ("shift", "until", "since"):  # G3, G4: my own days
+                if k in body and body[k] != f.get(k):
+                    f[k] = body[k]
+                    self._count("plan_follows")
+            if "skipped" in body and list(dict.fromkeys(body["skipped"])) != f.get("skipped", []):
+                f["skipped"] = list(dict.fromkeys(body["skipped"]))
+                self._count("plan_follows")
+            return 200, {"share": share, "paused": paused, "sched": sched, "early": early,
+                         "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", [])}
         if rest[1:] == ["ids"] and method == "PUT":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1221,6 +1233,7 @@ class FakeWorker:
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
                           "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
+                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "followers": len(rows), "crewDone": done})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}

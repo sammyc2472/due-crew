@@ -279,9 +279,17 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
   return !!squad && !!(await env.DB.prepare("SELECT 1 FROM members WHERE squad = ? AND uid = ?").bind(squad, uid).first());
 }
 
+// a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped";
+
 async function following(env: Env, plan: string, uid: string) {
-  return env.DB.prepare("SELECT share, paused, sched, progress, early FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
-    .first<{ share: number; paused: number; sched: string | null; progress: string | null; early: number }>();
+  return env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(plan, uid).first<Follow>();
+}
+
+/** My follow's own days, as the add-on and the site read them. */
+function followDays(f: { shift?: number | null; pause_until?: string | null; pause_since?: string | null; skipped?: string | null }) {
+  return { shift: f.shift ?? 0, until: f.pause_until ?? null, since: f.pause_since ?? null,
+    skipped: f.skipped ? JSON.parse(f.skipped) as string[] : [] };
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -317,7 +325,8 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
   return p;
 }
 
-type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number };
+type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
+  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null };
 type Editor = { uid: string; name: string; emoji: string };
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
@@ -335,7 +344,7 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
     ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") ? { code: p.code } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
-                           progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
+                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f) } } : {}),
   };
 }
 
@@ -346,7 +355,7 @@ const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
 
 async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
-    env.DB.prepare("SELECT share, paused, sched, progress, early FROM plan_follows WHERE plan = ? AND uid = ?").bind(p.id, uid),
+    env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
     env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id),
     env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
     env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
@@ -812,11 +821,17 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   return json(await view(env, p, s.uid));
 }
 
-/** PATCH /plans/{id}/follow {share?, paused?, sched?}. */
+/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?}.
+ *  G3, G4: my own days: how many days my dates run later than the plan's
+ *  (0-365), a pause's first and last day, the dates I skip (unit ids). */
 export async function patchFollow(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early"].includes(k)) throw V.bad("follow");
+  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped"].includes(k)) throw V.bad("follow");
   if (body.early !== undefined && !V.isInt(body.early, 0, 7)) throw V.bad("follow");
+  if (body.shift !== undefined && !V.isInt(body.shift, 0, 365)) throw V.bad("follow");
+  for (const k of ["until", "since"]) if (body[k] !== undefined && body[k] !== null && !V.isDate(body[k])) throw V.bad("follow");
+  if (body.skipped !== undefined && (!Array.isArray(body.skipped) || body.skipped.length > UNITS_MAX
+      || !body.skipped.every((u) => typeof u === "string" && UNIT_ID.test(u)))) throw V.bad("follow");
   const f = await following(env, id, s.uid);
   if (!f) throw new HttpError(404, "not_following");
   const share = typeof body.share === "boolean" ? (body.share ? 1 : 0) : f.share;
@@ -824,12 +839,19 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
   const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
   const sj = sched === undefined ? f.sched : sched === null ? null : JSON.stringify(sched);
   const early = body.early !== undefined ? body.early as number : f.early ?? 0;
-  if (share !== f.share || paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0)) {
+  const shift = body.shift !== undefined ? body.shift as number : f.shift ?? 0;
+  const until = body.until !== undefined ? (body.until as string | null) : f.pause_until;
+  const since = body.since !== undefined ? (body.since as string | null) : f.pause_since;
+  const skipped = body.skipped !== undefined ? ((body.skipped as string[]).length ? JSON.stringify([...new Set(body.skipped as string[])]) : null) : f.skipped;
+  if (share !== f.share || paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0) || shift !== (f.shift ?? 0)
+      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped) {
     await env.DB.prepare(
-      `UPDATE plan_follows SET share = ?, paused = ?, sched = ?, early = ?${share ? "" : ", progress = NULL"} WHERE plan = ? AND uid = ?`,
-    ).bind(share, paused, sj, early, id, s.uid).run();
+      `UPDATE plan_follows SET share = ?, paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?${share ? "" : ", progress = NULL"}
+        WHERE plan = ? AND uid = ?`,
+    ).bind(share, paused, sj, early, shift, until, since, skipped, id, s.uid).run();
   }
-  return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early });
+  return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early,
+    ...followDays({ shift, pause_until: until, pause_since: since, skipped }) });
 }
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
@@ -855,7 +877,7 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   if (!ids.length) return json({ plans: [] });
   const inIds = ids.map(() => "?").join(",");
   const [fs, ns, eds, sq] = await Promise.all([
-    env.DB.prepare(`SELECT plan, share, paused, sched, progress, early FROM plan_follows WHERE uid = ?`).bind(s.uid)
+    env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
     env.DB.prepare(`SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${inIds}) GROUP BY plan`).bind(...ids)
       .all<{ plan: string; n: number }>(),
@@ -932,7 +954,8 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
  *  offered to my squads that I don't follow yet. */
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, f.sched, f.early, u.name AS owner_name
+    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, f.sched, f.early,
+            f.shift, f.pause_until, f.pause_since, f.skipped, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
             OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
@@ -979,7 +1002,7 @@ export async function forBoard(env: Env, uid: string) {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
-      sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0,
+      sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
   };

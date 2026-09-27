@@ -517,6 +517,51 @@ def match_rows(idx, doc, swap=None, shown=5):
     return rows
 
 
+def _later(iso, days):
+    try:
+        return (datetime.date.fromisoformat(str(iso)) + datetime.timedelta(days=days)).isoformat()
+    except ValueError:
+        return iso
+
+
+def my_doc(doc, shift=0, skipped=()):
+    """G3, G4: the plan as this follower runs it: every date `shift` days
+    later (their due dates, checkpoints, review days and end with them),
+    the dates they skip left out. Events are fixed days: they never move.
+    The plan itself never changes."""
+    skipped = set(skipped or ())
+    if not shift and not skipped:
+        return doc
+    out = dict(doc or {})
+    us = []
+    for u in units(doc):
+        if u["id"] in skipped:
+            continue
+        v = dict(u)
+        if shift:
+            for k in ("opens", "due", "check"):
+                if v.get(k):
+                    v[k] = _later(v[k], shift)
+        us.append(v)
+    out["units"] = us
+    if shift:
+        if out.get("end"):
+            out["end"] = _later(out["end"], shift)
+        if out.get("reviews"):
+            out["reviews"] = [dict(r, day=_later(r["day"], shift)) for r in out["reviews"]]
+    return out
+
+
+def waiting_new(doc, prog, today):
+    """G5: new cards of dates opened before today that I haven't seen yet."""
+    n = 0
+    for u in units(doc):
+        if str(u.get("opens") or "9999") < today:
+            _o, s, t = prog.get(u["id"], [0, 0, 0])
+            n += max(0, int(t) - int(s))
+    return n
+
+
 def prep_for(doc, today):
     """F1: the next event (today or later) that today's dates, or the next
     ones, prep for: {name, day, left}, `left` the prep days after today."""
