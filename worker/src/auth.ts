@@ -6,7 +6,7 @@
 import { isAdmin } from "./notices";
 import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
-import { sendCode } from "./mail";
+import { sendCode, sendMail } from "./mail";
 import {
   Env, HttpError, clientIp, json, newCode, newToken, normEmail, nowSec, readJson,
   sha256Hex, timingSafeEqual, ulid,
@@ -299,6 +299,29 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
     }
   }
   return json({ imported, skipped, reclaimed });
+}
+
+// ---- a link to open on the computer (3.4 review, C2) ----
+
+const LINK_PATH = /^\/(p\/[A-Z0-9]{8})?$/;
+
+/** POST /links/email {email, path}: someone on a phone sends themselves the
+ *  page they're on, to open where Anki is. One fixed message with that link
+ *  and nothing of theirs in it; no account is made or looked up. A few an
+ *  hour from an address, and a few a day to an inbox. */
+export async function emailLink(req: Request, env: Env): Promise<Response> {
+  if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");  // only the site's own pages
+  const body = await readJson(req);
+  const email = normEmail(body.email);
+  if (!email) throw new HttpError(400, "bad_email");
+  const path = typeof body.path === "string" ? body.path : "";
+  if (!LINK_PATH.test(path)) throw new HttpError(400, "bad_path");
+  await limitOrThrow(env, ipKey("emaillink", req), 5, LIMIT_WINDOW);
+  await limitOrThrow(env, await emailKey("emaillink", email), 3, 86400);
+  const url = `https://duecrew.com${path}`;
+  await sendMail(env, email, "Your Due Crew link",
+    `Here's the link you asked for:\n\n${url}\n\nOpen it on the computer where you use Anki. Due Crew is a free Anki add-on.`);
+  return json({ ok: true });
 }
 
 // ---- the site, signed in from the add-on (3.1) ----

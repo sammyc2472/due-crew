@@ -712,6 +712,29 @@ export async function ics(req: Request, env: Env): Promise<Response> {
     "content-disposition": `inline; filename="due-crew-${p.code}.ics"` } });
 }
 
+/** GET /plans/public?code=: what a plan's shared link shows before anyone
+ *  signs in (3.4 review, C1): its name, whose, the one line, how many
+ *  follow, and each date's name, day and card count. The calendar link
+ *  already gives the dates to anyone with the code; a squad's plan has none. */
+export async function publicPeek(req: Request, env: Env): Promise<Response> {
+  const code = normalizeCode(new URL(req.url).searchParams.get("code") || "");
+  if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
+  await limitOrThrow(env, `pub:ip:${clientIp(req)}`, 300, 3600);  // guessing codes stays slow
+  const p = await env.DB.prepare(
+    `SELECT p.id, p.name, p.line, p.audience, p.doc, u.name AS owner_name,
+            (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
+       FROM plans p LEFT JOIN users u ON u.uid = p.owner WHERE p.code = ?`,
+  ).bind(code).first<{ id: string; name: string; line: string; audience: string; doc: string; owner_name: string | null; followers: number }>();
+  if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
+  const doc = JSON.parse(p.doc) as { deck: string; units: Obj[] };
+  const n = (u: Obj) => ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
+    + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0);
+  return json({
+    name: p.name, ownerName: p.owner_name || "?", line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
+    units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
+  });
+}
+
 // ---- following ----
 
 /** POST /plans/follow {code, share?, sched?}: follow the plan behind a code. */

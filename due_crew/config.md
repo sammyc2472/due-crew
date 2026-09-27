@@ -14,7 +14,7 @@ Raw keys, for reference:
 | `accent` | green / blue / purple / teal / amber / rose | Accent color, light and dark variants |
 | `status` | text, up to 80 chars | One line under your name on Today, crew-only. Set it by clicking your own name |
 | `away_from`, `away_to` | YYYY-MM-DD or empty | Away dates: ✈️ by your name, ✈️ squares in week shares |
-| `compact`, `show_last_active`, `highlight_me` | true/false | Board display |
+| `compact`, `highlight_me` | true/false | Board display |
 | `share_reviews`, `share_time`, `share_retention`, `share_streak` | true/false | What your crew and squads see |
 | `share_heatmap` | true/false | Heatmap on your profile card |
 | `emoji` | one emoji | Shown in front of your name; set from your own card |

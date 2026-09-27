@@ -29,6 +29,8 @@ open("POST", r("/auth/verify"), A.verifyCode);
 open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
+open("GET", r("/plans/public"), (q, env) => P.publicPeek(q, env));  // a plan's link, before signing in
+open("POST", r("/links/email"), (q, env) => A.emailLink(q, env));  // a phone sends itself the link
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
@@ -48,6 +50,7 @@ authed("PUT", r("/friends"), S.restoreFriends);
 authed("PUT", r(`/friends/${ID}`), S.putFriend);
 authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, p));
 authed("POST", r("/codes"), S.newCode);
+authed("GET", r("/codes/([A-Za-z0-9]{1,12})"), (_q, s, env, p) => S.peekCode(s, env, p));
 authed("POST", r("/codes/([A-Za-z0-9]{1,12})/add"), (_q, s, env, p) => S.addByCode(s, env, p));
 authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));

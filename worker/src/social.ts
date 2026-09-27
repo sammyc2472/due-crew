@@ -185,6 +185,20 @@ export async function newCode(req: Request, s: Session, env: Env): Promise<Respo
   throw new HttpError(503, "try_again");
 }
 
+/** GET /codes/{code}: whose code this is, before adding them (the site's
+ *  "Got a code?", 3.4 review). A name and an emoji, as anyone signed in
+ *  may see for a uid; the same limit as adding by code. */
+export async function peekCode(s: Session, env: Env, [code]: string[]): Promise<Response> {
+  await limitOrThrow(env, `addcode:${s.uid}`, 30, 3600);
+  code = code.toUpperCase();
+  const owner = CODE_RE.test(code)
+    ? await env.DB.prepare("SELECT uid FROM codes WHERE code = ?").bind(code).first<string>("uid")
+    : null;
+  if (!owner) throw new HttpError(404, "no_match");
+  const u = (await nameOf(env, owner))!;
+  return json({ uid: owner, ...u, mine: owner === s.uid, added: owner !== s.uid && (await added(env, s.uid, owner)) });
+}
+
 /** POST /codes/{code}/add: add the code's owner, and knock them with it so
  *  their board offers Add back. */
 export async function addByCode(s: Session, env: Env, [code]: string[]): Promise<Response> {

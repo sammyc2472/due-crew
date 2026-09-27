@@ -628,7 +628,12 @@ def _on_js(handled, message, context):
     elif cmd == "copyinvite":
         _copy_friend_invite()
     elif cmd == "addcode":
-        open_friends(focus_add=True)
+        if len(parts) > 2 and parts[2]:
+            _add_code(parts[2])  # 3.4 review, C5: from the day-one card
+        else:
+            open_friends(focus_add=True)
+    elif cmd == "crewmenu":
+        _crew_menu(c)  # 3.4 review, H5
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
@@ -774,6 +779,47 @@ def _welcome():
         if bool(c.get("show_up")) != dlg.show_up:
             c["show_up"] = dlg.show_up
             save_cfg(c)
+
+
+def _add_code(code):
+    """The day-one card's Add: a friend's code, added now. One request."""
+    from .backend.shapes import friend_code_from
+    code = friend_code_from(code)
+    if not code:
+        tooltip("Codes are 6 letters and numbers. Pasting the whole invite works too.")
+        return
+    if code == _state["my_code"]:
+        tooltip("That's your own code.")
+        return
+    cl = client()
+
+    def done(result):
+        friend, err = result if result else (None, None)
+        if not friend:
+            tooltip(html.escape(err or "Couldn't add. Check your connection."))
+            return
+        name = html.escape(str(friend.get("name") or "?"))
+        tooltip(f"You and {name} are crew." if friend.get("mutual")
+                else f"Added {name}. They'll see it on their board.")
+        refresh_board(full=True)
+
+    _bg(lambda: cl.add_friend(code), done)
+
+
+def _crew_menu(c):
+    """The footer's Crew ▾ (3.4 review, H5), as fits the tab on screen."""
+    from aqt.qt import QCursor, QMenu
+    run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
+           "squadshare": lambda: _share_squad(),
+           "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek")}
+    menu = QMenu(mw)
+    for i, (label, key) in enumerate(board.crew_menu_items(
+            c.get("period", "today"), bool(c.get("show_up")),
+            (_squad_view(c) or {}).get("state") == "ok")):
+        if i == 1:
+            menu.addSeparator()
+        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    menu.exec(QCursor.pos())
 
 
 def open_friends(focus_add=False):

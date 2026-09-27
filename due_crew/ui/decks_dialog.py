@@ -2,7 +2,7 @@
 
 A collapsed tree with a filter (2.9). Until then every deck and subdeck was
 a checkbox in one long list, and a deep tree made a long one. Counts come
-from ONE grouped pass over the cards table. Match labels ("matches igk")
+from ONE grouped pass over the cards table. Match labels ("you and igk both study it")
 come from local_matches: one query over the crew's fingerprint guids finds
 the few decks that could pair, and only those are fingerprinted. Until 2.9
 every deck was, one per timer tick. Collection access stays on the main
@@ -122,7 +122,7 @@ class DecksDialog(QDialog):
         for did, who in found.items():
             item = self.items.get(did)
             if item is not None:
-                item.setText(2, "matches " + ", ".join(who))
+                item.setText(2, f"you and {', '.join(who)} both study it")  # 3.4 review, N9
                 self._reveal(item)
 
     def _filter(self, text):

@@ -310,7 +310,7 @@ def test_welcome_back():
                         "back": True, "exam": "", "last_updated": "",
                         "reviews": 118, "time_ms": 1, "retention": None,
                         "streak": 1}, "#2", {})
-    check("welcome back: row renders the chip", "bkb" in html and "back" in html)
+    check("welcome back: row renders the chip, in grey", '<span class="chip">back today</span>' in html)
 
 
 def test_milestones():
@@ -430,8 +430,8 @@ def test_shares_v21():
           "duecrew:sharetoday" in js and "duecrew:shareweek" in js)
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
-    check("share: Week view footer offers the crew week",
-          "sharecrewweek" in foot_week and "Share week" in foot_week)
+    check("share: Week view's Crew menu offers the crew week (3.4 review, H5)",
+          "crewmenu" in foot_week and ("Share the week", "sharecrewweek") in board.crew_menu_items("week", False))
 
 
 def _luminance(hex_color):
@@ -582,7 +582,7 @@ def test_away_flag():
     data, labels, tomorrow = fetch_as(store, sam, col)
     today_html = _render(data, labels, tomorrow, "today")
     check("away: Today row says when they're back",
-          'class="awb"' in today_html and "back tomorrow" in today_html, today_html[-600:])
+          '<span class="chip">away · back tomorrow</span>' in today_html, today_html[-600:])
     doc3 = {"away": True, "awayTo": d(3)}
     check("away: badge names the return day",
           board._away_text(doc3, d(0)) == f"back {TODAY + datetime.timedelta(days=4):%b} {(TODAY + datetime.timedelta(days=4)).day}"
@@ -727,7 +727,7 @@ def test_squad_view_html():
           'onclick="pycmd(\'duecrew:sort:retention\')' in html
           and by_streak.index("StepQueen") < by_streak.index("Maya")
           and by_streak.index("Maya") < by_streak.index("Sammy")
-          and '&#128293;<span class="hl"> Streak</span> &#9662;' in by_streak, by_streak)
+          and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
           'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
@@ -883,19 +883,20 @@ def test_v25_edges_emoji_week():
     html = board._squads_html(view, {"sort": "week"})
     check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
           "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
-          and '&#128197;<span class="hl"> 7 days</span> &#9662;' in html
+          and '<span class="hl">7 days</span> &#9662;' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
-    check("squad board: Share today sits in the footer, as on Today, not on the squad's line",
-          "squadshare" not in html and "squadshare" in page
-          and page.index("squadinvite") < page.index('<div class="dc-foot">') < page.index("squadshare"))
+    check("squad board: Share the squad's day is in the Crew menu, not on the squad's line",
+          "squadshare" not in html and "crewmenu" in page
+          and ("Share the squad's day", "squadshare") in board.crew_menu_items("squads", False, True)
+          and not any(k == "squadshare" for _l, k in board.crew_menu_items("squads", False, False)))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
                          "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week"}, 0)
     check("crew board: emoji by the name; the squads-only sort falls back to reviews",
-          "🦊 Sammy" in crew and '&#128218;<span class="hl"> Reviews</span> &#9662;' in crew)
+          "🦊 Sammy" in crew and '<span class="hl">Reviews</span> &#9662;' in crew)
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
     esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
     check("own card: emoji by the name and a link to change it",
@@ -2215,7 +2216,9 @@ def test_show_up():
                         wrap={"reviews": 5, "time_ms": 1, "full_days": 5})
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
-          and "Last week" not in mode and "Share week" in mode and "Share today" not in mode)
+          and "Last week" not in mode
+          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek"]
+          and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
           mode.count('class="sq on"') == 3 + 2 + 3 + 1 + 2 * 0 + 0  # per person within the calendar week
@@ -2293,14 +2296,18 @@ def test_new_cards_v213():
         return {"user_id": "u", "name": "Nia", "you": False, "paused": False,
                 "last_updated": "", "exam_date": "", "days": {lb: day}, "decks": []}
     base = {"labels": [lb], "tomorrow": "", "pending": []}
+    # 3.4 review, T5: on the Week tab, where how much was new is the story
     some = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
-                        {"period": "today"}, 0)
+                        {"period": "week"}, 0)
     every = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 20})]),
-                         {"period": "today"}, 0)
+                         {"period": "week"}, 0)
     none = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 0})]),
-                        {"period": "today"}, 0)
-    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "today"}, 0)
-    check("board: a grey line under Reviews, with the whole count on hover",
+                        {"period": "week"}, 0)
+    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "week"}, 0)
+    today_only = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
+                              {"period": "today"}, 0)
+    check("board, T5: Today's rows are one line (no new line under Reviews)", 'class="nw"' not in today_only)
+    check("board: a grey line under Reviews on the Week tab, with the whole count on hover",
           '<small class="nw">12 new</small>' in some and 'title="12 of 205 were new cards"' in some)
     check("board: \"all new\" when every review was new; nothing when none were or they didn't say",
           ">all new<" in every and 'class="nw"' not in none and 'class="nw"' not in old)
@@ -2608,6 +2615,46 @@ def test_mute_and_report_v301():
     except shapes.TransportError as e:
         eleventh = e.status
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
+
+
+def test_ui_review_board():
+    """3.4 review: one chip beside a name (T1), a colour means one thing
+    (T2), one banner at a time (H6), one way in (C4), day one is the
+    invite (C5), and a friend's card says since when."""
+    base = {"user_id": "u", "name": "Dre", "you": False, "paused": False, "quiet": False, "stale": False,
+            "last_updated": "2026-09-27T10:00:00Z", "reviews": 700, "time_ms": 1, "retention": 90.0, "streak": 3}
+    busy = board._row_html(dict(base, live=True, exam="exam Fri", back=True, away="back Sep 6",
+                                recap={"n": 2, "name": "P"}), "#2", {})
+    check("T1: a busy day shows one chip, the most time-bound", "studying now" in busy
+          and "exam Fri" not in busy and "back today" not in busy and "week 2 done" not in busy)
+    exam = board._row_html(dict(base, exam="exam Fri", back=True), "#2", {})
+    check("T1/T2: then an exam, in amber, and nothing else", '<span class="chip exam">exam Fri</span>' in exam and "back today" not in exam)
+    check("T2: when they last synced leaves a row that's studying", '<span class="la' not in exam)
+    quiet = board._row_html(dict(base, quiet=True, last_updated="2026-09-20T10:00:00Z"), "&mdash;", {})
+    check("T2: a quiet row keeps it, in grey", '<span class="la faded">(' in quiet)
+    away = board._row_html(dict(base, away="back Sep 6"), "#2", {})
+    check("T1: away reads as away, in grey", '<span class="chip">away · back Sep 6</span>' in away)
+    evil = board._row_html(dict(base, room="<b>x</b>'s room"), "#2", {})
+    check("T1: a room's title is escaped", "&lt;b&gt;" in evil and "<b>x" not in evil)
+    labels = ["2026-09-27"]
+    data = {"entries": [], "labels": labels, "tomorrow": "", "pending": []}
+    bans = board.render(data, {"period": "today"}, 0, wrap={"reviews": 5, "time_ms": 1},
+                        exam_eve={"people": [("m", "Marisa")]}, knocks=[{"name": "Priya", "uid": "p"}])
+    check("H6: the most time-bound banner shows, the others wait behind 1 of 3",
+          bans.count('<div class="dc-wrap') == 1 and bans.count("<div hidden class=\"dc-wrap") == 2
+          and "1 of 3 &rsaquo;" in bans and bans.index("exam is tomorrow") < bans.index("Priya"))
+    one = board.render(data, {"period": "today"}, 0, wrap={"reviews": 5, "time_ms": 1})
+    check("H6: one banner has no counter", "of 1" not in one and "&rsaquo;</a>" not in one)
+    out = board.signed_out_card({})
+    check("C4: one way in", "Start with your email" in out and ">Join<" not in out and "setup:" not in out)
+    me = {"user_id": "sam", "name": "Sammy", "emoji": "", "you": True, "paused": False, "last_updated": "",
+          "exam_date": "", "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}
+    solo = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": [], "my_code": "K7Q2ZP"},
+                        {"period": "today"}, 0)
+    check("C5: alone, the invite is the board", 'class="dc-empty"' in solo and "K7Q2 ZP" in solo
+          and "copyinvite" in solo and "duecrew:addcode:" in solo)
+    card = board.profile_overlay_js({"name": "Dre", "you": False, "cells": [1, 0], "same_days": 42, "start": "2026-04-06"})
+    check("card: the days in common, since the month the heatmap starts", "42 days</b> since April" in card, card[-400:])
 
 
 def test_retry_only_what_is_safe_twice():

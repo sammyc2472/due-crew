@@ -151,6 +151,9 @@ def shoot(dlg, path):
 
 def main(out):
     os.makedirs(out, exist_ok=True)
+    for old in os.listdir(out):  # this run's renders only: none left from dialogs that changed or went
+        if old.endswith(".png"):
+            os.remove(os.path.join(out, old))
     failures = []
     noop = lambda *a, **k: None
 

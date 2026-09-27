@@ -59,8 +59,8 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads", "plans")  # plans: only while I follow one (3.3)
 def _head_label(icon, text):
-    """Icon, then the word, which a narrow window drops (see _css)."""
-    return f'{icon}<span class="hl"> {text}</span>'
+    """The word; a narrow window shows the icon in its place (see _css)."""
+    return f'<span class="hi">{icon}</span><span class="hl">{text}</span>'
 
 
 HEADERS = (("reviews", _head_label("&#128218;", "Reviews")), ("time", _head_label("&#9201;", "Time")),
@@ -287,7 +287,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                # 3.2: their last plan week done, the day it's new
                "recap": (e.get("recap") or {}) if not e["paused"] and (e.get("recap") or {}).get("day") == today_lb else {},
                "exam": "" if e["paused"] else
-                       _exam_badge(e.get("exam_date"), today_lb)}
+                       _exam_text(e.get("exam_date"), today_lb)}
         if e["paused"]:
             paused.append(row)
             continue
@@ -485,6 +485,22 @@ def _css(cfg):
     #due-crew .la.faded {{ color: var(--dc-faded); }}
     #due-crew .dc-foot {{ display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }}
     #due-crew .dc-foot .sp {{ flex: 1; }}
+    #due-crew .dc-foot .fl, #due-crew .dc-foot .fr {{ display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }}
+    #due-crew .dc-foot a.pb {{ border: 1px solid var(--dc-accent); border-radius: 99px; padding: 1px 9px; }}
+    #due-crew .dc-foot a.pb.on {{ background: var(--dc-accent); color: var(--dc-bg); }}
+    #due-crew .dc-foot a.pb.warn {{ border-color: var(--dc-hours); color: var(--dc-hours); }}
+    #due-crew .dc-foot a.ic {{ color: var(--dc-muted); font-weight: 400; font-size: 13px; }}
+    #due-crew .dc-wrap[hidden] {{ display: none; }}
+    #due-crew .dc-wrap a.wn {{ color: var(--dc-muted); text-decoration: none; font-size: 11px; white-space: nowrap; margin-left: 8px; }}
+    #due-crew .dc-empty {{ border: 1px dashed var(--dc-accent); border-radius: 10px; padding: 12px 14px; margin: 8px 0 2px;
+      display: grid; gap: 8px; font-size: 12px; }}
+    #due-crew .dc-empty .row {{ display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
+    #due-crew .dc-empty .dc-code {{ font-size: 18px; letter-spacing: 3px; }}
+    #due-crew .dc-empty input {{ flex: 1 1 160px; font: inherit; padding: 4px 8px; border: 1px solid var(--dc-line);
+      border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); }}
+    #due-crew .dc-empty a.bt {{ border: 1px solid var(--dc-accent); border-radius: 6px; padding: 3px 12px; font-weight: 700;
+      color: var(--dc-accent); text-decoration: none; }}
+    #due-crew .dc-empty a.bt.on {{ background: var(--dc-accent); color: var(--dc-bg); }}
     #due-crew .dc-foot a {{ color: var(--dc-accent); text-decoration: none; font-weight: 700;
       white-space: nowrap; }}
     #due-crew .dc-note {{ font-style: italic; font-size: 11px; }}
@@ -500,6 +516,10 @@ def _css(cfg):
       text-decoration: none; font-weight: 700; }}
     #due-crew .dc-delta {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
       margin-left: 6px; }}
+    #due-crew th .hi {{ display: none; }}
+    #due-crew .chip {{ font-size: 10px; margin-left: 5px; white-space: nowrap; color: var(--dc-muted); }}
+    #due-crew .chip.live {{ color: var(--dc-fresh); font-weight: 700; }}
+    #due-crew .chip.exam {{ color: var(--dc-hours); font-weight: 700; }}
     #due-crew .exb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
       margin-left: 5px; white-space: nowrap; }}
     #due-crew .bkb {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
@@ -577,7 +597,7 @@ def _css(cfg):
        (a quiet row keeps its: that chip is the whole story), and the name
        gets the room. Until 2.9 every name shrank to three letters. */
     @media (max-width: 560px) {{
-      #due-crew th .hl {{ display: none; }}
+      #due-crew th .hl {{ display: none; }} #due-crew th .hi {{ display: inline; }}
       #due-crew td, #due-crew th {{ padding-left: 4px; padding-right: 4px; }}
       #due-crew tr:not(.dim) .la {{ display: none; }}
       #due-crew .dc-head .dc-mark {{ height: 14px; }}
@@ -662,7 +682,33 @@ def _head(period, show_up=False, has_plans=False):
             f'<span>{pills}</span></div>')
 
 
-def _row_html(row, rank, cfg):
+def _chip(row):
+    """3.4 review, T1: the one thing beside a name, the most time-bound:
+    a room or studying now, an exam within two weeks, back today, away,
+    a plan week done. The rest is on the person's card. T2: green only
+    for studying now, amber only for an exam; the others grey."""
+    if row["quiet"]:
+        return ""
+    if row.get("room"):
+        # the room's title is a friend's name: escaped
+        return f' <span class="dc-live"></span><span class="chip live">in {_html.escape(str(row["room"]))}</span>'
+    if row.get("live"):
+        return ' <span class="dc-live"></span><span class="chip live">studying now</span>'
+    if row.get("exam"):
+        return f' <span class="chip exam">{_html.escape(str(row["exam"]))}</span>'
+    if row.get("back"):
+        return ' <span class="chip">back today</span>'
+    if row.get("away"):
+        away = str(row["away"])
+        return f' <span class="chip">{_html.escape(away if away == "away" else "away · " + away)}</span>'
+    r = row.get("recap")
+    if r:
+        return (f' <span class="chip" title="{_html.escape(str(r.get("name") or ""))}">'
+                f'week {int(r.get("n") or 0)} done</span>')
+    return ""
+
+
+def _row_html(row, rank, cfg, period="today"):
     name = _label(row["name"], row.get("emoji"))
     cls = "you" if row["you"] else ""
     extra = ""
@@ -674,10 +720,11 @@ def _row_html(row, rank, cfg):
     elif row["quiet"]:
         cls += " dim"
         cells = '<td class="n">&mdash;</td>' * 4
-        # the chip is a quiet row's whole story, so it ignores show_last_active
-        txt, tone = _ago(row["last_updated"])
+        # T2: when they last synced is a quiet row's whole story; the others
+        # show it on their card
+        txt, _tone = _ago(row["last_updated"])
         if txt:
-            la = f'<span class="la {tone}">({txt})</span>'
+            la = f'<span class="la faded">({txt})</span>'
     else:
         if row["stale"]:
             cls += " dim"
@@ -685,31 +732,12 @@ def _row_html(row, rank, cfg):
         elif row.get("showup") and row.get("days_wk"):
             n = row["days_wk"]
             extra = f' <span class="la faded">&middot; {n} day{"s" if n != 1 else ""} this week</span>'
-        cells = (f'<td class="n">{_reviews_cell(row["reviews"], row.get("new"))}</td>'
+        # T5: how many were new shows on the Week tab, where it's the story
+        cells = (f'<td class="n">{_reviews_cell(row["reviews"], row.get("new") if period == "week" else None)}</td>'
                  f'<td class="n">{_cell(row["time_ms"], _fmt_time)}</td>'
                  f'<td class="n">{_cell(row["retention"], lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(row["streak"])}</td>')
-        if cfg.get("show_last_active", True) and not row["stale"]:
-            txt, tone = _ago(row["last_updated"])
-            if txt:
-                la = f'<span class="la {tone}">({txt})</span>'
-    exam = row.get("exam") or ""
-    if row.get("back") and not row["quiet"]:
-        # the day a quiet friend returns, the board says so
-        exam = ' <span class="bkb">&#128075; back</span>' + exam
-    if row.get("away"):
-        exam += f' <span class="awb">&#9992;&#65039; {_html.escape(str(row["away"]))}</span>'
-    if row.get("recap") and not row["quiet"]:
-        r = row["recap"]
-        exam += (f' <span class="la fresh" title="{_html.escape(str(r.get("name") or ""))}">'
-                 f'&middot; week {int(r.get("n") or 0)} done</span>')
-    if row.get("room") and not row["quiet"]:
-        # 2.12: in a study room (the room's title is escaped: a friend's name)
-        exam = (' <span class="dc-live"></span><span class="la fresh">in '
-                f'{_html.escape(str(row["room"]))}</span>') + exam
-    elif row.get("live") and not row["quiet"]:
-        # 2.10: studying right now; the dot clears itself when the hour is up
-        exam = ' <span class="dc-live"></span><span class="la fresh">studying now</span>' + exam
+    chip = _chip(row)
     status = ""
     if row.get("status"):
         st = _html.escape(str(row["status"]))
@@ -738,7 +766,7 @@ def _row_html(row, rank, cfg):
                 f'onclick="{_pycmd("profile:" + str(row["user_id"]))}" '
                 f'oncontextmenu="{_pycmd("rowmenu:" + str(row["user_id"]))}">{name}</a>')
     return (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
-            f'<td class="nm">{name}{exam}{la}{extra}{status}</td>{cells}{cheer}</tr>')
+            f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 
 
 def _table_html(data, cfg, period):
@@ -766,17 +794,26 @@ def _table_html(data, cfg, period):
         else:
             n += 1
             rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
-        body += _row_html(row, rank, cfg)
+        body += _row_html(row, rank, cfg, period)
     for row in dormant:
-        body += _row_html(row, "&mdash;", cfg)
+        body += _row_html(row, "&mdash;", cfg, period)
     solo = ""
-    if len(data["entries"]) == 1 and not data.get("pending"):
+    if len(data["entries"]) == 1:
+        # 3.4 review, C5: until a friend adds me back, the invite is the board
         code = str(data.get("my_code") or "")
-        mine = (f'Your code <span class="dc-code">{_html.escape(code)}</span> &middot; '
-                if code else "")
-        solo = (f'<div class="dc-line">Just you so far. {mine}'
-                f'<a href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a> &middot; '
-                f'<a href="#" onclick="{_pycmd("addcode")}">Add a code</a></div>')
+        spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
+        add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase(),"
+               "m=v.match(/(^|[^A-Z0-9])([A-Z0-9]{6})([^A-Z0-9]|$)/);"
+               "pycmd('duecrew:addcode:'+(m?m[2]:''));return false;")
+        waiting = len(data.get("pending") or [])
+        solo = (f'<div class="dc-empty"><b>Bring your crew</b>'
+                f'<span style="color: var(--dc-muted);">'
+                f'{"They show up here once they add you back." if not waiting else f"Waiting for {waiting} to add you back."}</span>'
+                f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
+                f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
+                f'<div class="row"><input id="dc-addcode" placeholder="Their code, or paste their invite" '
+                f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+                f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
@@ -1268,6 +1305,56 @@ def _review_banner(kind, info):
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
+def crew_menu_items(period, show_up, squad_ok=False):
+    """3.4 review, H5: the footer's Crew ▾, as [(label, command)] for the
+    tab on screen. What the footer's links were, in one place."""
+    items = [("Friends…", "friends")]
+    if period == "today" and not show_up:
+        items.append(("Share today", "sharetoday"))
+    if period == "week" or (show_up and period == "today"):
+        items.append(("Share the week", "sharecrewweek"))
+    if period == "squads" and not show_up and squad_ok:
+        items.append(("Share the squad's day", "squadshare"))
+    if period == "decks":
+        items.append(("Shared decks…", "decks"))
+    return items
+
+
+def _split_wraps(html):
+    """The banners in a run of them, one string each."""
+    out, i = [], 0
+    while True:
+        j = html.find('<div class="dc-wrap', i)
+        if j < 0:
+            return out
+        k = html.find('<div class="dc-wrap', j + 1)
+        out.append(html[j:k if k >= 0 else len(html)])
+        if k < 0:
+            return out
+        i = k
+
+
+def _one_at_a_time(bans):
+    """3.4 review, H6: the first banner shows; "1 of N ›" steps to the next
+    (in the page, no request). Dismissing one still goes through Python."""
+    bans = [b for b in bans if b]
+    if len(bans) < 2:
+        return "".join(bans)
+    out = []
+    step = ("var w=this.closest('.dc-wrap'),n=w.nextElementSibling||w.parentNode.firstElementChild;"
+            "w.hidden=true;n.hidden=false;return false;")
+    for i, b in enumerate(bans):
+        more = f'<a class="wn" href="#" title="The next one" onclick="{step}">{i + 1} of {len(bans)} &rsaquo;</a>'
+        cut = b.rfind('<a class="wx"')
+        if cut < 0:
+            cut = b.rfind("</div>")
+        b = b[:cut] + more + b[cut:]
+        if i:
+            b = b.replace('<div class="dc-wrap', '<div hidden class="dc-wrap', 1)
+        out.append(b)
+    return f'<div class="dc-bans">{"".join(out)}</div>'
+
+
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
@@ -1289,47 +1376,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
             else _table_html(data, cfg, period))
-    if period in ("decks", "squads", "plans"):
-        body = _offer_banners((plans or {}).get("offers")) + body
-    for kind in ("year", "month"):
-        if reviews and reviews.get(kind):
-            body = _review_banner(kind, reviews[kind]) + body
-    if room and period in ("today", "week"):
-        body = room_html(room) + body
-    for k in (knocks or [])[:3]:
-        # someone in a squad added me: my add makes it mutual
-        who = _html.escape(str(k.get("name", "?")))
-        # a squadmate's add names the squad; an add by code (2.9) says so
-        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad")
-                 else " your code" if k.get("via_code") else "")
-        uid = str(k.get("uid", ""))
-        body = (f'<div class="dc-wrap knock"><span>&#128075;</span>'
-                f'<span><b>{who}</b> added{"" if k.get("via_code") and not k.get("squad") else " you"}{where}</span>'
-                f'<a class="wc" href="#" title="Add back" '
-                f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
-                f'<a class="wx" href="#" title="Not now" '
-                f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>') + body
-    if wrap and not show_up:  # the week's totals are numbers
-        extra = ""
-        if (wrap.get("full_days") or 0) >= 3:
-            extra = f' &middot; everyone showed up {wrap["full_days"]} of 7 days'
-        if wrap.get("best_name"):
-            extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
-                      f'best week yet')
-        if 0 < int(wrap.get("days_known") or 7) < 7:
-            extra += f' &middot; from {int(wrap["days_known"])} of its 7 days'
-        if wrap.get("milestone"):
-            extra += (f' &middot; and the crew just passed '
-                      f'<b>{_html.escape(str(wrap["milestone"]))} all-time</b>')
-        body = (f'<div class="dc-wrap"><span>&#127881;</span>'
-                f'<span><b>Last week, together:</b> '
-                f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
-                f'<a class="wc" href="#" title="Copy for the group chat" '
-                f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
-                f'<a class="wx" href="#" title="Dismiss" '
-                f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>') + body
-    if notice:
-        body = notice_html(notice) + body
+    # 3.4 review, H6: one banner at a time, the most time-bound first; the
+    # rest wait behind "1 of N ›". The admin's notice and my own room stay.
+    bans = []
     if exam_eve and exam_eve.get("people"):
         # 2.10: a line for their exam-morning card, rather than a cheer now
         links = [f'<a class="dc-pl" href="#" title="Add a line to their good-luck card" '
@@ -1344,63 +1393,93 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
         else:
             line = " and ".join(links) + " have exams tomorrow."
             act = ""
-        body = (f'<div class="dc-wrap eve"><span>&#128214;</span>'
-                f'<span>{line}</span>{act}'
-                f'<a class="wx" href="#" title="Dismiss" '
-                f'onclick="{_pycmd("evedismiss")}">&times;</a></div>') + body
-
+        bans.append(f'<div class="dc-wrap eve"><span>&#128214;</span>'
+                    f'<span>{line}</span>{act}'
+                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'onclick="{_pycmd("evedismiss")}">&times;</a></div>')
+    for k in (knocks or [])[:3]:
+        # someone in a squad added me: my add makes it mutual
+        who = _html.escape(str(k.get("name", "?")))
+        # a squadmate's add names the squad; an add by code (2.9) says so
+        where = (f' from {_html.escape(str(k["squad"]))}' if k.get("squad")
+                 else " your code" if k.get("via_code") else "")
+        uid = str(k.get("uid", ""))
+        bans.append(f'<div class="dc-wrap knock"><span>&#128075;</span>'
+                    f'<span><b>{who}</b> added{"" if k.get("via_code") and not k.get("squad") else " you"}{where}</span>'
+                    f'<a class="wc" href="#" title="Add back" '
+                    f'onclick="{_pycmd("addback:" + uid)}">Add back</a>'
+                    f'<a class="wx" href="#" title="Not now" '
+                    f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>')
     for uid, who, days in (milestones or [])[:2]:
         emoji = "&#128175;" if int(days) < 365 else "&#127881;"
-        body = (f'<div class="dc-wrap"><span>{emoji}</span>'
-                f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
-                f'<a class="wc" href="#" title="Send a cheer" '
-                f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
-                f'<a class="wx" href="#" title="Dismiss" '
-                f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>') + body
+        bans.append(f'<div class="dc-wrap"><span>{emoji}</span>'
+                    f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
+                    f'<a class="wc" href="#" title="Send a cheer" '
+                    f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
+                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
+    lobby = ""
+    if room and period in ("today", "week"):
+        bans += [b for b in _split_wraps(room_html({"done": room.get("done"), "invites": room.get("invites")}))]
+        lobby = room_html({"mine": room.get("mine")})
+    if wrap and not show_up:  # the week's totals are numbers
+        extra = ""
+        if (wrap.get("full_days") or 0) >= 3:
+            extra = f' &middot; everyone showed up {wrap["full_days"]} of 7 days'
+        if wrap.get("best_name"):
+            extra += (f' &middot; {_html.escape(str(wrap["best_name"]))}&rsquo;s '
+                      f'best week yet')
+        if 0 < int(wrap.get("days_known") or 7) < 7:
+            extra += f' &middot; from {int(wrap["days_known"])} of its 7 days'
+        if wrap.get("milestone"):
+            extra += (f' &middot; and the crew just passed '
+                      f'<b>{_html.escape(str(wrap["milestone"]))} all-time</b>')
+        bans.append(f'<div class="dc-wrap"><span>&#127881;</span>'
+                    f'<span><b>Last week, together:</b> '
+                    f'{wrap["reviews"]:,} reviews &middot; {_fmt_time(wrap["time_ms"])}{extra}</span>'
+                    f'<a class="wc" href="#" title="Copy for the group chat" '
+                    f'onclick="{_pycmd("wrapcopy")}">Copy</a>'
+                    f'<a class="wx" href="#" title="Dismiss" '
+                    f'onclick="{_pycmd("wrapdismiss")}">&times;</a></div>')
+    for kind in ("month", "year"):
+        if reviews and reviews.get(kind):
+            bans.append(_review_banner(kind, reviews[kind]))
+    if period in ("decks", "squads", "plans"):
+        bans += _split_wraps(_offer_banners((plans or {}).get("offers")))
+    body = (notice_html(notice) if notice else "") + _one_at_a_time(bans) + lobby + body
 
-    n_pending = len(data.get("pending", []))
-    if n_pending:
-        left = (f'<span title="You added them; you\'re crew when they add you back">'
-                f'{n_pending} waiting</span> &middot; '
-                f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>')
-    else:
-        left = f'<a href="#" onclick="{_pycmd("friends")}">Friends</a>'
+    # 3.4 review, H5: the day's two social actions as buttons, the rest in
+    # one Crew menu, and Refresh and Settings as quiet icons
+    left = ""
     if rules_stale:
-        left = ('<span class="warn" title="The server is behind this version; '
-                'some sharing is paused until it catches up.">'
-                '&#9888; server catching up</span>'
-                ' &middot; ') + left
-    if period == "decks":
-        left += f' &middot; <a href="#" onclick="{_pycmd("decks")}">Shared decks</a>'
-    if period == "today" and not show_up:
-        left += (f' &middot; <a href="#" title="Copy your day for the chat" '
-                 f'onclick="{_pycmd("sharetoday")}">Share today</a>')
-    if (period == "squads" and not show_up
-            and (squad_view or {}).get("state") == "ok"):
-        left += (f' &middot; <a href="#" title="Copy the squad\'s day for the chat" '
-                 f'onclick="{_pycmd("squadshare")}">Share today</a>')
-    if period == "week" or (show_up and period == "today"):
-        left += (f' &middot; <a href="#" title="Copy the crew\'s week for the chat" '
-                 f'onclick="{_pycmd("sharecrewweek")}">Share week</a>')
-    if period in ("today", "week") and not cfg.get("paused") and not (room or {}).get("mine"):
-        # 2.12: a study room for the crew
-        left += (f' &middot; <a href="#" title="Rounds and breaks with your crew" '
-                 f'onclick="{_pycmd("roomopen")}">Open a room</a>')
+        left += ('<span class="warn" title="The server is behind this version; '
+                 'some sharing is paused until it catches up.">'
+                 '&#9888; server catching up</span>')
     if period in ("today", "week") and not cfg.get("paused"):
         # 2.10: a dot by your name for an hour, so friends can join you
-        left += (f' &middot; <a href="#" title="Stop showing that you\'re studying" '
+        left += (f'<a class="pb on" href="#" title="Stop showing that you\'re studying" '
                  f'onclick="{_pycmd("live")}">Stop studying</a>' if live else
-                 f' &middot; <a href="#" title="A dot by your name for the next hour" '
+                 f'<a class="pb on" href="#" title="A dot by your name for the next hour" '
                  f'onclick="{_pycmd("live")}">I&rsquo;m studying</a>')
+        if not (room or {}).get("mine"):
+            # 2.12: a study room for the crew
+            left += (f'<a class="pb" href="#" title="Rounds and breaks with your crew" '
+                     f'onclick="{_pycmd("roomopen")}">Open a room</a>')
+    left += (f'<a href="#" title="Friends, sharing" '
+             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>')
+    n_pending = len(data.get("pending", []))
+    if n_pending:
+        left += (f'<a class="pb warn" href="#" title="You added them; you\'re crew when they add you back" '
+                 f'onclick="{_pycmd("friends")}">{n_pending} waiting</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
     failed = ('<span class="warn" title="The last sync didn\'t reach the server. '
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
-    foot = (f'<div class="dc-foot"><span>{left}</span><span class="sp"></span>'
-            f'<span>{failed}Updated {ago} &middot; <a href="#" '
-            f'onclick="{_pycmd("refresh")}">Refresh</a> &middot; <a href="#" '
-            f'onclick="{_pycmd("settings")}">Settings</a></span></div>')
+    foot = (f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
+            f'<span class="fr">{failed}Updated {ago}'
+            f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
+            f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
             f'{_css(cfg)}{_head(period, show_up, has_plans)}{body}{foot}</div>')
@@ -1461,10 +1540,10 @@ def signed_out_card(cfg, expired=False, moved=False):
         return _card(cfg, "Due Crew",
                      f'Your sign-in expired. '
                      f'<a href="#" onclick="{_pycmd("setup")}">Sign in again</a>')
+    # 3.4 review, C4: one way in; the emailed code knows if the address is new
     return _card(cfg, "Due Crew",
                  f'Your friends&rsquo; studying next to yours. Nothing is shared '
-                 f'until you join. <a href="#" onclick="{_pycmd("setup:join")}">Join</a>'
-                 f' &middot; <a href="#" onclick="{_pycmd("setup:signin")}">Sign in</a>')
+                 f'until you start. <a href="#" onclick="{_pycmd("setup")}">Start with your email</a>')
 
 
 def loading_card(cfg):
@@ -1847,7 +1926,7 @@ def profile_overlay_js(profile):
     else:
         # rows are weekdays: the first column starts on a Monday, padded with
         # blanks, and the last is padded after today. Until 2.9 the grid
-        # started wherever the half-year did.
+        # started wherever the six months did.
         try:
             pad = _date.fromisoformat(str(profile.get("start"))).weekday()
         except (TypeError, ValueError):
@@ -1893,9 +1972,14 @@ def profile_overlay_js(profile):
             lines += (f'<div style="font-size: 12px; padding: 4px 0 2px;">'
                       f'Best run together: <b>{best} days</b>.</div>')
     if profile.get("same_days") is not None:
+        # named by the month the heatmap above starts, so the two agree
+        try:
+            since = f' since {_date.fromisoformat(str(profile.get("start"))).strftime("%B")}'
+        except (TypeError, ValueError):
+            since = ""
+        n = int(profile["same_days"])
         lines += (f'<div style="font-size: 12px; padding: 2px 0;">'
-                  f'You&rsquo;ve studied on <b>{int(profile["same_days"])} of the '
-                  f'same days</b> this half-year.</div>')
+                  f'You&rsquo;ve both studied on <b>{n} day{"" if n == 1 else "s"}</b>{since}.</div>')
     if profile.get("decks_line"):
         prefix = "Shares with your crew: " if you else "Shares with you: "
         lines += (f'<div style="font-size: 12px; padding: 2px 0; opacity: 0.8;">'
