@@ -142,8 +142,8 @@ def card_will_show(text, card, kind):
 # ---- sending ----
 
 def _ask_line(title, prompt):
-    from aqt.qt import QInputDialog
-    text, ok = QInputDialog.getText(mw, title, prompt)
+    from .ui import ask_text
+    text, ok = ask_text(mw, title, prompt)  # plain text: the prompt holds a crewmate's name
     return clean_note(text) if ok else ""
 
 

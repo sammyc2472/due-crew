@@ -4,19 +4,27 @@ and the menus. Main-thread rules as in __init__: every collection read and
 the one unsuspend step happen here, on the main thread; plan_flow never
 makes a request of its own except on a click (follow, pause, stop).
 
-Per computer, in config `plans`: {plan id: {deck_id, swap, applied:
-{unit id: sig | "skip:" + sig}, seen_version, snapshot}}. Follow, share
-and pause live on the server; the board's plans are cached in the session
-(api.fetch_board), so a light refresh and an offline morning have them.
+Per profile and computer, in user_files/<profile>/plans.json (deck ids
+belong to one collection, so not in the add-on's config, which every
+profile shares): `plans`: {plan id: {deck_id, swap, applied: {unit id: sig
+| "skip:" + sig}, src: {unit id: what it matched with when applied},
+seen_version, snapshot}}, `plans_day`, `plans_opened` and
+`plan_offers_dismissed`. Follow, share and pause live on the server; the
+board's plans are cached in the session (api.fetch_board), so a light
+refresh and an offline morning have them.
 
-The morning is once per Anki day (config `plans_day`): after the day's
-AnkiWeb sync, or at the first refresh when this profile doesn't sync. It
-never suspends anything: a unit removed, a date moved later, a plan
-stopped all leave open cards open.
+The morning is once per Anki day (`plans_day`): after the day's AnkiWeb
+sync, or at the first refresh when this profile doesn't sync; the day's
+fresh plans get one more look. It never suspends anything: a unit
+removed, a date moved later, a plan stopped all leave open cards open. A
+unit the author changes opens only the cards the change adds, and a leech
+never opens.
 """
 
 import datetime
 import html
+import json
+import os
 import traceback
 
 from aqt import mw
@@ -25,6 +33,84 @@ from aqt.utils import tooltip
 from . import app
 from . import plans as P
 from .app import _bg, _state, cfg, client, save_cfg
+
+PLAN_KEYS = ("plans", "plans_day", "plans_opened", "plan_offers_dismissed")
+
+_store = {"profile": None, "data": None}
+
+
+def _files():
+    return app._profile_files()
+
+
+def _pcfg():
+    """This profile's plan state (plans.json), loaded once per profile.
+    Main thread. The first load after 3.1.1 takes the plans in the old
+    shared config whose decks are in this collection."""
+    key = app._profile_key()
+    if _store["profile"] == key and _store["data"] is not None:
+        return _store["data"]
+    path = os.path.join(_files(), "plans.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        data = data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        if not mw.col:
+            return {}  # nothing to claim with yet; asked again once it's open
+        data = _migrate()
+        _store.update(profile=key, data=data)
+        _psave(data)
+    except Exception:
+        data = {}
+    _store.update(profile=key, data=data)
+    return data
+
+
+def _psave(data):
+    """Written whole, then swapped in (as wrap.json)."""
+    _store.update(profile=app._profile_key(), data=data)
+    path = os.path.join(_files(), "plans.json")
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _migrate():
+    """Until 3.1.1 plan state lived in the config every profile shares. Each
+    profile takes the plans that run on its decks, with the day's morning
+    and Undo if it takes any; the rest wait for their own profile. The
+    config keys go once nothing is left in them."""
+    c = cfg()
+    if not any(k in c for k in PLAN_KEYS):
+        return {}
+    old = c.get("plans") if isinstance(c.get("plans"), dict) else {}
+    mine = {pid: st for pid, st in old.items()
+            if isinstance(st, dict) and _deck_ok(mw.col, st.get("deck_id"))}
+    rest = {pid: st for pid, st in old.items() if pid not in mine}
+    data = {"plans": mine,
+            "plan_offers_dismissed": list(c.get("plan_offers_dismissed") or [])}
+    if mine:
+        for k in ("plans_day", "plans_opened"):
+            if k in c:
+                data[k] = c[k]
+    if rest:
+        c["plans"] = rest
+        if mine:
+            c.pop("plans_day", None)
+            c.pop("plans_opened", None)
+    else:
+        for k in PLAN_KEYS:
+            c.pop(k, None)
+    save_cfg(c)
+    return data
 
 
 def _today():
@@ -64,8 +150,36 @@ def new_state(col, plan, deck_id=None, swap=None):
         deck_id, swap = P.best_deck(col, plan["doc"])
     if deck_id is None:
         return None
-    return {"deck_id": int(deck_id), "swap": list(swap) if swap else None, "applied": {},
+    return {"deck_id": int(deck_id), "swap": list(swap) if swap else None, "applied": {}, "src": {},
             "seen_version": plan.get("version") or 0, "snapshot": P.snapshot(plan["doc"])}
+
+
+def skip_past(st, plan, today):
+    """A plan followed on another computer, first seen here: the units that
+    opened before today opened there (and came with the AnkiWeb sync), or
+    were skipped there on purpose. Only today's open here."""
+    sig = _sig(st)
+    applied = st.setdefault("applied", {})
+    for u in P.units(plan["doc"]):
+        if str(u.get("opens") or "9999") < today and u["id"] not in applied:
+            applied[u["id"]] = "skip:" + sig(u)
+    return st
+
+
+def _unit_cids(idx, st, u, deck, whole=False):
+    """The cards applying `u` opens: its match, or, when it was applied
+    before on this deck and the author changed it since, only the cards the
+    change adds (a card suspended since by hand, or by Anki, stays so)."""
+    cids = idx.match(u, _swap(st), deck)
+    was = (st.get("src") or {}).get(u["id"])
+    have = (st.get("applied") or {}).get(u["id"])
+    if whole or not was or not isinstance(have, str) or have.startswith("skip:"):
+        return cids
+    did, swap, tags, decks, cards = was
+    if did != st.get("deck_id") or list(swap or []) != list(st.get("swap") or []):
+        return cids  # another deck now: what had opened opens there too
+    old = idx.match({"tags": tags, "decks": decks, "cards": cards}, _swap(st), deck)
+    return cids - old
 
 
 def run(col, plan_list, state, today, mode=None, everything=False):
@@ -88,17 +202,19 @@ def run(col, plan_list, state, today, mode=None, everything=False):
             continue
         idx = P.DeckIndex(col, st["deck_id"])
         pnames, pcids = [], set()
+        src = st.setdefault("src", {})
         for u, how in items:
             if how == "open" and mode != "skip":
-                cids = idx.match(u, _swap(st), doc.get("deck", ""))
+                cids = idx.openable(_unit_cids(idx, st, u, doc.get("deck", ""), whole=everything))
                 applied[u["id"]] = sig(u)
-                if idx.suspended(cids):
+                src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+                if cids:
                     pnames.append(u.get("name") or "?")
                     pcids |= cids
             else:
                 applied[u["id"]] = "skip:" + sig(u)
         if pnames:
-            per[p["id"]] = [pnames, len(idx.suspended(pcids))]
+            per[p["id"]] = [pnames, len(pcids)]
             names += pnames
             all_cids |= pcids
     label = P.step_label(names) if names else ""
@@ -117,7 +233,7 @@ def waiting(col, plan, st, today):
     idx = P.DeckIndex(col, st["deck_id"])
     cids = set()
     for u in due:
-        cids |= idx.match(u, _swap(st), plan["doc"].get("deck", ""))
+        cids |= _unit_cids(idx, st, u, plan["doc"].get("deck", ""))
     return len(due), len(cids)
 
 
@@ -199,7 +315,7 @@ def offers_view(offers, squad_names, following_ids, dismissed):
 # ---- the glue (aqt) ----
 
 def _state_cfg(c=None):
-    c = cfg() if c is None else c
+    c = _pcfg() if c is None else c
     st = c.get("plans")
     return st if isinstance(st, dict) else {}
 
@@ -232,7 +348,7 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
     caller's toast), redraw."""
     if not mw.col:
         return None
-    c = cfg()
+    c = _pcfg()
     state = _state_cfg(c)
     today = _today()
     try:
@@ -243,7 +359,7 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
     c["plans"] = state
     if res["n"]:
         c["plans_opened"] = {"day": today, "label": res["label"], "per": res["per"]}
-    save_cfg(c)
+    _psave(c)
     if res["n"]:
         _after_change()
         if toast:
@@ -257,12 +373,15 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
     open what's due. Waits for the day's AnkiWeb sync when this profile
     syncs (the phone's reviews, and the other computer's opened cards,
     come in with it). fresh: the plans just came with the day's refresh,
-    so plans no longer followed are forgotten here. toast=False returns
-    the line for the caller's own toast (one tooltip replaces another)."""
+    so plans no longer followed are forgotten here, and what's due opens
+    even when the morning already ran today (it may have run on
+    yesterday's cached plans; what's applied doesn't open twice).
+    toast=False returns the line for the caller's own toast (one tooltip
+    replaces another)."""
     if not mw.col or not client().signed_in:
         return None
     try:
-        c = cfg()
+        c = _pcfg()
         state = _state_cfg(c)
         plan_list = followed()
         if fresh:
@@ -280,19 +399,18 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
                     changed = True
             if changed:
                 c["plans"] = state
-                save_cfg(c)
+                _psave(c)
         today = _today()
-        if awaiting_sync or c.get("plans_day") == today:
+        if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
         for p in plan_list:
             if p["id"] not in state:
                 st = new_state(mw.col, p)  # followed on another computer
                 if st:
-                    state[p["id"]] = st
-        c = cfg()
+                    state[p["id"]] = skip_past(st, p, today)
         c["plans"] = state
         c["plans_day"] = today
-        save_cfg(c)
+        _psave(c)
         return opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
     except Exception:
         traceback.print_exc()
@@ -332,11 +450,12 @@ def board_view(c):
     """{cards, offers} for the board, from cache. Main thread (one undo-queue
     look; no collection reads)."""
     plan_list = followed()
-    state = _state_cfg(c)
+    pc = _pcfg()
+    state = _state_cfg(pc)
     today = _state["labels"][0] if _state["labels"] else ""
     if not today:
         return {"cards": [], "offers": []}
-    opened = c.get("plans_opened") if isinstance(c.get("plans_opened"), dict) else {}
+    opened = pc.get("plans_opened") if isinstance(pc.get("plans_opened"), dict) else {}
     fresh_open = opened.get("day") == today
     undo = fresh_open and _undo_ok(opened.get("label"))
     prog = _state.get("plan_progress") or {}
@@ -348,7 +467,7 @@ def board_view(c):
     from .squads import _my_squads
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
-                         set(c.get("plan_offers_dismissed") or []))
+                         set(pc.get("plan_offers_dismissed") or []))
     return {"cards": cards, "offers": offers}
 
 
@@ -370,48 +489,61 @@ def on_message(cmd, parts):
         if offer:
             open_follow(code=offer.get("code") or "")
     elif cmd == "planofferx" and arg:
-        c = cfg()
-        c["plan_offers_dismissed"] = (list(c.get("plan_offers_dismissed") or []) + [arg])[-50:]
-        save_cfg(c)
-        app.swap(c)
+        pc = _pcfg()
+        pc["plan_offers_dismissed"] = (list(pc.get("plan_offers_dismissed") or []) + [arg])[-50:]
+        _psave(pc)
+        app.swap(cfg())
     else:
         return False
     return True
 
 
 def undo_morning():
-    """The board's Undo: Anki's own undo, only while the step is its latest."""
-    c = cfg()
-    opened = c.get("plans_opened") or {}
+    """The board's Undo: Anki's own undo, only while the step is its latest.
+    The card and the numbers follow once the undo has happened, and only
+    if it did."""
+    opened = _pcfg().get("plans_opened") or {}
     if not _undo_ok(opened.get("label")):
         tooltip("Anki has done something since. Use Edit › Undo.")
-        app.swap(c)
+        app.swap(cfg())
+        return
+
+    def done(_out=None):
+        # the units stay marked as applied: the next morning won't open them again
+        pc = _pcfg()
+        pc["plans_opened"] = {}
+        _psave(pc)
+        try:
+            mw.update_undo_actions()
+        except Exception:
+            pass
+        refresh_progress()
+        app.swap(cfg())
+
+    try:
+        from aqt.operations import CollectionOp
+    except ImportError:
+        CollectionOp = None
+    if CollectionOp is not None:
+        CollectionOp(mw, lambda col: col.undo()).success(done).run_in_background()
         return
     try:
-        from aqt.operations.collection import undo
-        undo(parent=mw)
+        mw.undo()  # an Anki without CollectionOp: undo runs here, now
     except Exception:
-        try:
-            mw.undo()
-        except Exception:
-            traceback.print_exc()
-            return
-    # the units stay marked as applied: the next morning won't open them again
-    c["plans_opened"] = {}
-    save_cfg(c)
-    refresh_progress()
-    app.swap(c)
+        traceback.print_exc()
+        return
+    done()
 
 
 def seen_change(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
-    c = cfg()
+    c = _pcfg()
     state = _state_cfg(c)
     if p and pid in state:
         state[pid].update(seen_version=p.get("version"), snapshot=P.snapshot(p["doc"]))
         c["plans"] = state
-        save_cfg(c)
-    app.swap(c)
+        _psave(c)
+    app.swap(cfg())
 
 
 def plan_menu(pid):
@@ -440,8 +572,7 @@ def open_everything(pid):
 
 
 def _ensure_deck(p):
-    c = cfg()
-    state = _state_cfg(c)
+    state = _state_cfg()
     if state.get(p["id"]) and _deck_ok(mw.col, state[p["id"]].get("deck_id")):
         return True
     change_deck(p["id"])
@@ -454,18 +585,19 @@ def change_deck(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None or not mw.col:
         return
-    from aqt.qt import QInputDialog
+    from .ui import ask_item
     choices = P.deck_choices(mw.col)
     if not choices:
         return
-    c = cfg()
+    c = _pcfg()
     state = _state_cfg(c)
     st = state.get(pid)
     best, _swap_guess = P.best_deck(mw.col, p["doc"], choices)
     current = st.get("deck_id") if st else best
     names = [n for _d, n in choices]
     at = next((i for i, (d, _n) in enumerate(choices) if d == current), 0)
-    name, ok = QInputDialog.getItem(mw, "Change deck", f"Run {p.get('name') or 'the plan'} on", names, at, False)
+    # plain text: the plan's name is the author's
+    name, ok = ask_item(mw, "Change deck", f"Run {p.get('name') or 'the plan'} on", names, at)
     if not ok:
         return
     did = next(d for d, n in choices if n == name)
@@ -480,7 +612,7 @@ def change_deck(pid):
     else:
         state[pid] = new_state(mw.col, p, did, swap)
     c["plans"] = state
-    save_cfg(c)
+    _psave(c)
     if p.get("paused"):
         refresh_progress()
     else:
@@ -535,13 +667,13 @@ def stop_following(pid):
         if not ok:
             tooltip("Couldn't reach Due Crew. Check your connection.")
             return
-        c = cfg()
-        state = _state_cfg(c)
+        pc = _pcfg()
+        state = _state_cfg(pc)
         state.pop(pid, None)
-        c["plans"] = state
-        save_cfg(c)
+        pc["plans"] = state
+        _psave(pc)
         _state.get("plan_progress", {}).pop(pid, None)
-        app.swap(c)
+        app.swap(cfg())
 
     _bg(lambda: cl.unfollow_plan(pid), done)
 
@@ -561,14 +693,19 @@ def open_follow(code=""):
 
 def on_followed(plan, deck_id, swap, late):
     """Main thread, after POST /plans/follow: this computer runs it on
-    `deck_id`; late is "open" (open what has opened) or "skip"."""
+    `deck_id`; late is "open" (open what has opened) or "skip". Following
+    again keeps what this computer already applied: only the deck changes."""
     cl = client()
     cl.remember_plan(plan)
-    c = cfg()
+    c = _pcfg()
     state = _state_cfg(c)
-    state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
+    st = state.get(plan["id"])
+    if st:
+        st.update(deck_id=int(deck_id), swap=list(swap) if swap else None)
+    else:
+        state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
     c["plans"] = state
-    save_cfg(c)
+    _psave(c)
     res = _open_now([plan], mode=late)
     if res is not None and not res["n"]:
         tooltip(f"Following {html.escape(plan.get('name') or 'the plan')}.")
@@ -586,7 +723,6 @@ def open_make():
 
 
 def site_base():
-    import os
     return (str(cfg().get("site_base") or "") or os.environ.get("DUE_CREW_SITE")
             or "https://duecrew.com").rstrip("/")
 
@@ -603,6 +739,15 @@ def browser_menu(browser, menu):
 
 
 def add_to_plan(browser):
+    table = getattr(browser, "table", None)
+    try:
+        notes_mode = bool(table is not None and hasattr(table, "is_notes_mode") and table.is_notes_mode())
+    except Exception:
+        notes_mode = False
+    if notes_mode:
+        # a note's row is all its cards; a plan takes the exact cards picked
+        tooltip("Switch the browser to Cards to add single cards to a plan.")
+        return
     try:
         cids = browser.selected_cards()
     except AttributeError:

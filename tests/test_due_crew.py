@@ -2831,10 +2831,10 @@ def test_plans_glue_v31():
     col = _plan_col()
     box = {"cfg": {}}
     toasts = []
-    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "client", "_today", "tooltip")}
+    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "_pcfg", "_psave", "client", "_today", "tooltip")}
     saved_col, saved_swap = F.mw.col, F.app.swap
-    F.cfg = lambda: box["cfg"]
-    F.save_cfg = lambda c: box.update(cfg=c)
+    F.cfg = F._pcfg = lambda: box["cfg"]
+    F.save_cfg = F._psave = lambda c: box.update(cfg=c)
     F.client = lambda: maya
     today = {"d": _day(0)}
     F._today = lambda: today["d"]
@@ -2843,7 +2843,9 @@ def test_plans_glue_v31():
     F.app.swap = lambda c: None
     labels = [_day(-i) for i in range(7)]
     try:
-        maya.follow_plan(code)
+        plan, _ = maya.follow_plan(code)
+        # followed here before its first date, and Anki not opened since
+        box["cfg"]["plans"] = {pid: F.new_state(col, plan)}
         n = len(store.log)
         light = maya.fetch_board(labels)
         full = maya.fetch_board(labels, with_decks=True)
@@ -2959,6 +2961,456 @@ def test_plans_glue_v31():
             setattr(F, k, v)
         F.mw.col, F.app.swap = saved_col, saved_swap
         _state["labels"], _state["plan_progress"] = [], {}
+
+
+# ---------------------------------------------------------------- 3.1.1: review fixes
+
+_PLAN_KEYS = ("plans", "plans_day", "plans_opened", "plan_offers_dismissed")
+
+
+class _PlanGlue:
+    """plan_flow's glue pointed at a test world: a shared add-on config
+    (the one every profile sees), per-profile folders, and a client and a
+    collection per profile. Restores everything on exit."""
+
+    def __init__(self, clients, cols, today=None):
+        from due_crew import plan_flow as F
+        self.F = F
+        self.glob = {"cfg": {}}
+        self.dirs = {name: tempfile.mkdtemp() for name in clients}
+        self.clients, self.cols = clients, cols
+        self.toasts = []
+        self.today = {"d": today or _day(0)}
+
+    def __enter__(self):
+        F = self.F
+        self.saved = {k: getattr(F, k, None) for k in ("cfg", "save_cfg", "_files", "client", "_today", "tooltip")}
+        self.saved_mw = (F.mw.col, F.mw.pm.name, F.app.swap)
+        F.cfg = lambda: self.glob["cfg"]
+        F.save_cfg = lambda c: self.glob.update(cfg=c)
+        F._files = lambda: self.dirs[F.mw.pm.name]
+        F.client = lambda: self.clients[F.mw.pm.name]
+        F._today = lambda: self.today["d"]
+        F.tooltip = lambda text, **kw: self.toasts.append(text)
+        F.app.swap = lambda c: None
+        self.forget()
+        self.profile(next(iter(self.clients)))
+        return self
+
+    def forget(self):
+        """Drop plan_flow's cache of this profile's file."""
+        if hasattr(self.F, "_store"):
+            self.F._store.update(profile=None, data=None)
+
+    def state(self):
+        """This profile's plan state (before 3.1.1: the shared config)."""
+        return self.F._pcfg() if hasattr(self.F, "_pcfg") else self.glob["cfg"]
+
+    def profile(self, name):
+        self.F.mw.pm.name = name
+        self.F.mw.col = self.cols[name]
+
+    def __exit__(self, *exc):
+        F = self.F
+        for k, v in self.saved.items():
+            if v is None:
+                delattr(F, k)
+            else:
+                setattr(F, k, v)
+        F.mw.col, F.mw.pm.name, F.app.swap = self.saved_mw
+        self.forget()
+        from due_crew.app import _state
+        _state["labels"], _state["plan_progress"] = [], {}
+        return False
+
+
+def test_plans_per_profile_v311():
+    """3.1.1: plan state is the profile's, not the add-on's. Profile B's
+    fresh board used to prune A's plans (A then reopened every past unit),
+    and B's morning set the day for A. The old shared state moves once, to
+    the profile whose decks it names."""
+    store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya, kai = new_client(store, "maya", "Maya"), new_client(store, "kai", "Kai")
+    col_b = _plan_col()
+    col_b.decks = fakes.FakeDecks({30: "Biochem"})
+    with _PlanGlue({"A": maya, "B": kai}, {"A": _plan_col(), "B": col_b}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        col_a = g.cols["A"]
+        g.profile("B")
+        F.maybe_morning(False, fresh=True)  # B follows nothing
+        g.profile("A")
+        st = g.state().get("plans", {}).get(pid)
+        check("profiles: B's fresh board leaves A's plan state alone",
+              bool(st) and st["applied"].get("hf") and st["applied"].get("ar"), str(st))
+        check("profiles: no plan state in the config every profile shares",
+              not any(k in g.glob["cfg"] for k in _PLAN_KEYS), str(g.glob["cfg"]))
+        col_a.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = 1")  # suspended again by hand
+        g.today["d"] = _day(1)
+        maya.fetch_board([_day(1)], with_decks=True)
+        F.maybe_morning(False, fresh=True)
+        check("profiles: A's next morning doesn't reopen what it opened before", 1 not in _open(col_a))
+
+    # the old shared config: each profile takes the plans on its own decks, once
+    with _PlanGlue({"C": maya, "D": kai}, {"C": _plan_col(), "D": col_b}) as g:
+        F = g.F
+        g.glob["cfg"] = {"plans": {"pa": {"deck_id": 10, "applied": {"hf": "x"}},
+                                   "pb": {"deck_id": 30, "applied": {}}},
+                         "plans_day": _day(0), "plans_opened": {"day": _day(0), "label": "L"},
+                         "plan_offers_dismissed": ["o1"], "sort": "reviews"}
+        c_state = g.state()
+        check("migrate: a profile takes the plans on its decks, with the day and the Undo",
+              list(c_state["plans"]) == ["pa"] and c_state.get("plans_day") == _day(0)
+              and c_state.get("plans_opened", {}).get("label") == "L"
+              and c_state.get("plan_offers_dismissed") == ["o1"], str(c_state))
+        check("migrate: the rest wait in the config for their own profile",
+              list(g.glob["cfg"].get("plans") or {}) == ["pb"] and "plans_day" not in g.glob["cfg"])
+        g.profile("D")
+        d_state = g.state()
+        check("migrate: the other profile takes its own, and the config lets go",
+              list(d_state["plans"]) == ["pb"] and "plans_day" not in d_state
+              and not any(k in g.glob["cfg"] for k in _PLAN_KEYS) and g.glob["cfg"].get("sort") == "reviews",
+              f"{d_state} {g.glob['cfg']}")
+        g.profile("C")
+        g.forget()
+        check("migrate: once; the profile's file is kept", list(g.state()["plans"]) == ["pa"])
+
+
+def test_plans_followed_elsewhere_v311():
+    """3.1.1: a plan first seen here (followed on another computer, or on
+    the site) opens today's unit only; what opened before came with the
+    AnkiWeb sync, or was skipped there on purpose. Following again here
+    keeps what was applied."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        F, col = g.F, g.cols["A"]
+        plan, _ = maya.follow_plan(code)
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.maybe_morning(False, fresh=True)
+        st = g.state()["plans"][pid]
+        check("elsewhere: only today's unit opens", _open(col) == {3, 8}, str(_open(col)))
+        check("elsewhere: the units before today are marked skipped", st["applied"]["hf"].startswith("skip:"))
+        F.on_followed(plan, 10, None, "open")
+        check("follow again: what was applied here is kept (the skipped unit stays shut)",
+              _open(col) == {3, 8} and g.state()["plans"][pid]["applied"]["hf"].startswith("skip:"),
+              str(_open(col)))
+
+
+def test_plans_changed_unit_v311():
+    """3.1.1: when the author changes a unit already opened here, only the
+    cards the change adds open. A card suspended since (by hand, or a
+    leech Anki suspended) stays suspended; a leech never opens."""
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    plan, _ = new_client(store, "maya", "Maya").follow_plan(code)
+    col = _plan_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = -1 WHERE id = 1")                          # by hand
+    fakes.add_card(conn, 12, did=10, queue=-1, tags="Step1::Cardio::Heart_failure leech")  # Anki's leech
+    fakes.add_card(conn, 13, did=10, queue=-1, tags="Step1::Cardiology leech")
+    units = [dict(u, tags=u["tags"] + ["Step1::Cardiology"]) if u["id"] == "hf" else u
+             for u in _plan_units()]
+    changed = dict(plan, doc=dict(plan["doc"], units=units))
+    check("changed unit: what's waiting is only what the change adds",
+          F.waiting(col, changed, state[pid], _day(1)) == (1, 2))
+    res = F.run(col, [changed], state, _day(1))
+    check("changed unit: only the card it adds opens", 9 in _open(col) and res["n"] == 1, f"{res} {_open(col)}")
+    check("changed unit: a card suspended since stays suspended", 1 not in _open(col))
+    check("changed unit: a leech never opens", 12 not in _open(col) and 13 not in _open(col))
+    check("open cards: never a leech, even asked directly", P.open_cards(col, {12, 13}, "x") == 0)
+    F.run(col, [changed], state, _day(1), everything=True)
+    check("open everything: still no leech", 12 not in _open(col) and 13 not in _open(col) and 1 in _open(col))
+
+
+def test_plans_fresh_after_cached_morning_v311():
+    """3.1.1: the morning at the sync can run on yesterday's cached plans;
+    the day's fresh ones, arriving after, still get their look."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        F, col = g.F, g.cols["A"]
+        plan, _ = maya.follow_plan(code)
+        maya.session["plans"] = []           # the cache: from before the follow
+        F.maybe_morning(False)               # at the sync, before the refresh
+        check("fresh: the morning ran on the cache, and found nothing", g.state().get("plans_day") == _day(0)
+              and _open(col) == {8})
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.maybe_morning(False, fresh=True)   # the refresh
+        check("fresh: the day's plans still open what's due today", 3 in _open(col), str(_open(col)))
+        n = len(col.undo_steps)
+        F.maybe_morning(False, fresh=True)
+        check("fresh: a second look opens nothing twice, and makes no step", len(col.undo_steps) == n)
+
+
+def test_plans_undo_waits_v311():
+    """3.1.1: the board's Undo clears the card and counts only once Anki's
+    undo has actually happened (a CollectionOp, run in the background)."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    pending = []
+
+    class Op:
+        def __init__(self, parent, op):
+            self.op, self.ok = op, None
+
+        def success(self, fn):
+            self.ok = fn
+            return self
+
+        def failure(self, fn):
+            return self
+
+        def run_in_background(self):
+            pending.append(self)
+
+    ops = types.ModuleType("aqt.operations")
+    ops.CollectionOp = Op
+    coll = types.ModuleType("aqt.operations.collection")
+    coll.undo = lambda parent=None: pending.append(None)
+    sys.modules["aqt.operations"], sys.modules["aqt.operations.collection"] = ops, coll
+    try:
+        with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+            F, col = g.F, g.cols["A"]
+            plan, _ = maya.follow_plan(code)
+            F.on_followed(plan, 10, None, "open")
+            check("undo: set up", g.state().get("plans_opened", {}).get("label") == "Due Crew: open 2 dates")
+            F.undo_morning()
+            check("undo: nothing is cleared before the undo has happened",
+                  bool(g.state().get("plans_opened")) and 1 in _open(col))
+            op = next((p for p in pending if p is not None), None)
+            if op is not None:
+                op.ok(op.op(col))
+            check("undo: once it has, the step's cards are back and the card forgets it",
+                  op is not None and 1 not in _open(col) and not g.state().get("plans_opened")
+                  and F._state["plan_progress"][pid]["hf"][0] == 0)
+    finally:
+        sys.modules.pop("aqt.operations", None)
+        sys.modules.pop("aqt.operations.collection", None)
+
+
+def test_plans_notes_mode_v311():
+    """3.1.1: Add to a plan in the browser's Notes mode would take every
+    card of the picked notes; it asks for Cards mode instead."""
+    maya = new_client(world({"maya": "Maya"}), "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        asked = []
+        browser = types.SimpleNamespace(table=types.SimpleNamespace(is_notes_mode=lambda: True),
+                                        selected_cards=lambda: asked.append(1) or [5])
+        try:
+            g.F.add_to_plan(browser)
+        except Exception:
+            pass
+        check("notes mode: no cards are taken, and it says to switch to Cards",
+              not asked and g.toasts and "Cards" in g.toasts[-1], str(g.toasts))
+
+
+def test_restore_only_from_2x_v311():
+    """3.1.1: a 3.x session that signs in again (a 401) isn't a 2.x one: the
+    restore would re-add people removed elsewhere and rejoin squads. And a
+    code this computer remembers from 2.x never replaces the account's."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    fresh = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    fresh.request_code("sam@example.com")
+    fresh.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("3.x: a first sign-in here counts as restored", fresh.session.get("restored_to") == fresh.base)
+    old3 = new_client(store, "sam", "Sammy")  # signed in before 3.1.1: no restored_to
+    old3.fetch_board([TODAY.isoformat()])
+    check("3.x: a board fetch marks the session this server's",
+          old3.session.get("friend_ids") == ["dre"] and old3.session.get("restored_to") == old3.base)
+    store.tokens.clear()
+    try:
+        old3.fetch_board([TODAY.isoformat()])
+    except shapes.TransportError:
+        pass
+    old3.request_code("sam@example.com")
+    old3.verify_code("sam@example.com", store.otp["sam@example.com"])
+    check("3.x: signing in again after a 401 doesn't rerun the 2.x restore",
+          not old3.session.get("needs_restore") and old3.session_dead is False)
+
+    store.add_user("kai", "Kai", code="NEW777")  # regenerated since 2.x
+    kai = new_client(store, "kai", "Kai")
+    kai.session.update(needs_restore=True, friend_code="OLD999")
+    kai.push([TODAY.isoformat()], {})
+    check("restore: a remembered 2.x code doesn't replace the account's",
+          store.users["kai"]["code"] == "NEW777" and store.codes.get("OLD999") != "kai")
+
+
+def test_sign_in_keeps_anki_synced_v311():
+    """3.1.1: signing in or out mid-session doesn't forget that AnkiWeb has
+    synced (it's about the collection); the plans' morning isn't held back."""
+    import due_crew as dc
+    from due_crew.app import _state
+    saved = sys.modules.get("due_crew.ui.auth_dialog")
+    fake = types.ModuleType("due_crew.ui.auth_dialog")
+
+    class Dlg:
+        def __init__(self, *a, **k):
+            self.user, self.joined = ("sam", "Sam"), False
+
+        def exec(self):
+            return True
+    fake.AuthDialog = Dlg
+    sys.modules["due_crew.ui.auth_dialog"] = fake
+    saved_fns = (dc.client, dc._on_sync_done)
+    signed_in = new_client(world({"sam": "Sam"}), "sam", "Sam")
+    dc.client, dc._on_sync_done = (lambda: signed_in), (lambda **kw: None)
+    try:
+        _state["anki_synced"] = True
+        dc._on_signed_out()
+        out_ok = _state["anki_synced"] is True
+        _state["anki_synced"] = True
+        try:
+            dc.open_auth()
+        except Exception:
+            pass
+        check("sign-in: AnkiWeb having synced survives signing out and in",
+              out_ok and _state["anki_synced"] is True)
+    finally:
+        if saved is not None:
+            sys.modules["due_crew.ui.auth_dialog"] = saved
+        else:
+            sys.modules.pop("due_crew.ui.auth_dialog", None)
+        dc.client, dc._on_sync_done = saved_fns
+        _state["anki_synced"] = False
+
+
+def test_refresh_generation_v311():
+    """3.1.1: a refresh still running when the profile switches doesn't
+    land in the next profile, and doesn't hold back that profile's own."""
+    import due_crew as dc
+    from due_crew import app as appmod
+    from due_crew.app import _state
+    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam, eve = new_client(store, "sam", "Sammy"), new_client(store, "eve", "Eve")
+    jobs = []
+
+    class Thread:
+        def __init__(self, target, daemon=None):
+            self.target = target
+
+        def start(self):
+            jobs.append(self.target)
+
+    who = {"cl": sam}
+    saved = (dc.client, dc.threading, dc.account.ensure, dc._menu_done, dc.mw.col,
+             dc.plan_flow.maybe_morning, dc._update_wrap, dc._update_returns)
+    dc.client = lambda: who["cl"]
+    dc.threading = types.SimpleNamespace(Thread=Thread)
+    dc.account.ensure = lambda *a, **k: None
+    dc._menu_done = True
+    dc.plan_flow.maybe_morning = lambda *a, **k: None
+    dc._update_wrap = lambda *a, **k: None
+    dc._update_returns = lambda *a, **k: []
+    dc.mw.col = make_user_col([TODAY])
+    try:
+        dc._reset_runtime()
+        dc.refresh_board()
+        old_job = jobs[-1] if jobs else None
+        who["cl"] = eve
+        n = len(jobs)
+        dc._on_profile_open()
+        check("profile switch: the new profile's first refresh isn't held back by the old one's",
+              len(jobs) == n + 1)
+        if old_job:
+            old_job()
+        check("profile switch: the old profile's board doesn't land in the new one",
+              _state["entries"] is None and _state["my_code"] == "", str(_state["entries"])[:120])
+        if len(jobs) > n:
+            jobs[n]()
+        check("profile switch: the new profile's own board does",
+              bool(_state["entries"]) and _state["entries"][0]["user_id"] == "eve")
+        gen = appmod.generation
+        dc._on_profile_close()
+        check("profile close: nothing in flight commits after it", not dc._current(gen))
+    finally:
+        (dc.client, dc.threading, dc.account.ensure, dc._menu_done, dc.mw.col,
+         dc.plan_flow.maybe_morning, dc._update_wrap, dc._update_returns) = saved
+        dc._closing = False
+        dc._fetching = False
+        dc._reset_runtime()
+
+
+def test_morning_not_while_closing_v311():
+    """3.1.1: Anki's close runs its own AnkiWeb sync after profile_will_close;
+    the plans' morning doesn't run on it."""
+    import due_crew as dc
+    ran = []
+    saved = dc.plan_flow.maybe_morning
+    dc.plan_flow.maybe_morning = lambda *a, **k: ran.append(a)
+    try:
+        dc._closing = True
+        dc._sync_failed()
+        dc._morning_fallback()
+        check("closing: no morning", ran == [], str(ran))
+    finally:
+        dc.plan_flow.maybe_morning = saved
+        dc._closing = False
+
+
+def test_plain_prompts_v311():
+    """3.1.1: prompts that carry a crewmate's name are plain-text labels."""
+    from due_crew import together, ui
+    got = []
+    saved = getattr(ui, "ask_text", None)
+    ui.ask_text = lambda parent, title, label, text="": (got.append(label), ("", False))[1]
+    try:
+        try:
+            together._ask_line("Good-luck card", "A line for <b>Dre</b>")
+        except Exception:
+            pass
+        check("prompts: a crewmate's name goes through the plain-text prompt", got == ["A line for <b>Dre</b>"])
+    finally:
+        if saved is not None:
+            ui.ask_text = saved
+
+
+def test_anki_day_labels_v311():
+    """3.1.1: the Anki day before the first refresh (account._today), and
+    day labels across a DST change with rollover at midnight."""
+    import time as _time
+    from due_crew import account
+    from due_crew.app import _state
+    saved_col = account.mw.col
+    account.mw.col = make_user_col([])
+    _state["labels"] = []
+    try:
+        check("account: before the first refresh, today is Anki's day", account._today() == TODAY.isoformat())
+    finally:
+        account.mw.col = saved_col
+    if not hasattr(_time, "tzset"):
+        return
+    old_tz = os.environ.get("TZ")
+    os.environ["TZ"] = "America/New_York"
+    _time.tzset()
+    try:
+        # clocks go forward on Sun 8 Mar 2026: a 23-hour day
+        cutoff = int(datetime.datetime(2026, 3, 9, 0, 0).timestamp())
+        q = StatsQueries(types.SimpleNamespace(sched=types.SimpleNamespace(day_cutoff=cutoff)))
+        got = [q.day_label(i) for i in (-1, 0, 1, 2)]
+        check("day labels: rollover at midnight, across the spring DST change",
+              got == ["2026-03-09", "2026-03-08", "2026-03-07", "2026-03-06"], str(got))
+        cutoff = int(datetime.datetime(2026, 11, 2, 0, 0).timestamp())  # back on Sun 1 Nov
+        q = StatsQueries(types.SimpleNamespace(sched=types.SimpleNamespace(day_cutoff=cutoff)))
+        check("day labels: and the autumn one", [q.day_label(i) for i in (0, 1)] == ["2026-11-01", "2026-10-31"])
+        cutoff = int(datetime.datetime(2026, 3, 9, 4, 0).timestamp())
+        q = StatsQueries(types.SimpleNamespace(sched=types.SimpleNamespace(day_cutoff=cutoff)))
+        check("day labels: unchanged at a 4am rollover", q.day_label(0) == "2026-03-08")
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        _time.tzset()
 
 
 def main():

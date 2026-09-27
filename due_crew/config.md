@@ -26,7 +26,8 @@ Raw keys, for reference:
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 | `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
-| `plans`, `plans_day`, `plans_opened`, `plan_offers_dismissed` | kept by the add-on | Plans you follow on this computer: the deck each runs on and which dates have opened. Removing them never suspends anything; the next morning may open a date again |
 
 Sign-in state (account, name, tokens) lives in `user_files/<profile>/`,
-not here — restoring defaults never signs you out.
+not here — restoring defaults never signs you out. So do the plans you
+follow on this profile (`plans.json`: the deck each runs on and which
+dates have opened).

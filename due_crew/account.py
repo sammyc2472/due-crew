@@ -129,7 +129,17 @@ _pending = []
 
 
 def _today():
-    return _state["labels"][0] if _state["labels"] else datetime.date.today().isoformat()
+    """The Anki day: before the first refresh too, so the hours between
+    midnight and the rollover don't read as a new day (one GET /settings)."""
+    if _state["labels"]:
+        return _state["labels"][0]
+    if mw.col:
+        try:
+            from .stats.queries import StatsQueries
+            return StatsQueries(mw.col).day_label(0)
+        except Exception:
+            pass
+    return datetime.date.today().isoformat()
 
 
 def _deck_name(did):

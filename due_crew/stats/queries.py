@@ -18,8 +18,11 @@ class StatsQueries:
         return end - 86400000, end
 
     def day_label(self, days_ago=0):
-        start, _ = self.day_bounds_ms(days_ago)
-        return datetime.date.fromtimestamp(start / 1000).isoformat()
+        """The Anki day `days_ago` before today, as a date: the day before
+        the cutoff's date. Counted in dates, not 86400s, so a 23- or 25-hour
+        day (DST) with rollover at midnight still names the right day."""
+        cutoff = datetime.date.fromtimestamp(self._cutoff_s())
+        return (cutoff - datetime.timedelta(days=days_ago + 1)).isoformat()
 
     def reviews_for_day(self, days_ago=0):
         start, end = self.day_bounds_ms(days_ago)
