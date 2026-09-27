@@ -246,3 +246,48 @@ the same slices for everyone, in the deck's order. With a schedule of my
 own, my schedule spreads it as any date. `schedule.quota` does this for a
 follower without a schedule, and the morning runs such a plan through the
 3.2 spread. A 3.2.x add-on drops `even` and opens the date whole.
+
+## 3.3: following is simpler, and plans are made together
+
+### Following: do what's on the day
+
+Sam's call: a follower doesn't set study days or minutes. Each date opens
+on its day, whole, or in slices when the author split it evenly over the
+plan's study days (`pace.days`). The plan card shows today's new cards,
+reviews due and minutes left, on track or behind, from the plan's own
+days. A 3.2 schedule keeps working (Plan ▾ › My schedule… changes or
+takes it off); nothing asks for a new one. The board has a Plans tab while
+I follow a plan: a card each, one bar a date, "crew 3/6".
+
+### The tree
+
+The add-on sends the deck's tags nested, each name once (`plans.nest`):
+the most useful first (tags that aren't question-bank ids, shallow before
+deep, big before small) while it fits 1.4 MB; the Worker takes up to
+1.5 MB for `PUT /plans/trees` only. A 3.2 server gets the old lists.
+
+### Together (save-based; migration 0006)
+
+```
+plan_editors (plan, uid, at)                     PK (plan, uid)
+plan_notes   (id, plan, uid, day, text, at)      index (plan, day)
+plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
+```
+
+- **Co-authors**: the owner adds them from their crew (mutual friends);
+  they edit everything but the audience, the co-authors and deleting the
+  plan, and can leave. Up to 10.
+- **Notes on a day**: anyone in the plan (authors and followers) writes a
+  line on a day; the writer or an author takes it down. They show as 💬 on
+  the calendar and in the day's panel. This is also how a follower
+  suggests a change.
+- **History**: every save logs who, a few words the site writes ("moved
+  Heme 2 to Tue 6 Oct"), and the doc it replaced; the last 30 stay. The
+  latest can be undone (itself a save, so it can be undone too).
+- **Two authors at once**: a save that meets a newer version merges in
+  the page: my changes (against what I loaded) go onto theirs, date by
+  date, then save again. No live connection, nothing running when nobody
+  has the plan open.
+- `/plans/{id}` is the one page: authors get Calendar, As text, Progress,
+  History (and the owner Settings); a follower gets the calendar, their
+  on-track line and the notes.

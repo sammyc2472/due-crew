@@ -87,6 +87,13 @@ plan I follow carries my schedule and my progress. 3.3: a date may be
 `even` (split evenly from its opens to its due date, which must be later),
 and the doc may carry the builder's `pace: {mode: "end" | "daily" |
 "placed", days: [7 of 0/1], daily?, cover?: ["tag:…" | "deck:…"]}`.
+3.3 together: `role` and `editors` on a plan's view; `PUT /plans/{id}` for
+the owner and co-authors (with an optional `summary` for the history);
+`POST /plans/{id}/editors {uid}` and `DELETE /plans/{id}/editors/{uid}`;
+`GET/POST /plans/{id}/notes` and `DELETE /plans/{id}/notes/{nid}`;
+`GET /plans/{id}/log` and `POST /plans/{id}/undo {version}` (the latest
+save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
+`GET /plans/trees?deck=` returns that deck's.
 
 ### Squads
 

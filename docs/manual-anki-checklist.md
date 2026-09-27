@@ -276,3 +276,12 @@ deck both share (Settings › Shared decks).
 - [ ] Plan next week: only next Monday to Sunday fills. Save; Maya (no schedule) gets an even date's cards a slice a morning, not all at once.
 - [ ] As text: Copy the prompt, paste it into an AI with a syllabus, paste the answer back, Read it: the preview lists each date; a made-up tag says not found; a "# Pick in Anki" line shows under To pick in Anki. Replace, Save.
 - [ ] On a phone: the week shows as a list of days; What to cover folds.
+
+### 3.3: following, the Plans tab, together
+
+- [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
+- [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
+- [ ] Site, as the owner: + Co-author lists your crew; pick one. They see the plan under Yours (with you), can edit and save, can't see Settings. Remove them with ×.
+- [ ] A follower opens the plan on the site: the calendar, read-only, with 💬 on days with notes; click a day, add a note; the author sees it and can take it down.
+- [ ] History: each save with who and what; Undo on the latest puts it back.
+- [ ] Two authors save the same plan from two browsers: the second says "Saved, with the other changes kept" and both changes are there.
