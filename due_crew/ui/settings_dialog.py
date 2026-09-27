@@ -24,7 +24,7 @@ from . import _night, attach_alive, confirm, danger, run_bg
 DEFAULTS = {
     "show_leaderboard": True, "period": "today", "sort": "reviews",
     "show_stale": True, "sync_notifications": True,
-    "theme": "auto", "compact": False, "show_last_active": True,
+    "theme": "auto", "compact": False,
     "highlight_me": True, "share_reviews": True, "share_time": True,
     "share_retention": True, "share_streak": True, "share_heatmap": True,
     "show_up": False,
@@ -33,7 +33,7 @@ DEFAULTS = {
     "away_from": "", "away_to": "", "room_chip_side": "right",
 }
 # what Reset Board puts back: the Board tab, and never anything on Privacy
-BOARD_KEYS = ("show_leaderboard", "show_stale", "show_last_active", "sync_notifications",
+BOARD_KEYS = ("show_leaderboard", "show_stale", "sync_notifications",
               "theme", "accent", "compact", "highlight_me", "crew_label", "room_chip_side")
 TABS = ("you", "board", "privacy")
 
@@ -112,9 +112,12 @@ class SettingsDialog(QDialog):
     def _shrink(self):
         # QTabWidget's sizeHint still spans every page; its minimum hint
         # follows the Ignored policies above, so size to that
-        self.layout().activate()
-        # +12: wrapped notes report a hint a hair short of their last line
-        self.resize(self.width(), self.minimumSizeHint().height() + 12)
+        lay = self.layout()
+        lay.activate()
+        # wrapped notes need their height at this width, which the minimum
+        # hint doesn't know (two notes on Privacy came out squeezed)
+        want = max(self.minimumSizeHint().height(), lay.totalHeightForWidth(self.width()))
+        self.resize(self.width(), want + 6)
 
     @staticmethod
     def _note(lay, text, indent=0):
@@ -157,39 +160,36 @@ class SettingsDialog(QDialog):
             lay.addStretch()
             return
 
-        who = QHBoxLayout()
+        # 3.4 review, H8: me in one block, then what I can do, no gaps
         self.who_label = QLabel(self._who_text())
-        who.addWidget(self.who_label)
-        who.addStretch()
-        if self.edit_emoji is not None:
-            emoji = QPushButton("Emoji…")
-            emoji.setToolTip("In front of your name, for your crew and squads")
-            emoji.clicked.connect(self._emoji)
-            who.addWidget(emoji)
-        rename = QPushButton("Name…")
-        rename.clicked.connect(self._rename)
-        who.addWidget(rename)
-        lay.addLayout(who)
-
+        lay.addWidget(self.who_label)
         if self.edit_status is not None:
-            srow = QHBoxLayout()
             self.status_label = QLabel()
             self.status_label.setTextFormat(Qt.TextFormat.PlainText)
             self.status_label.setWordWrap(True)
             self._show_status()
-            srow.addWidget(self.status_label, 1)
+            lay.addWidget(self.status_label)
+        mine = QHBoxLayout()
+        rename = QPushButton("Name…")
+        rename.clicked.connect(self._rename)
+        mine.addWidget(rename)
+        if self.edit_emoji is not None:
+            emoji = QPushButton("Emoji…")
+            emoji.setToolTip("In front of your name, for your crew and squads")
+            emoji.clicked.connect(self._emoji)
+            mine.addWidget(emoji)
+        if self.edit_status is not None:
             status = QPushButton("Status…")
             status.setToolTip("One line under your name on Today, for your crew")
             status.clicked.connect(self._status)
-            srow.addWidget(status)
-            lay.addLayout(srow)
+            mine.addWidget(status)
+        mine.addStretch()
+        lay.addLayout(mine)
         self.sync_label = QLabel(self._sync_line())
         self.sync_label.setStyleSheet("font-size: 11px;")
         lay.addWidget(self.sync_label)
 
-        lay.addSpacing(6)
-        self._rule(lay)
-        lay.addWidget(QLabel("<b>Your crew</b>"))
+        lay.addSpacing(8)
         row = QHBoxLayout()
         for label, opener in (("Friends…", self.open_friends),
                               ("Squads…", self.open_squads),
@@ -202,7 +202,7 @@ class SettingsDialog(QDialog):
         row.addStretch()
         lay.addLayout(row)
 
-        lay.addSpacing(6)
+        lay.addStretch()  # whatever height the tab has goes here, not between the rows
         self._rule(lay)
         bottom = QHBoxLayout()
         out = QPushButton("Sign Out")
@@ -360,7 +360,6 @@ class SettingsDialog(QDialog):
         lay.addWidget(QLabel("<b>What it shows</b>"))
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
-        self._check(lay, "show_last_active", 'Show "last active" next to names')
         self._check(lay, "sync_notifications", "Tell me when my crew studies")
         lay.addSpacing(6)
         lay.addWidget(QLabel("<b>How it looks</b>"))

@@ -267,3 +267,41 @@ deck both share (Settings › Shared decks).
 - [ ] Admin → A notice: post "Testing a notice" with https://duecrew.com as the link. It's under Showing now. In Anki (3.2.1), Refresh: 📣 Testing a notice · More · × on top of every tab. More opens the link in the browser; × hides it, and it stays hidden after a restart.
 - [ ] Post one "only to add-ons older than 3.2.1": a 3.2.1 board doesn't show it. Take down: the next refresh drops it.
 - [ ] A link that isn't https is refused with a plain message.
+
+### 3.3: the calendar builder
+
+- [ ] Anki: Make a plan from a deck… opens the site on the builder. Calendar tab: the left panel lists every tag readably with the raw tag under it; By resource / By system / Other tags / Subdecks when the deck has them. Search finds a tag by its raw or readable name.
+- [ ] Tick two chapters, choose New cards a day (150), Lay it out: the days fill in order, big chapters split by their tags or evenly (a green edge, "1/3"), nothing on days off (untick S S) or in a catch-up week.
+- [ ] Drag a chip to another day; drag a tag from the left onto a day; click a day: its panel on the right (name, Split…, ×, checkpoint, move). A heavy day shows the amber note with Split.
+- [ ] Plan next week: only next Monday to Sunday fills. Save; Maya (no schedule) gets an even date's cards a slice a morning, not all at once.
+- [ ] As text: Copy the prompt, paste it into an AI with a syllabus, paste the answer back, Read it: the preview lists each date; a made-up tag says not found; a "# Pick in Anki" line shows under To pick in Anki. Replace, Save.
+- [ ] On a phone: the week shows as a list of days; What to cover folds.
+
+### 3.3: following, the Plans tab, together
+
+- [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
+- [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
+- [ ] Site, as the owner: + Co-author lists your crew; pick one. They see the plan under Yours (with you), can edit and save, can't see Settings. Remove them with ×.
+- [ ] A follower opens the plan on the site: the calendar, read-only, with 💬 on days with notes; click a day, add a note; the author sees it and can take it down.
+- [ ] History: each save with who and what; Undo on the latest puts it back.
+- [ ] Two authors save the same plan from two browsers: the second says "Saved, with the other changes kept" and both changes are there.
+
+### 3.3: a teacher and a class
+
+- [ ] A deck with no tags: Make a plan opens its calendar straight away; tick the deck, Fill the calendar: 20 a day in the deck's order.
+- [ ] A student imports the deck (all cards active) and follows: Follow shows "Hold back N cards of later dates until their day", checked. After Follow, only today's date is active; Edit › Undo undoes the hold. The next date opens on its morning. Stop following: everything held opens again.
+- [ ] Not signed in: Make a plan / Follow a plan open the sign-in, then carry on.
+- [ ] The plan's link in a private window: three steps, each with Copy.
+
+### 3.3: a class through Step (C1–C5)
+
+- [ ] C1: set the deck's New cards/day to 20 and follow a plan with 60 today: the card says "Anki shows 20 new a day in this deck; today has 60" with Raise to 60. Click: Deck Options shows 60 (a shared preset: this deck now has its own "(Due Crew)" copy; the others still 20). Edit › Undo puts it back.
+- [ ] C2: Plan ▾ › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
+- [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
+- [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
+- [ ] C5: rename a tag in a follower's copy (like a new AnKing): the date still opens its cards, and the card says the tags differ, with OK.
+
+### 3.4: search counts, calendar
+
+- [ ] Paste a search on a day on the site: "counted in your Anki soon". Refresh Anki (the day's first refresh, or tomorrow): the site shows its count; a search that finds nothing says so.
+- [ ] Add to calendar › Google Calendar: Google offers to add "Step 1"; each date shows as an all-day event. Apple Calendar: the Calendar app subscribes. Move a date on the site: the calendar follows within a few hours.

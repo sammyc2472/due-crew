@@ -26,6 +26,7 @@ import takes `Authorization: Bearer <token>`.
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
 | `GET /auth/me` | `{uid, email, name, emoji}`. |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
+| `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/` or `/p/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
 | `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
@@ -44,7 +45,7 @@ import takes `Authorization: Bearer <token>`.
 | | |
 |---|---|
 | `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?}`. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
-| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 400 days kept, mine only). |
+| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each, 100,000 kept a person), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 400 days kept, mine only). |
 | `POST /tips/helped {guid, from, helped?}` | 3.2: "This helped" on a mutual friend's tip. It orders tips (the most helpful first); nobody sees a count. |
 | `GET /log` | 3.2: my log, for the site. Mine only. |
 | `GET` / `POST /admin/notices {text, link?, below?, days?}`, `DELETE /admin/notices/{id}` | 3.2.1: the admin's notice (at most 200 characters, an https link, only to add-ons older than `below`, 14 days unless said). `GET /board` carries the newest live one for the asking add-on's version as `notice: {id, text, link}`. |
@@ -69,8 +70,9 @@ import takes `Authorization: Bearer <token>`.
 | `DELETE /friends/{uid}` | Their reads of my numbers end with this request. |
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
+| `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
-| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card, for mutual friends stuck on it. |
+| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card (5,000 a person), for mutual friends stuck on it. |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |
 | `POST /knocks/{to} {squad}` | Only between two members of that squad. |
 | `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
@@ -83,7 +85,34 @@ follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
 `plans: {id: {unitId: [opened, seen, total]}}`. 3.2: a plan's doc may have
 `end`, `phases: {catchup, taper}` and a date's `check` (a checkpoint); a
 follow may carry my `sched: {start?, days, minutes}`, and my own view of a
-plan I follow carries my schedule and my progress.
+plan I follow carries my schedule and my progress. 3.3: a date may be
+`even` (split evenly from its opens to its due date, which must be later),
+and the doc may carry the builder's `pace: {mode: "end" | "daily" |
+"placed", days: [7 of 0/1], daily?, cover?: ["tag:…" | "deck:…"]}`.
+3.3 together: `role` and `editors` on a plan's view; `PUT /plans/{id}` for
+the owner and co-authors (with an optional `summary` for the history);
+`POST /plans/{id}/editors {uid}` and `DELETE /plans/{id}/editors/{uid}`;
+`GET/POST /plans/{id}/notes` and `DELETE /plans/{id}/notes/{nid}`;
+`GET /plans/{id}/log` and `POST /plans/{id}/undo {version}` (the latest
+save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
+`GET /plans/trees?deck=` returns that deck's.
+C1–C5: `PATCH /plans/{id}/follow {early}` (0–7); a date's `search`
+(up to 10) and `sn` (their counts), `ids` (note ids, 50,000 a plan);
+`reviews: [{day, from, to}]` on the doc; 50,000 single cards and 1.5 MB
+docs; `POST /plans/{id}/cards {search, n}`; `PUT /plans/{id}/ids
+{units: {unitId: [tags, decks, [guid]]}}` (kept only while the date's
+tags are unchanged); `GET /board?decks=1` adds `authored` (the plans I
+write, lean) and each plan's `early`.
+3.4: `PUT /plans/{id}/ids` also takes `counts: {unitId: {search: n}}`;
+the lean `authored` docs carry each date's searches. `GET
+/plans/ics?code=` (no sign-in) is the plan as iCalendar; the site serves
+it at `/p/CODE.ics` (1,000 an hour an address). `POST /plans/follow`
+shares peek's 60 an hour. `GET /plans/mine` leaves each doc's single
+cards and note ids out; `GET /plans/{id}/progress` is for co-authors too.
+The UI review: `GET /plans/public?code=` (no sign-in, code plans only) is
+what a plan's link shows before signing in: `{name, ownerName, line,
+deck, followers, units: [{name, opens, due?, n}]}`, days and counts, never
+what's in them (300 an hour an address).
 
 ### Squads
 
@@ -91,8 +120,8 @@ plan I follow carries my schedule and my progress.
 |---|---|
 | `POST /squads {name}` | `{id, code, name, founder, open}`; I'm the founder and a member. |
 | `GET /squads/peek?code=` | The join preview. 60 an hour. |
-| `POST /squads/{id}/join` | The only way in: the door must be open and I mustn't be blocked. |
-| `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. |
+| `POST /squads/{id}/join` | The only way in: the door must be open, I mustn't be blocked, and it holds at most 500. |
+| `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
 | `GET /squads/{id}` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. |
 | `PUT /squads/{id}/row` | My numbers, as an update. Never a join. |
 | `DELETE /squads/{id}/members/{uid}` | Leave, or (founder) remove. |

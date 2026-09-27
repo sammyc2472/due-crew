@@ -9,7 +9,7 @@ import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as Q from "./squads";
 import * as S from "./social";
-import { BODY_MAX, Env, HttpError, json } from "./util";
+import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
 type Open = (req: Request, env: Env, params: string[]) => Promise<Response>;
@@ -28,10 +28,13 @@ open("POST", r("/auth/code"), A.requestCode);
 open("POST", r("/auth/verify"), A.verifyCode);
 open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
+open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
+open("GET", r("/plans/public"), (q, env) => P.publicPeek(q, env));  // a plan's link, before signing in
+open("POST", r("/links/email"), (q, env) => A.emailLink(q, env));  // a phone sends itself the link
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
-authed("POST", r("/auth/signout-all"), (_q, s, env) => A.signOutAll(s, env));
+authed("POST", r("/auth/signout-all"), (q, s, env) => A.signOutAll(s, env, q));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
 
 authed("GET", r("/board"), B.board);
@@ -47,6 +50,7 @@ authed("PUT", r("/friends"), S.restoreFriends);
 authed("PUT", r(`/friends/${ID}`), S.putFriend);
 authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, p));
 authed("POST", r("/codes"), S.newCode);
+authed("GET", r("/codes/([A-Za-z0-9]{1,12})"), (_q, s, env, p) => S.peekCode(s, env, p));
 authed("POST", r("/codes/([A-Za-z0-9]{1,12})/add"), (_q, s, env, p) => S.addByCode(s, env, p));
 authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
@@ -65,7 +69,7 @@ authed("DELETE", r("/admin/notices/([0-9]{1,9})"), (_q, s, env, p) => N.remove(s
 
 // 3.1: plans (the fixed paths before /plans/{id})
 authed("PUT", r("/plans/trees"), P.putTree);
-authed("GET", r("/plans/trees"), (_q, s, env) => P.getTrees(s, env));
+authed("GET", r("/plans/trees"), (q, s, env) => P.getTrees(q, s, env));
 authed("GET", r("/plans/mine"), (_q, s, env) => P.mine(s, env));
 authed("GET", r("/plans/peek"), P.peek);
 authed("POST", r("/plans/follow"), P.follow);
@@ -77,6 +81,15 @@ authed("POST", r(`/plans/${ID}/cards`), P.addCards);
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
+// 3.3: plans together
+authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));
+authed("PUT", r(`/plans/${ID}/ids`), P.putIds);
+authed("POST", r(`/plans/${ID}/undo`), P.undo);
+authed("POST", r(`/plans/${ID}/editors`), P.addEditor);
+authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEditor(s, env, p));
+authed("GET", r(`/plans/${ID}/notes`), (_q, s, env, p) => P.notes(s, env, p));
+authed("POST", r(`/plans/${ID}/notes`), P.addNote);
+authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.removeNote(s, env, p));
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
@@ -115,7 +128,7 @@ export default {
     // the site reaches the API as duecrew.com/api/* (3.1), through its service binding
     if (path.startsWith("/api/")) path = path.slice(4);
     try {
-      if (Number(req.headers.get("content-length") || 0) > BODY_MAX) throw new HttpError(413, "too_big");
+      if (Number(req.headers.get("content-length") || 0) > ANY_BODY_MAX) throw new HttpError(413, "too_big");
       let allowed = false;
       for (const [method, re, handler] of routes) {
         const m = re.exec(path);

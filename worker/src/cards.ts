@@ -8,6 +8,8 @@ import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
 export const KNOWS_PER_SYNC = 2000;
+export const KNOWS_MAX = 100000;  // a person's cards "down": AnKing has ~35,000 notes
+export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
 export const TIP_MAX = V.NOTE_MAX;
 const CHUNK = 90;           // D1: at most 100 bound parameters a statement
@@ -93,12 +95,14 @@ export async function forStuck(env: Env, uid: string, stuck: string[]): Promise<
   return out;
 }
 
-/** Keep a tip on its card (called when a cheer carries a guid and a note). */
+/** Keep a tip on its card (called when a cheer carries a guid and a note).
+ *  A new one only while I have fewer than TIPS_MAX; an old one always updates. */
 export function tipWrite(env: Env, from: string, guid: string, text: string): D1PreparedStatement {
   return env.DB.prepare(
-    `INSERT INTO tips (guid, uid, text, at) VALUES (?, ?, ?, ?)
+    `INSERT INTO tips (guid, uid, text, at) SELECT ?1, ?2, ?3, ?4
+      WHERE (SELECT COUNT(*) FROM tips WHERE uid = ?2) < ?5 OR EXISTS (SELECT 1 FROM tips WHERE guid = ?1 AND uid = ?2)
      ON CONFLICT(guid, uid) DO UPDATE SET text = excluded.text, at = excluded.at`,
-  ).bind(guid, from, text, nowSec());
+  ).bind(guid, from, text, nowSec(), TIPS_MAX);
 }
 
 /** POST /tips/helped {guid, from, helped?}: "This helped" on a mutual

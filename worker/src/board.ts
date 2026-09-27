@@ -72,7 +72,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
-  if (withDecks) Object.assign(out, await P.forBoard(env, s.uid));  // 3.1: the plans I follow, and offers
+  // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
+  if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
   await touchSeen(env, s.uid);
   return json(out);
 }
@@ -228,6 +229,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     const pw = await P.progressWrites(env, s.uid, planProgress);
     wrote.plans = pw.length > 0;
     writes.push(...pw);
+  }
+  if (knows && knows.add.length) {
+    // a ceiling on what one person keeps: past it, new ones aren't taken
+    const n = knows.reset ? 0 : (await db.prepare("SELECT COUNT(*) AS n FROM knows WHERE uid = ?").bind(s.uid).first<number>("n")) ?? 0;
+    knows.add = knows.add.slice(0, Math.max(0, C.KNOWS_MAX - n + knows.del.length));
   }
   if (knows) {
     const kw = C.knowsWrites(env, s.uid, knows);

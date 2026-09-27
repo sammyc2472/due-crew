@@ -49,11 +49,30 @@ describe("plans: authoring", () => {
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05", due: "2026-10-01" }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05", text: "card text" }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05",
-      cards: Array.from({ length: 5001 }, (_, i) => [`g${i}`, 0]) }] })).toBe(400);
+      cards: Array.from({ length: 50001 }, (_, i) => [`g${i}`, 0]) }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [UNITS[0], UNITS[0]] })).toBe(400);  // ids are unique
     expect(await put({ deck: "Step 1", units: [{ ...UNITS[0], n: "212" }] })).toBe(400);  // a count is a number
     const counted = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], n: 212 }] } });
     expect(counted.body.doc.units[0].n).toBe(212);
+  });
+
+  it("3.3: an even split needs a window; the pace is the builder's, shaped", async () => {
+    const { dre, plan } = await authored();
+    const put = (doc: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc });
+    const even = { id: "a", name: "A", opens: "2026-10-05", due: "2026-10-09", even: true, tags: ["Step1"] };
+    expect((await put({ deck: "Step 1", units: [{ ...even, due: undefined }] })).status).toBe(400);  // no window
+    expect((await put({ deck: "Step 1", units: [{ ...even, due: "2026-10-05" }] })).status).toBe(400);  // one day
+    expect((await put({ deck: "Step 1", units: [{ ...even, even: "yes" }] })).status).toBe(400);
+    const days = [1, 1, 1, 1, 1, 0, 0];
+    expect((await put({ deck: "Step 1", pace: { mode: "fast", days }, units: [] })).status).toBe(400);
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days: [0, 0, 0, 0, 0, 0, 0] }, units: [] })).status).toBe(400);
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days, cover: ["Step1"] }, units: [] })).status).toBe(400);  // tag: or deck:
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days, daily: 0 }, units: [] })).status).toBe(400);
+    const ok = await put({ deck: "Step 1", pace: { mode: "daily", days, daily: 150, cover: ["tag:Step1", "tag:Step1", "deck:Step 1::Extras"] },
+      units: [even, { ...even, id: "b", even: false }] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.pace).toEqual({ mode: "daily", days, daily: 150, cover: ["tag:Step1", "deck:Step 1::Extras"] });
+    expect(ok.body.doc.units.map((u: any) => u.even)).toEqual([true, undefined]);
   });
 
   it("single cards go onto a date that exists, or a new one", async () => {
@@ -74,13 +93,21 @@ describe("plans: following", () => {
     const maya = await person("maya");
     const f = await maya.call("POST", "/plans/follow", { code: plan.code });
     expect(f.status).toBe(200);
-    expect(f.body.following).toEqual({ share: true, paused: false, sched: null, progress: null });
+    expect(f.body.following).toEqual({ share: true, paused: false, sched: null, early: 0, progress: null });
     const light = await maya.call("GET", "/board");
     expect(light.body.plans).toBeUndefined();  // not on every refresh
     const first = await maya.call("GET", "/board?decks=1");
     expect(first.body.plans).toHaveLength(1);
     expect(first.body.plans[0]).toMatchObject({ id: plan.id, ownerName: "Dre", version: 2, share: true });
     expect(await maya.status("GET", `/plans/${plan.id}`)).toBe(200);  // a follower reads it without the code
+  });
+
+  it("guessing codes through Follow is as slow as through Peek", async () => {
+    const { plan } = await authored();
+    const maya = await person("maya");
+    for (let i = 0; i < 60; i++) expect(await maya.status("POST", "/plans/follow", { code: "NOPE2345" })).toBe(404);
+    expect(await maya.status("POST", "/plans/follow", { code: plan.code })).toBe(429);
+    expect(await maya.status("GET", `/plans/peek?code=${plan.code}`)).toBe(429);
   });
 
   it("a squad plan: only members follow it, and members are offered it", async () => {
@@ -160,8 +187,37 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     expect(await dre.status("PUT", "/plans/trees", tree)).toBe(200);
     expect(await dre.status("PUT", "/plans/trees", tree)).toBe(200);
     expect(await dre.status("PUT", "/plans/trees", { deck: "Step 1", tags: [["Step1::Cardio", "312 cards"]] })).toBe(400);
-    const got = await dre.call("GET", "/plans/trees");
+    const got = await dre.call("GET", "/plans/trees?deck=Step%201");
     expect(got.body.trees).toEqual([expect.objectContaining({ deck: "Step 1", tags: [["Step1::Cardio", 312]] })]);
+    const list = await dre.call("GET", "/plans/trees");
+    expect(list.body.trees).toEqual([{ deck: "Step 1", at: expect.any(Number) }]);  // which decks, not the trees
+  });
+
+  it("3.3: a nested tree, each name once, deep tags and a big deck", async () => {
+    const dre = await person("dre");
+    const deep = ["#AK", 9000, [["#Bootcamp", 3000, [["Cardiology", 900, [["02_Anatomy", 120, [["04_Penetrating_Cardiac_Trauma", 7]]]]]]]]];
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [deep], decks: [] })).toBe(200);
+    const got = await dre.call("GET", "/plans/trees?deck=AnKing");
+    expect(got.body.trees[0].v).toBe(2);
+    expect(got.body.trees[0].tags).toEqual([deep]);
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["A::B", 1]] })).toBe(400);  // a name, not a path
+    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["x".repeat(150), 1, [["y".repeat(60), 1]]]] })).toBe(400);  // path over 200
+    // past the usual 512 KB body: a big deck's tags still fit
+    const many = Array.from({ length: 30000 }, (_, i) => [`Lecture_${String(i).padStart(5, "0")}_Some_Topic`, 3]);
+    expect(await dre.status("PUT", "/plans/trees", { deck: "Big", v: 2, tags: [["Big", 90000, many]] })).toBe(200);
+    // as a real client sends it, its length declared: the early check lets a tree's size through
+    const { env } = await import("cloudflare:workers");
+    const worker = (await import("../src/index")).default;
+    const body = JSON.stringify({ deck: "Big2", v: 2, tags: [["Big2", 90000, many]] });
+    expect(body.length).toBeGreaterThan(512 * 1024);
+    const res = await worker.fetch(new Request("https://api.duecrew.com/plans/trees", {
+      method: "PUT", body, headers: { authorization: `Bearer ${dre.token}`, "content-type": "application/json",
+        "content-length": String(body.length) } }), { ...env } as any);
+    expect(res.status).toBe(200);
+    // …while an ordinary route still stops at 512 KB
+    const sync = await worker.fetch(new Request("https://api.duecrew.com/sync", {
+      method: "POST", body, headers: { authorization: `Bearer ${dre.token}`, "content-length": String(body.length) } }), { ...env } as any);
+    expect(sync.status).toBe(413);
   });
 
   it("a one-time link signs the site in once, with a same-site cookie", async () => {
@@ -192,6 +248,8 @@ describe("plans: the deck's tree and the site's sign-in", () => {
     const { mailbox } = await import("./helpers");
     const box = mailbox();
     await api("POST", "/auth/code", { body: { email: "maya@example.com" } });
+    // another site's page can't make the request (no header), and doesn't spend the code trying
+    expect((await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true } })).status).toBe(403);
     const v = await api("POST", "/api/auth/verify", { body: { email: "maya@example.com", code: box.code("maya@example.com"), web: true }, headers: SITE });
     expect(v.status).toBe(200);
     expect(v.body.token).toBeUndefined();  // never in page script
@@ -228,7 +286,7 @@ describe("limits the audit asked for", () => {
     const { env } = await import("cloudflare:workers");
     const worker = (await import("../src/index")).default;
     const big = new ReadableStream({
-      start(c) { for (let i = 0; i < 40; i++) c.enqueue(new TextEncoder().encode("x".repeat(20_000))); c.close(); },
+      start(c) { for (let i = 0; i < 90; i++) c.enqueue(new TextEncoder().encode("x".repeat(20_000))); c.close(); },  // 1.8 MB: past even a tree's 1.5 MB
     });
     const res = await worker.fetch(new Request("https://api.duecrew.com/plans/trees", {
       method: "PUT", body: big, headers: { authorization: `Bearer ${dre.token}` }, duplex: "half",

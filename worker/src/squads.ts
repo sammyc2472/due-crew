@@ -12,6 +12,7 @@ import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
 export const SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no 0/O/1/I
 export const SQUAD_CODE_LEN = 8;
 const BANS_MAX = 200;
+const MEMBERS_MAX = 500;  // a squad's board is one query: it stays bounded
 
 export function normalizeCode(code: string): string {
   return [...code.toUpperCase()].filter((c) => SQUAD_ALPHABET.includes(c)).join("");
@@ -110,6 +111,8 @@ async function joinById(s: Session, env: Env, id: string): Promise<Response> {
     throw new HttpError(403, "blocked");
   }
   if (sq.open !== 1) throw new HttpError(403, "locked");
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM members WHERE squad = ?").bind(id).first<number>("n");
+  if ((n ?? 0) >= MEMBERS_MAX) throw new HttpError(403, "full");  // the add-on says the door is shut
   await joinStmt(env, id, s.uid, await myName(env, s.uid)).run();
   return json(info(sq));
 }
@@ -123,6 +126,7 @@ export async function restore(req: Request, s: Session, env: Env): Promise<Respo
   const code = normalizeCode(typeof body.code === "string" ? body.code : "");
   if (code.length !== SQUAD_CODE_LEN) throw V.bad("code");
   const name = V.squadName(body.name);
+  await limitOrThrow(env, `squadrestore:${s.uid}`, 30, 86400);  // a 2.x computer's squads, once; not a way round create's limit
   const id = await squadId(code);
   const exists = await env.DB.prepare("SELECT 1 FROM squads WHERE id = ?").bind(id).first();
   if (!exists) {

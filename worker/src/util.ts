@@ -37,10 +37,14 @@ export function nowSec(): number {
 }
 
 export const BODY_MAX = 512 * 1024;
+/** The most any route reads (a plan, a deck's tree, its note ids). Each
+ *  route's own limit (readJson's `max`) is checked as it streams; this is
+ *  only the early refusal of a declared length past all of them. */
+export const ANY_BODY_MAX = 1600 * 1024;
 
-/** The body as text, at most BODY_MAX bytes: counted as it streams, since a
+/** The body as text, at most `max` bytes: counted as it streams, since a
  *  chunked request has no content-length to check first. */
-export async function readText(req: Request): Promise<string> {
+export async function readText(req: Request, max = BODY_MAX): Promise<string> {
   if (!req.body) return "";
   const reader = req.body.getReader();
   const parts: Uint8Array[] = [];
@@ -49,7 +53,7 @@ export async function readText(req: Request): Promise<string> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > BODY_MAX) {
+    if (size > max) {
       await reader.cancel();
       throw new HttpError(413, "too_big");
     }
@@ -64,8 +68,8 @@ export async function readText(req: Request): Promise<string> {
   return new TextDecoder().decode(all);
 }
 
-export async function readJson(req: Request): Promise<Record<string, unknown>> {
-  const text = await readText(req);
+export async function readJson(req: Request, max = BODY_MAX): Promise<Record<string, unknown>> {
+  const text = await readText(req, max);
   let body: unknown;
   try {
     body = JSON.parse(text);

@@ -34,6 +34,7 @@ export async function sendMail(env: Env, to: string, subject: string, text: stri
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, text }),
-  });
+    signal: AbortSignal.timeout(10000),  // a slow mail service answers "try again", not a hung sign-in
+  }).catch(() => { throw new HttpError(502, "mail_failed"); });
   if (!res.ok) throw new HttpError(502, "mail_failed");
 }

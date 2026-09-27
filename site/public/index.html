@@ -24,13 +24,13 @@
   body { margin: 0; background: var(--bg); color: var(--ink);
          font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   main { max-width: 660px; margin: 0 auto; padding: 56px 20px 40px; }
-  .logo { display: block; width: 220px; max-width: 70%; height: auto; }
-  h1 { font-size: 26px; line-height: 1.3; font-weight: 700; margin: 32px 0 12px; letter-spacing: -0.01em; }
+  .logo { display: block; width: 180px; max-width: 60%; height: auto; }
+  h1 { font-size: 28px; line-height: 1.25; font-weight: 700; margin: 26px 0 8px; letter-spacing: -0.01em; }
   p { margin: 0 0 14px; }
   .muted { color: var(--muted); }
   figure { margin: 32px 0; }
   figure img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }
-  .install { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 28px 0 8px;
+  .install { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 8px;
              padding: 16px 18px; background: var(--well); border-radius: 12px; }
   .install .how { flex: 1 1 260px; }
   .code { font: 700 20px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.06em; }
@@ -40,6 +40,30 @@
   a { color: var(--accent); }
   ul { padding-left: 20px; margin: 0 0 14px; }
   li { margin: 4px 0; }
+  .lede { font-size: 18px; color: var(--muted); margin: 0 0 20px; }
+  .install .how { flex: 1 1 220px; font-size: 14px; color: var(--muted); }
+  .feat { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 8px 0 26px; }
+  .feat div { border-top: 2px solid var(--line); padding-top: 8px; font-size: 15px; color: var(--muted); }
+  .feat b { display: block; color: var(--ink); }
+  .phone { display: none; }
+  .mailme { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 14px 0; }
+  .mailme p { margin: 0 0 8px; font-size: 15px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row input { flex: 1 1 180px; font: inherit; font-size: 15px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+  button.ghost { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+  .small { font-size: 13px; }
+  .crop table { width: 100%; border-collapse: collapse; font-size: 15px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .crop td { padding: 9px 8px; white-space: nowrap; }
+  .crop td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+  .crop td:nth-child(2) { width: 100%; }
+  .crop tr.you td { background: var(--well); }
+  .crop .live { color: var(--accent); font-size: 12px; font-weight: 700; }
+  @media (max-width: 700px) {
+    .phone { display: block; }
+    .wide { display: none; }
+    .feat { grid-template-columns: 1fr; }
+    .logo { width: 150px; }
+  }
   footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 18px; font-size: 15px; color: var(--muted); }
   footer a { color: inherit; }
 </style>
@@ -52,29 +76,42 @@
   </picture>
 
   <h1>Your friends&rsquo; studying next to yours, on Anki&rsquo;s Decks screen.</h1>
-  <p>Studying for a big exam can get lonely. Due Crew is a free Anki add-on
-  that puts your friends&rsquo; studying next to yours, so you can keep each
-  other going.</p>
-
-  <figure>
-    <img src="/board.png" alt="The Due Crew board on Anki's Decks screen" width="1280" height="722">
-  </figure>
-
-  <ul>
-    <li>Send a cheer, and it rains down their screen.</li>
-    <li>Open a study room and take the breaks together.</li>
-    <li>Leave a good-luck line for exam morning.</li>
-    <li>Only people you&rsquo;ve added see anything, and only once they&rsquo;ve added you back.</li>
-  </ul>
+  <p class="lede">Free. Only people you add see it, once they add you back.</p>
 
   <div class="install">
-    <div class="how">In Anki: Tools &rarr; Add-ons &rarr; Get Add-ons, then<br>
-      <span class="code" id="code">2035408484</span></div>
+    <span class="code" id="code">2035408484</span>
     <button type="button" id="copy">Copy code</button>
+    <span class="how">Anki &rsaquo; Tools &rsaquo; Add-ons &rsaquo; Get Add-ons, paste, restart Anki.</span>
   </div>
-  <p class="muted">Needs Anki 2.1.55 or newer. Restart Anki after installing.</p>
 
-  <p class="muted">A site for your crew is on its way. For now, everything happens in Anki.</p>
+  <div class="phone mailme">
+    <p>It&rsquo;s for Anki on a computer. Send yourself the link:</p>
+    <form id="mailme" class="row" novalidate>
+      <input type="email" id="mailto" autocomplete="email" placeholder="you@school.edu" aria-label="Your email">
+      <button type="submit" class="ghost">Email it</button>
+    </form>
+    <p class="muted small" id="mailsaid">One email with the link. No account, nothing else.</p>
+  </div>
+
+  <figure class="wide">
+    <img src="/board.png" alt="The Due Crew board on Anki's Decks screen" width="1280" height="684">
+  </figure>
+  <figure class="phone crop" aria-label="The Due Crew board, three rows">
+    <table>
+      <tr><td>&#129351;</td><td>Jordan</td><td>840</td><td>2h 16m</td></tr>
+      <tr class="you"><td>#2</td><td><b>You</b></td><td>512</td><td>1h 12m</td></tr>
+      <tr><td>#3</td><td>Dre <span class="live">studying now</span></td><td>118</td><td>22m</td></tr>
+    </table>
+  </figure>
+
+  <div class="feat">
+    <div><b>Cheers</b>Send one and it rains down their screen.</div>
+    <div><b>Study rooms</b>Rounds and breaks, together.</div>
+    <div><b>Plans</b>A class&rsquo;s cards open on their day.</div>
+  </div>
+
+  <p class="muted">Free and open source &middot; on <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot; needs Anki 2.1.55 or newer.</p>
+  <p class="muted">Already using it? <a href="/sign-in">Sign in</a> for your crew and your plans.</p>
 
   <footer>
     <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot;
@@ -82,11 +119,28 @@
   </footer>
 </main>
 <script>
+  document.getElementById("mailme").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var to = document.getElementById("mailto"), said = document.getElementById("mailsaid");
+    if (!to.value.trim()) return;
+    said.textContent = "Sending…";
+    fetch("/api/links/email", { method: "POST", credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-due-crew": "1" },
+      body: JSON.stringify({ email: to.value, path: "/" }) }).then(function (r) {
+      said.textContent = r.ok ? "Sent. Open it on your computer." : r.status === 429 ? "That's a few already. Try again later." : "That doesn't look like an email address.";
+      if (r.ok) to.value = "";
+    }, function () { said.textContent = "That didn't send. Try again."; });
+  });
   document.getElementById("copy").addEventListener("click", function () {
     var b = this;
     navigator.clipboard.writeText("2035408484").then(function () {
       b.textContent = "Copied";
       setTimeout(function () { b.textContent = "Copy code"; }, 1600);
+    }, function () {
+      // no clipboard here (an old browser, or it said no): the code is selected to copy by hand
+      var r = document.createRange();
+      r.selectNodeContents(document.getElementById("code"));
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     });
   });
 </script>

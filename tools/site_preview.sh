@@ -31,7 +31,17 @@ q = lambda s: "'" + str(s).replace("'", "''") + "'"
 tags = [["Step1", 1960], ["Step1::Cardio", 312], ["Step1::Cardio::Heart_failure", 48], ["Step1::Cardio::Arrhythmia", 61],
         ["Step1::Cardio::Valves", 39], ["Step1::Cardio::Pharm", 164], ["Step1::Renal", 402], ["Step1::Renal::Physiology", 212],
         ["Step1::Renal::Pharm", 190], ["Step1::Pulm", 288], ["Step1::Pulm::Asthma", 74], ["Step1::Pulm::COPD", 58],
-        ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177]]
+        ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177],
+        # 3.3: AnKing-style tags, for readable names and the resource / system views
+        ["#AK_Step1_v12", 5200], ["#AK_Step1_v12::#Pathoma", 2408], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury", 283],
+        ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::01_Growth", 90], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::02_Cell_Injury", 150],
+        ["#AK_Step1_v12::#Pathoma::02_Inflammation", 210], ["#AK_Step1_v12::#Pathoma::03_Neoplasia", 176],
+        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells", 380], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::01_Microcytic", 96],
+        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::02_Macrocytic", 64], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic", 142],
+        ["#AK_Step1_v12::#B&B", 1900], ["#AK_Step1_v12::#B&B::01_Biochem", 640], ["#AK_Step1_v12::#B&B::01_Biochem::01_Enzymes", 96],
+        ["#AK_Step1_v12::#B&B::01_Biochem::02_Metabolism1", 188], ["#AK_Step1_v12::#B&B::01_Biochem::03_Metabolism2", 120],
+        ["#AK_Step1_v12::^Systems", 3000], ["#AK_Step1_v12::^Systems::Hematology", 700], ["#AK_Step1_v12::^Systems::Cardio", 900],
+        ["lecture04_glycolysis", 64]]
 decks = [["Step 1::Extras", 96], ["Step 1::Extras::Images", 41]]
 units = [
   {"id": "hf", "name": "Heart failure", "opens": d(0), "due": d(7), "tags": ["Step1::Cardio::Heart_failure"], "decks": [], "cards": []},
@@ -44,12 +54,23 @@ units[2]["check"] = d(24)
 doc = {"deck": "Step 1", "end": d(55), "phases": {"catchup": 4, "taper": 10}, "units": units}
 out = []
 for uid, name in [("dre", "Dre"), ("maya", "Maya"), ("nia", "Nia"), ("jonah", "Jonah")]:
-    out.append(f"INSERT INTO users (uid, email, name, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {now});")
+    code = uid.upper().ljust(6, "X")[:6]
+    out.append(f"INSERT INTO users (uid, email, name, code, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {q(code)}, {now});")
+    out.append(f"INSERT INTO codes (code, uid) VALUES ({q(code)}, {q(uid)});")
 out.append(f"INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES ({q(h)}, 'dre', 'preview', {now}, {now});")
 out.append(f"INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busmpreview', 'Busm', 'dre', 1, {now});")
 for uid in ["dre", "maya", "nia"]:
     out.append(f"INSERT INTO members (squad, uid, name, joined_at) VALUES ('busmpreview', {q(uid)}, {q(uid.title())}, {now});")
+    if uid != "nia":
+        rv = {"dre": 180, "maya": 240}.get(uid, 90)
+        out.append(f"UPDATE members SET day = {q(today.isoformat())}, reviews = {rv}, study_time_ms = {rv * 17000}, accuracy = 88.5, streak = 4, week = 5, new_cards = 30 "
+                   f"WHERE squad = 'busmpreview' AND uid = {q(uid)};")
+    else:
+        out.append(f"UPDATE members SET day = {q((today - datetime.timedelta(days=1)).isoformat())}, reviews = 292, week = 6 WHERE squad = 'busmpreview' AND uid = 'nia';")
 out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Step 1', {q(json.dumps({'tags': tags, 'decks': decks}))}, {now});")
+# 3.3: a teacher's language deck: units as subdecks, no tags
+es = {"tags": [], "decks": [["Español 1", 1200], ["Español 1::Unidad 1 · Saludos", 380], ["Español 1::Unidad 2 · La familia", 420], ["Español 1::Unidad 3 · La comida", 400]]}
+out.append(f"INSERT INTO plan_trees (uid, deck, doc, at) VALUES ('dre', 'Español 1', {q(json.dumps(es))}, {now});")
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
            f"('stepplanpreview1', '7KQ4MX2D', 'dre', 'Step 1', 'Organ systems, one a week, done by January.', 'code', 'busmpreview', {q(json.dumps(doc))}, 3, {now}, {now});")
 prog = {"maya": {"hf": [48, 48, 48], "arr": [63, 63, 63], "renp": [212, 120, 212]},
@@ -70,6 +91,10 @@ for uid, studied in [("dre", [0, 1, 2, 3]), ("maya", [0, 1, 3]), ("nia", [1, 2])
         w["liveUntil"] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
     if uid == "nia":
         w["recap"] = {"name": "Step 1", "n": 2, "day": wk(0)}
+        w["days"].pop(wk(0), None)  # studied yesterday, not yet today
+        w["days"][wk(1)] = {"studied": True, "reviews": 292, "newCards": 249, "studyTimeMs": 129 * 60000, "accuracy": 87.7, "streak": 13}
+    if uid == "maya":
+        w["days"].setdefault(wk(0), {"studied": True, "reviews": 0})["status"] = "doing the bare minimum for the #streak"
     out.append(f"INSERT INTO weeks (uid, doc, updated_at) VALUES ({q(uid)}, {q(json.dumps(w))}, {now});")
 out.append(f"INSERT INTO cheers (to_uid, from_uid, emoji, note, at) VALUES ('dre', 'maya', '🔥', 'go go go', {now});")
 mdoc = {"deck": "Step 1", "units": [
@@ -78,6 +103,11 @@ mdoc = {"deck": "Step 1", "units": [
   {"id": "m3", "name": "Pulm", "opens": (real + datetime.timedelta(days=10)).isoformat(), "due": (real + datetime.timedelta(days=24)).isoformat(), "tags": ["Step1::Pulm"], "decks": [], "cards": []}]}
 out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
            f"('mayaplanpreview1', 'M4YA2PLN', 'maya', 'Boards sprint', '', 'code', NULL, {q(json.dumps(mdoc))}, 1, {now}, {now});")
+# 3.3: Maya co-authors Dre's plan; notes on a day; Maya's plan has a note from Dre
+out.append(f"INSERT INTO plan_editors (plan, uid, at) VALUES ('stepplanpreview1', 'maya', {now});")
+out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('stepplanpreview1', 'nia', {q(d(2))}, 'Lab day, keep it light?', {now});")
+out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('mayaplanpreview1', 'maya', {q(wk(0))}, 'Big one today, go early', {now});")
+out.append(f"INSERT INTO plan_log (plan, version, uid, at, summary, prev) VALUES ('stepplanpreview1', 3, 'maya', {now - 600}, 'moved Renal pharm to Mon', NULL);")
 sched = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 90}
 out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, sched, at) VALUES ('mayaplanpreview1', 'dre', 1, 0, "
            f"{q(json.dumps({'m1': [312, 250, 312], 'm2': [60, 30, 402], 'm3': [0, 0, 288]}))}, {q(json.dumps(sched))}, {now});")
@@ -107,6 +137,7 @@ cat <<EOF
     http://localhost:$PORT/plans/new?deck=Step%201#$LINK
 
   Then try:  http://localhost:$PORT/home                     your home (3.2)
+             http://localhost:$PORT/plans/new?deck=Espa%C3%B1ol%201   a teacher's first plan (3.3)
              http://localhost:$PORT/log                      your log
              http://localhost:$PORT/admin                    the numbers
              http://localhost:$PORT/plans                    your plans

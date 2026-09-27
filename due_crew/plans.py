@@ -16,6 +16,7 @@ Nothing here ever suspends a card. open_cards unsuspends, in one undo step.
 """
 
 import bisect
+import weakref
 import datetime
 import hashlib
 import json
@@ -68,8 +69,11 @@ def units(doc):
 def unit_sources(unit, deck_id=None, swap=None):
     """What a unit matched with when it was applied here: its deck, swap and
     sources. A later change opens only what the new sources add."""
-    return [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
-            [list(c) for c in unit.get("cards") or []]]
+    out = [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
+           [list(c) for c in unit.get("cards") or []]]
+    if unit.get("search"):
+        out.append(list(unit["search"]))  # 3.3, C3
+    return out
 
 
 def unit_sig(unit, deck_id=None, swap=None):
@@ -79,7 +83,8 @@ def unit_sig(unit, deck_id=None, swap=None):
     to gets a new one (so the new cards open the next morning)."""
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
-                       sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])])
+                       sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
+                      + ([sorted(unit["search"])] if unit.get("search") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -117,6 +122,10 @@ def swapped(path, swap):
 
 # ---- the deck, read once ----
 
+_STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "_searches")
+
+
 class DeckIndex:
     """One deck and its subdecks, read in one query: every card's id, home
     deck, ord, queue and type, with its note's guid and tags. Cards in a
@@ -137,24 +146,53 @@ class DeckIndex:
             self.rel[rel.lower()] = d
             self.spelled[rel.lower()] = rel
         ids = ",".join(str(d) for d in tree) or "0"
-        rows = col.db.all(
-            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, c.queue, c.type, "
-            f"n.guid, n.tags, c.due FROM cards c JOIN notes n ON n.id = c.nid "
-            f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})")
+        where = f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})"
+        self.col = col
+        # 3.3: the tags, note ids and subdecks change only when notes do;
+        # kept between refreshes while this fingerprint holds (a few ms),
+        # and only each card's state is read again
+        sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
+               tuple(col.db.first("SELECT count(), max(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+                                  f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
+        key = (id(col), self.did)
+        kept = _STATIC.get(key)
+        if kept and kept[2]() is col and kept[0] == sig:
+            self.__dict__.update(kept[1])
+        else:
+            self._read_static(col, tree, where)
+            try:
+                ref = weakref.ref(col)  # never keeps a closed collection alive
+            except TypeError:
+                ref = (lambda: None)
+            for k in [k for k, v in _STATIC.items() if v[2]() is None]:
+                _STATIC.pop(k, None)  # a closed profile's decks
+            _STATIC[key] = (sig, {k: getattr(self, k) for k in _STATIC_KEYS}, ref)
         self.cards = {}      # cid -> (queue, type)
+        self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
+        home = self.home
+        for cid, queue, ctype, due in col.db.all(f"SELECT c.id, c.queue, c.type, c.due FROM cards c {where}"):
+            cid = int(cid)
+            if cid in home:
+                self.cards[cid] = (int(queue), int(ctype))
+                self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+        self.fell_back = set()  # unit ids matched by their note ids (C5)
+
+    def _read_static(self, col, tree, where):
+        rows = col.db.all(
+            "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, n.guid, n.tags "
+            f"FROM cards c JOIN notes n ON n.id = c.nid {where}")
         self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
         self.by_deck = {}    # did -> [cid]
         self.by_ref = {}     # (guid, ord) -> cid
+        self.home = set()    # the cids in this deck and its subdecks
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
-        self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
         treeset = set(tree)
-        for cid, home, ord_, queue, ctype, guid, tags, due in rows:
+        for cid, home, ord_, guid, tags in rows:
             if int(home) not in treeset:
                 continue
             cid = int(cid)
-            self.cards[cid] = (int(queue), int(ctype))
-            self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
+            self.home.add(cid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -165,6 +203,14 @@ class DeckIndex:
                 self.tag_names.setdefault(low, t)
         self.by_tag = by_tag
         self.tag_keys = sorted(by_tag)
+        # searches run through the collection; note ids back a renamed tag
+        self.by_guid = {}
+        for (g, _o), cid in self.by_ref.items():
+            self.by_guid.setdefault(g, []).append(cid)
+        self.guid_of = {cid: g for (g, _o), cid in self.by_ref.items()}
+        # a search's answer, kept with the rest: it changes when notes or cards
+        # do (a plan's searches are about the deck, never one person's reviews)
+        self._searches = {}
 
     # -- sources --
 
@@ -203,13 +249,37 @@ class DeckIndex:
                 out.update(self.by_deck.get(d, ()))
         return out
 
+    def search_cards(self, q):
+        """3.3, C3: an Anki search, run by this collection, kept to this deck."""
+        if q not in self._searches:
+            try:
+                found = {int(c) for c in self.col.find_cards(str(q))}
+            except Exception:
+                found = set()  # a search this Anki can't read finds nothing
+            self._searches[q] = {c for c in found if c in self.cards}
+        return self._searches[q]
+
     def match(self, unit, swap=None, plan_deck=""):
         """{cid} for one unit on this deck."""
         out = set()
+        missing = False
         for t in unit.get("tags") or []:
-            out |= self.tag_cards(swapped(t, swap))
+            got = self.tag_cards(swapped(t, swap))
+            missing = missing or not got
+            out |= got
         for d in unit.get("decks") or []:
-            out |= self.deck_cards(d, plan_deck)
+            got = self.deck_cards(d, plan_deck)
+            missing = missing or not got
+            out |= got
+        if missing and unit.get("ids"):
+            # 3.3, C5: a tag this copy names differently (a newer AnKing):
+            # the author's note ids behind the date find its cards
+            by_id = {c for g in unit["ids"] for c in self.by_guid.get(g, ())}
+            if by_id - out:
+                self.fell_back.add(unit.get("id"))
+                out |= by_id
+        for q in unit.get("search") or []:
+            out |= self.search_cards(q)
         for g, o in unit.get("cards") or []:
             cid = self.by_ref.get((str(g), int(o)))
             if cid is not None:
@@ -244,10 +314,10 @@ class DeckIndex:
 
     # -- the builder's tree --
 
-    def tree(self, with_tags=True, with_decks=True, cap=5000):
+    def tree(self, with_tags=True, with_decks=True, cap=None):
         """(tags, decks) for PUT /plans/trees: [[path, cards]] each, names and
-        counts only. A tag counts every card under it; a subdeck, every card
-        in it and below. At most `cap` of each, shallowest and biggest first."""
+        counts only. A tag counts every card under it; a subdeck (and the
+        deck itself, 3.3), every card in it and below. At most `cap` of each, shallowest and biggest first."""
         tags = []
         if with_tags:
             counts = {}
@@ -261,18 +331,17 @@ class DeckIndex:
                 merged.setdefault(path.lower(), [path, set()])[1].update(cids)
             tags = [[p, len(c)] for p, c in merged.values()]
             tags.sort(key=lambda x: (x[0].count(_SEP), -x[1], x[0].lower()))
-            tags = sorted(tags[:cap], key=lambda x: x[0].lower())
+            tags = sorted(tags[:cap] if cap else tags, key=lambda x: x[0].lower())
         decks = []
         if with_decks:
             for rel, d in self.rel.items():
-                if not rel:
-                    continue
                 n = sum(len(self.by_deck.get(dd, ())) for r, dd in self.rel.items()
-                        if r == rel or r.startswith(rel + _SEP))
+                        if not rel or r == rel or r.startswith(rel + _SEP))
                 if n:
-                    decks.append([f"{self.name}{_SEP}{self.spelled[rel]}", n])
+                    # 3.3: the deck itself too, for a deck with no tags or subdecks
+                    decks.append([f"{self.name}{_SEP}{self.spelled[rel]}" if rel else self.name, n])
             decks.sort(key=lambda x: x[0].lower())
-            decks = decks[:cap]
+            decks = decks[:cap] if cap else decks
         return tags, decks
 
     def top_tags(self):
@@ -282,6 +351,49 @@ class DeckIndex:
             first = self.tag_names[low].split(_SEP)[0]
             out.setdefault(first.lower(), first)
         return out
+
+
+# ---- the tree as it goes up (3.3) ----
+
+TREE_BUDGET = 1_400_000  # bytes of JSON: under the server's 1.5 MB for a tree, with room for decks
+
+
+def _qid(path):
+    """A question-bank id (UWorld's, AMBOSS's…): a leaf that's only digits.
+    Thousands of them, one card or two each; they go last."""
+    return path.rsplit(_SEP, 1)[-1].strip().isdigit()
+
+
+def nest(rows, budget=TREE_BUDGET):
+    """[[path, n]] as the builder's tree: nested, each name once
+    ([name, n] or [name, n, [children]]), the most useful first while it
+    fits `budget` bytes: tags that aren't question ids, shallow before
+    deep, big before small. A kept tag keeps its parents. Returns (tree,
+    kept, left out)."""
+    counts = {p: n for p, n in rows}
+    order = sorted(rows, key=lambda r: (_qid(r[0]), r[0].count(_SEP), -r[1], r[0].lower()))
+    kept, size, dropped = set(), 0, 0
+    for p, _n in order:
+        if p in kept:
+            continue
+        parts = p.split(_SEP)
+        new = [a for a in (_SEP.join(parts[:i]) for i in range(1, len(parts) + 1)) if a not in kept]
+        cost = sum(len(json.dumps(a.rsplit(_SEP, 1)[-1])) + len(str(counts.get(a, 0))) + 8 for a in new)
+        if size + cost > budget:
+            dropped += 1
+            continue
+        kept.update(new)
+        size += cost
+    root = {}
+    for p in sorted(kept, key=lambda x: x.lower()):
+        node = root
+        parts = p.split(_SEP)
+        for i, part in enumerate(parts):
+            node = node.setdefault(part, {"n": counts.get(_SEP.join(parts[:i + 1]), 0), "k": {}})["k"]
+
+    def out(level):
+        return [[name, v["n"], out(v["k"])] if v["k"] else [name, v["n"]] for name, v in level.items()]
+    return out(root), len(kept), dropped
 
 
 # ---- following ----
@@ -380,7 +492,7 @@ def match_rows(idx, doc, swap=None, shown=5):
         cids = set()
         for u in rest:
             cids |= idx.match(u, swap, doc.get("deck", ""))
-        rows.append((f"… {len(rest)} more unit{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+        rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
 
 
@@ -421,6 +533,75 @@ def open_cards(col, cids, label):
         except Exception:
             pass
     return len(ids)
+
+
+def holdable(idx, doc, today, swap=None):
+    """3.3, "Hold back later dates until their day": the cards of dates
+    that haven't opened yet which are active now and never studied (new,
+    not suspended, not a leech). A card that is also on an opened date is
+    never held. What Follow offers to suspend, once, when asked."""
+    opened, later = set(), set()
+    for u in units(doc):
+        cids = idx.match(u, swap, doc.get("deck", ""))
+        (opened if str(u.get("opens") or "") <= today else later).update(cids)
+    return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
+
+
+def hold_cards(col, cids, label):
+    """Suspend these (still new and active) cards as one undo step. Only
+    ever called when the person asked, at Follow. Returns how many."""
+    if not cids:
+        return 0
+    ids = []
+    cl = sorted(int(c) for c in cids)
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        ids += col.db.list(f"SELECT id FROM cards WHERE queue = 0 AND type = 0 AND id IN ({chunk})")
+    if not ids:
+        return 0
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    col.sched.suspend_cards(ids)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return len(ids)
+
+
+def note_ids(idx, unit, plan_deck=""):
+    """3.3, C5: the note ids behind a unit's tags and subdecks here, for the
+    author's Anki to keep on the plan."""
+    got = set()
+    for t in unit.get("tags") or []:
+        got |= idx.tag_cards(t)
+    for d in unit.get("decks") or []:
+        got |= idx.deck_cards(d, plan_deck)
+    return sorted({idx.guid_of[c] for c in got if c in idx.guid_of})
+
+
+def search_counts(idx, lean_doc):
+    """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write."""
+    return {u["id"]: {q: len(idx.search_cards(q)) for q in u["search"]}
+            for u in lean_doc.get("units") or [] if u.get("search")}
+
+
+def ids_snapshot(idx, lean_doc, cap=50000):
+    """{unit id: [tags, decks, [guid]]} for a plan I write, from my copy;
+    at most `cap` ids in all."""
+    out, n = {}, 0
+    for u in lean_doc.get("units") or []:
+        if not (u.get("tags") or u.get("decks")):
+            continue  # a date of searches only: its count is enough (search_counts)
+        ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
+        n += len(ids)
+        out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]
+    return out
 
 
 def step_label(names):
@@ -503,6 +684,17 @@ def change_note(owner, old, doc):
 
 
 # ---- the browser: which cards ----
+
+# searches whose answer is this person's own Anki, not the deck: another
+# follower's would find something else (deck:current is the browser's default)
+_PERSONAL = re.compile(r"(?i)(?:^|[\s(\"-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|"
+                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:)")
+
+
+def shareable_search(q):
+    """3.3, C3: a search worth giving a plan (not empty, not about my Anki)."""
+    q = str(q or "").strip()
+    return bool(q) and not _PERSONAL.search(q)
 
 def card_refs(col, cids):
     """[[note guid, card ord]] for the picked cards: which cards, never text."""

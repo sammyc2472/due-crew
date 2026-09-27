@@ -204,3 +204,178 @@ logs       (uid PK, json, at)              {days: {date: [min, reviews, new, ret
 - `/log`: this week, 12 weeks (minutes, reviews, new, retention), and each
   plan's cards seen against my schedule.
 - `/admin`: counts only, for `ADMIN_UIDS` (a secret: comma-separated uids).
+
+## 3.3: the builder is a calendar
+
+Signed-off mock: "Building a Plan" (P1–P8, H1). P6 is a prompt for the
+person's own AI, not one the server runs; P8 (co-authors, suggestions,
+comments, the change log) comes after, save-based.
+
+- **What to cover**: every tag, named readably ("#AK_Step1_v12::#Pathoma::
+  01_Growth" reads "Step 1 › Pathoma › 1 · Growth", the raw tag beneath),
+  in three views when the deck has them: by resource (a `#` tag), by
+  system (a `^` tag), other tags; and subdecks. Ticking a tag covers
+  everything under it; a tag holding more than one view covers only what
+  the view shows (AnKing's top tag holds the same cards twice).
+- **The pace**: the plan's study days (`pace.days`), and one of: finish by
+  the end date (cards a day follow), cards a day (the finish follows), or
+  day by day (each day is what's on it, as a class's syllabus).
+- **Lay it out** puts what's ticked and not yet on a day onto the study
+  days from the day after the last date, in the tree's order, chapters
+  whole where they fit the day; a bigger one splits by its own tags, the
+  cards only on it go last, and one with nothing below splits evenly.
+  Catch-up weeks and the taper are skipped. **Plan next week** does the
+  same for one week only, so a plan can be made a week at a time.
+- **The calendar**: month, week or list; drag a chip to another day, a tag
+  from the left onto a day, or use + and the day panel. A day shows its
+  cards and a load bar against the pace; a heavy day offers a split.
+- **Split**: by its tags (over the next study days at the pace), evenly
+  over N study days (`even`), or single cards in Anki (the browser search
+  to copy; Due Crew: add to a plan, onto that date).
+- **As text** has "Copy the prompt": the plan's dates and pace, the line
+  format, and the deck's tags with counts (what's ticked, or three levels,
+  at most 600); never a card. The answer pasted back is read with a
+  preview (tags matched in any case or by their readable name; `#` lines
+  that ask for single cards listed to pick in Anki), then Replace or Add.
+
+### Even dates
+
+`{opens, due, even: true}`: the date's cards open in slices over its
+window, on the plan's study days, skipping catch-up weeks and the taper;
+the same slices for everyone, in the deck's order. With a schedule of my
+own, my schedule spreads it as any date. `schedule.quota` does this for a
+follower without a schedule, and the morning runs such a plan through the
+3.2 spread. A 3.2.x add-on drops `even` and opens the date whole.
+
+## 3.3: following is simpler, and plans are made together
+
+### Following: do what's on the day
+
+Sam's call: a follower doesn't set study days or minutes. Each date opens
+on its day, whole, or in slices when the author split it evenly over the
+plan's study days (`pace.days`). The plan card shows today's new cards,
+reviews due and minutes left, on track or behind, from the plan's own
+days. A 3.2 schedule keeps working (Plan ▾ › My schedule… changes or
+takes it off); nothing asks for a new one. The board has a Plans tab while
+I follow a plan: a card each, one bar a date, "crew 3/6".
+
+### The tree
+
+The add-on sends the deck's tags nested, each name once (`plans.nest`):
+the most useful first (tags that aren't question-bank ids, shallow before
+deep, big before small) while it fits 1.4 MB; the Worker takes up to
+1.5 MB for `PUT /plans/trees` only. A 3.2 server gets the old lists.
+
+### Together (save-based; migration 0006)
+
+```
+plan_editors (plan, uid, at)                     PK (plan, uid)
+plan_notes   (id, plan, uid, day, text, at)      index (plan, day)
+plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
+```
+
+- **Co-authors**: the owner adds them from their crew (mutual friends);
+  they edit everything but the audience, the co-authors and deleting the
+  plan, and can leave. Up to 10.
+- **Notes on a day**: anyone in the plan (authors and followers) writes a
+  line on a day; the writer or an author takes it down. They show as 💬 on
+  the calendar and in the day's panel. This is also how a follower
+  suggests a change.
+- **History**: every save logs who, a few words the site writes ("moved
+  Heme 2 to Tue 6 Oct"), and the doc it replaced; the last 30 stay. The
+  latest can be undone (itself a save, so it can be undone too).
+- **Two authors at once**: a save that meets a newer version merges in
+  the page: my changes (against what I loaded) go onto theirs, date by
+  date, then save again. No live connection, nothing running when nobody
+  has the plan open.
+- `/plans/{id}` is the one page: authors get Calendar, As text, Progress,
+  History (and the owner Settings); a follower gets the calendar, their
+  on-track line and the notes.
+
+### Hold back, and a deck with no tags (3.3)
+
+- A teacher's deck, imported by students, has every card active: a plan
+  can't hold anything back. Follow shows, checked when there's anything
+  to hold, "Hold back N cards of later dates until their day"
+  (`plans.holdable`: new, never studied, not suspended, not a leech, on
+  a date that hasn't opened and on no date that has). Following
+  suspends them in one undo step (`plans.hold_cards`) and keeps their ids
+  in `held`; the morning opens them on their day as any suspended card;
+  Stop following opens what's still held. Nothing else ever suspends.
+- A plan followed elsewhere (the site's code box, another computer) asks
+  the same question once, on its first morning here (`plan_flow.offer_hold`,
+  "… is new on this computer"), in one undo step.
+- The deck itself is in the tree (`DeckIndex.tree`), so a deck with no
+  tags or subdecks is planned in its own order: tick it, 20 a day, Fill
+  the calendar.
+- From Anki, Make a plan opens the new plan's calendar directly (named
+  after the deck; the title edits in place), at 20 new cards a day.
+- The shared link (`/p/CODE`) is three steps for someone new: Anki, the
+  add-on's code, Follow a plan with this code.
+
+## 3.3: a class through Step (C1–C5)
+
+Signed-off mock: "A class through Step", with Sam's picks (the preset:
+a copy when shared; keep note ids for tag and subdeck dates).
+
+- **C1 Anki's daily limit.** `plan_flow.new_limit` reads what Anki will
+  show today (the deck's today-only or own limit, else its preset). When
+  today's target is above it, the card says so with Raise to N:
+  `raise_limit` sets the deck's own limit (Deck Options › This deck), so
+  no other deck changes and no preset is copied. Anki records that as an
+  undo step (a preset change it doesn't), so Edit › Undo puts it back;
+  checked against the real engine (`tools/real_anki.py`).
+- **C2 Open early.** `early` on my follow, 0–7 days, from Plan ▾ › Open
+  early. The morning runs as if it were that many days later
+  (`run(..., when)`); the tiles and "behind" stay on today.
+- **C3 Searches.** A date's `search: [q]` runs through
+  `col.find_cards(q)` and is kept to the plan's deck; `unit_sig` includes
+  searches, so a new one opens what it adds. From Anki's browser, Add to
+  a plan offers the search in the box (with its count, `sn`) or exactly
+  the selected cards (those, when any are selected). On the site a day
+  takes a pasted search. A search about one person's own Anki
+  (`deck:current`, the browser's default; `is:due`, `flag:`, `rated:`…)
+  finds different cards for everyone, so neither side takes it
+  (`plans.shareable_search`, `PERSONAL` in builder.js). 50,000 single
+  cards a plan (docs up to 1.5 MB).
+- **C4 Study and review days.** Study on a date's row builds "Due Crew ·
+  <date>" (its seen cards, most lapses first) and opens it. `reviews:
+  [{day, from, to}]`: on that morning (up to three late) "Review · A – B",
+  the dates from A to B, 200 cards. The site's day panel sets them
+  (+ Review day); a 3.2 checkpoint loads as a one-date review day.
+- **C5 AnKing updates.** A date's `ids`: the note ids behind its tags and
+  subdecks in the author's copy. The day's first board carries
+  `authored` (my plans, lean); `send_ids` computes each plan's ids from
+  the deck of the same name and sends them when they changed
+  (`PUT /plans/{id}/ids`, kept only while the tags are the same). A
+  follower's tag or subdeck that finds nothing falls back to the ids;
+  the card says so once.
+
+### Speed (3.3)
+
+A deck's tags, note ids and subdecks are kept between refreshes
+(`plans._STATIC`) while a fingerprint holds (card count, newest note
+edit, newest card, deck and card-number sums; a few ms); only each
+card's state is read again, and so are a date's searches (they depend
+on notes and cards, never on reviews). On a 35,000-card AnKing-shaped
+deck a refresh's plan work is ~50 ms after the first (~550 ms). `tools/real_anki.py`
+checks it, with Anki's own package, before a release.
+
+## 3.4: a pasted search's count, and the plan in your calendar
+
+Signed-off mock "Plans 3.4" (D1, D2).
+
+- **D1.** The plans I write ride the day's first board (`authored`) with
+  their searches. My Anki counts each (`plans.search_counts`, kept to the
+  plan's deck) and sends the counts with the note ids (`PUT
+  /plans/{id}/ids {units, counts}`), one request a plan, only when
+  something changed. The site shows a pasted search as "counted in your
+  Anki soon" until then, and "finds nothing" when it finds none.
+- **D2.** `duecrew.com/p/CODE.ics` (the site's Worker passes it to `GET
+  /plans/ics?code=`, no sign-in, 120 an hour a code, cached 3 hours):
+  each date an all-day event ("name · N new"; an even date spans to its
+  due date), each review day one too, a link back to the plan, nobody's
+  name. A plan for one squad has none. Add to calendar (plan page for its
+  authors and code-plan followers, and the shared link's page): Google
+  Calendar (subscribe by URL), Apple Calendar or Outlook (`webcal:`), or
+  the link. Followers of a code plan now see its code.

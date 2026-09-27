@@ -50,6 +50,14 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Unsuspend", ids))
 
+    def suspend_cards(self, ids):
+        """Anki's: queue -1, whatever it was. An undoable op."""
+        ids = [int(i) for i in ids]
+        for cid in ids:
+            self.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = ?", (cid,))
+        if self.col is not None:
+            self.col.undo_steps.append(("Suspend", ids))
+
 
 class FakeCol:
     """A collection over a real sqlite database. The undo queue is a list
@@ -93,7 +101,10 @@ def make_collection(conn):
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
                  "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, flds TEXT DEFAULT '', "
-                 "tags TEXT DEFAULT '')")
+                 "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
+    # Anki bumps a note's mod on every edit; the plan index keeps tags by it
+    conn.execute("CREATE TRIGGER notes_mod AFTER UPDATE OF tags, guid, flds ON notes "
+                 "BEGIN UPDATE notes SET mod = mod + 1 WHERE id = NEW.id; END")
     return conn
 
 
@@ -150,6 +161,10 @@ class FakeResponse:
 
 class RequestException(Exception):
     pass
+
+
+class ConnectTimeout(RequestException):
+    """requests.exceptions.ConnectTimeout: the request never got out."""
 
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -256,7 +271,8 @@ class FakeWorker:
     # -- transport ---------------------------------------------------------
     def handle(self, method, url, headers=None, json_body=None):
         if self.down:
-            raise RequestException("offline")
+            self.tries = getattr(self, "tries", 0) + 1
+            raise (ConnectTimeout if self.down == "connect" else RequestException)("offline")
         if self.fail_status:
             self.log.append((method, url.split("?")[0], self.fail_status))
             return FakeResponse(self.fail_status, {"error": "server"})
@@ -879,7 +895,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -897,7 +913,7 @@ class FakeWorker:
         p["version"] += 1
 
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "units"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -922,6 +938,16 @@ class FakeWorker:
                   "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
             if u.get("due"):
                 nu["due"] = u["due"]
+            if u.get("search"):
+                nu["search"] = list(dict.fromkeys(u["search"]))
+            if u.get("sn"):
+                nu["sn"] = dict(u["sn"])
+            if u.get("ids"):
+                nu["ids"] = list(dict.fromkeys(u["ids"]))
+            if u.get("even"):
+                if u["even"] is not True or not u.get("due") or u["due"] == u["opens"]:
+                    raise Bad(400, "plan")
+                nu["even"] = True
             if u.get("check"):
                 if not DATE_RE.fullmatch(str(u["check"])) or u["check"] < u["opens"]:
                     raise Bad(400, "plan")
@@ -939,6 +965,21 @@ class FakeWorker:
             doc["exam"] = v["exam"]
         if v.get("end"):
             doc["end"] = v["end"]
+        if v.get("reviews"):
+            ids = {u["id"] for u in out}
+            if not all(isinstance(r, dict) and r.get("from") in ids and r.get("to") in ids for r in v["reviews"]):
+                raise Bad(400, "plan")
+            doc["reviews"] = [dict(r) for r in v["reviews"]]
+        if v.get("pace") is not None:
+            pc = v["pace"]
+            if (not isinstance(pc, dict) or not set(pc) <= {"mode", "days", "daily", "cover"}
+                    or pc.get("mode") not in ("end", "daily", "placed")
+                    or not isinstance(pc.get("days"), list) or len(pc["days"]) != 7
+                    or not all(x in (0, 1) and not isinstance(x, bool) for x in pc["days"]) or not any(pc["days"])
+                    or (pc.get("daily") is not None and not _is_int(pc["daily"], 1, 5000))
+                    or not isinstance(pc.get("cover") or [], list) or len(pc.get("cover") or []) > 500):
+                raise Bad(400, "plan")
+            doc["pace"] = {k: pc[k] for k in ("mode", "days", "daily", "cover") if pc.get(k) is not None}
         ph = v.get("phases") or {}
         if ph.get("catchup") or ph.get("taper"):
             if ph.get("taper") and not v.get("end"):
@@ -979,11 +1020,26 @@ class FakeWorker:
         if rest == ["trees"] and method == "PUT":
             if not isinstance(body.get("deck"), str) or not body["deck"]:
                 raise Bad(400, "plan")
+            def nested(v, prefix=0):
+                for x in v:
+                    if not (isinstance(x, list) and len(x) in (2, 3) and isinstance(x[0], str) and x[0]
+                            and "::" not in x[0] and _is_int(x[1])):
+                        raise Bad(400, "tree")
+                    ln = prefix + (2 if prefix else 0) + len(x[0])
+                    if ln > 200:
+                        raise Bad(400, "tree")
+                    if len(x) == 3:
+                        nested(x[2], ln)
             for k in ("tags", "decks"):
+                if body.get("v") == 2:
+                    nested(body.get(k) or [])
+                    continue
                 for x in body.get(k) or []:
                     if not (isinstance(x, list) and len(x) == 2 and isinstance(x[0], str) and _is_int(x[1])):
                         raise Bad(400, "tree")
             doc = {"tags": body.get("tags") or [], "decks": body.get("decks") or []}
+            if body.get("v") == 2:
+                doc["v"] = 2
             if self.plan_trees.get((me, body["deck"])) != doc:
                 self.plan_trees[(me, body["deck"])] = doc
                 self._count("plan_trees")
@@ -1018,7 +1074,8 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched"}:
+            if not set(body) <= {"share", "paused", "sched", "early"} or (
+                    "early" in body and not _is_int(body["early"], 0, 7)):
                 raise Bad(400, "follow")
             f = self.follows.get((pid, me))
             if not f:
@@ -1026,17 +1083,44 @@ class FakeWorker:
             share = body["share"] if isinstance(body.get("share"), bool) else f["share"]
             paused = body["paused"] if isinstance(body.get("paused"), bool) else f["paused"]
             sched = self._sched(body["sched"]) if "sched" in body else f.get("sched")
-            if (share, paused, sched) != (f["share"], f["paused"], f.get("sched")):
-                f.update(share=share, paused=paused, sched=sched)
+            early = body["early"] if "early" in body else f.get("early", 0)
+            if (share, paused, sched, early) != (f["share"], f["paused"], f.get("sched"), f.get("early", 0)):
+                f.update(share=share, paused=paused, sched=sched, early=early)
                 if not share:
                     f["progress"] = None  # sharing off clears what I shared
                 self._count("plan_follows")
-            return 200, {"share": share, "paused": paused, "sched": sched}
+            return 200, {"share": share, "paused": paused, "sched": sched, "early": early}
+        if rest[1:] == ["ids"] and method == "PUT":
+            if p["owner"] != me:
+                raise Bad(403, "not_author")
+            doc = json.loads(json.dumps(p["doc"]))
+            for uid, v in (body.get("counts") or {}).items():
+                u = next((x for x in doc["units"] if x["id"] == uid), None)
+                if u:
+                    sn = {q: n for q, n in v.items() if q in (u.get("search") or [])}
+                    if sn:
+                        u["sn"] = dict(u.get("sn") or {}, **sn)
+            for uid, (tags, decks, ids) in (body.get("units") or {}).items():
+                u = next((x for x in doc["units"] if x["id"] == uid), None)
+                if u and u["tags"] == tags and u["decks"] == decks:
+                    if ids:
+                        u["ids"] = list(ids)
+                    else:
+                        u.pop("ids", None)
+            clean = self._plan_doc(doc)
+            if clean != p["doc"]:
+                p["doc"] = clean
+                p["version"] += 1
+                self._count("plans")
+            return 200, {"version": p["version"]}
         if rest[1:] == ["cards"] and method == "POST":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
-            cards = body.get("cards")
-            if not isinstance(cards, list) or not cards:
+            search = body.get("search")
+            cards = [] if search else body.get("cards")
+            if search is not None and (not isinstance(search, str) or not search or not _is_int(body.get("n"), 0, 10 ** 6)):
+                raise Bad(400, "cards")
+            if not search and (not isinstance(cards, list) or not cards):
                 raise Bad(400, "cards")
             doc = json.loads(json.dumps(p["doc"]))
             if "unit" in body:
@@ -1050,6 +1134,9 @@ class FakeWorker:
                      "opens": body["opens"], "tags": [], "decks": [], "cards": []}
                 doc["units"].append(u)
             u["cards"] = u["cards"] + list(cards)
+            if search:
+                u["search"] = list(dict.fromkeys((u.get("search") or []) + [search]))
+                u["sn"] = dict(u.get("sn") or {}, **{search: body["n"]})
             clean = self._plan_doc(doc)
             if clean != p["doc"]:
                 p["doc"] = clean
@@ -1109,14 +1196,18 @@ class FakeWorker:
             plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
-                          "share": f["share"], "paused": f["paused"], "sched": f.get("sched"),
+                          "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "followers": len(rows), "crewDone": done})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
                   for pid, p in sorted(self.plans.items())
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
-        return {"plans": plans, "planOffers": offers}
+        authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
+            dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}))
+            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search")]}}
+            for pid, p in sorted(self.plans.items()) if p["owner"] == me]
+        return {"plans": plans, "planOffers": offers, "authored": authored}
 
     def _delete_account(self, me):
         email = self.users[me]["email"]
@@ -1161,6 +1252,7 @@ def install_fake_requests(store):
     mod = types.ModuleType("requests")
     mod.Session = lambda: FakeSession(store)
     mod.RequestException = RequestException
+    mod.exceptions = types.SimpleNamespace(ConnectTimeout=ConnectTimeout, RequestException=RequestException)
     mod.request = lambda method, url, **kw: FakeSession(store).request(
         method, url, headers=kw.get("headers"), json=kw.get("json"))
     sys.modules["requests"] = mod

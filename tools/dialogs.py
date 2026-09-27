@@ -151,6 +151,9 @@ def shoot(dlg, path):
 
 def main(out):
     os.makedirs(out, exist_ok=True)
+    for old in os.listdir(out):  # this run's renders only: none left from dialogs that changed or went
+        if old.endswith(".png"):
+            os.remove(os.path.join(out, old))
     failures = []
     noop = lambda *a, **k: None
 
@@ -328,6 +331,10 @@ def main(out):
         if dlg.plan.count() != 1:
             raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
         shoot(dlg, os.path.join(out, "plan-add-cards.png"))
+        dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
+                             search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
+        settle()
+        shoot(dlg, os.path.join(out, "plan-add-search.png"))
         # Change deck's question carries the plan's name: plain text, as the tip prompts
         from due_crew.ui import _plain_input
         dlg = _plain_input(None, "Change deck", "Run Arrhythmia <b> on")

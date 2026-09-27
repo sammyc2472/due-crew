@@ -8,15 +8,11 @@ requests (PUT /plans/trees, POST /auth/link) run in the background."""
 from urllib.parse import quote
 
 from aqt.qt import (
-    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
-    QRadioButton, QVBoxLayout,
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QVBoxLayout,
 )
 
 from . import attach_alive, esc, run_bg
 from .. import plans as P
-
-KINDS = (("both", "Tags and subdecks"), ("tags", "Tags only"), ("decks", "Subdecks only"))
-
 
 class MakePlanDialog(QDialog):
     def __init__(self, parent, client, col, site, open_link=None):
@@ -37,17 +33,6 @@ class MakePlanDialog(QDialog):
         form.addRow("Deck", self.deck)
         root.addLayout(form)
 
-        root.addWidget(QLabel("Units can be"))
-        row = QHBoxLayout()
-        self.kinds = QButtonGroup(self)
-        for i, (_key, label) in enumerate(KINDS):
-            b = QRadioButton(label)
-            b.setChecked(i == 0)
-            self.kinds.addButton(b, i)
-            row.addWidget(b)
-        row.addStretch()
-        root.addLayout(row)
-
         self.found = QLabel("")
         self.found.setWordWrap(True)
         self.found.setStyleSheet("font-size: 12px;")
@@ -66,11 +51,7 @@ class MakePlanDialog(QDialog):
         root.addWidget(self.buttons)
 
         self.deck.currentIndexChanged.connect(self._update)
-        self.kinds.idToggled.connect(lambda *_: self._update())
         self._update()
-
-    def _kind(self):
-        return KINDS[max(0, self.kinds.checkedId())][0]
 
     def _tree(self):
         did = self.deck.currentData()
@@ -78,8 +59,7 @@ class MakePlanDialog(QDialog):
             return None, [], []
         if did not in self.indexes:
             self.indexes[did] = P.DeckIndex(self.col, did)
-        kind = self._kind()
-        tags, decks = self.indexes[did].tree(with_tags=kind != "decks", with_decks=kind != "tags")
+        tags, decks = self.indexes[did].tree()
         # the server takes paths of up to 200 characters, one line each
         ok = lambda path: len(path) <= 200 and path.isprintable()
         return (self.indexes[did].name, [t for t in tags if ok(t[0])], [d for d in decks if ok(d[0])])
@@ -90,17 +70,10 @@ class MakePlanDialog(QDialog):
             self.found.setText("No decks yet.")
             self.go.setEnabled(False)
             return
-        kind = self._kind()
-        parts = []
-        if kind != "decks":
-            parts.append(f"<b>{len(tags):,}</b> tag name{'s' if len(tags) != 1 else ''}")
-        if kind != "tags":
-            parts.append(f"<b>{len(decks):,}</b> subdeck name{'s' if len(decks) != 1 else ''}")
-        self.found.setText(f"Sends {' and '.join(parts)}, with how many cards each has. No card text.")
+        self.found.setText("Sends its tag and subdeck names with card counts. Never card text.")
         self.go.setEnabled(bool(tags or decks))
         if not (tags or decks):
-            self.found.setText(f"{esc(name)} has no {'tags' if kind == 'tags' else 'subdecks' if kind == 'decks' else 'tags or subdecks'} "
-                               "to make units from.")
+            self.found.setText(f"{esc(name)} has no cards yet.")
 
     def _open(self):
         name, tags, decks = self._tree()

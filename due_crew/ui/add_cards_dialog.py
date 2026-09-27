@@ -8,7 +8,7 @@ import datetime
 
 from aqt.qt import (
     QButtonGroup, QComboBox, QDate, QDateEdit, QDialog, QDialogButtonBox, QFormLayout,
-    QHBoxLayout, QLabel, QRadioButton, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QRadioButton, Qt, QVBoxLayout, QWidget,
 )
 
 from . import attach_alive, run_bg
@@ -16,14 +16,14 @@ from .. import plans as P
 
 
 class AddCardsDialog(QDialog):
-    def __init__(self, parent, client, refs, today, on_added=None):
+    def __init__(self, parent, client, refs, today, on_added=None, search="", search_n=0):
         super().__init__(parent)
         self.client, self.refs, self.today = client, list(refs), today
         self.on_added = on_added
+        self.search, self.search_n = str(search or "").strip(), int(search_n or 0)
         self.plans = []
         attach_alive(self)
-        n = len(self.refs)
-        self.setWindowTitle(f"Add {n:,} card{'s' if n != 1 else ''} to a plan")
+        self.setWindowTitle("Add to a plan")
         self.setMinimumWidth(440)
         root = QVBoxLayout(self)
 
@@ -35,13 +35,13 @@ class AddCardsDialog(QDialog):
         ol = QVBoxLayout(opens)
         ol.setContentsMargins(0, 0, 0, 0)
         wrow = QHBoxLayout()
-        self.with_unit = QRadioButton("With")
+        self.with_unit = QRadioButton("")
         self.unit = QComboBox()
         wrow.addWidget(self.with_unit)
         wrow.addWidget(self.unit, 1)
         ol.addLayout(wrow)
         orow = QHBoxLayout()
-        self.own = QRadioButton("On its own date:")
+        self.own = QRadioButton("New date")
         self.date = QDateEdit()
         self.date.setCalendarPopup(True)
         self.date.setDisplayFormat("ddd d MMM yyyy")
@@ -60,14 +60,27 @@ class AddCardsDialog(QDialog):
         self.with_unit.setChecked(True)
         self.unit.currentIndexChanged.connect(lambda *_: self.with_unit.setChecked(True))
         self.date.dateChanged.connect(lambda *_: self.own.setChecked(True))
-        form.addRow("Opens", opens)
+        form.addRow("Date", opens)
         root.addLayout(form)
 
-        note = QLabel("Adds these exact cards, not the rest of their notes. "
-                      "Sends which cards they are, never their text.")
-        note.setWordWrap(True)
-        note.setStyleSheet("font-size: 12px;")
-        root.addWidget(note)
+        # 3.3, C3: the browser's search itself (it keeps up with cards added
+        # later, and runs in each classmate's Anki), or exactly these cards
+        n = len(self.refs)
+        self.by_search = QRadioButton(f"This search · {self.search_n:,} card{'s' if self.search_n != 1 else ''} now, and cards added to it later")
+        self.by_cards = QRadioButton(f"These {n:,} card{'s' if n != 1 else ''} · exactly these")
+        what = QButtonGroup(self)
+        what.addButton(self.by_search)
+        what.addButton(self.by_cards)
+        shown = QLabel(self.search)
+        shown.setTextFormat(Qt.TextFormat.PlainText)  # the search as typed, never markup
+        shown.setStyleSheet("font-family: monospace; font-size: 11.5px; margin-left: 22px;")
+        shown.setWordWrap(True)
+        for w in (self.by_search, shown, self.by_cards):
+            root.addWidget(w)
+        self.by_search.setVisible(bool(self.search))
+        shown.setVisible(bool(self.search))
+        self.by_cards.setVisible(bool(n))
+        (self.by_cards if n else self.by_search).setChecked(True)  # what I picked, unless I picked nothing
         self.status = QLabel("Looking for your plans…")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
@@ -83,7 +96,7 @@ class AddCardsDialog(QDialog):
 
         me = client.user_id
         run_bg(self, client.my_plans, lambda plans, err: self._loaded(
-            None if err else [p for p in plans or [] if p.get("owner") == me]))
+            None if err else [p for p in plans or [] if p.get("owner") == me or p.get("role") == "editor"]))
 
     def _loaded(self, plans):
         if plans is None:
@@ -115,7 +128,7 @@ class AddCardsDialog(QDialog):
         self.with_unit.setEnabled(bool(units))
         self.unit.setEnabled(bool(units))
         (self.with_unit if units else self.own).setChecked(True)
-        self.add_btn.setEnabled(bool(p) and bool(self.refs))
+        self.add_btn.setEnabled(bool(p) and (bool(self.refs) or bool(self.search)))
 
     def _add(self):
         p = self._current()
@@ -127,6 +140,8 @@ class AddCardsDialog(QDialog):
         self.add_btn.setEnabled(False)
         self.status.setText("Adding…")
         cl, refs, pid = self.client, self.refs, p["id"]
+        search = self.search if self.by_search.isChecked() and self.search else None
+        n_added = self.search_n if search else len(refs)
 
         def done(result, err):
             got, status = result if result else (None, 0)
@@ -138,7 +153,8 @@ class AddCardsDialog(QDialog):
                     status, "Couldn't add them. Check your connection."))
                 return
             if self.on_added:
-                self.on_added(got, len(refs))
+                self.on_added(got, n_added)
             self.accept()
 
-        run_bg(self, lambda: cl.add_plan_cards(pid, refs, unit=unit, opens=None if unit else opens), done)
+        run_bg(self, lambda: cl.add_plan_cards(pid, refs, unit=unit, opens=None if unit else opens,
+                                               search=search, n=self.search_n), done)

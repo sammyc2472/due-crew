@@ -15,6 +15,7 @@ from a friend's doc goes in as textContent, never markup.
 import datetime
 import json
 import re
+import secrets
 
 ROUND_CHOICES = (15, 25, 30, 45, 50)
 BREAK_CHOICES = (5, 10, 15)
@@ -197,6 +198,11 @@ SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;heigh
                                   (289.8, "on"), (362.25, "on"), (434.7, "on")))
            + "</svg>")
 
+# The widget's commands carry this, so the reviewer page (where a card's own
+# script runs too) is heard only through the widget's buttons. New each run,
+# and only inside the widget's closure: never on the page for a card to read.
+CMD_KEY = secrets.token_hex(8)
+
 # One runtime per webview, shared by every kind. `kind`: chip (top bar),
 # bottom (review bottom bar), gutter (margin card), break (between cards),
 # card (the whole room, opened from the chip), off (remove all).
@@ -269,7 +275,7 @@ _RUNTIME = r"""
     });
     return f;
   }
-  function send(cmd) { try { pycmd('duecrew:' + cmd); } catch (e) {} }
+  function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + __KEY__); } catch (e) {} }
   function sub(p) {
     if (p.state === 'before') { return 'starts ' + hm(D.start); }
     if (p.state === 'break') { return 'Break · round ' + (p.round + 1) + ' at ' + hm(p.until); }
@@ -435,7 +441,27 @@ def widget_js(kind, data=None):
             .replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
-            .replace("__SIDE__", chip_side((data or {}).get("side"))))
+            .replace("__SIDE__", chip_side((data or {}).get("side")))
+            .replace("__KEY__", json.dumps(CMD_KEY)))
+
+
+# what the widget sends from the reviewer's page (the margin card, the
+# break, the room's card): nothing else is ever taken from there
+CARD_PAGE_CMDS = ("roomcard", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave")
+
+
+def trusted(message, from_card_page):
+    """(message without its key, whether to act on it). From the reviewer's
+    page only the widget's own commands count, and only with the key; a
+    card's script could still wrap pycmd and learn it, so the list is what
+    bounds it. Elsewhere the key is just dropped."""
+    body, sep, key = message.rpartition("|")
+    keyed = bool(sep) and key == CMD_KEY
+    if keyed:
+        message = body
+    if not from_card_page:
+        return message, True
+    return message, keyed and message.split(":")[1:2] in [[c] for c in CARD_PAGE_CMDS]
 
 
 def placement(top_hidden, bottom_hidden):

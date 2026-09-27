@@ -156,6 +156,17 @@ SROWS_MANY = SROWS + [
 sections.append("<h3>squad of 18 (the row cap)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60,
     squad_view=dict(SQUAD_VIEW, rows=SROWS_MANY, people=18, studying=17)))
+# 3.1-3.3: a plan I follow, on my schedule, on the Decks tab
+PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of 9 · 6 following",
+             "rows": [{"name": "Pathoma 1 · Cell injury", "state": "open", "seen": [283, 283], "crew": [5, 6], "n": "crew 5/6"},
+                      {"name": "B&B Biochem · Enzymes", "state": "open", "seen": [80, 96], "crew": [3, 6], "n": "crew 3/6"},
+                      {"name": "Pathoma 2 · Inflammation", "state": "now", "seen": [60, 210], "crew": [1, 6], "n": "crew 1/6 · due Fri"},
+                      {"name": "B&B Metabolism 1", "state": "later", "seen": None, "crew": None, "n": "opens Mon 12 Oct"}],
+             "opened": {"names": ["Pathoma 2 · Inflammation"], "n": 42, "undo": True},
+             "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
+             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": True}
+sections.append("<h3>3.3: a plan I follow, on the Plans tab</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
 # the preview holds many boards; the add-on runs this once, for its one
 sections.append("<script>" + board.keep_me_in_view_js().replace(
     "var box = document.querySelector('#due-crew .dc-scroll');\n        if (!box) { return; }",

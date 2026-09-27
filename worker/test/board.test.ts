@@ -229,6 +229,17 @@ describe("squads", () => {
     expect((await nia.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" })).status).toBe(403);
   });
 
+  it("restore isn't a way round create's limit, and a squad fills at 500", async () => {
+    for (let i = 0; i < 30; i++) {
+      expect(await nia.status("POST", "/squads/restore", { code: `ABCDEF${"23456789"[i % 8]}${"23456789"[Math.floor(i / 8)]}`, name: "x" })).toBe(200);
+    }
+    expect(await nia.status("POST", "/squads/restore", { code: "ZZZZZZZZ", name: "x" })).toBe(429);
+    const sq = (await dre.call("POST", "/squads", { name: "big" })).body;
+    await db().prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 499)
+      INSERT INTO members (squad, uid, name, joined_at) SELECT ?, 'm' || x, 'M', 0 FROM c`).bind(sq.id).run();
+    expect(await sam.status("POST", `/squads/${sq.id}/join`, { code: sq.code })).toBe(403);
+  });
+
   it("only the founder sees the block list", async () => {
     const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
     await dre.call("POST", `/squads/${sq.id}/join`);

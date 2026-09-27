@@ -45,6 +45,13 @@ paste it into your group chat.
 
 <img alt="The crew's week pasted into a group chat" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/share.png" width="420">
 
+**Study plans.** Plan a class's or a crew's studying on a calendar at
+duecrew.com: Tools → Due Crew → Make a plan from a deck, tick the
+chapters (tags, subdecks, or just the deck in order), pick a pace, and
+share the link. Everyone following gets that day's cards each morning,
+and sees how the crew is doing on the Plans tab. Plan it with co-authors,
+and leave notes on a day.
+
 **And also**
 
 - **Status.** One line under your name. Start it with a number, like

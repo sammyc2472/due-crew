@@ -310,7 +310,7 @@ def test_welcome_back():
                         "back": True, "exam": "", "last_updated": "",
                         "reviews": 118, "time_ms": 1, "retention": None,
                         "streak": 1}, "#2", {})
-    check("welcome back: row renders the chip", "bkb" in html and "back" in html)
+    check("welcome back: row renders the chip, in grey", '<span class="chip">back today</span>' in html)
 
 
 def test_milestones():
@@ -430,8 +430,8 @@ def test_shares_v21():
           "duecrew:sharetoday" in js and "duecrew:shareweek" in js)
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
-    check("share: Week view footer offers the crew week",
-          "sharecrewweek" in foot_week and "Share week" in foot_week)
+    check("share: Week view's Crew menu offers the crew week (3.4 review, H5)",
+          "crewmenu" in foot_week and ("Share the week", "sharecrewweek") in board.crew_menu_items("week", False))
 
 
 def _luminance(hex_color):
@@ -582,7 +582,7 @@ def test_away_flag():
     data, labels, tomorrow = fetch_as(store, sam, col)
     today_html = _render(data, labels, tomorrow, "today")
     check("away: Today row says when they're back",
-          'class="awb"' in today_html and "back tomorrow" in today_html, today_html[-600:])
+          '<span class="chip">away · back tomorrow</span>' in today_html, today_html[-600:])
     doc3 = {"away": True, "awayTo": d(3)}
     check("away: badge names the return day",
           board._away_text(doc3, d(0)) == f"back {TODAY + datetime.timedelta(days=4):%b} {(TODAY + datetime.timedelta(days=4)).day}"
@@ -727,7 +727,7 @@ def test_squad_view_html():
           'onclick="pycmd(\'duecrew:sort:retention\')' in html
           and by_streak.index("StepQueen") < by_streak.index("Maya")
           and by_streak.index("Maya") < by_streak.index("Sammy")
-          and '&#128293;<span class="hl"> Streak</span> &#9662;' in by_streak, by_streak)
+          and '<span class="hi">&#128293;</span><span class="hl">Streak</span> &#9662;' in by_streak, by_streak)
     check("squad view: switcher marks the current squad and escapes names",
           'class="on"' in html and "MS2 &lt;x&gt;" in html and "squadadd" in html)
     none = board._squads_html({"state": "none", "squads": [], "current": ""}, {})
@@ -883,19 +883,20 @@ def test_v25_edges_emoji_week():
     html = board._squads_html(view, {"sort": "week"})
     check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
           "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
-          and '&#128197;<span class="hl"> 7 days</span> &#9662;' in html
+          and '<span class="hl">7 days</span> &#9662;' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
-    check("squad board: Share today sits in the footer, as on Today, not on the squad's line",
-          "squadshare" not in html and "squadshare" in page
-          and page.index("squadinvite") < page.index('<div class="dc-foot">') < page.index("squadshare"))
+    check("squad board: Share the squad's day is in the Crew menu, not on the squad's line",
+          "squadshare" not in html and "crewmenu" in page
+          and ("Share the squad's day", "squadshare") in board.crew_menu_items("squads", False, True)
+          and not any(k == "squadshare" for _l, k in board.crew_menu_items("squads", False, False)))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
                          "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week"}, 0)
     check("crew board: emoji by the name; the squads-only sort falls back to reviews",
-          "🦊 Sammy" in crew and '&#128218;<span class="hl"> Reviews</span> &#9662;' in crew)
+          "🦊 Sammy" in crew and '<span class="hl">Reviews</span> &#9662;' in crew)
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
     esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
     check("own card: emoji by the name and a link to change it",
@@ -2215,7 +2216,9 @@ def test_show_up():
                         wrap={"reviews": 5, "time_ms": 1, "full_days": 5})
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
-          and "Last week" not in mode and "Share week" in mode and "Share today" not in mode)
+          and "Last week" not in mode
+          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek"]
+          and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
           mode.count('class="sq on"') == 3 + 2 + 3 + 1 + 2 * 0 + 0  # per person within the calendar week
@@ -2293,14 +2296,18 @@ def test_new_cards_v213():
         return {"user_id": "u", "name": "Nia", "you": False, "paused": False,
                 "last_updated": "", "exam_date": "", "days": {lb: day}, "decks": []}
     base = {"labels": [lb], "tomorrow": "", "pending": []}
+    # 3.4 review, T5: on the Week tab, where how much was new is the story
     some = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
-                        {"period": "today"}, 0)
+                        {"period": "week"}, 0)
     every = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 20})]),
-                         {"period": "today"}, 0)
+                         {"period": "week"}, 0)
     none = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20, "newCards": 0})]),
-                        {"period": "today"}, 0)
-    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "today"}, 0)
-    check("board: a grey line under Reviews, with the whole count on hover",
+                        {"period": "week"}, 0)
+    old = board.render(dict(base, entries=[ent({"studied": True, "reviews": 20})]), {"period": "week"}, 0)
+    today_only = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12})]),
+                              {"period": "today"}, 0)
+    check("board, T5: Today's rows are one line (no new line under Reviews)", 'class="nw"' not in today_only)
+    check("board: a grey line under Reviews on the Week tab, with the whole count on hover",
           '<small class="nw">12 new</small>' in some and 'title="12 of 205 were new cards"' in some)
     check("board: \"all new\" when every review was new; nothing when none were or they didn't say",
           ">all new<" in every and 'class="nw"' not in none and 'class="nw"' not in old)
@@ -2610,6 +2617,82 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+def test_ui_review_board():
+    """3.4 review: one chip beside a name (T1), a colour means one thing
+    (T2), one banner at a time (H6), one way in (C4), day one is the
+    invite (C5), and a friend's card says since when."""
+    base = {"user_id": "u", "name": "Dre", "you": False, "paused": False, "quiet": False, "stale": False,
+            "last_updated": "2026-09-27T10:00:00Z", "reviews": 700, "time_ms": 1, "retention": 90.0, "streak": 3}
+    busy = board._row_html(dict(base, live=True, exam="exam Fri", back=True, away="back Sep 6",
+                                recap={"n": 2, "name": "P"}), "#2", {})
+    check("T1: a busy day shows one chip, the most time-bound", "studying now" in busy
+          and "exam Fri" not in busy and "back today" not in busy and "week 2 done" not in busy)
+    exam = board._row_html(dict(base, exam="exam Fri", back=True), "#2", {})
+    check("T1/T2: then an exam, in amber, and nothing else", '<span class="chip exam">exam Fri</span>' in exam and "back today" not in exam)
+    check("T2: when they last synced leaves a row that's studying", '<span class="la' not in exam)
+    quiet = board._row_html(dict(base, quiet=True, last_updated="2026-09-20T10:00:00Z"), "&mdash;", {})
+    check("T2: a quiet row keeps it, in grey", '<span class="la faded">(' in quiet)
+    away = board._row_html(dict(base, away="back Sep 6"), "#2", {})
+    check("T1: away reads as away, in grey", '<span class="chip">away · back Sep 6</span>' in away)
+    evil = board._row_html(dict(base, room="<b>x</b>'s room"), "#2", {})
+    check("T1: a room's title is escaped", "&lt;b&gt;" in evil and "<b>x" not in evil)
+    labels = ["2026-09-27"]
+    data = {"entries": [], "labels": labels, "tomorrow": "", "pending": []}
+    bans = board.render(data, {"period": "today"}, 0, wrap={"reviews": 5, "time_ms": 1},
+                        exam_eve={"people": [("m", "Marisa")]}, knocks=[{"name": "Priya", "uid": "p"}])
+    check("H6: the most time-bound banner shows, the others wait behind 1 of 3",
+          bans.count('<div class="dc-wrap') == 1 and bans.count("<div hidden class=\"dc-wrap") == 2
+          and "1 of 3 &rsaquo;" in bans and bans.index("exam is tomorrow") < bans.index("Priya"))
+    one = board.render(data, {"period": "today"}, 0, wrap={"reviews": 5, "time_ms": 1})
+    check("H6: one banner has no counter", "of 1" not in one and "&rsaquo;</a>" not in one)
+    out = board.signed_out_card({})
+    check("C4: one way in", "Start with your email" in out and ">Join<" not in out and "setup:" not in out)
+    me = {"user_id": "sam", "name": "Sammy", "emoji": "", "you": True, "paused": False, "last_updated": "",
+          "exam_date": "", "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}
+    solo = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": [], "my_code": "K7Q2ZP"},
+                        {"period": "today"}, 0)
+    check("C5: alone, the invite is the board", 'class="dc-empty"' in solo and "K7Q2 ZP" in solo
+          and "copyinvite" in solo and "duecrew:addcode:" in solo)
+    card = board.profile_overlay_js({"name": "Dre", "you": False, "cells": [1, 0], "same_days": 42, "start": "2026-04-06"})
+    check("card: the days in common, since the month the heatmap starts", "42 days</b> since April" in card, card[-400:])
+
+
+def test_retry_only_what_is_safe_twice():
+    """Review: a request that fails is sent once more only when sending it
+    twice can't do a thing twice. A POST that may have landed (a new squad)
+    isn't repeated; a read, a sync, or one that never got out is."""
+    store = world({"maya": "Maya"})
+    cl = new_client(store, "maya", "Maya")
+    for down, method, path, want in ((True, "POST", "/squads", 1), (True, "GET", "/friends", 2),
+                                     (True, "POST", "/sync", 2), ("connect", "POST", "/squads", 2)):
+        store.down, store.tries = down, 0
+        try:
+            cl._call(method, path, {"name": "x"} if method == "POST" else None)
+        except shapes.TransportError:
+            pass
+        check(f"retry: {method} {path} ({'never sent' if down == 'connect' else 'may have landed'}) tried {want}x",
+              store.tries == want, str(store.tries))
+    store.down = False
+
+
+def test_room_commands_from_the_card_page_need_the_key():
+    """Review: the reviewer's page runs the card's own script too. From
+    there a bare duecrew: command (a card cheering the room, joining or
+    leaving it) is dropped; the room widget's own buttons carry a key that
+    lives only in its script. The board and the bars need no key."""
+    from due_crew import room_model as rm
+    js = rm.widget_js("break", {"title": "x"})
+    check("room: the widget's commands carry this run's key", rm.CMD_KEY in js and "'|'" in js)
+    check("room: a keyed command from the card page counts, without its key",
+          rm.trusted(f"duecrew:roomcheer|{rm.CMD_KEY}", True) == ("duecrew:roomcheer", True))
+    check("room: a bare one from the card page doesn't", rm.trusted("duecrew:roomcheer", True)[1] is False)
+    check("room: a wrong key doesn't either", rm.trusted("duecrew:roomleave|0000", True)[1] is False)
+    check("room: the board's commands need none", rm.trusted("duecrew:roomjoin:abc:1", False) == ("duecrew:roomjoin:abc:1", True))
+    check("room: from the card page, even keyed, nothing but the widget's own",
+          rm.trusted(f"duecrew:roomjoin:abc|{rm.CMD_KEY}", True)[1] is False
+          and rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True)[1] is False)
+
+
 def test_room_chip_side_v301():
     """3.0.1: the room chip goes left or right in the top bar (a setting
     on this computer; AMBOSS puts a chip on the right too)."""
@@ -2899,17 +2982,17 @@ def test_plans_glue_v31():
         col.undo_steps.append(("Due Crew: open 2 dates", []))
         view = F.board_view(box["cfg"])
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
-                            {"period": "decks"}, 0, plans=view)
+                            {"period": "plans"}, 0, plans=view)
         check("card: the plan's title, week and followers",
               "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
         check("card: names escaped, crew done as N of followers, Undo while it's Anki's latest step",
-              "Heart &lt;b&gt;failure" in html and "1 of 2" in html and "duecrew:planundo" in html
+              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:planundo" in html
               and "<b>failure" not in html)
         col.undo_steps.append(("Edit note", []))
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
-                            {"period": "decks"}, 0, plans=F.board_view(box["cfg"]))
+                            {"period": "plans"}, 0, plans=F.board_view(box["cfg"]))
         check("card: no Undo once Anki has done something since", "duecrew:planundo" not in html
-              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning: 3 cards" in html)
+              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning (3 cards)" in html)
         check("card: behind, only for me",
               "Heart failure</b> was due Mon. 2 cards not seen yet." in html
               or "was due Monday. 2 cards not seen yet." in html, "")
@@ -2947,7 +3030,7 @@ def test_plans_glue_v31():
         check("site link: one request, a token for the fragment", maya.site_link() and
               store.log[-1] == ("POST", "/auth/link", 200))
         check("tree: names and counts go up", maya.put_tree("Step 1", [["Step1::Cardio", 3]], [])
-              and store.plan_trees[("maya", "Step 1")]["tags"] == [["Step1::Cardio", 3]])
+              and store.plan_trees[("maya", "Step 1")]["tags"] == [["Step1", 0, [["Cardio", 3]]]])
         check("add cards: only the author", new_client(store, "kai", "Kai").add_plan_cards(
             pid, [["guid000001", 0]], unit="hf")[1] == 403)
         mine = maya.my_plans()
@@ -3096,6 +3179,19 @@ def test_plans_followed_elsewhere_v311():
         check("follow again: what was applied here is kept (the skipped unit stays shut)",
               _open(col) == {3, 8} and g.state()["plans"][pid]["applied"]["hf"].startswith("skip:"),
               str(_open(col)))
+        # 3.4 review, H1: a plan first seen here (followed on the site) asks
+        # Follow's hold-back question, once, only when there's something to hold
+        asked = []
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("hold on first sight: nothing active to hold, nothing asked", asked == [], str(asked))
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
+        before = _open(col)
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("hold on first sight: asked, and a no leaves everything open", asked and _open(col) == before, str(asked))
+        F.offer_hold([pid], ask=lambda name, n: True)
+        held = g.state()["plans"][pid].get("held") or []
+        check("hold on first sight: a yes holds back the later dates' cards, remembered for stop",
+              held and all(c not in _open(col) for c in held) and len(held) == asked[-1], str(held))
 
 
 def test_plans_changed_unit_v311():
@@ -3211,6 +3307,31 @@ def test_plans_notes_mode_v311():
             pass
         check("notes mode: no cards are taken, and it says to switch to Cards",
               not asked and g.toasts and "Cards" in g.toasts[-1], str(g.toasts))
+
+
+def test_plan_search_is_the_decks_v34():
+    """3.4 review: the browser's search goes to a plan only when it finds the
+    same cards in everyone's copy. Anki's own deck:current (the browser's
+    default) would open a follower's whole deck; is:due, flags and ratings
+    are one person's."""
+    from due_crew import plans
+    for q in ("deck:current", '"deck:current" tag:x', "is:due", "-is:suspended tag:a", "flag:1", "(rated:1 or tag:x)", " "):
+        check(f"search: {q!r} isn't a plan's", not plans.shareable_search(q))
+    for q in ("tag:*Cardio* -tag:*Pharm*", "tag:Step1::Renal", "current events", '"deck:Step 1::Renal"'):
+        check(f"search: {q!r} is", plans.shareable_search(q))
+    maya = new_client(world({"maya": "Maya"}), "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        edit = types.SimpleNamespace(lineEdit=lambda: types.SimpleNamespace(text=lambda: "deck:current"))
+        browser = types.SimpleNamespace(table=types.SimpleNamespace(is_notes_mode=lambda: False),
+                                        form=types.SimpleNamespace(searchEdit=edit), selected_cards=lambda: [])
+        try:
+            g.F.add_to_plan(browser)
+        except Exception:
+            pass
+        check("search: the default search with nothing picked asks for a search or cards",
+              g.toasts and "Search for the cards" in g.toasts[-1], str(g.toasts))
+        check("review: a date named with :: makes no parent deck for its filtered deck",
+              g.F._deck_name("Checkpoint · Renal::Pharm") == "Checkpoint · Renal: Pharm")
 
 
 def test_restore_only_from_2x_v311():
@@ -3530,6 +3651,186 @@ def test_schedule_morning_v32():
     del start
 
 
+def test_tree_nested_v33():
+    """3.3: the tree goes up nested, each name once, so deep tags fit: the
+    most useful first (question ids last), a kept tag keeps its parents,
+    and it stays under the server's body limit."""
+    from due_crew import plans as P
+    rows = [["#AK", 9000], ["#AK::#Bootcamp", 3000], ["#AK::#Bootcamp::Cardiology", 900],
+            ["#AK::#Bootcamp::Cardiology::02_Anatomy", 120],
+            ["#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
+            ["#AK::#UWorld", 5000]]
+    rows += [[f"#AK::#UWorld::{10000 + i}", 2] for i in range(40000)]
+    tree, kept, left = P.nest(rows, budget=60_000)
+    flat = []
+
+    def walk(level, pre=""):
+        for x in level:
+            p = f"{pre}::{x[0]}" if pre else x[0]
+            flat.append(p)
+            if len(x) == 3:
+                walk(x[2], p)
+    walk(tree)
+    check("tree: a tag five levels down goes up", "#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
+    check("tree: question ids fill what's left, and some are left out", left > 0 and kept == len(flat))
+    check("tree: every kept tag has its parents", all("::" not in p or p.rsplit("::", 1)[0] in set(flat) for p in flat))
+    check("tree: it fits the budget", len(json.dumps(tree)) <= 60_000, str(len(json.dumps(tree))))
+    store = world({"dre": "Dre"})
+    dre = new_client(store, "dre", "Dre")
+    check("tree: the server takes it", dre.put_tree("Step 1", rows[:6], []) and store.plan_trees[("dre", "Step 1")].get("v") == 2)
+
+
+def test_hold_back_v33():
+    """3.3: a deck whose cards are all active (a teacher's shared deck):
+    Follow offers to hold back later dates' never-studied cards; asked,
+    they're suspended in one undo step, open on their day, and stopping
+    opens them again. Nothing studied, and nothing on an opened date, is held."""
+    from due_crew import plans as P
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for i in range(6):  # 100-102 unidad 1 (today), 103-105 unidad 2 (in three days); 105 already studied
+        fakes.add_card(conn, 100 + i, did=10, queue=2 if i == 5 else 0, ctype=2 if i == 5 else 0,
+                       tags="Unidad_1" if i < 3 else "Unidad_2", due=i)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Español 1"})
+    doc = {"deck": "Español 1", "units": [
+        {"id": "u1", "name": "Unidad 1", "opens": _day(0), "tags": ["Unidad_1"], "decks": [], "cards": []},
+        {"id": "u2", "name": "Unidad 2", "opens": _day(3), "tags": ["Unidad_2"], "decks": [], "cards": []}]}
+    idx = P.DeckIndex(col, 10)
+    held = P.holdable(idx, doc, _day(0))
+    check("hold: only later dates' new, active cards", held == {103, 104}, str(held))
+    n = P.hold_cards(col, held, "Due Crew: hold back Español")
+    check("hold: suspended, one undo step", n == 2 and _open(col) == {100, 101, 102, 105}
+          and col.undo_steps[-1][0] == "Due Crew: hold back Español")
+    check("hold: nothing left to hold after", P.holdable(P.DeckIndex(col, 10), doc, _day(0)) == set())
+    P.open_cards(col, held, "Due Crew: stop Español")
+    check("hold: stopping opens them again", _open(col) == {100, 101, 102, 103, 104, 105})
+
+
+def test_class_through_step_v33():
+    """3.3, C1-C5: Anki's own limit shows on the card with the fix; a date
+    opens days early; an Anki search is a date's contents; a renamed tag
+    falls back to the author's note ids; the author's ids go up once."""
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    col = _spread_col()
+    idx = P.DeckIndex(col, 10)
+    # C3: a search, run by this collection and kept to the deck
+    col.find_cards = lambda q: [101, 102, 999] if q == "tag:L14" else []
+    idx = P.DeckIndex(col, 10)
+    got = idx.match({"id": "s", "tags": [], "decks": [], "cards": [], "search": ["tag:L14"]}, None, "Step 1")
+    check("search: its cards, only those in the plan's deck", got == {101, 102}, str(got))
+    check("search: a unit's sig changes with its searches, and stays for one without",
+          P.unit_sig({"tags": ["a"]}) == P.unit_sig({"tags": ["a"], "search": []})
+          and P.unit_sig({"tags": ["a"]}) != P.unit_sig({"tags": ["a"], "search": ["tag:x"]}))
+    # C5: a tag this copy doesn't have: the author's note ids find it
+    guids = {cid: g for (g, _o), cid in idx.by_ref.items()}
+    u = {"id": "r", "tags": ["Step1_v13::Renal"], "decks": [], "cards": [], "ids": [guids[103], guids[104]]}
+    got = idx.match(u, None, "Step 1")
+    check("renamed tag: matched by the author's note ids, and noted", got == {103, 104} and "r" in idx.fell_back, str(got))
+    idx2 = P.DeckIndex(col, 10)
+    check("renamed tag: a tag that matches doesn't use them", idx2.match(dict(u, tags=["Step1::Renal"]), None, "Step 1")
+          == set(range(100, 110)) and not idx2.fell_back)
+    snap = P.ids_snapshot(idx2, {"deck": "Step 1", "units": [{"id": "r", "tags": ["Step1::Renal"], "decks": []}]})
+    check("snapshot: the note ids behind a date's tags, with the tags they came from",
+          snap["r"][0] == ["Step1::Renal"] and len(snap["r"][2]) == 10)
+    # C1 and C2 on the card
+    card = {"id": "p1", "title": "Block", "sub": "", "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
+            "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Mon", "sched": False, "early": 2,
+            "opened": {"names": ["L14"], "n": 9, "undo": False},
+            "session": {"kind": "study", "target": 60, "done": 0, "due": 10, "minutes": 20, "behind": 0, "limit": 20, "fell_back": 3}}
+    html = board._plan_card_html(card)
+    check("limit: the card says Anki shows fewer, with Raise", "Anki shows 20 new a day" in html and "planlimit:p1" in html)
+    check("limit: not when Anki shows enough", "planlimit" not in board._plan_card_html(
+        dict(card, session=dict(card["session"], limit=80))))
+    check("early: what opened says how early", "2 days early" in html)
+    check("study: a date's row builds its deck", "planstudydate:p1:u1" in html)
+    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in html
+          and "planidsok:p1" not in board._plan_card_html(dict(card, fallback_ok=True)))
+    # C2: the morning looks ahead
+    store = world({"dre": "Dre", "maya": "Maya"})
+    unit = {"id": "rn", "name": "Renal", "opens": _day(2), "tags": ["Step1::Renal"]}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    maya = new_client(store, "maya", "Maya")
+    plan, _ = maya.follow_plan(code)
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    check("early: off, a date two days out stays shut", _open(col) == set())
+    check("early: set with one request, kept on the plan", maya.set_early(pid, 2) and store.follows[(pid, "maya")]["early"] == 2)
+    F.run(col, [dict(plan, early=2)], state, _day(0))
+    check("early: two days early, it opens today", _open(col) == set(range(101, 110)))
+    # C5: the author's Anki sends the ids behind its plan's tags
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    check("authored: my plans ride the day's first board", [a["id"] for a in dre.session.get("plans_authored") or []] == [pid])
+    ok = dre.put_ids(pid, {"rn": [["Step1::Renal"], [], ["g1", "g2"]]})
+    check("ids: kept on the date", ok and store.plans[pid]["doc"]["units"][0].get("ids") == ["g1", "g2"])
+    # 3.4, D1: a pasted search's count, from my Anki, with the same request
+    store.plans[pid]["doc"]["units"][0]["search"] = ["tag:L14"]
+    dre.fetch_board([_day(0)], with_decks=True)
+    lean = dre.session["plans_authored"][0]["doc"]
+    check("authored: carries its searches", lean["units"][0]["search"] == ["tag:L14"])
+    scol = _spread_col()
+    scol.find_cards = lambda q: [101, 102, 103] if q == "tag:L14" else []
+    counts = P.search_counts(P.DeckIndex(scol, 10), lean)
+    check("search count: from my copy", counts == {"rn": {"tag:L14": 3}}, str(counts))
+    check("search count: rides the ids request", dre.put_ids(pid, {}, counts)
+          and store.plans[pid]["doc"]["units"][0].get("sn") == {"tag:L14": 3})
+
+
+def test_plans_tab_v33():
+    """3.3: a Plans tab, only while I follow a plan; Decks is decks again."""
+    from due_crew import board
+    card = {"id": "p1", "title": "Step 1 · Dre’s plan", "sub": "week 1 of 4", "rows": [], "lines": [], "change": None,
+            "no_deck": False, "paused": False, "today": "Mon", "sched": False}
+    data = {"entries": [], "labels": [TODAY.isoformat()], "tomorrow": "", "pending": []}
+    with_plan = board.render(data, {"period": "plans"}, 0, plans={"cards": [card], "offers": []})
+    check("plans tab: there while I follow one, the card on it",
+          "period:plans" in with_plan and "Step 1 · Dre’s plan" in with_plan)
+    decks = board.render(data, {"period": "decks"}, 0, plans={"cards": [card], "offers": []})
+    check("plans tab: the card isn't on Decks any more", "Step 1 · Dre’s plan" not in decks)
+    none = board.render(data, {"period": "plans"}, 0, plans={"cards": [], "offers": []})
+    check("plans tab: following nothing, no tab, and a saved Plans period falls back to Today",
+          "period:plans" not in none and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in none)
+
+
+def test_even_split_v33():
+    """3.3: a date the author split evenly opens in the same slices for
+    someone without a schedule: the plan's days, the deck's order; the
+    server keeps `even` and the pace, and an old add-on's shapes drop them."""
+    from due_crew import plan_flow as F
+    from due_crew.backend import shapes
+    store = world({"dre": "Dre", "maya": "Maya"})
+    unit = {"id": "rn", "name": "Renal", "opens": _day(0), "due": _day(4), "tags": ["Step1::Renal"], "even": True}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    check("even: kept on the plan", store.plans[pid]["doc"]["units"][0].get("even") is True)
+    bad = None
+    try:
+        store._plan_doc({"deck": "x", "units": [dict(unit, due=_day(0))]})
+    except fakes.Bad as e:
+        bad = e
+    check("even: needs a window of more than one day", bad is not None)
+    maya = new_client(store, "maya", "Maya")
+    plan, status = maya.follow_plan(code)
+    check("even: followed without a schedule", status == 200 and not plan.get("sched") and plan["doc"]["units"][0].get("even"))
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    check("even: day one opens a fifth, first in the deck's order", _open(col) == {109, 108}, str(_open(col)))
+    F.run(col, [plan], state, _day(2))
+    check("even: a missed morning catches up to the day's slice", len(_open(col)) == 6, str(_open(col)))
+    F.run(col, [plan], state, _day(4))
+    check("even: the last day opens the rest, then it's applied",
+          _open(col) == set(range(101, 110)) and "rn" in state[pid]["applied"])
+    doc = shapes.clean_plan_doc({"deck": "x", "pace": {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 90, "cover": ["tag:a"]},
+                                 "units": [dict(unit), dict(unit, id="b", even="yes")]})
+    check("shapes: even and the plan's days come through, nothing else of the pace",
+          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
+
+
 def _knows_col():
     """Step 1 (10) with Sub (11), and Other (20). 1: mature and clean;
     2: mature but missed yesterday; 3: lapsed three times; 4: young, missed
@@ -3703,8 +4004,11 @@ def test_session_card_v32():
     html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
     check("board: the missed-days question, three ways",
           "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
-    check("board: no schedule yet offers one", "plansched:p1" in board._plan_card_html(
+    check("board: 3.3, no schedule to set: the plan's days are it", "plansched:p1" not in board._plan_card_html(
         F.card_view(dict(plan, sched=None), st, {}, _day(0))))
+    v0 = F.session_view(dict(plan, sched=None), st, idx, seen_today, _day(0))
+    check("session: 3.3, without a schedule the plan's own days give today, and no missed-days question",
+          v0 is not None and v0["ask"] is None and "target" in v0)
     # the recap: on the first day of a plan week
     monday = TODAY + datetime.timedelta(days=(7 - TODAY.weekday()) % 7)
     mon_plan = dict(plan, doc=dict(plan["doc"], units=[dict(unit, opens=(monday - datetime.timedelta(days=7)).isoformat(),
@@ -3714,7 +4018,11 @@ def test_session_card_v32():
           and rv["recap"]["sessions"][1] == 7, str(rv["recap"]))
     # checkpoints
     due = F.checks_due(plan["doc"], st, plan["sched"], _day(0))
-    check("checkpoint: due on its morning", [u["id"] for u in due] == ["rn"])
+    check("checkpoint: due on its morning", [k for k, _n, _us, _c in due] == ["rn"])
+    rdoc = dict(plan["doc"], reviews=[{"day": _day(0), "from": "rn", "to": "rn"}])
+    rdue = F.checks_due(rdoc, st, plan["sched"], _day(0))
+    check("review day: 3.3, due on its morning with its dates, named for them",
+          [(k, n) for k, n, _us, _c in rdue][-1] == (f"r:{_day(0)}:rn:rn", "Review · Renal <i>") and rdue[-1][3] == 200)
     check("checkpoint: not built late past three mornings", F.checks_due(plan["doc"], st, plan["sched"], _day(4)) == [])
     col.db.conn.execute("UPDATE cards SET type = 2, queue = 2, lapses = id - 100 WHERE id IN (105, 106, 107)")
     idx = P.DeckIndex(col, 10)
@@ -3753,6 +4061,12 @@ def test_schedule_parity_v32():
                    {"id": "c", "name": "C", "opens": "2026-11-02", "due": "2026-11-30"}]},
         {"deck": "x", "units": [{"id": "a", "name": "A", "opens": "2026-10-10", "due": "2026-10-11"},
                                 {"id": "b", "name": "B", "opens": "2026-10-12", "due": "2026-10-20"}]},
+        # 3.3: even splits, over the plan's own days (weekends off) without a schedule
+        {"deck": "x", "pace": {"mode": "placed", "days": [1, 1, 1, 1, 1, 0, 0]}, "phases": {"catchup": 3, "taper": 0},
+         "units": [{"id": "a", "name": "A", "opens": "2026-10-05", "due": "2026-10-09", "even": True},
+                   {"id": "b", "name": "B", "opens": "2026-10-07"},
+                   {"id": "c", "name": "C", "opens": "2026-10-10", "due": "2026-10-11", "even": True},
+                   {"id": "d", "name": "D", "opens": "2026-10-12", "due": "2026-10-30", "even": True}]},
     ]
     scheds = [None, {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60},
               {"days": [1, 0, 1, 0, 1, 0, 0], "minutes": 60, "start": "2026-10-14"}]

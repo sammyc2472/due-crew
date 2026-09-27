@@ -44,9 +44,11 @@ def _tree(col, dids):
     return out
 
 
-def known_and_stuck(col, dids, day_cutoff):
+def known_and_stuck(col, dids, day_cutoff, with_known=True):
     """(known guids, stuck guids) in these decks and their subdecks. Two
-    queries; `day_cutoff` is Anki's next rollover, in seconds."""
+    queries, each reading the review log's recent range once (not once a
+    card); `day_cutoff` is Anki's next rollover, in seconds. with_known
+    False (a light sync, which doesn't send them) skips the first."""
     tree = _tree(col, dids)
     if not tree:
         return set(), []
@@ -57,12 +59,12 @@ def known_and_stuck(col, dids, day_cutoff):
     known = set(col.db.list(
         f"SELECT DISTINCT n.guid FROM cards c JOIN notes n ON n.id = c.nid WHERE {in_tree} "
         f"AND c.type = 2 AND c.queue = 2 AND c.ivl >= {KNOWN_IVL} "
-        "AND NOT EXISTS (SELECT 1 FROM revlog r WHERE r.cid = c.id AND r.ease = 1 AND r.id >= ?)",
-        clean_since))
+        "AND c.id NOT IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)",
+        clean_since)) if with_known else set()
     rows = col.db.all(
         f"SELECT n.guid, MAX(c.lapses) FROM cards c JOIN notes n ON n.id = c.nid WHERE {in_tree} "
-        f"AND (c.lapses >= {STUCK_LAPSES} OR EXISTS (SELECT 1 FROM revlog r WHERE r.cid = c.id "
-        "AND r.ease = 1 AND r.id >= ?)) GROUP BY n.guid ORDER BY MAX(c.lapses) DESC, n.guid LIMIT ?",
+        f"AND (c.lapses >= {STUCK_LAPSES} OR c.id IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)) "
+        "GROUP BY n.guid ORDER BY MAX(c.lapses) DESC, n.guid LIMIT ?",
         today, STUCK_MAX)
     stuck = [str(g) for g, _l in rows]
     return {str(g) for g in known} - set(stuck), stuck
@@ -94,7 +96,7 @@ def for_sync(c, light=False):
     out = {}
     dids = c.get("shared_decks") or []
     if dids:
-        known, stuck = known_and_stuck(mw.col, dids, int(mw.col.sched.day_cutoff))
+        known, stuck = known_and_stuck(mw.col, dids, int(mw.col.sched.day_cutoff), with_known=not light)
         out["stuck"] = stuck
         if not light:
             out["known"] = known
@@ -307,5 +309,5 @@ def i_know(col, guids):
     cutoff = int(col.sched.day_cutoff)
     return set(col.db.list(
         f"SELECT DISTINCT n.guid FROM cards c JOIN notes n ON n.id = c.nid WHERE n.guid IN ({','.join('?' * len(guids))}) "
-        f"AND c.type = 2 AND c.ivl >= {KNOWN_IVL} AND NOT EXISTS (SELECT 1 FROM revlog r WHERE r.cid = c.id "
-        "AND r.ease = 1 AND r.id >= ?)", *guids, (cutoff - CLEAN_DAYS * 86400) * 1000))
+        f"AND c.type = 2 AND c.ivl >= {KNOWN_IVL} AND c.id NOT IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)",
+        *guids, (cutoff - CLEAN_DAYS * 86400) * 1000))

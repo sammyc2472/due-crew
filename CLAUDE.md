@@ -189,6 +189,67 @@ add-on.
   for the asking add-on's version (`notices`, migration 0005), and the
   board shows it on top of every tab until it's dismissed (by id, in
   wrap.json). Only 3.2.1 and later show it.
+- 3.3 the builder is a calendar (`site/public/builder.js`, loaded before
+  app.js): tags named readably with the raw tag under (`Tags`), by
+  resource / by system / other, ticked into what the plan covers; the pace
+  (finish by, cards a day, or day by day, and the plan's study days) and
+  Lay it out / Plan next week put it on days. A date can be split evenly
+  over its window (`even` on a unit): everyone gets the same slices on the
+  plan's study days (`pace.days`), with or without a schedule of their own
+  (`schedule.quota`; `Sched.quota` the same). `pace` is otherwise the
+  builder's (`mode`, `daily`, `cover`); an add-on keeps only its days, and
+  3.2.x add-ons open an even date whole. As text carries a prompt for the
+  person's own AI (tag names and counts, never a card) and reads its
+  answer back with a preview. The site home is the add-on's board.
+- 3.3 following is simpler: a follower does each date on its day (the
+  plan's study days, `schedule.weight` falls back to `pace.days`); the
+  add-on no longer asks for a schedule, and a 3.2 `sched` still runs. The
+  add-on's board has a Plans tab while I follow a plan (the cards left
+  Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
+  ids last), so deep tags reach the builder.
+- 3.3 hold back (Sam's call): a deck imported with every card active
+  can't wait for its days, so Follow offers (checked) "Hold back N cards
+  of later dates until their day": the never-studied new cards of dates
+  not yet open, suspended once in one undo step and kept in `held`;
+  stopping opens them again. The only suspend, and only when asked; a
+  plan still never suspends on its own. The whole deck is coverable
+  (a deck with no tags or subdecks), and a new plan goes straight from
+  Anki to its calendar at 20 new cards a day.
+- 3.3 a class through Step (C1–C5, mock "A class through Step"):
+  C1 the plan card says when Anki's new cards/day is below today's plan
+  (Raise: the deck's own limit, which Anki can undo; no other deck changes). C2 `early` on my follow
+  (0–7 days): the morning looks that far ahead, for studying on a phone.
+  C3 a date's `search` (Anki searches, run in each follower's Anki, kept
+  to the plan's deck; `sn` the count when added from the browser); a plan
+  holds 50,000 single cards. C4 Study on a date's row (its filtered deck)
+  and review days (`reviews: [{day, from, to}]`, replacing checkpoints on
+  the site). C5 `ids` on a date: the author's Anki sends the note ids
+  behind its tags (`PUT /plans/{id}/ids`, one request a plan when they
+  changed, on the day's first refresh; `authored` rides that board); a
+  follower whose tag matches nothing falls back to them.
+- 3.4: a pasted search's count comes from an author's Anki with the
+  note-id request (`counts`), and `/p/CODE.ics` is the plan as a calendar
+  to subscribe to (no sign-in, code plans only, nobody's name).
+- 3.3 plans together (migration 0006): co-authors from the owner's crew
+  (`plan_editors`; they edit, the owner alone deletes, picks the audience
+  and the co-authors), notes on a day from anyone in the plan
+  (`plan_notes`), and the history (`plan_log`, the last 30 saves with who,
+  a summary the site writes, and what each replaced; the latest undoes).
+  Save-based: a save that meets another merges onto it in the page
+  (`merge` in builder.js). `/plans/{id}` is the one plan page: the authors
+  edit, a follower sees the calendar and the notes.
+- 3.4 the UI review (`docs/ui-review.md`, mocks on "Due Crew UI Review"):
+  a row carries at most one chip (studying now > exam > back > away,
+  coloured), headings are words (icons only when narrow), the ago text
+  only on quiet rows, new cards only on the Week tab; banners show one at
+  a time; the footer is Crew ▾ plus Refresh and Settings; one person's
+  board is an invite card with a code box. The site's "Got a code?" box
+  (home, Plans) looks a code up first (`GET /codes/{code}`, `GET
+  /plans/public`) and says what it is: add a friend, follow a plan, join
+  a squad (a squad goes into the settings doc, so Anki shows it next
+  open). A plan's link shows the plan signed out (`/plans/public`), and a
+  phone can email itself the link (`POST /links/email`, fixed text). The
+  "last active" switch is gone.
 
 ## Releasing
 
@@ -209,6 +270,11 @@ add-on.
 5. Sam updates AnkiWeb by hand: listing 2035408484, update Branch 1 with the
    new file, re-paste README if it changed. The listing can lag releases.
 
+`tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
+`tools/check_prod.sh` checks the live API and site after the deploy
+(no sign-in, no mail). `docs/go-live.md` is the 3.3.0 go-live: the first
+production deploy of 3.x, with the 2.x import and the rollback.
+
 ## Rules of the road
 
 - Simplicity is the product rule. Friendship framing, never competition —
@@ -226,10 +292,20 @@ add-on.
   The 2.3 removal test locked the squad first, which hid the bug above.
 - Escape every server-sourced string before webviews, tooltips, or rich-text
   labels.
+- The reviewer's page runs the card's own script too: from there only the
+  room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
+  (`room_model.trusted`); anything that acts for me elsewhere comes from
+  the board, the bars or a dialog.
+- A failed request is sent again only when twice can't do a thing twice
+  (`api._call`: reads, PUT/PATCH/DELETE, a sync, one that never got out).
+  What a person or a request adds on the server has a ceiling.
 - Never log emails, codes or tokens (the Worker, and the client's prints).
 - Process: propose features as mockups on the design-spec artifact first
   (ask Sam for the link if needed), build after sign-off. Ask Sam before
   changing anything users see.
+- Before a release, `tools/real_anki.py` runs the plan code on Anki's own
+  engine with an AnKing-sized collection (searches, suspend and undo,
+  deck limits, filtered decks, timings); `pip install anki` in a venv.
 - Code changes are compile- and logic-tested here; anything under
   `due_crew/ui/` also gets `tools/dialogs.py` (offscreen PyQt6 render of
   every dialog, see tests/README.md); flows still deserve a click-test in

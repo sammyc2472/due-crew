@@ -6,7 +6,7 @@
 import { isAdmin } from "./notices";
 import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
-import { sendCode } from "./mail";
+import { sendCode, sendMail } from "./mail";
 import {
   Env, HttpError, clientIp, json, newCode, newToken, normEmail, nowSec, readJson,
   sha256Hex, timingSafeEqual, ulid,
@@ -56,6 +56,9 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   const code = typeof body.code === "string" ? body.code.replace(/\s+/g, "") : "";
   const device = typeof body.device === "string" ? body.device.slice(0, 60) : "";
   if (!email) throw new HttpError(400, "bad_email");
+  // the site's sign-in comes only from its own script: checked before the
+  // code is spent, so another page can't use up someone's code
+  if (body.web === true && req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
   await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
   if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
 
@@ -95,7 +98,6 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
   if (body.web === true) {
-    if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
     // the site (3.1): the session is a same-site cookie, never in page script
     return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
   }
@@ -163,9 +165,9 @@ export async function signOut(s: Session, env: Env, req?: Request): Promise<Resp
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
-export async function signOutAll(s: Session, env: Env): Promise<Response> {
+export async function signOutAll(s: Session, env: Env, req?: Request): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE uid = ?").bind(s.uid).run();
-  return json({ ok: true });
+  return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
 /** DELETE /account: everything of mine, sessions included. A squad I
@@ -200,6 +202,10 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM settings WHERE uid = ?1",
     // 3.1: my plans go (followers keep every card they have open), and my follows
     "DELETE FROM plan_follows WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    // 3.3: my plans' co-authors, notes and history, and mine on others' plans
+    "DELETE FROM plan_editors WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    "DELETE FROM plan_notes WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    "DELETE FROM plan_log WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plans WHERE owner = ?1",
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",
@@ -293,6 +299,29 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
     }
   }
   return json({ imported, skipped, reclaimed });
+}
+
+// ---- a link to open on the computer (3.4 review, C2) ----
+
+const LINK_PATH = /^\/(p\/[A-Z0-9]{8})?$/;
+
+/** POST /links/email {email, path}: someone on a phone sends themselves the
+ *  page they're on, to open where Anki is. One fixed message with that link
+ *  and nothing of theirs in it; no account is made or looked up. A few an
+ *  hour from an address, and a few a day to an inbox. */
+export async function emailLink(req: Request, env: Env): Promise<Response> {
+  if (req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");  // only the site's own pages
+  const body = await readJson(req);
+  const email = normEmail(body.email);
+  if (!email) throw new HttpError(400, "bad_email");
+  const path = typeof body.path === "string" ? body.path : "";
+  if (!LINK_PATH.test(path)) throw new HttpError(400, "bad_path");
+  await limitOrThrow(env, ipKey("emaillink", req), 5, LIMIT_WINDOW);
+  await limitOrThrow(env, await emailKey("emaillink", email), 3, 86400);
+  const url = `https://duecrew.com${path}`;
+  await sendMail(env, email, "Your Due Crew link",
+    `Here's the link you asked for:\n\n${url}\n\nOpen it on the computer where you use Anki. Due Crew is a free Anki add-on.`);
+  return json({ ok: true });
 }
 
 // ---- the site, signed in from the add-on (3.1) ----
