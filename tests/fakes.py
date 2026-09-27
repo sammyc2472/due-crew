@@ -776,7 +776,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "tags", "decks", "cards"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "tags", "decks", "cards", "n"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -819,6 +819,10 @@ class FakeWorker:
                   "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
             if u.get("due"):
                 nu["due"] = u["due"]
+            if u.get("n") is not None:
+                if not _is_int(u["n"], 0, 1_000_000):
+                    raise Bad(400, "plan")
+                nu["n"] = u["n"]
             out.append(nu)
         if len({u["id"] for u in out}) != len(out) or sum(len(u["cards"]) for u in out) > 5000:
             raise Bad(400, "plan")

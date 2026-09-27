@@ -332,6 +332,38 @@ def due_now(doc, applied, today, sig):
     return out
 
 
+def _cards(n):
+    return f"{n:,} card{'s' if n != 1 else ''}"
+
+
+def match_rows(idx, doc, swap=None, shown=5):
+    """[(label, text, missing)] for the match list: a unit's tags and
+    subdecks as one row (found of the author's count when the plan has
+    one, else cards found), its single cards as another (found of picked). Past `shown`
+    rows, the rest of the units are one row: how many, and their cards."""
+    rows, rest = [], []
+    for u in units(doc):
+        if len(rows) >= shown:
+            rest.append(u)
+            continue
+        name = u.get("name") or "?"
+        if u.get("tags") or u.get("decks"):
+            n = len(idx.match(dict(u, cards=[]), swap, doc.get("deck", "")))
+            of = u.get("n")  # the author's count, when the builder saved one
+            text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
+            rows.append((name, text, not n))
+        if u.get("cards"):
+            found, total = idx.single_found(u), len(u["cards"])
+            label = f"{name} · single cards" if (u.get("tags") or u.get("decks")) else name
+            rows.append((label, f"{found:,} of {total:,}" if found else "not in your copy", not found))
+    if rest:
+        cids = set()
+        for u in rest:
+            cids |= idx.match(u, swap, doc.get("deck", ""))
+        rows.append((f"… {len(rest)} more unit{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
+    return rows
+
+
 def opened_by_date(doc, today):
     return [u for u in units(doc) if str(u.get("opens") or "9999") <= today]
 

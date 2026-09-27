@@ -2715,6 +2715,14 @@ def test_plans_matching_v31():
     check("tree: names and counts only, a tag counting everything under it",
           ["Step1::Cardio", 3] in tags and ["Step 1::Extras", 1] in decks
           and all(isinstance(n, int) for _p, n in tags + decks))
+    FD = P
+    counted = dict(u["hf"], n=3)  # the author's copy had 3 under that tag; this one has 2
+    rows = FD.match_rows(idx, {"deck": "Step 1", "units": [counted, u["ar"], u["cz"]]})
+    check("follow: found of the author's count when the plan has one, else cards found",
+          rows[0] == ("Heart failure", "2 of 3", False) and rows[1] == ("Arrhythmia", "1 card", False)
+          and rows[2] == ("Cloze two", "1 of 1", False), str(rows))
+    missing = FD.match_rows(idx, {"deck": "Step 1", "units": [dict(u["rn"], tags=["Nope"], n=40)]})
+    check("follow: a date with none of its cards here says so", missing == [("Renal", "not in your copy", True)])
     check("code: typed, spaced, or a pasted link",
           P.code_from("7kq4 mx2d") == "7KQ4MX2D" == P.code_from("https://duecrew.com/p/7KQ4MX2D"))
 

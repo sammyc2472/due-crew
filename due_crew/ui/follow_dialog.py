@@ -19,36 +19,6 @@ from .. import plans as P
 SHOWN_UNITS = 5
 
 
-def _cards(n):
-    return f"{n:,} card{'s' if n != 1 else ''}"
-
-
-def match_rows(idx, doc, swap=None, shown=SHOWN_UNITS):
-    """[(label, text, missing)] for the match list: a unit's tags and
-    subdecks as one row (cards found; the author's totals aren't in the
-    plan), its single cards as another (found of picked). Past `shown`
-    rows, the rest of the units are one row: how many, and their cards."""
-    rows, rest = [], []
-    for u in P.units(doc):
-        if len(rows) >= shown:
-            rest.append(u)
-            continue
-        name = u.get("name") or "?"
-        if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[]), swap, doc.get("deck", "")))
-            rows.append((name, _cards(n) if n else "not in your copy", not n))
-        if u.get("cards"):
-            found, total = idx.single_found(u), len(u["cards"])
-            label = f"{name} · single cards" if (u.get("tags") or u.get("decks")) else name
-            rows.append((label, f"{found:,} of {total:,}" if found else "not in your copy", not found))
-    if rest:
-        cids = set()
-        for u in rest:
-            cids |= idx.match(u, swap, doc.get("deck", ""))
-        rows.append((f"… {len(rest)} more unit{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
-    return rows
-
-
 def late_counts(idx, doc, today, swap=None):
     """(units opened by date, cards they hold here)."""
     opened = P.opened_by_date(doc, today)
@@ -319,11 +289,13 @@ class FollowDialog(QDialog):
         idx = self._index(did)
         doc = self.plan["doc"]
         swap = self._swap_for(did, idx)
-        self._rows(match_rows(idx, doc, swap))
+        self._rows(P.match_rows(idx, doc, swap, SHOWN_UNITS))
         total = P.found_total(idx, doc, swap)
-        singles_only = all(not (u.get("tags") or u.get("decks")) for u in P.units(doc))
-        if singles_only:
-            picked = sum(len(u.get("cards") or []) for u in P.units(doc))
+        us = P.units(doc)
+        counted = all(isinstance(u.get("n"), int) or not (u.get("tags") or u.get("decks")) for u in us)
+        if counted and us:
+            # the author's counts (tags and subdecks) plus the picked single cards
+            picked = sum((u.get("n") or 0) + len(u.get("cards") or []) for u in us)
             self.found.setText(f"<b>{total:,} of {picked:,}</b> cards found in your copy. "
                                "Missing ones are skipped.")
         else:

@@ -479,6 +479,12 @@ async function builder(id) {
     saveBtn.disabled = true;
     status.className = "status"; status.textContent = "Saving…";
     try {
+      // each date keeps its tags' and subdecks' card count here, for a follower's "204 of 212"
+      for (const u of doc.units) {
+        const n = (u.tags || []).reduce((a, t) => a + (counts.get(`tag:${t}`) || 0), 0)
+          + (u.decks || []).reduce((a, d) => a + (counts.get(`deck:${d}`) || 0), 0);
+        if (counts.size && (u.tags?.length || u.decks?.length)) u.n = n; else delete u.n;
+      }
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc };
       if (meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (meta.audience !== plan.audience) body.audience = meta.audience;

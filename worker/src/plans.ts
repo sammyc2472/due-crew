@@ -45,7 +45,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "tags", "decks", "cards"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "tags", "decks", "cards", "n"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -56,6 +56,12 @@ function unit(v: unknown): Obj {
   if (v.lead !== undefined && v.lead !== null) {
     if (!V.isStr(v.lead, 128, 1)) throw V.bad("plan");
     out.lead = v.lead;
+  }
+  if (v.n !== undefined && v.n !== null) {
+    // how many cards the tags and subdecks hold in the author's copy, so a
+    // follower sees "204 of 212"; a number, never which cards
+    if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
+    out.n = v.n;
   }
   for (const k of ["tags", "decks"] as const) {
     const x = v[k] ?? [];

@@ -49,6 +49,9 @@ describe("plans: authoring", () => {
     expect(await put({ deck: "Step 1", units: [{ id: "a", name: "A", opens: "2026-10-05",
       cards: Array.from({ length: 5001 }, (_, i) => [`g${i}`, 0]) }] })).toBe(400);
     expect(await put({ deck: "Step 1", units: [UNITS[0], UNITS[0]] })).toBe(400);  // ids are unique
+    expect(await put({ deck: "Step 1", units: [{ ...UNITS[0], n: "212" }] })).toBe(400);  // a count is a number
+    const counted = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], n: 212 }] } });
+    expect(counted.body.doc.units[0].n).toBe(212);
   });
 
   it("single cards go onto a date that exists, or a new one", async () => {
