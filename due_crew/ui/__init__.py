@@ -215,6 +215,37 @@ def confirm(parent, title, text, yes):
     return box.clickedButton() is go
 
 
+def _plain_input(parent, title, label):
+    """A QInputDialog whose label is plain text: names in it come from the
+    server, and Qt reads a label with a tag in it as rich text."""
+    from aqt.qt import QInputDialog, QLabel, Qt
+    dlg = QInputDialog(parent or mw)
+    dlg.setWindowTitle(title)
+    dlg.setLabelText(label)
+    for lb in dlg.findChildren(QLabel):
+        lb.setTextFormat(Qt.TextFormat.PlainText)
+    return dlg
+
+
+def ask_text(parent, title, label, text=""):
+    """(text, ok), as QInputDialog.getText, with a plain-text label."""
+    dlg = _plain_input(parent, title, label)
+    dlg.setTextValue(text)
+    ok = bool(dlg.exec())
+    return dlg.textValue(), ok
+
+
+def ask_item(parent, title, label, items, current=0):
+    """(item, ok), as QInputDialog.getItem (not editable), with a plain-text label."""
+    dlg = _plain_input(parent, title, label)
+    dlg.setComboBoxItems(list(items))
+    dlg.setComboBoxEditable(False)
+    if items:
+        dlg.setTextValue(items[max(0, min(current, len(items) - 1))])
+    ok = bool(dlg.exec())
+    return dlg.textValue(), ok
+
+
 def shared_words(cfg):
     """The numbers the Privacy switches share, as words for a sentence:
     "reviews, time, retention, and streak". '' when none are."""

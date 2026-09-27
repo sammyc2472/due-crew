@@ -190,6 +190,10 @@ class ApiClient:
                             display_name=name)
         if from_2x:
             self.session["needs_restore"] = True
+        elif not self.session.get("needs_restore"):
+            # a 3.x session: what it remembers came from this server, and
+            # bringing it back after a 401 would undo removals made elsewhere
+            self.session["restored_to"] = self.base
         self._save_session()
         return {"uid": uid, "name": name, "new": bool(data.get("new")) or not name}
 
@@ -283,8 +287,11 @@ class ApiClient:
         friends = [str(f.get("uid")) for f in data.get("friends") or [] if f.get("uid")]
         # until the restore has sent it, the list this computer remembers from
         # 2.x is the only copy: 3.0.0 replaced it here and lost most crews
-        if friends != self.session.get("friend_ids") and not self.session.get("needs_restore"):
+        if not self.session.get("needs_restore") and (
+                friends != self.session.get("friend_ids") or not self.session.get("restored_to")):
+            # the list is this server's now: a later sign-in isn't a 2.x one
             self.session["friend_ids"] = friends
+            self.session.setdefault("restored_to", self.base)
             self._save_session()
         # 3.1: plans ride the day's first refresh; later ones render the last
         if with_decks:
@@ -467,13 +474,12 @@ class ApiClient:
         # (the cutover import carried it); only an account with none gets one.
         # POST /codes without a code always makes a new one and retires the
         # old: 3.0.0 did that here, and everyone's imported code was lost.
+        # A code the account already has always stays: a 2.x friend_code on
+        # this computer may be one the account has since regenerated.
         code = friend_code_from(self.session.get("friend_code") or "")
-        if code:
-            self._call("POST", "/codes", {"code": code})
-        else:
-            status, data = self._call("GET", "/friends")
-            if status == 200 and not data.get("code"):
-                self._call("POST", "/codes", {})
+        status, data = self._call("GET", "/friends")
+        if status == 200 and not data.get("code"):
+            self._call("POST", "/codes", {"code": code} if code else {})
         ids = [f for f in self.session.get("friend_ids") or [] if isinstance(f, str)]
         if ids:
             self._call("PUT", "/friends", {"ids": ids[:500]})

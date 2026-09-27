@@ -454,7 +454,7 @@ def change_deck(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None or not mw.col:
         return
-    from aqt.qt import QInputDialog
+    from .ui import ask_item
     choices = P.deck_choices(mw.col)
     if not choices:
         return
@@ -465,7 +465,8 @@ def change_deck(pid):
     current = st.get("deck_id") if st else best
     names = [n for _d, n in choices]
     at = next((i for i, (d, _n) in enumerate(choices) if d == current), 0)
-    name, ok = QInputDialog.getItem(mw, "Change deck", f"Run {p.get('name') or 'the plan'} on", names, at, False)
+    # plain text: the plan's name is the author's
+    name, ok = ask_item(mw, "Change deck", f"Run {p.get('name') or 'the plan'} on", names, at)
     if not ok:
         return
     did = next(d for d, n in choices if n == name)
