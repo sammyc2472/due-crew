@@ -13,7 +13,8 @@ routes = [
 [assets]
 directory = "./public"
 binding = "ASSETS"
-run_worker_first = ["/api/*", "/sign-in", "/account", "/plans", "/plans/*", "/p/*"]
+# "/" too (3.2): signed in, it sends you to your home instead of the landing page
+run_worker_first = ["/", "/api/*", "/sign-in", "/account", "/home", "/log", "/admin", "/plans", "/plans/*", "/p/*"]
 
 [[services]]
 binding = "API"

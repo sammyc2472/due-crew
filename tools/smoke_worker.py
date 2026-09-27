@@ -159,6 +159,16 @@ got, st = sam.add_plan_cards(pid, [["g2", 1]], unit="hf")
 check("plans: the author adds single cards", st == 200 and got["doc"]["units"][0]["cards"] == [["g2", 1]])
 check("plans: only the author", dre.add_plan_cards(pid, [["g2", 1]], opens=tomorrow)[1] == 403)
 check("plans: mine", [p["id"] for p in sam.my_plans()] == [pid] and dre.my_plans()[0]["following"])
+# 3.2: my schedule, the cards I know and I'm stuck on, a tip that stays, my log
+sched = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 90}
+check("3.2: my schedule", dre.set_schedule(pid, sched) == sched and dre.fetch_board(
+    labels, tomorrow, with_decks=True)["plans"][0]["sched"] == sched)
+check("3.2: the cards I know go up", sam.push(labels, cfg, known={"g1", "g2"})[0])
+dre.send_cheer(sam.user_id, "\U0001F4A1", "Loop of Henle", guid="g1")
+check("3.2: stuck: who knows it and the tip come back",
+      dre.push(labels, cfg, stuck=["g1", "g9"])[0] and dre.session["cards"].get("g1", {}).get("knows") == [sam.user_id], str(dre.session.get("cards")))
+check("3.2: my log", dre.push(labels, cfg, log={labels[0]: [30, 120, 20, 90.0]})[0]
+      and dre._call("GET", "/log")[1]["days"] == {labels[0]: [30, 120, 20, 90.0]})
 check("plans: pause, sharing off", dre.set_follow(pid, paused=True) == {"share": True, "paused": True}
       and dre.set_follow(pid, share=False) == {"share": False, "paused": True})
 check("plans: stop following", dre.unfollow_plan(pid) and dre.fetch_board(labels, tomorrow, with_decks=True)["plans"] == [])

@@ -109,20 +109,32 @@ def quota(doc, unit, sched, total, day, shift=None):
     """How many of the unit's `total` cards should be open (and seen) by
     the end of my `day`: cumulative, in whole cards. Without a schedule a
     unit opens whole on its first day, as in 3.1. A window with no study
-    day in it opens whole on its first day too (nothing to spread over)."""
+    day in it (a catch-up week, rest days) opens whole on my first study
+    day after it."""
     if shift is None:
         shift = shift_days(doc, sched)
     first, last = window(doc, unit, shift)
     if day < first or total <= 0:
         return 0
-    if not sched or day >= last:
+    if not sched:
         return total
     ws = _weights(doc, sched, first, last, shift)
     whole = sum(ws)
     if not whole:
-        return total
+        # no study day in the window (a catch-up week, rest days): it all
+        # opens on my first study day after it, or on its last day if none comes
+        nxt = _next_study(doc, sched, last, shift)
+        return total if day >= (nxt or last) else 0
     upto = sum(ws[:(day - first).days + 1])
     return min(total, math.ceil(total * upto / whole))
+
+
+def _next_study(doc, sched, after, shift, horizon=60):
+    for i in range(1, horizon + 1):
+        x = after + datetime.timedelta(days=i)
+        if weight(doc, sched, x, shift):
+            return x
+    return None
 
 
 def share(doc, unit, sched, total, day, shift=None):

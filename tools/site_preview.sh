@@ -40,7 +40,8 @@ units = [
   {"id": "renm", "name": "Renal pharm", "opens": d(21), "due": d(28), "tags": ["Step1::Renal::Pharm"], "decks": [], "cards": []},
   {"id": "pulm", "name": "Pulm", "opens": d(28), "due": d(35), "tags": ["Step1::Pulm"], "decks": ["Step 1::Extras"], "cards": []},
 ]
-doc = {"deck": "Step 1", "units": units}
+units[2]["check"] = d(24)
+doc = {"deck": "Step 1", "end": d(55), "phases": {"catchup": 4, "taper": 10}, "units": units}
 out = []
 for uid, name in [("dre", "Dre"), ("maya", "Maya"), ("nia", "Nia"), ("jonah", "Jonah")]:
     out.append(f"INSERT INTO users (uid, email, name, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(name)}, {now});")
@@ -56,15 +57,43 @@ prog = {"maya": {"hf": [48, 48, 48], "arr": [63, 63, 63], "renp": [212, 120, 212
 for uid, p in prog.items():
     out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, at) VALUES ('stepplanpreview1', {q(uid)}, 1, 0, {q(json.dumps(p))}, {now});")
 out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, at) VALUES ('stepplanpreview1', 'jonah', 0, 0, {now});")
+# 3.2: a crew with weeks, a cheer waiting, a plan Dre follows on a schedule, Dre's log
+real = datetime.date.today()
+wk = lambda n: (real - datetime.timedelta(days=n)).isoformat()
+for a, b in [("dre", "maya"), ("dre", "nia"), ("dre", "jonah"), ("maya", "dre"), ("nia", "dre")]:
+    out.append(f"INSERT INTO friends (owner, friend, at) VALUES ({q(a)}, {q(b)}, {now});")
+for uid, studied in [("dre", [0, 1, 2, 3]), ("maya", [0, 1, 3]), ("nia", [1, 2])]:
+    days = {wk(n): {"studied": True, "reviews": 180 + 40 * n, "studyTimeMs": (50 + 5 * n) * 60000, "newCards": 30,
+                    "accuracy": 88.5, "streak": 4} for n in studied if wk(n) >= (real - datetime.timedelta(days=real.weekday())).isoformat()}
+    w = {"v": 1, "paused": False, "days": days}
+    if uid == "maya":
+        w["liveUntil"] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if uid == "nia":
+        w["recap"] = {"name": "Step 1", "n": 2, "day": wk(0)}
+    out.append(f"INSERT INTO weeks (uid, doc, updated_at) VALUES ({q(uid)}, {q(json.dumps(w))}, {now});")
+out.append(f"INSERT INTO cheers (to_uid, from_uid, emoji, note, at) VALUES ('dre', 'maya', '🔥', 'go go go', {now});")
+mdoc = {"deck": "Step 1", "units": [
+  {"id": "m1", "name": "Cardio", "opens": wk(10), "due": wk(1), "tags": ["Step1::Cardio"], "decks": [], "cards": []},
+  {"id": "m2", "name": "Renal", "opens": wk(0), "due": (real + datetime.timedelta(days=9)).isoformat(), "tags": ["Step1::Renal"], "decks": [], "cards": []},
+  {"id": "m3", "name": "Pulm", "opens": (real + datetime.timedelta(days=10)).isoformat(), "due": (real + datetime.timedelta(days=24)).isoformat(), "tags": ["Step1::Pulm"], "decks": [], "cards": []}]}
+out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
+           f"('mayaplanpreview1', 'M4YA2PLN', 'maya', 'Boards sprint', '', 'code', NULL, {q(json.dumps(mdoc))}, 1, {now}, {now});")
+sched = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 90}
+out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, sched, at) VALUES ('mayaplanpreview1', 'dre', 1, 0, "
+           f"{q(json.dumps({'m1': [312, 250, 312], 'm2': [60, 30, 402], 'm3': [0, 0, 288]}))}, {q(json.dumps(sched))}, {now});")
+log = {wk(n): [40 + (n * 7) % 50, 150 + (n * 37) % 200, 20 + (n * 11) % 40, 85 + (n % 9)] for n in range(0, 84) if n % 6 != 5}
+out.append(f"INSERT INTO logs (uid, json, at) VALUES ('dre', {q(json.dumps({'days': log}))}, {now});")
 print("\n".join(out))
 PY
 (cd worker && npx wrangler d1 execute due-crew --local --env="" --persist-to "../$STATE" --file "$SEED" >/dev/null)
 
+# 3.2: Dre may open /admin here (the real one reads the ADMIN_UIDS secret)
+printf 'ADMIN_UIDS=dre\n' > ../worker/.dev.vars 2>/dev/null || printf 'ADMIN_UIDS=dre\n' > worker/.dev.vars
 echo "Starting duecrew.com and its API on http://localhost:$PORT …"
 cd site
 npx wrangler dev -c wrangler.toml -c ../worker/wrangler.toml --port "$PORT" --ip 127.0.0.1 &
 DEV=$!
-trap 'kill $DEV 2>/dev/null; rm -f "$SEED"' EXIT INT TERM
+trap 'kill $DEV 2>/dev/null; rm -f "$SEED" ../worker/.dev.vars' EXIT INT TERM
 for _ in $(seq 1 60); do
   curl -fsS "http://localhost:$PORT/api/version" >/dev/null 2>&1 && break
   sleep 1
@@ -77,7 +106,10 @@ cat <<EOF
 
     http://localhost:$PORT/plans/new?deck=Step%201#$LINK
 
-  Then try:  http://localhost:$PORT/plans                    your plans
+  Then try:  http://localhost:$PORT/home                     your home (3.2)
+             http://localhost:$PORT/log                      your log
+             http://localhost:$PORT/admin                    the numbers
+             http://localhost:$PORT/plans                    your plans
              http://localhost:$PORT/plans/stepplanpreview1/edit   the builder, with a sample plan
              http://localhost:$PORT/plans/stepplanpreview1        progress (counts only)
              http://localhost:$PORT/p/7KQ4MX2D                  a shared link (try a private window too)

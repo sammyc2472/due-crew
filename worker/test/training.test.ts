@@ -171,6 +171,27 @@ describe("tips stay on the card", () => {
   });
 });
 
+describe("the site's home", () => {
+  it("keep=1 shows the cheers waiting and leaves them for Anki", async () => {
+    const { sam, dre } = await crew();
+    await dre.call("POST", "/cheers/sam", { emoji: "🔥", note: "go" });
+    const site = await sam.call("GET", "/board?keep=1");
+    expect(site.body.cheers.map((c: any) => c.from)).toEqual(["dre"]);
+    const anki = await sam.call("GET", "/board");
+    expect(anki.body.cheers.map((c: any) => c.from)).toEqual(["dre"]);  // still there for Anki
+    expect((await sam.call("GET", "/board")).body.cheers).toEqual([]);
+  });
+
+  it("my plan view carries my own progress, and nobody else's", async () => {
+    const { put, dre } = await planWith({ units: [{ id: "a", name: "A", opens: "2026-10-05", tags: ["A"] }] });
+    const maya = await person("maya");
+    await maya.call("POST", "/plans/follow", { code: put.body.code });
+    await maya.call("POST", "/sync", { plans: { [put.body.id]: { a: [3, 2, 5] } } });
+    expect((await maya.call("GET", `/plans/${put.body.id}`)).body.following.progress).toEqual({ a: [3, 2, 5] });
+    expect((await dre.call("GET", `/plans/${put.body.id}`)).body.following).toBeUndefined();
+  });
+});
+
 describe("the log", () => {
   it("merges days, writes only what changed, and is mine alone", async () => {
     const sam = await person("sam");

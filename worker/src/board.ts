@@ -20,11 +20,15 @@ async function touchSeen(env: Env, uid: string) {
     .bind(now, uid, now - SEEN_EVERY).run();
 }
 
-/** GET /board[?decks=1]: me, the people I added (with their week when they
- *  added me back, name and emoji only when they haven't yet), my cheers
- *  (delivered once: they go as they're read), my knocks. One request. */
+/** GET /board[?decks=1][&keep=1]: me, the people I added (with their week
+ *  when they added me back, name and emoji only when they haven't yet), my
+ *  cheers (delivered once: they go as they're read), my knocks. One
+ *  request. keep=1 (3.2, the site's home) shows the cheers waiting and
+ *  leaves them for Anki to play. */
 export async function board(req: Request, s: Session, env: Env): Promise<Response> {
-  const withDecks = new URL(req.url).searchParams.get("decks") === "1";
+  const params = new URL(req.url).searchParams;
+  const withDecks = params.get("decks") === "1";
+  const keep = params.get("keep") === "1";
   const db = env.DB;
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
@@ -54,7 +58,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     cheers.push({ from: c.from_uid, name: from.name, emoji: c.emoji, note: c.note || "",
                   luck: c.luck === 1, guid: c.guid || "", at: iso(c.at) });
   }
-  if (cheersRes.results.length) {
+  if (cheersRes.results.length && !keep) {
     // delivered, or no longer deliverable: either way done. Only the ones
     // read go: a cheer landing mid-request waits for the next refresh.
     await db.batch((cheersRes.results as any[]).map((c) => db.prepare(

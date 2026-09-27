@@ -85,7 +85,7 @@ async function whoami() {
 function renderNav() {
   const nav = document.getElementById("nav");
   nav.replaceChildren(...(me
-    ? [link("/plans", "Plans"), link("/account", me.name || "Account")]
+    ? [link("/home", "Home"), link("/plans", "Plans"), link("/log", "Log"), link("/account", me.name || "Account")]
     : [link("/sign-in", "Sign in")]));
 }
 
@@ -96,7 +96,7 @@ function needSignIn() {
 // ---- sign in ----
 
 function signIn() {
-  const next = new URLSearchParams(location.search).get("next") || "/plans";
+  const next = new URLSearchParams(location.search).get("next") || "/home";
   const m = page();
   m.className = "narrow";
   const status = h("p", { class: "status", role: "status" });
@@ -337,6 +337,9 @@ async function builder(id) {
     const name = h("input", { class: "uname", value: u.name, maxlength: 60, "aria-label": "Date name", oninput: (e) => { u.name = e.target.value; mark(); } });
     const opens = h("input", { type: "date", value: u.opens, "aria-label": "Opens", onchange: (e) => { if (e.target.value) { u.opens = e.target.value; if (u.due && u.due < u.opens) u.due = u.opens; mark(); } } });
     const due = h("input", { type: "date", value: u.due || "", "aria-label": "Due", onchange: (e) => { u.due = e.target.value && e.target.value >= u.opens ? e.target.value : undefined; mark(); draw(); } });
+    // 3.2: a checkpoint, the morning followers get a filtered deck of this date's most-missed cards
+    const check = h("input", { type: "date", value: u.check || "", "aria-label": "Checkpoint", title: "A checkpoint: that morning, followers get a filtered deck of this date's cards they've missed most",
+      onchange: (e) => { u.check = e.target.value && e.target.value >= u.opens ? e.target.value : undefined; mark(); draw(); } });
     const chips = h("div", { class: "chips" },
       ...(u.tags || []).map((t) => h("span", { class: "chip", title: t }, `tag ${t}`, h("button", { "aria-label": `Remove ${t}`, onclick: () => { u.tags = u.tags.filter((x) => x !== t); mark(); draw(); } }, "×"))),
       ...(u.decks || []).map((d) => h("span", { class: "chip", title: d }, `deck ${d}`, h("button", { "aria-label": `Remove ${d}`, onclick: () => { u.decks = u.decks.filter((x) => x !== d); mark(); draw(); } }, "×"))),
@@ -345,7 +348,7 @@ async function builder(id) {
     const el = h("div", { class: "unit" },
       h("span", { class: "grip", draggable: "true", title: "Drag to reorder" }, "⋮⋮"),
       h("div", {}, name, chips, h("div", { class: "muted small", style: "margin:4px 5px 0" }, n ? `about ${n} cards` : "no cards yet: drag a tag here")),
-      h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due),
+      h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due), h("span", {}, "Checkpoint ", check),
         h("button", { class: "del", "aria-label": `Delete ${u.name}`, title: "Delete this date", onclick: () => { doc.units.splice(i, 1); refill(); mark(); draw(); } }, "×")));
     el.querySelector(".grip").addEventListener("dragstart", (e) => { dragging = { unit: i }; e.dataTransfer.setData("text/plain", String(i)); });
     dropTarget(el, (d) => {
@@ -359,6 +362,27 @@ async function builder(id) {
     return el;
   }
 
+  /** 3.2: the plan's weeks at a glance: build, catch-up, taper, checkpoints. */
+  function phaseStrip() {
+    const us = Sched.units(doc);
+    if (!us.length) return null;
+    const first = Sched.monday(Sched.start(doc));
+    const lastDay = [doc.end, ...us.map((u) => u.due || u.opens)].filter(Boolean).sort().pop();
+    const weeks = Math.min(52, Math.floor(Sched.diff(lastDay, first) / 7) + 1);
+    const checks = new Set(us.filter((u) => u.check).map((u) => Sched.monday(u.check)));
+    const cells = [];
+    for (let i = 0; i < weeks; i++) {
+      const m = addDays(first, 7 * i);
+      const kinds = [0, 1, 2, 3, 4, 5, 6].map((k) => Sched.phase(doc, addDays(m, k), 0));
+      const kind = kinds.every((k) => k === "taper") || kinds.includes("taper") && i === weeks - 1 ? "taper" : kinds[0] === "catchup" ? "catchup" : "build";
+      cells.push(h("div", { class: `ph ${kind}${checks.has(m) ? " cp" : ""}`, title: `${pretty(m)}: ${kind === "catchup" ? "catch-up week" : kind}${checks.has(m) ? ", a checkpoint" : ""}` }, `W${i + 1}`));
+    }
+    // a date that opens in a catch-up week or the taper waits for the next build day
+    const held = us.filter((u) => Sched.phase(doc, u.opens, 0) !== "build");
+    return h("div", {}, h("div", { class: "phases" }, cells),
+      held.length ? h("p", { class: "status bad" }, `${held.map((u) => u.name).slice(0, 3).join(", ")}${held.length > 3 ? "…" : ""} ${held.length === 1 ? "opens" : "open"} in a catch-up week or the taper: followers start ${held.length === 1 ? "it" : "them"} on their next study day after it.`) : null);
+  }
+
   function unitsTab() {
     const startIn = h("input", { type: "date", value: start, "aria-label": "Starts", onchange: (e) => { if (e.target.value) { start = e.target.value; refill(); mark(); draw(); } } });
     const rhythmIn = h("select", { "aria-label": "Rhythm", onchange: (e) => { rhythm = e.target.value; refill(); mark(); draw(); } },
@@ -368,6 +392,7 @@ async function builder(id) {
     const drop = h("div", { class: "drop" }, "Drop a tag or subdeck here for a new date");
     dropTarget(drop, (d) => d.source && addSource(d.source));
     return h("div", {},
+      phaseStrip(),
       h("div", { class: "tool" }, "Starts", startIn, rhythmIn,
         h("span", {}, `${doc.units.length} date${doc.units.length === 1 ? "" : "s"} · about ${total} cards${last ? ` · ends ${pretty(last.due || last.opens)}` : ""}`)),
       h("div", { class: "builder" }, treeView(), h("div", { class: "units" }, doc.units.map(unitRow), drop)),
@@ -434,10 +459,16 @@ async function builder(id) {
     const aud = (v, text) => h("label", { style: "display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px" },
       h("input", { type: "radio", name: "aud", value: v, checked: meta.audience === v, disabled: v === "squad" && !meta.squad,
         onchange: () => { meta.audience = v; mark(); } }), text);
-    const exam = doc.exam || null;
-    const examDate = h("input", { type: "date", id: "edate", value: exam?.date || "", onchange: (e) => { if (e.target.value) doc.exam = { ...(doc.exam || { target: 85 }), date: e.target.value, by: addDays(e.target.value, -35) }; else delete doc.exam; mark(); draw(); } });
-    const target = h("input", { type: "number", id: "etarget", min: 50, max: 100, value: exam?.target ?? 85, disabled: !exam, style: "width:6em",
-      onchange: (e) => { const v = Math.max(50, Math.min(100, Math.round(Number(e.target.value) || 85))); if (doc.exam) { doc.exam.target = v; mark(); } } });
+    // 3.2: the plan's shape over time: an end date, catch-up weeks, a taper
+    const ph = doc.phases || { catchup: 0, taper: 0 };
+    const setPh = (k, v) => { doc.phases = { ...ph, ...(doc.phases || {}), [k]: v }; if (!doc.phases.catchup && !doc.phases.taper) delete doc.phases; mark(); };
+    const endIn = h("input", { type: "date", id: "pend", value: doc.end || "", onchange: (e) => {
+      if (e.target.value) doc.end = e.target.value; else { delete doc.end; if (doc.phases) { doc.phases.taper = 0; if (!doc.phases.catchup) delete doc.phases; } }
+      mark(); draw(); } });
+    const catchup = h("select", { id: "pcatch", onchange: (e) => setPh("catchup", Number(e.target.value)) },
+      [[0, "None"], [3, "Every 3rd week"], [4, "Every 4th week"]].map(([v, t]) => h("option", { value: v, selected: (ph.catchup || 0) === v }, t)));
+    const taper = h("input", { type: "number", id: "ptaper", min: 0, max: 60, value: ph.taper || 0, disabled: !doc.end, style: "width:6em",
+      onchange: (e) => setPh("taper", Math.max(0, Math.min(60, Math.round(Number(e.target.value) || 0)))) });
     const del = h("button", { class: "danger", onclick: async () => {
       if (del.dataset.sure !== "1") { del.dataset.sure = "1"; del.textContent = "Delete it: followers keep their cards open"; return; }
       await api("DELETE", `/plans/${id}`); dirty = false; go("/plans");
@@ -448,8 +479,10 @@ async function builder(id) {
       h("label", { for: "ssquad" }, "Offer it to a squad"), sq,
       h("p", { class: "muted small" }, "Everyone in that squad sees it on their board in Anki."),
       h("label", {}, "Who can follow"), aud("code", "Anyone with the code"), aud("squad", meta.squad ? "Only people in that squad" : "Only people in a squad (choose one above)"),
-      h("label", { for: "edate" }, "Exam (optional)"),
-      h("div", { class: "row" }, examDate, h("span", { class: "muted small" }, "target"), target, h("span", { class: "muted small" }, "% of the plan's cards mature, five weeks before")),
+      h("label", { for: "pend" }, "Ends (optional)"), h("div", { class: "row" }, endIn, h("span", { class: "muted small" }, "the exam, or the course's last day")),
+      h("label", { for: "pcatch" }, "Catch-up weeks"), catchup,
+      h("p", { class: "muted small" }, "Nothing new opens in a catch-up week: anyone behind closes the gap."),
+      h("label", { for: "ptaper" }, "Taper"), h("div", { class: "row" }, taper, h("span", { class: "muted small" }, "days before the end date with no new cards, only reviews")),
       h("div", { style: "margin-top:18px" }, del));
   }
 
@@ -485,6 +518,8 @@ async function builder(id) {
           + (u.decks || []).reduce((a, d) => a + (counts.get(`deck:${d}`) || 0), 0);
         if (counts.size && (u.tags?.length || u.decks?.length)) u.n = n; else delete u.n;
       }
+      delete doc.exam;  // 3.2: the exam projection is gone; the end date and the taper replace it
+      for (const u of doc.units) { delete u.lead; if (!u.check) delete u.check; }
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc };
       if (meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (meta.audience !== plan.audience) body.audience = meta.audience;
@@ -496,7 +531,7 @@ async function builder(id) {
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 409 ? "This plan changed somewhere else. Reload to see it (your changes here will be lost)."
-        : err.body?.error === "bad_plan" ? "Something in the plan isn't valid: check the dates (due can't be before it opens)."
+        : err.body?.error === "bad_plan" ? "Something in the plan isn't valid: check the dates (due and checkpoints can't be before a date opens; a taper needs an end date)."
         : "That didn't save. Try again.";
     } finally { saveBtn.disabled = false; }
   }
@@ -524,6 +559,7 @@ async function planPage(id) {
             h("span", { class: "bar" }, h("i", { style: `width:${w(c.done)}` })), h("span", { class: "n" }, `${c.opened} · ${c.done}`)];
         })));
   } else {
+    if (plan.following) parts.push(onTrack(plan, false), onTrackChart(plan));
     parts.push(h("h2", {}, "Dates"), h("div", { class: "plans" }, units.map((u) =>
       h("div", { class: "plan-row" }, h("b", {}, u.name), h("small", {}, pretty(u.opens)), h("small", {}, u.due ? `due ${pretty(u.due)}` : ""), h("span")))));
   }
@@ -560,6 +596,263 @@ async function account() {
 
 // ---- routing ----
 
+// ---- 3.2: a schedule's arithmetic (due_crew/schedule.py, the same rules) ----
+
+const Sched = (() => {
+  const day = 86400000;
+  const units = (doc) => (doc?.units || []).filter((u) => u.id && u.opens);
+  const start = (doc) => { const us = units(doc); return us.length ? us.map((u) => u.opens).sort()[0] : null; };
+  const monday = (s) => { const d = parseIso(s); const k = (d.getUTCDay() + 6) % 7; return addDays(s, -k); };
+  const diff = (a, b) => Math.round((parseIso(a) - parseIso(b)) / day);
+  const shift = (doc, sched) => (sched?.start && start(doc) ? Math.max(0, diff(sched.start, start(doc))) : 0);
+  function phase(doc, d, sh) {
+    const ph = doc.phases || {}; const first = start(doc); const pd = addDays(d, -sh);
+    if (doc.end && ph.taper && diff(doc.end, pd) < ph.taper && pd <= doc.end) return "taper";
+    if (ph.catchup >= 2 && first && pd >= first && ((diff(monday(pd), monday(first)) / 7 + 1) % ph.catchup) === 0) return "catchup";
+    return "build";
+  }
+  const weight = (doc, sched, d, sh) => (phase(doc, d, sh) !== "build" ? 0 : ((sched?.days || [1, 1, 1, 1, 1, 1, 1])[(parseIso(d).getUTCDay() + 6) % 7] || 0));
+  function win(doc, u, sh) {
+    let last = u.due;
+    if (!last) { const later = units(doc).map((x) => x.opens).filter((o) => o > u.opens).sort(); last = later.length ? addDays(later[0], -1) : u.opens; }
+    if (last < u.opens) last = u.opens;
+    return [addDays(u.opens, sh), addDays(last, sh)];
+  }
+  function quota(doc, u, sched, total, d) {
+    const sh = shift(doc, sched); const [a, b] = win(doc, u, sh);
+    if (d < a || total <= 0) return 0;
+    if (!sched) return total;
+    let whole = 0; let upto = 0;
+    for (let x = a; x <= b; x = addDays(x, 1)) { const w = weight(doc, sched, x, sh); whole += w; if (x <= d) upto += w; }
+    if (whole) return Math.min(total, Math.ceil((total * upto) / whole));
+    // no study day in the window: all of it on my first study day after it
+    let next = b;
+    for (let i = 1; i <= 60; i++) { const x = addDays(b, i); if (weight(doc, sched, x, sh)) { next = x; break; } }
+    return d >= next ? total : 0;
+  }
+  return { units, start, shift, win, quota, phase, monday, diff };
+})();
+
+// ---- 3.2: home, my log, the admin's counts ----
+
+const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6].map((i) => {
+  const d = addDays(mon, i); const v = days?.[d];
+  return h("i", { class: v?.studied || v?.reviews ? "on" : d > today() ? "later" : "", title: pretty(d) });
+}));
+
+async function home() {
+  const [b, plansR, sett] = await Promise.all([api("GET", "/board?keep=1"), api("GET", "/plans/mine"), api("GET", "/settings").catch(() => null)]);
+  const mon = Sched.monday(today());
+  const showUp = !!sett?.settings?.show_up;
+  const my = b.me.week?.days || {};
+  const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
+  const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
+  const t = my[today()] || {};
+  const cheerBtn = (f) => {
+    const btn = h("button", { class: "linkish", onclick: async () => {
+      btn.disabled = true;
+      try { await api("POST", `/cheers/${f.uid}`, { emoji: "🎉" }); btn.textContent = "Cheered"; }
+      catch { btn.textContent = "Try again"; btn.disabled = false; }
+    } }, "Cheer");
+    return btn;
+  };
+  const crewRow = (f, you) => {
+    const days = f.week?.days || {}; const d = days[today()] || {};
+    const live = f.week?.liveUntil && Date.parse(f.week.liveUntil) > Date.now();
+    const away = f.week?.awayFrom && f.week.awayFrom <= today() && today() <= f.week.awayTo;
+    const state = live ? "studying now" : d.studied || d.reviews ? "studied" : away ? "away" : "not yet";
+    return h("tr", { class: you ? "you" : "" },
+      h("td", {}, f.emoji || ""), h("td", { class: "nm" }, you ? `${f.name || "You"} (you)` : f.name,
+        f.week?.recap && f.week.recap.day === today() ? h("small", { class: "muted" }, ` · week ${f.week.recap.n} done`) : null),
+      h("td", {}, squares(days, mon)),
+      showUp ? null : h("td", { class: "n" }, d.reviews ? `${d.reviews.toLocaleString()}` : ""),
+      h("td", { class: state === "not yet" || state === "away" ? "muted" : "ok" }, state),
+      h("td", {}, you ? "" : cheerBtn(f)));
+  };
+  const crew = b.friends.filter((f) => f.mutual);
+  const waiting = b.friends.filter((f) => !f.mutual);
+  const order = [...crew].sort((x, y) => ((y.week?.days?.[today()]?.reviews || 0) - (x.week?.days?.[today()]?.reviews || 0)));
+  const table = h("table", { class: "crew" }, h("tbody", {}, crewRow(b.me, true), order.map((f) => crewRow(f, false))));
+  const squadsBox = h("div", { class: "stack" });
+  let tab = "crew";
+  const panel = h("div");
+  const tabs = h("div", { class: "pills" });
+  async function drawTab() {
+    tabs.replaceChildren(...[["crew", "Crew"], ["squads", "Squads"]].map(([k, l]) =>
+      h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; drawTab(); } }, l)));
+    if (tab === "crew") {
+      panel.replaceChildren(crew.length ? table : h("p", { class: "muted" }, "Nobody yet. Add your crew in Anki: Tools › Due Crew › Friends."),
+        waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null);
+      return;
+    }
+    panel.replaceChildren(squadsBox);
+    squadsBox.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+    const { squads } = await api("GET", "/squads/mine");
+    if (!squads.length) { squadsBox.replaceChildren(h("p", { class: "muted" }, "No squads. Start or join one in Anki: Tools › Due Crew › Squads.")); return; }
+    const out = [];
+    for (const sq of squads) {
+      const s = await api("GET", `/squads/${sq.id}`);
+      out.push(h("h3", {}, sq.name), h("table", { class: "crew" }, h("tbody", {}, s.rows.map((r) => h("tr", { class: r.uid === me.uid ? "you" : "" },
+        h("td", {}, r.emoji || ""), h("td", { class: "nm" }, r.name),
+        h("td", { class: "n" }, r.day === today() && r.reviews != null ? r.reviews.toLocaleString() : ""),
+        h("td", { class: "muted" }, r.week != null ? `${r.week} of 7 days` : ""))))));
+    }
+    squadsBox.replaceChildren(...out);
+  }
+  drawTab();
+  const followed = plansR.plans.filter((p) => p.following);
+  page(
+    h("div", { class: "home" },
+      h("div", { class: "col" },
+        h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
+          h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
+        h("section", { class: "panel" }, h("h4", {}, "Today"),
+          h("div", { class: "tiles" },
+            h("div", {}, h("b", {}, (t.reviews || 0).toLocaleString()), h("small", {}, "reviews")),
+            h("div", {}, h("b", {}, (t.newCards || 0).toLocaleString()), h("small", {}, "new")),
+            h("div", {}, h("b", {}, `${Math.round((t.studyTimeMs || 0) / 60000)}m`), h("small", {}, "studied"))),
+          h("small", { class: "muted" }, "From your last sync. Study in Anki.")),
+        h("section", { class: "panel" }, h("h4", {}, "Cheers", h("span", { class: "muted" }, String(b.cheers.length))),
+          b.cheers.length ? b.cheers.map((c) => h("div", { class: "cheer" }, h("b", {}, `${c.emoji} ${c.name}`), c.note ? ` ${c.note}` : ""))
+            : h("p", { class: "muted small" }, "None waiting."),
+          b.cheers.length ? h("small", { class: "muted" }, "They play in Anki too.") : null),
+        followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")),
+          followed.map((p) => onTrack(p, true))) : null),
+      h("div", { class: "col" }, h("section", { class: "panel" }, tabs, panel))));
+}
+
+/** A plan I follow: cards seen against my schedule, from what my Anki last shared. */
+function onTrack(p, compact) {
+  const prog = p.following?.progress || {};
+  const sched = p.following?.sched || null;
+  const seen = Object.values(prog).reduce((n, t) => n + t[1], 0);
+  const total = Object.values(prog).reduce((n, t) => n + t[2], 0);
+  const want = Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, today()), 0);
+  const gap = want - seen;
+  const words = !total ? "Your progress shows once you share it (in Anki: Plan ▾)." :
+    gap > 0 ? `${gap.toLocaleString()} behind your schedule` : "on track";
+  if (compact) {
+    return h("div", { class: "prow" }, link(`/plans/${p.id}`, p.name), h("span", { class: "bar" }, h("i", { style: `width:${total ? Math.round((100 * seen) / total) : 0}%` })),
+      h("small", { class: gap > 0 ? "warn" : "muted" }, total ? words : ""));
+  }
+  return h("p", { class: gap > 0 ? "warn" : "muted" }, total ? `${seen.toLocaleString()} of ${total.toLocaleString()} seen · ${words}` : words);
+}
+
+/** Cards seen against my schedule, as a line: the schedule dashed, me as a dot today. */
+function onTrackChart(p) {
+  const prog = p.following?.progress || {};
+  const sched = p.following?.sched || null;
+  const us = Sched.units(p.doc);
+  if (!us.length || !Object.keys(prog).length) return null;
+  const sh = Sched.shift(p.doc, sched);
+  const first = addDays(Sched.start(p.doc), sh);
+  const last = us.map((u) => Sched.win(p.doc, u, sh)[1]).sort().pop();
+  const span = Math.max(1, Sched.diff(last, first));
+  const step = Math.max(1, Math.ceil(span / 60));
+  const pts = [];
+  for (let i = 0; i <= span; i += step) {
+    const d = addDays(first, i);
+    pts.push([i, us.reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, d), 0)]);
+  }
+  const seen = Object.values(prog).reduce((n, t) => n + t[1], 0);
+  const top = Math.max(1, ...pts.map((x) => x[1]), seen) * 1.08;
+  const W = 560; const H = 190; const L = 44; const R = 70; const T = 12; const B = 24;
+  const x = (i) => L + ((W - L - R) * i) / span; const y = (v) => T + (H - T - B) * (1 - v / top);
+  const ns = "http://www.w3.org/2000/svg";
+  const s = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v)); if (text !== undefined) e.textContent = text; return e; };
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": "Cards seen against my schedule" });
+  for (let k = 0; k <= 4; k++) {
+    const v = Math.round((top / 1.08) * (k / 4));
+    svg.append(s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }), s("text", { x: L - 6, y: y(v) + 4, class: "tick", "text-anchor": "end" }, v.toLocaleString()));
+  }
+  svg.append(s("text", { x: L, y: H - 6, class: "tick" }, pretty(first)), s("text", { x: W - R, y: H - 6, class: "tick", "text-anchor": "end" }, pretty(last)));
+  svg.append(s("polyline", { points: pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" "), class: "ln plan" }));
+  const ti = Math.min(span, Math.max(0, Sched.diff(today(), first)));
+  const dot = s("circle", { cx: x(ti), cy: y(seen), r: 4.5, class: "dot" });
+  dot.append(s("title", {}, `You, ${pretty(today())}: ${seen.toLocaleString()} seen`));
+  svg.append(dot, s("text", { x: x(ti) + 8, y: y(seen) + 4, class: "lab" }, `You ${seen.toLocaleString()}`));
+  return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"), h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg);
+}
+
+function barChart(values, labels, cap, unit) {
+  const W = 560; const H = 170; const L = 34; const R = 8; const T = 14; const B = 22;
+  const top = Math.max(1, ...values, cap || 0) * 1.12;
+  const ns = "http://www.w3.org/2000/svg";
+  const s = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v)); if (text !== undefined) e.textContent = text; return e; };
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": `${unit} by week` });
+  for (let k = 0; k <= 3; k++) {
+    const v = Math.round((top / 1.12) * (k / 3));
+    svg.append(s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }), s("text", { x: L - 6, y: y(v) + 4, class: "tick", "text-anchor": "end" }, v));
+  }
+  const slot = (W - L - R) / values.length; const bw = Math.max(6, slot - 6);
+  values.forEach((v, i) => {
+    const x0 = L + i * slot + (slot - bw) / 2;
+    const r = s("rect", { x: x0, y: y(v), width: bw, height: Math.max(0, y(0) - y(v)), rx: 3, class: "barm" });
+    r.append(s("title", {}, `${labels[i]}: ${v} ${unit}`));
+    svg.append(r, s("text", { x: x0 + bw / 2, y: H - 6, class: "tick", "text-anchor": "middle" }, labels[i]));
+  });
+  if (cap) svg.append(s("line", { x1: L, x2: W - R, y1: y(cap), y2: y(cap), class: "cap" }), s("text", { x: W - R, y: y(cap) - 5, class: "capl", "text-anchor": "end" }, `your ${cap} min`));
+  return svg;
+}
+
+async function logPage() {
+  const [log, plansR] = await Promise.all([api("GET", "/log"), api("GET", "/plans/mine")]);
+  const days = log.days || {};
+  const mon = Sched.monday(today());
+  const week = Object.entries(days).filter(([d]) => d >= mon);
+  const sum = (rows, i) => rows.reduce((n, [, r]) => n + (r[i] || 0), 0);
+  const graded = week.filter(([, r]) => r[3] !== null);
+  const ret = graded.length ? graded.reduce((n, [, r]) => n + r[3] * r[1], 0) / graded.reduce((n, [, r]) => n + r[1], 0) : null;
+  let streak = 0;
+  for (let d = today(); days[d] || (d === today() && streak === 0 && days[addDays(d, -1)]); d = addDays(d, -1)) if (days[d]) streak++;
+  const mins = sum(week, 0);
+  const metric = { i: 0, unit: "minutes a day" };
+  const box = h("div");
+  const minutesPlan = plansR.plans.find((p) => p.following?.sched)?.following.sched.minutes || 0;
+  function drawChart() {
+    const vals = []; const labels = [];
+    for (let w = 11; w >= 0; w--) {
+      const m0 = addDays(mon, -7 * w);
+      const rows = Object.entries(days).filter(([d]) => d >= m0 && d < addDays(m0, 7));
+      let v;
+      if (metric.i === 3) {
+        const g = rows.filter(([, r]) => r[3] !== null);
+        v = g.length ? Math.round(g.reduce((n, [, r]) => n + r[3] * r[1], 0) / g.reduce((n, [, r]) => n + r[1], 0)) : 0;
+      } else v = Math.round(sum(rows, metric.i) / 7);
+      vals.push(v);
+      const d = parseIso(m0);
+      labels.push(w % 3 === 0 || w === 11 ? `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}` : "");
+    }
+    box.replaceChildren(barChart(vals, labels, metric.i === 0 ? minutesPlan : 0, metric.unit));
+  }
+  const pills = h("div", { class: "pills" });
+  const pick = [["Minutes", 0, "minutes a day"], ["Reviews", 1, "reviews a day"], ["New", 2, "new cards a day"], ["Retention", 3, "% retention"]];
+  const drawPills = () => pills.replaceChildren(...pick.map(([l, i, u]) => h("button", { class: metric.i === i ? "on" : "", onclick: () => { metric.i = i; metric.unit = u; drawPills(); drawChart(); } }, l)));
+  drawPills(); drawChart();
+  const followed = plansR.plans.filter((p) => p.following);
+  page(h("h1", {}, "Your log"), h("p", { class: "muted" }, "Only you see this. It fills in from Anki's syncs."),
+    h("div", { class: "tiles" },
+      h("div", {}, h("b", {}, `${week.length} of 7`), h("small", {}, "days this week")),
+      h("div", {}, h("b", {}, `${Math.floor(mins / 60)}h ${Math.round(mins % 60)}m`), h("small", {}, "studied")),
+      h("div", {}, h("b", {}, sum(week, 1).toLocaleString()), h("small", {}, "reviews")),
+      h("div", {}, h("b", {}, sum(week, 2).toLocaleString()), h("small", {}, "new cards")),
+      h("div", {}, h("b", {}, ret === null ? "—" : `${ret.toFixed(1)}%`), h("small", {}, "retention")),
+      h("div", {}, h("b", {}, String(streak)), h("small", {}, "day streak"))),
+    h("div", { class: "row", style: "justify-content:space-between;margin-top:18px" }, h("h2", { style: "margin:0" }, "By week"), pills), box,
+    followed.length ? h("h2", {}, "Plans") : null,
+    followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p))));
+}
+
+async function adminPage() {
+  const s = await api("GET", "/admin/stats");
+  const tile = (v, l) => h("div", {}, h("b", {}, typeof v === "number" ? v.toLocaleString() : v), h("small", {}, l));
+  page(h("h1", {}, "Numbers"), h("p", { class: "muted" }, "Counts only. Never names or emails."),
+    h("div", { class: "tiles" }, tile(`${s.on3} / ${s.accounts}`, "on 3.x"), tile(s.seenDay, "seen today"), tile(s.seenWeek, "seen this week"),
+      tile(s.mutualPairs, "mutual friendships"), tile(s.squads, `squads · ${s.memberships} in them`), tile(s.plans, `plans · ${s.follows} following`), tile(s.tips, "tips on cards")),
+    h("h2", {}, "Versions"), h("table", { class: "crew" }, h("tbody", {}, s.versions.map(([v, n]) => h("tr", {}, h("td", { class: "nm" }, v), h("td", { class: "n" }, n.toLocaleString()))))));
+}
+
 async function route() {
   const path = location.pathname.replace(/\/+$/, "") || "/";
   try {
@@ -569,6 +862,9 @@ async function route() {
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
     if (!me) return needSignIn();
     if (path === "/plans") return await plansList();
+    if (path === "/home" || path === "/") return await home();
+    if (path === "/log") return await logPage();
+    if (path === "/admin") return await adminPage();
     if (path === "/account") return account();
     if ((m = /^\/plans\/([a-z0-9]{16})\/edit$/.exec(path))) return await builder(m[1]);
     if ((m = /^\/plans\/([a-z0-9]{16})$/.exec(path))) return await planPage(m[1]);

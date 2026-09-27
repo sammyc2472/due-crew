@@ -3450,8 +3450,9 @@ def test_schedule_model_v32():
           S.quota(doc, unit, None, 100, mon) == 100 and S.quota(doc, unit, None, 100, mon - datetime.timedelta(days=1)) == 0)
     check("spread: the last day of the window has it all open", S.quota(doc, unit, five, 7, D("2026-10-11")) == 7)
     weekend = {"id": "w", "name": "W", "opens": "2026-10-10", "due": "2026-10-11"}
-    check("spread: a window with no study day opens whole on its first day",
-          S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-10")) == 9)
+    check("spread: a window with no study day opens whole on my next study day",
+          S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-11")) == 0
+          and S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-12")) == 9)
     nodue = [{"id": "a", "name": "A", "opens": "2026-10-05"}, {"id": "b", "name": "B", "opens": "2026-10-08"}]
     check("window: without a due date, up to the day before the next date opens",
           S.window({"units": nodue}, nodue[0]) == (mon, D("2026-10-07")))

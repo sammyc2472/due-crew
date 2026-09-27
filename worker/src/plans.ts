@@ -160,8 +160,8 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 async function following(env: Env, plan: string, uid: string) {
-  return env.DB.prepare("SELECT share, paused, sched FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
-    .first<{ share: number; paused: number; sched: string | null }>();
+  return env.DB.prepare("SELECT share, paused, sched, progress FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
+    .first<{ share: number; paused: number; sched: string | null; progress: string | null }>();
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -191,7 +191,9 @@ async function view(env: Env, p: Plan, uid: string) {
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
     ...(p.owner === uid ? { code: p.code } : {}),
-    ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null } } : {}),
+    // mine only: my schedule, and my own progress (3.2's on-track line on the site)
+    ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null,
+                           progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
   };
 }
 
