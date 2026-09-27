@@ -8,7 +8,7 @@ interface Env {
   API: { fetch(req: Request): Promise<Response> };
 }
 
-const APP = /^\/(sign-in|account|plans|plans\/[A-Za-z0-9-]+(\/edit)?|plans\/new|p\/[A-Za-z0-9]{1,16})\/?$/;
+const APP = /^\/(sign-in|account|home|log|admin|plans|plans\/[A-Za-z0-9-]+(\/edit)?|plans\/new|p\/[A-Za-z0-9]{1,16})\/?$/;
 const CSP = [
   "default-src 'self'", "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "script-src 'self'", "connect-src 'self'",
   "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
@@ -18,6 +18,11 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/api/")) return env.API.fetch(req);
+    // 3.2: signed in, duecrew.com opens on your home, not the landing page.
+    // The cookie is only a hint here: the home asks the API who you are.
+    if (url.pathname === "/" && /(?:^|;\s*)dc_session=/.test(req.headers.get("cookie") || "")) {
+      return new Response(null, { status: 302, headers: { location: "/home", "cache-control": "no-store" } });
+    }
     if (APP.test(url.pathname)) {
       const page = await env.ASSETS.fetch(new Request(new URL("/app", url), { method: "GET" }));
       const headers = new Headers(page.headers);

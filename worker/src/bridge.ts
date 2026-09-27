@@ -146,6 +146,7 @@ export function inbound(doc: Record<string, unknown>): string | null {
 export function outbound(doc: string, updatedAt: number): Record<string, unknown> {
   const w = JSON.parse(doc) as Record<string, unknown>;
   delete w.tricky;
+  delete w.recap;  // 3.2, which 2.x doesn't show
   w.updatedAt = isoZ(updatedAt);
   return w;
 }

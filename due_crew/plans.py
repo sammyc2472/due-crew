@@ -139,7 +139,7 @@ class DeckIndex:
         ids = ",".join(str(d) for d in tree) or "0"
         rows = col.db.all(
             "SELECT c.id, CASE WHEN c.odid != 0 THEN c.odid ELSE c.did END, c.ord, c.queue, c.type, "
-            f"n.guid, n.tags FROM cards c JOIN notes n ON n.id = c.nid "
+            f"n.guid, n.tags, c.due FROM cards c JOIN notes n ON n.id = c.nid "
             f"WHERE c.did IN ({ids}) OR c.odid IN ({ids})")
         self.cards = {}      # cid -> (queue, type)
         self.leech = set()   # cids whose note Anki tagged leech: a plan never opens them
@@ -147,12 +147,14 @@ class DeckIndex:
         self.by_ref = {}     # (guid, ord) -> cid
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
+        self.order = {}      # cid -> the deck's own order: cards seen before first, then new by position
         treeset = set(tree)
-        for cid, home, ord_, queue, ctype, guid, tags in rows:
+        for cid, home, ord_, queue, ctype, guid, tags, due in rows:
             if int(home) not in treeset:
                 continue
             cid = int(cid)
             self.cards[cid] = (int(queue), int(ctype))
+            self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -231,6 +233,10 @@ class DeckIndex:
 
     def suspended(self, cids):
         return {cid for cid in cids if self.cards[cid][0] == -1}
+
+    def in_order(self, cids):
+        """[(cid, suspended)] in the deck's own order (3.2's spread opens the first ones)."""
+        return [(cid, self.cards[cid][0] == -1) for cid in sorted(cids, key=self.order.__getitem__)]
 
     def openable(self, cids):
         """The suspended ones a plan may open: never a leech Anki suspended."""

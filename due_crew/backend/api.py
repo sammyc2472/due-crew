@@ -25,7 +25,7 @@ import requests
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan,
+    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan, clean_sched, clean_recap, clean_cards,
     clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
 )
 
@@ -272,6 +272,8 @@ class ApiClient:
                 "tricky": [] if you else clean_tricky(week.get("tricky"), today),
                 # 2.12: the study room they're in (mine from the session)
                 "room": _live_room(self.session.get("room") if you else week.get("room")),
+                # 3.2: their last plan week done, for a cheer
+                "recap": clean_recap(self.session.get("recap") if you else week.get("recap"), today),
             })
         by_uid = {f.get("uid"): f for f in data.get("friends") or []}
         cheers = []
@@ -399,22 +401,30 @@ class ApiClient:
         if live and live_now(live):
             doc["liveUntil"] = str(live)
         # a flag goes out as its note's guid, its deck and its day: never the card's text
-        tricky = [{k: t[k] for k in ("guid", "deck", "at")}
+        tricky = [{k: t[k] for k in ("guid", "deck", "at", "q") if k in t}
                   for t in clean_tricky(self.session.get("tricky"), labels[0] if labels else None)]
         if tricky:
             doc["tricky"] = tricky
         room = clean_room(self.session.get("room"))
         if room and not is_over(room):
             doc["room"] = room
+        recap = clean_recap(self.session.get("recap"), labels[0] if labels else None)
+        if recap:
+            doc["recap"] = recap
         return doc
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
-             squad_row=None, squads=(), version=None, clock=None, plans=None):
+             squad_row=None, squads=(), version=None, clock=None, plans=None,
+             known=None, stuck=None, log=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
         {unit id: [opened, seen, total]}} for the plans I share progress
         on, sent only when it changed since the last sync that went.
+        3.2: known, the guids of cards I have down in decks I share (sent
+        as changes since the last that went); stuck, the guids I'm stuck
+        on (the answer lands in session["cards"]); log, my study log's
+        days, sent when they changed.
         Raises TransportError."""
         if self.session.get("needs_restore"):
             try:
@@ -445,6 +455,15 @@ class ApiClient:
             body["squads"] = {"row": squad_row, "ids": list(squads)}
         if plans is not None and not paused and _digest(plans) != self.session.get("plans_hash", _digest({})):
             body["plans"] = plans
+        sent_known = None
+        if known is not None and not paused:
+            part, sent_known = self._knows_part(known)
+            if part:
+                body["knows"] = part
+        if stuck is not None and not paused:
+            body["stuck"] = list(stuck)[:300]
+        if log and _digest(log) != self.session.get("log_hash"):
+            body["log"] = {"days": log}
         status, data = self._call("POST", "/sync", body)
         if status != 200:
             print(f"due crew: sync refused ({status}: {data.get('error', '?')})")
@@ -456,9 +475,67 @@ class ApiClient:
             self.session["heatmap_hash"] = _digest(body["heatmap"])
         if "plans" in body:
             self.session["plans_hash"] = _digest(body["plans"])
+        if "knows" in body:
+            self._save_known(sent_known)
+        if "stuck" in body:
+            self.session["cards"] = clean_cards(data.get("cards"))
+        if "log" in body:
+            self.session["log_hash"] = _digest(log)
+            if len(log) > 8:
+                self.session["log_full"] = self.user_id  # the long first upload went: 8 days from now on
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]
+
+    # ---- 3.2: the cards I know, kept beside the session ----
+
+    KNOWS_PER_SYNC = 2000
+
+    def _known_file(self):
+        return os.path.join(os.path.dirname(self.session_file), "known.json")
+
+    def _load_known(self):
+        """(uid, [guids]) the server has for me, as far as this computer knows."""
+        try:
+            with open(self._known_file()) as f:
+                data = json.load(f)
+            return str(data.get("uid") or ""), list(data.get("guids") or [])
+        except Exception:
+            return "", None
+
+    def _save_known(self, guids):
+        tmp = self._known_file() + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump({"uid": self.user_id, "guids": sorted(guids)}, f)
+            os.replace(tmp, self._known_file())
+        except OSError:
+            pass
+
+    def _knows_part(self, known):
+        """(the sync's `knows` part or None, what the server will have after it).
+        A first upload, or one for another account, starts from nothing."""
+        uid, sent = self._load_known()
+        known = set(known)
+        if sent is None or uid != self.user_id:
+            add = sorted(known)[:self.KNOWS_PER_SYNC]
+            return {"reset": True, "add": add}, set(add)
+        sent = set(sent)
+        add = sorted(known - sent)[:self.KNOWS_PER_SYNC]
+        gone = sorted(sent - known)[:self.KNOWS_PER_SYNC]
+        if not add and not gone:
+            return None, sent
+        return {"add": add, "del": gone}, (sent | set(add)) - set(gone)
+
+    def tip_helped(self, guid, from_uid, helped=True):
+        """3.2: "This helped" on a crewmate's tip. One request, on a click."""
+        status, _ = self._call("POST", "/tips/helped", {"guid": str(guid), "from": str(from_uid), "helped": bool(helped)})
+        if status == 200:
+            for t in (self.session.get("cards") or {}).get(guid, {}).get("tips") or []:
+                if t.get("from") == from_uid:
+                    t["helped"] = bool(helped)
+            self._save_session()
+        return status == 200
 
     # ---- 3.0's first sync: bring back what 2.x had ----
 
@@ -665,8 +742,11 @@ class ApiClient:
         status, data = self._call("GET", f"/plans/peek?code={code}")
         return (clean_plan(data) if status == 200 else None), status
 
-    def follow_plan(self, code, share=True):
-        status, data = self._call("POST", "/plans/follow", {"code": normalize_code(code), "share": bool(share)})
+    def follow_plan(self, code, share=True, sched=None):
+        body = {"code": normalize_code(code), "share": bool(share)}
+        if sched is not None:
+            body["sched"] = sched  # 3.2: my days and time
+        status, data = self._call("POST", "/plans/follow", body)
         if status == 200:
             self.session.pop("plans_hash", None)  # my progress goes out whole at the next sync
             self._save_session()
@@ -682,6 +762,16 @@ class ApiClient:
             self.session.pop("plans_hash", None)  # sharing off cleared it on the server
         self._note_follow(plan_id, share=data.get("share") is True, paused=data.get("paused") is True)
         return {"share": data.get("share") is True, "paused": data.get("paused") is True}
+
+    def set_schedule(self, plan_id, sched):
+        """3.2: PATCH my schedule (None: no schedule, units open whole). The
+        schedule as the server keeps it, or False when it didn't take."""
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", {"sched": sched})
+        if status != 200:
+            return False
+        got = clean_sched(data.get("sched"))
+        self._note_follow(plan_id, sched=got)
+        return got
 
     def unfollow_plan(self, plan_id):
         status, _ = self._call("DELETE", f"/plans/{plan_id}/follow")

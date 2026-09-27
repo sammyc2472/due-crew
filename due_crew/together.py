@@ -127,18 +127,6 @@ def tips_for(guid):
     return [(t["name"], t["note"]) for t in (_wrap_data().get("tips") or {}).get(guid, [])]
 
 
-def card_will_show(text, card, kind):
-    """gui_hooks.card_will_show: a crewmate's tip under the answer of the
-    card it was sent for. Never on the question: a tip can give it away."""
-    try:
-        if not kind.endswith("Answer"):
-            return text
-        tips = tips_for(card.note().guid)
-        return text + board.tip_html(tips) if tips else text
-    except Exception:
-        return text
-
-
 # ---- sending ----
 
 def _ask_line(title, prompt):
@@ -289,6 +277,14 @@ def tricky_view():
     except Exception:
         return []
     text = {g: _plain(str(flds).split("\x1f", 1)[0]) for g, flds in rows}
-    return [{"uid": e["user_id"], "name": e["name"], "index": i,
-             "text": text[t["guid"]], "deck": t["deck"]}
-            for e, i, t in flags if t["guid"] in text]
+    try:
+        from .cards import i_know
+        known = i_know(mw.col, [t["guid"] for _e, _i, t in flags if t.get("q")])  # 3.2: an ask
+    except Exception:
+        known = set()
+    out = [{"uid": e["user_id"], "name": e["name"], "index": i,
+            "text": text[t["guid"]], "deck": t["deck"], "q": t.get("q") or "",
+            "known": t["guid"] in known}
+           for e, i, t in flags if t["guid"] in text]
+    out.sort(key=lambda v: not v["known"])  # asks about cards I know first
+    return out

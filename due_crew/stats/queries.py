@@ -95,6 +95,33 @@ class StatsQueries:
             "GROUP BY 1", cutoff - 1, start_ms, cutoff * 1000)
         return {self.day_label(int(ago)): int(n) for ago, n in rows or []}
 
+    def first_seen(self, days):
+        """{cid: days ago} for cards whose first answer ever fell in the last
+        `days` days (0 = today). 3.2's plan card counts a plan's new cards
+        by day from it."""
+        cutoff = self._cutoff_s()
+        start_ms = (cutoff - days * 86400) * 1000
+        rows = self.col.db.all(
+            "SELECT r.cid, CAST((? - MIN(r.id) / 1000) / 86400 AS INTEGER) FROM revlog r "
+            "WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND NOT EXISTS "
+            "(SELECT 1 FROM revlog p WHERE p.cid = r.cid AND p.ease > 0 AND p.id < ?) GROUP BY r.cid",
+            cutoff - 1, start_ms, cutoff * 1000, start_ms)
+        return {int(c): int(a) for c, a in rows or []}
+
+    def pace(self, days=30):
+        """(seconds a review, seconds a new card on its first day) over the
+        last `days`: what turns cards into minutes. Typical values until
+        there's enough to go on."""
+        cutoff = self._cutoff_s()
+        start_ms = (cutoff - days * 86400) * 1000
+        rev = self.col.db.first(
+            "SELECT SUM(time), COUNT(*) FROM revlog WHERE ease > 0 AND type IN (1, 2) AND id >= ?", start_ms)
+        learn = self.col.db.first(
+            "SELECT SUM(time), COUNT(DISTINCT cid) FROM revlog WHERE ease > 0 AND type = 0 AND id >= ?", start_ms)
+        secs_review = (rev[0] / rev[1] / 1000) if rev and rev[1] and rev[1] >= 50 else 8.0
+        secs_new = (learn[0] / learn[1] / 1000) if learn and learn[1] and learn[1] >= 20 else 30.0
+        return max(2.0, min(60.0, secs_review)), max(5.0, min(300.0, secs_new))
+
     def answers_in_days(self, first, last):
         """Answers on the days `first` to `last - 1` ago, the span
         heatmap_counts(last) keeps once `first` days have settled: one count

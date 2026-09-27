@@ -17,3 +17,5 @@ wdev.log
 # wrangler's local state (a local dev session keeps its D1 here)
 .wrangler/
 users.json
+# wrangler dev's local secrets (tools/site_preview.sh writes one)
+.dev.vars

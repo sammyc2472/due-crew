@@ -6,6 +6,7 @@
 // A knock needs a squad in common or the recipient's own code.
 
 import type { Session } from "./auth";
+import { tipWrite } from "./cards";
 import { limitOrThrow } from "./limits";
 import { sendMail } from "./mail";
 import * as V from "./validate";
@@ -220,6 +221,8 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET emoji = excluded.emoji, note = excluded.note,
        luck = excluded.luck, guid = excluded.guid, at = excluded.at`,
   ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, nowSec()).run();
+  // 3.2: a tip with words stays on its card, for the crew who has it
+  if (c.guid && c.note) await tipWrite(env, s.uid, c.guid, c.note).run();
   // 3.0.1: the first tip on a flagged card takes the flag down for the whole
   // crew. Only a tip from someone the flag was shown to (mutual) counts.
   if (c.guid && (await added(env, s.uid, to))) await unflag(env, to, c.guid);

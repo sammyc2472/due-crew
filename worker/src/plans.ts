@@ -48,7 +48,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "tags", "decks", "cards", "n"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -56,7 +56,12 @@ function unit(v: unknown): Obj {
     if (!V.isDate(v.due) || v.due < v.opens) throw V.bad("plan");
     out.due = v.due;
   }
-  if (v.lead !== undefined && v.lead !== null) {
+  if (v.check !== undefined && v.check !== null) {
+    // 3.2: a checkpoint, the morning a filtered deck of this date's cards is built
+    if (!V.isDate(v.check) || v.check < v.opens) throw V.bad("plan");
+    out.check = v.check;
+  }
+  if (v.lead !== undefined && v.lead !== null) {  // 3.1 docs only; the builder no longer writes it
     if (!V.isStr(v.lead, 128, 1)) throw V.bad("plan");
     out.lead = v.lead;
   }
@@ -78,11 +83,31 @@ function unit(v: unknown): Obj {
   return out;
 }
 
-/** A plan's doc: {deck, exam?, units}. Units sorted by when they open. */
+/** 3.2: the plan's shape over time. `catchup`: every nth week opens nothing
+ *  new (0: none); `taper`: the last days before `end` open nothing new. */
+function phases(v: unknown): Obj {
+  if (!V.isObj(v)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["catchup", "taper"].includes(k)) throw V.bad("plan");
+  const catchup = v.catchup ?? 0;
+  const taper = v.taper ?? 0;
+  if (!V.isInt(catchup, 0, 8) || catchup === 1 || !V.isInt(taper, 0, 60)) throw V.bad("plan");
+  return { catchup, taper };
+}
+
+/** A plan's doc: {deck, exam?, end?, phases?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "units"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "units"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
+  if (v.end !== undefined && v.end !== null) {
+    if (!V.isDate(v.end)) throw V.bad("plan");
+    out.end = v.end;
+  }
+  if (v.phases !== undefined && v.phases !== null) {
+    const ph = phases(v.phases);
+    if (ph.catchup || ph.taper) out.phases = ph;
+    if (ph.taper && !out.end) throw V.bad("plan");  // a taper runs up to the end date
+  }
   if (v.exam !== undefined && v.exam !== null) {
     const e = v.exam as Obj;
     if (!V.isObj(e) || !V.isDate(e.date) || !V.isInt(e.target, 50, 100)
@@ -96,6 +121,23 @@ export function planDoc(v: unknown): Obj {
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
   if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");
+  return out;
+}
+
+/** 3.2: a follower's own schedule. `days`, Monday first: 0 rest, 1 study,
+ *  2 a double share. `minutes` a day; `start` when later than the plan. */
+export function schedule(v: unknown): Obj | null {
+  if (v === null) return null;
+  if (!V.isObj(v)) throw V.bad("sched");
+  for (const k of Object.keys(v)) if (!["start", "days", "minutes"].includes(k)) throw V.bad("sched");
+  if (!Array.isArray(v.days) || v.days.length !== 7 || !v.days.every((d) => V.isInt(d, 0, 2))
+      || !v.days.some((d) => d > 0)) throw V.bad("sched");
+  if (!V.isInt(v.minutes, 10, 600)) throw V.bad("sched");
+  const out: Obj = { days: v.days, minutes: v.minutes };
+  if (v.start !== undefined && v.start !== null) {
+    if (!V.isDate(v.start)) throw V.bad("sched");
+    out.start = v.start;
+  }
   return out;
 }
 
@@ -118,8 +160,8 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 async function following(env: Env, plan: string, uid: string) {
-  return env.DB.prepare("SELECT share, paused FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
-    .first<{ share: number; paused: number }>();
+  return env.DB.prepare("SELECT share, paused, sched, progress FROM plan_follows WHERE plan = ? AND uid = ?").bind(plan, uid)
+    .first<{ share: number; paused: number; sched: string | null; progress: string | null }>();
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -149,7 +191,9 @@ async function view(env: Env, p: Plan, uid: string) {
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (await isMember(env, p.squad, uid)) ? p.squad : null,
     ...(p.owner === uid ? { code: p.code } : {}),
-    ...(f ? { following: { share: f.share === 1, paused: f.paused === 1 } } : {}),
+    // mine only: my schedule, and my own progress (3.2's on-track line on the site)
+    ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null,
+                           progress: f.progress ? JSON.parse(f.progress) : null } } : {}),
   };
 }
 
@@ -305,10 +349,11 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
 
 // ---- following ----
 
-/** POST /plans/follow {code, share?}: follow the plan behind a code. */
+/** POST /plans/follow {code, share?, sched?}: follow the plan behind a code. */
 export async function follow(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   if (typeof body.code !== "string") throw V.bad("code");
+  const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
   const code = normalizeCode(body.code);
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || !(await mayRead(env, p, s.uid, code))) throw new HttpError(404, "no_plan");
@@ -318,27 +363,31 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE uid = ?").bind(s.uid).first<number>("n");
     if ((n ?? 0) >= FOLLOWS_MAX) throw new HttpError(409, "too_many_plans");
   }
+  const sj = sched === undefined ? null : sched === null ? null : JSON.stringify(sched);
   await env.DB.prepare(
-    `INSERT INTO plan_follows (plan, uid, share, paused, at) VALUES (?, ?, ?, 0, ?)
-     ON CONFLICT(plan, uid) DO UPDATE SET share = excluded.share, paused = 0`,
-  ).bind(p.id, s.uid, share, nowSec()).run();
+    `INSERT INTO plan_follows (plan, uid, share, paused, sched, at) VALUES (?, ?, ?, 0, ?, ?)
+     ON CONFLICT(plan, uid) DO UPDATE SET share = excluded.share, paused = 0
+       ${sched === undefined ? "" : ", sched = excluded.sched"}`,
+  ).bind(p.id, s.uid, share, sj, nowSec()).run();
   return json(await view(env, p, s.uid));
 }
 
-/** PATCH /plans/{id}/follow {share?, paused?}. */
+/** PATCH /plans/{id}/follow {share?, paused?, sched?}. */
 export async function patchFollow(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (k !== "share" && k !== "paused") throw V.bad("follow");
+  for (const k of Object.keys(body)) if (!["share", "paused", "sched"].includes(k)) throw V.bad("follow");
   const f = await following(env, id, s.uid);
   if (!f) throw new HttpError(404, "not_following");
   const share = typeof body.share === "boolean" ? (body.share ? 1 : 0) : f.share;
   const paused = typeof body.paused === "boolean" ? (body.paused ? 1 : 0) : f.paused;
-  if (share !== f.share || paused !== f.paused) {
+  const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
+  const sj = sched === undefined ? f.sched : sched === null ? null : JSON.stringify(sched);
+  if (share !== f.share || paused !== f.paused || sj !== f.sched) {
     await env.DB.prepare(
-      `UPDATE plan_follows SET share = ?, paused = ?${share ? "" : ", progress = NULL"} WHERE plan = ? AND uid = ?`,
-    ).bind(share, paused, id, s.uid).run();
+      `UPDATE plan_follows SET share = ?, paused = ?, sched = ?${share ? "" : ", progress = NULL"} WHERE plan = ? AND uid = ?`,
+    ).bind(share, paused, sj, id, s.uid).run();
   }
-  return json({ share: share === 1, paused: paused === 1 });
+  return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null });
 }
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
@@ -416,7 +465,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
  *  offered to my squads that I don't follow yet. */
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, u.name AS owner_name
+    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.paused, f.sched, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
             OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
@@ -447,6 +496,7 @@ export async function forBoard(env: Env, uid: string) {
   return {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
+      sched: r.sched ? JSON.parse(r.sched) : null,
       followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
   };

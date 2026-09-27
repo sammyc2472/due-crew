@@ -243,3 +243,20 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Plan ▾ → Change deck… on a plan named with <b>markup</b>: the question shows the name as text.
 - [ ] Signed out, AnkiWeb sync done at open, then sign in: the plans' morning runs with the sign-in's refresh, not three minutes later.
 - [ ] Close Anki with a sync on close on a new day before the morning ran: no plan cards open during the close.
+
+## 3.2: plans as training, who knows this one, the site's home
+
+Two accounts again, Dre (author) and Maya (follower), mutual friends, a
+deck both share (Settings › Shared decks).
+
+- [ ] Dre, on the site: Settings has Ends, Catch-up weeks and Taper (no exam target). Dates has a Checkpoint per date and the weeks strip (build, catch-up light, taper grey, a checkpoint ringed). A date opening in a catch-up week gets the orange note. Save; a taper without an end date is refused with a plain message.
+- [ ] Maya: Follow a plan… → Follow: My schedule opens right after. Days: click S twice (×2, then rest), minutes, a later start. The chart shows reviews a day by week, amber over my time, "your 60 min ≈ N"; the sentence says what to do. Save: today's share opens (a toast), not the whole date. Cancel instead: dates open whole, as in 3.1.
+- [ ] The plan card: three tiles (new today N / M, reviews due, ~minutes left), "On track." and Study now (opens the deck's review). A rest day says "rest day: no new"; a catch-up week and the taper say so.
+- [ ] Skip two study days (change the date): the card says "You missed Tue and Wed: N new cards waiting" with Spread them (+N a day), Push my dates back 2 days, Leave them open. Push: one request, a tooltip; the plan's dates on the site don't move for Dre. Spread: the target grows by a quarter a day. Either way the question doesn't come back for those days.
+- [ ] Plan ▾ → My schedule…: the same dialog with No schedule; No schedule takes it off.
+- [ ] A checkpoint's morning: "Due Crew built Checkpoint · <date>", a filtered deck of that date's cards with most lapses first. Study it: the card says "N done", then "Checkpoint … done: X of N right first time".
+- [ ] The Monday of plan week 2: "Week 1 done: X of Y sessions, N new cards, on track." Dre's board shows "· week 1 done" beside Maya's name that day.
+- [ ] Who knows this one: Maya presses Again on a card Dre has mature in the shared deck, then syncs. On its answer side, beside Edit: "🐙 Dre knows this · Ask". Ask → a line → the flag goes up. Dre's Decks tab: "Maya asks about a card you know: "…"" first, with Tip; the same card in Dre's reviewer shows "Maya asked about this · Tip". Dre tips: Maya's flag comes down; next time the card's answer shows "💡 Dre's tip"; click: the tip and This helped. Nothing is ever drawn inside the card.
+- [ ] A card with no one who knows it and no tip: no chip. A card on the question side: no chip.
+- [ ] The site, signed in: duecrew.com goes to Home (this week, today, cheers waiting, plans with on track or N behind, the crew with Cheer, Squads). A cheer shown there still plays in Anki. Log: tiles, 12 weeks by minutes/reviews/new/retention, each plan's line against my schedule. /admin: Sam only; anyone else gets Not found.
+- [ ] `wrangler tail`: still one GET /board and one POST /sync per refresh and sync; My schedule and This helped are one request each, on a click.

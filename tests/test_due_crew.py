@@ -2050,8 +2050,6 @@ def test_together_v210():
     check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
-    tip = board.tip_html([("Dre <i>", "Ken-tuck-y")])
-    check("tips: under the answer, escaped", "Dre &lt;i&gt;" in tip and "Ken-tuck-y" in tip)
 
     # L3 + tips: cheers carry luck / guid
     check("luck: a line goes out marked", dre.send_cheer("sam", "\U0001F340", "Go get it", luck=True) is True
@@ -2077,12 +2075,10 @@ def test_together_v210():
     check("keeping: the line and the tip are held locally, and each says so",
           w["luck"]["exam"] == exam and w["luck"]["lines"][0]["note"] == "Go"
           and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
-    class Card:
-        def note(self):
-            return types.SimpleNamespace(guid="guid000003")
-    check("tips: on the answer only",
-          "Kentucky" in together.card_will_show("A", Card(), "reviewAnswer")
-          and together.card_will_show("Q", Card(), "reviewQuestion") == "Q")
+    from due_crew import cards as crew_cards
+    chip = crew_cards.chip_view(None, together.tips_for("guid000003"), {})
+    check("tips: 3.2, a chip beside Edit, never inside the card",
+          chip == {"kind": "tip", "text": "\U0001F4A1 Eve’s tip", "cmd": "knowstip"})
     js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
     check("good-luck card: lines go in as text, and Thanks is wired",
           "textContent" in js and "innerHTML" not in js and "duecrew:luckthanks" in js
@@ -3037,6 +3033,7 @@ def test_plans_per_profile_v311():
     with _PlanGlue({"A": maya, "B": kai}, {"A": _plan_col(), "B": col_b}) as g:
         F = g.F
         plan, _ = maya.follow_plan(code)
+        F.open_schedule = _skip_schedule
         F.on_followed(plan, 10, None, "open")
         col_a = g.cols["A"]
         g.profile("B")
@@ -3094,6 +3091,7 @@ def test_plans_followed_elsewhere_v311():
         st = g.state()["plans"][pid]
         check("elsewhere: only today's unit opens", _open(col) == {3, 8}, str(_open(col)))
         check("elsewhere: the units before today are marked skipped", st["applied"]["hf"].startswith("skip:"))
+        F.open_schedule = _skip_schedule
         F.on_followed(plan, 10, None, "open")
         check("follow again: what was applied here is kept (the skipped unit stays shut)",
               _open(col) == {3, 8} and g.state()["plans"][pid]["applied"]["hf"].startswith("skip:"),
@@ -3182,6 +3180,7 @@ def test_plans_undo_waits_v311():
         with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
             F, col = g.F, g.cols["A"]
             plan, _ = maya.follow_plan(code)
+            F.open_schedule = _skip_schedule
             F.on_followed(plan, 10, None, "open")
             check("undo: set up", g.state().get("plans_opened", {}).get("label") == "Due Crew: open 2 dates")
             F.undo_morning()
@@ -3411,6 +3410,322 @@ def test_anki_day_labels_v311():
         else:
             os.environ["TZ"] = old_tz
         _time.tzset()
+
+
+def _skip_schedule(pid, then=None):
+    """The schedule dialog, as if Cancel was pressed (no Qt here)."""
+    if then:
+        then()
+
+
+def _spread_col(n=10):
+    """Step 1 (10): n suspended new cards tagged Renal, positions n..1 (so
+    the deck's order is the reverse of their ids), one of them a leech."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for i in range(n):
+        fakes.add_card(conn, 100 + i, did=10, queue=-1, tags="Step1::Renal" + (" leech" if i == 0 else ""), due=n - i)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    return col
+
+
+def test_schedule_model_v32():
+    """3.2: a unit's cards spread over my study days in its window; rest
+    days, catch-up weeks and the taper take none; a later start moves only
+    my dates; pushing back can't pass the end date."""
+    from due_crew import schedule as S
+    D = S.d
+    mon = D("2026-10-05")  # a Monday
+    unit = {"id": "rn", "name": "Renal", "opens": "2026-10-05", "due": "2026-10-11"}
+    doc = {"deck": "Step 1", "units": [unit]}
+    five = {"days": [1, 1, 1, 1, 1, 0, 0], "minutes": 60}
+    q = [S.quota(doc, unit, five, 100, mon + datetime.timedelta(days=i)) for i in range(7)]
+    check("spread: five study days take a fifth each, and the weekend none",
+          q == [20, 40, 60, 80, 100, 100, 100], str(q))
+    double = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60}
+    q2 = [S.quota(doc, unit, double, 70, mon + datetime.timedelta(days=i)) for i in range(7)]
+    check("spread: a double day takes twice the share", q2[4] - q2[3] == 10 and q2[5] - q2[4] == 20, str(q2))
+    check("spread: no schedule opens the unit whole on its first day, as 3.1 did",
+          S.quota(doc, unit, None, 100, mon) == 100 and S.quota(doc, unit, None, 100, mon - datetime.timedelta(days=1)) == 0)
+    check("spread: the last day of the window has it all open", S.quota(doc, unit, five, 7, D("2026-10-11")) == 7)
+    weekend = {"id": "w", "name": "W", "opens": "2026-10-10", "due": "2026-10-11"}
+    check("spread: a window with no study day opens whole on my next study day",
+          S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-11")) == 0
+          and S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-12")) == 9)
+    nodue = [{"id": "a", "name": "A", "opens": "2026-10-05"}, {"id": "b", "name": "B", "opens": "2026-10-08"}]
+    check("window: without a due date, up to the day before the next date opens",
+          S.window({"units": nodue}, nodue[0]) == (mon, D("2026-10-07")))
+    later = dict(five, start="2026-10-12")
+    check("start later: my dates move by the difference, the plan's don't",
+          S.shift_days(doc, later) == 7 and S.quota(doc, unit, later, 100, D("2026-10-09")) == 0
+          and S.quota(doc, unit, later, 100, D("2026-10-12")) == 20)
+    ph = {"deck": "x", "end": "2026-11-15", "phases": {"catchup": 4, "taper": 7},
+          "units": [dict(unit, due=None)]}
+    check("phases: every 4th week is a catch-up week",
+          S.phase(ph, D("2026-10-26")) == "catchup" and S.phase(ph, D("2026-10-19")) == "build")
+    check("phases: the taper is the last 7 days up to the end",
+          S.phase(ph, D("2026-11-09")) == "taper" and S.phase(ph, D("2026-11-08")) == "build"
+          and S.weight(ph, five, D("2026-11-10")) == 0)
+    long_unit = {"id": "l", "name": "L", "opens": "2026-10-19", "due": "2026-11-01"}
+    lp = dict(ph, units=[dict(unit, due=None), long_unit])
+    q3 = [S.quota(lp, long_unit, five, 50, D("2026-10-19") + datetime.timedelta(days=i)) for i in range(14)]
+    check("spread: a catch-up week in the window opens nothing new",
+          q3[6] == 50 and q3[7] == 50 and q3[4] == 50, str(q3))
+    check("push back: a later start, as a date", S.pushed_start(doc, five, 2)["start"] == "2026-10-07")
+    check("push back: never past the plan's end date",
+          S.pushed_start(dict(doc, end="2026-10-12"), five, 2) is None
+          and S.pushed_start(dict(doc, end="2026-10-13"), five, 2) is not None)
+    view = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 5, D("2026-10-07"), catch="spread")
+    check("today: my share, plus a quarter of what I'm behind when I chose to spread it",
+          view["share"] == 20 and view["behind"] == 30 and view["target"] == 28 and view["done"] == 5, str(view))
+    leave = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 0, D("2026-10-07"), catch="leave")
+    check("today: leaving it open keeps just the share", leave["target"] == 20)
+    rest = S.today_view(doc, five, {"rn": 100}, {"rn": 100}, 0, D("2026-10-10"))
+    check("today: a rest day says so", rest["kind"] == "rest" and rest["target"] == 0)
+    missed = S.missed_study_days(doc, five, D("2026-10-08"), {"2026-10-05": 20, "2026-10-06": 2},
+                                 {"2026-10-05": 20, "2026-10-06": 20, "2026-10-07": 20})
+    check("missed: study days under a quarter of their share, back to the last one kept",
+          missed == [D("2026-10-07"), D("2026-10-06")], str(missed))
+    lv = S.load_view(doc, five, {"rn": 500}, mon, [100] * 60, 8.0, 30.0)
+    check("load: weeks of expected reviews, the new cards' reviews on top of what's due",
+          lv["weeks"][0][1] > 100 and lv["new_a_day"] == 100 and lv["cap"] == S.cap_reviews(60, 8.0, 30.0, 100))
+    check("load: a week over my time is called out", lv["over"] == [l for l, v, o in lv["weeks"] if o])
+    check("plan week: 1 the week the first date opens",
+          S.plan_week(doc, D("2026-10-07")) == 1 and S.plan_week(doc, D("2026-10-13")) == 2 and S.plan_week(doc, D("2026-10-01")) == 0)
+
+
+def test_schedule_morning_v32():
+    """3.2: the morning opens up to today's quota, first cards in the
+    deck's order, never a leech; again the same day opens nothing; the
+    last day opens the rest and marks the unit applied."""
+    from due_crew import plan_flow as F
+    store = world({"dre": "Dre", "maya": "Maya"})
+    start = TODAY
+    unit = {"id": "rn", "name": "Renal", "opens": _day(0), "due": _day(4), "tags": ["Step1::Renal"]}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    maya = new_client(store, "maya", "Maya")
+    every = {"days": [1] * 7, "minutes": 60}
+    plan, status = maya.follow_plan(code, sched=every)
+    check("follow: my schedule goes with the follow, and comes back", status == 200 and plan["sched"] == every)
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    res = F.run(col, [plan], state, _day(0))
+    check("morning: a fifth of the unit, the first in the deck's order (highest ids first here)",
+          _open(col) == {109, 108} and res["n"] == 2, str(_open(col)))
+    check("morning: again the same day opens nothing", F.run(col, [plan], state, _day(0))["n"] == 0)
+    F.run(col, [plan], state, _day(2))
+    check("morning: a missed morning catches up to today's quota, not more", len(_open(col)) == 6, str(_open(col)))
+    F.run(col, [plan], state, _day(4))
+    check("morning: the last day opens the rest, never the leech", _open(col) == set(range(101, 110)))
+    check("morning: then the unit is applied, as in 3.1", "rn" in state[pid]["applied"])
+    got = maya.set_schedule(pid, dict(every, start=_day(3)))
+    check("my schedule: changed with one request, kept on the cached plan",
+          got["start"] == _day(3) and maya.session["plans"][0]["sched"]["start"] == _day(3)
+          and store.follows[(pid, "maya")]["sched"]["start"] == _day(3))
+    b = maya.fetch_board([_day(0)], with_decks=True)
+    check("board: my schedule rides the day's first refresh", b["plans"][0]["sched"]["start"] == _day(3))
+    check("my schedule: a bad one doesn't take", maya.set_schedule(pid, {"days": [0] * 7, "minutes": 60}) is False)
+    del start
+
+
+def _knows_col():
+    """Step 1 (10) with Sub (11), and Other (20). 1: mature and clean;
+    2: mature but missed yesterday; 3: lapsed three times; 4: young, missed
+    today; 5: mature, in Other; 6: mature, in Sub."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, ctype=2, queue=2, ivl=40)
+    fakes.add_card(conn, 2, did=10, ctype=2, queue=2, ivl=40)
+    fakes.add_card(conn, 3, did=10, ctype=2, queue=2, ivl=3, lapses=3)
+    fakes.add_card(conn, 4, did=10, ctype=2, queue=2, ivl=2)
+    fakes.add_card(conn, 5, did=20, ctype=2, queue=2, ivl=90)
+    fakes.add_card(conn, 6, did=11, ctype=2, queue=2, ivl=30)
+    noon = int(datetime.datetime.combine(TODAY, datetime.time(12)).timestamp() * 1000)
+    fakes.add_review(conn, noon - 86400000, ease=1, cid=2)
+    fakes.add_review(conn, noon, ease=1, cid=4)
+    fakes.add_review(conn, noon + 60000, ease=3, time_ms=90000, rtype=0, cid=4)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1", 11: "Step 1::Sub", 20: "Other"})
+    return col
+
+
+def test_who_knows_v32():
+    """3.2: the cards I know and the ones I'm stuck on (in decks I share),
+    sent as changes; who knows mine comes back in the same sync; the chip;
+    an ask; This helped; my log."""
+    from due_crew import cards as K
+    col = _knows_col()
+    known, stuck = K.known_and_stuck(col, [10], fakes.day_cutoff_for(TODAY))
+    check("known: mature, no miss in 30 days, in the deck I share and its subdecks",
+          known == {"guid000001", "guid000006"}, str(known))
+    check("stuck: lapsed twice or more, or missed today; most lapses first",
+          stuck == ["guid000003", "guid000004"], str(stuck))
+    check("known and stuck: nothing without a shared deck", K.known_and_stuck(col, [], 0) == (set(), []))
+    labels = [_day(0)]
+    store = world({"sam": "Sam", "dre": "Dre", "mo": "Mo"},
+                  {"sam": ["dre", "mo"], "dre": ["sam"], "mo": ["sam"]})
+    sam, dre = new_client(store, "sam", "Sam"), new_client(store, "dre", "Dre")
+    ok, _g = dre.push(labels, {}, known={"guid000003", "guid000009"})
+    check("knows: the first upload starts from nothing", ok and store.bodies[-1][2]["knows"]["reset"] is True
+          and store.knows == {("dre", "guid000003"), ("dre", "guid000009")})
+    dre.push(labels, {}, known={"guid000003", "guid000010"})
+    check("knows: then only what changed", store.bodies[-1][2]["knows"] == {"add": ["guid000010"], "del": ["guid000009"]})
+    dre.push(labels, {}, known={"guid000003", "guid000010"})
+    check("knows: nothing changed, nothing sent", "knows" not in store.bodies[-1][2])
+    many = {f"g{i:05d}" for i in range(2500)}
+    other = new_client(store, "mo", "Mo")
+    other.push(labels, {}, known=many)
+    other.push(labels, {}, known=many)
+    check("knows: at most 2,000 a sync, the rest at the next",
+          len(store.bodies[-2][2]["knows"]["add"]) == 2000 and len(store.bodies[-1][2]["knows"]["add"]) == 500
+          and sum(1 for u, _g in store.knows if u == "mo") == 2500)
+    dre.send_cheer("sam", "\U0001F4A1", "Loop of Henle", guid="guid000003")
+    sam.push(labels, {}, stuck=["guid000003", "guid000004"])
+    cardsin = sam.session["cards"]
+    check("stuck: who knows it and their tips come back in the same sync",
+          cardsin == {"guid000003": {"knows": ["dre"], "tips": [{"from": "dre", "text": "Loop of Henle", "helped": False}]}},
+          str(cardsin))
+    check("helped: one request, and the session keeps it",
+          sam.tip_helped("guid000003", "dre") and cardsin["guid000003"]["tips"][0]["helped"] is True
+          and ("guid000003", "dre", "sam") in store.helped)
+    names = {"dre": ("Dre Ng", "\U0001F419"), "mo": ("Mo", "")}
+    v = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names)
+    check("chip: who knows it, and Ask", v["text"] == "\U0001F419 Dre and 1 more know this" and v["cmd"] == "knowsask")
+    check("chip: a tip comes first", K.chip_view(cardsin["guid000003"], [], names)["cmd"] == "knowstip")
+    check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1)])
+    check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
+    check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
+    sam.fetch_board(labels)  # Dre's tip is read, so a flag on that card may go up again
+    sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
+    doc = sam.week_doc(labels, {})
+    check("ask: rides my week as the guid and my line, never the card's text",
+          doc["tricky"] == [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "q": "Trick?"}])
+    sam.push(labels, {})
+    board_ = dre.fetch_board(labels)
+    check("ask: the crewmate reads it", board_["entries"][1]["tricky"][0]["q"] == "Trick?")
+    check("ask: a card I know is known", K.i_know(col, ["guid000001", "guid000003"]) == {"guid000001"})
+    log = K.log_days(col, 8)
+    check("log: minutes, reviews, new cards and retention, studied days only",
+          log == {_day(-1): [0, 1, 1, 0.0], _day(0): [2, 2, 1, 50.0]}, str(log))
+    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)})
+    check("log: the long first upload marks it sent", sam.session["log_full"] == "sam" and len(store.logs["sam"]) == 18)
+    sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
+    sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
+    check("log: unchanged, not sent again", "log" not in store.bodies[-1][2])
+    got = sam._call("GET", "/log")[1]
+    check("log: mine to read", len(got["days"]) == 19)
+    sam.session["recap"] = {"name": "Step 1", "n": 3, "day": _day(0)}
+    sam.push(labels, {})
+    check("recap: rides my week, and a crewmate sees it",
+          dre.fetch_board(labels)["entries"][1]["recap"] == {"name": "Step 1", "n": 3, "day": _day(0)})
+
+
+def test_session_card_v32():
+    """3.2: today's session on my schedule, the missed-days question, the
+    recap on a new plan week, checkpoints; the board draws them escaped."""
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    col = _spread_col(20)
+    start = TODAY - datetime.timedelta(days=3)  # opened three days ago, due in four
+    unit = {"id": "rn", "name": "Renal <i>", "opens": start.isoformat(), "due": _day(3), "tags": ["Step1::Renal"],
+            "check": _day(0)}
+    plan = {"id": "p1", "name": "Step 1", "ownerName": "Dre", "version": 1, "followers": 3,
+            "doc": {"deck": "Step 1", "units": [unit]}, "sched": {"days": [1] * 7, "minutes": 60}}
+    st = F.new_state(col, plan)
+    F.run(col, [plan], {"p1": st}, _day(0))
+    idx = P.DeckIndex(col, 10)
+    # nothing seen on the three days before: all three missed
+    v = F.session_view(plan, st, idx, {}, _day(0), (8.0, 30.0), due=40)
+    check("session: today's share and what's waiting", v["share"] == 3 and v["behind"] == 9 and v["kind"] == "study", str(v))
+    check("session: the question, with how much spreading adds a day and how far pushing goes",
+          v["ask"] and v["ask"]["waiting"] == 9 and v["ask"]["spread"] == 3 and v["ask"]["push"] == 3
+          and len(v["ask"]["days"]) == 3, str(v["ask"]))
+    check("session: minutes from my pace: reviews due and today's new", v["minutes"] == round((40 * 8 + 3 * 30) / 60))
+    st["catch"] = {"mode": "spread", "day": _day(0)}
+    v2 = F.session_view(plan, st, idx, {}, _day(0), (8.0, 30.0), due=40)
+    check("session: answered, the question goes, and spreading adds a quarter a day",
+          v2["ask"] is None and v2["target"] == 3 + 3)
+    seen_today = {c: 0 for c in list(idx.cards)[:4]}
+    v3 = F.session_view(plan, dict(st, catch=None), idx, seen_today, _day(0))
+    check("session: cards first seen today count toward today", v3["done"] == 4)
+    html_ = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v2))
+    check("board: the session tiles, and Study now", "new today" in html_ and "reviews due" in html_
+          and "planstudy:p1" in html_ and "<i>" not in html_.replace("<i style", "").replace("<i class", ""))
+    html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
+    check("board: the missed-days question, three ways",
+          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
+    check("board: no schedule yet offers one", "plansched:p1" in board._plan_card_html(
+        F.card_view(dict(plan, sched=None), st, {}, _day(0))))
+    # the recap: on the first day of a plan week
+    monday = TODAY + datetime.timedelta(days=(7 - TODAY.weekday()) % 7)
+    mon_plan = dict(plan, doc=dict(plan["doc"], units=[dict(unit, opens=(monday - datetime.timedelta(days=7)).isoformat(),
+                                                             due=(monday + datetime.timedelta(days=6)).isoformat())]))
+    rv = F.session_view(mon_plan, st, idx, {}, monday.isoformat())
+    check("recap: week 1 done, the first day of week 2", rv["recap"] and rv["recap"]["n"] == 1
+          and rv["recap"]["sessions"][1] == 7, str(rv["recap"]))
+    # checkpoints
+    due = F.checks_due(plan["doc"], st, plan["sched"], _day(0))
+    check("checkpoint: due on its morning", [u["id"] for u in due] == ["rn"])
+    check("checkpoint: not built late past three mornings", F.checks_due(plan["doc"], st, plan["sched"], _day(4)) == [])
+    col.db.conn.execute("UPDATE cards SET type = 2, queue = 2, lapses = id - 100 WHERE id IN (105, 106, 107)")
+    idx = P.DeckIndex(col, 10)
+    picked = F.check_cards(col, idx, idx.match(unit, None, "Step 1"), n=2)
+    check("checkpoint: seen cards, most lapses first", picked == [107, 106], str(picked))
+    st["checks"] = {"rn": {"day": _day(0), "at": 0, "cids": [107, 106]}}
+    cv = F.session_view(plan, st, idx, {}, _day(0), answered={107: (3, 1), 106: (1, 2)})
+    check("checkpoint: the score, first answers since it was built",
+          cv["checks"] == [{"name": "Renal <i>", "n": 2, "answered": 2, "right": 1, "day": _day(0)}])
+    ch = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=cv))
+    check("board: the checkpoint's score, its name escaped", "1 of 2" in ch and "Renal &lt;i&gt;" in ch)
+    rows_ = board.build_rows([{"user_id": "dre", "name": "Dre", "you": False, "paused": False, "last_updated": "",
+                               "days": {}, "recap": {"name": "Step 1", "n": 3, "day": _day(0)}}],
+                             [_day(0)], "", "today", {})
+    allrows = rows_[0] + rows_[1]
+    check("recap: on a crewmate's row the day it's new", allrows and allrows[0]["recap"]["n"] == 3)
+
+
+def test_schedule_parity_v32():
+    """3.2: the site's schedule arithmetic (Sched in site/public/app.js) gives
+    the add-on's quota on every case here. Needs node; skipped without it."""
+    import shutil
+    import subprocess
+    from due_crew import schedule as S
+    node = shutil.which("node")
+    if not node:
+        print("SKIP schedule parity: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    head = js[js.index("const MONTHS"):js.index("const today =")]
+    sched_js = js[js.index("const Sched = (() => {"):js.index("// ---- 3.2: home")]
+    docs = [
+        {"deck": "x", "end": "2026-12-06", "phases": {"catchup": 4, "taper": 10},
+         "units": [{"id": "a", "name": "A", "opens": "2026-10-05", "due": "2026-10-25"},
+                   {"id": "b", "name": "B", "opens": "2026-10-26"},
+                   {"id": "c", "name": "C", "opens": "2026-11-02", "due": "2026-11-30"}]},
+        {"deck": "x", "units": [{"id": "a", "name": "A", "opens": "2026-10-10", "due": "2026-10-11"},
+                                {"id": "b", "name": "B", "opens": "2026-10-12", "due": "2026-10-20"}]},
+    ]
+    scheds = [None, {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60},
+              {"days": [1, 0, 1, 0, 1, 0, 0], "minutes": 60, "start": "2026-10-14"}]
+    cases = []
+    for di, doc in enumerate(docs):
+        for si, sc in enumerate(scheds):
+            for u in doc["units"]:
+                for k in range(0, 70, 3):
+                    day = (datetime.date(2026, 10, 1) + datetime.timedelta(days=k)).isoformat()
+                    cases.append([di, si, u["id"], 97, day, S.quota(doc, u, sc, 97, S.d(day))])
+    prog = head + "\n" + sched_js + (
+        f"const docs = {json.dumps(docs)}; const scheds = {json.dumps(scheds)}; const cases = {json.dumps(cases)};\n"
+        "let bad = 0; for (const [di, si, uid, total, day, want] of cases) {"
+        " const doc = docs[di]; const u = doc.units.find((x) => x.id === uid);"
+        " if (Sched.quota(doc, u, scheds[si], total, day) !== want) bad++; }"
+        " console.log(bad);")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    check("schedule: the site's arithmetic is the add-on's", out.stdout.strip() == "0", out.stdout + out.stderr)
 
 
 def main():

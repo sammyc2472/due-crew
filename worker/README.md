@@ -43,8 +43,11 @@ import takes `Authorization: Bearer <token>`.
 
 | | |
 |---|---|
-| `GET /board[?decks=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?}`. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read. |
-| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?}` → `{ok, gone, wrote}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. |
+| `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?}`. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
+| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 400 days kept, mine only). |
+| `POST /tips/helped {guid, from, helped?}` | 3.2: "This helped" on a mutual friend's tip. It orders tips (the most helpful first); nobody sees a count. |
+| `GET /log` | 3.2: my log, for the site. Mine only. |
+| `GET /admin/stats` | 3.2: counts only (accounts, on 3.x, seen, friendships, squads, plans, tips, versions), for the uids in the `ADMIN_UIDS` secret; 404 for everyone else. |
 | `GET /decks` | Shared-deck progress: mine and my mutual friends'. |
 | `GET /heatmap/{uid}` | Mine or a mutual friend's; `{counts: null}` when they don't share one. |
 | `GET` / `PUT /settings` | `{v, at, settings}`, mine only. |
@@ -54,6 +57,7 @@ import takes `Authorization: Bearer <token>`.
 - At most 9 days.
 - A flagged card (`tricky`) is `{guid, deck, at}`. Any `text` is dropped on the way in; crewmates read the text from their own copy of the note.
 - A flag with a tip still waiting for me is dropped on the way in, so a sync before I've read the tip doesn't put it back up.
+- 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to Firestore.
 
 ### People
 
@@ -65,7 +69,7 @@ import takes `Authorization: Bearer <token>`.
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
-| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). |
+| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card, for mutual friends stuck on it. |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |
 | `POST /knocks/{to} {squad}` | Only between two members of that squad. |
 | `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
@@ -75,7 +79,10 @@ import takes `Authorization: Bearer <token>`.
 See `docs/plans-design.md` for the endpoints (`/plans/*`, `/auth/link`), the
 doc shape and the rules. `GET /board?decks=1` adds `plans` (the plans I
 follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
-`plans: {id: {unitId: [opened, seen, total]}}`.
+`plans: {id: {unitId: [opened, seen, total]}}`. 3.2: a plan's doc may have
+`end`, `phases: {catchup, taper}` and a date's `check` (a checkpoint); a
+follow may carry my `sched: {start?, days, minutes}`, and my own view of a
+plan I follow carries my schedule and my progress.
 
 ### Squads
 

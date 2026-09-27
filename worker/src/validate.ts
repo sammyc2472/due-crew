@@ -144,13 +144,22 @@ export function week(v: unknown): Obj {
         out[k] = x.map((t) => {
           if (!isObj(t) || !isStr(t.guid, GUID_MAX, 1) || !isDate(t.at)) throw bad("week");
           const deck = typeof t.deck === "string" ? oneLine(t.deck, 40) : "";
-          return { guid: t.guid, deck, at: t.at };  // no `text`, ever
+          const out: Obj = { guid: t.guid, deck, at: t.at };  // no `text`, ever
+          // 3.2: an ask, my one line to whoever has this card down
+          if (typeof t.q === "string" && oneLine(t.q, NOTE_MAX)) out.q = oneLine(t.q, NOTE_MAX);
+          return out;
         });
         break;
       }
       case "room":
         out[k] = room(x);
         break;
+      case "recap": {
+        // 3.2: last plan week done, on my row: {name, n, day}
+        if (!isObj(x) || !isStr(x.name, NAME_MAX, 1) || !isInt(x.n, 1, 200) || !isDate(x.day)) throw bad("week");
+        out[k] = { name: oneLine(x.name, NAME_MAX), n: x.n, day: x.day };
+        break;
+      }
       default:
         throw bad("week");
     }

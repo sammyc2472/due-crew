@@ -114,3 +114,93 @@ the fragment never reaches a server log.
 - Client (fakes.FakeWorker mirrors the Worker): matching with swap and
   single cards, never suspending, the undo step, joining late both ways,
   moved dates, pause, the request budget unchanged on a normal day.
+
+## 3.2: plans as training
+
+Signed-off mock: "Plans that train you" (T1–T7, N1–N3, W1, K2–K4; K1, the
+switch, is dropped: who knows a card follows the decks I already share).
+The idea is a marathon plan: the author says what and by when, and each
+follower says when they study.
+
+### The plan (the author's, on the site)
+
+- `end`: the plan's last day (an exam, a course's end), optional.
+- `phases: {catchup, taper}`: every `catchup`th week (3 or 4; 0 none) opens
+  nothing new; the `taper` is the last N days up to `end`, with no new
+  cards. Weeks count from the Monday of the first date.
+- A date's `check`: a checkpoint, on or after it opens.
+- Unit leads and the exam projection are gone (the server still reads
+  3.1 docs that have them; the builder drops them on save).
+
+### My schedule (mine, on my follow)
+
+`sched: {start?, days, minutes}`: `days` Monday first, 0 a rest day, 1 a
+study day, 2 a double share; `minutes` a day (10 to 600); `start` when I
+begin later than the plan, which moves all my dates by the difference.
+PATCH `/plans/{id}/follow {sched}`; `null` takes it off (dates open whole,
+as in 3.1). The add-on asks right after following, and from Plan ▾.
+
+`schedule.py` (and `Sched` in the site's app.js; keep them the same):
+
+- A date's window is its opens to its due, or to the day before the next
+  date opens, or its opens alone; all shifted by my start.
+- `quota(date, day)`: the cards that should be open (and seen) by the end
+  of my `day`: the window's study-day weights up to `day` over all of
+  them, rounded up. A window with no study day in it opens on my next
+  study day after it.
+- The morning opens up to today's quota, the first cards in the deck's
+  order (seen before, then new by position), never a leech, and marks the
+  date applied once its window is over (from then on as in 3.1).
+- Behind: yesterday's quota less what I'd seen by this morning. A missed
+  study day saw under a quarter of its share. After one, the plan card
+  asks once: spread what's waiting (a quarter of it on top of each day's
+  share), push my dates back by the missed study days (never past `end`),
+  or leave it open with no target. `catch` in plans.json.
+- The load ahead: new cards a day from the schedule, each bringing reviews
+  1, 3, 7, 16, 35 and 80 days later (and 12% lapses), on top of what's
+  already due; against my minutes, with my own seconds a review and a new
+  card from the last 30 days.
+- The recap: on the first day of a plan week, last week's sessions kept,
+  new cards and whether I'm on track. It rides my week (`recap`) for the
+  crew's rows that day.
+- A checkpoint's morning (up to 3 mornings late): Anki's own filtered deck
+  "Checkpoint · <date>", the date's seen cards with most lapses first (60).
+  The score (right first time since it was built) stays on this computer.
+
+### Who knows this one
+
+- Known: in the decks I share, a review card at 21+ days with no Again in
+  30. Sent as note guids, as changes (`knows: {reset?, add, del}`, 2,000
+  a sync), with `known.json` beside the session saying what went.
+- Stuck: 2+ lapses, or Again today, in those decks; at most 300, most
+  lapses first, on every sync (`stuck`). The answer comes in the same
+  request: which mutual friends know each, and their tips (most helpful
+  first, 3). Nothing about the question is kept.
+- The chip, on the answer side of a card, beside Edit: a tip (click:
+  the tips, This helped), else who knows it (Ask), else a crewmate's ask
+  on a card I have (Tip). Never inside the card. The 2.10 in-card tip is
+  gone; its tips show in the chip.
+- Ask is a flag with my line (`q` on my week's `tricky`). The board lists
+  asks on cards I know first: "Sam asks about a card you know". The first
+  tip takes it down, as in 3.0.1, and a tip with words stays on the card
+  for everyone in the crew stuck on it (`tips`).
+
+### Tables (migration 0004)
+
+```
+plan_follows.sched    my schedule (JSON)
+knows      (uid, guid)                     PK (uid, guid), index guid
+tips       (guid, uid, text, at)           PK (guid, uid)
+tip_helped (guid, tip_uid, by_uid)         PK all three
+logs       (uid PK, json, at)              {days: {date: [min, reviews, new, retention]}}
+```
+
+### The site
+
+- `/` signed in goes to `/home`: this week, today (from my last sync),
+  cheers waiting (`GET /board?keep=1` leaves them for Anki), my plans and
+  whether I'm on track, the crew (show-up when my settings say so) with
+  Cheer, and squads.
+- `/log`: this week, 12 weeks (minutes, reviews, new, retention), and each
+  plan's cards seen against my schedule.
+- `/admin`: counts only, for `ADMIN_UIDS` (a secret: comma-separated uids).

@@ -246,8 +246,49 @@ def clean_tricky(value, today_label=None):
         text = clean_note(t.get("text"), 60)
         if text:
             flag["text"] = text
+        q = clean_note(t.get("q"))
+        if q:
+            flag["q"] = q  # 3.2: an ask, one line to whoever has the card down
         out.append(flag)
     return out[-TRICKY_MAX:]
+
+
+def clean_recap(value, today_label=None):
+    """3.2: a crewmate's last plan week done, {name, n, day}; None when
+    unusable or older than a week."""
+    if not isinstance(value, dict) or not _ISO.fullmatch(str(value.get("day") or "")):
+        return None
+    n = value.get("n")
+    name = clean_note(value.get("name"), 60)
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= 200 or not name:
+        return None
+    if today_label:
+        try:
+            if (datetime.date.fromisoformat(today_label) - datetime.date.fromisoformat(value["day"])).days > 6:
+                return None
+        except ValueError:
+            return None
+    return {"name": name, "n": n, "day": value["day"]}
+
+
+def clean_cards(value):
+    """3.2: what a sync says about the cards I'm stuck on: {guid: {knows:
+    [uid], tips: [{from, text, at, helped}]}}."""
+    out = {}
+    if not isinstance(value, dict):
+        return out
+    for guid, v in list(value.items())[:300]:
+        if not isinstance(guid, str) or not guid or len(guid) > GUID_MAX or not isinstance(v, dict):
+            continue
+        knows = [str(u)[:128] for u in v.get("knows") or [] if isinstance(u, str) and u][:5]
+        tips = []
+        for t in v.get("tips") or []:
+            if isinstance(t, dict) and isinstance(t.get("from"), str) and clean_note(t.get("text")):
+                tips.append({"from": t["from"][:128], "text": clean_note(t.get("text")),
+                             "helped": t.get("helped") is True})
+        if knows or tips:
+            out[guid] = {"knows": knows, "tips": tips[:3]}
+    return out
 
 
 def _live_room(value):
@@ -394,6 +435,28 @@ def _clean_unit(u):
                      and isinstance(c[1], int) and not isinstance(c[1], bool)]}
     if _ISO.fullmatch(str(u.get("due") or "")):
         out["due"] = u["due"]
+    if _ISO.fullmatch(str(u.get("check") or "")):
+        out["check"] = u["check"]  # 3.2: a checkpoint's morning
+    if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
+        out["n"] = u["n"]
+    return out
+
+
+def clean_sched(s):
+    """3.2: my schedule for a plan, {days: [7 of 0-2], minutes, start?}; None if unusable."""
+    if not isinstance(s, dict):
+        return None
+    days = s.get("days")
+    if (not isinstance(days, list) or len(days) != 7
+            or not all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 2 for x in days)
+            or not any(days)):
+        return None
+    minutes = s.get("minutes")
+    if not isinstance(minutes, int) or isinstance(minutes, bool) or not 10 <= minutes <= 600:
+        return None
+    out = {"days": list(days), "minutes": minutes}
+    if _ISO.fullmatch(str(s.get("start") or "")):
+        out["start"] = s["start"]
     return out
 
 
@@ -402,7 +465,16 @@ def clean_plan_doc(doc):
     doc = doc if isinstance(doc, dict) else {}
     units = [u for u in map(_clean_unit, doc.get("units") or []) if u][:200]
     units.sort(key=lambda u: u["opens"])
-    return {"deck": str(doc.get("deck") or ""), "units": units}
+    out = {"deck": str(doc.get("deck") or ""), "units": units}
+    if _ISO.fullmatch(str(doc.get("end") or "")):
+        out["end"] = doc["end"]
+    ph = doc.get("phases") if isinstance(doc.get("phases"), dict) else {}
+    catchup, taper = ph.get("catchup"), ph.get("taper")
+    ok = lambda v, hi: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi
+    if (ok(catchup, 8) and catchup != 1) or ok(taper, 60):
+        out["phases"] = {"catchup": catchup if ok(catchup, 8) and catchup != 1 else 0,
+                         "taper": taper if ok(taper, 60) and out.get("end") else 0}
+    return out
 
 
 def clean_plan(p):
@@ -420,7 +492,8 @@ def clean_plan(p):
             "followers": _as_int(p.get("followers")) or 0,
             "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
             "code": normalize_code(p.get("code")) if p.get("code") else "",
-            "following": bool(following) or "share" in p}
+            "following": bool(following) or "share" in p,
+            "sched": clean_sched(p.get("sched", following.get("sched")))}
 
 
 def clean_offer(o):

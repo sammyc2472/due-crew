@@ -13,6 +13,8 @@ export interface Env {
   FIREBASE_SA?: string;
   /** Where reports go (POST /reports). Unset: the log counts them, and they go nowhere. */
   REPORT_TO?: string;
+  /** 3.2: comma-separated uids that may read GET /admin/stats. */
+  ADMIN_UIDS?: string;
 }
 
 export class HttpError extends Error {

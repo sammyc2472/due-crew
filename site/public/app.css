@@ -90,3 +90,49 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .bar { height: 8px; background: var(--well); border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); }
 .n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* 3.2: home, the log, phases */
+.home { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
+@media (max-width: 800px) { .home { grid-template-columns: 1fr; } }
+.home .col { display: grid; gap: 12px; align-content: start; }
+.panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--card); display: grid; gap: 8px; }
+.panel h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.panel h4 a { text-decoration: none; font-weight: 700; }
+.panel h3 { font-size: 14px; margin: 6px 0 0; }
+.sqs { display: inline-flex; gap: 3px; }
+.sqs i { width: 12px; height: 12px; border-radius: 2px; background: var(--well); display: inline-block; }
+.sqs i.on { background: var(--accent); }
+.sqs i.later { opacity: 0.4; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.tiles div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; background: var(--card); }
+.tiles b { font-size: 19px; font-variant-numeric: tabular-nums; }
+.tiles small { color: var(--muted); font-size: 11.5px; }
+.crew { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.crew td { padding: 6px 4px; border-top: 1px solid var(--line); white-space: nowrap; }
+.crew td.nm { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crew tr.you td { background: var(--you); }
+.crew .ok { color: var(--accent); }
+.linkish { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 700; }
+.cheer { background: var(--well); border-radius: 8px; padding: 6px 10px; font-size: 13.5px; }
+.pills { justify-self: start; display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.pills button { background: transparent; color: var(--muted); border: 0; border-radius: 0; font-size: 12.5px; padding: 4px 12px; font-weight: 600; }
+.pills button.on { background: var(--accent); color: var(--accent-ink); }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 10px; align-items: center; font-size: 13px; }
+.chart { width: 100%; max-width: 680px; height: auto; display: block; }
+.chart .grid { stroke: var(--line); }
+.chart .tick { fill: var(--muted); font-size: 10.5px; }
+.chart .barm { fill: var(--accent); opacity: 0.85; }
+.chart .cap { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .capl, .chart .lab { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.chart .ln { fill: none; stroke-width: 2; }
+.chart .ln.plan { stroke: var(--muted); stroke-dasharray: 6 5; }
+.chart .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+.key { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin: 4px 0; }
+.key i { display: inline-block; width: 16px; vertical-align: middle; margin-right: 6px; }
+.key .k-you { height: 8px; width: 8px; border-radius: 50%; background: var(--accent); }
+.key .k-plan { border-top: 2px dashed var(--muted); }
+.phases { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 3px; margin-bottom: 12px; font-size: 10.5px; }
+.phases .ph { padding: 5px 2px; text-align: center; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.phases .ph.catchup { background: var(--you); color: var(--ink); }
+.phases .ph.taper { background: var(--well); color: var(--muted); }
+.phases .ph.cp { box-shadow: inset 0 0 0 2px var(--warn); }

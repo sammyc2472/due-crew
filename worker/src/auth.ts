@@ -202,6 +202,11 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plans WHERE owner = ?1",
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",
+    // 3.2
+    "DELETE FROM knows WHERE uid = ?1",
+    "DELETE FROM tips WHERE uid = ?1",
+    "DELETE FROM tip_helped WHERE tip_uid = ?1 OR by_uid = ?1",
+    "DELETE FROM logs WHERE uid = ?1",
     "DELETE FROM codes WHERE uid = ?1",
     "DELETE FROM sessions WHERE uid = ?1",
     "DELETE FROM users WHERE uid = ?1",
