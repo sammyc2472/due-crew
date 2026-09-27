@@ -450,6 +450,8 @@ def _clean_unit(u):
         out["due"] = u["due"]
     if _ISO.fullmatch(str(u.get("check") or "")):
         out["check"] = u["check"]  # 3.2: a checkpoint's morning
+    if u.get("even") is True and out.get("due", "") > out["opens"]:
+        out["even"] = True  # 3.3: split evenly over its days
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
     return out
@@ -481,6 +483,9 @@ def clean_plan_doc(doc):
     out = {"deck": str(doc.get("deck") or ""), "units": units}
     if _ISO.fullmatch(str(doc.get("end") or "")):
         out["end"] = doc["end"]
+    days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
+    if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
+        out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
     ph = doc.get("phases") if isinstance(doc.get("phases"), dict) else {}
     catchup, taper = ph.get("catchup"), ph.get("taper")
     ok = lambda v, hi: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi

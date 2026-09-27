@@ -56,6 +56,25 @@ describe("plans: authoring", () => {
     expect(counted.body.doc.units[0].n).toBe(212);
   });
 
+  it("3.3: an even split needs a window; the pace is the builder's, shaped", async () => {
+    const { dre, plan } = await authored();
+    const put = (doc: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc });
+    const even = { id: "a", name: "A", opens: "2026-10-05", due: "2026-10-09", even: true, tags: ["Step1"] };
+    expect((await put({ deck: "Step 1", units: [{ ...even, due: undefined }] })).status).toBe(400);  // no window
+    expect((await put({ deck: "Step 1", units: [{ ...even, due: "2026-10-05" }] })).status).toBe(400);  // one day
+    expect((await put({ deck: "Step 1", units: [{ ...even, even: "yes" }] })).status).toBe(400);
+    const days = [1, 1, 1, 1, 1, 0, 0];
+    expect((await put({ deck: "Step 1", pace: { mode: "fast", days }, units: [] })).status).toBe(400);
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days: [0, 0, 0, 0, 0, 0, 0] }, units: [] })).status).toBe(400);
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days, cover: ["Step1"] }, units: [] })).status).toBe(400);  // tag: or deck:
+    expect((await put({ deck: "Step 1", pace: { mode: "end", days, daily: 0 }, units: [] })).status).toBe(400);
+    const ok = await put({ deck: "Step 1", pace: { mode: "daily", days, daily: 150, cover: ["tag:Step1", "tag:Step1", "deck:Step 1::Extras"] },
+      units: [even, { ...even, id: "b", even: false }] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.pace).toEqual({ mode: "daily", days, daily: 150, cover: ["tag:Step1", "deck:Step 1::Extras"] });
+    expect(ok.body.doc.units.map((u: any) => u.even)).toEqual([true, undefined]);
+  });
+
   it("single cards go onto a date that exists, or a new one", async () => {
     const { dre, plan } = await authored();
     const onto = await dre.call("POST", `/plans/${plan.id}/cards`, { unit: "hf", cards: [["g9", 2]] });

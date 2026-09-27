@@ -879,7 +879,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -897,7 +897,7 @@ class FakeWorker:
         p["version"] += 1
 
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "units"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "units"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -922,6 +922,10 @@ class FakeWorker:
                   "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
             if u.get("due"):
                 nu["due"] = u["due"]
+            if u.get("even"):
+                if u["even"] is not True or not u.get("due") or u["due"] == u["opens"]:
+                    raise Bad(400, "plan")
+                nu["even"] = True
             if u.get("check"):
                 if not DATE_RE.fullmatch(str(u["check"])) or u["check"] < u["opens"]:
                     raise Bad(400, "plan")
@@ -939,6 +943,16 @@ class FakeWorker:
             doc["exam"] = v["exam"]
         if v.get("end"):
             doc["end"] = v["end"]
+        if v.get("pace") is not None:
+            pc = v["pace"]
+            if (not isinstance(pc, dict) or not set(pc) <= {"mode", "days", "daily", "cover"}
+                    or pc.get("mode") not in ("end", "daily", "placed")
+                    or not isinstance(pc.get("days"), list) or len(pc["days"]) != 7
+                    or not all(x in (0, 1) and not isinstance(x, bool) for x in pc["days"]) or not any(pc["days"])
+                    or (pc.get("daily") is not None and not _is_int(pc["daily"], 1, 5000))
+                    or not isinstance(pc.get("cover") or [], list) or len(pc.get("cover") or []) > 500):
+                raise Bad(400, "plan")
+            doc["pace"] = {k: pc[k] for k in ("mode", "days", "daily", "cover") if pc.get(k) is not None}
         ph = v.get("phases") or {}
         if ph.get("catchup") or ph.get("taper"):
             if ph.get("taper") and not v.get("end"):

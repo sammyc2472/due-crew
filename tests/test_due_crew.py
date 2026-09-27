@@ -3530,6 +3530,41 @@ def test_schedule_morning_v32():
     del start
 
 
+def test_even_split_v33():
+    """3.3: a date the author split evenly opens in the same slices for
+    someone without a schedule: the plan's days, the deck's order; the
+    server keeps `even` and the pace, and an old add-on's shapes drop them."""
+    from due_crew import plan_flow as F
+    from due_crew.backend import shapes
+    store = world({"dre": "Dre", "maya": "Maya"})
+    unit = {"id": "rn", "name": "Renal", "opens": _day(0), "due": _day(4), "tags": ["Step1::Renal"], "even": True}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    check("even: kept on the plan", store.plans[pid]["doc"]["units"][0].get("even") is True)
+    bad = None
+    try:
+        store._plan_doc({"deck": "x", "units": [dict(unit, due=_day(0))]})
+    except fakes.Bad as e:
+        bad = e
+    check("even: needs a window of more than one day", bad is not None)
+    maya = new_client(store, "maya", "Maya")
+    plan, status = maya.follow_plan(code)
+    check("even: followed without a schedule", status == 200 and not plan.get("sched") and plan["doc"]["units"][0].get("even"))
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    check("even: day one opens a fifth, first in the deck's order", _open(col) == {109, 108}, str(_open(col)))
+    F.run(col, [plan], state, _day(2))
+    check("even: a missed morning catches up to the day's slice", len(_open(col)) == 6, str(_open(col)))
+    F.run(col, [plan], state, _day(4))
+    check("even: the last day opens the rest, then it's applied",
+          _open(col) == set(range(101, 110)) and "rn" in state[pid]["applied"])
+    doc = shapes.clean_plan_doc({"deck": "x", "pace": {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 90, "cover": ["tag:a"]},
+                                 "units": [dict(unit), dict(unit, id="b", even="yes")]})
+    check("shapes: even and the plan's days come through, nothing else of the pace",
+          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
+
+
 def _knows_col():
     """Step 1 (10) with Sub (11), and Other (20). 1: mature and clean;
     2: mature but missed yesterday; 3: lapsed three times; 4: young, missed
@@ -3753,6 +3788,12 @@ def test_schedule_parity_v32():
                    {"id": "c", "name": "C", "opens": "2026-11-02", "due": "2026-11-30"}]},
         {"deck": "x", "units": [{"id": "a", "name": "A", "opens": "2026-10-10", "due": "2026-10-11"},
                                 {"id": "b", "name": "B", "opens": "2026-10-12", "due": "2026-10-20"}]},
+        # 3.3: even splits, over the plan's own days (weekends off) without a schedule
+        {"deck": "x", "pace": {"mode": "placed", "days": [1, 1, 1, 1, 1, 0, 0]}, "phases": {"catchup": 3, "taper": 0},
+         "units": [{"id": "a", "name": "A", "opens": "2026-10-05", "due": "2026-10-09", "even": True},
+                   {"id": "b", "name": "B", "opens": "2026-10-07"},
+                   {"id": "c", "name": "C", "opens": "2026-10-10", "due": "2026-10-11", "even": True},
+                   {"id": "d", "name": "D", "opens": "2026-10-12", "due": "2026-10-30", "even": True}]},
     ]
     scheds = [None, {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60},
               {"days": [1, 0, 1, 0, 1, 0, 0], "minutes": 60, "start": "2026-10-14"}]

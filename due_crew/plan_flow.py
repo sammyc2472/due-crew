@@ -198,7 +198,7 @@ def run(col, plan_list, state, today, mode=None, everything=False):
         applied = st.setdefault("applied", {})
         sig = _sig(st)
         src = st.setdefault("src", {})
-        if p.get("sched") and not everything and mode != "skip":
+        if (p.get("sched") or S.has_even(doc)) and not everything and mode != "skip":
             pnames, pcids = _spread(col, p, st, today)
             if pnames:
                 per[p["id"]] = [pnames, len(pcids)]

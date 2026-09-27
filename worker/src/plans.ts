@@ -15,6 +15,7 @@ const UNITS_MAX = 200;
 const CARDS_MAX = 5000;
 const SOURCES_MAX = 50;
 const PATH_MAX = 200;
+const COVER_MAX = 500;
 const DOC_MAX = 256 * 1024;
 const TREE_MAX = 5000;
 const LINE_MAX = 120;
@@ -48,13 +49,18 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
   if (v.due !== undefined && v.due !== null) {
     if (!V.isDate(v.due) || v.due < v.opens) throw V.bad("plan");
     out.due = v.due;
+  }
+  if (v.even !== undefined && v.even !== null && v.even !== false) {
+    // 3.3: split evenly over its days, the same slices for everyone (needs a due date after it opens)
+    if (v.even !== true || !out.due || out.due === out.opens) throw V.bad("plan");
+    out.even = true;
   }
   if (v.check !== undefined && v.check !== null) {
     // 3.2: a checkpoint, the morning a filtered deck of this date's cards is built
@@ -94,11 +100,38 @@ function phases(v: unknown): Obj {
   return { catchup, taper };
 }
 
-/** A plan's doc: {deck, exam?, end?, phases?, units}. Units sorted by when they open. */
+/** 3.3: the builder's pace. `days`, Monday first: the plan's study days
+ *  (1) and days off (0); `mode`: an end date, cards a day, or each day as
+ *  placed; `daily`: cards a day; `cover`: what the plan means to cover
+ *  ("tag:path" or "deck:path"), for laying it out. Only `days` reaches a
+ *  follower: an even split spreads over them. */
+function pace(v: unknown): Obj {
+  if (!V.isObj(v)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["mode", "days", "daily", "cover"].includes(k)) throw V.bad("plan");
+  if (!["end", "daily", "placed"].includes(v.mode as string)) throw V.bad("plan");
+  if (!Array.isArray(v.days) || v.days.length !== 7 || !v.days.every((d) => d === 0 || d === 1) || !v.days.some((d) => d === 1)) throw V.bad("plan");
+  const out: Obj = { mode: v.mode, days: v.days };
+  if (v.daily !== undefined && v.daily !== null) {
+    if (!V.isInt(v.daily, 1, 5000)) throw V.bad("plan");
+    out.daily = v.daily;
+  }
+  if (v.cover !== undefined && v.cover !== null) {
+    if (!Array.isArray(v.cover) || v.cover.length > COVER_MAX) throw V.bad("plan");
+    out.cover = [...new Set(v.cover.map((c) => {
+      if (!V.isStr(c, PATH_MAX + 5, 5) || !/^(tag|deck):./.test(c)) throw V.bad("plan");
+      path(c.slice(c.indexOf(":") + 1));
+      return c;
+    }))];
+  }
+  return out;
+}
+
+/** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "units"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "units"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
+  if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
     if (!V.isDate(v.end)) throw V.bad("plan");
     out.end = v.end;

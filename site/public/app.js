@@ -619,10 +619,11 @@ const Sched = (() => {
     if (last < u.opens) last = u.opens;
     return [addDays(u.opens, sh), addDays(last, sh)];
   }
+  const planDays = (doc) => { const p = doc.pace?.days; return Array.isArray(p) && p.length === 7 && p.some(Boolean) ? p.map((x) => (x ? 1 : 0)) : [1, 1, 1, 1, 1, 1, 1]; };
   function quota(doc, u, sched, total, d) {
     const sh = shift(doc, sched); const [a, b] = win(doc, u, sh);
     if (d < a || total <= 0) return 0;
-    if (!sched) return total;
+    if (!sched) { if (!u.even) return total; sched = { days: planDays(doc) }; }  // an even split: the plan's own days
     let whole = 0; let upto = 0;
     for (let x = a; x <= b; x = addDays(x, 1)) { const w = weight(doc, sched, x, sh); whole += w; if (x <= d) upto += w; }
     if (whole) return Math.min(total, Math.ceil((total * upto) / whole));
@@ -631,7 +632,7 @@ const Sched = (() => {
     for (let i = 1; i <= 60; i++) { const x = addDays(b, i); if (weight(doc, sched, x, sh)) { next = x; break; } }
     return d >= next ? total : 0;
   }
-  return { units, start, shift, win, quota, phase, monday, diff };
+  return { units, start, shift, win, quota, phase, monday, diff, weight, planDays };
 })();
 
 // ---- 3.2: home, my log, the admin's counts ----

@@ -45,6 +45,19 @@ def units(doc):
     return [u for u in (doc or {}).get("units") or [] if isinstance(u, dict) and u.get("id") and u.get("opens")]
 
 
+def plan_days(doc):
+    """The plan's own study days (the builder's pace), Monday first: what an
+    evenly split date spreads over for someone without a schedule."""
+    days = ((doc or {}).get("pace") or {}).get("days")
+    if isinstance(days, list) and len(days) == 7 and any(days):
+        return [1 if x else 0 for x in days]
+    return [1] * 7
+
+
+def has_even(doc):
+    return any(u.get("even") for u in units(doc))
+
+
 def plan_start(doc):
     us = units(doc)
     return d(min(u["opens"] for u in us)) if us else None
@@ -108,7 +121,9 @@ def _weights(doc, sched, first, last, shift):
 def quota(doc, unit, sched, total, day, shift=None):
     """How many of the unit's `total` cards should be open (and seen) by
     the end of my `day`: cumulative, in whole cards. Without a schedule a
-    unit opens whole on its first day, as in 3.1. A window with no study
+    unit opens whole on its first day, as in 3.1, unless the author split
+    it evenly over its days (`even`): then it spreads over the plan's own
+    study days, the same slices for everyone. A window with no study
     day in it (a catch-up week, rest days) opens whole on my first study
     day after it."""
     if shift is None:
@@ -117,7 +132,9 @@ def quota(doc, unit, sched, total, day, shift=None):
     if day < first or total <= 0:
         return 0
     if not sched:
-        return total
+        if not unit.get("even"):
+            return total
+        sched = {"days": plan_days(doc)}
     ws = _weights(doc, sched, first, last, shift)
     whole = sum(ws)
     if not whole:
