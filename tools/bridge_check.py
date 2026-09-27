@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,11 +29,16 @@ ROW_KEYS = [("reviews", "reviews"), ("day", "day"), ("streak", "streak"), ("week
 
 
 def d1(sql):
-    """Rows from the live D1, through wrangler (your own login)."""
-    out = subprocess.run(["npx", "wrangler", "d1", "execute", "due-crew", "--remote", "--env=", "--json",
-                          "--command", sql], cwd=os.path.join(ROOT, "worker"),
-                         capture_output=True, text=True, check=True).stdout
-    return json.loads(out)[0]["results"]
+    """Rows from the live D1, through wrangler (your own login). Tries twice;
+    on a second failure, shows what wrangler said."""
+    for attempt in (1, 2):
+        run = subprocess.run(["npx", "wrangler", "d1", "execute", "due-crew", "--remote", "--env=", "--json",
+                              "--command", sql], cwd=os.path.join(ROOT, "worker"), capture_output=True, text=True)
+        if run.returncode == 0:
+            return json.loads(run.stdout)[0]["results"]
+        if attempt == 2:
+            sys.exit("wrangler couldn't read D1:\n" + "\n".join((run.stderr + run.stdout).strip().splitlines()[-12:]))
+        time.sleep(3)
 
 
 def _pv(f):
