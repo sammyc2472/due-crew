@@ -32,6 +32,7 @@ from aqt.utils import tooltip
 
 from . import app
 from . import plans as P
+from . import schedule as S
 from .app import _bg, _state, cfg, client, save_cfg
 
 PLAN_KEYS = ("plans", "plans_day", "plans_opened", "plan_offers_dismissed")
@@ -196,13 +197,20 @@ def run(col, plan_list, state, today, mode=None, everything=False):
         doc = p["doc"]
         applied = st.setdefault("applied", {})
         sig = _sig(st)
+        src = st.setdefault("src", {})
+        if p.get("sched") and not everything and mode != "skip":
+            pnames, pcids = _spread(col, p, st, today)
+            if pnames:
+                per[p["id"]] = [pnames, len(pcids)]
+                names += pnames
+                all_cids |= pcids
+            continue
         items = ([(u, "open") for u in P.units(doc)] if everything
                  else P.due_now(doc, applied, today, sig))
         if not items:
             continue
         idx = P.DeckIndex(col, st["deck_id"])
         pnames, pcids = [], set()
-        src = st.setdefault("src", {})
         for u, how in items:
             if how == "open" and mode != "skip":
                 cids = idx.openable(_unit_cids(idx, st, u, doc.get("deck", ""), whole=everything))
@@ -220,6 +228,44 @@ def run(col, plan_list, state, today, mode=None, everything=False):
     label = P.step_label(names) if names else ""
     n = P.open_cards(col, all_cids, label) if names else 0
     return {"n": n, "names": names, "label": label, "per": per}
+
+
+def _spread(col, p, st, today):
+    """3.2, a plan run on my schedule: each unit whose window has started
+    opens up to today's quota, the first cards in the deck's order. A unit
+    is marked applied once its window is over (all of it open), so from
+    then on it behaves as in 3.1: an author's change opens only what it
+    adds. Skipped units stay skipped. Returns (names, cids) to open."""
+    doc, sched = p["doc"], p.get("sched")
+    applied, src, sig = st["applied"], st["src"], _sig(st)
+    day = S.d(today)
+    shift = S.shift_days(doc, sched)
+    idx = P.DeckIndex(col, st["deck_id"])
+    names, cids_out = [], set()
+    for u in P.units(doc):
+        have, s = applied.get(u["id"]), sig(u)
+        if isinstance(have, str) and (have == s or have.startswith("skip:")):
+            continue
+        first, _last = S.window(doc, u, shift)
+        if day < first:
+            continue
+        cids = _unit_cids(idx, st, u, doc.get("deck", ""))
+        if have:  # applied whole before, and the author changed it: what's new opens
+            chosen = idx.openable(cids)
+            done = True
+        else:
+            order = [(c, sus) for c, sus in idx.in_order(cids) if not (sus and c in idx.leech)]
+            open_now = sum(1 for _c, sus in idx.in_order(cids) if not sus)
+            want = S.quota(doc, u, sched, len(cids), day, shift)
+            chosen = set(S.pick(order, open_now, want))
+            done = want >= len(cids)
+        if done:
+            applied[u["id"]] = s
+            src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+        if chosen:
+            names.append(u.get("name") or "?")
+            cids_out |= set(chosen)
+    return names, cids_out
 
 
 def waiting(col, plan, st, today):

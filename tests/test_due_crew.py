@@ -3413,6 +3413,117 @@ def test_anki_day_labels_v311():
         _time.tzset()
 
 
+def _spread_col(n=10):
+    """Step 1 (10): n suspended new cards tagged Renal, positions n..1 (so
+    the deck's order is the reverse of their ids), one of them a leech."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for i in range(n):
+        fakes.add_card(conn, 100 + i, did=10, queue=-1, tags="Step1::Renal" + (" leech" if i == 0 else ""), due=n - i)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    return col
+
+
+def test_schedule_model_v32():
+    """3.2: a unit's cards spread over my study days in its window; rest
+    days, catch-up weeks and the taper take none; a later start moves only
+    my dates; pushing back can't pass the end date."""
+    from due_crew import schedule as S
+    D = S.d
+    mon = D("2026-10-05")  # a Monday
+    unit = {"id": "rn", "name": "Renal", "opens": "2026-10-05", "due": "2026-10-11"}
+    doc = {"deck": "Step 1", "units": [unit]}
+    five = {"days": [1, 1, 1, 1, 1, 0, 0], "minutes": 60}
+    q = [S.quota(doc, unit, five, 100, mon + datetime.timedelta(days=i)) for i in range(7)]
+    check("spread: five study days take a fifth each, and the weekend none",
+          q == [20, 40, 60, 80, 100, 100, 100], str(q))
+    double = {"days": [1, 1, 1, 1, 1, 2, 0], "minutes": 60}
+    q2 = [S.quota(doc, unit, double, 70, mon + datetime.timedelta(days=i)) for i in range(7)]
+    check("spread: a double day takes twice the share", q2[4] - q2[3] == 10 and q2[5] - q2[4] == 20, str(q2))
+    check("spread: no schedule opens the unit whole on its first day, as 3.1 did",
+          S.quota(doc, unit, None, 100, mon) == 100 and S.quota(doc, unit, None, 100, mon - datetime.timedelta(days=1)) == 0)
+    check("spread: the last day of the window has it all open", S.quota(doc, unit, five, 7, D("2026-10-11")) == 7)
+    weekend = {"id": "w", "name": "W", "opens": "2026-10-10", "due": "2026-10-11"}
+    check("spread: a window with no study day opens whole on its first day",
+          S.quota({"units": [weekend]}, weekend, five, 9, D("2026-10-10")) == 9)
+    nodue = [{"id": "a", "name": "A", "opens": "2026-10-05"}, {"id": "b", "name": "B", "opens": "2026-10-08"}]
+    check("window: without a due date, up to the day before the next date opens",
+          S.window({"units": nodue}, nodue[0]) == (mon, D("2026-10-07")))
+    later = dict(five, start="2026-10-12")
+    check("start later: my dates move by the difference, the plan's don't",
+          S.shift_days(doc, later) == 7 and S.quota(doc, unit, later, 100, D("2026-10-09")) == 0
+          and S.quota(doc, unit, later, 100, D("2026-10-12")) == 20)
+    ph = {"deck": "x", "end": "2026-11-15", "phases": {"catchup": 4, "taper": 7},
+          "units": [dict(unit, due=None)]}
+    check("phases: every 4th week is a catch-up week",
+          S.phase(ph, D("2026-10-26")) == "catchup" and S.phase(ph, D("2026-10-19")) == "build")
+    check("phases: the taper is the last 7 days up to the end",
+          S.phase(ph, D("2026-11-09")) == "taper" and S.phase(ph, D("2026-11-08")) == "build"
+          and S.weight(ph, five, D("2026-11-10")) == 0)
+    long_unit = {"id": "l", "name": "L", "opens": "2026-10-19", "due": "2026-11-01"}
+    lp = dict(ph, units=[dict(unit, due=None), long_unit])
+    q3 = [S.quota(lp, long_unit, five, 50, D("2026-10-19") + datetime.timedelta(days=i)) for i in range(14)]
+    check("spread: a catch-up week in the window opens nothing new",
+          q3[6] == 50 and q3[7] == 50 and q3[4] == 50, str(q3))
+    check("push back: a later start, as a date", S.pushed_start(doc, five, 2)["start"] == "2026-10-07")
+    check("push back: never past the plan's end date",
+          S.pushed_start(dict(doc, end="2026-10-12"), five, 2) is None
+          and S.pushed_start(dict(doc, end="2026-10-13"), five, 2) is not None)
+    view = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 5, D("2026-10-07"), catch="spread")
+    check("today: my share, plus a quarter of what I'm behind when I chose to spread it",
+          view["share"] == 20 and view["behind"] == 30 and view["target"] == 28 and view["done"] == 5, str(view))
+    leave = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 0, D("2026-10-07"), catch="leave")
+    check("today: leaving it open keeps just the share", leave["target"] == 20)
+    rest = S.today_view(doc, five, {"rn": 100}, {"rn": 100}, 0, D("2026-10-10"))
+    check("today: a rest day says so", rest["kind"] == "rest" and rest["target"] == 0)
+    missed = S.missed_study_days(doc, five, D("2026-10-08"), {"2026-10-05": 20, "2026-10-06": 2},
+                                 {"2026-10-05": 20, "2026-10-06": 20, "2026-10-07": 20})
+    check("missed: study days under a quarter of their share, back to the last one kept",
+          missed == [D("2026-10-07"), D("2026-10-06")], str(missed))
+    lv = S.load_view(doc, five, {"rn": 500}, mon, [100] * 60, 8.0, 30.0)
+    check("load: weeks of expected reviews, the new cards' reviews on top of what's due",
+          lv["weeks"][0][1] > 100 and lv["new_a_day"] == 100 and lv["cap"] == S.cap_reviews(60, 8.0, 30.0, 100))
+    check("load: a week over my time is called out", lv["over"] == [l for l, v, o in lv["weeks"] if o])
+    check("plan week: 1 the week the first date opens",
+          S.plan_week(doc, D("2026-10-07")) == 1 and S.plan_week(doc, D("2026-10-13")) == 2 and S.plan_week(doc, D("2026-10-01")) == 0)
+
+
+def test_schedule_morning_v32():
+    """3.2: the morning opens up to today's quota, first cards in the
+    deck's order, never a leech; again the same day opens nothing; the
+    last day opens the rest and marks the unit applied."""
+    from due_crew import plan_flow as F
+    store = world({"dre": "Dre", "maya": "Maya"})
+    start = TODAY
+    unit = {"id": "rn", "name": "Renal", "opens": _day(0), "due": _day(4), "tags": ["Step1::Renal"]}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    maya = new_client(store, "maya", "Maya")
+    every = {"days": [1] * 7, "minutes": 60}
+    plan, status = maya.follow_plan(code, sched=every)
+    check("follow: my schedule goes with the follow, and comes back", status == 200 and plan["sched"] == every)
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    res = F.run(col, [plan], state, _day(0))
+    check("morning: a fifth of the unit, the first in the deck's order (highest ids first here)",
+          _open(col) == {109, 108} and res["n"] == 2, str(_open(col)))
+    check("morning: again the same day opens nothing", F.run(col, [plan], state, _day(0))["n"] == 0)
+    F.run(col, [plan], state, _day(2))
+    check("morning: a missed morning catches up to today's quota, not more", len(_open(col)) == 6, str(_open(col)))
+    F.run(col, [plan], state, _day(4))
+    check("morning: the last day opens the rest, never the leech", _open(col) == set(range(101, 110)))
+    check("morning: then the unit is applied, as in 3.1", "rn" in state[pid]["applied"])
+    got = maya.set_schedule(pid, dict(every, start=_day(3)))
+    check("my schedule: changed with one request, kept on the cached plan",
+          got["start"] == _day(3) and maya.session["plans"][0]["sched"]["start"] == _day(3)
+          and store.follows[(pid, "maya")]["sched"]["start"] == _day(3))
+    b = maya.fetch_board([_day(0)], with_decks=True)
+    check("board: my schedule rides the day's first refresh", b["plans"][0]["sched"]["start"] == _day(3))
+    check("my schedule: a bad one doesn't take", maya.set_schedule(pid, {"days": [0] * 7, "minutes": 60}) is False)
+    del start
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

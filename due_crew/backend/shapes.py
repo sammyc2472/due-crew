@@ -394,6 +394,28 @@ def _clean_unit(u):
                      and isinstance(c[1], int) and not isinstance(c[1], bool)]}
     if _ISO.fullmatch(str(u.get("due") or "")):
         out["due"] = u["due"]
+    if _ISO.fullmatch(str(u.get("check") or "")):
+        out["check"] = u["check"]  # 3.2: a checkpoint's morning
+    if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
+        out["n"] = u["n"]
+    return out
+
+
+def clean_sched(s):
+    """3.2: my schedule for a plan, {days: [7 of 0-2], minutes, start?}; None if unusable."""
+    if not isinstance(s, dict):
+        return None
+    days = s.get("days")
+    if (not isinstance(days, list) or len(days) != 7
+            or not all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 2 for x in days)
+            or not any(days)):
+        return None
+    minutes = s.get("minutes")
+    if not isinstance(minutes, int) or isinstance(minutes, bool) or not 10 <= minutes <= 600:
+        return None
+    out = {"days": list(days), "minutes": minutes}
+    if _ISO.fullmatch(str(s.get("start") or "")):
+        out["start"] = s["start"]
     return out
 
 
@@ -402,7 +424,16 @@ def clean_plan_doc(doc):
     doc = doc if isinstance(doc, dict) else {}
     units = [u for u in map(_clean_unit, doc.get("units") or []) if u][:200]
     units.sort(key=lambda u: u["opens"])
-    return {"deck": str(doc.get("deck") or ""), "units": units}
+    out = {"deck": str(doc.get("deck") or ""), "units": units}
+    if _ISO.fullmatch(str(doc.get("end") or "")):
+        out["end"] = doc["end"]
+    ph = doc.get("phases") if isinstance(doc.get("phases"), dict) else {}
+    catchup, taper = ph.get("catchup"), ph.get("taper")
+    ok = lambda v, hi: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi
+    if (ok(catchup, 8) and catchup != 1) or ok(taper, 60):
+        out["phases"] = {"catchup": catchup if ok(catchup, 8) and catchup != 1 else 0,
+                         "taper": taper if ok(taper, 60) and out.get("end") else 0}
+    return out
 
 
 def clean_plan(p):
@@ -420,7 +451,8 @@ def clean_plan(p):
             "followers": _as_int(p.get("followers")) or 0,
             "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
             "code": normalize_code(p.get("code")) if p.get("code") else "",
-            "following": bool(following) or "share" in p}
+            "following": bool(following) or "share" in p,
+            "sched": clean_sched(p.get("sched", following.get("sched")))}
 
 
 def clean_offer(o):

@@ -25,7 +25,7 @@ import requests
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan,
+    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan, clean_sched,
     clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
 )
 
@@ -665,8 +665,11 @@ class ApiClient:
         status, data = self._call("GET", f"/plans/peek?code={code}")
         return (clean_plan(data) if status == 200 else None), status
 
-    def follow_plan(self, code, share=True):
-        status, data = self._call("POST", "/plans/follow", {"code": normalize_code(code), "share": bool(share)})
+    def follow_plan(self, code, share=True, sched=None):
+        body = {"code": normalize_code(code), "share": bool(share)}
+        if sched is not None:
+            body["sched"] = sched  # 3.2: my days and time
+        status, data = self._call("POST", "/plans/follow", body)
         if status == 200:
             self.session.pop("plans_hash", None)  # my progress goes out whole at the next sync
             self._save_session()
@@ -682,6 +685,16 @@ class ApiClient:
             self.session.pop("plans_hash", None)  # sharing off cleared it on the server
         self._note_follow(plan_id, share=data.get("share") is True, paused=data.get("paused") is True)
         return {"share": data.get("share") is True, "paused": data.get("paused") is True}
+
+    def set_schedule(self, plan_id, sched):
+        """3.2: PATCH my schedule (None: no schedule, units open whole). The
+        schedule as the server keeps it, or False when it didn't take."""
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", {"sched": sched})
+        if status != 200:
+            return False
+        got = clean_sched(data.get("sched"))
+        self._note_follow(plan_id, sched=got)
+        return got
 
     def unfollow_plan(self, plan_id):
         status, _ = self._call("DELETE", f"/plans/{plan_id}/follow")
