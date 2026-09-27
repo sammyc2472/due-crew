@@ -68,8 +68,11 @@ def units(doc):
 def unit_sources(unit, deck_id=None, swap=None):
     """What a unit matched with when it was applied here: its deck, swap and
     sources. A later change opens only what the new sources add."""
-    return [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
-            [list(c) for c in unit.get("cards") or []]]
+    out = [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
+           [list(c) for c in unit.get("cards") or []]]
+    if unit.get("search"):
+        out.append(list(unit["search"]))  # 3.3, C3
+    return out
 
 
 def unit_sig(unit, deck_id=None, swap=None):
@@ -79,7 +82,8 @@ def unit_sig(unit, deck_id=None, swap=None):
     to gets a new one (so the new cards open the next morning)."""
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
-                       sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])])
+                       sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
+                      + ([sorted(unit["search"])] if unit.get("search") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -165,6 +169,14 @@ class DeckIndex:
                 self.tag_names.setdefault(low, t)
         self.by_tag = by_tag
         self.tag_keys = sorted(by_tag)
+        # 3.3: searches run through the collection; note ids back a renamed tag
+        self.col = col
+        self.by_guid = {}
+        for (g, _o), cid in self.by_ref.items():
+            self.by_guid.setdefault(g, []).append(cid)
+        self.guid_of = {cid: g for (g, _o), cid in self.by_ref.items()}
+        self._searches = {}
+        self.fell_back = set()  # unit ids matched by their note ids (C5)
 
     # -- sources --
 
@@ -203,13 +215,37 @@ class DeckIndex:
                 out.update(self.by_deck.get(d, ()))
         return out
 
+    def search_cards(self, q):
+        """3.3, C3: an Anki search, run by this collection, kept to this deck."""
+        if q not in self._searches:
+            try:
+                found = {int(c) for c in self.col.find_cards(str(q))}
+            except Exception:
+                found = set()  # a search this Anki can't read finds nothing
+            self._searches[q] = {c for c in found if c in self.cards}
+        return self._searches[q]
+
     def match(self, unit, swap=None, plan_deck=""):
         """{cid} for one unit on this deck."""
         out = set()
+        missing = False
         for t in unit.get("tags") or []:
-            out |= self.tag_cards(swapped(t, swap))
+            got = self.tag_cards(swapped(t, swap))
+            missing = missing or not got
+            out |= got
         for d in unit.get("decks") or []:
-            out |= self.deck_cards(d, plan_deck)
+            got = self.deck_cards(d, plan_deck)
+            missing = missing or not got
+            out |= got
+        if missing and unit.get("ids"):
+            # 3.3, C5: a tag this copy names differently (a newer AnKing):
+            # the author's note ids behind the date find its cards
+            by_id = {c for g in unit["ids"] for c in self.by_guid.get(g, ())}
+            if by_id - out:
+                self.fell_back.add(unit.get("id"))
+                out |= by_id
+        for q in unit.get("search") or []:
+            out |= self.search_cards(q)
         for g, o in unit.get("cards") or []:
             cid = self.by_ref.get((str(g), int(o)))
             if cid is not None:
@@ -502,6 +538,28 @@ def hold_cards(col, cids, label):
         except Exception:
             pass
     return len(ids)
+
+
+def note_ids(idx, unit, plan_deck=""):
+    """3.3, C5: the note ids behind a unit's tags and subdecks here, for the
+    author's Anki to keep on the plan."""
+    got = set()
+    for t in unit.get("tags") or []:
+        got |= idx.tag_cards(t)
+    for d in unit.get("decks") or []:
+        got |= idx.deck_cards(d, plan_deck)
+    return sorted({idx.guid_of[c] for c in got if c in idx.guid_of})
+
+
+def ids_snapshot(idx, lean_doc, cap=50000):
+    """{unit id: [tags, decks, [guid]]} for a plan I write, from my copy;
+    at most `cap` ids in all."""
+    out, n = {}, 0
+    for u in lean_doc.get("units") or []:
+        ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
+        n += len(ids)
+        out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]
+    return out
 
 
 def step_label(names):

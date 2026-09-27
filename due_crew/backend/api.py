@@ -25,7 +25,7 @@ import requests
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
+    _exam_value, _live_room, _week_days, away_range, clean_emoji, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
 )
 
@@ -299,8 +299,11 @@ class ApiClient:
         if with_decks:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
-            if plans != self.session.get("plans") or offers != self.session.get("plan_offers"):
+            authored = [a for a in map(clean_authored, data.get("authored") or []) if a]
+            if (plans != self.session.get("plans") or offers != self.session.get("plan_offers")
+                    or authored != self.session.get("plans_authored")):
                 self.session["plans"], self.session["plan_offers"] = plans, offers
+                self.session["plans_authored"] = authored  # 3.3, C5
                 self._save_session()
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
@@ -826,16 +829,35 @@ class ApiClient:
                                        if o.get("id") != plan["id"]]
         self._save_session()
 
-    def add_plan_cards(self, plan_id, cards, unit=None, opens=None):
+    def add_plan_cards(self, plan_id, cards, unit=None, opens=None, search=None, n=0):
         """Single cards onto a date of a plan I wrote ([[guid, ord]]), or
-        onto a new date. (plan, status)."""
-        body = {"cards": [[str(g), int(o)] for g, o in cards]}
+        onto a new date. 3.3: or an Anki search, with how many it found
+        here. (plan, status)."""
+        body = ({"search": str(search), "n": int(n)} if search
+                else {"cards": [[str(g), int(o)] for g, o in cards]})
         if unit:
             body["unit"] = str(unit)
         else:
             body["opens"] = str(opens)
         status, data = self._call("POST", f"/plans/{plan_id}/cards", body)
         return (clean_plan(data) if status == 200 else None), status
+
+    def set_early(self, plan_id, days):
+        """3.3, C2: open each date `days` early (0-7). True when it took."""
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", {"early": int(days)})
+        if status != 200:
+            return False
+        for p in self.session.get("plans") or []:
+            if p.get("id") == plan_id:
+                p["early"] = int(data.get("early") or 0)
+        self._save_session()
+        return True
+
+    def put_ids(self, plan_id, units):
+        """3.3, C5: the note ids behind a plan's tags, from my copy. One
+        request, only when they changed. True when it took."""
+        status, _ = self._call("PUT", f"/plans/{plan_id}/ids", {"units": units})
+        return status == 200
 
     def my_plans(self):
         """[plan]: the plans I wrote and the ones I follow. Raises TransportError."""

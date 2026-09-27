@@ -22,6 +22,7 @@ never opens.
 """
 
 import datetime
+import hashlib
 import html
 import json
 import os
@@ -198,15 +199,17 @@ def run(col, plan_list, state, today, mode=None, everything=False):
         applied = st.setdefault("applied", {})
         sig = _sig(st)
         src = st.setdefault("src", {})
+        # 3.3, C2: a follower who studies on a phone opens days early
+        when = S.iso(S.d(today) + datetime.timedelta(days=int(p.get("early") or 0))) if mode != "skip" else today
         if (p.get("sched") or S.has_even(doc)) and not everything and mode != "skip":
-            pnames, pcids = _spread(col, p, st, today)
+            pnames, pcids = _spread(col, p, st, when)
             if pnames:
                 per[p["id"]] = [pnames, len(pcids)]
                 names += pnames
                 all_cids |= pcids
             continue
         items = ([(u, "open") for u in P.units(doc)] if everything
-                 else P.due_now(doc, applied, today, sig))
+                 else P.due_now(doc, applied, when, sig))
         if not items:
             continue
         idx = P.DeckIndex(col, st["deck_id"])
@@ -351,11 +354,11 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     checks = []
     for uid, c in sorted((st.get("checks") or {}).items()):
         unit = next((u for u in P.units(doc) if u["id"] == uid), None)
-        if not unit or not isinstance(c, dict):
+        if not isinstance(c, dict) or not (unit or c.get("name")):
             continue
         firsts = [(answered or {}).get(cid) for cid in c.get("cids") or []]
         done = [f for f in firsts if f]
-        checks.append({"name": unit.get("name") or "?", "n": len(c.get("cids") or []), "answered": len(done),
+        checks.append({"name": c.get("name") or (unit or {}).get("name") or "?", "n": len(c.get("cids") or []), "answered": len(done),
                        "right": sum(1 for e, _t in done if e > 1), "day": c.get("day") or ""})
     return dict(view, due=due, minutes=minutes, missed=[S.iso(x) for x in missed], ask=ask,
                 recap=recap, checks=checks, phase=S.phase(doc, day, shift))
@@ -401,7 +404,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
         n = f"crew {done:,}/{followers:,}"
         if u["id"] == now_id and u.get("due") and u["due"] >= today:
             n += f" · due {_short_day(u['due'], today)}"
-        rows.append({"name": u.get("name") or "?", "state": "now" if u["id"] == now_id else "open",
+        rows.append({"name": u.get("name") or "?", "uid": u["id"], "state": "now" if u["id"] == now_id else "open",
                      "seen": [s, t], "crew": [done, followers], "n": n, "missing": not t})
     nxt = P.next_unit(doc, today)
     if nxt:
@@ -417,7 +420,9 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
             "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
             "session": None if no_deck or plan.get("paused") else session,
-            "today": P.fmt_day(today), "sched": bool(plan.get("sched"))}
+            "today": P.fmt_day(today), "sched": bool(plan.get("sched")),
+            "early": int(plan.get("early") or 0),
+            "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"]))}
 
 
 def offers_view(offers, squad_names, following_ids, dismissed):
@@ -514,6 +519,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
             if changed:
                 c["plans"] = state
                 _psave(c)
+            send_ids()  # 3.3, C5: the plans I write
         today = _today()
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
@@ -535,24 +541,99 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
         return None
 
 
+def send_ids():
+    """3.3, C5: main thread, on the day's first refresh. For each plan I
+    write whose deck I have (by its name), the note ids behind each date's
+    tags and subdecks go up, one request a plan, only when they changed:
+    a follower whose AnKing renamed a tag still gets the date."""
+    cl = client()
+    auth = cl.session.get("plans_authored") or []
+    if not auth or not mw.col:
+        return
+    sent = _pcfg().get("ids_sent") or {}
+    names = {n.lower(): d for d, n in P.deck_choices(mw.col)}
+    jobs = []
+    try:
+        for a in auth:
+            did = names.get(str(a["doc"].get("deck") or "").lower())
+            if did is None or not a["doc"].get("units"):
+                continue
+            units = P.ids_snapshot(P.DeckIndex(mw.col, did), a["doc"])
+            h = hashlib.sha1(json.dumps(units, sort_keys=True).encode()).hexdigest()[:16]
+            if sent.get(a["id"]) != h:
+                jobs.append((a["id"], units, h))
+    except Exception:
+        traceback.print_exc()
+        return
+    if not jobs:
+        return
+
+    def job():
+        return [(pid, h) for pid, units, h in jobs if cl.put_ids(pid, units)]
+
+    def done(ok):
+        if ok:
+            pc = _pcfg()
+            pc.setdefault("ids_sent", {}).update(dict(ok))
+            _psave(pc)
+
+    _bg(job, done)
+
+
 CHECK_CARDS = 60
 CHECK_DAYS = 3  # a checkpoint missed by more than this many mornings isn't built late
 
 
 def checks_due(doc, st, sched, today):
-    """Units whose checkpoint is today on my dates (or up to CHECK_DAYS ago)
-    and not built here yet."""
+    """Checkpoints and (3.3) review days that are today on my dates (or up
+    to CHECK_DAYS ago) and not built here yet: [(key, name, [units], n)]."""
     day = S.d(today)
     shift = S.shift_days(doc, sched)
     done = st.get("checks") or {}
+    us = P.units(doc)
     out = []
-    for u in P.units(doc):
-        if not u.get("check") or u["id"] in done:
+    due = lambda d: 0 <= (day - (S.d(d) + datetime.timedelta(days=shift))).days <= CHECK_DAYS
+    for u in us:
+        if u.get("check") and u["id"] not in done and due(u["check"]):
+            out.append((u["id"], f"Checkpoint · {u.get('name') or 'unit'}", [u], CHECK_CARDS))
+    by_id = {u["id"]: u for u in us}
+    for r in doc.get("reviews") or []:
+        key = f"r:{r['day']}:{r['from']}:{r['to']}"
+        a, b = by_id.get(r["from"]), by_id.get(r["to"])
+        if key in done or not a or not b or not due(r["day"]):
             continue
-        when = S.d(u["check"]) + datetime.timedelta(days=shift)
-        if 0 <= (day - when).days <= CHECK_DAYS:
-            out.append(u)
+        lo, hi = sorted([a["opens"], b["opens"]])
+        span = [u for u in us if lo <= u["opens"] <= hi]
+        name = f"Review · {a.get('name') or '?'}" + (f" – {b.get('name') or '?'}" if a is not b else "")
+        out.append((key, name, span, REVIEW_CARDS))
     return out
+
+
+REVIEW_CARDS = 200  # 3.3, C4: a review day's deck
+
+
+def study_date(pid, uid):
+    """3.3, C4: Study on a date's row: Anki's filtered deck of that date's
+    cards I've seen, most-missed first, and straight into it."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    st = _state_cfg().get(pid)
+    if not p or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return
+    u = next((x for x in P.units(p["doc"]) if x["id"] == uid), None)
+    if not u:
+        return
+    idx = P.DeckIndex(mw.col, st["deck_id"])
+    cids = check_cards(mw.col, idx, idx.match(u, _swap(st), p["doc"].get("deck", "")), 9999)
+    if not cids:
+        tooltip("Nothing from this date studied yet.")
+        return
+    name = f"Due Crew · {u.get('name') or 'date'}"
+    if _filtered(mw.col, name, cids):
+        _after_change()
+        did = mw.col.decks.id_for_name(name)
+        if did:
+            mw.col.decks.select(did)
+            mw.moveToState("overview")
 
 
 def check_cards(col, idx, cids, n=CHECK_CARDS):
@@ -605,12 +686,14 @@ def build_checks(plan_list):
         if not due:
             continue
         idx = P.DeckIndex(mw.col, st["deck_id"])
-        for u in due:
-            cids = check_cards(mw.col, idx, idx.match(u, _swap(st), p["doc"].get("deck", "")))
-            name = f"Checkpoint · {u.get('name') or 'unit'}"
+        for key, name, span, cap in due:
+            pool = set()
+            for u in span:
+                pool |= idx.match(u, _swap(st), p["doc"].get("deck", ""))
+            cids = check_cards(mw.col, idx, pool, cap)
             ok = bool(cids) and _filtered(mw.col, name, cids)
-            st.setdefault("checks", {})[u["id"]] = {"day": today, "at": int(_time.time() * 1000),
-                                                    "cids": cids if ok else []}
+            st.setdefault("checks", {})[key] = {"day": today, "at": int(_time.time() * 1000), "name": name,
+                                                "cids": cids if ok else []}
             if ok:
                 built.append(name)
     c["plans"] = state
@@ -662,6 +745,68 @@ def _answered(col, checks):
     return out
 
 
+def new_limit(col, did):
+    """3.3, C1: how many new cards Anki shows today in this deck: its own
+    today-only or deck limit, else its options preset's. None if unknown."""
+    try:
+        deck = col.decks.get(int(did))
+        today = int(col.sched.today)
+        t = deck.get("newLimitToday") or {}
+        if isinstance(t, dict) and t.get("today") == today and t.get("limit") is not None:
+            return int(t["limit"])
+        if deck.get("newLimit") is not None:
+            return int(deck["newLimit"])
+        return int(col.decks.config_dict_for_deck_id(int(did))["new"]["perDay"])
+    except Exception:
+        return None
+
+
+def raise_limit(pid):
+    """3.3, C1: Raise to today's plan. The deck's own limit if it has one;
+    else its preset when only this deck uses it; else this deck gets a copy
+    of the preset, so the other decks stay as they are. One undo step."""
+    v = (_state.get("plan_session") or {}).get(pid) or {}
+    st = _state_cfg().get(pid)
+    want = int(v.get("target") or 0)
+    if not st or not mw.col or not want:
+        return
+    col, did = mw.col, int(st["deck_id"])
+    was = new_limit(col, did)
+    pos = None
+    try:
+        pos = col.add_custom_undo_entry("Due Crew: new cards a day")
+    except Exception:
+        pos = None
+    try:
+        deck = col.decks.get(did)
+        if deck.get("newLimit") is not None or (deck.get("newLimitToday") or {}).get("limit") is not None:
+            deck["newLimit"] = want
+            deck.pop("newLimitToday", None)
+            col.decks.save(deck)
+        else:
+            conf = col.decks.config_dict_for_deck_id(did)
+            if len(col.decks.decks_using_config(conf)) > 1:
+                cid = col.decks.add_config_returning_id(f"{deck['name']} (Due Crew)", clone_from=conf)
+                conf = col.decks.get_config(cid)
+                deck["conf"] = cid
+                col.decks.save(deck)
+            conf["new"]["perDay"] = want
+            col.decks.update_config(conf)
+    except Exception:
+        traceback.print_exc()
+        tooltip("Couldn't change it. Deck Options › New cards/day.")
+        return
+    if pos is not None:
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    _after_change()
+    tooltip(f"New cards a day in {html.escape(col.decks.get(did)['name'])}: {want:,} (was {was:,}).")
+    refresh_progress()
+    app.swap(cfg())
+
+
 def sessions(col, plan_list, state, today):
     """{plan id: session_view} for the plans on my schedule, on this computer."""
     from .stats.queries import StatsQueries
@@ -675,8 +820,12 @@ def sessions(col, plan_list, state, today):
     out = {}
     for p, st in todo:
         idx = P.DeckIndex(col, st["deck_id"])
-        out[p["id"]] = session_view(p, st, idx, first, today, pace, _due_in(col, st["deck_id"]),
-                                    _answered(col, st.get("checks") or {}))
+        v = session_view(p, st, idx, first, today, pace, _due_in(col, st["deck_id"]),
+                         _answered(col, st.get("checks") or {}))
+        if v is not None:
+            v["limit"] = new_limit(col, st["deck_id"])  # 3.3, C1
+            v["fell_back"] = len(idx.fell_back)          # 3.3, C5
+        out[p["id"]] = v
     return out
 
 
@@ -757,6 +906,15 @@ def on_message(cmd, parts):
         study(arg)
     elif cmd == "plansched" and arg:
         open_schedule(arg)
+    elif cmd == "planlimit" and arg:
+        raise_limit(arg)
+    elif cmd == "planstudydate" and arg and len(parts) > 3:
+        study_date(arg, parts[3])
+    elif cmd == "planidsok" and arg:
+        pc = _pcfg()
+        pc.setdefault("fallback_ok", {})[arg] = True
+        _psave(pc)
+        app.swap(cfg())
     elif cmd == "planspread" and arg:
         set_catch(arg, "spread")
     elif cmd == "planleave" and arg:
@@ -821,6 +979,22 @@ def seen_change(pid):
     app.swap(cfg())
 
 
+def set_early(pid, days):
+    """3.3, C2: open each date `days` early; what that opens, opens now."""
+    cl = client()
+
+    def done(ok):
+        if not ok:
+            tooltip("Couldn't reach Due Crew. Check your connection.")
+            return
+        p = next((x for x in followed() if x["id"] == pid), None)
+        if p and not p.get("paused"):
+            _open_now([p])
+        app.swap(cfg())
+
+    _bg(lambda: cl.set_early(pid, days), done)
+
+
 def plan_menu(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None:
@@ -830,6 +1004,12 @@ def plan_menu(pid):
     if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
         menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
     menu.addAction("Open everything now").triggered.connect(lambda: open_everything(pid))
+    early = menu.addMenu("Open early")  # 3.3, C2: for studying on a phone
+    for n, label in ((0, "Off"), (1, "1 day"), (2, "2 days"), (3, "3 days"), (5, "5 days"), (7, "7 days")):
+        a = early.addAction(label)
+        a.setCheckable(True)
+        a.setChecked(int(p.get("early") or 0) == n)
+        a.triggered.connect(lambda _=False, n=n: set_early(pid, n))
     menu.addAction("Change deck…").triggered.connect(lambda: change_deck(pid))
     menu.addSeparator()
     menu.addAction("Resume" if p.get("paused") else "Pause").triggered.connect(
@@ -1155,24 +1335,37 @@ def browser_menu(browser, menu):
 
 
 def add_to_plan(browser):
+    if not mw.col or not _signed_in():
+        return
     table = getattr(browser, "table", None)
     try:
         notes_mode = bool(table is not None and hasattr(table, "is_notes_mode") and table.is_notes_mode())
     except Exception:
         notes_mode = False
-    if notes_mode:
-        # a note's row is all its cards; a plan takes the exact cards picked
-        tooltip("Switch the browser to Cards to add single cards to a plan.")
-        return
+    # 3.3, C3: the search in the browser's box, and how many cards it finds
     try:
-        cids = browser.selected_cards()
-    except AttributeError:
-        cids = browser.selectedCards()
-    if not cids or not mw.col:
+        search = browser.form.searchEdit.lineEdit().text().strip()
+    except Exception:
+        search = ""
+    try:
+        search_n = len(mw.col.find_cards(search)) if search else 0
+    except Exception:
+        search, search_n = "", 0
+    cids = []
+    if not notes_mode:
+        # a note's row is all its cards; exact cards come from Cards mode
+        try:
+            cids = browser.selected_cards()
+        except AttributeError:
+            cids = browser.selectedCards()
+    if not cids and not search:
+        tooltip("Switch the browser to Cards to add single cards to a plan." if notes_mode
+                else "Search for the cards, or select them, first.")
         return
-    refs = P.card_refs(mw.col, cids)  # which cards, never their text
+    refs = P.card_refs(mw.col, cids) if cids else []  # which cards, never their text
     from .ui.add_cards_dialog import AddCardsDialog
+
     def added(plan, n):
         tooltip(f"Added {n:,} card{'s' if n != 1 else ''} to {html.escape(plan.get('name') or 'the plan')}.")
 
-    AddCardsDialog(browser, client(), refs, _today(), on_added=added).exec()
+    AddCardsDialog(browser, client(), refs, _today(), on_added=added, search=search, search_n=search_n).exec()

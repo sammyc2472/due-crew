@@ -601,7 +601,7 @@ def _css(cfg):
     #due-crew .dc-pc .pk span {{ font-size: 11px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pk .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pk .acts a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; }}
-    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px;
+    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px 36px;
       gap: 10px; align-items: center; font-size: 12px; padding: 3px 0; }}
     #due-crew .dc-pc .u3 .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     #due-crew .dc-pc .u3.hd {{ color: var(--dc-muted); font-size: 10.5px; font-weight: 700; }}
@@ -617,6 +617,7 @@ def _css(cfg):
     #due-crew .dc-pc .pn {{ font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--dc-well);
       display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }}
     #due-crew .dc-pc .pn.warn {{ color: var(--dc-hours); }}
+    #due-crew .dc-pc .u3 a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11px; text-align: right; }}
     #due-crew .dc-pc .pn a, #due-crew .dc-pc .pl a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-pc .pl {{ display: flex; gap: 10px; }}
@@ -954,13 +955,17 @@ def _plan_card_html(card):
     for r in card.get("rows") or []:
         name = f'<span class="u">{e(str(r.get("name") or "?"))}</span>'
         if r.get("state") == "later":
-            rows += f'<div class="u3 later">{name}<span></span><span class="n">{e(str(r.get("n") or ""))}</span></div>'
+            rows += f'<div class="u3 later">{name}<span></span><span class="n">{e(str(r.get("n") or ""))}</span><span></span></div>'
             continue
         s_, t = r.get("seen") or [0, 0]
         mine = ('<span class="miss">not in your copy</span>' if r.get("missing")
                 else f'<span title="{int(s_):,} of {int(t):,} seen">{_pbar(s_, t, solid=int(s_) >= int(t))}</span>')
         cls = "u3 now" if r.get("state") == "now" else "u3"
-        rows += f'<div class="{cls}">{name}{mine}<span class="n">{e(str(r.get("n") or ""))}</span></div>'
+        cmd = "planstudydate:" + pid + ":" + str(r.get("uid") or "")
+        study = (f'<a href="#" title="A filtered deck of this date&rsquo;s cards you&rsquo;ve seen" '
+                 f'onclick="{_pycmd(cmd)}">Study</a>'
+                 if r.get("uid") and not r.get("missing") and int(s_) else '<span></span>')
+        rows += f'<div class="{cls}">{name}{mine}<span class="n">{e(str(r.get("n") or ""))}</span>{study}</div>'
     if rows:
         n_rows = len(card.get("rows") or [])
         out += f'<div class="dc-scroll">{rows}</div>' if n_rows > ROW_CAP else rows
@@ -1004,7 +1009,9 @@ def _session_html(card, pid):
         what = (" and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2
                 else f"<b>{len(names)} dates</b>")
         n = int(op.get("n") or 0)
-        bits.append(f'opened {what} this morning ({n:,} card{"s" if n != 1 else ""})')
+        early = int(card.get("early") or 0)
+        bits.append(f'opened {what} this morning ({n:,} card{"s" if n != 1 else ""}'
+                    + (f', {early} day{"s" if early != 1 else ""} early)' if early else ")"))
         if op.get("undo"):
             acts.append(f'<a href="#" title="Anki&rsquo;s Edit › Undo" onclick="{_pycmd("planundo")}">Undo</a>')
     if s and kind == "study" and not ask:
@@ -1016,6 +1023,17 @@ def _session_html(card, pid):
                 f'<span class="acts">{"".join(acts)}</span></div>')
     if not s:
         return out
+    lim, want = s.get("limit"), int(s.get("target") or 0)
+    if lim is not None and want > int(lim) and kind == "study":
+        # 3.3, C1: Anki would quietly show fewer than the plan has today
+        out += (f'<div class="pn warn"><span>Anki shows {int(lim):,} new a day in this deck; today has {want:,}.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("planlimit:" + pid)}">Raise to {want:,}</a></span></div>')
+    fb = int(s.get("fell_back") or 0)
+    if fb and not card.get("fallback_ok"):
+        # 3.3, C5: a newer AnKing names some of the plan's tags differently
+        out += (f'<div class="pn"><span>{fb} date{"s use tags" if fb != 1 else " uses a tag"} your deck names differently. '
+                f'Matched by their cards: nothing changes for you.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("planidsok:" + pid)}">OK</a></span></div>')
     if ask:
         days = [str(d) for d in ask.get("days") or []]
         when = " and ".join(_short(d) for d in days[-2:]) if len(days) <= 2 else f"{len(days)} study days"

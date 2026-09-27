@@ -452,6 +452,12 @@ def _clean_unit(u):
         out["check"] = u["check"]  # 3.2: a checkpoint's morning
     if u.get("even") is True and out.get("due", "") > out["opens"]:
         out["even"] = True  # 3.3: split evenly over its days
+    search = [q for q in u.get("search") or [] if isinstance(q, str) and q.strip()][:10]
+    if search:
+        out["search"] = search  # 3.3, C3: Anki searches, run here
+    ids = [g for g in u.get("ids") or [] if isinstance(g, str) and g][:50000]
+    if ids:
+        out["ids"] = ids  # 3.3, C5: the note ids behind its tags, from the author's Anki
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
     return out
@@ -483,6 +489,11 @@ def clean_plan_doc(doc):
     out = {"deck": str(doc.get("deck") or ""), "units": units}
     if _ISO.fullmatch(str(doc.get("end") or "")):
         out["end"] = doc["end"]
+    ids = {u["id"] for u in units}
+    reviews = [{"day": r["day"], "from": r["from"], "to": r["to"]} for r in doc.get("reviews") or []
+               if isinstance(r, dict) and _ISO.fullmatch(str(r.get("day") or "")) and r.get("from") in ids and r.get("to") in ids]
+    if reviews:
+        out["reviews"] = reviews[:60]  # 3.3, C4: review days
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -493,6 +504,22 @@ def clean_plan_doc(doc):
         out["phases"] = {"catchup": catchup if ok(catchup, 8) and catchup != 1 else 0,
                          "taper": taper if ok(taper, 60) and out.get("end") else 0}
     return out
+
+
+def _early(v):
+    """3.3, C2: days early, 0 to 7."""
+    return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 7 else 0
+
+
+def clean_authored(a):
+    """3.3, C5: a plan I write, lean: {id, version, doc: {deck, units: [{id, tags, decks, ids: n}]}}."""
+    if not isinstance(a, dict) or not _PLAN_ID.fullmatch(str(a.get("id") or "")) or not isinstance(a.get("doc"), dict):
+        return None
+    d = a["doc"]
+    units = [{"id": str(u["id"]), "tags": [t for t in u.get("tags") or [] if isinstance(t, str)],
+              "decks": [x for x in u.get("decks") or [] if isinstance(x, str)]}
+             for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
+    return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 
 
 def clean_plan(p):
@@ -512,7 +539,8 @@ def clean_plan(p):
             "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
             "code": normalize_code(p.get("code")) if p.get("code") else "",
             "following": bool(following) or "share" in p,
-            "sched": clean_sched(p.get("sched", following.get("sched")))}
+            "sched": clean_sched(p.get("sched", following.get("sched"))),
+            "early": _early(p.get("early", following.get("early")))}
 
 
 def clean_offer(o):

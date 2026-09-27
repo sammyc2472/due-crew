@@ -3586,6 +3586,68 @@ def test_hold_back_v33():
     check("hold: stopping opens them again", _open(col) == {100, 101, 102, 103, 104, 105})
 
 
+def test_class_through_step_v33():
+    """3.3, C1-C5: Anki's own limit shows on the card with the fix; a date
+    opens days early; an Anki search is a date's contents; a renamed tag
+    falls back to the author's note ids; the author's ids go up once."""
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    col = _spread_col()
+    idx = P.DeckIndex(col, 10)
+    # C3: a search, run by this collection and kept to the deck
+    col.find_cards = lambda q: [101, 102, 999] if q == "tag:L14" else []
+    idx = P.DeckIndex(col, 10)
+    got = idx.match({"id": "s", "tags": [], "decks": [], "cards": [], "search": ["tag:L14"]}, None, "Step 1")
+    check("search: its cards, only those in the plan's deck", got == {101, 102}, str(got))
+    check("search: a unit's sig changes with its searches, and stays for one without",
+          P.unit_sig({"tags": ["a"]}) == P.unit_sig({"tags": ["a"], "search": []})
+          and P.unit_sig({"tags": ["a"]}) != P.unit_sig({"tags": ["a"], "search": ["tag:x"]}))
+    # C5: a tag this copy doesn't have: the author's note ids find it
+    guids = {cid: g for (g, _o), cid in idx.by_ref.items()}
+    u = {"id": "r", "tags": ["Step1_v13::Renal"], "decks": [], "cards": [], "ids": [guids[103], guids[104]]}
+    got = idx.match(u, None, "Step 1")
+    check("renamed tag: matched by the author's note ids, and noted", got == {103, 104} and "r" in idx.fell_back, str(got))
+    idx2 = P.DeckIndex(col, 10)
+    check("renamed tag: a tag that matches doesn't use them", idx2.match(dict(u, tags=["Step1::Renal"]), None, "Step 1")
+          == set(range(100, 110)) and not idx2.fell_back)
+    snap = P.ids_snapshot(idx2, {"deck": "Step 1", "units": [{"id": "r", "tags": ["Step1::Renal"], "decks": []}]})
+    check("snapshot: the note ids behind a date's tags, with the tags they came from",
+          snap["r"][0] == ["Step1::Renal"] and len(snap["r"][2]) == 10)
+    # C1 and C2 on the card
+    card = {"id": "p1", "title": "Block", "sub": "", "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
+            "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Mon", "sched": False, "early": 2,
+            "opened": {"names": ["L14"], "n": 9, "undo": False},
+            "session": {"kind": "study", "target": 60, "done": 0, "due": 10, "minutes": 20, "behind": 0, "limit": 20, "fell_back": 3}}
+    html = board._plan_card_html(card)
+    check("limit: the card says Anki shows fewer, with Raise", "Anki shows 20 new a day" in html and "planlimit:p1" in html)
+    check("limit: not when Anki shows enough", "planlimit" not in board._plan_card_html(
+        dict(card, session=dict(card["session"], limit=80))))
+    check("early: what opened says how early", "2 days early" in html)
+    check("study: a date's row builds its deck", "planstudydate:p1:u1" in html)
+    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in html
+          and "planidsok:p1" not in board._plan_card_html(dict(card, fallback_ok=True)))
+    # C2: the morning looks ahead
+    store = world({"dre": "Dre", "maya": "Maya"})
+    unit = {"id": "rn", "name": "Renal", "opens": _day(2), "tags": ["Step1::Renal"]}
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", [unit])
+    maya = new_client(store, "maya", "Maya")
+    plan, _ = maya.follow_plan(code)
+    maya.remember_plan(plan)
+    col = _spread_col()
+    state = {pid: F.new_state(col, plan)}
+    F.run(col, [plan], state, _day(0))
+    check("early: off, a date two days out stays shut", _open(col) == set())
+    check("early: set with one request, kept on the plan", maya.set_early(pid, 2) and store.follows[(pid, "maya")]["early"] == 2)
+    F.run(col, [dict(plan, early=2)], state, _day(0))
+    check("early: two days early, it opens today", _open(col) == set(range(101, 110)))
+    # C5: the author's Anki sends the ids behind its plan's tags
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    check("authored: my plans ride the day's first board", [a["id"] for a in dre.session.get("plans_authored") or []] == [pid])
+    ok = dre.put_ids(pid, {"rn": [["Step1::Renal"], [], ["g1", "g2"]]})
+    check("ids: kept on the date", ok and store.plans[pid]["doc"]["units"][0].get("ids") == ["g1", "g2"])
+
+
 def test_plans_tab_v33():
     """3.3: a Plans tab, only while I follow a plan; Decks is decks again."""
     from due_crew import board
@@ -3824,7 +3886,11 @@ def test_session_card_v32():
           and rv["recap"]["sessions"][1] == 7, str(rv["recap"]))
     # checkpoints
     due = F.checks_due(plan["doc"], st, plan["sched"], _day(0))
-    check("checkpoint: due on its morning", [u["id"] for u in due] == ["rn"])
+    check("checkpoint: due on its morning", [k for k, _n, _us, _c in due] == ["rn"])
+    rdoc = dict(plan["doc"], reviews=[{"day": _day(0), "from": "rn", "to": "rn"}])
+    rdue = F.checks_due(rdoc, st, plan["sched"], _day(0))
+    check("review day: 3.3, due on its morning with its dates, named for them",
+          [(k, n) for k, n, _us, _c in rdue][-1] == (f"r:{_day(0)}:rn:rn", "Review · Renal <i>") and rdue[-1][3] == 200)
     check("checkpoint: not built late past three mornings", F.checks_due(plan["doc"], st, plan["sched"], _day(4)) == [])
     col.db.conn.execute("UPDATE cards SET type = 2, queue = 2, lapses = id - 100 WHERE id IN (105, 106, 107)")
     idx = P.DeckIndex(col, 10)
