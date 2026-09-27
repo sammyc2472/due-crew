@@ -76,16 +76,22 @@ export async function restoreFriends(req: Request, s: Session, env: Env): Promis
   if (!Array.isArray(ids) || ids.length > 500) throw V.bad("ids");
   const want = [...new Set(ids.filter((x): x is string => typeof x === "string" && UID_RE.test(x) && x !== s.uid))];
   if (!want.length) return json({ added: [] });
-  const found = await env.DB.prepare(
-    `SELECT uid FROM users WHERE uid IN (${want.map(() => "?").join(",")})`,
-  ).bind(...want).all<{ uid: string }>();
-  const ok = found.results.map((r) => r.uid);
+  // D1 binds at most 100 parameters a query and runs at most 1,000 queries
+  // a request: 90 at a time keeps a 500-friend restore well inside both
+  const ok: string[] = [];
+  for (let i = 0; i < want.length; i += 90) {
+    const part = want.slice(i, i + 90);
+    const found = await env.DB.prepare(`SELECT uid FROM users WHERE uid IN (${part.map(() => "?").join(",")})`)
+      .bind(...part).all<{ uid: string }>();
+    ok.push(...found.results.map((r) => r.uid));
+  }
   const now = nowSec();
-  if (ok.length) {
+  for (let i = 0; i < ok.length; i += 90) {
+    const part = ok.slice(i, i + 90);
     // each one I add back who hasn't added me gets a knock, so a computer
     // that forgot its list sees "added you" and adds back in one click; one
     // who already added me is crew now, and their knock to me is done
-    await env.DB.batch(ok.flatMap((fid) => [
+    await env.DB.batch(part.flatMap((fid) => [
       env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(s.uid, fid, now),
       env.DB.prepare(
         `INSERT INTO knocks (to_uid, from_uid, squad, at) SELECT ?1, ?2, NULL, ?3

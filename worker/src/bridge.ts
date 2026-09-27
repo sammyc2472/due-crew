@@ -169,13 +169,23 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
   const token = await accessToken(env.FIREBASE_SA, fetcher);
   const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
   const db = env.DB;
+  // Only people it matters for: everyone on 3.x (2.x friends read their
+  // copies), and people on 2.x whom someone on 3.x has added or shares a
+  // squad with (the only ones whose Firestore data a 3.x screen shows).
+  // Firestore's free tier is 50k reads a day; reading everyone every 15
+  // minutes came close to it.
+  const V3 = "SELECT uid FROM users WHERE client_version LIKE '3.%'";
+  const SQUADS3 = `SELECT squad FROM members WHERE uid IN (${V3})`;
   const [peopleRes, membersRes] = await db.batch([
     db.prepare(`SELECT u.uid, u.name, u.emoji, u.client_version, w.doc, w.updated_at, d.json AS decks, h.json AS heat
                   FROM users u LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN decks d ON d.uid = u.uid
-                  LEFT JOIN heatmaps h ON h.uid = u.uid`),
+                  LEFT JOIN heatmaps h ON h.uid = u.uid
+                 WHERE u.client_version LIKE '3.%'
+                    OR u.uid IN (SELECT friend FROM friends WHERE owner IN (${V3}))
+                    OR u.uid IN (SELECT uid FROM members WHERE squad IN (${SQUADS3}))`),
     db.prepare(`SELECT m.squad, m.uid, m.name, m.day, m.reviews, m.study_time_ms, m.accuracy, m.streak, m.week,
                        m.emoji, m.new_cards, u.client_version
-                  FROM members m JOIN users u ON u.uid = m.uid`),
+                  FROM members m JOIN users u ON u.uid = m.uid WHERE m.squad IN (${SQUADS3})`),
   ]);
   const people = peopleRes.results as Row[];
   const members = membersRes.results as Member[];

@@ -18,6 +18,7 @@ const PATH_MAX = 200;
 const DOC_MAX = 256 * 1024;
 const TREE_MAX = 5000;
 const LINE_MAX = 120;
+export const FOLLOWS_MAX = 20;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
 
 type Obj = Record<string, unknown>;
@@ -298,6 +299,11 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
   if (!p || !(await mayRead(env, p, s.uid, code))) throw new HttpError(404, "no_plan");
   const share = body.share === false ? 0 : 1;
+  if (!(await following(env, p.id, s.uid))) {
+    // a bound on what every board carries (and on one query's parameters)
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE uid = ?").bind(s.uid).first<number>("n");
+    if ((n ?? 0) >= FOLLOWS_MAX) throw new HttpError(409, "too_many_plans");
+  }
   await env.DB.prepare(
     `INSERT INTO plan_follows (plan, uid, share, paused, at) VALUES (?, ?, ?, 0, ?)
      ON CONFLICT(plan, uid) DO UPDATE SET share = excluded.share, paused = 0`,
@@ -330,8 +336,8 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
 /** GET /plans/mine: plans I wrote and plans I follow. */
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
-    `SELECT DISTINCT p.* FROM plans p LEFT JOIN plan_follows f ON f.plan = p.id AND f.uid = ?1
-     WHERE p.owner = ?1 OR f.uid IS NOT NULL ORDER BY p.updated_at DESC`,
+    `SELECT * FROM plans WHERE id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1)
+     ORDER BY updated_at DESC`,  // both halves by index, not a scan of every plan
   ).bind(s.uid).all<Plan>();
   const out = [];
   for (const p of rows.results) out.push(await view(env, p, s.uid));

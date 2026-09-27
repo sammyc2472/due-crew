@@ -31,13 +31,10 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added
     db.prepare(
-      `SELECT f.friend AS uid, u.name, u.emoji,
-              EXISTS (SELECT 1 FROM friends b WHERE b.owner = f.friend AND b.friend = ?1) AS mutual,
-              CASE WHEN EXISTS (SELECT 1 FROM friends b WHERE b.owner = f.friend AND b.friend = ?1)
-                   THEN w.doc END AS doc,
-              CASE WHEN EXISTS (SELECT 1 FROM friends b WHERE b.owner = f.friend AND b.friend = ?1)
-                   THEN w.updated_at END AS updated_at
-       FROM friends f JOIN users u ON u.uid = f.friend LEFT JOIN weeks w ON w.uid = f.friend
+      `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at
+       FROM friends f JOIN users u ON u.uid = f.friend
+       LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
+       LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
        WHERE f.owner = ?1 ORDER BY f.at, f.friend`).bind(s.uid),
     db.prepare(
       `SELECT c.from_uid, c.emoji, c.note, c.luck, c.guid, c.at FROM cheers c WHERE c.to_uid = ?`).bind(s.uid),

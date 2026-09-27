@@ -58,6 +58,11 @@ function fakeFirestore(docs: Record<string, Record<string, unknown>>) {
   return { fetcher, log, docs };
 }
 
+/** `new` (on 3.x) has added `uid`, so the bridge brings their 2.x data in. */
+async function seenBy3(...uids: string[]) {
+  for (const u of uids) await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES ('new', ?, 0)").bind(u).run();
+}
+
 async function user(uid: string, name: string, version: string | null, week?: object, at = 1_790_000_000) {
   await env.DB.prepare("INSERT INTO users (uid, email, name, client_version, created_at) VALUES (?, ?, ?, ?, 0)")
     .bind(uid, `${uid}@example.com`, name, version).run();
@@ -77,6 +82,7 @@ describe("the 2.x bridge", () => {
   it("brings a 2.x week in and sends a 3.x week out, then has nothing to do", async () => {
     await user("old", "Dre", "2.13.0");
     await user("new", "Sam", "3.0.1", week(120));
+    await seenBy3("old");
     const fs = fakeFirestore({
       "users/old": { displayName: "Dre", clientVersion: "2.13.0" },
       "users/old/shared/week": { ...week(88), updatedAt: { timestampValue: "2026-09-26T10:00:00Z" },
@@ -107,6 +113,7 @@ describe("the 2.x bridge", () => {
   it("follows each side's changes", async () => {
     await user("old", "Dre", null);
     await user("new", "Sam", "3.0.1", week(10), 1_790_000_000);
+    await seenBy3("old");
     const fs = fakeFirestore({
       "users/old": { displayName: "Dre" },
       "users/old/shared/week": { ...week(1), updatedAt: { timestampValue: "2026-09-26T08:00:00Z" } },
@@ -137,6 +144,8 @@ describe("the 2.x bridge", () => {
   it("skips a 2.x week that won't pass the validator, and keeps going", async () => {
     await user("bad", "X", "2.13.0");
     await user("ok", "Y", "2.13.0");
+    await user("new", "Sam", "3.0.1");
+    await seenBy3("bad", "ok");
     const fs = fakeFirestore({
       "users/bad/shared/week": { v: 1, days: { "not-a-date": { studied: true } } },
       "users/ok/shared/week": { ...week(7), updatedAt: "2026-09-26T08:00:00Z" },
@@ -150,6 +159,7 @@ describe("the 2.x bridge", () => {
     const deck = { name: "Step 1", sig: ["g1", "g2"], total: 100, seen: 40, mature: 10 };
     await user("old", "Dre", "2.13.0");
     await user("new", "Sam", "3.0.1", week(1));
+    await seenBy3("old");
     await env.DB.batch([
       env.DB.prepare("UPDATE users SET emoji = '🔥' WHERE uid = 'new'"),
       env.DB.prepare("INSERT INTO decks (uid, json) VALUES ('new', ?)").bind(JSON.stringify([{ ...deck, seen: 70 }])),
@@ -209,5 +219,27 @@ describe("the 2.x bridge", () => {
     await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher);
     expect(fs.docs["squads/sq/members/new"]).toMatchObject({ reviews: 88, day: "2026-09-26" });
     expect(await bridge({ ...env, FIREBASE_SA: sa } as any, fs.fetcher)).toEqual({ pulled: 0, pushed: 0 });
+  });
+
+  it("reads nobody a 3.x screen can't show", async () => {
+    await user("new", "Sam", "3.0.1", week(1));
+    await user("friend", "Dre", "2.13.0");
+    await user("mate", "Nia", "2.13.0");
+    await user("stranger", "Zed", "2.13.0");
+    await seenBy3("friend");
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('sq', 'Busm', 'new', 1, 0)"),
+      env.DB.prepare("INSERT INTO members (squad, uid, name, joined_at) VALUES ('sq', 'new', 'Sam', 0), ('sq', 'mate', 'Nia', 0)"),
+    ]);
+    const fs = fakeFirestore({});
+    const asked: string[] = [];
+    const spy = async (url: string, init?: RequestInit) => {
+      if (url.endsWith(":batchGet")) asked.push(...JSON.parse(String(init?.body)).documents);
+      return fs.fetcher(url, init);
+    };
+    await bridge({ ...env, FIREBASE_SA: await serviceAccount() } as any, spy);
+    const who = new Set(asked.map((d) => d.split("/documents/")[1].split("/")[1]));
+    expect([...who].sort()).toEqual(["friend", "mate", "new", "sq"]);  // "sq": the squad rows' documents
+    expect(asked.some((d) => d.includes("stranger"))).toBe(false);
   });
 });
