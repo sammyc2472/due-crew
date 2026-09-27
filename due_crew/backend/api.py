@@ -465,6 +465,13 @@ class ApiClient:
         if log and _digest(log) != self.session.get("log_hash"):
             body["log"] = {"days": log}
         status, data = self._call("POST", "/sync", body)
+        if status == 400 and data.get("error") in ("bad_sync", "bad_week"):
+            # 3.2 against a server that doesn't know 3.2's parts yet (a Worker
+            # not yet deployed): the day's numbers still go, without them
+            older = self._without_32(body)
+            if older != body:
+                body = older
+                status, data = self._call("POST", "/sync", body)
         if status != 200:
             print(f"due crew: sync refused ({status}: {data.get('error', '?')})")
             self._save_session()
@@ -486,6 +493,19 @@ class ApiClient:
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]
+
+    @staticmethod
+    def _without_32(body):
+        """The sync as a 3.1 server takes it: no known or stuck cards, no
+        log, and the week without a recap or asks' lines."""
+        out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log")}
+        week = out.get("week")
+        if isinstance(week, dict) and ("recap" in week or any("q" in t for t in week.get("tricky") or [])):
+            week = {k: v for k, v in week.items() if k != "recap"}
+            if week.get("tricky"):
+                week["tricky"] = [{k: v for k, v in t.items() if k != "q"} for t in week["tricky"]]
+            out["week"] = week
+        return out
 
     # ---- 3.2: the cards I know, kept beside the session ----
 

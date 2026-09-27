@@ -3624,6 +3624,27 @@ def test_who_knows_v32():
           dre.fetch_board(labels)["entries"][1]["recap"] == {"name": "Step 1", "n": 3, "day": _day(0)})
 
 
+def test_older_server_v32():
+    """3.2 against a Worker still on 3.1 (merged, not yet deployed): a sync
+    it refuses for 3.2's parts goes again without them, and the day's
+    numbers still land. Nothing 3.2 is marked sent."""
+    store = world({"sam": "Sam"})
+    real = store._sync
+
+    def old_sync(me, body):
+        if set(body) - {"profile", "week", "decks", "heatmap", "squads", "settings", "plans"} or "recap" in (body.get("week") or {}):
+            raise fakes.Bad(400, "bad_sync")
+        return real(me, body)
+    store._sync = old_sync
+    sam = new_client(store, "sam", "Sam")
+    sam.session["recap"] = {"name": "Step 1", "n": 2, "day": _day(0)}
+    ok, _g = sam.push([_day(0)], {}, known={"g1"}, stuck=["g2"], log={_day(0): [1, 1, 0, None]})
+    sent = [b for m, p, b in store.bodies if p == "/sync"]
+    check("older server: the sync still goes, without 3.2's parts", ok and len(sent) == 2
+          and not {"knows", "stuck", "log"} & set(sent[1]) and "recap" not in sent[1]["week"])
+    check("older server: nothing 3.2 is marked sent", "log_hash" not in sam.session and sam._load_known()[1] is None)
+
+
 def test_session_card_v32():
     """3.2: today's session on my schedule, the missed-days question, the
     recap on a new plan week, checkpoints; the board draws them escaped."""
