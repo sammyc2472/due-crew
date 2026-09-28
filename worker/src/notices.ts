@@ -64,18 +64,24 @@ export async function post(req: Request, s: Session, env: Env): Promise<Response
   return json({ id: r!.id, text, link, below, until: now + days * 86400 });
 }
 
-/** GET /admin/notices: the ones still showing, newest first. */
-export async function list(s: Session, env: Env): Promise<Response> {
+/** GET /admin/notices[?all=1]: the ones still showing, newest first; with
+ *  all, the last 20 whatever their state (3.5, X), each with `state`:
+ *  showing, taken down, or ended. */
+export async function list(req: Request, s: Session, env: Env): Promise<Response> {
   adminOnly(env, s);
-  const rows = await env.DB.prepare("SELECT * FROM notices WHERE until > ? ORDER BY id DESC LIMIT 20").bind(nowSec()).all<Notice>();
-  return json({ notices: rows.results });
+  const all = new URL(req.url).searchParams.get("all") === "1";
+  const now = nowSec();
+  const rows = await env.DB.prepare(`SELECT * FROM notices ${all ? "" : "WHERE until > ?1"} ORDER BY id DESC LIMIT 20`)
+    .bind(...(all ? [] : [now])).all<Notice & { taken_at: number | null }>();
+  return json({ notices: rows.results.map((n) => ({ ...n, state: n.taken_at ? "taken down" : n.until > now ? "showing" : "ended" })) });
 }
 
-/** DELETE /admin/notices/{id}: it stops showing. */
+/** DELETE /admin/notices/{id}: it stops showing now; its row stays for the list. */
 export async function remove(s: Session, env: Env, [id]: string[]): Promise<Response> {
   adminOnly(env, s);
   if (!/^\d{1,9}$/.test(id)) throw new HttpError(404, "not_found");
-  await env.DB.prepare("DELETE FROM notices WHERE id = ?").bind(Number(id)).run();
+  const now = nowSec();
+  await env.DB.prepare("UPDATE notices SET until = MIN(until, ?), taken_at = ? WHERE id = ? AND until > ?").bind(now, now, Number(id), now).run();
   return json({ ok: true });
 }
 

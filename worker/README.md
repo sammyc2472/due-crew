@@ -142,6 +142,18 @@ without followers, notes or co-authors. `POST /plans/{id}/report {reason:
 spam|copied|other, note?}` mails REPORT_TO and stores nothing. The admin:
 `POST /admin/library/{id} {note}` takes one out, `DELETE` puts it back,
 `GET /admin/library` lists those taken out.
+3.5, H/L/X (migration 0009): `GET /board?keep=1&feed=1` (the site's home
+only) adds `feed`: who added me back, notes on days of plans I'm in, and
+others' saves to those plans (`summary`), the last 14 days, 20 at most,
+none from someone I muted. My follow carries `hist` (`{date: [opened,
+seen]}`, 120 days, kept with each progress write) on `following`.
+`/admin/stats` adds `cutover {on3, active2, quiet}`, `codes {sent, ok,
+wrong, out, limited}` (the last 7 days), `bridge` (its last run and
+today's runs) and the library's `listed`/`takenOut`; `GET
+/admin/trends?days=30|90|365` is each kept count by day (the daily cron
+keeps them in `admin_days`; accounts come from `created_at`). `GET
+/admin/notices?all=1` is the last 20 with their `state`; taking one down
+keeps its row.
 
 ### Squads
 

@@ -303,7 +303,7 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 // a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
-const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped";
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist";
 
 async function following(env: Env, plan: string, uid: string) {
   return env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(plan, uid).first<Follow>();
@@ -350,7 +350,7 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
 }
 
 type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
-  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null };
+  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null };
 type Editor = { uid: string; name: string; emoji: string };
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
@@ -372,7 +372,9 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
     ...(p.based_on ? { basedOn: JSON.parse(p.based_on) } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
-                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f) } } : {}),
+                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f),
+                           // 3.5, L: my own history on this plan, for my log
+                           hist: f.hist ? JSON.parse(f.hist) : {} } } : {}),
   };
 }
 
@@ -949,18 +951,31 @@ export function progressPart(v: unknown): Record<string, Record<string, [number,
   return out;
 }
 
+const HIST_DAYS = 120;
+
+/** 3.5, L: today's point on my plan's history: cards opened and seen in all,
+ *  the last HIST_DAYS days kept. */
+export function histNext(have: string | null, units: Record<string, [number, number, number]>, day: string): string {
+  const h = have ? (JSON.parse(have) as Record<string, [number, number]>) : {};
+  h[day] = Object.values(units).reduce<[number, number]>((a, [o, s]) => [a[0] + o, a[1] + s], [0, 0]);
+  const keep = Object.keys(h).sort().slice(-HIST_DAYS);
+  return JSON.stringify(Object.fromEntries(keep.map((d) => [d, h[d]])));
+}
+
 /** The statements that store my progress: only for plans I follow with
- *  sharing on, and only where it changed. */
+ *  sharing on, and only where it changed; my history rides the same write. */
 export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>) {
   const ids = Object.keys(part);
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
-    `SELECT plan, progress FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
-  ).bind(uid, ...ids).all<{ plan: string; progress: string | null }>();
+    `SELECT plan, progress, hist FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
+  ).bind(uid, ...ids).all<{ plan: string; progress: string | null; hist: string | null }>();
+  const today = new Date().toISOString().slice(0, 10);
   return rows.results
     .map((r) => ({ r, doc: JSON.stringify(part[r.plan]) }))
     .filter(({ r, doc }) => r.progress !== doc)
-    .map(({ r, doc }) => env.DB.prepare("UPDATE plan_follows SET progress = ? WHERE plan = ? AND uid = ?").bind(doc, r.plan, uid));
+    .map(({ r, doc }) => env.DB.prepare("UPDATE plan_follows SET progress = ?, hist = ? WHERE plan = ? AND uid = ?")
+      .bind(doc, histNext(r.hist, part[r.plan], today), r.plan, uid));
 }
 
 /** GET /plans/{id}/progress: for its authors, per unit, how many followers

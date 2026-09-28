@@ -3,7 +3,6 @@
 // Cards are note guids; never their text. See docs/plans-design.md.
 
 import type { Session } from "./auth";
-import { isAdmin } from "./notices";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -156,34 +155,4 @@ export function logMerge(have: string | null, part: Record<string, (number | nul
 export async function getLog(s: Session, env: Env): Promise<Response> {
   const row = await env.DB.prepare("SELECT json FROM logs WHERE uid = ?").bind(s.uid).first<string>("json");
   return json(row ? JSON.parse(row) : { days: {} });
-}
-
-// ---- admin: counts only ----
-
-/** GET /admin/stats: for the uids in ADMIN_UIDS. Counts, never names. */
-export async function stats(s: Session, env: Env): Promise<Response> {
-  if (!isAdmin(env, s.uid)) throw new HttpError(404, "not_found");
-  const now = nowSec();
-  const q = (sql: string, ...b: unknown[]) => env.DB.prepare(sql).bind(...b);
-  const rs = await env.DB.batch([
-    q("SELECT COUNT(*) AS n FROM users"),
-    q("SELECT COUNT(*) AS n FROM users WHERE client_version LIKE '3.%'"),
-    q("SELECT COUNT(*) AS n FROM users WHERE last_seen > ?", now - 7 * 86400),
-    q("SELECT COUNT(*) AS n FROM users WHERE last_seen > ?", now - 86400),
-    q("SELECT COUNT(*) AS n FROM friends"),
-    q("SELECT COUNT(*) AS n FROM friends f JOIN friends b ON b.owner = f.friend AND b.friend = f.owner"),
-    q("SELECT COUNT(*) AS n FROM squads"),
-    q("SELECT COUNT(*) AS n FROM members"),
-    q("SELECT COUNT(*) AS n FROM plans"),
-    q("SELECT COUNT(*) AS n FROM plan_follows"),
-    q("SELECT COUNT(*) AS n FROM tips"),
-    q("SELECT client_version AS v, COUNT(*) AS n FROM users GROUP BY client_version ORDER BY n DESC LIMIT 12"),
-  ]);
-  const n = (i: number) => (rs[i].results[0] as { n: number }).n;
-  return json({
-    accounts: n(0), on3: n(1), seenWeek: n(2), seenDay: n(3),
-    friendEdges: n(4), mutualPairs: n(5) / 2, squads: n(6), memberships: n(7),
-    plans: n(8), follows: n(9), tips: n(10),
-    versions: (rs[11].results as { v: string | null; n: number }[]).map((r) => [r.v || "2.x", r.n]),
-  });
 }

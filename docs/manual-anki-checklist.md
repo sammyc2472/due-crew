@@ -335,3 +335,11 @@ In Anki (as a follower):
 - [ ] C2: with 3+ followers sharing and most behind on a past date, Progress says so; Give the class a day moves the later dates (Save to keep).
 - [ ] C3: Share › A poster for the class › Print: one page, the QR code scans to the plan's link.
 
+### 3.5: home, log, admin (site), and a year of log (add-on)
+
+- [ ] Home: the strip says what opens today, what's waiting, the next event, and today so far; the year shows under the board; "Since you were here" lists crew added back, notes and plan changes (a second visit shows only what's new).
+- [ ] Home: a crewmate with an exam in the next two weeks: Send good luck › a line › Send. On their exam morning, their Anki shows it with the others.
+- [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
+- [ ] Anki 3.5.0: after the first full sync, the site's log reaches back a year.
+- [ ] Admin (sammy): tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
+

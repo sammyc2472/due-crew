@@ -3,6 +3,7 @@
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 
+import { bump } from "./admin";
 import { isAdmin } from "./notices";
 import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
@@ -36,15 +37,21 @@ export async function requestCode(req: Request, env: Env): Promise<Response> {
   const body = await readJson(req);
   const email = normEmail(body.email);
   if (!email) throw new HttpError(400, "bad_email");
-  if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
-  await limitOrThrow(env, ipKey("code", req), CODES_PER_IP, LIMIT_WINDOW);
-  await limitOrThrow(env, await emailKey("code", email), CODES_PER_EMAIL, LIMIT_WINDOW);
+  try {
+    if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
+    await limitOrThrow(env, ipKey("code", req), CODES_PER_IP, LIMIT_WINDOW);
+    await limitOrThrow(env, await emailKey("code", email), CODES_PER_EMAIL, LIMIT_WINDOW);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 429) await bump(env, "codes.limited");  // 3.5, X: counts only
+    throw e;
+  }
   const code = newCode();
   await env.DB.prepare(
     `INSERT INTO otp (email, code_hash, expires_at, attempts) VALUES (?1, ?2, ?3, 0)
      ON CONFLICT(email) DO UPDATE SET code_hash = ?2, expires_at = ?3, attempts = 0`,
   ).bind(email, await codeHash(email, code), nowSec() + CODE_TTL).run();
   await sendCode(env, email, code);
+  await bump(env, "codes.sent");
   return json({ ok: true });
 }
 
@@ -59,8 +66,13 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   // the site's sign-in comes only from its own script: checked before the
   // code is spent, so another page can't use up someone's code
   if (body.web === true && req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
-  await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
-  if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
+  try {
+    await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
+    if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 429) await bump(env, "codes.limited");
+    throw e;
+  }
 
   // Claim one try in one statement, before comparing: a flood of parallel
   // guesses gets at most CODE_ATTEMPTS claims between them, never more.
@@ -70,12 +82,14 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   ).bind(email, CODE_ATTEMPTS, nowSec()).first<{ code_hash: string; attempts: number }>();
   if (!claim) {
     await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();  // expired or out of tries
+    await bump(env, "codes.out");
     throw new HttpError(400, "expired");
   }
   const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), claim.code_hash);
   if (!good) {
     if (claim.attempts >= CODE_ATTEMPTS) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
     await hit(env, await emailKey("fail", email), FAILS_TO_LOCK, LIMIT_WINDOW);
+    await bump(env, claim.attempts >= CODE_ATTEMPTS ? "codes.out" : "codes.wrong");
     throw new HttpError(400, claim.attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
   }
 
@@ -97,6 +111,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     "INSERT INTO sessions (token_hash, uid, device, created_at, last_used) VALUES (?, ?, ?, ?, ?)",
   ).bind(await sha256Hex(token), user.uid, device, now, now).run();
+  await bump(env, "codes.ok");
   if (body.web === true) {
     // the site (3.1): the session is a same-site cookie, never in page script
     return json({ uid: user.uid, new: isNew, name: user.name }, 200, { "set-cookie": sessionCookie(token, SESSION_IDLE, req) });
