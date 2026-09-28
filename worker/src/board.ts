@@ -21,7 +21,44 @@ async function touchSeen(env: Env, uid: string) {
     .bind(now, uid, now - SEEN_EVERY).run();
 }
 
-/** GET /board[?decks=1][&keep=1]: me, the people I added (with their week
+const FEED_DAYS = 14;
+const FEED_MAX = 20;
+
+/** 3.5, H: what the site's home lists since I was last there: who added me
+ *  back, notes on days of plans I'm in, and saves by others to those plans
+ *  (their one-line summaries). The last FEED_DAYS days, FEED_MAX items,
+ *  newest first; nothing from a person I muted. Cheers and crewmates'
+ *  exams come with the board already. */
+async function feed(env: Env, uid: string) {
+  const since = nowSec() - FEED_DAYS * 86400;
+  const mine = "SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1";
+  const [back, notes, saves, sett] = await env.DB.batch<any>([
+    env.DB.prepare(
+      `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
+         JOIN users u ON u.uid = f.owner WHERE f.friend = ?1 AND f.at > ?2 AND f.at > b.at ORDER BY f.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
+    env.DB.prepare(
+      `SELECT n.plan, p.name AS plan_name, n.day, n.text, n.at, n.uid, u.name, u.emoji FROM plan_notes n
+         JOIN plans p ON p.id = n.plan LEFT JOIN users u ON u.uid = n.uid
+        WHERE n.plan IN (${mine}) AND n.uid != ?1 AND n.at > ?2 ORDER BY n.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
+    env.DB.prepare(
+      `SELECT l.plan, p.name AS plan_name, l.summary, l.at, l.uid, u.name FROM plan_log l
+         JOIN plans p ON p.id = l.plan LEFT JOIN users u ON u.uid = l.uid
+        WHERE l.plan IN (${mine}) AND l.uid != ?1 AND l.at > ?2 ORDER BY l.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
+    env.DB.prepare("SELECT json FROM settings WHERE uid = ?").bind(uid),
+  ]);
+  let muted = new Set<string>();
+  try { muted = new Set((JSON.parse((sett.results[0] as any)?.json || "{}").muted as string[]) || []); } catch { /* none */ }
+  const items = [
+    ...back.results.map((r: any) => ({ kind: "back", uid: r.uid, name: r.name || "?", emoji: r.emoji || "", at: r.at })),
+    ...notes.results.map((r: any) => ({ kind: "note", uid: r.uid, name: r.name || "?", emoji: r.emoji || "", at: r.at,
+                                        plan: r.plan, planName: r.plan_name, day: r.day, text: r.text })),
+    ...saves.results.map((r: any) => ({ kind: "change", uid: r.uid, name: r.name || "?", at: r.at,
+                                        plan: r.plan, planName: r.plan_name, summary: r.summary })),
+  ].filter((x) => !muted.has(x.uid));
+  return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
+}
+
+/** GET /board[?decks=1][&keep=1][&feed=1]: me, the people I added (with their week
  *  when they added me back, name and emoji only when they haven't yet), my
  *  cheers (delivered once: they go as they're read), my knocks. One
  *  request. keep=1 (3.2, the site's home) shows the cheers waiting and
@@ -74,6 +111,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
   if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
+  // 3.5, H: only the site's home asks (the add-on never sends feed=1)
+  if (keep && params.get("feed") === "1") out.feed = await feed(env, s.uid);
   await touchSeen(env, s.uid);
   return json(out);
 }

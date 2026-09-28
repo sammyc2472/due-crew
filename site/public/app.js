@@ -108,7 +108,7 @@ function renderNav() {
   if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
   // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
   const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
-  nav.replaceChildren(link("/home", "Home"), link("/plans", "Plans"),
+  nav.replaceChildren(link("/home", "Home"), link("/plans", "Plans"), link("/library", "Library"),
     h("span", { class: "wide-only" }, rest()),
     h("details", { class: "navme calmenu" }, h("summary", { "aria-label": "More" }, (me.name || "?").slice(0, 1).toUpperCase()),
       h("div", { class: "calpop" }, rest())));
@@ -224,7 +224,108 @@ async function plansList() {
     h("h2", {}, "Following"),
     followed.length ? h("div", { class: "plans" }, followed.map(row))
       : h("p", { class: "muted" }, "None yet. A plan's code goes in the box above."),
+    h("p", { class: "muted small", style: "margin-top:12px" }, "Or find one to follow or copy in the ", link("/library", "library"), "."),
   );
+}
+
+// ---- 3.5, B: the library ----
+
+/** "Jordan's plan", or the copy's credit: "based on Step 1 in 8 weeks, Jordan's". */
+const credit = (b) => (b ? `based on ${b.name}${b.owner && b.owner !== "?" ? `, ${b.owner}'s` : ""}` : null);
+
+/** Copy a plan into one of my own: its first date on the day I pick. */
+function copyForm(p, done) {
+  const start = h("input", { type: "date", value: nextMonday(), "aria-label": "Its first date" });
+  const status = h("span", { class: "status", role: "status" });
+  const btn = h("button", { onclick: async () => {
+    if (!start.value) return;
+    btn.disabled = true; status.className = "status"; status.textContent = "Copying…";
+    try {
+      const mine = await api("POST", `/plans/${p.id}/copy`, { start: start.value });
+      go(`/plans/${mine.id}`);
+    } catch (err) {
+      btn.disabled = false; status.className = "status bad";
+      status.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+    }
+  } }, "Copy");
+  return h("div", { class: "copyform" }, h("span", { class: "muted small" }, "Starting"), start, btn,
+    done ? h("button", { class: "linkish", onclick: done }, "Cancel") : null, status);
+}
+
+/** Report a plan in the library: it goes to Sam by mail; nothing is stored. */
+function reportForm(p, done) {
+  const why = h("select", { "aria-label": "Why" }, [["spam", "Not a study plan"], ["copied", "Copied without credit"], ["other", "Something else"]]
+    .map(([v, t]) => h("option", { value: v }, t)));
+  const note = h("input", { maxlength: 200, placeholder: "Anything to add (optional)", "aria-label": "Note" });
+  const status = h("span", { class: "status", role: "status" });
+  const send = h("button", { class: "ghost", onclick: async () => {
+    send.disabled = true;
+    try { await api("POST", `/plans/${p.id}/report`, { reason: why.value, note: note.value.trim() || null }); status.textContent = "Sent. Thanks."; setTimeout(done, 1400); }
+    catch { send.disabled = false; status.className = "status bad"; status.textContent = "That didn't send. Try again."; }
+  } }, "Send");
+  return h("div", { class: "copyform" }, why, note, send, h("button", { class: "linkish", onclick: done }, "Cancel"), status);
+}
+
+async function libraryPage() {
+  const q = new URLSearchParams(location.search);
+  const f = { deck: q.get("deck") || "", len: q.get("len") || "", q: q.get("q") || "" };
+  let pg = 0;
+  const grid = h("div", { class: "lib" });
+  const more = h("button", { class: "quiet", hidden: true }, "More");
+  const filters = h("div", { class: "filters" });
+  const search = h("input", { type: "search", value: f.q, placeholder: "Search plans", "aria-label": "Search plans", style: "flex:1 1 200px" });
+  const empty = h("p", { class: "muted", hidden: true });
+  const tags = (p) => [`${p.dates} date${p.dates === 1 ? "" : "s"}`, p.perDay ? `~${p.perDay.toLocaleString()} new a study day` : null,
+    p.days ? `${Math.max(1, Math.round(p.days / 7))} week${Math.round(p.days / 7) > 1 ? "s" : ""}` : null,
+    p.reviews ? `${p.reviews} review day${p.reviews === 1 ? "" : "s"}` : null, p.events ? `${p.events} event${p.events === 1 ? "" : "s"}` : null].filter(Boolean);
+  function card(p) {
+    const extra = h("div");
+    const el = h("div", { class: "lc" },
+      h("a", { href: `/plans/${p.id}`, "data-go": "", class: "lcname" }, p.name),
+      h("span", { class: "muted small" }, [`${p.ownerName}'s plan`, p.deck, credit(p.basedOn)].filter(Boolean).join(" · ")),
+      p.line ? h("span", { class: "small" }, p.line) : null,
+      h("div", { class: "lctags" }, tags(p).map((t) => h("span", {}, t))),
+      h("span", { class: "muted small" }, `${p.followers.toLocaleString()} following`),
+      h("div", { class: "row" },
+        link(`/plans/${p.id}`, "Look", "btn ghost"),
+        h("button", { onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
+        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : h("button", { class: "linkish", style: "margin-left:auto", onclick: () => extra.replaceChildren(reportForm(p, () => extra.replaceChildren())) }, "Report"),
+        me.admin ? h("button", { class: "linkish", onclick: async () => {
+          const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
+          if (!note) return;
+          try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
+        } }, "Take out") : null),
+      extra);
+    return el;
+  }
+  function pill(k, v, t) {
+    return h("button", { class: `pill${f[k] === v ? " on" : ""}`, onclick: () => { f[k] = f[k] === v ? "" : v; load(true); } }, t);
+  }
+  async function load(fresh) {
+    if (fresh) pg = 0;
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v));
+    history.replaceState(null, "", `/library${qs.toString() ? `?${qs}` : ""}`);
+    here = location.pathname + location.search;
+    qs.set("page", pg);
+    let r;
+    try { r = await api("GET", `/library?${qs}`); } catch { empty.hidden = false; empty.textContent = "Couldn't load the library. Try again."; return; }
+    filters.replaceChildren(
+      ...r.decks.map(([d]) => pill("deck", d, d)),
+      r.decks.length ? h("span", { class: "muted" }, "·") : null,
+      pill("len", "short", "Up to 4 weeks"), pill("len", "mid", "4–12 weeks"), pill("len", "long", "Longer"));
+    if (fresh) grid.replaceChildren();
+    grid.append(...r.plans.map(card));
+    more.hidden = !r.more;
+    empty.hidden = grid.children.length > 0;
+    empty.textContent = f.deck || f.len || f.q ? "Nothing matches. Try fewer filters." : "Nothing here yet. List a plan of yours from its Settings.";
+  }
+  more.addEventListener("click", () => { pg++; load(false); });
+  let t = null;
+  search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = search.value.trim(); load(true); }, 300); });
+  page(h("h1", {}, "Library"),
+    h("p", { class: "muted" }, "Plans people list for anyone to follow or copy. Newest first."),
+    h("div", { class: "row" }, search), filters, grid, empty, more);
+  await load(true);
 }
 
 /** /plans/new?deck=…#token: signed in by the add-on's link, then a plan for that deck. */
@@ -678,7 +779,8 @@ const todayLocal = () => today();
 
 async function home() {
   Board.forget();
-  const [b, plansR, sett] = await Promise.all([api("GET", "/board?keep=1&decks=1"), api("GET", "/plans/mine"), api("GET", "/settings").catch(() => null)]);
+  const [b, plansR, sett, logR] = await Promise.all([api("GET", "/board?keep=1&decks=1&feed=1"), api("GET", "/plans/mine"),
+    api("GET", "/settings").catch(() => null), api("GET", "/log").catch(() => ({ days: {} }))]);
   const t = today();
   const mon = Sched.monday(t);
   const showUp = !!sett?.settings?.show_up;
@@ -702,11 +804,6 @@ async function home() {
       crew.length ? null : h("p", { class: "muted small" }, "Just you so far. Your crew shows up here once they add you back."),
       waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null].filter(Boolean));
   }
-  // 3.4 review, H1: my code to give, and any code I was sent
-  const friendsBox = h("div", { class: "stack friends", hidden: crew.length > 0 },
-    h("div", { class: "note-inline" }, h("span", {}, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
-      b.me.code ? h("button", { class: "quiet", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy invite") : null),
-    codeBox());
   const shareBtn = h("button", { class: "linkish", onclick: async () => {
     try { await navigator.clipboard.writeText(Board.shareText(people, t)); shareBtn.textContent = "Copied"; } catch { shareBtn.textContent = Board.shareText(people, t); }
     setTimeout(() => { shareBtn.textContent = "Share today"; }, 1800);
@@ -716,38 +813,154 @@ async function home() {
   const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
   const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
   const followed = plansR.plans.filter((p) => p.following);
-  page(todayLine(followed), h("div", { class: "wb" },
-    h("section", { class: "brd" },
-      h("div", { class: "top2" }, pills),
-      panel,
-      h("div", { class: "foot" },
-        h("span", {}, h("button", { class: "linkish", onclick: () => { friendsBox.hidden = !friendsBox.hidden; } }, "Friends"), " · ", shareBtn),
-        h("span", {}, updated, " · ", h("button", { class: "linkish", onclick: () => route() }, "Refresh"))),
-      friendsBox),
+  // 3.4 review, H1 / 3.5, H: my code to give, and any code I was sent, in the rail
+  const friends = h("section", { class: "panel" }, h("h4", {}, "Friends"),
+    h("div", { class: "row" }, h("span", { class: "small" }, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
+      b.me.code ? h("button", { class: "linkish", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy invite") : null),
+    codeBox());
+  page(todayStrip(followed, my[t]), h("div", { class: "wb" },
+    h("div", { class: "stack" },
+      h("section", { class: "brd" },
+        h("div", { class: "top2" }, pills),
+        panel,
+        h("div", { class: "foot" },
+          h("span", {}, shareBtn),
+          h("span", {}, updated, " · ", h("button", { class: "linkish", onclick: () => route() }, "Refresh")))),
+      h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
+        yearHeat(logR.days || {}), h("small", { class: "muted" }, "One square a day, by minutes. Point at a day for its numbers."))),
     h("aside", { class: "rail" },
       h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
-      h("section", { class: "panel" }, h("h4", {}, "Cheers", h("span", { class: "muted" }, String(b.cheers.length))),
-        b.cheers.length ? b.cheers.map((c) => h("div", { class: "cheer" }, h("b", {}, `${c.emoji} ${c.name}`), c.note ? ` ${c.note}` : "")) : h("p", { class: "muted small" }, "None waiting."),
-        b.cheers.length ? h("small", { class: "muted" }, "They'll rain on your Anki screen next time you open it.") : null),
-      followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null)));
+      sinceYouWereHere(b, crew, t),
+      followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
+      friends)));
 }
 
-/** 3.4 review, H9: what's on today, from the plans I follow, above the board. */
-function todayLine(followed) {
-  const bits = followed.filter((p) => !p.following?.paused).map((p) => {
+/** 3.5, H: what today holds, from the plans I follow and my week so far. */
+function todayStrip(followed, mine) {
+  const t = today(), y = addDays(t, -1);
+  let fresh = 0, behind = 0;
+  const opening = [];
+  let next = null;
+  for (const p of followed.filter((x) => !x.following?.paused)) {
     const prog = p.following?.progress || {};
     const sched = p.following?.sched || null;
-    const t = today(), y = addDays(t, -1);
-    const q = (d) => Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, d), 0);
-    const fresh = Math.max(0, q(t) - q(y));
-    const seen = Object.values(prog).reduce((n, x) => n + x[1], 0);
-    const behind = Math.max(0, q(t) - seen);
-    if (!fresh && !behind) return null;
-    return h("span", {}, fresh ? `${fresh.toLocaleString()} new from ` : "", link(`/plans/${p.id}`, p.name),
-      behind ? h("span", { class: "warn" }, ` · ${behind.toLocaleString()} behind`) : null);
-  }).filter(Boolean);
-  return bits.length ? h("div", { class: "todayline" }, h("b", {}, "Today"), bits) : null;
+    const total = (u) => prog[u.id]?.[2] || u.n || 0;
+    const q = (u, d) => Sched.quota(p.doc, u, sched, total(u), d);
+    const us = Sched.units(p.doc).filter((u) => !(p.following?.skipped || []).includes(u.id));
+    for (const u of us) {
+      const n = q(u, t) - q(u, y);
+      if (n > 0) { fresh += n; opening.push([p, u]); }
+    }
+    if (Object.keys(prog).length) {
+      const seen = Object.values(prog).reduce((n, x) => n + x[1], 0);
+      behind += Math.max(0, us.reduce((n, u) => n + q(u, y), 0) - seen);
+    }
+    for (const ev of p.doc.events || []) if (ev.day >= t && (!next || ev.day < next.ev.day)) next = { ev, p };
+  }
+  const card = (cls, label, big, ...rest) => h("div", { class: `ts ${cls}` }, h("small", {}, label), h("b", {}, big), ...rest);
+  const cards = [];
+  if (followed.length) {
+    cards.push(fresh ? card("on", "Opens today", `${fresh.toLocaleString()} new`,
+      h("span", {}, link(`/plans/${opening[0][0].id}`, opening[0][0].name), ` · ${opening.slice(0, 3).map(([, u]) => u.name).join(", ")}${opening.length > 3 ? "…" : ""}`),
+      h("small", { class: "muted" }, "Your Anki opens them in the morning"))
+      : card("", "Opens today", "Nothing new", h("small", { class: "muted" }, "A day for reviews")));
+  }
+  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "In Anki: Plan ▾ › Catch up")));
+  if (next) {
+    const preps = followed.some((p) => Sched.units(p.doc).some((u) => u.for === next.ev.id && opening.some(([, o]) => o.id === u.id)));
+    cards.push(card("", "Next", next.ev.name, h("span", {}, `${next.ev.day === t ? "Today" : pretty(next.ev.day)}${preps ? " · today preps for it" : ""}`),
+      h("small", { class: "muted" }, next.p.name)));
+  }
+  const m = mine || {};
+  cards.push(card("", "So far today", (m.reviews || 0).toLocaleString(),
+    h("span", {}, `reviews · ${Math.round((m.studyTimeMs || 0) / 60000)}m · ${(m.newCards || 0).toLocaleString()} new`),
+    h("small", { class: "muted" }, "As of your last sync")));
+  return h("div", { class: "tstrip" }, cards);
+}
+
+/** 3.5, H: since I was last here (this browser): who added me back, notes on
+ *  my plans' days, their authors' changes. Cheers waiting and a crewmate's
+ *  exam in the next two weeks show whenever they're true. */
+function sinceYouWereHere(b, crew, t) {
+  let prev = null;
+  try {
+    prev = sessionStorage.getItem("dc-since");
+    if (!prev) { prev = localStorage.getItem("dc-seen") || ""; sessionStorage.setItem("dc-since", prev); localStorage.setItem("dc-seen", new Date().toISOString()); }
+  } catch { prev = ""; }
+  const items = (b.feed || []);
+  const fresh = prev ? items.filter((x) => x.at > prev) : items;
+  const older = items.filter((x) => !fresh.includes(x));
+  const when = (iso) => { const d = new Date(iso); return `${DAYS[d.getDay()]} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "am" : "pm"}`; };
+  const who = (x) => `${x.emoji ? `${x.emoji} ` : ""}${x.name}`;
+  const row = (icon, main, sub) => h("div", { class: "fi" }, h("span", { class: "ic" }, icon), h("div", {}, h("span", {}, main), sub ? h("small", { class: "muted" }, sub) : null));
+  const item = (x) => x.kind === "back" ? row("🤝", [h("b", {}, who(x)), " added you back"], "Now in your crew")
+    : x.kind === "note" ? row("✎", [h("b", {}, x.name), ` on ${pretty(x.day)}, `, link(`/plans/${x.plan}`, x.planName), `: ${x.text}`], "A note on a day")
+    : row("↻", [h("b", {}, x.name), " changed ", link(`/plans/${x.plan}`, x.planName), `: ${x.summary}`], "Your Anki follows it next morning");
+  const cheers = b.cheers.length ? row(b.cheers[0].emoji, [h("b", {}, b.cheers[0].name), " cheered", b.cheers[0].note ? `: ${b.cheers[0].note}` : ""],
+    `${b.cheers.length === 1 ? "It waits" : `${b.cheers.length} cheers wait`} for your Anki screen`) : null;
+  const exams = crew.map((f) => [f, f.week?.examDate]).filter(([, d]) => d && d >= t && d <= addDays(t, 14)).sort((a, c) => a[1].localeCompare(c[1]))
+    .map(([f, d]) => {
+      const box = h("div");
+      const send = h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren())) }, "Send good luck");
+      return h("div", { class: "fi" }, h("span", { class: "ic" }, f.emoji || "🍀"),
+        h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
+    });
+  const earlier = h("div", { class: "stack", hidden: true }, older.map(item));
+  const body = [cheers, ...fresh.map(item), ...exams].filter(Boolean);
+  return h("section", { class: "panel feed" }, h("h4", {}, "Since you were here", prev ? h("span", { class: "muted" }, when(prev)) : null),
+    body.length ? body : h("p", { class: "muted small" }, "Nothing new."),
+    older.length ? [h("button", { class: "linkish", onclick: (e) => { earlier.hidden = !earlier.hidden; e.target.textContent = earlier.hidden ? "Earlier, the last two weeks" : "Hide earlier"; } }, "Earlier, the last two weeks"), earlier] : null);
+}
+
+/** A good-luck line for a crewmate's exam morning (the add-on's Good-luck card). */
+function luckForm(f, done) {
+  const line = h("input", { maxlength: 80, placeholder: `A line for ${f.name.split(" ")[0]}'s exam morning`, "aria-label": "Your line" });
+  const status = h("span", { class: "status", role: "status" });
+  const send = h("button", { class: "ghost", onclick: async () => {
+    if (!line.value.trim()) return;
+    send.disabled = true;
+    try { await api("POST", `/cheers/${f.uid}`, { emoji: "🍀", note: line.value.trim(), luck: true }); status.textContent = "Sent. They see it when they open Anki that morning."; line.remove(); send.remove(); }
+    catch { send.disabled = false; status.className = "status bad"; status.textContent = "That didn't send. Try again."; }
+  } }, "Send");
+  return h("div", { class: "copyform" }, line, send, h("button", { class: "linkish", onclick: done }, "Cancel"), status);
+}
+
+/** A year of my log, a square a day (Monday at the top), darker with more
+ *  minutes; days before my log began are dashed. */
+function yearHeat(days) {
+  const t = today();
+  const lastMon = Sched.monday(t);
+  const first = addDays(lastMon, -52 * 7);
+  const logged = Object.keys(days).sort();
+  const start = logged[0] || t;
+  const mins = Object.values(days).map((r) => r[0]).filter((m) => m > 0).sort((a, c) => a - c);
+  const cut = [0.25, 0.5, 0.75].map((q) => mins[Math.floor(q * (mins.length - 1))] || 0);
+  const level = (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
+  const cells = [];
+  const months = [];
+  let lastLabel = -9;
+  for (let w = 0; w < 53; w++) {
+    const wd = addDays(first, w * 7);
+    const d0 = parseIso(wd);
+    if ((w === 0 || parseIso(addDays(wd, -7)).getUTCMonth() !== d0.getUTCMonth()) && (w === 0 || w - lastLabel >= 3) && w <= 50) {
+      months.push(h("span", { style: `grid-column:${w + 1}` }, MONTHS[d0.getUTCMonth()]));
+      lastLabel = w;
+    }
+    for (let k = 0; k < 7; k++) {
+      const d = addDays(wd, k);
+      if (d > t) { cells.push(h("i", { class: "fut" })); continue; }
+      const r = days[d];
+      const title = r ? `${pretty(d)}: ${r[0]} min, ${r[1].toLocaleString()} reviews` : `${pretty(d)}${d < start ? ", before your log" : ""}`;
+      cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, title }));
+    }
+  }
+  const wrap = h("div", { class: "heatwrap" }, h("div", { class: "heat" },
+    h("div", { class: "hm" }, months), h("div", { class: "hd" }, h("span", {}, "Mon"), h("span", {}, "Wed"), h("span", {}, "Fri")),
+    h("div", { class: "hg" }, cells)),
+    h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
+  setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
+  return wrap;
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */
@@ -774,7 +987,9 @@ function onTrackChart(p) {
   const us = Sched.units(p.doc);
   if (!us.length || !Object.keys(prog).length) return null;
   const sh = Sched.shift(p.doc, sched);
-  const first = addDays(Sched.start(p.doc), sh);
+  // 3.5, L: my history on it (a point a day, from when it began being kept)
+  const hist = Object.entries(p.following?.hist || {}).sort(([a], [b]) => a.localeCompare(b));
+  const first = [addDays(Sched.start(p.doc), sh), ...hist.map(([d]) => d)].sort()[0];
   const last = us.map((u) => Sched.win(p.doc, u, sh)[1]).sort().pop();
   const span = Math.max(1, Sched.diff(last, first));
   const step = Math.max(1, Math.ceil(span / 60));
@@ -784,7 +999,7 @@ function onTrackChart(p) {
     pts.push([i, us.reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, d), 0)]);
   }
   const seen = Object.values(prog).reduce((n, t) => n + t[1], 0);
-  const top = Math.max(1, ...pts.map((x) => x[1]), seen) * 1.08;
+  const top = Math.max(1, ...pts.map((x) => x[1]), seen, ...hist.map(([, v]) => v[0])) * 1.08;
   const W = 560; const H = 190; const L = 44; const R = 70; const T = 12; const B = 24;
   const x = (i) => L + ((W - L - R) * i) / span; const y = (v) => T + (H - T - B) * (1 - v / top);
   const ns = "http://www.w3.org/2000/svg";
@@ -796,11 +1011,18 @@ function onTrackChart(p) {
   }
   svg.append(s("text", { x: L, y: H - 6, class: "tick" }, pretty(first)), s("text", { x: W - R, y: H - 6, class: "tick", "text-anchor": "end" }, pretty(last)));
   svg.append(s("polyline", { points: pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" "), class: "ln plan" }));
+  if (hist.length > 1) {
+    const line = (k, cls) => s("polyline", { points: hist.map(([d, v]) => `${x(Sched.diff(d, first))},${y(v[k])}`).join(" "), class: cls });
+    svg.append(line(0, "ln open"), line(1, "ln seen"));
+  }
   const ti = Math.min(span, Math.max(0, Sched.diff(today(), first)));
   const dot = s("circle", { cx: x(ti), cy: y(seen), r: 4.5, class: "dot" });
   dot.append(s("title", {}, `You, ${pretty(today())}: ${seen.toLocaleString()} seen`));
   svg.append(dot, s("text", { x: x(ti) + 8, y: y(seen) + 4, class: "lab" }, `You ${seen.toLocaleString()}`));
-  return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"), h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg);
+  return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"),
+    hist.length > 1 ? [h("span", {}, h("i", { class: "k-seen" }), "seen"), h("span", {}, h("i", { class: "k-open" }), "opened for you")] : null,
+    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg,
+    h("small", { class: "muted" }, "A point a day from what your Anki shares (Plan ▾ › Share my progress)."));
 }
 
 function barChart(values, labels, cap, unit) {
@@ -825,105 +1047,291 @@ function barChart(values, labels, cap, unit) {
   return svg;
 }
 
+/** 3.5, L: this week and last, day by day, as pairs of bars (last week grey). */
+function weekPairs(days, metric, unit) {
+  const W = 560; const H = 180; const L = 34; const R = 8; const T = 14; const B = 22;
+  const mon = Sched.monday(today()), prev = addDays(mon, -7);
+  const val = (d) => { const r = days[d]; if (!r) return 0; return metric === 3 ? r[3] ?? 0 : r[metric] || 0; };
+  const pairs = [0, 1, 2, 3, 4, 5, 6].map((k) => [val(addDays(prev, k)), addDays(mon, k) <= today() ? val(addDays(mon, k)) : null]);
+  const top = Math.max(1, ...pairs.flat().filter((v) => v !== null)) * 1.12;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": `${unit}, this week and last` });
+  for (let k = 0; k <= 3; k++) {
+    const v = Math.round((top / 1.12) * (k / 3));
+    svg.append(svgEl("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }), svgEl("text", { x: L - 6, y: y(v) + 4, class: "tick", "text-anchor": "end" }, v));
+  }
+  const slot = (W - L - R) / 7, bw = Math.max(6, (slot - 14) / 2);
+  pairs.forEach(([a, c], k) => {
+    const x0 = L + k * slot + 4;
+    const bar = (v, x, cls, when) => { const r = svgEl("rect", { x, y: y(v), width: bw, height: Math.max(0, y(0) - y(v)), rx: 3, class: cls }); r.append(svgEl("title", {}, `${pretty(when)}: ${v} ${unit}`)); svg.append(r); };
+    bar(a, x0, "barp", addDays(prev, k));
+    if (c !== null) bar(c, x0 + bw + 3, "barm", addDays(mon, k));
+    svg.append(svgEl("text", { x: L + k * slot + slot / 2, y: H - 6, class: "tick", "text-anchor": "middle" }, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][k]));
+  });
+  return svg;
+}
+
 async function logPage() {
   const [log, plansR] = await Promise.all([api("GET", "/log"), api("GET", "/plans/mine")]);
   const days = log.days || {};
-  const mon = Sched.monday(today());
-  const week = Object.entries(days).filter(([d]) => d >= mon);
+  const t = today();
+  const mon = Sched.monday(t);
+  const dow = (parseIso(t).getUTCDay() + 6) % 7;  // Monday 0
+  const range = (a, b) => Object.entries(days).filter(([d]) => d >= a && d <= b);
   const sum = (rows, i) => rows.reduce((n, [, r]) => n + (r[i] || 0), 0);
-  const graded = week.filter(([, r]) => r[3] !== null);
-  const ret = graded.length ? graded.reduce((n, [, r]) => n + r[3] * r[1], 0) / graded.reduce((n, [, r]) => n + r[1], 0) : null;
-  let streak = 0;
-  for (let d = today(); days[d] || (d === today() && streak === 0 && days[addDays(d, -1)]); d = addDays(d, -1)) if (days[d]) streak++;
-  const mins = sum(week, 0);
-  const metric = { i: 0, unit: "minutes a day" };
-  const box = h("div");
+  const ret = (rows) => { const g = rows.filter(([, r]) => r[3] !== null && r[1]); return g.length ? g.reduce((n, [, r]) => n + r[3] * r[1], 0) / g.reduce((n, [, r]) => n + r[1], 0) : null; };
+  const week = range(mon, t);
+  const lastSoFar = range(addDays(mon, -7), addDays(mon, dow - 7));
+  const byDay = DAYS[parseIso(t).getUTCDay()];
+  const hm = (m) => `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, "0")}m`;
+  const last30 = range(addDays(t, -29), t);
+  const studied30 = last30.filter(([, r]) => r[0] || r[1]);
+  const tile = (big, small, extra) => h("div", {}, h("b", {}, big), h("small", {}, small), extra ? h("small", { class: "muted" }, extra) : null);
+
+  // this week and last, by a metric
+  const metric = { i: 0, unit: "minutes" };
+  const pairsBox = h("div");
+  const pills = h("div", { class: "pills" });
+  const pick = [["Minutes", 0, "minutes"], ["Reviews", 1, "reviews"], ["New", 2, "new cards"], ["Retention", 3, "% retention"]];
+  const drawPairs = () => {
+    pills.replaceChildren(...pick.map(([l, i, u]) => h("button", { class: metric.i === i ? "on" : "", onclick: () => { metric.i = i; metric.unit = u; drawPairs(); } }, l)));
+    pairsBox.replaceChildren(weekPairs(days, metric.i, metric.unit),
+      h("div", { class: "key" }, h("span", {}, h("i", { class: "k-prev" }), `${pretty(addDays(mon, -7))} – ${pretty(addDays(mon, -1))}`), h("span", {}, h("i", { class: "k-now" }), "This week")));
+  };
+  drawPairs();
+
+  // by week, 12 weeks (3.2's chart), folded
+  const weeks = h("div");
   const minutesPlan = plansR.plans.find((p) => p.following?.sched)?.following.sched.minutes || 0;
-  function drawChart() {
+  const drawWeeks = () => {
     const vals = []; const labels = [];
     for (let w = 11; w >= 0; w--) {
       const m0 = addDays(mon, -7 * w);
-      const rows = Object.entries(days).filter(([d]) => d >= m0 && d < addDays(m0, 7));
-      let v;
-      if (metric.i === 3) {
-        const g = rows.filter(([, r]) => r[3] !== null);
-        v = g.length ? Math.round(g.reduce((n, [, r]) => n + r[3] * r[1], 0) / g.reduce((n, [, r]) => n + r[1], 0)) : 0;
-      } else v = Math.round(sum(rows, metric.i) / 7);
-      vals.push(v);
+      vals.push(Math.round(sum(range(m0, addDays(m0, 6)), 0) / 7));
       const d = parseIso(m0);
       labels.push(w % 3 === 0 || w === 11 ? `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}` : "");
     }
-    box.replaceChildren(barChart(vals, labels, metric.i === 0 ? minutesPlan : 0, metric.unit));
-  }
-  const pills = h("div", { class: "pills" });
-  const pick = [["Minutes", 0, "minutes a day"], ["Reviews", 1, "reviews a day"], ["New", 2, "new cards a day"], ["Retention", 3, "% retention"]];
-  const drawPills = () => pills.replaceChildren(...pick.map(([l, i, u]) => h("button", { class: metric.i === i ? "on" : "", onclick: () => { metric.i = i; metric.unit = u; drawPills(); drawChart(); } }, l)));
-  drawPills(); drawChart();
+    weeks.replaceChildren(barChart(vals, labels, minutesPlan, "minutes a day"));
+  };
+  drawWeeks();
+
+  // day by day, the last 30 days: by date only
+  let newest = true, all = false;
+  const table = h("div");
+  const order = h("span", { class: "seg" });
+  const drawTable = () => {
+    order.replaceChildren(h("button", { class: newest ? "on" : "", onclick: () => { newest = true; drawTable(); } }, "Newest first"),
+      h("button", { class: newest ? "" : "on", onclick: () => { newest = false; drawTable(); } }, "Oldest first"));
+    const ds = []; for (let k = 0; k < 30; k++) ds.push(addDays(t, -k));
+    if (!newest) ds.reverse();
+    const shown = all ? ds : ds.slice(0, 10);
+    table.replaceChildren(h("table", { class: "crew daytab" },
+      h("thead", {}, h("tr", {}, h("th", { class: "nm" }, "Day"), ["Minutes", "Reviews", "New", "Retention"].map((x) => h("th", { class: "n" }, x)))),
+      h("tbody", {}, shown.map((d) => {
+        const r = days[d];
+        return h("tr", { class: r ? "" : "off" }, h("td", { class: "nm" }, `${pretty(d)}${d === t ? " · today" : ""}`),
+          r ? [h("td", { class: "n" }, r[0]), h("td", { class: "n" }, r[1].toLocaleString()), h("td", { class: "n" }, r[2].toLocaleString()), h("td", { class: "n" }, r[3] === null ? "—" : `${r[3].toFixed(1)}%`)]
+            : [0, 1, 2, 3].map(() => h("td", { class: "n" }, "—")));
+      }))),
+    all ? null : h("button", { class: "linkish", onclick: () => { all = true; drawTable(); } }, "20 more days"));
+  };
+  drawTable();
+
+  const csv = () => {
+    const rows = Object.entries(days).sort(([a], [c]) => a.localeCompare(c)).map(([d, r]) => [d, ...r.map((x) => (x === null ? "" : x))].join(","));
+    const url = URL.createObjectURL(new Blob([`date,minutes,reviews,new,retention\n${rows.join("\n")}\n`], { type: "text/csv" }));
+    const a = h("a", { href: url, download: `due-crew-log-${t}.csv` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const logged = Object.keys(days).sort();
   const followed = plansR.plans.filter((p) => p.following);
-  page(h("h1", {}, "Your log"), h("p", { class: "muted" }, "Only you see this. It fills in from Anki's syncs."),
+  const wret = ret(week);
+  const r30 = ret(studied30);
+  page(
+    h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Your log"),
+      logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
+    h("p", { class: "muted" }, "Only you see this. It fills in from Anki's syncs."),
     h("div", { class: "tiles" },
-      h("div", {}, h("b", {}, `${week.length} of 7`), h("small", {}, "days this week")),
-      h("div", {}, h("b", {}, `${Math.floor(mins / 60)}h ${Math.round(mins % 60)}m`), h("small", {}, "studied")),
-      h("div", {}, h("b", {}, sum(week, 1).toLocaleString()), h("small", {}, "reviews")),
-      h("div", {}, h("b", {}, sum(week, 2).toLocaleString()), h("small", {}, "new cards")),
-      h("div", {}, h("b", {}, ret === null ? "—" : `${ret.toFixed(1)}%`), h("small", {}, "retention")),
-      h("div", {}, h("b", {}, String(streak)), h("small", {}, "day streak"))),
-    h("div", { class: "row", style: "justify-content:space-between;margin-top:18px" }, h("h2", { style: "margin:0" }, "By week"), pills), box,
+      tile(`${week.filter(([, r]) => r[0] || r[1]).length} of 7`, "days this week"),
+      tile(hm(sum(week, 0)), "studied", `last week by ${byDay}: ${hm(sum(lastSoFar, 0))}`),
+      tile(sum(week, 1).toLocaleString(), "reviews", `by ${byDay}: ${sum(lastSoFar, 1).toLocaleString()}`),
+      tile(sum(week, 2).toLocaleString(), "new cards", `by ${byDay}: ${sum(lastSoFar, 2).toLocaleString()}`),
+      tile(wret === null ? "—" : `${wret.toFixed(1)}%`, "retention"),
+      tile(`${studied30.length} of 30`, "days studied, last 30")),
+    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`)),
+      yearHeat(days), logged.length ? h("small", { class: "muted" }, `Your log starts ${pretty(logged[0])}, when Anki first sent it.`) : h("small", { class: "muted" }, "Nothing yet: Anki sends it with a full sync.")),
+    h("div", { class: "agrid2", style: "margin-top:12px" },
+      h("section", { class: "panel" }, h("h4", {}, "This week and last", pills), pairsBox),
+      h("section", { class: "panel" }, h("h4", {}, "On days you studied", h("span", { class: "muted" }, "last 30 days")),
+        studied30.length ? h("div", { class: "mini2" },
+          tile(`${Math.round(sum(studied30, 0) / studied30.length)}m`, "a day"),
+          tile(Math.round(sum(studied30, 1) / studied30.length).toLocaleString(), "reviews a day"),
+          tile(Math.round(sum(studied30, 2) / studied30.length).toLocaleString(), "new cards a day"),
+          tile(r30 === null ? "—" : `${r30.toFixed(1)}%`, "retention")) : h("p", { class: "muted small" }, "No study days yet."),
+        h("small", { class: "muted" }, "Averages leave out days off, so a rest day doesn't pull them down."),
+        h("details", {}, h("summary", { class: "small" }, "By week, 12 weeks"), weeks))),
+    h("section", { class: "panel", style: "margin-top:12px" }, h("h4", {}, h("span", {}, "Day by day ", h("span", { class: "muted" }, "last 30 days")), order), table),
     followed.length ? h("h2", {}, "Plans") : null,
     followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p))));
 }
 
-async function adminPage() {
-  const [s, nl] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices")]);
-  const tile = (v, l) => h("div", {}, h("b", {}, typeof v === "number" ? v.toLocaleString() : v), h("small", {}, l));
+// ---- 3.5, X: the admin's page: counts, their history, the cutover, the bridge ----
 
-  // 3.2.1: a notice on everyone's board (3.2.1 and later), one line
+const svgEl = (tag, attrs, text) => {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+
+/** A small line of a count over time; days not kept yet are left out. */
+function sparkline(values, w = 150, h = 34) {
+  const pts = values.map((v, i) => [i, v]).filter(([, v]) => v !== null && v !== undefined);
+  const svg = svgEl("svg", { viewBox: `0 0 ${w} ${h}`, class: "spark", role: "img", "aria-label": "over time" });
+  if (pts.length < 2) return svg;
+  const lo = Math.min(...pts.map((p) => p[1])), hi = Math.max(...pts.map((p) => p[1]));
+  const x = (i) => 2 + ((w - 6) * i) / Math.max(1, values.length - 1);
+  const y = (v) => h - 3 - ((h - 6) * (v - lo)) / Math.max(1, hi - lo);
+  svg.append(svgEl("polyline", { points: pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" "), class: "sl" }));
+  const [li, lv] = pts[pts.length - 1];
+  svg.append(svgEl("circle", { cx: x(li), cy: y(lv), r: 2.5, class: "sd" }));
+  return svg;
+}
+
+/** Bars of labelled counts, one row each, to one scale. */
+function hbars(rows, grey) {
+  const top = Math.max(1, ...rows.map((r) => r[1]));
+  return h("div", { class: "hbars" }, rows.flatMap(([label, n], i) => [h("span", {}, label),
+    h("span", { class: "hb" }, h("i", { class: grey && grey(label, i) ? "g" : "", style: `width:${Math.round((100 * n) / top)}%` })),
+    h("b", {}, n.toLocaleString())]));
+}
+
+const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+
+async function adminPage() {
+  let range = 90;
+  const [s, nl, out] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices?all=1"), api("GET", "/admin/library").catch(() => ({ plans: [] }))]);
+  const tilesBox = h("div", { class: "atiles" });
+  const rangeSeg = h("span", { class: "seg" });
+  async function drawTiles() {
+    rangeSeg.replaceChildren(...[30, 90, 365].map((d) => h("button", { class: range === d ? "on" : "", onclick: () => { range = d; drawTiles(); } }, d === 365 ? "A year" : `${d} days`)));
+    let t = null;
+    try { t = await api("GET", `/admin/trends?days=${range}`); } catch { t = null; }
+    const ser = (k) => (t ? t.series[k] : []);
+    const since = (k) => {
+      const v = ser(k).filter((x) => x !== null && x !== undefined);
+      if (v.length < 2) return "kept from today on";
+      const d = v[v.length - 1] - v[0];
+      return `${d >= 0 ? "+" : ""}${d.toLocaleString()} in ${ser(k).length - ser(k).findIndex((x) => x !== null && x !== undefined)} days`;
+    };
+    const tile = (label, value, key, note) => h("div", { class: "at" }, h("small", {}, label), h("b", {}, value),
+      key ? sparkline(ser(key)) : h("span", { class: "spark" }), h("small", { class: "muted" }, note ?? (key ? since(key) : "")));
+    const pct = s.accounts ? Math.round((100 * s.on3) / s.accounts) : 0;
+    tilesBox.replaceChildren(
+      tile("accounts", s.accounts.toLocaleString(), "accounts"),
+      tile("on 3.x", h("span", {}, s.on3.toLocaleString(), h("small", { class: "muted" }, ` ${pct}%`)), "on3"),
+      tile("seen today", s.seenDay.toLocaleString(), "seenDay"),
+      tile("seen this week", s.seenWeek.toLocaleString(), "seenWeek"),
+      tile("mutual friendships", s.mutualPairs.toLocaleString(), "mutualPairs"),
+      tile("plans · following", `${s.plans.toLocaleString()} · ${s.follows.toLocaleString()}`, "follows"),
+      tile("squads · in them", `${s.squads.toLocaleString()} · ${s.memberships.toLocaleString()}`, "memberships"),
+      tile("tips on cards", s.tips.toLocaleString(), null, ""));
+  }
+
+  // sign-in codes, the last 7 days: counters only
+  const c = s.codes;
+  const codes = h("section", { class: "panel" }, h("h4", {}, "Sign-in codes", h("span", { class: "muted" }, "last 7 days")),
+    hbars([["codes sent", c.sent], ["signed in", c.ok], ["wrong code tries", c.wrong], ["ran out of tries or time", c.out], ["held by the rate limit", c.limited]], (l, i) => i > 1),
+    h("small", { class: "muted" }, c.sent ? `${Math.round((100 * c.ok) / c.sent)}% of codes end in a sign-in. Counters only: no address, no code.` : "Counters only: no address, no code."));
+
+  // the cutover from 2.x
+  const cu = s.cutover, all = Math.max(1, cu.on3 + cu.active2 + cu.quiet);
+  const seg = (n, cls) => h("i", { class: cls, style: `width:${(100 * n) / all}%` });
+  const cutover = h("section", { class: "panel" }, h("h4", {}, "The cutover", h("span", { class: "muted" }, `of ${s.accounts.toLocaleString()} accounts`)),
+    h("div", { class: "stackbar" }, seg(cu.on3, "a"), seg(cu.active2, "b"), seg(cu.quiet, "c")),
+    h("div", { class: "legend" }, h("span", {}, h("i", { class: "a" }), `on 3.x · ${cu.on3.toLocaleString()}`),
+      h("span", {}, h("i", { class: "b" }), `on 2.x, studied in 7 days · ${cu.active2.toLocaleString()}`),
+      h("span", {}, h("i", { class: "c" }), `quiet · ${cu.quiet.toLocaleString()}`)),
+    h("small", { class: "muted" }, "2.x counts people whose week the bridge brought in during the last 7 days."));
+
+  // the 2.x bridge
+  const b = s.bridge;
+  const bridge = h("section", { class: "panel" }, h("h4", {}, "The 2.x bridge", b ? h("span", { class: b.error ? "warn" : "muted" }, `ran ${ago(b.at)}`) : null),
+    b ? [h("div", { class: "mini3" }, h("div", {}, h("b", {}, b.pulled.toLocaleString()), h("small", {}, "pulled")),
+        h("div", {}, h("b", {}, b.pushed.toLocaleString()), h("small", {}, "pushed")),
+        h("div", {}, h("b", {}, `${(b.ms / 1000).toFixed(1)}s`), h("small", {}, "took"))),
+      h("small", { class: "muted" }, `Today: ${b.runsToday} run${b.runsToday === 1 ? "" : "s"}, ${b.failedToday} failed.`),
+      b.error ? h("p", { class: "warn small" }, `Last error: ${b.error}`) : null]
+      : h("p", { class: "muted small" }, "It hasn't run since this page began keeping track (it runs every 15 minutes while the FIREBASE_SA secret is set)."));
+
+  // the library: what's taken out, to put back (Take out is on each card in the library)
+  const libList = h("div", { class: "plans" });
+  const drawLib = (plans) => libList.replaceChildren(...(plans.length ? plans.map((p) => {
+    const back = h("button", { class: "quiet", onclick: async () => {
+      back.disabled = true;
+      try { await api("DELETE", `/admin/library/${p.id}`); drawLib((await api("GET", "/admin/library")).plans); } catch { back.disabled = false; back.textContent = "Try again"; }
+    } }, "Put back");
+    return h("div", { class: "plan-row" }, h("b", {}, p.name), back, h("small", {}, `${p.ownerName}'s · taken out: “${p.note}”`));
+  }) : [h("p", { class: "muted small" }, "Nothing taken out.")]));
+  drawLib(out.plans);
+  const library = h("section", { class: "panel" }, h("h4", {}, "The library", h("span", { class: "muted" }, `${s.listed} listed · ${s.takenOut} taken out`)),
+    libList, h("small", { class: "muted" }, "Take out is on each card in ", link("/library", "the library"), "; it asks for one line the author reads."));
+
+  // notices: post one, and every recent one with what became of it
   const status = h("p", { class: "status", role: "status" });
-  const text = h("input", { id: "ntext", maxlength: 200, style: "width:100%", placeholder: "Due Crew 3.2 is out: plans your crew can follow together." });
+  const text = h("input", { id: "ntext", maxlength: 200, style: "width:100%", placeholder: "Due Crew 3.5 is out: a library of plans." });
   const nlink = h("input", { id: "nlink", type: "url", style: "width:100%", placeholder: "https://duecrew.com (optional)" });
-  const below = h("input", { id: "nbelow", style: "width:8em", placeholder: "3.2.1" });
+  const below = h("input", { id: "nbelow", style: "width:8em", placeholder: "3.5.0" });
   const days = h("input", { id: "ndays", type: "number", min: 1, max: 60, value: 14, style: "width:6em" });
   const count = h("small", { class: "muted" }, "0 / 200");
   text.addEventListener("input", () => { count.textContent = `${text.value.length} / 200`; });
-  const list = h("div", { class: "plans" });
+  const form = h("div", { class: "stack", style: "max-width:600px", hidden: true },
+    h("label", { for: "ntext" }, "Text"), text, count,
+    h("label", { for: "nlink" }, "Link"), nlink,
+    h("div", { class: "row" }, h("span", { class: "muted small" }, "Only to add-ons older than"), below, h("span", { class: "muted small" }, "for"), days, h("span", { class: "muted small" }, "days")),
+    h("div", {}, h("button", { onclick: () => post() }, "Post notice")), status);
+  const list = h("div", { class: "nlist" });
+  const until = (t) => { const d = new Date(t * 1000); return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`; };
   const drawList = (notices) => list.replaceChildren(...(notices.length ? notices.map((n) => {
-    const rm = h("button", { class: "quiet", onclick: async () => {
-      rm.disabled = true;
-      try { await api("DELETE", `/admin/notices/${n.id}`); drawList((await api("GET", "/admin/notices")).notices); }
-      catch { rm.disabled = false; rm.textContent = "Try again"; }
-    } }, "Take down");
-    const until = new Date(n.until * 1000);
-    return h("div", { class: "plan-row" }, h("b", {}, n.text), rm,
-      h("small", {}, [n.below ? `to add-ons before ${n.below}` : "to everyone", `until ${DAYS[until.getDay()]} ${until.getDate()} ${MONTHS[until.getMonth()]}`, n.link || ""].filter(Boolean).join(" · ")));
-  }) : [h("p", { class: "muted small" }, "No notice showing.")]));
+    const act = n.state === "showing"
+      ? h("button", { class: "linkish", onclick: async () => { try { await api("DELETE", `/admin/notices/${n.id}`); drawList((await api("GET", "/admin/notices?all=1")).notices); } catch { /* next load */ } } }, "Take down")
+      : h("button", { class: "linkish", onclick: () => { form.hidden = false; text.value = n.text; nlink.value = n.link || ""; below.value = n.below || ""; count.textContent = `${n.text.length} / 200`; text.focus(); } }, "Post again");
+    return h("div", { class: "nrow" }, h("div", {}, h("b", {}, n.text),
+      h("small", { class: "muted" }, [n.below ? `to add-ons before ${n.below}` : "everyone", n.state === "showing" ? `until ${until(n.until)}` : `from ${until(n.created_at)}`, n.link ? "with a link" : null].filter(Boolean).join(" · "))),
+      h("span", { class: `state ${n.state.replace(" ", "")}` }, n.state), act);
+  }) : [h("p", { class: "muted small" }, "No notices yet.")]));
   drawList(nl.notices);
-  const send = h("button", { onclick: async () => {
+  async function post() {
     if (!text.value.trim()) { status.className = "status bad"; status.textContent = "Write the notice first."; return; }
-    send.disabled = true; status.className = "status"; status.textContent = "Posting…";
+    status.className = "status"; status.textContent = "Posting…";
     try {
       await api("POST", "/admin/notices", { text: text.value, link: nlink.value.trim() || null, below: below.value.trim() || null, days: Number(days.value) || 14 });
       text.value = ""; nlink.value = ""; count.textContent = "0 / 200";
       status.textContent = "Posted. It shows at each board's next refresh.";
-      drawList((await api("GET", "/admin/notices")).notices);
+      drawList((await api("GET", "/admin/notices?all=1")).notices);
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.body?.error === "bad_link" ? "The link must start with https://."
         : err.body?.error === "bad_below" ? "The version looks like 3.2.1." : "That didn't post. Try again.";
-    } finally { send.disabled = false; }
-  } }, "Post notice");
+    }
+  }
+  const notices = h("section", { class: "panel" }, h("h4", {}, "Notices", h("button", { class: "linkish", onclick: () => { form.hidden = !form.hidden; } }, "New notice")),
+    h("p", { class: "muted small" }, "One line at the top of everyone's board in Anki (3.2.1 and later) until they dismiss it. The newest one shows."),
+    form, list);
 
-  page(h("h1", {}, "Admin"), h("p", { class: "muted" }, "Counts only. Never names or emails."),
-    h("div", { class: "tiles" }, tile(`${s.on3} / ${s.accounts}`, "on 3.x"), tile(s.seenDay, "seen today"), tile(s.seenWeek, "seen this week"),
-      tile(s.mutualPairs, "mutual friendships"), tile(s.squads, `squads · ${s.memberships} in them`), tile(s.plans, `plans · ${s.follows} following`), tile(s.tips, "tips on cards")),
-    h("h2", {}, "A notice"),
-    h("p", { class: "muted small" }, "One line at the top of everyone's board in Anki (3.2.1 and later), with More when there's a link, until they dismiss it. The newest one shows."),
-    h("div", { class: "stack", style: "max-width:600px" },
-      h("label", { for: "ntext" }, "Text"), text, count,
-      h("label", { for: "nlink" }, "Link"), nlink,
-      h("div", { class: "row" }, h("span", { class: "muted small" }, "Only to add-ons older than"), below, h("span", { class: "muted small" }, "for"), days, h("span", { class: "muted small" }, "days")),
-      h("div", {}, send), status),
-    h("h2", {}, "Showing now"), list,
-    h("h2", {}, "Versions"), h("table", { class: "crew" }, h("tbody", {}, s.versions.map(([v, n]) => h("tr", {}, h("td", { class: "nm" }, v), h("td", { class: "n" }, n.toLocaleString()))))));
+  const versions = h("section", { class: "panel" }, h("h4", {}, "Versions", h("span", { class: "muted" }, "accounts by the add-on they last used")),
+    hbars(s.versions, (label) => !/^3\./.test(label)));
+
+  page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
+    h("p", { class: "muted" }, "Counts only. Never names or emails."),
+    tilesBox,
+    h("div", { class: "agrid3" }, codes, cutover, bridge),
+    h("div", { class: "agrid2" }, library, notices),
+    versions);
+  $app().classList.add("wide");
+  await drawTiles();
 }
 
 async function route() {
@@ -937,6 +1345,7 @@ async function route() {
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
     if (!me) return needSignIn();
     if (path === "/plans") return await plansList();
+    if (path === "/library") return await libraryPage();
     if (path === "/home" || path === "/") return await home();
     if (path === "/log") return await logPage();
     if (path === "/admin") return await adminPage();

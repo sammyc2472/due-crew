@@ -436,3 +436,46 @@ else's cards; events never move.
   put back: a today-only limit ends at midnight.
 - **My progress on the site** (G6): a follower who shares their progress
   sees it on each date, and their skips; nobody else does.
+
+## 3.5: plans that spread (mock "Plans that spread")
+
+### A: a plan's link previews as the plan
+
+A pasted `duecrew.com/p/CODE` shows the plan in a chat or a post: the site
+Worker puts its name and one line in the page head (`og:` and `twitter:`
+tags, escaped), and `/p/CODE.png` is a 1200x630 picture of it: the logo,
+the name (two lines at most), whose it is, the deck, its dates, followers,
+its weeks as a strip (darker with more new cards, an event's week
+outlined) and the code. Only what the signed-out page already shows
+(`/plans/public`), so a squad's plan gets the plain head. The picture is
+drawn pixel by pixel in `site/src/og.ts` from glyphs and the logo drawn
+once by `tools/og_assets.py` (Inter, OFL), with no font engine or
+WebAssembly; a missing glyph (a script Inter doesn't have) is left out,
+and a name with nothing left reads "A study plan". The peek is cached five
+minutes and each version's picture a week, whatever `?v=` asks.
+
+### B: the library
+
+An owner lists a plan from its Settings ("anyone with the code" plans with
+dates, 20 a person). Anyone signed in finds it at `/library` by deck,
+length and words, newest first: the follower count shows on each card
+but never orders the list. Look opens its calendar (a listed plan reads
+like one shared by code), Follow follows it, Copy makes a plan of my own
+starting on a day I pick (dates, events and review days move together;
+no followers, notes or co-authors) that says whose it was based on. A
+plan made for a squad leaves the library. Report mails Sam; Sam's Take
+out removes it with a line its author reads on Settings, and it can't be
+listed again until Sam puts it back. Deleting an account takes its name
+out of copies' credit.
+
+### C: classes
+
+`/classes` says how a class lead runs a class's deck (static, linked from
+the landing page). The Progress tab says when most of the class is
+behind: a date finished by under half of those sharing (3 or more), two
+days after its date, with "Look at that day" and "Give the class a day"
+(every date after today one study day later; events stay; the author
+saves). Print has a Poster: the plan's name, a QR code of its link
+(`site/public/qr.js`, byte mode, error correction M, checked against a
+reference encoder and a decoder), the code, and how to follow.
+

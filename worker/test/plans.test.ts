@@ -94,7 +94,7 @@ describe("plans: following", () => {
     const f = await maya.call("POST", "/plans/follow", { code: plan.code });
     expect(f.status).toBe(200);
     expect(f.body.following).toEqual({ share: true, paused: false, sched: null, early: 0, progress: null,
-      shift: 0, until: null, since: null, skipped: [] });  // G3, G4: my own days, none yet
+      shift: 0, until: null, since: null, skipped: [], hist: {} });  // G3, G4: my own days, none yet; 3.5, L: my history
     const light = await maya.call("GET", "/board");
     expect(light.body.plans).toBeUndefined();  // not on every refresh
     const first = await maya.call("GET", "/board?decks=1");

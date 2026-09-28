@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Due Crew</title>
-<meta name="description" content="Your friends' studying next to yours, on Anki's Decks screen. A free Anki add-on.">
-<meta property="og:title" content="Due Crew">
-<meta property="og:description" content="Your friends' studying next to yours, on Anki's Decks screen.">
+<title>Due Crew for classes</title>
+<meta name="description" content="Plan your class's Anki deck on a calendar. Everyone's cards open on the day you pick. A free Anki add-on.">
+<meta property="og:title" content="Due Crew for classes">
+<meta property="og:description" content="Plan the block on a calendar. Everyone's cards open on the day you pick.">
 <meta property="og:image" content="https://duecrew.com/board.png">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon.png" type="image/png">
@@ -64,19 +64,25 @@
     .feat { grid-template-columns: 1fr; }
     .logo { width: 150px; }
   }
+  .steps { list-style: none; padding: 0; margin: 26px 0; display: grid; gap: 18px; counter-reset: s; }
+  .steps li { margin: 0; padding-left: 44px; position: relative; counter-increment: s; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+                      background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 15px; display: grid; place-items: center; }
+  .steps b { display: block; }
+  .steps span { color: var(--muted); font-size: 16px; }
   footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 18px; font-size: 15px; color: var(--muted); }
   footer a { color: inherit; }
 </style>
 </head>
 <body>
 <main>
-  <picture>
+  <a href="/"><picture>
     <source srcset="/logo-dark.svg" media="(prefers-color-scheme: dark)">
     <img class="logo" src="/logo.svg" alt="Due Crew" width="401" height="137">
-  </picture>
+  </picture></a>
 
-  <h1>Your friends&rsquo; studying next to yours, on Anki&rsquo;s Decks screen.</h1>
-  <p class="lede">Free. Only people you add see it, once they add you back.</p>
+  <h1>Run your class&rsquo;s Anki.</h1>
+  <p class="lede">Plan the block on a calendar. Everyone&rsquo;s cards open on the day you pick.</p>
 
   <div class="install">
     <span class="code" id="code">2035408484</span>
@@ -84,61 +90,31 @@
     <span class="how">Anki &rsaquo; Tools &rsaquo; Add-ons &rsaquo; Get Add-ons, paste, restart Anki.</span>
   </div>
 
-  <div class="phone mailme">
-    <p>It&rsquo;s for Anki on a computer. Send yourself the link:</p>
-    <form id="mailme" class="row" novalidate>
-      <input type="email" id="mailto" autocomplete="email" placeholder="you@school.edu" aria-label="Your email">
-      <button type="submit" class="ghost">Email it</button>
-    </form>
-    <p class="muted small" id="mailsaid">One email with the link. No account, nothing else.</p>
-  </div>
+  <ol class="steps">
+    <li><b>Make a plan from your deck.</b>
+      <span>In Anki: Tools &rsaquo; Due Crew &rsaquo; Make a plan from a deck. It opens here as a calendar: tick the tags or subdecks, paste a lecture&rsquo;s note IDs, put the exam on it as an event. Plan it with a friend as co-author.</span></li>
+    <li><b>Share one link, or print the poster.</b>
+      <span>The plan&rsquo;s Share menu has its link, a calendar to subscribe to, and a poster with a QR code. Following it in Anki takes a minute, and anyone who imported the deck with every card showing can hold later dates back.</span></li>
+    <li><b>See how the class is doing.</b>
+      <span>The plan&rsquo;s Progress tab counts who has opened and finished each date, among those who share it. Nobody is named. When a date runs behind, it says so, and you can give the class a day.</span></li>
+  </ol>
 
-  <figure class="wide">
-    <img src="/board.png" alt="The Due Crew board on Anki's Decks screen" width="1280" height="684">
-  </figure>
-  <figure class="phone crop" aria-label="The Due Crew board, three rows">
-    <table>
-      <tr><td>&#129351;</td><td>Jordan</td><td>840</td><td>2h 16m</td></tr>
-      <tr class="you"><td>#2</td><td><b>You</b></td><td>512</td><td>1h 12m</td></tr>
-      <tr><td>#3</td><td>Dre <span class="live">studying now</span></td><td>118</td><td>22m</td></tr>
-    </table>
-  </figure>
-
-  <div class="feat">
-    <div><b>Cheers</b>Send one and it rains down their screen.</div>
-    <div><b>Study rooms</b>Rounds and breaks, together.</div>
-    <div><b>Plans</b>A class&rsquo;s cards open on their day. <a href="/classes">For classes</a></div>
-  </div>
-
-  <p class="muted">Free and open source &middot; on <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot; needs Anki 2.1.55 or newer.</p>
-  <p class="muted">Already using it? <a href="/sign-in">Sign in</a> for your crew and your plans.</p>
+  <p class="muted">Rather start from someone else&rsquo;s? The <a href="/library">library</a> has plans to follow or copy.</p>
+  <p class="muted">Free and open source &middot; on <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot; needs Anki 2.1.55 or newer. <a href="/sign-in">Sign in</a></p>
 
   <footer>
-    <a href="/classes">For classes</a> &middot;
+    <a href="/">Due Crew</a> &middot;
     <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot;
     <a href="https://github.com/sammyc2472/due-crew">Source</a>, server included
   </footer>
 </main>
 <script>
-  document.getElementById("mailme").addEventListener("submit", function (e) {
-    e.preventDefault();
-    var to = document.getElementById("mailto"), said = document.getElementById("mailsaid");
-    if (!to.value.trim()) return;
-    said.textContent = "Sending…";
-    fetch("/api/links/email", { method: "POST", credentials: "same-origin",
-      headers: { "content-type": "application/json", "x-due-crew": "1" },
-      body: JSON.stringify({ email: to.value, path: "/" }) }).then(function (r) {
-      said.textContent = r.ok ? "Sent. Open it on your computer." : r.status === 429 ? "That's a few already. Try again later." : "That doesn't look like an email address.";
-      if (r.ok) to.value = "";
-    }, function () { said.textContent = "That didn't send. Try again."; });
-  });
   document.getElementById("copy").addEventListener("click", function () {
     var b = this;
     navigator.clipboard.writeText("2035408484").then(function () {
       b.textContent = "Copied";
       setTimeout(function () { b.textContent = "Copy code"; }, 1600);
     }, function () {
-      // no clipboard here (an old browser, or it said no): the code is selected to copy by hand
       var r = document.createRange();
       r.selectNodeContents(document.getElementById("code"));
       var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);

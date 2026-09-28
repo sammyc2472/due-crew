@@ -36,14 +36,15 @@ const NOTES_MAX = 500;
 const NOTE_TEXT_MAX = 280;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
-const PLANS_MAX = 50;
+export const PLANS_MAX = 50;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
 
 type Obj = Record<string, unknown>;
-type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
-  squad: string | null; doc: string; version: number; updated_at: number };
+export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
+  squad: string | null; doc: string; version: number; updated_at: number;
+  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null };
 
-function draw(n: number): string {
+export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
   return [...bytes].map((b) => SQUAD_ALPHABET[b % 32]).join("");
 }
@@ -59,7 +60,7 @@ function path(v: unknown): string {
 
 /** A date's new cards as far as the server knows: its tags' and subdecks'
  *  count, single cards, what its searches and pasted ids found. */
-function unitCount(u: Obj): number {
+export function unitCount(u: Obj): number {
   return ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
     + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0)
     + ((u.idn as number | undefined) ?? (((u.nids as unknown[]) || []).length + ((u.cids as unknown[]) || []).length));
@@ -244,6 +245,28 @@ export function planDoc(v: unknown): Obj {
   return out;
 }
 
+/** 3.5, B: what a library card shows, so the library never reads a doc:
+ *  the deck, how many dates over how many days, about how many new cards a
+ *  study day, review days, events, and whether dates hold pasted ids. */
+export function libCard(doc: Obj): Obj {
+  const units = (doc.units as Obj[]) || [];
+  const from = units.length ? (units[0].opens as string) : null;  // sorted by when they open
+  const to = units.reduce<string | null>((m, u) => { const e = (u.due as string) || (u.opens as string); return !m || e > m ? e : m; }, null);
+  const days = from && to ? Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1 : 0;
+  const week = ((doc.pace as Obj | undefined)?.days as number[] | undefined) || [1, 1, 1, 1, 1, 1, 1];
+  let study = 0;
+  for (let i = 0; i < days; i++) if (week[(new Date(Date.parse(`${from}T00:00:00Z`) + i * 86400000).getUTCDay() + 6) % 7]) study++;
+  const n = units.reduce((a, u) => a + unitCount(u), 0);
+  return { deck: doc.deck, dates: units.length, from, to, days, n, perDay: study ? Math.round(n / study) : 0,
+    reviews: ((doc.reviews as unknown[]) || []).length, events: ((doc.events as unknown[]) || []).length,
+    ids: units.some((u) => u.nids || u.cids) ? 1 : 0 };
+}
+
+/** A save's library card: redone from the new doc while it's listed. */
+export function keepLib(p: Plan, doc: string): string | null {
+  return p.listed === 1 ? JSON.stringify(libCard(JSON.parse(doc))) : (p.lib ?? null);
+}
+
 /** 3.2: a follower's own schedule. `days`, Monday first: 0 rest, 1 study,
  *  2 a double share. `minutes` a day; `start` when later than the plan. */
 export function schedule(v: unknown): Obj | null {
@@ -261,7 +284,7 @@ export function schedule(v: unknown): Obj | null {
   return out;
 }
 
-function planLine(v: unknown): string {
+export function planLine(v: unknown): string {
   if (v === undefined || v === null || v === "") return "";
   if (!V.isStr(v, LINE_MAX * 2)) throw V.bad("line");
   return V.oneLine(v, LINE_MAX);
@@ -269,7 +292,7 @@ function planLine(v: unknown): string {
 
 // ---- access ----
 
-async function getPlan(env: Env, id: string): Promise<Plan> {
+export async function getPlan(env: Env, id: string): Promise<Plan> {
   const p = await env.DB.prepare("SELECT * FROM plans WHERE id = ?").bind(id).first<Plan>();
   if (!p) throw new HttpError(404, "no_plan");
   return p;
@@ -280,7 +303,7 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 // a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
-const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped";
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist";
 
 async function following(env: Env, plan: string, uid: string) {
   return env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(plan, uid).first<Follow>();
@@ -296,13 +319,14 @@ function followDays(f: { shift?: number | null; pause_until?: string | null; pau
 async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<boolean> {
   if (p.owner === uid || (await isEditor(env, p.id, uid))) return true;
   if (p.audience === "squad") return isMember(env, p.squad, uid);  // leaving the squad ends it, follow or not
+  if (p.listed === 1) return true;  // 3.5, B: in the library, for anyone signed in
   if (await following(env, p.id, uid)) return true;
   return (!!code && normalizeCode(code) === p.code) || isMember(env, p.squad, uid);
 }
 
 /** 3.3: the owner and co-authors edit; the owner alone deletes, picks the
  *  audience and the co-authors. */
-async function isEditor(env: Env, plan: string, uid: string): Promise<boolean> {
+export async function isEditor(env: Env, plan: string, uid: string): Promise<boolean> {
   return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(plan, uid).first());
 }
 
@@ -326,7 +350,7 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
 }
 
 type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
-  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null };
+  shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null };
 type Editor = { uid: string; name: string; emoji: string };
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
@@ -341,10 +365,16 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
     audience: p.audience, version: p.version, doc, followers: ctx.n,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (!!p.squad && ctx.mySquads.has(p.squad)) ? p.squad : null,
-    ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") ? { code: p.code } : {}),
+    ...(r === "owner" || r === "editor" || (r === "follower" && p.audience === "code") || p.listed === 1 ? { code: p.code } : {}),
+    // 3.5, B: in the library (the code shows there); the authors also see if the admin took it out, and why
+    library: p.listed === 1,
+    ...(r === "owner" || r === "editor" ? { listed: p.listed ?? 0, ...(p.listed === -1 ? { listedNote: p.listed_note || "" } : {}) } : {}),
+    ...(p.based_on ? { basedOn: JSON.parse(p.based_on) } : {}),
     // mine only: my schedule, and my own progress (3.2's on-track line on the site)
     ...(f ? { following: { share: f.share === 1, paused: f.paused === 1, sched: f.sched ? JSON.parse(f.sched) : null, early: f.early ?? 0,
-                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f) } } : {}),
+                           progress: f.progress ? JSON.parse(f.progress) : null, ...followDays(f),
+                           // 3.5, L: my own history on this plan, for my log
+                           hist: f.hist ? JSON.parse(f.hist) : {} } } : {}),
   };
 }
 
@@ -353,7 +383,7 @@ const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
     WHERE e.plan IN (${ids.map(() => "?").join(",")}) ORDER BY e.at`,
 ).bind(...ids).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>();
 
-async function view(env: Env, p: Plan, uid: string) {
+export async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
     env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
     env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE plan = ?").bind(p.id),
@@ -503,10 +533,13 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
       && next.squad === p.squad && next.doc === p.doc) {
     return json(await view(env, p, s.uid));  // nothing changed: nothing written
   }
+  // 3.5, B: a plan for one squad leaves the library; a listed plan's card follows its doc
+  const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
+  const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
   const r = await env.DB.prepare(
-    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, version = version + 1, updated_at = ?
+    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, nowSec(), id, body.version).run();
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, nowSec(), id, body.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   return json(await view(env, await getPlan(env, id), s.uid));
@@ -514,7 +547,7 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
 
 /** One row of the plan's history: who saved, what they said it did, and
  *  the doc it replaced (for Undo). The last LOG_KEEP stay. */
-async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
+export async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
   await env.DB.batch([
     env.DB.prepare("INSERT OR REPLACE INTO plan_log (plan, version, uid, at, summary, prev) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(plan, version, uid, nowSec(), summary, prev),
@@ -556,8 +589,8 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
-  const r = await env.DB.prepare("UPDATE plans SET doc = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, nowSec(), id, p.version).run();
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   return json({ version: p.version + 1 });
 }
@@ -581,8 +614,8 @@ export async function undo(req: Request, s: Session, env: Env, [id]: string[]): 
   const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? AND version = ?").bind(id, p.version)
     .first<{ summary: string; prev: string | null }>();
   if (!row || !row.prev) throw new HttpError(404, "nothing_to_undo");
-  const r = await env.DB.prepare("UPDATE plans SET doc = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(row.prev, nowSec(), id, p.version).run();
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(row.prev, keepLib(p, row.prev), nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, p.version + 1, s.uid, V.oneLine(`undid: ${row.summary}`, SUMMARY_MAX), p.doc);
   return json(await view(env, await getPlan(env, id), s.uid));
@@ -686,8 +719,8 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
   }
   const clean = JSON.stringify(planDoc(doc));  // dedupes, re-sorts, enforces the caps
   if (clean === p.doc) return json(await view(env, p, s.uid));
-  const r = await env.DB.prepare("UPDATE plans SET doc = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, nowSec(), id, p.version).run();
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, p.version + 1, s.uid, search !== null ? "added a search in Anki"
     : `added ${cards.length} single card${cards.length === 1 ? "" : "s"} in Anki`, p.doc);
@@ -782,15 +815,17 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
   await limitOrThrow(env, `pub:ip:${clientIp(req)}`, 300, 3600);  // guessing codes stays slow
   const p = await env.DB.prepare(
-    `SELECT p.id, p.name, p.line, p.audience, p.doc, u.name AS owner_name,
+    `SELECT p.id, p.name, p.line, p.audience, p.version, p.doc, u.name AS owner_name,
             (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
        FROM plans p LEFT JOIN users u ON u.uid = p.owner WHERE p.code = ?`,
-  ).bind(code).first<{ id: string; name: string; line: string; audience: string; doc: string; owner_name: string | null; followers: number }>();
+  ).bind(code).first<{ id: string; name: string; line: string; audience: string; version: number; doc: string; owner_name: string | null; followers: number }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
-  const doc = JSON.parse(p.doc) as { deck: string; units: Obj[] };
+  const doc = JSON.parse(p.doc) as { deck: string; units: Obj[]; events?: { day: string; name: string }[] };
   const n = unitCount;
   return json({
     name: p.name, ownerName: p.owner_name || "?", line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
+    // 3.5, A: the version keys the link's preview picture; events are in the calendar feed already
+    v: p.version, events: (doc.events || []).map((e) => ({ day: e.day, name: e.name })),
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
   });
 }
@@ -866,6 +901,7 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
+            p.listed, p.listed_note, p.based_on,
             json_remove(p.doc, '$.units') AS rest,
             (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
@@ -915,18 +951,31 @@ export function progressPart(v: unknown): Record<string, Record<string, [number,
   return out;
 }
 
+const HIST_DAYS = 120;
+
+/** 3.5, L: today's point on my plan's history: cards opened and seen in all,
+ *  the last HIST_DAYS days kept. */
+export function histNext(have: string | null, units: Record<string, [number, number, number]>, day: string): string {
+  const h = have ? (JSON.parse(have) as Record<string, [number, number]>) : {};
+  h[day] = Object.values(units).reduce<[number, number]>((a, [o, s]) => [a[0] + o, a[1] + s], [0, 0]);
+  const keep = Object.keys(h).sort().slice(-HIST_DAYS);
+  return JSON.stringify(Object.fromEntries(keep.map((d) => [d, h[d]])));
+}
+
 /** The statements that store my progress: only for plans I follow with
- *  sharing on, and only where it changed. */
+ *  sharing on, and only where it changed; my history rides the same write. */
 export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>) {
   const ids = Object.keys(part);
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
-    `SELECT plan, progress FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
-  ).bind(uid, ...ids).all<{ plan: string; progress: string | null }>();
+    `SELECT plan, progress, hist FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
+  ).bind(uid, ...ids).all<{ plan: string; progress: string | null; hist: string | null }>();
+  const today = new Date().toISOString().slice(0, 10);
   return rows.results
     .map((r) => ({ r, doc: JSON.stringify(part[r.plan]) }))
     .filter(({ r, doc }) => r.progress !== doc)
-    .map(({ r, doc }) => env.DB.prepare("UPDATE plan_follows SET progress = ? WHERE plan = ? AND uid = ?").bind(doc, r.plan, uid));
+    .map(({ r, doc }) => env.DB.prepare("UPDATE plan_follows SET progress = ?, hist = ? WHERE plan = ? AND uid = ?")
+      .bind(doc, histNext(r.hist, part[r.plan], today), r.plan, uid));
 }
 
 /** GET /plans/{id}/progress: for its authors, per unit, how many followers

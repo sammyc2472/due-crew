@@ -19,7 +19,8 @@ add-on.
 - `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
-  the site's session is a same-site HttpOnly cookie.
+  the site's session is a same-site HttpOnly cookie, and draws a plan
+  link's preview (`site/src/og.ts`).
 - `firestore.rules` and `tests/rules/` — the 2.x backend, still live for 2.x
   clients until the cutover, then read-only, then gone with the Firebase
   project (anki-leaderboard-f6691). Delete both, the rules CI job and
@@ -286,6 +287,33 @@ add-on.
   nothing to put back). Pause until… (from my Away dates), and the day
   after it asks: move my dates later by the days away, or open what I
   missed. The site shows a follower their own progress per date (G6).
+- 3.5 plans that spread (mock "Plans that spread", `docs/plans-design.md`
+  "3.5"), site and Worker only. A: a plan's link previews as the plan:
+  the site Worker writes its `og:`/`twitter:` tags (escaped) and draws
+  `/p/CODE.png` (`site/src/og.ts`, glyphs and logo from
+  `tools/og_assets.py`: re-run it only to change the fonts or the logo),
+  from `/plans/public` only, cached per version. B: the library
+  (migration 0008): an owner lists a code plan (`listed`, `lib` kept at
+  every save while listed); `/library` is newest first, never by
+  followers; Copy makes my own plan crediting the original (`based_on`);
+  the admin's Take out (`listed = -1`) is sticky. C: `/classes`, the
+  Progress tab's hint (under half of 3+ sharing finished, two days after
+  a date), and Print's Poster with a QR code (`site/public/qr.js`).
+  `worker/tsconfig.json` includes `site/src`, and `worker/test/site.test.ts`
+  runs the site Worker with the API behind its binding.
+- 3.5 the site's own pages (mock "Home, Log, Admin", migration 0009).
+  Home: a today strip (from my plans and my week), the board as it was,
+  my year (from my log), and a rail with "since you were here" (`feed=1`
+  on the site's board: added me back, notes, others' saves; the cutoff
+  is per browser), crewmates' exams with Send good luck (a `luck` cheer),
+  plans and friends. Log: tiles against last week so far, the year, this
+  week and last, averages over days studied, 30 days by date (never by
+  size), each plan's history (`hist` on my follow), CSV; the year fills
+  in as the log grows (the server keeps 400 days). Admin: counts only; the
+  daily cron keeps them (`admin_days`), sign-in steps and bridge runs are
+  counters there (`admin.bump`), `bridge_last` is the bridge's last run,
+  the cutover is 3.x / 2.x still studying / quiet, notices keep their
+  history.
 
 ## Releasing
 

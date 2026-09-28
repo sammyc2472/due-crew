@@ -1,9 +1,11 @@
 // Due Crew API. One Worker, D1 underneath; every consent rule the Firestore
 // rules used to hold lives in this code now. JSON in, JSON out.
 
+import * as Ad from "./admin";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
+import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
@@ -61,9 +63,10 @@ authed("POST", r("/reports"), S.report);
 // 3.2: tips, my log, the admin's counts
 authed("POST", r("/tips/helped"), C.helped);
 authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
-authed("GET", r("/admin/stats"), (_q, s, env) => C.stats(s, env));
+authed("GET", r("/admin/stats"), (_q, s, env) => Ad.stats(s, env));
+authed("GET", r("/admin/trends"), Ad.trends);  // 3.5, X
 // 3.2.1: the admin's notice on everyone's board
-authed("GET", r("/admin/notices"), (_q, s, env) => N.list(s, env));
+authed("GET", r("/admin/notices"), N.list);
 authed("POST", r("/admin/notices"), N.post);
 authed("DELETE", r("/admin/notices/([0-9]{1,9})"), (_q, s, env, p) => N.remove(s, env, p));
 
@@ -81,6 +84,14 @@ authed("POST", r(`/plans/${ID}/cards`), P.addCards);
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
+// 3.5, B: the library
+authed("GET", r("/library"), L.list);
+authed("PUT", r(`/plans/${ID}/listed`), L.setListed);
+authed("POST", r(`/plans/${ID}/copy`), L.copy);
+authed("POST", r(`/plans/${ID}/report`), L.report);
+authed("GET", r("/admin/library"), (_q, s, env) => L.takenOut(s, env));
+authed("POST", r(`/admin/library/${ID}`), L.takeOut);
+authed("DELETE", r(`/admin/library/${ID}`), (_q, s, env, p) => L.putBack(s, env, p));
 // 3.3: plans together
 authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));
 authed("PUT", r(`/plans/${ID}/ids`), P.putIds);
@@ -116,11 +127,19 @@ export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (event.cron === BRIDGE_CRON) {
       // the 2.x bridge; counts only in the log
-      ctx.waitUntil(bridge(env).then((r) => { if (r) console.log(`bridge: pulled ${r.pulled}, pushed ${r.pushed}`); },
-        (e) => console.log(`bridge failed: ${String(e?.message || e).slice(0, 120)}`)));
+      // 3.5, X: its last run and today's count of runs go on the admin's page
+      const t0 = Date.now();
+      ctx.waitUntil(bridge(env).then(async (r) => {
+        if (!r) return;
+        console.log(`bridge: pulled ${r.pulled}, pushed ${r.pushed}`);
+        await Ad.bridgeRan(env, Date.now() - t0, r);
+      }, async (e) => {
+        console.log(`bridge failed: ${String(e?.message || e).slice(0, 120)}`);
+        await Ad.bridgeRan(env, Date.now() - t0, null, e);
+      }));
       return;
     }
-    ctx.waitUntil(housekeeping(env));
+    ctx.waitUntil(housekeeping(env).then(() => Ad.snapshot(env)));  // 3.5, X: the day's counts, kept
   },
 
   async fetch(req: Request, env: Env): Promise<Response> {

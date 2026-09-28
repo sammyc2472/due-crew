@@ -24,6 +24,7 @@ describe("C1: a plan's link shows the plan before signing in", () => {
     const r = await api("GET", `/plans/public?code=${p.code.toLowerCase()}`);
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ name: "MS2 Cardio block", ownerName: "Priya", line: "One lecture a day", deck: "Step 1", followers: 0,
+      v: p.version, events: [],
       units: [{ name: "Lecture 12", opens: "2026-10-05", n: 84 }, { name: "Lecture 13", opens: "2026-10-06", due: "2026-10-08", n: 62 }] });
     expect(JSON.stringify(r.body)).not.toContain("C::12");  // days and counts, not what's in them
     expect((await api("GET", "/plans/public?code=NOPE2345")).status).toBe(404);
