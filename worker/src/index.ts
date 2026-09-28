@@ -9,6 +9,7 @@ import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
+import * as People from "./people";
 import * as Q from "./squads";
 import * as S from "./social";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
@@ -65,6 +66,11 @@ authed("POST", r("/tips/helped"), C.helped);
 authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
 authed("GET", r("/admin/stats"), (_q, s, env) => Ad.stats(s, env));
 authed("GET", r("/admin/trends"), Ad.trends);  // 3.5, X
+// the admin's account lookup: one person at a time
+authed("GET", r("/admin/people"), People.search);
+authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
+authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
+authed("DELETE", r(`/admin/people/${ID}`), People.remove);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
 authed("POST", r("/admin/notices"), N.post);
