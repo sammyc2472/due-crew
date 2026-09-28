@@ -90,7 +90,8 @@ to your account, where only you can read them, so they follow you to other
 computers. Anyone else sees your name and emoji, nothing more.
 
 You sign in with a code sent to your email; there's no password. Your email
-is only used for that. Deleting your account deletes your data.
+is only used for that, and so Sam, who runs Due Crew, can find your account
+if you write in. Deleting your account deletes your data.
 
 The add-on and the server that enforces all of this are open source, on
 [GitHub](https://github.com/sammyc2472/due-crew).

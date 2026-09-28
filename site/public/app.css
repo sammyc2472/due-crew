@@ -570,3 +570,21 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .panel h4 { flex-wrap: wrap; align-items: center; }
 .atiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .spark { width: 100%; max-width: 150px; }
+
+/* the admin's account lookup */
+.people .hits { display: grid; }
+.people .hit { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 7px 4px; color: var(--ink); font-weight: 400; width: 100%; }
+.people .hit.on { background: var(--well); border-radius: 8px; border-top-color: transparent; }
+.people .person { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.people .who { display: flex; gap: 12px; align-items: center; }
+.people .who .em { font-size: 28px; }
+.people .who b { font-size: 17px; }
+.people .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 16px; font-size: 14px; margin: 0; }
+.people .kv dt { color: var(--muted); }
+.people .kv dd { margin: 0; overflow-wrap: anywhere; }
+.people .plist { display: grid; gap: 4px; font-size: 14px; }
+.people .plist > div { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 4px; }
+.people .madetag { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 1px 6px; background: var(--well); color: var(--accent); }
+.people .confirm { border: 1.5px solid var(--warn); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; font-size: 14px; }
+.people .confirm label { display: grid; gap: 4px; }
+.people .row { flex-wrap: wrap; }

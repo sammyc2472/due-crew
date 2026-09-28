@@ -315,6 +315,14 @@ add-on.
   counters there (`admin.bump`), `bridge_last` is the bridge's last run,
   the cutover is 3.x / 2.x still studying / quiet, notices keep their
   history.
+- The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
+  one person at a time, never a list of everyone. A search is an exact
+  email, uid or friend code, or up to 10 names that start with it,
+  emails partly hidden; one account shows who they are, where they are
+  (squads, plans) and counts of their crew, never how they study, who
+  their crew are, or their settings. Sign out everywhere, and Delete with
+  their email typed out. README's privacy section says Sam can find an
+  account when someone writes in.
 
 ## Releasing
 

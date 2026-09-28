@@ -1210,6 +1210,82 @@ function hbars(rows, grey) {
 
 const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 
+/** The admin's account lookup: one person at a time (never a list of
+ *  everyone, never how anyone studies). */
+function peoplePanel() {
+  const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
+  const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
+  const offset = (m) => (m === null || m === undefined ? "" : ` · UTC${m < 0 ? "−" : "+"}${Math.floor(Math.abs(m) / 60)}${Math.abs(m) % 60 ? `:${String(Math.abs(m) % 60).padStart(2, "0")}` : ""}`);
+  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code or a uid", "aria-label": "Look up an account", style: "flex:1 1 220px" });
+  const hits = h("div", { class: "hits" });
+  const one = h("div");
+  const status = h("p", { class: "muted small", role: "status" });
+  const tile = (n, label) => h("div", {}, h("b", {}, String(n)), h("small", {}, label));
+  async function open(uid) {
+    one.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+    let p;
+    try { p = await api("GET", `/admin/people/${encodeURIComponent(uid)}`); } catch { one.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that account.")); return; }
+    const copyBtn = h("button", { class: "ghost", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
+    const outStatus = h("span", { class: "muted small", role: "status" });
+    const confirmBox = h("div", { class: "confirm", hidden: true });
+    const typed = h("input", { type: "email", placeholder: p.email, "aria-label": "Type their email to confirm", style: "width:100%" });
+    const delBtn = h("button", { class: "danger", onclick: async () => {
+      delBtn.disabled = true;
+      try { await api("DELETE", `/admin/people/${encodeURIComponent(p.uid)}`, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
+      catch (e) { delBtn.disabled = false; outStatus.textContent = e.body?.error === "confirm" ? "That isn't their email." : "That didn't work."; }
+    } }, "Delete");
+    confirmBox.append(h("b", {}, `Delete ${p.name}'s account?`),
+      h("span", {}, "Everything of theirs goes, in one step, as when they delete it themselves: their crew, squads (a founded one passes on), plans, notes and sessions. It can't be undone. They aren't told."),
+      h("label", {}, h("span", {}, "Type ", h("b", {}, p.email), " to confirm"), typed),
+      h("div", { class: "row" }, h("button", { class: "ghost", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
+    const list = (title, rows) => h("div", { class: "plist" }, h("span", { class: "lbl" }, title),
+      rows.length ? rows : h("span", { class: "muted small" }, "None"));
+    one.replaceChildren(h("div", { class: "person" },
+      h("div", { class: "who" }, h("span", { class: "em" }, p.emoji || "🙂"),
+        h("div", {}, h("b", {}, p.name), h("small", { class: "muted" }, ` · last seen ${seen(p.lastSeen)}`))),
+      h("div", { class: "agrid2" },
+        h("dl", { class: "kv" },
+          h("dt", {}, "Email"), h("dd", {}, p.email),
+          h("dt", {}, "uid"), h("dd", { class: "mono" }, p.uid),
+          h("dt", {}, "Friend code"), h("dd", { class: "mono" }, p.code ? spaced(p.code) : "none"),
+          h("dt", {}, "Joined"), h("dd", {}, when(p.joined)),
+          h("dt", {}, "Add-on"), h("dd", {}, `${p.version || "not yet"}${offset(p.tz)}`),
+          h("dt", {}, "Signed in on"), h("dd", {}, `${p.signedIn.computers} computer${p.signedIn.computers === 1 ? "" : "s"}, ${p.signedIn.browsers} browser${p.signedIn.browsers === 1 ? "" : "s"}`)),
+        h("div", { class: "tiles" }, tile(p.crew.mutual, "crew, mutual"), tile(p.crew.addedNotBack, "added, not back"),
+          tile(p.crew.addedThem, "added them, not back"), tile(p.squads.length, "squads"), tile(p.following.length, "plans followed"),
+          tile(p.made.length, "plans made"), tile(p.crew.muted, "muted"))),
+      h("div", { class: "agrid2" },
+        list("Squads", p.squads.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
+        list("Plans", [...p.made.map((x) => h("div", {}, h("span", {}, x.name, " ", h("span", { class: "madetag" }, "made")),
+          h("small", { class: "muted" }, `${x.audience === "squad" ? "squad" : "code"} · ${x.followers} following${x.listed ? " · in the library" : ""}`))),
+          ...p.following.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `following · ${x.owner}'s${x.paused ? " · paused" : ""}${x.listed ? " · in the library" : ""}`)))])),
+      h("div", { class: "row" },
+        h("button", { class: "ghost", onclick: async () => {
+          try { const r = await api("POST", `/admin/people/${encodeURIComponent(p.uid)}/signout`); outStatus.textContent = `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`; }
+          catch { outStatus.textContent = "That didn't work."; }
+        } }, "Sign out everywhere"), copyBtn, h("span", { style: "flex:1" }),
+        h("button", { class: "danger ghost", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
+      outStatus, confirmBox));
+  }
+  async function look() {
+    const text = q.value.trim();
+    one.replaceChildren();
+    if (text.length < 3) { status.textContent = "At least 3 characters."; hits.replaceChildren(); return; }
+    status.textContent = "Looking…";
+    let r;
+    try { r = await api("GET", `/admin/people?q=${encodeURIComponent(text)}`); } catch { status.textContent = "That didn't work."; return; }
+    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}. Emails partly hidden; open one to see it in full.` : "Nobody by that.";
+    hits.replaceChildren(...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
+      for (const b of hits.children) b.classList.toggle("on", b === e.currentTarget); open(x.uid);
+    } }, h("span", {}, `${x.emoji ? x.emoji + " " : ""}`, h("b", {}, x.name), h("small", { class: "muted" }, ` · ${x.email} · joined ${when(x.joined)}`)),
+      h("small", { class: "muted" }, x.version || ""))));
+    if (r.people.length === 1) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+  }
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
+  return h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
+    h("div", { class: "row" }, q, h("button", { onclick: look }, "Look up")), status, hits, one);
+}
+
 async function adminPage() {
   let range = 90;
   const [s, nl, out] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices?all=1"), api("GET", "/admin/library").catch(() => ({ plans: [] }))]);
@@ -1325,7 +1401,8 @@ async function adminPage() {
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
   page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
-    h("p", { class: "muted" }, "Counts only. Never names or emails."),
+    h("p", { class: "muted" }, "Counts, and one account at a time when you look one up. Never how anyone studies."),
+    peoplePanel(),
     tilesBox,
     h("div", { class: "agrid3" }, codes, cutover, bridge),
     h("div", { class: "agrid2" }, library, notices),
