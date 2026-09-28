@@ -178,6 +178,71 @@ describe("verify", () => {
     expect((await signIn(email, box)).token).toBeTruthy();
   });
 
+  it("one IP's wrong codes lock that IP out, not the address's owner elsewhere", async () => {
+    const box = mailbox();
+    const email = "sam@example.com";
+    const wrongFor = () => (box.code(email) === "000000" ? "111111" : "000000");
+    for (let round = 0; round < 2; round++) {
+      await api("POST", "/auth/code", { body: { email }, ip: "198.51.100.66" });
+      for (let i = 0; i < 5; i++) await api("POST", "/auth/verify", { body: { email, code: wrongFor() }, ip: "198.51.100.66" });
+    }
+    expect((await api("POST", "/auth/code", { body: { email }, ip: "198.51.100.66" })).body.error).toBe("locked");
+    // the owner, at home, still gets a code and signs in
+    expect((await api("POST", "/auth/code", { body: { email }, ip: "203.0.113.20" })).status).toBe(200);
+    const r = await api("POST", "/auth/verify", { body: { email, code: box.code(email), device: "x" }, ip: "203.0.113.20" });
+    expect(r.status).toBe(200);
+  });
+
+  it("wrong codes from many IPs lock the address for the day", async () => {
+    const box = mailbox();
+    const email = "sam@example.com";
+    for (let n = 0; n < 4; n++) {
+      const ip = `198.51.100.${10 + n}`;
+      await api("POST", "/auth/code", { body: { email }, ip });
+      const wrong = box.code(email) === "000000" ? "111111" : "000000";
+      for (let i = 0; i < 5; i++) await api("POST", "/auth/verify", { body: { email, code: wrong }, ip });
+    }
+    const r = await api("POST", "/auth/code", { body: { email }, ip: "203.0.113.20" });
+    expect(r.body.error).toBe("locked");
+    await db().prepare("UPDATE limits SET window_start = window_start - 3601").run();
+    expect((await api("POST", "/auth/code", { body: { email }, ip: "203.0.113.20" })).body.error).toBe("locked");  // a day, not an hour
+    await db().prepare("UPDATE limits SET window_start = window_start - 86400").run();
+    expect((await signIn(email, box)).token).toBeTruthy();
+  });
+
+  it("an inbox gets at most twenty codes a day, and one IP can't use them all", async () => {
+    mailbox();
+    const email = "a@x.com";
+    const send = (ip: string) => api("POST", "/auth/code", { body: { email }, ip });
+    for (let i = 0; i < 5; i++) expect((await send("198.51.100.1")).status).toBe(200);
+    await db().prepare("UPDATE limits SET window_start = window_start - 3601 WHERE key LIKE 'code:%'").run();
+    for (let i = 0; i < 3; i++) expect((await send("198.51.100.1")).status).toBe(200);
+    expect((await send("198.51.100.1")).status).toBe(429);  // eight a day from one IP
+    // ten an hour from anywhere (three this hour already), twenty a day
+    for (let i = 0; i < 7; i++) expect((await send(`198.51.100.${20 + i}`)).status).toBe(200);
+    expect((await send("198.51.100.40")).status).toBe(429);
+    await db().prepare("UPDATE limits SET window_start = window_start - 3601 WHERE key LIKE 'code:%'").run();
+    for (let i = 0; i < 5; i++) expect((await send(`198.51.100.${50 + i}`)).status).toBe(200);
+    expect((await send("198.51.100.60")).status).toBe(429);  // the twenty-first today
+  });
+
+  it("another site's page can't ask for a code, try one, or change anything", async () => {
+    const box = mailbox();
+    const evil = { origin: "https://evil.example" };
+    expect((await api("POST", "/auth/code", { body: { email: "v@x.com" }, headers: evil })).body.error).toBe("csrf");
+    expect(box.sent).toHaveLength(0);
+    expect((await api("POST", "/auth/verify", { body: { email: "v@x.com", code: "000000" }, headers: evil })).body.error).toBe("csrf");
+    const me = await signIn("me@x.com", box);
+    expect((await api("POST", "/auth/signout", { token: me.token, headers: evil })).status).toBe(403);
+    // the site's own pages (same origin), and the add-on (no Origin), are fine
+    expect((await api("POST", "/auth/code", { body: { email: "v@x.com" }, headers: { origin: "https://duecrew.com" } })).status).toBe(200);
+    const { ourPage } = await import("../src/index");
+    expect([null, "https://duecrew.com", "https://www.duecrew.com", "http://127.0.0.1:8787"].every(ourPage)).toBe(true);
+    expect(["https://evil.example", "https://duecrew.com.evil.example", "https://evilduecrew.com", "null"].some(ourPage)).toBe(false);
+    expect((await api("GET", "/auth/me", { token: me.token, headers: evil })).status).toBe(200);  // a read: its answer stays unreadable to that page
+    expect((await api("GET", "/version")).headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   it("no code on file is the same answer as an expired one", async () => {
     const r = await api("POST", "/auth/verify", { body: { email: "ghost@example.com", code: "123456" } });
     expect(r.status).toBe(400);

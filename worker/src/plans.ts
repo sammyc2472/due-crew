@@ -802,7 +802,7 @@ export async function ics(req: Request, env: Env): Promise<Response> {
   }
   lines.push("END:VCALENDAR");
   return new Response(lines.map(fold).join("\r\n") + "\r\n", { headers: {
-    "content-type": "text/calendar; charset=utf-8", "cache-control": "public, max-age=10800",
+    "content-type": "text/calendar; charset=utf-8", "cache-control": "public, max-age=10800", "x-content-type-options": "nosniff",
     "content-disposition": `inline; filename="due-crew-${p.code}.ics"` } });
 }
 

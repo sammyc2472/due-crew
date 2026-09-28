@@ -70,7 +70,7 @@ export default {
       const hit = await caches.default.match(key);
       if (hit) return hit;
       const res = new Response(await png(await draw(p, code)), { headers: {
-        "content-type": "image/png", "cache-control": url.searchParams.get("v") === String(p.v) ? "public, max-age=604800" : "public, max-age=3600" } });
+        "content-type": "image/png", "x-content-type-options": "nosniff", "cache-control": url.searchParams.get("v") === String(p.v) ? "public, max-age=604800" : "public, max-age=3600" } });
       ctx.waitUntil(caches.default.put(key, res.clone()));
       return res;
     }

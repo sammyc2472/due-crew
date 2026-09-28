@@ -1,7 +1,8 @@
 /*
-  Content-Security-Policy: default-src 'self'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; img-src 'self'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
 /app.js
   Cache-Control: public, max-age=300
 /builder.js
@@ -9,4 +10,6 @@
 /app.css
   Cache-Control: public, max-age=300
 /qr.js
+  Cache-Control: public, max-age=300
+/landing.js
   Cache-Control: public, max-age=300
