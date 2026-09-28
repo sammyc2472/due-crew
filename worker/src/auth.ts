@@ -183,9 +183,9 @@ export async function authenticate(req: Request, env: Env): Promise<Session> {
   return { uid: row.uid, tokenHash };
 }
 
-/** GET /auth/me: who this session is. */
 const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
 
+/** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
   // 3.4.1: and my accent, from the settings the add-on keeps, so the site wears it too
   const u = await env.DB.prepare(
@@ -250,6 +250,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",
     "DELETE FROM invites WHERE uid = ?1",
+    // an invite I used stays used (so it can't make someone else crew at once), but not by me
+    "UPDATE invites SET used_by = '-' WHERE used_by = ?1",
     // 3.2
     "DELETE FROM knows WHERE uid = ?1",
     "DELETE FROM tips WHERE uid = ?1",

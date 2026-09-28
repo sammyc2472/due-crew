@@ -2787,6 +2787,49 @@ def test_settings_in_board_v341():
           "setsignin" in out and "follow your account" not in out)
 
 
+def test_settings_saves_in_order_v341():
+    """3.4.1: Settings in the board saves on every click, and the server keeps
+    whichever save arrives last. One save at a time: a click while one is on
+    its way goes after it, as the config is then."""
+    from due_crew import account, app as appmod
+    sent, queue = [], []
+    now = {"cfg": {"share_time": True, "share_reviews": True}}
+
+    class Stub:
+        signed_in = True
+        session = {}
+
+        def _save_session(self):
+            pass
+
+        def put_settings(self, at, settings):
+            sent.append(dict(settings))
+            return True
+    saved = (account.client, account.cfg, appmod._bg)
+    account.client, account.cfg = (lambda: Stub()), (lambda: now["cfg"])
+    appmod._bg = lambda job, done=None: queue.append((job, done))
+    try:
+        now["cfg"] = {"share_time": False, "share_reviews": True}
+        account.push(now["cfg"])
+        now["cfg"] = {"share_time": False, "share_reviews": False}
+        account.push(now["cfg"])
+        now["cfg"] = {"share_time": True, "share_reviews": False}
+        account.push(now["cfg"])
+        check("settings saves: one on its way at a time", len(queue) == 1)
+        job, done = queue.pop(0)
+        done(job())
+        check("settings saves: the clicks meanwhile go as one save, of the config as it is now",
+              len(queue) == 1)
+        job, done = queue.pop(0)
+        done(job())
+        check("settings saves: two in all, in order, the last one the latest",
+              [x["share_time"] for x in sent] == [False, True] and sent[-1]["share_reviews"] is False
+              and not queue, sent)
+    finally:
+        account.client, account.cfg, appmod._bg = saved
+        account._pushing.update(busy=False, again=False)
+
+
 def test_retry_only_what_is_safe_twice():
     """Review: a request that fails is sent once more only when sending it
     twice can't do a thing twice. A POST that may have landed (a new squad)

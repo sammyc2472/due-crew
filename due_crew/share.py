@@ -21,7 +21,7 @@ ON, OFF, AWAY = "🟩", "⬜", "✈️"
 NAME_MAX = 24
 
 
-INVITE_COPIED = "Invite copied. It works once: one per friend."
+INVITE_COPIED = "Invite copied. Send one per friend."
 
 
 def friend_invite(code):

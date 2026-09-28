@@ -111,10 +111,17 @@ export default {
     // 3.4.1: an invite's picture: the name only, drawn per name
     const ipic = INVITE_PNG.exec(url.pathname);
     if (ipic) {
-      const inv = await peekInvite(ipic[1].toUpperCase(), req, env, ctx);
+      const code = ipic[1].toUpperCase();
+      const inv = await peekInvite(code, req, env, ctx);
       if (!inv) return new Response("No invite with that code", { status: 404, headers: { "cache-control": "public, max-age=60" } });
-      return new Response(await png(await drawInvite(inv.name)), { headers: {
+      // drawn once per code and name: asking again can't draw again
+      const key = new Request(`https://duecrew.com/i/${code}.png?n=${encodeURIComponent(inv.name)}`);
+      const hit = await caches.default.match(key);
+      if (hit) return hit;
+      const res = new Response(await png(await drawInvite(inv.name)), { headers: {
         "content-type": "image/png", "x-content-type-options": "nosniff", "cache-control": "public, max-age=3600" } });
+      ctx.waitUntil(caches.default.put(key, res.clone()));
+      return res;
     }
     // 3.2: signed in, duecrew.com opens on your home, not the landing page.
     // The cookie is only a hint here: the home asks the API who you are.

@@ -98,3 +98,19 @@ describe("3.4.1: one-time invites", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe("3.4.1: invites and a deleted account", () => {
+  it("my invites go with me; one I used stays used, and no longer names me", async () => {
+    const sam = await person("sam");
+    const maya = await person("maya");
+    const kai = await person("kai");
+    const a = (await sam.call("POST", "/invites")).body.code;
+    await maya.call("POST", `/invites/${a}/redeem`);
+    await maya.call("DELETE", "/account");
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM invites WHERE used_by = 'maya'").first<number>("n")).toBe(0);
+    const late = await kai.call("POST", `/invites/${a}/redeem`);
+    expect(late.body).toMatchObject({ mutual: false, knocked: true });  // still used: an add, not crew at once
+    await sam.call("DELETE", "/account");
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM invites").first<number>("n")).toBe(0);
+  });
+});

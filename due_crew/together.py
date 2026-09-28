@@ -328,7 +328,8 @@ def my_asks_view():
                     "state": "open", "who": who})
     open_guids = {a["guid"] for a in out}
     tips = _wrap_data().get("tips") or {}
-    answered = [(g, ts) for g, ts in tips.items() if ts and g not in open_guids]
+    answered = [(g, [t for t in ts if isinstance(t, dict)]) for g, ts in tips.items()
+                if isinstance(ts, list) and ts and g not in open_guids][-50:]  # the newest; one bounded query
     if answered and mw.col:
         guids = [g for g, _ts in answered]
         try:

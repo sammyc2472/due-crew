@@ -262,8 +262,7 @@ def ask(card=None):
     else:
         lead = ""
     line, ok = ask_text(mw, "Ask your crew about this card",
-                        lead + "Anyone in your crew with this card sees your ask; they read it "
-                        "from their own deck. One line (optional).")
+                        lead + "Your crew sees it on their copy of the card. One line, optional.")
     if not ok:
         return
     flag(card, clean_note(line) or "")
@@ -283,7 +282,7 @@ def flag(card, q):
     cl.session["tricky"] = flags[-TRICKY_MAX:]
     cl._save_session()
     app.sync(light=True, fetch=False)
-    tooltip("Asked. The first tip shows here when the card comes up.")
+    tooltip("Asked. Tips show here when the card comes up.")
 
 
 def _tips_here(guid):

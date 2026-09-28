@@ -64,6 +64,8 @@ HIDEABLE_TABS = (("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("p
 
 def hidden_tabs(cfg):
     return {k for k in (cfg.get("hidden_tabs") or []) if k in dict(HIDEABLE_TABS)}
+
+
 def _head_label(icon, text):
     """The word; a narrow window shows the icon in its place (see _css)."""
     return f'<span class="hi">{icon}</span><span class="hl">{text}</span>'
@@ -1052,7 +1054,7 @@ def _tricky_html(tricky, mine=None):
         text = _html.escape(str(a.get("text") or "a card"))
         who = [_html.escape(str(w)) for w in a.get("who") or []]
         if a.get("state") == "answered":
-            said = f'{who[0] if who else "A crewmate"} answered &middot; it shows when the card comes up'
+            said = f'{who[0] if who else "A crewmate"} answered'
             tag = f'<span class="dc-ask-st on">{len(who) or 1} tip{"" if len(who) <= 1 else "s"}</span>'
         else:
             said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
@@ -1868,7 +1870,7 @@ def _settings_board(cfg):
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">What it shows</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
-                      "Off: Tools › Due Crew brings it back")
+                      "Tools › Due Crew › Settings turns it back on")
             + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
             + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
             + _st_row("Tabs", f'<span class="st-pills">{pills}</span>')
@@ -1881,7 +1883,7 @@ def _settings_board(cfg):
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
             + '</div>'
-            + f'<div class="st-foot"><span>Sort by clicking the board&rsquo;s headers.</span>'
+            + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
 
 
@@ -1935,7 +1937,7 @@ def settings_html(view, cfg):
                     for k, t in SETTINGS_TABS)
     body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
-    foot = ("Privacy, dates, status and accent follow your account. The rest stays on this computer."
+    foot = ("Privacy, dates, status and accent are saved to your account. The rest stays on this computer."
             if view.get("signed_in") else "")
     return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'

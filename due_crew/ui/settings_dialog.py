@@ -87,9 +87,8 @@ class SettingsDialog(QDialog):
 
         if self.client.signed_in:
             # 2.13: what's in the account follows it; the look is per computer
-            follow = QLabel("Privacy, dates, status, accent, squads and shared decks are saved "
-                            "to your account, so they follow you to other computers and the "
-                            "website. Theme and layout stay on this one.")
+            follow = QLabel("Saved to your account: privacy, dates, status, accent, squads and "
+                            "shared decks. Theme and layout stay on this computer.")
             follow.setWordWrap(True)
             follow.setStyleSheet("font-size: 11px;")
             root.addWidget(follow)

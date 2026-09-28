@@ -364,7 +364,7 @@ In Anki (as a follower):
 ### 3.4.1: invites (option B)
 
 - [ ] Board › Copy invite: the clipboard is one line, "Study with me on
-      Due Crew: duecrew.com/i/…", and the tooltip says it works once.
+      Due Crew: duecrew.com/i/…", and the tooltip says "Send one per friend."
 - [ ] Open the link signed out on a computer: "Name invited you", three
       steps, both Copy buttons work. On a phone: Email it only.
 - [ ] Paste the whole line into a second account's welcome box: "You and

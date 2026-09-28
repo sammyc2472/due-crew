@@ -139,7 +139,7 @@ function copyInvite(friendCode, btn) {
   const text = api("POST", "/invites").then((r) => r.code, () => friendCode)
     .then((code) => `Study with me on Due Crew: duecrew.com/i/${code}`);
   const done = (ok) => {
-    btn.textContent = ok ? "Copied. It works once: one per friend." : "Couldn't copy";
+    btn.textContent = ok ? "Copied. Send one per friend." : "Couldn't copy";
     setTimeout(() => { btn.textContent = "Copy invite"; }, 2400);
   };
   try {
@@ -388,13 +388,7 @@ async function libraryPage() {
 
 /** /plans/new?deck=…#token: signed in by the add-on's link, then a plan for that deck. */
 async function newPlan() {
-  const token = location.hash.slice(1);
-  if (token) {
-    history.replaceState(null, "", location.pathname + location.search);  // the token leaves the address bar
-    try { await api("POST", "/auth/link/redeem", { token }); }
-    catch { /* expired or used: if there's a session already, carry on */ }
-    await whoami();
-  }
+  // the link's token was traded for a session at start
   if (!me) {
     page(h("h1", {}, "That link has expired"),
       h("p", { class: "muted" }, "Links from Anki work once, for five minutes. Open the builder from Anki again, or sign in here."),
@@ -624,7 +618,7 @@ async function invitePage(code) {
 async function account() {
   const out = async (all) => {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
-    me = null; renderNav(); go("/sign-in");
+    me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
   page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
     h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
@@ -1354,7 +1348,7 @@ function peoplePanel() {
       catch (e) { delBtn.disabled = false; outStatus.textContent = e.body?.error === "confirm" ? "That isn't their email." : "That didn't work."; }
     } }, "Delete");
     confirmBox.append(h("b", {}, `Delete ${p.name}'s account?`),
-      h("span", {}, "Everything of theirs goes, in one step, as when they delete it themselves: their crew, squads (a founded one passes on), plans, notes and sessions. It can't be undone. They aren't told."),
+      h("span", {}, "Everything of theirs goes, as when they delete it themselves. It can't be undone, and they aren't told."),
       h("label", {}, h("span", {}, "Type ", h("b", {}, p.email), " to confirm"), typed),
       h("div", { class: "row" }, h("button", { class: "ghost", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
     const list = (title, rows) => h("div", { class: "plist" }, h("span", { class: "lbl" }, title),
@@ -1393,7 +1387,7 @@ function peoplePanel() {
     status.textContent = "Looking…";
     let r;
     try { r = await api("GET", `/admin/people?q=${encodeURIComponent(text)}`); } catch { status.textContent = "That didn't work."; return; }
-    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}. Emails partly hidden; open one to see it in full.` : "Nobody by that.";
+    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}` : "No one found.";
     hits.replaceChildren(...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
       for (const b of hits.children) b.classList.toggle("on", b === e.currentTarget); open(x.uid);
     } }, h("span", {}, `${x.emoji ? x.emoji + " " : ""}`, h("b", {}, x.name), h("small", { class: "muted" }, ` · ${x.email} · joined ${when(x.joined)}`)),
@@ -1557,4 +1551,18 @@ async function route() {
   }
 }
 
-whoami().then(route);
+/** A link from Anki carries a one-time sign-in token after the # (never
+ *  sent to any server log): any page trades it for a session first, and
+ *  it leaves the address bar at once. */
+async function start() {
+  const token = /^#([A-Za-z0-9_-]{43})$/.exec(location.hash);
+  if (token) {
+    history.replaceState(null, "", location.pathname + location.search);
+    try { await api("POST", "/auth/link/redeem", { token: token[1] }); }
+    catch { /* expired or used: a session already here carries on */ }
+  }
+  await whoami();
+  await route();
+}
+
+start();

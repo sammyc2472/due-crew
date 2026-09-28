@@ -81,7 +81,7 @@ newer. Restart Anki after installing.
 2. Got an invite, or a code from a class or a plan? Paste it on the
    welcome screen. Otherwise, copy your invite and send it to a friend.
    When they paste it, you're crew. One invite per friend.
-3. Someone added you with your code? Click **Add back**.
+3. Someone added you? Click **Add back**.
 
 ## Privacy
 
