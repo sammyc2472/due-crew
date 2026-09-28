@@ -457,3 +457,30 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .printout .fx { font-weight: 400; color: #6b6b64; }
 .printout tr.evr td { border-top: 1.5px solid #1f1f1c; }
 .cal2 .you { font-size: 11px; color: var(--muted); }
+/* 3.5, B: the library */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 14px; }
+.pill { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 99px; font-size: 13px; font-weight: 500; padding: 3px 11px; }
+.pill.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.lc { display: grid; gap: 6px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.lc .lcname { font-weight: 700; font-size: 15.5px; color: var(--ink); text-decoration: none; }
+.lc .lcname:hover { color: var(--accent); }
+.lctags { display: flex; flex-wrap: wrap; gap: 4px; }
+.lctags span { background: var(--well); color: var(--muted); border-radius: 99px; padding: 1px 8px; font-size: 12px; }
+.lc .row .btn, .lc .row button { padding: 5px 12px; font-size: 13px; }
+.copyform { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.copyform .status { margin: 0; }
+.libnote { padding: 10px 12px; border-radius: 8px; background: var(--well); display: grid; gap: 6px; }
+.libnote.out { background: var(--warn-tint); }
+.hint { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: center; padding: 9px 12px; border-radius: 8px; background: var(--warn-tint); font-size: 14px; }
+.hint .row { gap: 14px; }
+/* 3.5, C3: the class poster */
+.printout.poster { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 40px 32px; }
+.printout.poster h2 { font-size: 34px; line-height: 1.15; margin: 0; }
+.printout.poster .qr { width: 300px; height: 300px; }
+.printout.poster .qr svg { width: 100%; height: 100%; display: block; }
+.printout.poster .pcode { font: 700 34px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .12em; margin: 4px 0; }
+.printout.poster .psteps { text-align: left; font-size: 16px; line-height: 1.6; margin: 6px 0; }
+@media print { .printout.poster { min-height: 90vh; align-content: center; } }
+button[hidden] { display: none; }
+.lc .copyform button { padding: 5px 12px; font-size: 13px; }

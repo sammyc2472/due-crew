@@ -1100,7 +1100,32 @@ async function builder(id) {
       h("label", { for: "pend" }, "Ends (optional)"), h("div", { class: "row" }, endIn, h("span", { class: "muted small" }, "the exam, or the course's last day")),
       h("label", { for: "pcatch" }, "Catch-up weeks (nothing new)"), catchup,
       h("label", { for: "ptaper" }, "Review-only days at the end"), h("div", { class: "row" }, taper, h("span", { class: "muted small" }, "before the end date: no new cards")),
+      h("label", {}, "Library"), libraryBox(),
       h("div", { style: "margin-top:18px" }, del));
+  }
+
+  /** 3.5, B: list the plan in the library, or take it out. At once, not with Save. */
+  function libraryBox() {
+    if (plan.listed === -1) {
+      return h("div", { class: "libnote out" }, h("b", {}, "Taken out of the library"), h("span", {}, plan.listedNote || ""),
+        h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Write to Sam if it's a mistake."));
+    }
+    const why = plan.audience !== "code" ? "Only a plan anyone with the code can follow goes in the library."
+      : !plan.doc.units.length ? "Put some dates on it first." : null;
+    const status = h("span", { class: "status", role: "status" });
+    const box = h("input", { type: "checkbox", id: "slisted", checked: plan.listed === 1, disabled: !!why && plan.listed !== 1, onchange: async (e) => {
+      box.disabled = true;
+      try { plan = await api("PUT", `/plans/${id}/listed`, { listed: e.target.checked }); status.textContent = plan.listed === 1 ? "In the library." : "Out of the library."; }
+      catch (err) {
+        e.target.checked = !e.target.checked; status.className = "status bad";
+        status.textContent = err.body?.error === "too_many_listed" ? "You have 20 plans in the library. Take one out first." : "That didn't work. Try again.";
+      }
+      box.disabled = false;
+    } });
+    return h("div", { class: "libnote" },
+      h("label", { class: "inline", for: "slisted", style: "margin:0;color:var(--ink);font-size:14px" }, box, " List it in the library"),
+      h("span", { class: "muted small" }, why || "Anyone signed in can find it, look at its calendar, follow it, or copy it into a plan of their own. Your name shows as its author, and its code shows there."),
+      status);
   }
 
   /** B4: under the name, one line: whose it is, with whom, who follows. */
@@ -1111,7 +1136,8 @@ async function builder(id) {
     const f = !author && plan.following;
     const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck,
       f && f.shift ? `your dates run ${f.shift} day${f.shift === 1 ? "" : "s"} later` : null,
-      f && f.paused ? (f.until ? `paused until ${pretty(f.until)}` : "paused") : null];
+      f && f.paused ? (f.until ? `paused until ${pretty(f.until)}` : "paused") : null,
+      plan.basedOn ? credit(plan.basedOn) : null, author && plan.listed === 1 ? "in the library" : null];
     return bits.filter(Boolean).join(" · ");
   }
 
@@ -1125,7 +1151,8 @@ async function builder(id) {
           h("span", { class: "lbl" }, "The plan's code"),
           h("div", { class: "row", style: "justify-content:space-between" }, h("span", { class: "code" }, spaced(plan.code)),
             h("button", { class: "ghost", title: "Send this to your class: the page says how to follow", onclick: (e) => copy(url, e.target) }, "Copy link")),
-          calMenu(plan.code)]
+          calMenu(plan.code),
+          h("button", { class: "linkish", onclick: () => { tab = "calendar"; view = "print"; printOpt.poster = true; shareOpen = false; draw(); } }, "A poster for the class, with a QR code")]
           : h("p", { class: "muted small" }, "Only your squad can follow it. They'll find it in Anki."),
         h("span", { class: "lbl" }, "Planning it with"),
         people()));
@@ -1216,7 +1243,7 @@ async function builder(id) {
   }
 
   // ---- E2: print: a list to study from, a line per study day ----
-  const printOpt = { counts: true, notes: true, off: false, from: null, to: null };
+  const printOpt = { counts: true, notes: true, off: false, from: null, to: null, poster: false };
   /** A day's topics by where they come from: "B&B: Heart failure · Pathoma: Ch 8". */
   function topics(u) {
     const groups = new Map();
@@ -1234,6 +1261,34 @@ async function builder(id) {
     if ((u.cards || []).length) put("Picked", `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`);
     return [...groups.entries()];
   }
+  /** 3.5, C3: a page for the classroom wall: the plan, a QR code of its
+   *  link, the code to type. Only a plan anyone with the code can follow. */
+  function posterView(bar) {
+    const url = `https://duecrew.com/p/${plan.code}`;
+    const qr = h("div", { class: "qr" });
+    const draw1 = () => qr.replaceChildren(QR.svg(url, 300));
+    if (typeof QR !== "undefined") draw1();
+    else {
+      const sc = h("script", { src: "/qr.js" });
+      sc.onload = draw1;
+      sc.onerror = () => qr.replaceChildren(h("p", { class: "muted" }, "The QR code didn't load. Try again."));
+      document.head.append(sc);
+    }
+    const us = doc.units;
+    const last = us.reduce((m, u) => ((u.due || u.opens) > m ? u.due || u.opens : m), us[0]?.opens || "");
+    const paper = h("div", { class: "printout poster" },
+      h("h2", {}, meta.name || plan.name),
+      us.length ? h("p", { class: "pm" }, [(meta.name || plan.name) === plan.doc.deck ? null : plan.doc.deck,
+        `${us.length} date${us.length === 1 ? "" : "s"}, ${pretty(us[0].opens)}${last !== us[0].opens ? ` – ${pretty(last)}` : ""}`].filter(Boolean).join(" · ")) : null,
+      qr,
+      h("p", { class: "pcode" }, spaced(plan.code)),
+      h("ol", { class: "psteps" },
+        h("li", {}, "Scan it, or open ", h("b", {}, `duecrew.com/p/${plan.code}`)),
+        h("li", {}, "In Anki on a computer: Tools › Due Crew › Follow a plan, and type the code")),
+      h("p", { class: "pfoot" }, "Each morning, that day's cards open in your deck."));
+    return h("div", { class: "stack" }, bar, h("div", { class: "paperwrap" }, paper));
+  }
+
   function printView() {
     byOpens();
     const dates = doc.units.map((u) => u.opens).sort();
@@ -1241,7 +1296,11 @@ async function builder(id) {
     const from = printOpt.from || first, to = printOpt.to || lastD;
     const box = (k, t) => h("label", { class: "inline" }, h("input", { type: "checkbox", checked: printOpt[k], onchange: (e) => { printOpt[k] = e.target.checked; draw(); } }), t);
     const dateIn = (k, v) => h("input", { type: "date", value: v, "aria-label": k === "from" ? "From" : "To", onchange: (e) => { printOpt[k] = e.target.value || null; draw(); } });
-    const bar = h("div", { class: "printbar" }, box("counts", "card counts"), box("notes", "notes"), box("off", "days off"),
+    const posterOk = !!plan.code && plan.audience === "code";
+    const kind = posterOk ? h("span", { class: "seg" }, ...[[false, "Dates"], [true, "Poster"]].map(([v, t]) =>
+      h("button", { class: printOpt.poster === v ? "on" : "", "aria-pressed": String(printOpt.poster === v), onclick: () => { printOpt.poster = v; draw(); } }, t))) : null;
+    if (posterOk && printOpt.poster) return posterView(h("div", { class: "printbar" }, kind, h("button", { onclick: () => window.print() }, "Print")));
+    const bar = h("div", { class: "printbar" }, kind, box("counts", "card counts"), box("notes", "notes"), box("off", "days off"),
       h("span", { class: "muted" }, "From"), dateIn("from", from), h("span", { class: "muted" }, "to"), dateIn("to", to),
       h("button", { onclick: () => window.print() }, "Print"));
     // the rows: each day with something new, a review day, or (ticked) a day off
@@ -1299,6 +1358,7 @@ async function builder(id) {
     if (pr.failed) { progressData = null; return h("p", { class: "muted" }, "Couldn't load it. Open the tab again."); }
     byOpens();
     return h("div", {},
+      classHints(pr),
       h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress.`),
       h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
         doc.units.flatMap((u) => {
@@ -1307,6 +1367,34 @@ async function builder(id) {
           return [h("span", {}, u.name), h("span", { class: "bar" }, h("i", { style: `width:${w(c.opened)}` })),
             h("span", { class: "bar" }, h("i", { style: `width:${w(c.done)}` })), h("span", { class: "n" }, `${c.opened} · ${c.done}`)];
         })));
+  }
+
+  /** 3.5, C2: a date most of the class hasn't finished two days after it
+   *  (3 or more sharing, under half done). Counts only; nobody named. What
+   *  helps is on the dates still to come: a day's breather, or a look at
+   *  that day to split what's like it. */
+  function classHints(pr) {
+    if (pr.sharing < 3) return null;
+    const t = today();
+    const behind = doc.units.filter((u) => addDays(u.due || u.opens, 2) <= t && (pr.units[u.id]?.done || 0) < pr.sharing / 2)
+      .sort((a, b) => (b.due || b.opens).localeCompare(a.due || a.opens)).slice(0, 2);
+    if (!behind.length) return null;
+    const later = doc.units.filter((u) => u.opens > t);
+    const breather = () => {
+      // every date still to come, one study day later; events stay on their days
+      for (const u of [...later].sort((a, b) => b.opens.localeCompare(a.opens))) shiftUnit(u, Sched.diff(nextStudy(u.opens), u.opens));
+      for (const r of doc.reviews || []) if (r.day > t) r.day = nextStudy(r.day);
+      byOpens(); mark(); tab = "calendar"; note = `Moved the ${later.length} date${later.length === 1 ? "" : "s"} after today one study day later. Save to keep it.`; draw();
+    };
+    return h("div", { class: "stack", style: "margin-bottom:12px" }, behind.map((u) => {
+      const done = pr.units[u.id]?.done || 0;
+      const late = Sched.diff(t, u.due || u.opens);
+      return h("div", { class: "hint" },
+        h("span", {}, h("b", {}, u.name), ` (${unitTotal(u).toLocaleString()} cards): ${done} of ${pr.sharing} finished, ${late} days after its date.`),
+        h("span", { class: "row" },
+          h("button", { class: "linkish", onclick: () => { tab = "calendar"; picked = u.opens; sideTab = "day"; anchor = u.opens; draw(); } }, "Look at that day"),
+          later.length ? h("button", { class: "linkish", onclick: breather }, "Give the class a day") : null));
+    }));
   }
 
   // ---- history: every save, who and what; the latest undoes ----
@@ -1330,6 +1418,23 @@ async function builder(id) {
         draw(); } }, "Undo") : h("span"))));
   }
 
+  /** Someone looking at a plan they don't follow (from its code or the
+   *  library): follow it here, or copy it into a plan of their own. */
+  let copying = false;
+  function readerActions() {
+    const status = h("span", { class: "status", role: "status" });
+    const follow = plan.code ? h("button", { onclick: async () => {
+      follow.disabled = true;
+      try { plan = await api("POST", "/plans/follow", { code: plan.code }); draw(); }
+      catch (err) { follow.disabled = false; status.className = "status bad"; status.textContent = err.body?.error === "too_many_plans" ? "You follow 20 plans. Stop one first." : "That didn't work. Try again."; }
+    } }, "Follow") : null;
+    return h("div", { class: "stack", style: "margin:6px 0 12px" },
+      h("div", { class: "row" }, follow,
+        plan.library ? h("button", { class: "ghost", onclick: () => { copying = !copying; draw(); } }, "Copy to my plans") : null, status),
+      copying ? copyForm(plan, () => { copying = false; draw(); }) : null,
+      h("p", { class: "muted small" }, "Following opens each date's cards in Anki on its day", plan.code ? ["; or in Anki, Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, plan.code)] : null, "."));
+  }
+
   function draw() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
     const tabs = author ? [["calendar", "Calendar"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
@@ -1342,7 +1447,7 @@ async function builder(id) {
           h("p", { class: "muted small bsub" }, subline())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
-      !author && !plan.following ? h("p", {}, "To follow it: in Anki, Tools › Due Crew › Follow a plan, then paste ", h("b", { class: "mono" }, plan.code || "its code"), ".") : null,
+      !author && !plan.following ? readerActions() : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
       author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status, saveBtn) : null);

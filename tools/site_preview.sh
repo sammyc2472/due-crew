@@ -78,6 +78,11 @@ prog = {"maya": {"hf": [48, 48, 48], "arr": [63, 63, 63], "renp": [212, 120, 212
 for uid, p in prog.items():
     out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, at) VALUES ('stepplanpreview1', {q(uid)}, 1, 0, {q(json.dumps(p))}, {now});")
 out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, at) VALUES ('stepplanpreview1', 'jonah', 0, 0, {now});")
+# 3.5, C2: most of the class is behind on the first date, so Progress says so
+for uid in ["kai", "lee", "ora"]:
+    out.append(f"INSERT INTO users (uid, email, name, created_at) VALUES ({q(uid)}, {q(uid + '@example.com')}, {q(uid.title())}, {now});")
+    out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, at) VALUES ('stepplanpreview1', {q(uid)}, 1, 0, "
+               f"{q(json.dumps({'hf': [48, 20, 48], 'arr': [63, 10, 63]}))}, {now});")
 # 3.2: a crew with weeks, a cheer waiting, a plan Dre follows on a schedule, Dre's log
 real = datetime.date.today()
 wk = lambda n: (real - datetime.timedelta(days=n)).isoformat()
@@ -98,11 +103,26 @@ for uid, studied in [("dre", [0, 1, 2, 3]), ("maya", [0, 1, 3]), ("nia", [1, 2])
     out.append(f"INSERT INTO weeks (uid, doc, updated_at) VALUES ({q(uid)}, {q(json.dumps(w))}, {now});")
 out.append(f"INSERT INTO cheers (to_uid, from_uid, emoji, note, at) VALUES ('dre', 'maya', '🔥', 'go go go', {now});")
 mdoc = {"deck": "Step 1", "units": [
-  {"id": "m1", "name": "Cardio", "opens": wk(10), "due": wk(1), "tags": ["Step1::Cardio"], "decks": [], "cards": []},
-  {"id": "m2", "name": "Renal", "opens": wk(0), "due": (real + datetime.timedelta(days=9)).isoformat(), "tags": ["Step1::Renal"], "decks": [], "cards": []},
-  {"id": "m3", "name": "Pulm", "opens": (real + datetime.timedelta(days=10)).isoformat(), "due": (real + datetime.timedelta(days=24)).isoformat(), "tags": ["Step1::Pulm"], "decks": [], "cards": []}]}
-out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at) VALUES "
-           f"('mayaplanpreview1', 'M4YA2PLN', 'maya', 'Boards sprint', '', 'code', NULL, {q(json.dumps(mdoc))}, 1, {now}, {now});")
+  {"id": "m1", "name": "Cardio", "opens": wk(10), "due": wk(1), "tags": ["Step1::Cardio"], "decks": [], "cards": [], "n": 312},
+  {"id": "m2", "name": "Renal", "opens": wk(0), "due": (real + datetime.timedelta(days=9)).isoformat(), "tags": ["Step1::Renal"], "decks": [], "cards": [], "n": 402},
+  {"id": "m3", "name": "Pulm", "opens": (real + datetime.timedelta(days=10)).isoformat(), "due": (real + datetime.timedelta(days=24)).isoformat(), "tags": ["Step1::Pulm"], "decks": [], "cards": [], "n": 288}]}
+def lib(doc):  # the library's card, as plans.ts libCard makes it (every day a study day)
+    us = doc["units"]; a = us[0]["opens"]; b = max(u.get("due") or u["opens"] for u in us)
+    days = (datetime.date.fromisoformat(b) - datetime.date.fromisoformat(a)).days + 1
+    n = sum(u.get("n", 0) for u in us)
+    return json.dumps({"deck": doc["deck"], "dates": len(us), "from": a, "to": b, "days": days, "n": n, "perDay": round(n / days), "reviews": 0, "events": 0, "ids": 0})
+out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at, listed, listed_at, lib) VALUES "
+           f"('mayaplanpreview1', 'M4YA2PLN', 'maya', 'Boards sprint', 'Three systems, then questions.', 'code', NULL, {q(json.dumps(mdoc))}, 1, {now}, {now}, 1, {now - 3600}, {q(lib(mdoc))});")
+# 3.5, B: two more plans in the library
+for pid, code, who, name, line, deck, unit_list in [
+    ("niaplanpreview01", "N4APULM2", "nia", "Pulm in two weeks", "Physiology first, then pharm.", "Step 1",
+     [("p1", "Pulm physiology", 0, 6, 156), ("p2", "Asthma and COPD", 7, 10, 132)]),
+    ("kaiplanpreview01", "KA7MICRZ", "kai", "Sketchy Micro, bugs first", "Every Sketchy Micro video, in watch order.", "Sketchy Micro",
+     [(f"s{i}", f"Micro {i + 1}", i * 2, i * 2 + 1, 30 + i * 3) for i in range(15)])]:
+    ud = {"deck": deck, "units": [{"id": i, "name": nm, "opens": (real + datetime.timedelta(days=a)).isoformat(), "due": (real + datetime.timedelta(days=b)).isoformat(),
+                                   "tags": [f"T::{i}"], "decks": [], "cards": [], "n": n} for i, nm, a, b, n in unit_list]}
+    out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at, listed, listed_at, lib) VALUES "
+               f"({q(pid)}, {q(code)}, {q(who)}, {q(name)}, {q(line)}, 'code', NULL, {q(json.dumps(ud))}, 1, {now}, {now}, 1, {now - (7200 if who == 'nia' else 60)}, {q(lib(ud))});")
 # 3.3: Maya co-authors Dre's plan; notes on a day; Maya's plan has a note from Dre
 out.append(f"INSERT INTO plan_editors (plan, uid, at) VALUES ('stepplanpreview1', 'maya', {now});")
 out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('stepplanpreview1', 'nia', {q(d(2))}, 'Lab day, keep it light?', {now});")
@@ -144,6 +164,9 @@ cat <<EOF
              http://localhost:$PORT/plans/stepplanpreview1/edit   the builder, with a sample plan
              http://localhost:$PORT/plans/stepplanpreview1        progress (counts only)
              http://localhost:$PORT/p/7KQ4MX2D                  a shared link (try a private window too)
+             http://localhost:$PORT/p/7KQ4MX2D.png              its preview picture (3.5)
+             http://localhost:$PORT/library                  the library (3.5)
+             http://localhost:$PORT/classes                  for classes (3.5)
 
   Sign-in by code works too; the email lands in wrangler's log above instead of an inbox.
   Ctrl-C stops it.

@@ -23,7 +23,7 @@ invocation_logs = false
 directory = "./public"
 binding = "ASSETS"
 # "/" too (3.2): signed in, it sends you to your home instead of the landing page
-run_worker_first = ["/", "/api/*", "/sign-in", "/account", "/home", "/log", "/admin", "/plans", "/plans/*", "/p/*"]
+run_worker_first = ["/", "/api/*", "/sign-in", "/account", "/home", "/log", "/admin", "/library", "/plans", "/plans/*", "/p/*"]
 
 [[services]]
 binding = "API"

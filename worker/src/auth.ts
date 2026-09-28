@@ -206,6 +206,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plan_editors WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_notes WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_log WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    // 3.5, B: copies of my plans keep the plan's name in their credit, not mine
+    "UPDATE plans SET based_on = json_set(based_on, '$.owner', '?') WHERE based_on IS NOT NULL AND json_extract(based_on, '$.id') IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plans WHERE owner = ?1",
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",

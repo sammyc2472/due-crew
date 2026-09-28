@@ -4,6 +4,7 @@
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
+import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
@@ -81,6 +82,14 @@ authed("POST", r(`/plans/${ID}/cards`), P.addCards);
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
+// 3.5, B: the library
+authed("GET", r("/library"), L.list);
+authed("PUT", r(`/plans/${ID}/listed`), L.setListed);
+authed("POST", r(`/plans/${ID}/copy`), L.copy);
+authed("POST", r(`/plans/${ID}/report`), L.report);
+authed("GET", r("/admin/library"), (_q, s, env) => L.takenOut(s, env));
+authed("POST", r(`/admin/library/${ID}`), L.takeOut);
+authed("DELETE", r(`/admin/library/${ID}`), (_q, s, env, p) => L.putBack(s, env, p));
 // 3.3: plans together
 authed("GET", r(`/plans/${ID}/log`), (_q, s, env, p) => P.log(s, env, p));
 authed("PUT", r(`/plans/${ID}/ids`), P.putIds);

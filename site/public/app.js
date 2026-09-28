@@ -108,7 +108,7 @@ function renderNav() {
   if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
   // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
   const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
-  nav.replaceChildren(link("/home", "Home"), link("/plans", "Plans"),
+  nav.replaceChildren(link("/home", "Home"), link("/plans", "Plans"), link("/library", "Library"),
     h("span", { class: "wide-only" }, rest()),
     h("details", { class: "navme calmenu" }, h("summary", { "aria-label": "More" }, (me.name || "?").slice(0, 1).toUpperCase()),
       h("div", { class: "calpop" }, rest())));
@@ -224,7 +224,108 @@ async function plansList() {
     h("h2", {}, "Following"),
     followed.length ? h("div", { class: "plans" }, followed.map(row))
       : h("p", { class: "muted" }, "None yet. A plan's code goes in the box above."),
+    h("p", { class: "muted small", style: "margin-top:12px" }, "Or find one to follow or copy in the ", link("/library", "library"), "."),
   );
+}
+
+// ---- 3.5, B: the library ----
+
+/** "Jordan's plan", or the copy's credit: "based on Step 1 in 8 weeks, Jordan's". */
+const credit = (b) => (b ? `based on ${b.name}${b.owner && b.owner !== "?" ? `, ${b.owner}'s` : ""}` : null);
+
+/** Copy a plan into one of my own: its first date on the day I pick. */
+function copyForm(p, done) {
+  const start = h("input", { type: "date", value: nextMonday(), "aria-label": "Its first date" });
+  const status = h("span", { class: "status", role: "status" });
+  const btn = h("button", { onclick: async () => {
+    if (!start.value) return;
+    btn.disabled = true; status.className = "status"; status.textContent = "Copying…";
+    try {
+      const mine = await api("POST", `/plans/${p.id}/copy`, { start: start.value });
+      go(`/plans/${mine.id}`);
+    } catch (err) {
+      btn.disabled = false; status.className = "status bad";
+      status.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+    }
+  } }, "Copy");
+  return h("div", { class: "copyform" }, h("span", { class: "muted small" }, "Starting"), start, btn,
+    done ? h("button", { class: "linkish", onclick: done }, "Cancel") : null, status);
+}
+
+/** Report a plan in the library: it goes to Sam by mail; nothing is stored. */
+function reportForm(p, done) {
+  const why = h("select", { "aria-label": "Why" }, [["spam", "Not a study plan"], ["copied", "Copied without credit"], ["other", "Something else"]]
+    .map(([v, t]) => h("option", { value: v }, t)));
+  const note = h("input", { maxlength: 200, placeholder: "Anything to add (optional)", "aria-label": "Note" });
+  const status = h("span", { class: "status", role: "status" });
+  const send = h("button", { class: "ghost", onclick: async () => {
+    send.disabled = true;
+    try { await api("POST", `/plans/${p.id}/report`, { reason: why.value, note: note.value.trim() || null }); status.textContent = "Sent. Thanks."; setTimeout(done, 1400); }
+    catch { send.disabled = false; status.className = "status bad"; status.textContent = "That didn't send. Try again."; }
+  } }, "Send");
+  return h("div", { class: "copyform" }, why, note, send, h("button", { class: "linkish", onclick: done }, "Cancel"), status);
+}
+
+async function libraryPage() {
+  const q = new URLSearchParams(location.search);
+  const f = { deck: q.get("deck") || "", len: q.get("len") || "", q: q.get("q") || "" };
+  let pg = 0;
+  const grid = h("div", { class: "lib" });
+  const more = h("button", { class: "quiet", hidden: true }, "More");
+  const filters = h("div", { class: "filters" });
+  const search = h("input", { type: "search", value: f.q, placeholder: "Search plans", "aria-label": "Search plans", style: "flex:1 1 200px" });
+  const empty = h("p", { class: "muted", hidden: true });
+  const tags = (p) => [`${p.dates} date${p.dates === 1 ? "" : "s"}`, p.perDay ? `~${p.perDay.toLocaleString()} new a study day` : null,
+    p.days ? `${Math.max(1, Math.round(p.days / 7))} week${Math.round(p.days / 7) > 1 ? "s" : ""}` : null,
+    p.reviews ? `${p.reviews} review day${p.reviews === 1 ? "" : "s"}` : null, p.events ? `${p.events} event${p.events === 1 ? "" : "s"}` : null].filter(Boolean);
+  function card(p) {
+    const extra = h("div");
+    const el = h("div", { class: "lc" },
+      h("a", { href: `/plans/${p.id}`, "data-go": "", class: "lcname" }, p.name),
+      h("span", { class: "muted small" }, [`${p.ownerName}'s plan`, p.deck, credit(p.basedOn)].filter(Boolean).join(" · ")),
+      p.line ? h("span", { class: "small" }, p.line) : null,
+      h("div", { class: "lctags" }, tags(p).map((t) => h("span", {}, t))),
+      h("span", { class: "muted small" }, `${p.followers.toLocaleString()} following`),
+      h("div", { class: "row" },
+        link(`/plans/${p.id}`, "Look", "btn ghost"),
+        h("button", { onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
+        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : h("button", { class: "linkish", style: "margin-left:auto", onclick: () => extra.replaceChildren(reportForm(p, () => extra.replaceChildren())) }, "Report"),
+        me.admin ? h("button", { class: "linkish", onclick: async () => {
+          const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
+          if (!note) return;
+          try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
+        } }, "Take out") : null),
+      extra);
+    return el;
+  }
+  function pill(k, v, t) {
+    return h("button", { class: `pill${f[k] === v ? " on" : ""}`, onclick: () => { f[k] = f[k] === v ? "" : v; load(true); } }, t);
+  }
+  async function load(fresh) {
+    if (fresh) pg = 0;
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v));
+    history.replaceState(null, "", `/library${qs.toString() ? `?${qs}` : ""}`);
+    here = location.pathname + location.search;
+    qs.set("page", pg);
+    let r;
+    try { r = await api("GET", `/library?${qs}`); } catch { empty.hidden = false; empty.textContent = "Couldn't load the library. Try again."; return; }
+    filters.replaceChildren(
+      ...r.decks.map(([d]) => pill("deck", d, d)),
+      r.decks.length ? h("span", { class: "muted" }, "·") : null,
+      pill("len", "short", "Up to 4 weeks"), pill("len", "mid", "4–12 weeks"), pill("len", "long", "Longer"));
+    if (fresh) grid.replaceChildren();
+    grid.append(...r.plans.map(card));
+    more.hidden = !r.more;
+    empty.hidden = grid.children.length > 0;
+    empty.textContent = f.deck || f.len || f.q ? "Nothing matches. Try fewer filters." : "Nothing here yet. List a plan of yours from its Settings.";
+  }
+  more.addEventListener("click", () => { pg++; load(false); });
+  let t = null;
+  search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = search.value.trim(); load(true); }, 300); });
+  page(h("h1", {}, "Library"),
+    h("p", { class: "muted" }, "Plans people list for anyone to follow or copy. Newest first."),
+    h("div", { class: "row" }, search), filters, grid, empty, more);
+  await load(true);
 }
 
 /** /plans/new?deck=…#token: signed in by the add-on's link, then a plan for that deck. */
@@ -937,6 +1038,7 @@ async function route() {
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
     if (!me) return needSignIn();
     if (path === "/plans") return await plansList();
+    if (path === "/library") return await libraryPage();
     if (path === "/home" || path === "/") return await home();
     if (path === "/log") return await logPage();
     if (path === "/admin") return await adminPage();

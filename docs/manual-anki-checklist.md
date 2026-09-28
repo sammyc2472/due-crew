@@ -324,3 +324,14 @@ In Anki (as a follower):
 - [ ] G4: Plan ▾ › Pause until… (your Away dates fill it in if set). The day after, "Welcome back": move my dates later, or open what I missed. Plan ▾ › Push my dates back… sets the days by hand; the card says "your dates +N days".
 - [ ] G5: fall behind a day: "N new cards from earlier dates waiting · Catch up…": over 3 days, Anki's new count for the deck goes up today only; Stop puts it back.
 - [ ] G6: on the site, the follower's plan page shows "you: 20 of 34", "you: skipped".
+
+### 3.5: previews, the library, classes (site only)
+
+- [ ] A: paste a plan's link (duecrew.com/p/CODE) into iMessage or Slack: the plan's name, one line and its picture show. A squad's plan shows the plain Due Crew card.
+- [ ] B: a plan's Settings › Library › List it in the library; it shows at /library. Filter by its deck and length; search a word in its name.
+- [ ] B: signed in as someone else: Look opens its calendar; Follow follows it (the add-on's next morning opens today's date); Copy › a Monday › it opens as your plan, "based on …".
+- [ ] B: Report on someone's card sends a mail to REPORT_TO. As sammy, Take out: the author's Settings says why and the switch is gone.
+- [ ] C1: duecrew.com/classes reads right on a phone and a computer; the landing links to it.
+- [ ] C2: with 3+ followers sharing and most behind on a past date, Progress says so; Give the class a day moves the later dates (Save to keep).
+- [ ] C3: Share › A poster for the class › Print: one page, the QR code scans to the plan's link.
+

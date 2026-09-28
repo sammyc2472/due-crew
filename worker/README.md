@@ -124,6 +124,24 @@ G3, G4 (migration 0007): `PATCH /plans/{id}/follow` also takes `shift`
 (0-365 days my dates run later), `until` and `since` (a pause's last and
 first day, or null) and `skipped` (unit ids, up to 200). They're mine
 only, on the board's plans and on the plan's `following`.
+3.5, A: `GET /plans/public` also carries `v` (the plan's version, which
+keys its preview picture) and `events: [{day, name}]`.
+3.5, B, the library (migration 0008): `PUT /plans/{id}/listed {listed}`
+(the owner; a plan anyone with the code can follow, with dates; up to 20
+listed a person); `GET /library?deck=&len=short|mid|long&q=&page=` (24 a
+page, newest first, a search puts name matches first; never by
+followers), each with its card (`deck, dates, from, to, days, n, perDay,
+reviews, events, ids`, kept on the plan as `lib` at every save while
+listed), `code`, `ownerName`, `followers`, `mine`, and `decks: [[deck,
+n]]`. A listed plan reads like one shared by code (`GET /plans/{id}`
+without it); a plan's view says `library` and, for its authors, `listed`
+(1, 0, or -1 when the admin took it out, with `listedNote`), and a copy's
+`basedOn: {id, name, owner}`. `POST /plans/{id}/copy {start}`: a plan of
+my own from a listed one (or one I write), its first date on `start`,
+without followers, notes or co-authors. `POST /plans/{id}/report {reason:
+spam|copied|other, note?}` mails REPORT_TO and stores nothing. The admin:
+`POST /admin/library/{id} {note}` takes one out, `DELETE` puts it back,
+`GET /admin/library` lists those taken out.
 
 ### Squads
 
