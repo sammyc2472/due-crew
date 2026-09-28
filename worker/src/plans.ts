@@ -663,13 +663,23 @@ export async function notes(s: Session, env: Env, [id]: string[]): Promise<Respo
       WHERE n.plan = ? ORDER BY n.id LIMIT ?`,
   ).bind(id, NOTES_MAX).all<{ id: number; uid: string; day: string; text: string; at: number; name: string | null; emoji: string | null }>();
   const author = p.owner === s.uid || (await isEditor(env, id, s.uid));
-  return json({ notes: rows.results.map((r) => ({ id: r.id, uid: r.uid, name: r.name || "?", emoji: r.emoji || "", day: r.day,
+  // a plan in the library: its authors' notes (and my own, from before), never a stranger's
+  const authors = p.listed === 1 ? await authorUids(env, p) : null;
+  return json({ notes: rows.results.filter((r) => !authors || authors.has(r.uid) || r.uid === s.uid).map((r) => ({ id: r.id, uid: r.uid, name: r.name || "?", emoji: r.emoji || "", day: r.day,
     text: r.text, at: r.at, mine: r.uid === s.uid, remove: r.uid === s.uid || author })) });
 }
 
-/** POST /plans/{id}/notes {day, text}: a note on a day ("lab day, keep it light"). */
+/** The owner and co-authors. */
+async function authorUids(env: Env, p: Plan): Promise<Set<string>> {
+  const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ?").bind(p.id).all<{ uid: string }>();
+  return new Set([p.owner, ...eds.results.map((e) => e.uid)]);
+}
+
+/** POST /plans/{id}/notes {day, text}: a note on a day ("lab day, keep it light").
+ *  On a plan in the library, where anyone can follow, only its authors write them. */
 export async function addNote(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
-  await inPlan(env, id, s.uid);
+  const p = await inPlan(env, id, s.uid);
+  if (p.listed === 1 && !(await authorUids(env, p)).has(s.uid)) throw new HttpError(403, "authors_only");
   const body = await readJson(req);
   if (!V.isDate(body.day) || !V.isStr(body.text, NOTE_TEXT_MAX * 4, 1)) throw V.bad("note");
   const text = V.oneLine(body.text as string, NOTE_TEXT_MAX);

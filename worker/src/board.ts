@@ -39,7 +39,9 @@ async function feed(env: Env, uid: string) {
     env.DB.prepare(
       `SELECT n.plan, p.name AS plan_name, n.day, n.text, n.at, n.uid, u.name, u.emoji FROM plan_notes n
          JOIN plans p ON p.id = n.plan LEFT JOIN users u ON u.uid = n.uid
-        WHERE n.plan IN (${mine}) AND n.uid != ?1 AND n.at > ?2 ORDER BY n.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
+        WHERE n.plan IN (${mine}) AND n.uid != ?1 AND n.at > ?2
+          AND (p.listed != 1 OR n.uid = p.owner OR n.uid IN (SELECT e.uid FROM plan_editors e WHERE e.plan = n.plan))
+        ORDER BY n.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
     env.DB.prepare(
       `SELECT l.plan, p.name AS plan_name, l.summary, l.at, l.uid, u.name FROM plan_log l
          JOIN plans p ON p.id = l.plan LEFT JOIN users u ON u.uid = l.uid

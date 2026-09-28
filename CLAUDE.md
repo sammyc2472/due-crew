@@ -296,7 +296,8 @@ add-on.
   (migration 0008): an owner lists a code plan (`listed`, `lib` kept at
   every save while listed); `/library` is newest first, never by
   followers; Copy makes my own plan crediting the original (`based_on`);
-  the admin's Take out (`listed = -1`) is sticky. C: `/classes`, the
+  the admin's Take out (`listed = -1`) is sticky; while listed, only its
+  authors write notes (anyone can follow), and only theirs are shown. C: `/classes`, the
   Progress tab's hint (under half of 3+ sharing finished, two days after
   a date), and Print's Poster with a QR code (`site/public/qr.js`).
   `worker/tsconfig.json` includes `site/src`, and `worker/test/site.test.ts`

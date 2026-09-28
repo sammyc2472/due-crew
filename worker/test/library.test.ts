@@ -47,6 +47,34 @@ describe("the library (3.5, B)", () => {
     expect((await api("GET", "/library")).status).toBe(401);
   });
 
+  it("in the library, only its authors write notes; a stranger's earlier ones reach nobody else", async () => {
+    const dre = await person("dre");
+    const p = await plan(dre);
+    const kai = await person("kai");  // a co-author
+    await dre.call("PUT", `/friends/kai`); await kai.call("PUT", `/friends/dre`);
+    expect(await dre.status("POST", `/plans/${p.id}/editors`, { uid: "kai" })).toBe(200);
+    const zed = await person("zed");  // a stranger who follows from the code, before it's listed
+    await zed.call("POST", "/plans/follow", { code: p.code });
+    expect(await zed.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "early note" })).toBe(200);
+    await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true });
+    const maya = await person("maya");  // follows it from the library
+    expect((await maya.call("POST", "/plans/follow", { code: p.code })).status).toBe(200);
+    const no = await maya.call("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "buy essays at spam.example" });
+    expect([no.status, no.body.error]).toEqual([403, "authors_only"]);
+    expect(await dre.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "quiz is closed-book" })).toBe(200);
+    expect(await kai.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-06", text: "lab day" })).toBe(200);
+    const texts = async (who: typeof dre) => (await who.call("GET", `/plans/${p.id}/notes`)).body.notes.map((n: any) => n.text).sort();
+    expect(await texts(maya)).toEqual(["lab day", "quiz is closed-book"]);
+    expect(await texts(zed)).toEqual(["early note", "lab day", "quiz is closed-book"]);  // my own stays mine
+    expect(await texts(dre)).toEqual(["lab day", "quiz is closed-book"]);
+    const feed = (await maya.call("GET", "/board?keep=1&feed=1")).body.feed.filter((x: any) => x.kind === "note").map((x: any) => x.text).sort();
+    expect(feed).toEqual(["lab day", "quiz is closed-book"]);
+    // out of the library, it's a code plan again: followers write notes
+    await dre.call("PUT", `/plans/${p.id}/listed`, { listed: false });
+    expect(await maya.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "thanks" })).toBe(200);
+    expect(await texts(dre)).toContain("early note");
+  });
+
   it("refuses a squad plan, a plan with no dates, and a bad body; taking it out is the owner's", async () => {
     const dre = await person("dre");
     const empty = await dre.call("POST", "/plans", { name: "Empty", deck: "D" });
