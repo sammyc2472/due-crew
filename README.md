@@ -78,9 +78,10 @@ newer. Restart Anki after installing.
 
 1. Click **Start with your email** on the Decks screen. Type in the code
    we send you. There's no password.
-2. Got a code from a friend, a class or a plan? Paste it on the welcome
-   screen. Otherwise, copy your invite and send it to a friend.
-3. When they add you, click **Add back**. You're crew.
+2. Got an invite, or a code from a class or a plan? Paste it on the
+   welcome screen. Otherwise, copy your invite and send it to a friend.
+   When they paste it, you're crew. One invite per friend.
+3. Someone added you with your code? Click **Add back**.
 
 ## Privacy
 

@@ -21,10 +21,14 @@ ON, OFF, AWAY = "🟩", "⬜", "✈️"
 NAME_MAX = 24
 
 
-def friend_invite(friend_code):
-    """One paste with everything a friend needs. Since 2.9 both invites share
-    one shape and the code box takes the whole paste."""
-    return f"Study with me on Due Crew · my code {friend_code}\n{FOOTER}"
+INVITE_COPIED = "Invite copied. It works once: one per friend."
+
+
+def friend_invite(code):
+    """3.4.1: one line and a link. The page behind it says the rest, and
+    the code box takes the whole paste. `code` is a one-time invite (10),
+    or my friend code (6) when one couldn't be made."""
+    return f"Study with me on Due Crew: duecrew.com/i/{code}"
 
 
 def squad_invite(name, code):

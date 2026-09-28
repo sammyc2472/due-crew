@@ -272,25 +272,28 @@ def _fetch_decks(force=False):
 
 
 def _copy_friend_invite():
-    """The solo board's Copy invite. An account without a code yet gets one
-    made here, and the invite is copied when it lands."""
-    from .share import friend_invite
-    if _state["my_code"]:
-        copy_text(friend_invite(_state["my_code"]))
-        tooltip("Invite copied.")
-        return
+    """Copy invite (3.4.1): a one-time link, made now. Offline, the link
+    carries my friend code instead (add, then Add back). An account without
+    a code yet gets one made here too."""
+    from .share import INVITE_COPIED, friend_invite
     cl = client()
+    mine = _state["my_code"]
 
-    def done(code):
-        if not code:
-            tooltip("Couldn't make your code. Check your connection.")
+    def job():
+        return cl.create_invite(), mine or cl.ensure_friend_code(None)
+
+    def done(result):
+        invite, code = result if result else (None, None)
+        if not invite and not code:
+            tooltip("Couldn't make your invite. Check your connection.")
             return
-        _state["my_code"] = code
-        copy_text(friend_invite(code))
-        tooltip("Invite copied.")
-        _swap(cfg())
+        copy_text(friend_invite(invite or code))
+        tooltip(INVITE_COPIED if invite else "Invite copied.")
+        if code and code != _state["my_code"]:
+            _state["my_code"] = code
+            _swap(cfg())
 
-    _bg(lambda: cl.ensure_friend_code(None), done)
+    _bg(job, done)
 
 
 def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
@@ -784,8 +787,12 @@ def _welcome():
 
 def _add_code(code):
     """The day-one card's Add: a friend's code, added now. One request."""
-    from .backend.shapes import friend_code_from, long_code_from
+    from .backend.shapes import friend_code_from, invite_code_from, long_code_from
     typed = code
+    invite = invite_code_from(typed)
+    if invite:
+        _redeem(invite)  # 3.4.1: a one-time invite makes us crew at once
+        return
     code = friend_code_from(typed)
     if not code:
         # 3.4.1: a plan's code opens Follow, a squad's opens Squads
@@ -812,6 +819,21 @@ def _add_code(code):
         refresh_board(full=True)
 
     _bg(lambda: cl.add_friend(code), done)
+
+
+def _redeem(invite):
+    cl = client()
+
+    def done(result):
+        friend, err = result if result else (None, None)
+        if not friend:
+            tooltip(html.escape(err or "Couldn't add. Check your connection."))
+            return
+        name = html.escape(str(friend.get("name") or "?"))
+        tooltip(f"You and {name} are crew." if friend.get("mutual") else f"{name} isn't in your crew now.")
+        refresh_board(full=True)
+
+    _bg(lambda: cl.redeem_invite(invite), done)
 
 
 def _crew_menu(c):

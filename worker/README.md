@@ -26,7 +26,7 @@ import takes `Authorization: Bearer <token>`.
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
 | `GET /auth/me` | `{uid, email, name, emoji}`. |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
-| `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/` or `/p/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
+| `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
 | `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
@@ -78,6 +78,9 @@ import takes `Authorization: Bearer <token>`.
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
+| `POST /invites` | 3.4.1: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends my unused ones. |
+| `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
+| `POST /invites/{code}/redeem` | I'm crew with its maker at once: both edges, knocks between us cleared, one use (410 `used`/`expired`, 400 `own_code`). The same person again writes nothing. Shares the add's 30 an hour. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
 | `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card (5,000 a person), for mutual friends stuck on it. |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |

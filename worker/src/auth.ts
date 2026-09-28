@@ -242,6 +242,7 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plans WHERE owner = ?1",
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",
+    "DELETE FROM invites WHERE uid = ?1",
     // 3.2
     "DELETE FROM knows WHERE uid = ?1",
     "DELETE FROM tips WHERE uid = ?1",
@@ -336,7 +337,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
 
 // ---- a link to open on the computer (3.4 review, C2) ----
 
-const LINK_PATH = /^\/(p\/[A-Z0-9]{8})?$/;
+const LINK_PATH = /^\/(p\/[A-Z0-9]{8}|i\/[A-Z0-9]{6}|i\/[A-Z0-9]{10})?$/;  // 3.4.1: an invite too
 
 /** POST /links/email {email, path}: someone on a phone sends themselves the
  *  page they're on, to open where Anki is. One fixed message with that link

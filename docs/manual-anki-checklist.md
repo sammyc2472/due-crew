@@ -361,3 +361,16 @@ In Anki (as a follower):
 - [ ] Welcome screen and the board's code box: a friend's code adds them; a plan's code opens Follow; a squad's opens Squads. A pasted invite works in each.
 - [ ] Alone on the board after adding someone: "Waiting for Name to add you back."
 
+### 3.4.1: invites (option B)
+
+- [ ] Board › Copy invite: the clipboard is one line, "Study with me on
+      Due Crew: duecrew.com/i/…", and the tooltip says it works once.
+- [ ] Open the link signed out on a computer: "Name invited you", three
+      steps, both Copy buttons work. On a phone: Email it only.
+- [ ] Paste the whole line into a second account's welcome box: "You and
+      … are crew", and both boards show each other with no Add back.
+- [ ] Paste it again from a third account: "This invite was used."
+- [ ] Offline, Copy invite still copies a link, with the friend code in it;
+      pasting that adds, and the other side sees Add back.
+- [ ] Paste the link into iMessage or Discord: the preview reads "… invited
+      you".

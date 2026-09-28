@@ -179,6 +179,8 @@ export async function newCode(req: Request, s: Session, env: Env): Promise<Respo
     await env.DB.batch([
       env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(code, s.uid),
       env.DB.prepare("DELETE FROM codes WHERE uid = ? AND code != ?").bind(s.uid, code),
+      // 3.4.1: a new code also ends the invite links I haven't seen used
+      env.DB.prepare("DELETE FROM invites WHERE uid = ? AND used_by IS NULL").bind(s.uid),
     ]);
     return json({ code });
   }

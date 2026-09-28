@@ -377,17 +377,28 @@ function codeBox() {
   const say = (cls, ...kids) => out.replaceChildren(h("div", { class: `res ${cls}` }, ...kids));
   const code = () => {
     const t = input.value.toUpperCase();
+    const inLink = /\/I\/([A-Z0-9]{10}|[A-Z0-9]{6})(?![A-Z0-9])/.exec(t);  // 3.4.1: an invite's link
+    if (inLink) return inLink[1];
     const bare = t.replace(/[^A-Z0-9]/g, "");
-    if (bare.length === 6 || bare.length === 8) return bare;
+    if (bare.length === 6 || bare.length === 8 || bare.length === 10) return bare;
     const m = /(?:^|[^A-Z0-9])([A-Z0-9]{4}\s?[A-Z0-9]{4}|[A-Z0-9]{6})(?:[^A-Z0-9]|$)/.exec(t);  // pasted with its invite
     return m ? m[1].replace(/\s/g, "") : "";
   };
   const done = (text) => { say("ok", h("span", {}, text)); input.value = ""; };
   async function look() {
     const c = code();
-    if (!c) { say("bad", h("span", {}, "Codes are 6 or 8 letters and numbers. Pasting the whole invite works too.")); return; }
+    if (!c) { say("bad", h("span", {}, "That doesn't look like a code. Pasting the whole invite works too.")); return; }
     say("", h("span", { class: "muted" }, "Looking…"));
     try {
+      if (c.length === 10) {
+        const inv = await api("GET", `/invites/${c}`);
+        const who = `${inv.emoji ? `${inv.emoji} ` : ""}${inv.name}`;
+        if (inv.state !== "ok") return say("bad", h("span", {}, inv.state === "used" ? "This invite was used." : `This invite has expired. Ask ${inv.name} for a new one.`));
+        return say("", h("b", {}, who), h("span", { class: "muted" }, "an invite"), h("button", { onclick: async () => {
+          try { const r = await api("POST", `/invites/${c}/redeem`); done(r.mutual ? `You and ${r.name} are crew.` : `${r.name} isn't in your crew now.`); }
+          catch (err) { say("bad", h("span", {}, err.status === 400 ? "That's your own invite." : err.status === 410 ? "This invite was just used." : "That didn't work. Try again.")); }
+        } }, `Add ${inv.name}`));
+      }
       if (c.length === 6) {
         const f = await api("GET", `/codes/${c}`);
         const who = `${f.emoji ? `${f.emoji} ` : ""}${f.name}`;
@@ -500,6 +511,59 @@ async function codePage(code) {
     h("h2", {}, "Follow it in Anki"), steps(p.deck),
     cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
     me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
+}
+
+/** 3.4.1: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
+ *  at once; a friend code (6) adds them, and they add you back. */
+async function invitePage(code) {
+  let inv = null;
+  try { inv = await api("GET", `/invites/${encodeURIComponent(code)}`); } catch (err) { inv = err.status === 429 ? "slow" : null; }
+  if (!inv || inv === "slow") {
+    page(h("h1", {}, inv ? "Too many tries" : "No invite with that code"),
+      h("p", { class: "muted" }, inv ? "Try again in an hour." : "Check the link with whoever sent it."),
+      h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
+    return;
+  }
+  const once = inv.kind === "invite";
+  const head = h("div", { class: "invwho" }, inv.emoji ? h("span", { class: "em" }, inv.emoji) : null,
+    h("h1", {}, `${inv.name} invited you to study together`));
+  if (inv.state !== "ok") {
+    page(h("div", { class: "invwho" }, inv.emoji ? h("span", { class: "em" }, inv.emoji) : null,
+      h("h1", {}, inv.state === "used" ? "This invite was used" : "This invite has expired")),
+      h("p", { class: "muted" }, `Ask ${inv.name} for a new one.`),
+      h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
+    return;
+  }
+  if (me) {
+    const out = h("p", { class: "status", role: "status" });
+    const btn = h("button", { onclick: async () => {
+      btn.disabled = true;
+      try {
+        const r = once ? await api("POST", `/invites/${code}/redeem`) : await api("POST", `/codes/${code}/add`);
+        out.textContent = r.mutual ? `You and ${r.name} are crew.` : `Added ${r.name}. You're crew once they add you back.`;
+        btn.hidden = true;
+      } catch (err) {
+        btn.disabled = false;
+        out.className = "status bad";
+        out.textContent = err.status === 400 ? "That's your own invite." : err.status === 409 ? `${inv.name} is already in your crew.`
+          : err.status === 410 ? "This invite was just used." : "That didn't work. Try again.";
+      }
+    } }, `Add ${inv.name}`);
+    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "quiet")), out);
+    return;
+  }
+  const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
+  const shown = once ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
+  page(head,
+    emailMe(`/i/${code}`),
+    h("ol", { class: "steps wide-only" },
+      h("li", {}, h("b", {}, "Add Due Crew to Anki. "), "Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ",
+        copyBtn("2035408484"), ", then restart Anki.", h("br"),
+        h("span", { class: "muted small" }, "No Anki yet? ", h("a", { href: "https://apps.ankiweb.net" }, "Get it free"))),
+      h("li", {}, h("b", {}, "Start with your email. "), "On Anki's Decks screen. We'll email you a code."),
+      h("li", {}, h("b", {}, `Paste ${inv.name}'s code `), h("b", { class: "mono" }, shown), " ", copyBtn(code),
+        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`)),
+    h("p", { class: "muted small" }, "Free · your studying goes only to people you add · ", h("a", { href: "/" }, "What's Due Crew?")));
 }
 
 async function account() {
@@ -1420,6 +1484,7 @@ async function route() {
     if (path === "/plans/new") return await newPlan();
     let m;
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
+    if ((m = /^\/i\/([A-Za-z0-9]{1,12})$/.exec(path))) return await invitePage(m[1].toUpperCase());
     if (!me) return needSignIn();
     if (path === "/plans") return await plansList();
     if (path === "/library") return await libraryPage();

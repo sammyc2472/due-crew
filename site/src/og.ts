@@ -212,6 +212,25 @@ export async function draw(p: Peek, code: string): Promise<Canvas> {
   return cv;
 }
 
+/** 3.4.1: an invite link's picture: who invited you, and what to. */
+export async function drawInvite(name: string): Promise<Canvas> {
+  const a = await load();
+  const cv = new Canvas(BG);
+  for (let j = 0; j < LOGO.h; j++) {
+    for (let i = 0; i < LOGO.w; i++) {
+      const k = (j * LOGO.w + i) * 4;
+      cv.blend(X0 + i, 64 + j, [a.logo[k], a.logo[k + 1], a.logo[k + 2]], a.logo[k + 3] / 255);
+    }
+  }
+  const { title, text: body } = a.faces;
+  const head = legible(title, name) ? `${name} invited you` : "You're invited";
+  let y = 260;
+  for (const l of wrap(title, head, X1 - X0, 2)) { text(cv, a, title, l, X0, y, INK); y += 74; }
+  text(cv, a, body, "to study together in Anki", X0, y - 74 + 62, MUTED);
+  text(cv, a, body, "Due Crew · a free Anki add-on", X0, 574, MUTED);
+  return cv;
+}
+
 // ---- PNG ----
 
 const CRC = (() => {

@@ -322,6 +322,7 @@ body:has(main.wide) > .top { max-width: 1320px; }
 main:not(.wide) .calmenu .calpop { left: 0; right: auto; }
 
 /* 3.4 review */
+.invwho { display: flex; align-items: center; gap: 12px; } .invwho .em { font-size: 34px; line-height: 1; } .invwho h1 { margin: 0; }
 .phone-only { display: none; }
 @media (max-width: 700px) { .phone-only { display: block; } .wide-only { display: none !important; } }
 nav .wide-only { display: inline-flex; gap: 16px; }

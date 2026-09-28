@@ -890,7 +890,7 @@ def _table_html(data, cfg, period):
         spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
         # 3.4.1: a friend's, a plan's or a squad's code, or a whole invite
         add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
-               ".replace(/[^A-Z0-9 ]/g,' ').slice(0,200);"
+               ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
                "pycmd('duecrew:addcode:'+v);return false;")
         pending = [str(x) for x in data.get("pending") or []]
         if not pending:
@@ -1085,7 +1085,7 @@ def _pbar(done, total, solid=True):
 def _plans_empty_html():
     """3.4.1: the Plans tab with no plan: three ways in."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
-           ".replace(/[^A-Z0-9 ]/g,' ').slice(0,200);"
+           ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v);return false;")
     return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '

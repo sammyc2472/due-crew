@@ -2670,7 +2670,7 @@ def test_ui_review_board():
     waiting = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": ["Sam <b>"], "my_code": "K7Q2ZP"},
                            {"period": "today"}, 0)
     check("3.4.1: alone, it names who I'm waiting on, escaped; the box takes any code, whole",
-          "Waiting for Sam &lt;b&gt; to add you back." in waiting and "[^A-Z0-9 ]" in waiting and "{6}" not in waiting)
+          "Waiting for Sam &lt;b&gt; to add you back." in waiting and "[^A-Z0-9 \\/]" in waiting and "{6}" not in waiting)
     from due_crew.backend.shapes import friend_code_from, long_code_from
     plan_invite = "Follow MS2 Block 1 on Due Crew \u00b7 code N4AP ULM2"
     check("3.4.1: a plan's code or invite is no friend code, and reads as the 8-character code",
@@ -2679,6 +2679,41 @@ def test_ui_review_board():
           and friend_code_from("STUDY WITH ME CODE K7Q2ZP") == "K7Q2ZP")
     card = board.profile_overlay_js({"name": "Dre", "you": False, "cells": [1, 0], "same_days": 42, "start": "2026-04-06"})
     check("card: the days in common, since the month the heatmap starts", "42 days</b> since April" in card, card[-400:])
+
+
+def test_invite_link_v341():
+    """3.4.1, option B: Copy invite makes a one-time link; whoever pastes it
+    is crew with its maker at once, both edges. One use. A friend code in
+    the same link still adds, and the other adds back."""
+    from due_crew.backend.shapes import friend_code_from, invite_code_from, long_code_from
+    from due_crew.share import friend_invite
+    store = world({"sam": "Sam", "priya": "Priya", "kai": "Kai"})
+    sam, priya, kai = (new_client(store, u) for u in ("sam", "priya", "kai"))
+    invite = sam.create_invite()
+    text = friend_invite(invite)
+    check("invite: one line and a link, the code in it",
+          text == f"Study with me on Due Crew: duecrew.com/i/{invite}" and "\n" not in text, text)
+    # the board's box sends the paste as capitals, with / kept
+    pasted = re.sub(r"[^A-Z0-9 /]", " ", text.upper())
+    check("invite: read from the link, a paste or typed; never a friend, plan or squad code",
+          invite_code_from(text) == invite == invite_code_from(pasted)
+          and invite_code_from(f"{invite[:5]} {invite[5:]}".lower()) == invite
+          and friend_code_from(text) == "" and long_code_from(text) == ""
+          and invite_code_from("SAM123") == "")
+    friend, err = priya.redeem_invite(pasted)
+    check("invite: pasting it makes us crew at once, both edges, no knock",
+          err is None and friend["user_id"] == "sam" and friend["mutual"]
+          and ("sam", "priya") in store.friends and ("priya", "sam") in store.friends
+          and not store.knocks, (friend, err))
+    check("invite: one use; my own says so",
+          kai.redeem_invite(invite)[1] == "This invite was used. Ask for a new one."
+          and sam.redeem_invite(sam.create_invite())[1] == "That's your own invite.")
+    # offline, Copy invite falls back to my friend code in the same link
+    code = store.users["sam"]["code"] or sam.ensure_friend_code(None)
+    link = friend_invite(code)
+    check("invite: a friend code's link still adds (then Add back)",
+          friend_code_from(link) == code and invite_code_from(link) == ""
+          and kai.add_friend(friend_code_from(link))[0]["knocked"], link)
 
 
 def test_retry_only_what_is_safe_twice():

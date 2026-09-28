@@ -5,6 +5,7 @@ import * as Ad from "./admin";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
+import * as I from "./invites";
 import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
@@ -55,6 +56,10 @@ authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, 
 authed("POST", r("/codes"), S.newCode);
 authed("GET", r("/codes/([A-Za-z0-9]{1,12})"), (_q, s, env, p) => S.peekCode(s, env, p));
 authed("POST", r("/codes/([A-Za-z0-9]{1,12})/add"), (_q, s, env, p) => S.addByCode(s, env, p));
+// 3.4.1: one-time invites (duecrew.com/i/CODE); the page asks signed out
+open("GET", r("/invites/([A-Za-z0-9]{1,12})"), (q, env, p) => I.peek(q, env, p));
+authed("POST", r("/invites"), (_q, s, env) => I.create(s, env));
+authed("POST", r("/invites/([A-Za-z0-9]{1,12})/redeem"), (_q, s, env, p) => I.redeem(s, env, p));
 authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
 authed("POST", r(`/knocks/${ID}`), S.sendKnock);
@@ -126,6 +131,7 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM limits WHERE window_start <= ?").bind(now - 86400),
     env.DB.prepare("DELETE FROM sessions WHERE last_used <= ?").bind(now - A.SESSION_IDLE),
     env.DB.prepare("DELETE FROM login_links WHERE expires_at <= ?").bind(now),
+    env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now),
   ]);
 }
 

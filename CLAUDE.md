@@ -333,6 +333,18 @@ add-on.
   (`hidden_tabs`, per computer). A code box anywhere (welcome, the
   board's) takes a friend's, a plan's or a squad's code
   (`shapes.long_code_from`).
+- 3.4.1 invites (mock "Invite Page", option B, migration 0010): Copy
+  invite makes a one-time code (10, `POST /invites`, kept as a hash, one
+  use, 14 days, 20 a day) and copies "Study with me on Due Crew:
+  duecrew.com/i/CODE". Whoever redeems it (`POST /invites/{code}/redeem`,
+  any code box, or the page signed in) is crew with its maker at once,
+  both edges: sending it was the maker's yes. Asking again writes
+  nothing, so a removal since stays a removal; a new friend code ends my
+  unused invites. Offline, the link carries my friend code, which adds
+  and knocks as before. `/i/CODE` on the site (`invitePage`) says who
+  (`GET /invites/{code}`, signed out: a name and an emoji, 300 an hour an
+  address), the three steps on a computer, Email it on a phone; the site
+  Worker writes its preview ("Sam invited you", `drawInvite`).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

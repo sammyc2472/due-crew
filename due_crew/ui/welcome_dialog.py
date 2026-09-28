@@ -11,7 +11,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from ..backend.shapes import friend_code_from, long_code_from
+from ..backend.shapes import friend_code_from, invite_code_from, long_code_from
 from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
 
 
@@ -123,10 +123,16 @@ class WelcomeDialog(QDialog):
         run_bg(self, job, done)
 
     def _copy(self):
-        from ..share import friend_invite
-        if self.code:
-            copy_text(friend_invite(self.code))
-            tooltip("Invite copied.")
+        """3.4.1: a one-time link; offline, the link carries my code."""
+        from ..share import INVITE_COPIED, friend_invite
+        if not self.code:
+            return
+        code = self.code
+
+        def done(invite, _err):
+            copy_text(friend_invite(invite or code))
+            tooltip(INVITE_COPIED if invite else "Invite copied.")
+        run_bg(self, self.client.create_invite, done)
 
     def _plan_or_squad(self, code):
         """A plan's code opens Follow; anything else of that length, Squads."""
@@ -147,8 +153,9 @@ class WelcomeDialog(QDialog):
     def _add(self):
         if not self.loaded or not self.add_btn.isEnabled():
             return
-        code = friend_code_from(self.code_input.text())
-        if not code:
+        invite = invite_code_from(self.code_input.text())
+        code = "" if invite else friend_code_from(self.code_input.text())
+        if not code and not invite:
             # 3.4.1: a plan's or a squad's code (8) works here too
             longer = long_code_from(self.code_input.text())
             if longer:
@@ -156,7 +163,7 @@ class WelcomeDialog(QDialog):
             else:
                 self.status.setText("That doesn't look like a code. Pasting the whole invite works too.")
             return
-        if code == self.code:
+        if code and code == self.code:
             self.status.setText("That's your own code.")
             return
         self.add_btn.setEnabled(False)
@@ -172,14 +179,16 @@ class WelcomeDialog(QDialog):
             self.changed = True
             self.code_input.clear()
             name = friend["name"]
-            if friend["mutual"]:
+            if invite and not friend["mutual"]:
+                self.status.setText(f"{name} isn't in your crew now.")
+            elif friend["mutual"]:
                 self.status.setText(f"You and {name} are crew.")
             elif friend.get("knocked"):
                 self.status.setText(f"Added {name}. They'll see it on their board.")
             else:
                 self.status.setText(f"Added {name}. Send them your code to finish.")
 
-        run_bg(self, lambda: cl.add_friend(code), done)
+        run_bg(self, lambda: cl.redeem_invite(invite) if invite else cl.add_friend(code), done)
 
     def _done(self):
         self.show_up = self.offered and self.show_up_box.isChecked()
