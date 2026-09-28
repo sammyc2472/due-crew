@@ -2667,6 +2667,16 @@ def test_ui_review_board():
                         {"period": "today"}, 0)
     check("C5: alone, the invite is the board", 'class="dc-empty"' in solo and "K7Q2 ZP" in solo
           and "copyinvite" in solo and "duecrew:addcode:" in solo)
+    waiting = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": ["Sam <b>"], "my_code": "K7Q2ZP"},
+                           {"period": "today"}, 0)
+    check("3.4.1: alone, it names who I'm waiting on, escaped; the box takes any code, whole",
+          "Waiting for Sam &lt;b&gt; to add you back." in waiting and "[^A-Z0-9 ]" in waiting and "{6}" not in waiting)
+    from due_crew.backend.shapes import friend_code_from, long_code_from
+    plan_invite = "Follow MS2 Block 1 on Due Crew \u00b7 code N4AP ULM2"
+    check("3.4.1: a plan's code or invite is no friend code, and reads as the 8-character code",
+          friend_code_from(plan_invite) == "" and long_code_from(plan_invite) == "N4APULM2"
+          and long_code_from("n4ap-ulm2") == "N4APULM2" and long_code_from("K7Q2ZP") == ""
+          and friend_code_from("STUDY WITH ME CODE K7Q2ZP") == "K7Q2ZP")
     card = board.profile_overlay_js({"name": "Dre", "you": False, "cells": [1, 0], "same_days": 42, "start": "2026-04-06"})
     check("card: the days in common, since the month the heatmap starts", "42 days</b> since April" in card, card[-400:])
 

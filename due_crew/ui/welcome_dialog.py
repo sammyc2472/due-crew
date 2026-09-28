@@ -11,7 +11,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from ..backend.shapes import friend_code_from
+from ..backend.shapes import friend_code_from, long_code_from
 from . import accent, attach_alive, copy_text, logo_label, run_bg, shared_words
 
 
@@ -128,12 +128,33 @@ class WelcomeDialog(QDialog):
             copy_text(friend_invite(self.code))
             tooltip("Invite copied.")
 
+    def _plan_or_squad(self, code):
+        """A plan's code opens Follow; anything else of that length, Squads."""
+        self.add_btn.setEnabled(False)
+        cl = self.client
+
+        def done(result, err):
+            self.add_btn.setEnabled(True)
+            plan = result[0] if result and not err else None
+            self._done()
+            if plan:
+                from ..plan_flow import open_follow
+                open_follow(code)
+            else:
+                self.open_squads(code)
+        run_bg(self, lambda: cl.peek_plan(code), done)
+
     def _add(self):
         if not self.loaded or not self.add_btn.isEnabled():
             return
         code = friend_code_from(self.code_input.text())
         if not code:
-            self.status.setText("Codes are 6 letters and numbers. Pasting the whole invite works too.")
+            # 3.4.1: a plan's or a squad's code (8) works here too
+            longer = long_code_from(self.code_input.text())
+            if longer:
+                self._plan_or_squad(longer)
+            else:
+                self.status.setText("That doesn't look like a code. Pasting the whole invite works too.")
             return
         if code == self.code:
             self.status.setText("That's your own code.")

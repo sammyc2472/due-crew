@@ -394,6 +394,18 @@ def squad_code_from(text):
     return normalize_code(_code_after_word(text, SQUAD_CODE_LEN) or text)
 
 
+def long_code_from(text):
+    """3.4.1: a plan's or a squad's 8-character code from whatever was typed
+    or pasted: the code, spaced as the site shows it ("N4AP ULM2"), or a
+    whole invite (the code after the word "code"). '' when none."""
+    up = str(text or "").upper()
+    found = re.findall(r"CODE:?\s*([A-Z0-9]{4})[ -]?([A-Z0-9]{4})(?![A-Z0-9])", up)
+    if found:
+        return normalize_code("".join(found[-1]))
+    bare = normalize_code(up)
+    return bare if len(bare) == SQUAD_CODE_LEN else ""
+
+
 def squad_id(code):
     """The squad's id derives from its invite code (the Worker computes the
     same): knowing the code is knowing the id, and there's no directory."""

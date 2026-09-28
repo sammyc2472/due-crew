@@ -810,16 +810,22 @@ def _table_html(data, cfg, period):
         # 3.4 review, C5: until a friend adds me back, the invite is the board
         code = str(data.get("my_code") or "")
         spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
-        add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase(),"
-               "m=v.match(/(^|[^A-Z0-9])([A-Z0-9]{6})([^A-Z0-9]|$)/);"
-               "pycmd('duecrew:addcode:'+(m?m[2]:''));return false;")
-        waiting = len(data.get("pending") or [])
+        # 3.4.1: a friend's, a plan's or a squad's code, or a whole invite
+        add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
+               ".replace(/[^A-Z0-9 ]/g,' ').slice(0,200);"
+               "pycmd('duecrew:addcode:'+v);return false;")
+        pending = [str(x) for x in data.get("pending") or []]
+        if not pending:
+            wait = "They show up here once they add you back."
+        elif len(pending) <= 2:
+            wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
+        else:
+            wait = f"Waiting for {len(pending)} people to add you back."
         solo = (f'<div class="dc-empty"><b>Bring your crew</b>'
-                f'<span style="color: var(--dc-muted);">'
-                f'{"They show up here once they add you back." if not waiting else f"Waiting for {waiting} to add you back."}</span>'
+                f'<span style="color: var(--dc-muted);">{wait}</span>'
                 f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
                 f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
-                f'<div class="row"><input id="dc-addcode" placeholder="Their code, or paste their invite" '
+                f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
                 f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
                 f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
     # the name column ellipsizes, so the table can never outgrow the card;

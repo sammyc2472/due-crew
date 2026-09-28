@@ -784,10 +784,17 @@ def _welcome():
 
 def _add_code(code):
     """The day-one card's Add: a friend's code, added now. One request."""
-    from .backend.shapes import friend_code_from
-    code = friend_code_from(code)
+    from .backend.shapes import friend_code_from, long_code_from
+    typed = code
+    code = friend_code_from(typed)
     if not code:
-        tooltip("Codes are 6 letters and numbers. Pasting the whole invite works too.")
+        # 3.4.1: a plan's code opens Follow, a squad's opens Squads
+        longer = long_code_from(typed)
+        if not longer:
+            tooltip("That doesn't look like a code. Pasting the whole invite works too.")
+            return
+        _bg(lambda: client().peek_plan(longer),
+            lambda r: plan_flow.open_follow(longer) if r and r[0] else open_squads(longer))
         return
     if code == _state["my_code"]:
         tooltip("That's your own code.")
