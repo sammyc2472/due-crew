@@ -115,23 +115,51 @@ def names_by_uid():
             for e in _state["entries"] or [] if not e.get("you")}
 
 
+def tip_list(info, local_tips, names):
+    """The tips on one card, each person once: [{from, name, text, helped}].
+    The server's first (on a card I'm stuck on, from crewmates I can name),
+    then the ones kept here as they arrived (2.10 tuples or 3.4.1 dicts)."""
+    out, seen = [], set()
+    for t in (info or {}).get("tips") or []:
+        u = t.get("from")
+        if u in names and u not in seen:
+            seen.add(u)
+            out.append({"from": u, "name": names[u][0], "text": str(t.get("text") or ""),
+                        "helped": bool(t.get("helped"))})
+    for t in local_tips or []:
+        if isinstance(t, (tuple, list)):
+            t = {"name": t[0], "note": t[1]}
+        u = t.get("from") or ""
+        if u and u in seen:
+            continue
+        seen.add(u)
+        out.append({"from": u, "name": str(t.get("name") or "?"), "text": str(t.get("note") or ""),
+                    "helped": bool(t.get("helped"))})
+    return out
+
+
 def chip_view(info, local_tips, names, asks=()):
     """What the chip says for one card, or None. info: the session's entry
-    for the card; local_tips: [(name, note)] kept from 2.10's flag tips;
-    asks: [(uid, index)] crewmates asking about this card (on their week)."""
+    for the card; local_tips: the tips kept here for it (together.local_tips);
+    asks: [(uid, index)] crewmates asking about this card (on their week).
+    3.4.1, K1: a tip shows its own words in the bar, with This helped."""
     asks = [(u, i) for u, i in asks if u in names]
     if asks:
         name, emoji = names[asks[0][0]]
         return {"kind": "asked", "text": f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]} asked about this",
                 "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
-    tips = [t for t in (info or {}).get("tips") or [] if t.get("from") in names]
-    if tips or local_tips:
-        first = names[tips[0]["from"]][0] if tips else local_tips[0][0]
-        more = len(tips) + len(local_tips) - 1
-        who = first.split(" ")[0]
-        return {"kind": "tip", "text": f"\U0001F4A1 {who}’s tip" + (f" and {more} more" if more > 0 else ""),
-                "cmd": "knowstip"}
+    tips = tip_list(info, local_tips, names)
+    if tips:
+        first = tips[0]
+        view = {"kind": "tip", "text": f"\U0001F4A1 {first['name'].split(' ')[0]}: {first['text']}",
+                "title": first["text"], "cmd": "knowstip"}
+        if len(tips) > 1:
+            view["more"] = len(tips) - 1
+        if first["from"]:
+            view["act"] = "\u2713 Helped" if first["helped"] else "This helped"
+            view["actcmd"] = f"knowshelped:{first['from']}"
+        return view
     if knows:
         name, emoji = names[knows[0]]
         who = name.split(" ")[0]
@@ -151,7 +179,12 @@ _CHIP_JS = """(function () {
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
     'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
   var t = document.createElement('span'); t.textContent = D.text; s.appendChild(t);
-  if (D.act) { var a = document.createElement('b'); a.textContent = D.act; a.style.color = D.accent; s.appendChild(a); }
+  if (D.title) { s.title = D.title; t.style.cssText = 'display:inline-block;max-width:38vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;'; }
+  if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
+  if (D.act) {
+    var a = document.createElement('b'); a.textContent = D.act; a.style.color = D.accent; s.appendChild(a);
+    if (D.actcmd) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
+  }
   s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} };
   cell.appendChild(s);
 })();"""
@@ -182,10 +215,10 @@ def on_answer(card):
         return
     try:
         guid = card.note().guid
-        from .together import tips_for
+        from .together import local_tips
         asks = [(e["user_id"], i) for e in _state["entries"] or [] if not e.get("you")
                 for i, t in enumerate(e.get("tricky") or []) if t.get("guid") == guid and t.get("q")]
-        view = chip_view((client().session.get("cards") or {}).get(guid), tips_for(guid), names_by_uid(), asks)
+        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks)
     except Exception:
         view = None
     if view:
@@ -209,11 +242,12 @@ def _card():
     return getattr(getattr(mw, "reviewer", None), "card", None) if mw.state == "review" else None
 
 
-def ask():
-    """Ask the crewmates who have this card down: a flag with my line. It
-    rides my week as the card's guid and the line; they read the card from
-    their own copy. The first tip takes it down."""
-    card = _card()
+def ask(card=None):
+    """3.4.1, K2: the one way to ask, from the chip or the reviewer's menu,
+    on any card: a flag with my line (optional). It rides my week as the
+    card's guid and the line; crewmates with the card read it from their
+    own copy. The first tip takes it down."""
+    card = card or _card()
     if card is None:
         return
     guid = card.note().guid
@@ -221,10 +255,15 @@ def ask():
     info = (client().session.get("cards") or {}).get(guid) or {}
     who = [names[u][0].split(" ")[0] for u in info.get("knows") or [] if u in names]
     from .ui import ask_text
-    listed = ", ".join(who[:3]) + (f" and {len(who) - 3} more" if len(who) > 3 else "")
-    line, ok = ask_text(mw, "Ask about this card",
-                        f"Your crew sees it, and {listed or 'whoever knows it'} will know it's for them. "
-                        "They see the card from their own deck. One line (optional).")
+    if who:
+        listed = (", ".join(who[:-1]) + " and " + who[-1]) if 1 < len(who) <= 3 else \
+            (", ".join(who[:3]) + f" and {len(who) - 3} more" if len(who) > 3 else who[0])
+        lead = f"{listed} {'has' if len(who) == 1 else 'have'} it down. "
+    else:
+        lead = ""
+    line, ok = ask_text(mw, "Ask your crew about this card",
+                        lead + "Anyone in your crew with this card sees your ask; they read it "
+                        "from their own deck. One line (optional).")
     if not ok:
         return
     flag(card, clean_note(line) or "")
@@ -247,29 +286,25 @@ def flag(card, q):
     tooltip("Asked. The first tip shows here when the card comes up.")
 
 
+def _tips_here(guid):
+    from .together import local_tips
+    return tip_list((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid())
+
+
 def show_tips():
-    """The chip's tips, above the bar: each with This helped."""
+    """The chip's tips, all of them, above the bar: each with This helped."""
     card = _card()
     if card is None:
         return
     guid = card.note().guid
-    names = names_by_uid()
-    info = (client().session.get("cards") or {}).get(guid) or {}
     from aqt.qt import QCursor, QMenu
-    from .together import tips_for
     menu = QMenu(mw)
-    for t in info.get("tips") or []:
-        if t.get("from") not in names:
-            continue
-        who = names[t["from"]][0].split(" ")[0]
-        head = menu.addAction(f"{who}: {t['text']}")
+    for t in _tips_here(guid):
+        head = menu.addAction(f"{t['name'].split(' ')[0]}: {t['text']}")
         head.setEnabled(False)
-        label = "✓ This helped" if t.get("helped") else "This helped"
-        act = menu.addAction(f"    {label}")
-        act.triggered.connect(lambda _c=False, t=t: helped(guid, t["from"], not t.get("helped")))
-    for name, note in tips_for(guid):
-        a = menu.addAction(f"{name.split(' ')[0]}: {note}")
-        a.setEnabled(False)
+        if t["from"]:
+            act = menu.addAction("    \u2713 This helped" if t["helped"] else "    This helped")
+            act.triggered.connect(lambda _c=False, t=t: helped(guid, t["from"], not t["helped"]))
     if not menu.actions():
         return
     menu.exec(QCursor.pos())
@@ -281,9 +316,30 @@ def helped(guid, from_uid, on=True):
     def done(ok):
         if not ok:
             tooltip("Couldn't reach Due Crew. Check your connection.")
-        elif on:
+            return
+        # remembered here too, so the bar says so at once and next time
+        for t in ((cl.session.get("cards") or {}).get(guid) or {}).get("tips") or []:
+            if t.get("from") == from_uid:
+                t["helped"] = on
+        from .together import mark_helped
+        mark_helped(guid, from_uid, on)
+        if on:
             tooltip("Thanks. The tips that help most show first.")
+        card = _card()
+        if card is not None and card.note().guid == guid and getattr(mw.reviewer, "state", "") == "answer":
+            on_answer(card)
     _bg(lambda: cl.tip_helped(guid, from_uid, on), done)
+
+
+def helped_toggle(from_uid):
+    """The bar's This helped (K1): on the tip it shows, for the card up now."""
+    card = _card()
+    if card is None:
+        return
+    guid = card.note().guid
+    tip = next((t for t in _tips_here(guid) if t["from"] == from_uid), None)
+    if tip is not None:
+        helped(guid, from_uid, not tip["helped"])
 
 
 def on_message(cmd, parts=()):
@@ -291,6 +347,8 @@ def on_message(cmd, parts=()):
         ask()
     elif cmd == "knowstip":
         show_tips()
+    elif cmd == "knowshelped" and len(parts) > 2:
+        helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:
         from .together import send_tip
         send_tip(parts[2], parts[3])

@@ -591,6 +591,12 @@ def _css(cfg):
       background: var(--dc-well); display: flex; flex-wrap: wrap; gap: 4px 10px; }}
     #due-crew .dc-flag a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-flag small {{ display: block; color: var(--dc-muted); font-size: 11px; }}
+    #due-crew .dc-flag-h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--dc-muted); margin: 2px 0 4px; }}
+    #due-crew .dc-ask-st {{ margin-left: auto; align-self: center; font-size: 10.5px; font-weight: 700;
+      border-radius: 5px; padding: 1px 6px; background: var(--dc-line); white-space: nowrap; }}
+    #due-crew .dc-ask-st.on {{ color: var(--dc-accent); }}
     #due-crew .dc-code {{ font-family: Menlo, Consolas, monospace; font-weight: 700;
       letter-spacing: 1.5px; color: var(--dc-ink); }}
     /* a narrow window: headers keep their icons, the last-active chips go
@@ -934,31 +940,46 @@ def _presence_html(fresh, dormant, labels, entries):
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
 
 
-def _tricky_html(tricky):
-    """2.10: cards a crewmate flagged "this one's getting me", listed only
-    when I have the same note. Their text is theirs: escaped."""
+def _tricky_html(tricky, mine=None):
+    """2.10: cards a crewmate flagged, listed only when I have the same note.
+    3.4.1, K3: under their own headings, "Asked of you" (asks about cards
+    I have down first) and "Your asks", each with where it stands. Their
+    text is theirs, and a card's text is my own copy's: escaped."""
     out = ""
-    for t in (tricky or [])[:6]:
+    asked = (tricky or [])[:6]
+    if asked:
+        out += '<div class="dc-flag-h">Asked of you</div>'
+    for t in asked:
         who = _html.escape(str(t.get("name", "?")))
         text = _html.escape(str(t.get("text") or "a card"))
         deck = _html.escape(str(t.get("deck") or ""))
         cmd = f'tricktip:{t.get("uid", "")}:{int(t.get("index", 0))}'
         q = _html.escape(str(t.get("q") or ""))
-        if q and t.get("known"):
-            # 3.2: an ask, on a card I have down
-            say = (f'&#129504; <b>{who}</b> asks about a card you know: &ldquo;{q}&rdquo;'
-                   f'<br><small>&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}</small>')
-        else:
-            say = (f'&#129513; <b>{who}</b> finds &ldquo;{text}&rdquo; tricky{" &middot; " + deck if deck else ""}'
-                   + (f': &ldquo;{q}&rdquo;' if q else ""))
+        where = f'&ldquo;{text}&rdquo;{" &middot; " + deck if deck else ""}' + (" &middot; you have this down" if t.get("known") else "")
+        say = (f'&#129504; <b>{who}</b>: &ldquo;{q}&rdquo;' if q
+               else f'&#129513; <b>{who}</b> finds this one tricky') + f'<small>{where}</small>'
         out += (f'<div class="dc-flag"><span>{say}</span>'
                 f'<a href="#" title="One line; it shows when the card comes up for them" '
-                f'onclick="{_pycmd(cmd)}">{"Tip" if q and t.get("known") else "Send a tip"}</a></div>')
+                f'onclick="{_pycmd(cmd)}">Tip</a></div>')
+    mine = (mine or [])[:6]
+    if mine:
+        out += '<div class="dc-flag-h">Your asks</div>'
+    for a in mine:
+        text = _html.escape(str(a.get("text") or "a card"))
+        who = [_html.escape(str(w)) for w in a.get("who") or []]
+        if a.get("state") == "answered":
+            said = f'{who[0] if who else "A crewmate"} answered &middot; it shows when the card comes up'
+            tag = f'<span class="dc-ask-st on">{len(who) or 1} tip{"" if len(who) <= 1 else "s"}</span>'
+        else:
+            said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
+                    f'{"knows" if len(who) == 1 else "know"} this') if who else "Nobody's answered yet"
+            tag = '<span class="dc-ask-st">waiting</span>'
+        out += f'<div class="dc-flag"><span>&ldquo;{text}&rdquo;<small>{said}</small></span>{tag}</div>'
     return out
 
 
-def _decks_html(data, deltas=None, tricky=None, plans=None):
-    return _tricky_html(tricky) + _decks_body(data, deltas)
+def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None):
+    return _tricky_html(tricky, mine) + _decks_body(data, deltas)
 
 
 def _plans_html(plans):
@@ -1387,20 +1408,21 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None):
+           notice=None, asks=None):
     """live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
     room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
     the cards on the Decks tab, a squad's offers on Decks and Squads.
-    notice (3.2.1): the admin's {id, text, link}, on top of every tab."""
+    notice (3.2.1): the admin's {id, text, link}, on top of every tab.
+    asks (3.4.1): my own asks about cards (together.my_asks_view), Decks tab."""
     period = cfg.get("period", "today")
     has_plans = bool((plans or {}).get("cards"))
     if period not in PERIODS or (period == "plans" and not has_plans):
         period = "today"
     show_up = bool(cfg.get("show_up"))
-    body = (_decks_html(data, deltas, tricky, plans) if period == "decks"
+    body = (_decks_html(data, deltas, tricky, plans, asks) if period == "decks"
             else _plans_html(plans) if period == "plans"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"

@@ -181,6 +181,13 @@ add-on.
   The chip is beside Edit on the answer side, never inside a card: who
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
+  3.4.1 (mock "Card Help Flow"): the chip shows a tip's own words (its
+  first tip, one per person, "+N more" opens the rest) with This helped
+  as its own click (`knowshelped`); asking is one thing, "ask my crew
+  about this…" from the chip or the reviewer's menu on any card, a line
+  optional; the Decks tab heads "Asked of you" and "Your asks" (open
+  ones say who has the card down, answered ones who answered), from
+  local data only (`together.my_asks_view`).
 - 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
   which leaves the cheers for Anki); `/log`; `/admin` for the admin.
 - 3.2.1 the admin's notice: the admin is Sam's "sammy" account (`ADMINS`

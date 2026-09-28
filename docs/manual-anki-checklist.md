@@ -342,3 +342,10 @@ In Anki (as a follower):
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
 - [ ] Admin (sammy): tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
 
+### 3.4.1: asking about a card (K1–K3)
+
+- [ ] Right-click a card while reviewing (or More): "Due Crew: ask my crew about this…". The box names who has it down, if anyone; OK with or without a line. Right-click again: "take back my ask".
+- [ ] A crewmate's Decks tab: "Asked of you" with your line, the card from their own copy, and Tip. Your own Decks tab: "Your asks", waiting, and who has it down.
+- [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
+- [ ] Night mode and light mode: the chip and the new headings read clearly.
+

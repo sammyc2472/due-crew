@@ -449,6 +449,7 @@ def _board_html(c):
                         reviews=review_banners(), sync_error=_state["sync_error"],
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
+                        asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
                         room=rooms.board_view(),
                         plans=plan_flow.board_view(c))  # 3.3: the Plans tab shows while I follow one

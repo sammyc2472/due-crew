@@ -2048,7 +2048,13 @@ def test_together_v210():
     check("flags: a card I don't have stays out of view", together.tricky_view() == [])
     sys.modules["aqt"].mw.col = None
     flags = board._tricky_html([dict(view[0], text="S3 <b>")])
-    check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
+    check("flags: escaped, with Tip wired, under Asked of you",
+          "&lt;b&gt;" in flags and "tricktip:dre:0" in flags and "Asked of you" in flags and "Your asks" not in flags)
+    mine = board._tricky_html([], [{"text": "K+ <i>", "state": "open", "who": ["Dre"]},
+                                   {"text": "Digoxin", "state": "answered", "who": ["Priya <b>"]}])
+    check("your asks (K3): where each stands, escaped, no Asked of you when nobody asked",
+          "Your asks" in mine and "Asked of you" not in mine and "Dre knows this" in mine and "waiting" in mine
+          and "Priya &lt;b&gt; answered" in mine and "1 tip" in mine and "<i>" not in mine)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
 
@@ -2077,9 +2083,17 @@ def test_together_v210():
           w["luck"]["exam"] == exam and w["luck"]["lines"][0]["note"] == "Go"
           and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
     from due_crew import cards as crew_cards
-    chip = crew_cards.chip_view(None, together.tips_for("guid000003"), {})
-    check("tips: 3.2, a chip beside Edit, never inside the card",
-          chip == {"kind": "tip", "text": "\U0001F4A1 Eve’s tip", "cmd": "knowstip"})
+    chip = crew_cards.chip_view(None, together.local_tips("guid000003"), {})
+    check("tips: 3.4.1, K1, the tip's own words beside Edit, with This helped, never inside the card",
+          chip["kind"] == "tip" and chip["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and chip["title"] == "S3 = Kentucky"
+          and chip["cmd"] == "knowstip" and chip.get("act") == "This helped"
+          and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
+    js = crew_cards.chip_js(dict(chip, accent="#0a0"))
+    check("tips: This helped is its own click, the tip's words go in as text",
+          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+    old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
+    check("tips: a tip kept before 3.4.1 still shows, without This helped (no one to thank)",
+          old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)
     js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
     check("good-luck card: lines go in as text, and Thanks is wired",
           "textContent" in js and "innerHTML" not in js and "duecrew:luckthanks" in js
@@ -4023,6 +4037,10 @@ def test_who_knows_v32():
     v = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names)
     check("chip: who knows it, and Ask", v["text"] == "\U0001F419 Dre and 1 more know this" and v["cmd"] == "knowsask")
     check("chip: a tip comes first", K.chip_view(cardsin["guid000003"], [], names)["cmd"] == "knowstip")
+    both = K.chip_view(cardsin["guid000003"], [{"from": "dre", "name": "Dre Ng", "note": "same tip"},
+                                               {"from": "mo", "name": "Mo", "note": "another"}], names)
+    check("chip: one tip per person, the rest counted, This helped for the first",
+          both["more"] == 1 and both["actcmd"] == "knowshelped:dre" and both["act"] == "\u2713 Helped", str(both))
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
     check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
@@ -4030,6 +4048,24 @@ def test_who_knows_v32():
     check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
     sam.fetch_board(labels)  # Dre's tip is read, so a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
+    from due_crew import together
+    from due_crew.app import _state
+    real_client, real_entries, real_labels = together.client, _state["entries"], _state["labels"]
+    together.client = lambda: sam
+    _state["labels"] = labels
+    col.db.conn.execute("UPDATE notes SET flds = ? WHERE guid = 'guid000001'", ("Insulin drives {{c1::K}} in\x1fback",))
+    _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}]
+    sam.session.setdefault("cards", {})["guid000003"] = {"knows": ["dre"], "tips": []}
+    w = together._wrap_data()
+    w["tips"] = {"guid000001": [{"from": "dre", "name": "Dre Ng", "note": "x", "day": _day(0)}]}
+    sys.modules["aqt"].mw.col = col
+    asks = together.my_asks_view()
+    sys.modules["aqt"].mw.col = None
+    check("your asks (K3): my open ask says who has it down; an answered one reads its text from my copy",
+          [(a["guid"], a["state"], a["who"]) for a in asks] == [("guid000003", "open", ["Dre"]), ("guid000001", "answered", ["Dre"])]
+          and asks[1]["text"] == "Insulin drives [\u2026] in", str(asks))
+    w.pop("tips", None)
+    together.client, _state["entries"], _state["labels"] = real_client, real_entries, real_labels
     doc = sam.week_doc(labels, {})
     check("ask: rides my week as the guid and my line, never the card's text",
           doc["tricky"] == [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "q": "Trick?"}])
