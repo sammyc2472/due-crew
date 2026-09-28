@@ -369,7 +369,11 @@ In Anki (as a follower):
       steps, both Copy buttons work. On a phone: Email it only.
 - [ ] Paste the whole line into a second account's welcome box: "You and
       … are crew", and both boards show each other with no Add back.
-- [ ] Paste it again from a third account: "This invite was used."
+- [ ] Paste it again from a third account: "Added …", and the first
+      account's board shows "… added you" with Add back.
+- [ ] Pick an accent in Anki; sign in on duecrew.com: its buttons, links,
+      logo and year wear it (light and dark). A second computer takes it
+      at its next pull.
 - [ ] Offline, Copy invite still copies a link, with the friend code in it;
       pasting that adds, and the other side sees Add back.
 - [ ] Paste the link into iMessage or Discord: the preview reads "… invited

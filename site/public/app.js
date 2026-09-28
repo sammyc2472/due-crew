@@ -93,12 +93,70 @@ async function copy(text, btn) {
   setTimeout(() => { btn.textContent = "Copy"; }, 1600);
 }
 
+// ---- my accent (3.4.1): the one I picked in Anki, here too ----
+
+// [accent, ink on it, my row's fill], by day and by night: board.py's ACCENTS
+const ACCENTS = {
+  green: [["#2e7d32", "#ffffff", "#e9f2e9"], ["#7cc47f", "#122912", "#2c372b"]],
+  blue: [["#1e5fb4", "#ffffff", "#e8f0fb"], ["#7fb2f0", "#0b1f3a", "#263244"]],
+  purple: [["#6b3fb5", "#ffffff", "#f0eafb"], ["#b89cf0", "#22143d", "#322a46"]],
+  teal: [["#0f766e", "#ffffff", "#e5f4f2"], ["#7dd3c8", "#0b2a28", "#22383a"]],
+  amber: [["#a35f00", "#ffffff", "#fbf1e2"], ["#e0a458", "#2d1d05", "#3d3323"]],
+  rose: [["#b03052", "#ffffff", "#fbe9ee"], ["#f08fa8", "#3a1220", "#3f2a31"]],
+};
+let worn = "green";
+let brandImgs = null;
+
+function wearAccent(name) {
+  if (!ACCENTS[name] || name === worn) return;
+  worn = name;
+  try { localStorage.setItem("dc-accent", name); } catch { /* private window: this page only */ }
+  const [day, night] = ACCENTS[name];
+  const vars = (t) => `--accent:${t[0]};--accent-ink:${t[1]};--you:${t[2]};`;
+  let tag = document.getElementById("dc-accent");
+  if (!tag) { tag = document.createElement("style"); tag.id = "dc-accent"; document.head.append(tag); }
+  tag.textContent = name === "green" ? "" : `:root{${vars(day)}}@media (prefers-color-scheme: dark){:root{${vars(night)}}}`;
+  // the logo's studied days wear it too, as in Anki: our own file, drawn inline
+  const brand = document.querySelector("header .brand");
+  if (!brand) return;
+  brandImgs ||= [...brand.children];
+  if (name === "green") { brand.replaceChildren(...brandImgs); return; }
+  fetch("/logo.svg").then((r) => r.text()).then((text) => {
+    if (worn !== name) return;
+    const svg = new DOMParser().parseFromString(text.replace(/fill="#2e7d32"/g, 'style="fill:var(--accent)"')
+      .replace(/fill="#242424"/g, 'style="fill:var(--ink)"').replace(/fill="#e2e2da"/g, 'style="fill:var(--line)"'), "image/svg+xml").documentElement;
+    svg.setAttribute("class", "logo-inline");
+    brand.replaceChildren(svg);
+  }).catch(() => {});
+}
+
+try { wearAccent(localStorage.getItem("dc-accent") || "green"); } catch { /* no storage: green until I know */ }
+
+/** 3.4.1: Copy invite makes a one-time link, as in Anki; offline it
+ *  carries my friend code. Safari only lets a click write the clipboard
+ *  if it starts writing at once, so the text goes in as a promise. */
+function copyInvite(friendCode, btn) {
+  const text = api("POST", "/invites").then((r) => r.code, () => friendCode)
+    .then((code) => `Study with me on Due Crew: duecrew.com/i/${code}`);
+  const done = (ok) => {
+    btn.textContent = ok ? "Copied. It works once: one per friend." : "Couldn't copy";
+    setTimeout(() => { btn.textContent = "Copy invite"; }, 2400);
+  };
+  try {
+    if (window.ClipboardItem) {
+      navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })])
+        .then(() => done(true), () => text.then((t) => navigator.clipboard.writeText(t)).then(() => done(true), () => done(false)));
+    } else text.then((t) => navigator.clipboard.writeText(t)).then(() => done(true), () => done(false));
+  } catch { done(false); }
+}
+
 // ---- who's signed in ----
 
 let me = null;  // {uid, name} or null
 
 async function whoami() {
   try { me = await api("GET", "/auth/me"); } catch { me = null; }
+  if (me) wearAccent(me.accent || "green");
   renderNav();
   return me;
 }
@@ -393,10 +451,11 @@ function codeBox() {
       if (c.length === 10) {
         const inv = await api("GET", `/invites/${c}`);
         const who = `${inv.emoji ? `${inv.emoji} ` : ""}${inv.name}`;
-        if (inv.state !== "ok") return say("bad", h("span", {}, inv.state === "used" ? "This invite was used." : `This invite has expired. Ask ${inv.name} for a new one.`));
         return say("", h("b", {}, who), h("span", { class: "muted" }, "an invite"), h("button", { onclick: async () => {
-          try { const r = await api("POST", `/invites/${c}/redeem`); done(r.mutual ? `You and ${r.name} are crew.` : `${r.name} isn't in your crew now.`); }
-          catch (err) { say("bad", h("span", {}, err.status === 400 ? "That's your own invite." : err.status === 410 ? "This invite was just used." : "That didn't work. Try again.")); }
+          try {
+            const r = await api("POST", `/invites/${c}/redeem`);
+            done(r.mutual ? `You and ${r.name} are crew.` : r.knocked ? `Added ${r.name}. You're crew once they add you back.` : `${r.name} isn't in your crew now.`);
+          } catch (err) { say("bad", h("span", {}, err.status === 400 ? "That's your own invite." : "That didn't work. Try again.")); }
         } }, `Add ${inv.name}`));
       }
       if (c.length === 6) {
@@ -524,36 +583,32 @@ async function invitePage(code) {
       h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
     return;
   }
-  const once = inv.kind === "invite";
+  // a one-time invite, first use within 14 days: crew at once. Used or old,
+  // it still adds, and the one who sent it adds back
+  const once = inv.kind === "invite" && inv.state === "ok";
   const head = h("div", { class: "invwho" }, inv.emoji ? h("span", { class: "em" }, inv.emoji) : null,
     h("h1", {}, `${inv.name} invited you to study together`));
-  if (inv.state !== "ok") {
-    page(h("div", { class: "invwho" }, inv.emoji ? h("span", { class: "em" }, inv.emoji) : null,
-      h("h1", {}, inv.state === "used" ? "This invite was used" : "This invite has expired")),
-      h("p", { class: "muted" }, `Ask ${inv.name} for a new one.`),
-      h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
-    return;
-  }
   if (me) {
     const out = h("p", { class: "status", role: "status" });
     const btn = h("button", { onclick: async () => {
       btn.disabled = true;
       try {
-        const r = once ? await api("POST", `/invites/${code}/redeem`) : await api("POST", `/codes/${code}/add`);
-        out.textContent = r.mutual ? `You and ${r.name} are crew.` : `Added ${r.name}. You're crew once they add you back.`;
+        const r = inv.kind === "invite" ? await api("POST", `/invites/${code}/redeem`) : await api("POST", `/codes/${code}/add`);
+        out.textContent = r.mutual ? `You and ${r.name} are crew.` : r.knocked === false ? `${r.name} isn't in your crew now.`
+          : `Added ${r.name}. You're crew once they add you back.`;
         btn.hidden = true;
       } catch (err) {
         btn.disabled = false;
         out.className = "status bad";
         out.textContent = err.status === 400 ? "That's your own invite." : err.status === 409 ? `${inv.name} is already in your crew.`
-          : err.status === 410 ? "This invite was just used." : "That didn't work. Try again.";
+          : "That didn't work. Try again.";
       }
     } }, `Add ${inv.name}`);
     page(head, h("div", { class: "row" }, btn, link("/home", "Home", "quiet")), out);
     return;
   }
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
-  const shown = once ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
+  const shown = code.length === 10 ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
   page(head,
     emailMe(`/i/${code}`),
     h("ol", { class: "steps wide-only" },
@@ -880,7 +935,7 @@ async function home() {
   // 3.4 review, H1 / 3.5, H: my code to give, and any code I was sent, in the rail
   const friends = h("section", { class: "panel" }, h("h4", {}, "Friends"),
     h("div", { class: "row" }, h("span", { class: "small" }, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
-      b.me.code ? h("button", { class: "linkish", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy invite") : null),
+      b.me.code ? h("button", { class: "linkish", onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null),
     codeBox());
   page(todayStrip(followed, my[t]), h("div", { class: "wb" },
     h("div", { class: "stack" },

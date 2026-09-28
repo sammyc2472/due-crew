@@ -839,7 +839,9 @@ def _redeem(invite):
             tooltip(html.escape(err or "Couldn't add. Check your connection."))
             return
         name = html.escape(str(friend.get("name") or "?"))
-        tooltip(f"You and {name} are crew." if friend.get("mutual") else f"{name} isn't in your crew now.")
+        tooltip(f"You and {name} are crew." if friend.get("mutual")
+                else f"Added {name}. They'll see it on their board." if friend.get("knocked")
+                else f"{name} isn't in your crew now.")
         refresh_board(full=True)
 
     _bg(lambda: cl.redeem_invite(invite), done)

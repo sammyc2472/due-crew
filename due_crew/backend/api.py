@@ -667,17 +667,17 @@ class ApiClient:
         return code if status == 200 and re.fullmatch(r"[A-Z0-9]{10}", code) else None
 
     def redeem_invite(self, code):
-        """(info, error), as add_friend: the invite's maker and I are crew."""
+        """(info, error), as add_friend: the invite's maker and I are crew
+        (its first use), or I've added them and they add back (after)."""
         code = invite_code_from(code)
         if not code:
             return None, "That invite doesn't match anyone."
         status, data = self._call("POST", f"/invites/{code}/redeem")
         if status == 200:
+            # used or old, it adds (knocked), and they add back
             return {"user_id": str(data["uid"]), "name": str(data.get("name") or "?"),
-                    "mutual": bool(data.get("mutual")), "knocked": False}, None
+                    "mutual": bool(data.get("mutual")), "knocked": bool(data.get("knocked"))}, None
         return None, {"own_code": "That's your own invite.",
-                      "used": "This invite was used. Ask for a new one.",
-                      "expired": "This invite has expired. Ask for a new one.",
                       "no_match": "That invite doesn't match anyone."}.get(data.get("error"), "Couldn't add. Try again.")
 
     def add_back(self, uid):

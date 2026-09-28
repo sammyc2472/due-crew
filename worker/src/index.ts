@@ -131,7 +131,8 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM limits WHERE window_start <= ?").bind(now - 86400),
     env.DB.prepare("DELETE FROM sessions WHERE last_used <= ?").bind(now - A.SESSION_IDLE),
     env.DB.prepare("DELETE FROM login_links WHERE expires_at <= ?").bind(now),
-    env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now),
+    // 3.4.1: an invite keeps working as an add (then Add back) for a year
+    env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
   ]);
 }
 

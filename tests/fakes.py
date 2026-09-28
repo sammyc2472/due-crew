@@ -697,7 +697,7 @@ class FakeWorker:
                 cand = f"C{abs(hash((me, n, len(self.codes)))) % 10**5:05d}"
                 code = cand if cand not in self.codes else None
             self.codes = {c: u for c, u in self.codes.items() if u != me}
-            self.invites = {c: i for c, i in self.invites.items() if i["uid"] != me or i["used_by"]}
+            self.invites = {c: i for c, i in self.invites.items() if i["uid"] != me}
             self.codes[code] = me
             self.users[me]["code"] = code
             return 200, {"code": code}
@@ -736,14 +736,19 @@ class FakeWorker:
             o = self.users[owner]
             info = {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or ""}
             if inv["used_by"] == me:
-                return 200, {**info, "mutual": self.mutual(me, owner)}
-            if inv["used_by"]:
-                raise Bad(410, "used")
-            inv["used_by"] = me
-            self.friends |= {(me, owner), (owner, me)}
-            self.knocks.pop((owner, me), None)
-            self.knocks.pop((me, owner), None)
-            return 200, {**info, "mutual": True}
+                return 200, {**info, "mutual": self.mutual(me, owner), "knocked": False}
+            if not inv["used_by"]:
+                inv["used_by"] = me
+                self.friends |= {(me, owner), (owner, me)}
+                self.knocks.pop((owner, me), None)
+                self.knocks.pop((me, owner), None)
+                return 200, {**info, "mutual": True, "knocked": False}
+            # used: as their friend code (add, then their Add back)
+            self.friends.add((me, owner))
+            mutual = self.mutual(me, owner)
+            if not mutual:
+                self.knocks[(owner, me)] = {"squad": "", "at": _now()}
+            return 200, {**info, "mutual": mutual, "knocked": not mutual}
         raise Bad(405, "method")
 
     def _cheer(self, me, to, body):

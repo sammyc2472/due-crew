@@ -1,12 +1,14 @@
 // 3.4.1: one-time invites (duecrew.com/i/CODE). Copy invite makes one; the
-// person who redeems it and the one who made it are crew at once, both
-// edges, with no Add back: sending the link was the inviter's yes. One use,
-// 14 days, stored as a hash. A friend code (six) in the same link still
-// works as before: add, then Add back.
+// first person to redeem it within 14 days and the one who made it are crew
+// at once, both edges, with no Add back: sending the link was the inviter's
+// yes, for one person. Anyone after that (a link in a group chat), or later,
+// gets what the friend code gives: add, then the inviter's Add back. Stored
+// as a hash, kept a year for that. A friend code (six) in the same link
+// works as it always has.
 
 import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
-import { CODE_ALPHABET, nameOf } from "./social";
+import { CODE_ALPHABET, added, mutual, nameOf } from "./social";
 import { Env, HttpError, clientIp, json, nowSec, sha256Hex } from "./util";
 
 export const INVITE_LEN = 10;
@@ -54,13 +56,16 @@ export async function peek(req: Request, env: Env, [raw]: string[]): Promise<Res
     .bind(await hashOf(code)).first<{ uid: string; expires_at: number; used_by: string | null }>();
   const u = row ? await nameOf(env, row.uid) : null;
   if (!row || !u) throw new HttpError(404, "no_match");
+  // used or expired, it still adds (they add back): the page says which
   const state = row.used_by ? "used" : row.expires_at <= nowSec() ? "expired" : "ok";
   return json({ kind: "invite", ...u, state });
 }
 
 /** POST /invites/{code}/redeem: I'm crew with whoever made it. Only the
- *  first redeem writes; the same person asking again is told where things
- *  stand (a removal since then stays a removal). */
+ *  first redeem, within 14 days, makes both edges. After that (someone
+ *  else used it, or it's old) it works as their friend code: I add them,
+ *  they're knocked, and Add back is theirs to click. The same person
+ *  asking again is told where things stand (a removal stays a removal). */
 export async function redeem(s: Session, env: Env, [raw]: string[]): Promise<Response> {
   await limitOrThrow(env, `addcode:${s.uid}`, 30, 3600);  // the same guesses as adding by code
   const code = raw.toUpperCase();
@@ -73,30 +78,40 @@ export async function redeem(s: Session, env: Env, [raw]: string[]): Promise<Res
   if (row.uid === s.uid) throw new HttpError(400, "own_code");
   const now = nowSec();
   if (row.used_by === s.uid) {
-    const back = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM friends WHERE (owner = ?1 AND friend = ?2) OR (owner = ?2 AND friend = ?1)",
-    ).bind(s.uid, row.uid).first<number>("n");
-    return json({ uid: row.uid, ...u, mutual: back === 2 });
+    return json({ uid: row.uid, ...u, mutual: await mutual(env, s.uid, row.uid), knocked: false });
   }
-  if (row.used_by) throw new HttpError(410, "used");
-  if (row.expires_at <= now) throw new HttpError(410, "expired");
-  // the claim and both edges in one transaction; the claim's WHERE makes a
-  // race lose cleanly (its edges insert nothing new)
-  const [claim] = await env.DB.batch([
-    env.DB.prepare("UPDATE invites SET used_by = ?1, used_at = ?2 WHERE hash = ?3 AND used_by IS NULL AND expires_at > ?2")
-      .bind(s.uid, now, hash),
-    env.DB.prepare(
-      `INSERT INTO friends (owner, friend, at) SELECT ?1, ?2, ?3
-       WHERE EXISTS (SELECT 1 FROM invites WHERE hash = ?4 AND used_by = ?1)
-       ON CONFLICT DO NOTHING`).bind(s.uid, row.uid, now, hash),
-    env.DB.prepare(
-      `INSERT INTO friends (owner, friend, at) SELECT ?2, ?1, ?3
-       WHERE EXISTS (SELECT 1 FROM invites WHERE hash = ?4 AND used_by = ?1)
-       ON CONFLICT DO NOTHING`).bind(s.uid, row.uid, now, hash),
-    env.DB.prepare(
-      `DELETE FROM knocks WHERE ((to_uid = ?1 AND from_uid = ?2) OR (to_uid = ?2 AND from_uid = ?1))
-       AND EXISTS (SELECT 1 FROM invites WHERE hash = ?3 AND used_by = ?1)`).bind(s.uid, row.uid, hash),
-  ]);
-  if (!claim.meta.changes) throw new HttpError(410, "used");
-  return json({ uid: row.uid, ...u, mutual: true });
+  if (!row.used_by && row.expires_at > now) {
+    // the claim and both edges in one transaction; the claim's WHERE makes a
+    // race lose cleanly (its edges insert nothing new), and the loser adds below
+    const [claim] = await env.DB.batch([
+      env.DB.prepare("UPDATE invites SET used_by = ?1, used_at = ?2 WHERE hash = ?3 AND used_by IS NULL AND expires_at > ?2")
+        .bind(s.uid, now, hash),
+      env.DB.prepare(
+        `INSERT INTO friends (owner, friend, at) SELECT ?1, ?2, ?3
+         WHERE EXISTS (SELECT 1 FROM invites WHERE hash = ?4 AND used_by = ?1)
+         ON CONFLICT DO NOTHING`).bind(s.uid, row.uid, now, hash),
+      env.DB.prepare(
+        `INSERT INTO friends (owner, friend, at) SELECT ?2, ?1, ?3
+         WHERE EXISTS (SELECT 1 FROM invites WHERE hash = ?4 AND used_by = ?1)
+         ON CONFLICT DO NOTHING`).bind(s.uid, row.uid, now, hash),
+      env.DB.prepare(
+        `DELETE FROM knocks WHERE ((to_uid = ?1 AND from_uid = ?2) OR (to_uid = ?2 AND from_uid = ?1))
+         AND EXISTS (SELECT 1 FROM invites WHERE hash = ?3 AND used_by = ?1)`).bind(s.uid, row.uid, hash),
+    ]);
+    if (claim.meta.changes) return json({ uid: row.uid, ...u, mutual: true, knocked: false });
+  }
+  // used by someone else, or past 14 days: as their friend code
+  const already = await added(env, s.uid, row.uid);
+  if (!already) {
+    await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
+      .bind(s.uid, row.uid, now).run();
+  }
+  const isMutual = await mutual(env, s.uid, row.uid);
+  if (!isMutual) {
+    await env.DB.prepare(
+      `INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES (?, ?, NULL, ?)
+       ON CONFLICT(to_uid, from_uid) DO UPDATE SET squad = NULL, at = excluded.at`,
+    ).bind(row.uid, s.uid, now).run();
+  }
+  return json({ uid: row.uid, ...u, mutual: isMutual, knocked: !isMutual });
 }

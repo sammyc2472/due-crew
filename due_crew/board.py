@@ -1935,7 +1935,7 @@ def settings_html(view, cfg):
                     for k, t in SETTINGS_TABS)
     body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
-    foot = ("Privacy, dates and status follow your account. The look stays on this computer."
+    foot = ("Privacy, dates, status and accent follow your account. The rest stays on this computer."
             if view.get("signed_in") else "")
     return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'

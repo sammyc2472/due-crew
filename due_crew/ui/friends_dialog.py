@@ -309,7 +309,7 @@ class FriendsDialog(QDialog):
             self.code_input.clear()
             self._render_list()
             name = html.escape(friend["name"])
-            if invite and not friend["mutual"]:
+            if invite and not friend["mutual"] and not friend.get("knocked"):
                 tooltip(f"{name} isn't in your crew now.")
             elif friend["mutual"]:
                 tooltip(f"You and {name} are crew.")

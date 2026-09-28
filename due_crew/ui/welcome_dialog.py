@@ -179,7 +179,7 @@ class WelcomeDialog(QDialog):
             self.changed = True
             self.code_input.clear()
             name = friend["name"]
-            if invite and not friend["mutual"]:
+            if invite and not friend["mutual"] and not friend.get("knocked"):
                 self.status.setText(f"{name} isn't in your crew now.")
             elif friend["mutual"]:
                 self.status.setText(f"You and {name} are crew.")

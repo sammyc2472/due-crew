@@ -1534,15 +1534,15 @@ def test_settings_follow_account_v213():
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
     doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
-    check("pick: only what follows the account; decks with names; accent and sort stay",
-          "accent" not in doc and "sort" not in doc
+    check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.4.1)",
+          doc["accent"] == "rose" and "sort" not in doc
           and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
     here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
     resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
     got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
-    check("apply: the account's settings land; the deck matches by id, else by name; accent stays",
+    check("apply: the account's settings land, the accent too; the deck matches by id, else by name",
           got["share_retention"] is False and got["exam_date"] == "2026-10-02"
-          and got["shared_decks"] == [11, 99] and got["accent"] == "green" and got["shared_decks_set"])
+          and got["shared_decks"] == [11, 99] and got["accent"] == "rose" and got["shared_decks_set"])
     junk = account.clean({"share_retention": "no", "status": "x" * 500, "squads": [{"id": 5}, "x"],
                           "shared_decks": [{"id": "abc"}, {"id": 3, "name": 7}] + [{"id": 1}] * 500})
     check("clean: wrong types dropped, text and lists bounded",
@@ -1604,7 +1604,7 @@ def test_settings_follow_account_v213():
         account._pulled = real_pulled
         check("second computer: pulls before its first sync, and takes the account's settings",
               order == ["pulled", "sync"] and b["cfg"]["shared_decks"] == [11, 77]
-              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "blue")
+              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "rose")
         b["cfg"]["status"] = "200 cards, then bed"
         account.on_change(b["cfg"])
         use(a)
@@ -2705,9 +2705,13 @@ def test_invite_link_v341():
           err is None and friend["user_id"] == "sam" and friend["mutual"]
           and ("sam", "priya") in store.friends and ("priya", "sam") in store.friends
           and not store.knocks, (friend, err))
-    check("invite: one use; my own says so",
-          kai.redeem_invite(invite)[1] == "This invite was used. Ask for a new one."
-          and sam.redeem_invite(sam.create_invite())[1] == "That's your own invite.")
+    late, err = kai.redeem_invite(invite)
+    check("invite: once only; after that it adds and knocks (a group chat); my own says so",
+          err is None and late["knocked"] and not late["mutual"] and ("sam", "kai") not in store.friends
+          and ("sam", "kai") in store.knocks
+          and sam.redeem_invite(sam.create_invite())[1] == "That's your own invite.", (late, err))
+    store.friends.discard(("kai", "sam"))
+    store.knocks.clear()
     # offline, Copy invite falls back to my friend code in the same link
     code = store.users["sam"]["code"] or sam.ensure_friend_code(None)
     link = friend_invite(code)
@@ -2719,6 +2723,10 @@ def test_invite_link_v341():
 def test_settings_in_board_v341():
     """3.4.1 (mock "Settings in the Board"): Settings in the board's place,
     one command per change, the same keys and rules as the dialog."""
+    from due_crew import account
+    check("settings: the accent follows the account (the site wears it); only an accent's name",
+          "accent" in account.ACCOUNT_KEYS and account.clean({"accent": "rose"}) == {"accent": "rose"}
+          and account.clean({"accent": "</style>"}) == {} and account.pick({"accent": "teal"})["accent"] == "teal")
     from due_crew.settings_model import change
     day = datetime.date(2026, 9, 28)
     cfg = {"hidden_tabs": ["squads"], "exam_date": "", "away_from": "", "away_to": ""}

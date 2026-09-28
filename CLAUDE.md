@@ -119,9 +119,10 @@ add-on.
   Closing Anki leaves the room.
 - 2.13: settings that belong to a person (`account.ACCOUNT_KEYS`: privacy
   switches, show-up, paused, exam and away dates, status, emoji, squads,
-  crew label, shared decks by id and name, muted uids) live on the server
-  (`GET/PUT /settings`), mine only. Accent, theme, sort, tab and the room
-  chip's side stay per computer. An install pulls before it uploads:
+  crew label, shared decks by id and name, muted uids, and since 3.4.1 the
+  accent, which `/auth/me` hands the site to wear) live on the server
+  (`GET/PUT /settings`), mine only. Theme, sort, tab and the room chip's
+  side stay per computer. An install pulls before it uploads:
   `_on_sync_done` waits for `account.ensure()` at profile open, sign-in and the day's first sync, so
   a new computer never sends defaults over the account's. Newest save
   wins. `app.save_cfg` pushes when an account key changes. An install that
@@ -340,8 +341,11 @@ add-on.
   any code box, or the page signed in) is crew with its maker at once,
   both edges: sending it was the maker's yes. Asking again writes
   nothing, so a removal since stays a removal; a new friend code ends my
-  unused invites. Offline, the link carries my friend code, which adds
-  and knocks as before. `/i/CODE` on the site (`invitePage`) says who
+  invites. Offline, the link carries my friend code, which adds
+  and knocks as before. After its first use, or after 14 days, an invite
+  works as the maker's friend code (add, knock, their Add back), so a link
+  in a group chat is never a dead end; rows are kept a year for that.
+  `/i/CODE` on the site (`invitePage`) says who
   (`GET /invites/{code}`, signed out: a name and an emoji, 300 an hour an
   address), the three steps on a computer, Email it on a phone; the site
   Worker writes its preview ("Sam invited you", `drawInvite`).

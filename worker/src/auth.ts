@@ -184,11 +184,18 @@ export async function authenticate(req: Request, env: Env): Promise<Session> {
 }
 
 /** GET /auth/me: who this session is. */
+const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
+
 export async function me(s: Session, env: Env): Promise<Response> {
-  const u = await env.DB.prepare("SELECT uid, email, name, emoji FROM users WHERE uid = ?")
-    .bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null }>();
+  // 3.4.1: and my accent, from the settings the add-on keeps, so the site wears it too
+  const u = await env.DB.prepare(
+    `SELECT u.uid, u.email, u.name, u.emoji, json_extract(t.json, '$.accent') AS accent
+       FROM users u LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`,
+  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; accent: unknown }>();
   if (!u) throw new HttpError(401, "auth");
-  return json(isAdmin(env, u.uid) ? { ...u, admin: true } : u);  // 3.2.1: the site shows Admin
+  const out = { uid: u.uid, email: u.email, name: u.name, emoji: u.emoji,
+    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green" };
+  return json(isAdmin(env, u.uid) ? { ...out, admin: true } : out);  // 3.2.1: the site shows Admin
 }
 
 export async function signOut(s: Session, env: Env, req?: Request): Promise<Response> {
