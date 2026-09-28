@@ -2818,6 +2818,29 @@ def test_settings_messages_reach_the_panel():
         dc._state["settings_tab"] = None
 
 
+def test_every_board_command_has_a_handler():
+    """Every duecrew: command the add-on puts on a page (the board, the
+    bars, the chip, Settings) has a handler (3.5.0: Settings shipped with
+    its clicks going nowhere). Prefix families (plan*, room*, knows*) go
+    to their modules, which must handle the name itself."""
+    import glob
+    src = {p: open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "**", "*.py"), recursive=True)}
+    emitted = set()
+    for text in src.values():
+        for rx in (r'_pycmd\(\s*f?["\']([a-z]+)', r'_st_click\(\s*f?["\']([a-z]+)', r'duecrew:([a-z]+)',
+                   r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
+            emitted |= set(re.findall(rx, text))
+    handled = set()
+    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py"):
+        text = src[os.path.join(REPO, "due_crew", name)]
+        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
+        for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
+            handled |= set(re.findall(r'"([a-z0-9]+)"', group))
+    prefixes = {"plan", "room", "knows"}  # 'duecrew:' + a name built at run time
+    missing = sorted(c for c in emitted - handled - prefixes)
+    check("commands: every one the add-on emits has a handler", not missing and len(emitted) > 60, missing)
+
+
 def test_take_back_an_ask():
     """3.5.0: an open ask on the Decks tab has Take back; it leaves my flags."""
     html = board._tricky_html([], [{"text": "The external iliac <b>", "who": [], "state": "open", "index": 1},

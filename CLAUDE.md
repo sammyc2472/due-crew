@@ -410,6 +410,17 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   The 2.3 removal test locked the squad first, which hid the bug above.
 - Escape every server-sourced string before webviews, tooltips, or rich-text
   labels.
+- The board lives in Anki's Decks screen, which sits in a `<center>` and
+  styles every button (margin, shadow, rounded corners). The board's older
+  parts are centred by it on purpose; a new part sets `text-align: left`
+  itself, and buttons start from the reset in `_css`. `tools/preview.py`
+  renders inside the same `<center>` and button style: look at a new part
+  there (light, dark, narrow) before calling it done.
+- Every `duecrew:` command a page emits needs a handler
+  (`test_every_board_command_has_a_handler`), and a new one gets a test
+  that sends it through `_on_js` as the board does (3.5.0's Settings went
+  out with its clicks reaching nothing). Anything a click adds has its way
+  back on the same screen.
 - The reviewer's page runs the card's own script too: from there only the
   room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from

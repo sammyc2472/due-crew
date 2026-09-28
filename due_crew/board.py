@@ -418,6 +418,12 @@ def _css(cfg):
     {_theme_css(cfg)}
     #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
+    /* 3.5.0: Anki's Decks screen sits in a <center> (the board's older parts
+       have always been centred by it; a new part says text-align: left
+       itself) and gives every button a margin, a shadow and rounded
+       corners, which the board's buttons start without */
+    #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */
@@ -600,6 +606,7 @@ def _css(cfg):
     #due-crew .dc-flag a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-flag, #due-crew .dc-flag-h {{ text-align: left; }}
+    #due-crew .dc-flag {{ align-items: center; }}
     #due-crew .dc-flag small {{ display: block; color: var(--dc-muted); font-size: 11px; }}
     #due-crew .dc-flag-h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
       text-transform: uppercase; color: var(--dc-muted); margin: 2px 0 4px; }}
