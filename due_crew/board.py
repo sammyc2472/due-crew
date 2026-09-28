@@ -665,7 +665,9 @@ def _css(cfg):
     #due-crew .dc-pc .ss span {{ font-size: 10.5px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
     #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
-    /* 3.5.0: the Plans tab's Today box and week */
+    /* 3.5.0: the Plans tab's Today box and week (Anki centres the Decks
+       screen's text; the tab reads left to right) */
+    #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
       display: grid; gap: 6px; margin: 2px 0 10px; }}
     #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
@@ -1168,10 +1170,11 @@ def _today_box(card, pid):
     if op and int(card.get("early") or 0):
         early = int(card["early"])
         nums.append(f'<span>opened {early} day{"s" if early != 1 else ""} early</span>')
-    if s and kind == "study" and not behind and not s.get("ask"):
+    something = bool(target) or bool(int(due or 0))
+    if s and kind == "study" and not behind and not s.get("ask") and target:
         nums.append('<span class="ok">&#10003; on track</span>')
     btns = ""
-    if s and kind == "study":
+    if s and kind == "study" and something:
         btns += f'<a class="bt on" href="#" onclick="{_pycmd("planstudy:" + pid)}">Study now</a>'
     if op and op.get("undo") and not behind:
         btns += f'<a href="#" class="q" onclick="{_pycmd("plannottoday")}">Put off to tomorrow</a>'
@@ -1737,6 +1740,12 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 
 SETTINGS_CSS = """
     #due-crew.dc-set, #due-crew.dc-set .st-row, #due-crew.dc-set .st-l { text-align: left; }
+    /* Anki styles every button on the Decks screen (a margin, a shadow,
+       rounded corners); the panel's own controls start from nothing */
+    #due-crew.dc-set button { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none; vertical-align: middle; }
+    #due-crew .st-radio { box-sizing: border-box; border-radius: 0; }
+    #due-crew .st-box { overflow: hidden; }
     #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
     #due-crew .st-bar b { font-size: 15px; }
     #due-crew .st-back { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
@@ -1759,6 +1768,7 @@ SETTINGS_CSS = """
     #due-crew .st-seg { display: inline-flex; }
     #due-crew .st-seg button, #due-crew .st-pill { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
       border: 1px solid var(--dc-line); background: transparent; color: var(--dc-muted); padding: 2px 10px; }
+    #due-crew .st-seg button { border-radius: 0; }
     #due-crew .st-seg button:first-child { border-radius: 99px 0 0 99px; }
     #due-crew .st-seg button:last-child { border-radius: 0 99px 99px 0; }
     #due-crew .st-seg button + button { border-left: none; }
