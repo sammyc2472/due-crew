@@ -988,7 +988,7 @@ async function builder(id) {
       "",
       "Write the plan in exactly this format, one line per date, and nothing else (no commentary, no table):",
       "",
-      "YYYY-MM-DD | a short name | tag:FULL::TAG::PATH, tag:ANOTHER::PATH | due YYYY-MM-DD | even",
+      "YYYY-MM-DD | a short name | tag:FULL::TAG::PATH, tag:ANOTHER::PATH | due YYYY-MM-DD | even | for EVENT NAME",
       "",
       "Rules:",
       "- The first part is the date those cards open: YYYY-MM-DD, or \"week 3\" for the Monday of the plan's third week.",
@@ -996,16 +996,24 @@ async function builder(id) {
       "- A subdeck works the same way: deck:FULL::DECK::PATH.",
       "- When a lecture is only part of a tag (two tags at once, or one without another), use an Anki search instead: search:tag:A tag:B -tag:C.",
       "- Several tags can open the same day: separate them with commas on one line.",
+      "- Exact notes: nids:ID,ID,ID brings every card of those notes (every cloze). Exact cards: cids:ID,ID brings just those cards. Use only IDs I give you below, copied exactly; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
+      "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched: or flag: (they find different cards for each person), and stays under 500 characters.",
+      "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line.",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
       "- Without a due date, a date's cards are meant to be done before the next date opens.",
-      "- Single cards can't be chosen here (you can't see the cards). If some day needs specific cards, add a line starting with # that says which (\"# Pick in Anki for 2026-10-06: the iron-study cards from Lecture 17\"); I'll pick them in Anki.",
+      "- If a day needs specific cards and I gave you no IDs for them, don't guess: add a line starting with # that says which (\"# Pick in Anki for 2026-10-06: the iron-study cards from Lecture 17\"); I'll pick them in Anki.",
       "- Leave out days off and catch-up weeks.",
       "",
       "Example:",
       "2026-10-05 | Microcytic anemias | tag:#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::01_Microcytic",
-      "2026-10-06 | Hemolysis | tag:#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic | due 2026-10-08 | even",
+      "2026-10-06 | Hemolysis | tag:#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic | due 2026-10-08 | even | for Heme quiz",
+      "2026-10-07 | Lecture 12 cards | nids:1628174531284,1628174531301 | for Heme quiz",
+      "2026-10-09 | event | Heme quiz",
       "",
       "My syllabus, or what I want (edit this part):",
+      "",
+      "",
+      "Note IDs or card IDs I have, and what each list is for (paste them here, or leave this empty):",
       "",
       "",
       `The deck's tags${cover.size ? " for what the plan covers" : ""} (tag or subdeck, card count, readable name)${more > 0 ? `; ${more.toLocaleString()} more aren't listed, ask me for a branch` : ""}:`,
@@ -1024,7 +1032,7 @@ async function builder(id) {
       preview.replaceChildren();
       if (r.errors.length) { out.className = "status bad"; out.textContent = r.errors.slice(0, 6).join(" "); return; }
       out.className = r.missing.length ? "status bad" : "status";
-      out.textContent = `${r.units.length} dates.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
+      out.textContent = `${r.units.length} dates${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
       const placed = new Set(r.units.flatMap(srcs));
       const rows = r.units.slice().sort((a, b) => a.opens.localeCompare(b.opens)).map((u) => h("div", { class: "pvrow" },
         h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), " ", h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
