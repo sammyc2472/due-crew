@@ -374,3 +374,22 @@ In Anki (as a follower):
       pasting that adds, and the other side sees Add back.
 - [ ] Paste the link into iMessage or Discord: the preview reads "… invited
       you".
+
+### 3.4.1: Settings in the board
+
+- [ ] The board's ⚙ opens Settings where the board was; ‹ Board goes back.
+      A name's card › Privacy… opens it on Privacy.
+- [ ] Board: each switch, Theme, Accent (the logo and panel recolour at
+      once), Tabs (a hidden tab is gone on ‹ Board), Crew name (saved on
+      Enter or leaving the box), Reset board.
+- [ ] Privacy: the three choices; the number switches under My numbers;
+      a crewmate sees the change a few seconds later. Exam and Away: switch
+      on, pick dates, switch off.
+- [ ] You: Name…, Emoji…, Status… update the panel; Friends, Squads and
+      Shared Decks open their dialogs; Sign out lands on the signed-out card.
+- [ ] Night mode (Anki's and the Theme setting): every control readable,
+      the date pickers too.
+- [ ] Tab from control to control with the keyboard; Space toggles; focus
+      stays on the control after it redraws.
+- [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
+      tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.

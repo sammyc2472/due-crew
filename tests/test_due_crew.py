@@ -2716,6 +2716,69 @@ def test_invite_link_v341():
           and kai.add_friend(friend_code_from(link))[0]["knocked"], link)
 
 
+def test_settings_in_board_v341():
+    """3.4.1 (mock "Settings in the Board"): Settings in the board's place,
+    one command per change, the same keys and rules as the dialog."""
+    from due_crew.settings_model import change
+    day = datetime.date(2026, 9, 28)
+    cfg = {"hidden_tabs": ["squads"], "exam_date": "", "away_from": "", "away_to": ""}
+    check("settings: a switch, a choice, only values it takes",
+          change(["set", "compact", "1"], cfg) == {"compact": True}
+          and change(["set", "accent", "rose"], cfg) == {"accent": "rose"}
+          and change(["set", "accent", "red"], cfg) is None
+          and change(["set", "api_base", "1"], cfg) is None
+          and change(["set", "compact", "yes"], cfg) is None)
+    check("settings: tabs hide and show; Today isn't one of them",
+          change(["settabs", "plans", "0"], cfg) == {"hidden_tabs": ["squads", "plans"]}
+          and change(["settabs", "squads", "1"], cfg) == {"hidden_tabs": []}
+          and change(["settabs", "today", "0"], cfg) is None)
+    check("settings: privacy is one of three, and the numbers keep their switches",
+          change(["setprivacy", "showup"], cfg) == {"show_up": True, "paused": False}
+          and change(["setprivacy", "paused"], cfg) == {"show_up": False, "paused": True}
+          and change(["setprivacy", "numbers"], cfg) == {"show_up": False, "paused": False})
+    check("settings: the exam on (a week out), a date, off; nonsense is nothing",
+          change(["setexam", "on"], cfg, today=day) == {"exam_date": "2026-10-05"}
+          and change(["setexam", "2026-11-02"], cfg) == {"exam_date": "2026-11-02"}
+          and change(["setexam", "off"], {"exam_date": "2026-11-02"}) == {"exam_date": ""}
+          and change(["setexam", "soon"], cfg) is None)
+    check("settings: away on (tomorrow to a week), dates in either order, off",
+          change(["setaway", "on"], cfg, today=day) == {"away_from": "2026-09-29", "away_to": "2026-10-05"}
+          and change(["setaway", "2026-10-09", "2026-10-02"], cfg) == {"away_from": "2026-10-02", "away_to": "2026-10-09"}
+          and change(["setaway", "off"], cfg) == {"away_from": "", "away_to": ""}
+          and change(["setaway", "2026-10-02", ""], cfg) is None)
+    check("settings: the crew name, decoded, one line, 24 at most; empty is Crew",
+          change(["setlabel", "Block%203%3A%20us"], cfg) == {"crew_label": "Block 3: us"}
+          and len(change(["setlabel", "x" * 60], cfg)["crew_label"]) == 24
+          and change(["setlabel", "%20"], cfg) == {"crew_label": "Crew"})
+    reset = change(["setreset"], cfg)
+    check("settings: Reset board puts the Board tab back, never Privacy",
+          reset["hidden_tabs"] == [] and reset["accent"] == "green"
+          and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
+    view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
+            "sync": "sam@x.edu · Synced 2m ago · v3.4.1", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
+            "decks": ["AnKing"]}
+    you = board.settings_html(view, {"crew_label": "Crew"})
+    check("settings: You, escaped; three squads read as two and 1 more",
+          'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;BUSM&lt;/i&gt;, Block 3 and 1 more" in you
+          and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>BUSM" not in you
+          and "duecrew:setclose" in you and "Delete account" in you, you[-600:])
+    bd = board.settings_html(dict(view, tab="board"), {"crew_label": 'a"><script>', "accent": "teal",
+                                                         "hidden_tabs": ["week"], "compact": True})
+    check("settings: Board, its switches and tabs as set, the crew name escaped",
+          'value="a&quot;&gt;&lt;script&gt;"' in bd and "<script>" not in bd
+          and "duecrew:settabs:week:1" in bd and "duecrew:settabs:plans:0" in bd
+          and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
+    pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
+                                                           "away_from": "", "away_to": ""})
+    check("settings: Privacy, one choice checked; numbers only under My numbers; exam on, away off",
+          pv.count('aria-checked="true"') == 2 and "duecrew:setprivacy:numbers" in pv
+          and "share_reviews" not in pv and 'value="2026-10-14"' in pv
+          and "duecrew:setexam:off" in pv and "duecrew:setaway:on" in pv, pv[-900:])
+    out = board.settings_html({"tab": "nope", "signed_in": False}, {})
+    check("settings: signed out, a way in; an unknown tab is You",
+          "setsignin" in out and "follow your account" not in out)
+
+
 def test_retry_only_what_is_safe_twice():
     """Review: a request that fails is sent once more only when sending it
     twice can't do a thing twice. A POST that may have landed (a new squad)

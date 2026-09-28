@@ -1731,6 +1731,219 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'{_css(cfg)}{_head(period, show_up, hidden)}{body}{foot}</div>')
 
 
+# ---- 3.4.1: Settings, in the board ----
+
+SETTINGS_CSS = """
+    #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
+    #due-crew .st-bar b { font-size: 15px; }
+    #due-crew .st-back { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .st-h { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); margin: 12px 0 5px; }
+    #due-crew .st-box { border: 1px solid var(--dc-line); border-radius: 9px; }
+    #due-crew .st-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px;
+      padding: 7px 11px; flex-wrap: wrap; }
+    #due-crew .st-row + .st-row { border-top: 1px solid var(--dc-line); }
+    #due-crew .st-l { display: grid; gap: 1px; min-width: 0; }
+    #due-crew .st-l small, #due-crew .st-note { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .st-note { margin-top: 8px; }
+    #due-crew .st-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #due-crew .st-tg { width: 30px; height: 17px; border-radius: 99px; border: 0; padding: 0; cursor: pointer;
+      background: var(--dc-line); position: relative; flex: none; }
+    #due-crew .st-tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+      border-radius: 50%; background: var(--dc-bg); }
+    #due-crew .st-tg.on { background: var(--dc-accent); }
+    #due-crew .st-tg.on::after { left: 15px; }
+    #due-crew .st-seg { display: inline-flex; }
+    #due-crew .st-seg button, #due-crew .st-pill { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+      border: 1px solid var(--dc-line); background: transparent; color: var(--dc-muted); padding: 2px 10px; }
+    #due-crew .st-seg button:first-child { border-radius: 99px 0 0 99px; }
+    #due-crew .st-seg button:last-child { border-radius: 0 99px 99px 0; }
+    #due-crew .st-seg button + button { border-left: none; }
+    #due-crew .st-seg button.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+    #due-crew .st-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+    #due-crew .st-pill { border-radius: 99px; }
+    #due-crew .st-pill.on { border-color: var(--dc-accent); background: var(--dc-you-bg); color: var(--dc-ink); }
+    #due-crew .st-pill.on::before { content: "\\2713  "; color: var(--dc-accent); }
+    #due-crew .st-pill[disabled] { cursor: default; opacity: .6; }
+    #due-crew .st-sw { display: flex; gap: 7px; }
+    #due-crew .st-sw button { width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+      box-shadow: 0 0 0 2px var(--dc-bg); }
+    #due-crew .st-sw button.on { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-ink); }
+    #due-crew .st-in { font: inherit; font-size: 12.5px; border: 1px solid var(--dc-line); border-radius: 6px;
+      padding: 2px 7px; background: var(--dc-bg); color: var(--dc-ink); color-scheme: light dark; }
+    #due-crew .st-in:disabled { color: var(--dc-faded); }
+    #due-crew .st-lk { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .st-danger { color: #d64035; }
+    #due-crew .st-who { display: flex; gap: 10px; align-items: center; }
+    #due-crew .st-who .em { font-size: 26px; line-height: 1; }
+    #due-crew .st-who b { font-size: 15px; }
+    #due-crew .st-acts { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0; }
+    #due-crew .st-radio { display: grid; grid-template-columns: 16px 1fr; gap: 8px; padding: 8px 11px; cursor: pointer;
+      width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; }
+    #due-crew .st-radio + .st-radio, #due-crew .st-radio + .st-sub { border-top: 1px solid var(--dc-line); }
+    #due-crew .st-radio i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%;
+      border: 1.5px solid var(--dc-faded); margin-top: 2px; }
+    #due-crew .st-radio.on { background: var(--dc-you-bg); }
+    #due-crew .st-radio.on i { border: 4px solid var(--dc-accent); }
+    #due-crew .st-radio span { display: grid; gap: 2px; }
+    #due-crew .st-radio small { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .st-sub { padding: 0 11px 8px 35px; background: var(--dc-you-bg); }
+    #due-crew .st-foot { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
+      margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew button:focus-visible, #due-crew a:focus-visible, #due-crew input:focus-visible {
+      outline: 2px solid var(--dc-accent); outline-offset: 2px; }
+"""
+SETTINGS_TABS = (("you", "You"), ("board", "Board"), ("privacy", "Privacy"))
+
+
+def _st_row(label, control, sub=""):
+    sub = f"<small>{sub}</small>" if sub else ""
+    return f'<div class="st-row"><span class="st-l"><span>{label}</span>{sub}</span><span class="st-r">{control}</span></div>'
+
+
+def _st_click(cmd):
+    """onclick for a settings command; data-f names it, so focus comes back
+    to it after the panel redraws."""
+    return f'data-f="{_html.escape(_re.sub(r"[^A-Za-z0-9:_-]", "", cmd))}" onclick="{_pycmd(cmd)}"'
+
+
+def _st_switch(key, on, label):
+    return (f'<button class="st-tg{" on" if on else ""}" role="switch" aria-checked="{"true" if on else "false"}" '
+            f'aria-label="{_html.escape(label)}" {_st_click(f"set:{key}:{0 if on else 1}")}></button>')
+
+
+def _st_seg(key, options, current, label):
+    btns = "".join(f'<button class="{"on" if v == current else ""}" aria-pressed="{"true" if v == current else "false"}" '
+                   f'{_st_click(f"set:{key}:{v}")}>{t}</button>' for v, t in options)
+    return f'<span class="st-seg" role="group" aria-label="{label}">{btns}</span>'
+
+
+def _settings_you(view):
+    e = _html.escape
+    if not view.get("signed_in"):
+        return (f'<p>Not signed in.</p><div class="st-acts">'
+                f'<a class="st-lk" href="#" {_st_click("setsignin")}>Start with your email</a></div>')
+    emoji = e(str(view.get("emoji") or ""))
+    status = str(view.get("status") or "")
+    out = (f'<div class="st-who">{f"<span class=em>{emoji}</span>" if emoji else ""}'
+           f'<span style="display:grid"><b>{e(str(view.get("name") or "?"))}</b>'
+           f'<span style="color:var(--dc-muted)">{"&ldquo;" + e(status) + "&rdquo;" if status else "No status"}</span></span></div>'
+           f'<div class="st-acts"><a class="st-lk" href="#" {_st_click("setname")}>Name&hellip;</a>'
+           f'<a class="st-lk" href="#" {_st_click("setemoji")}>Emoji&hellip;</a>'
+           f'<a class="st-lk" href="#" {_st_click("setstatus")}>Status&hellip;</a></div>'
+           f'<div class="st-note" style="margin:0 0 10px">{e(str(view.get("sync") or ""))}</div>')
+    crew = int(view.get("crew") or 0)
+    squads = [str(x) for x in view.get("squads") or []]
+    decks = [str(x) for x in view.get("decks") or []]
+
+    def names(xs, none):
+        if not xs:
+            return none
+        shown = ", ".join(e(x) for x in xs[:2])
+        return shown + (f" and {len(xs) - 2} more" if len(xs) > 2 else "")
+    out += ('<div class="st-box">'
+            + _st_row("Friends", f'<a class="st-lk" href="#" {_st_click("friends")}>Open</a>',
+                      f"{crew} in your crew" if crew else "Your code, and who's in your crew")
+            + _st_row("Squads", f'<a class="st-lk" href="#" {_st_click("setsquads")}>Open</a>', names(squads, "None yet"))
+            + _st_row("Shared decks", f'<a class="st-lk" href="#" {_st_click("decks")}>Open</a>', names(decks, "None yet"))
+            + '</div>')
+    out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
+            f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>')
+    return out
+
+
+def _settings_board(cfg):
+    hidden = hidden_tabs(cfg)
+    pills = '<button class="st-pill on" disabled aria-pressed="true">Today</button>' + "".join(
+        f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
+        f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    swatches = "".join(
+        f'<button class="{"on" if k == accent else ""}" style="background:{v["light"][0]}" title="{k.title()}" '
+        f'aria-label="{k.title()}" aria-pressed="{"true" if k == accent else "false"}" {_st_click(f"set:accent:{k}")}></button>'
+        for k, v in ACCENTS.items())
+    label = _html.escape(str(cfg.get("crew_label") or "Crew"))
+    label_in = (f'<input class="st-in" data-f="label" maxlength="24" size="12" value="{label}" aria-label="Crew name in shares" '
+                f'onchange="pycmd(\'duecrew:setlabel:\'+encodeURIComponent(this.value));">')
+    g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
+    return ('<div class="st-h">What it shows</div><div class="st-box">'
+            + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
+                      "Off: Tools › Due Crew brings it back")
+            + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
+            + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
+            + _st_row("Tabs", f'<span class="st-pills">{pills}</span>')
+            + '</div><div class="st-h">How it looks</div><div class="st-box">'
+            + _st_row("Theme", _st_seg("theme", (("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")), cfg.get("theme", "auto"), "Theme"))
+            + _st_row("Accent", f'<span class="st-sw" role="group" aria-label="Accent">{swatches}</span>')
+            + _st_row("Compact rows", _st_switch("compact", g("compact", False), "Compact rows"))
+            + _st_row("Highlight my row", _st_switch("highlight_me", g("highlight_me", True), "Highlight my row"))
+            + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
+                      "Its side of Anki's top bar")
+            + _st_row("Crew name in shares", label_in)
+            + '</div>'
+            + f'<div class="st-foot"><span>Sort by clicking the board&rsquo;s headers.</span>'
+              f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
+
+
+def _settings_privacy(cfg):
+    choice = "paused" if cfg.get("paused") else "showup" if cfg.get("show_up") else "numbers"
+
+    def radio(key, title, sub=""):
+        on = key == choice
+        return (f'<button class="st-radio{" on" if on else ""}" role="radio" aria-checked="{"true" if on else "false"}" '
+                f'{_st_click(f"setprivacy:{key}")}><i></i><span><b>{title}</b>{f"<small>{sub}</small>" if sub else ""}</span></button>')
+    nums = ""
+    if choice == "numbers":
+        nums = '<div class="st-sub"><span class="st-pills">' + "".join(
+            f'<button class="st-pill{" on" if cfg.get(k, True) else ""}" aria-pressed="{"true" if cfg.get(k, True) else "false"}" '
+            f'{_st_click(f"set:{k}:{0 if cfg.get(k, True) else 1}")}>{t}</button>'
+            for k, t in (("share_reviews", "Reviews"), ("share_time", "Study time"), ("share_retention", "Retention"),
+                         ("share_streak", "Streak"), ("share_heatmap", "Heatmap"))) + '</span></div>'
+    exam = str(cfg.get("exam_date") or "")
+    a, b = str(cfg.get("away_from") or ""), str(cfg.get("away_to") or "")
+    away_on = bool(a and b)
+    esc = _html.escape
+    exam_ctl = (f'<input class="st-in" type="date" data-f="exam" value="{esc(exam)}"{"" if exam else " disabled"} '
+                f'aria-label="Exam date" onchange="if(this.value)pycmd(\'duecrew:setexam:\'+this.value);">'
+                + _st_toggle_cmd("setexam:" + ("off" if exam else "on"), bool(exam), "Exam"))
+    send = "pycmd('duecrew:setaway:'+document.getElementById('st-af').value+':'+document.getElementById('st-at').value);"
+    away_ctl = (f'<input class="st-in" type="date" id="st-af" data-f="af" value="{esc(a)}"{"" if away_on else " disabled"} aria-label="Away from" '
+                f'onchange="{send}"><span style="color:var(--dc-muted)">to</span>'
+                f'<input class="st-in" type="date" id="st-at" data-f="at" value="{esc(b)}"{"" if away_on else " disabled"} aria-label="Away until" '
+                f'onchange="{send}">' + _st_toggle_cmd("setaway:" + ("off" if away_on else "on"), away_on, "Away"))
+    return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
+            + radio("numbers", "My numbers") + nums
+            + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
+            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting.")
+            + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
+            + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
+            + _st_row("&#9992;&#65039; Away", away_ctl)
+            + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span></div>')
+
+
+def _st_toggle_cmd(cmd, on, label):
+    return (f'<button class="st-tg{" on" if on else ""}" role="switch" aria-checked="{"true" if on else "false"}" '
+            f'aria-label="{label}" {_st_click(cmd)}></button>')
+
+
+def settings_html(view, cfg):
+    """3.4.1: Settings in place of the board (mock "Settings in the Board").
+    view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
+    from the glue; every string in it is escaped here."""
+    tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
+    pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
+                    for k, t in SETTINGS_TABS)
+    body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
+            else _settings_privacy(cfg))
+    foot = ("Privacy, dates and status follow your account. The look stays on this computer."
+            if view.get("signed_in") else "")
+    return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
+            f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b></div>'
+            f'{body}'
+            f'{f"<div class=st-note>{foot}</div>" if foot else ""}</div>')
+
+
 def room_html(room):
     """2.12: the Decks screen's study rooms, from room_model.board_view.
     Every string in it may carry a friend's name: escaped here."""

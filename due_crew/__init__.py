@@ -17,6 +17,7 @@ squad board each fetch their own, when someone looks.
 import datetime
 import html
 import json
+import re
 import threading
 import time
 import traceback
@@ -440,6 +441,8 @@ def _on_render(deck_browser, content):
 
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
+    if _state.get("settings_tab"):
+        return board.settings_html(_settings_view(), c)  # 3.4.1: Settings in its place
     show_up = bool(c.get("show_up"))
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
@@ -694,6 +697,8 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
+    elif cmd in SETTINGS_CMDS:
+        _settings_cmd(cmd, parts[1:])  # 3.4.1: Settings in the board
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
@@ -734,8 +739,9 @@ def _on_js(handled, message, context):
     return (True, None)
 
 
-def _swap(c):
-    """Re-render the board in place from cache. No network, no page reload."""
+def _swap(c, focus=None):
+    """Re-render the board in place from cache. No network, no page reload.
+    focus: the data-f of the control to give focus back to (Settings)."""
     if _state["entries"] is None:
         _rerender()
         return
@@ -749,6 +755,9 @@ def _swap(c):
         el.parentNode.replaceChild(tmp.firstElementChild, el);
     })();
     """ % json.dumps(html_out) + board.keep_me_in_view_js()
+    if focus:
+        js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
+               "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
     mw.web.eval(js)
 
 
@@ -894,9 +903,161 @@ def _on_decks_saved(changed):
     refresh_board(shared_decks=decks)
 
 
+SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam",
+                 "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
+                 "setsignout", "setdelete", "setsignin")
+_share_push = {"n": 0}
+
+
+def _board_on_screen():
+    c = cfg()
+    return (mw.state == "deckBrowser" and c.get("show_leaderboard", True) and _state["board_shown"]
+            and client().signed_in and not client().session_dead)
+
+
+def _settings_view():
+    """What the You tab shows. Main thread (deck names come from the collection)."""
+    from .board import _ago
+    c, cl = cfg(), client()
+    if cl.session_dead:
+        state = "Sign-in expired"
+    else:
+        ago, _tone = _ago(cl.session.get("last_ok", ""))
+        state = f"Synced {ago}" if ago else "Not synced yet"
+    sync = " · ".join(x for x in (cl.email, state, f"v{ADDON_VERSION}" if ADDON_VERSION else "") if x)
+    decks = []
+    for did in c.get("shared_decks") or []:
+        try:
+            decks.append(mw.col.decks.name(int(did)))
+        except Exception:
+            continue
+    crew = sum(1 for e in (_state["entries"] or []) if not e.get("you"))
+    return {"tab": _state.get("settings_tab"), "signed_in": cl.signed_in, "name": cl.display_name,
+            "emoji": c.get("emoji"), "status": c.get("status"), "sync": sync, "crew": crew,
+            "squads": [s.get("name") for s in (c.get("squads") or []) if isinstance(s, dict) and s.get("name")],
+            "decks": decks}
+
+
+def _settings_cmd(cmd, parts):
+    """One click in the board's Settings. Changes apply at once."""
+    from .settings_model import TABS, change
+    c = cfg()
+    focus = ":".join([cmd] + parts)
+    if cmd == "settab":
+        if parts and parts[0] in TABS:
+            _state["settings_tab"] = parts[0]
+            _swap(c)
+        return
+    if cmd == "setclose":
+        _state["settings_tab"] = None
+        _swap(c)
+        return
+    if cmd == "setname":
+        _rename()
+    elif cmd == "setemoji":
+        if _edit_emoji(mw) is not None:
+            _swap(cfg(), focus)
+    elif cmd == "setstatus":
+        if _edit_status(mw) is not None:
+            _swap(cfg(), focus)
+    elif cmd == "setsquads":
+        open_squads()
+        _swap(cfg(), focus)
+    elif cmd == "setsignin":
+        _state["settings_tab"] = None
+        open_auth()
+    elif cmd == "setsignout":
+        from .ui import confirm
+        if confirm(mw, "Sign out?", "Sign out on this device? Your account and stats stay.", "Sign Out"):
+            _state["settings_tab"] = None
+            client().sign_out()
+            _on_signed_out()
+    elif cmd == "setdelete":
+        _delete_account()
+    else:
+        changed = change([cmd] + parts, c)
+        if changed:
+            _apply_settings(changed, focus="label" if cmd == "setlabel" else focus)
+
+
+def _apply_settings(changed, focus=None):
+    """Save what one change changed; the board redraws at once, and a
+    sharing change goes out a moment later (one sync for a run of clicks)."""
+    c = cfg()
+    push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
+    chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
+    c.update(changed)
+    save_cfg(c)
+    if changed.get("show_leaderboard") is False:
+        _state["settings_tab"] = None
+        _rerender()
+        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Settings brings it back.")
+    else:
+        # the focus names the command sent; after a toggle it's the opposite one
+        _swap(c, focus=_flip(focus))
+    if chip:
+        rooms.refresh_widgets()
+    if push:
+        _share_push["n"] += 1
+        n = _share_push["n"]
+        QTimer.singleShot(2500, lambda: n == _share_push["n"] and _on_sync_done())
+
+
+def _flip(focus):
+    """set:compact:1 was clicked; the redrawn switch sends set:compact:0."""
+    if not focus:
+        return focus
+    for a, b in ((":1", ":0"), (":0", ":1"), (":on", ":off"), (":off", ":on")):
+        if focus.endswith(a) and not focus.startswith(("set:theme", "set:accent", "set:room")):
+            return focus[:-len(a)] + b
+    return focus
+
+
+def _rename():
+    from aqt.qt import QInputDialog, QLineEdit
+    cl = client()
+    current = cl.display_name
+    name, ok = QInputDialog.getText(mw, "Display name", "New name:", QLineEdit.EchoMode.Normal, current)
+    name = name.strip()
+    if not ok or not name or name == current:
+        return
+
+    def done(result):
+        if not result:
+            tooltip("Couldn't save the name. Try again.")
+            return
+        tooltip("Name changed.")
+        _swap(cfg())
+    _bg(lambda: cl.set_display_name(name), done)
+
+
+def _delete_account():
+    from .ui import confirm
+    if not confirm(mw, "Delete account?", "This deletes your stats, your code, and "
+                   "your account for good. No undo.", "Delete Account"):
+        return
+    cl = client()
+
+    def done(result):
+        if not result:
+            tooltip("Couldn't delete. Check your connection and try again.")
+            return
+        _state["settings_tab"] = None
+        _on_signed_out()
+        tooltip("Account deleted.")
+    _bg(lambda: cl.delete_account() or True, done)
+
+
 def open_settings(tab=None):
     """tab: "you", "board", or "privacy" (your card's Privacy… opens that
-    one; until 2.9 it landed on Account)."""
+    one; until 2.9 it landed on Account). 3.4.1: in the board when it's on
+    screen; the dialog otherwise (the board turned off, signed out, or
+    another screen)."""
+    if _board_on_screen():
+        from .settings_model import TABS
+        _state["settings_tab"] = tab if tab in TABS else "you"
+        _swap(cfg())
+        return
     from .ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
                          open_auth, open_friends, _on_signed_out, open_decks,

@@ -345,6 +345,16 @@ add-on.
   (`GET /invites/{code}`, signed out: a name and an emoji, 300 an hour an
   address), the three steps on a computer, Email it on a phone; the site
   Worker writes its preview ("Sam invited you", `drawInvite`).
+- 3.4.1 Settings in the board (mock "Settings in the Board"): the board's
+  Settings opens in the board's place (`board.settings_html`, You, Board,
+  Privacy; ‹ Board goes back), in its own tokens, so night mode and the
+  accent just work. Each click is one command (`settings_model.change`:
+  whitelisted keys and values, pure) and applies at once; no Save. A
+  sharing change pushes 2.5 seconds after the last click (one sync for a
+  run of them). Name, Emoji, Status, Friends, Squads and Shared Decks open
+  their dialogs. The Qt dialog stays for when the board isn't on screen
+  (turned off, signed out, another screen, Tools › Due Crew › Settings
+  from the reviewer).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
