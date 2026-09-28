@@ -123,6 +123,15 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
   ]);
 }
 
+/** No Origin (the add-on, a calendar app), or a page of ours: duecrew.com,
+ *  its subdomains, or a local preview (whose proxy names the route it came in by). */
+export function ourPage(origin: string | null): boolean {
+  if (origin === null) return true;
+  let host: string;
+  try { host = new URL(origin).hostname; } catch { return false; }  // "null": a sandboxed frame or a file
+  return host === "duecrew.com" || host.endsWith(".duecrew.com") || host === "localhost" || host === "127.0.0.1";
+}
+
 export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (event.cron === BRIDGE_CRON) {
@@ -148,6 +157,10 @@ export default {
     if (path.startsWith("/api/")) path = path.slice(4);
     try {
       if (Number(req.headers.get("content-length") || 0) > ANY_BODY_MAX) throw new HttpError(413, "too_big");
+      // A browser names the page that sent a request; the add-on sends no
+      // Origin. Nothing that changes anything comes from another site's page
+      // (sign-in included: another page can't send codes or spend my tries).
+      if (req.method !== "GET" && req.method !== "HEAD" && !ourPage(req.headers.get("origin"))) throw new HttpError(403, "csrf");
       let allowed = false;
       for (const [method, re, handler] of routes) {
         const m = re.exec(path);

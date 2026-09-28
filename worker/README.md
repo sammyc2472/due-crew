@@ -33,10 +33,16 @@ import takes `Authorization: Bearer <token>`.
 **Sign-in details**
 - Codes and tokens are stored as SHA-256 hashes; tokens are 32 random bytes, base64url.
 - A code works once, and dies after 5 wrong tries.
-- **Limits**, per hour:
-  - 5 codes per address and 20 per IP;
-  - 60 verifies per IP;
-  - the sixth wrong code locks the address for the hour.
+- **Limits.** An address from one IP comes first, so someone who knows my
+  address can't use up my codes or lock me out from where they are:
+  - codes: 5 an hour and 8 a day to an address from one IP; 10 an hour and
+    20 a day to an address from anywhere; 20 an hour from one IP;
+  - 60 verifies an hour per IP;
+  - the sixth wrong code in an hour locks the address from that IP; 20 wrong
+    in a day, from anywhere, lock it for the day.
+- **Other sites:** a request that changes anything (a POST, PUT, PATCH or
+  DELETE, sign-in included) is refused (`403 csrf`) when its `Origin` is a
+  page that isn't duecrew.com's. The add-on sends no `Origin`.
 - **Sessions:** `last_used` is written at most daily, and a session idle for 180 days ends.
 - Emails, codes and tokens are never logged.
 

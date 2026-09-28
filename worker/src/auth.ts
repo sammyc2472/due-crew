@@ -16,9 +16,17 @@ import {
 export const CODE_TTL = 10 * 60;            // a code lives ten minutes
 export const CODE_ATTEMPTS = 5;             // wrong tries before a code dies
 export const LIMIT_WINDOW = 60 * 60;        // rate limits count per hour
-export const CODES_PER_EMAIL = 5;
+// Limits are per address from one IP first, so someone who knows my address
+// can't use up my codes or lock me out from where they are; the address's
+// own ceilings, higher, stop the same thing spread over many IPs.
+export const CODES_PER_EMAIL = 5;           // an hour, to one address from one IP
+export const CODES_PER_EMAIL_ALL = 10;      // an hour, to one address from anywhere
+export const CODES_PER_EMAIL_IP_DAY = 8;    // a day, to one address from one IP
+export const CODES_PER_EMAIL_DAY = 20;      // a day, to one inbox from anywhere
 export const CODES_PER_IP = 20;
-export const FAILS_TO_LOCK = 6;             // the sixth wrong code locks the email
+export const FAILS_TO_LOCK = 6;             // the sixth wrong code locks the address, from that IP, for the hour
+export const FAILS_PER_EMAIL_DAY = 20;      // wrong codes from anywhere that lock the address for the day
+export const DAY = 86400;
 export const VERIFIES_PER_IP = 60;
 export const SESSION_IDLE = 180 * 86400;    // idle sessions end after 180 days
 const TOUCH_EVERY = 86400;                  // last_used is written at most daily
@@ -26,9 +34,13 @@ const TOUCH_EVERY = 86400;                  // last_used is written at most dail
 const codeHash = (email: string, code: string) => sha256Hex(`otp:${email}:${code}`);
 const emailKey = async (kind: string, email: string) => `${kind}:e:${(await sha256Hex(email)).slice(0, 32)}`;
 const ipKey = (kind: string, req: Request) => `${kind}:ip:${clientIp(req)}`;
+// an address from one IP: hashed together, so no row pairs an address with where it was typed
+const emailIpKey = async (kind: string, email: string, req: Request) =>
+  `${kind}:ei:${(await sha256Hex(`${email}|${clientIp(req)}`)).slice(0, 32)}`;
 
-async function locked(env: Env, email: string): Promise<boolean> {
-  return (await peek(env, await emailKey("fail", email), LIMIT_WINDOW)) >= FAILS_TO_LOCK;
+async function locked(env: Env, email: string, req: Request): Promise<boolean> {
+  return (await peek(env, await emailIpKey("fail", email, req), LIMIT_WINDOW)) >= FAILS_TO_LOCK
+    || (await peek(env, await emailKey("failday", email), DAY)) >= FAILS_PER_EMAIL_DAY;
 }
 
 /** POST /auth/code {email}: send a code. The answer is the same whether or
@@ -38,9 +50,12 @@ export async function requestCode(req: Request, env: Env): Promise<Response> {
   const email = normEmail(body.email);
   if (!email) throw new HttpError(400, "bad_email");
   try {
-    if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
+    if (await locked(env, email, req)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
     await limitOrThrow(env, ipKey("code", req), CODES_PER_IP, LIMIT_WINDOW);
-    await limitOrThrow(env, await emailKey("code", email), CODES_PER_EMAIL, LIMIT_WINDOW);
+    await limitOrThrow(env, await emailIpKey("code", email, req), CODES_PER_EMAIL, LIMIT_WINDOW);
+    await limitOrThrow(env, await emailIpKey("codeday", email, req), CODES_PER_EMAIL_IP_DAY, DAY);
+    await limitOrThrow(env, await emailKey("code", email), CODES_PER_EMAIL_ALL, LIMIT_WINDOW);
+    await limitOrThrow(env, await emailKey("codeday", email), CODES_PER_EMAIL_DAY, DAY);
   } catch (e) {
     if (e instanceof HttpError && e.status === 429) await bump(env, "codes.limited");  // 3.5, X: counts only
     throw e;
@@ -68,7 +83,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   if (body.web === true && req.headers.get("x-due-crew") !== "1") throw new HttpError(403, "csrf");
   try {
     await limitOrThrow(env, ipKey("verify", req), VERIFIES_PER_IP, LIMIT_WINDOW);
-    if (await locked(env, email)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
+    if (await locked(env, email, req)) throw new HttpError(429, "locked", { retryAfter: LIMIT_WINDOW });
   } catch (e) {
     if (e instanceof HttpError && e.status === 429) await bump(env, "codes.limited");
     throw e;
@@ -88,7 +103,8 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   const good = /^\d{6}$/.test(code) && timingSafeEqual(await codeHash(email, code), claim.code_hash);
   if (!good) {
     if (claim.attempts >= CODE_ATTEMPTS) await env.DB.prepare("DELETE FROM otp WHERE email = ?").bind(email).run();
-    await hit(env, await emailKey("fail", email), FAILS_TO_LOCK, LIMIT_WINDOW);
+    await hit(env, await emailIpKey("fail", email, req), FAILS_TO_LOCK, LIMIT_WINDOW);
+    await hit(env, await emailKey("failday", email), FAILS_PER_EMAIL_DAY, DAY);
     await bump(env, claim.attempts >= CODE_ATTEMPTS ? "codes.out" : "codes.wrong");
     throw new HttpError(400, claim.attempts >= CODE_ATTEMPTS ? "expired" : "wrong_code");
   }

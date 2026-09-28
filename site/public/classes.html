@@ -108,18 +108,6 @@
     <a href="https://github.com/sammyc2472/due-crew">Source</a>, server included
   </footer>
 </main>
-<script>
-  document.getElementById("copy").addEventListener("click", function () {
-    var b = this;
-    navigator.clipboard.writeText("2035408484").then(function () {
-      b.textContent = "Copied";
-      setTimeout(function () { b.textContent = "Copy code"; }, 1600);
-    }, function () {
-      var r = document.createRange();
-      r.selectNodeContents(document.getElementById("code"));
-      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
-    });
-  });
-</script>
+<script src="/landing.js"></script>
 </body>
 </html>
