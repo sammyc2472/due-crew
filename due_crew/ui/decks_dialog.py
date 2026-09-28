@@ -15,10 +15,42 @@ from aqt.qt import (
     QTreeWidgetItem, QVBoxLayout, Qt,
 )
 
-from . import attach_alive
+from . import _night, attach_alive
 from ..stats.decks import all_deck_counts, local_matches, subtree_counts
 
 DID = Qt.ItemDataRole.UserRole
+
+
+def _anki_style():
+    try:
+        from aqt.theme import WidgetStyle
+        return mw.pm.get_widget_style() == WidgetStyle.ANKI
+    except Exception:
+        return False
+
+
+def box_css():
+    """Anki's own checkbox look for the tree's boxes (3.4.1). Anki's style
+    sheet dresses QCheckBox but not the boxes in a list, and in night mode
+    they come out dark grey on near-black: there, but nobody can see them
+    (a friend's "there isn't even a box"). Only where that happens (Anki's
+    widget style, or night mode); elsewhere the system's own boxes stay.
+    Nothing when this Anki can't name its check icon: a styled box with no
+    tick would hide what's shared."""
+    if not (_anki_style() or _night()):
+        return ""
+    try:
+        from aqt import colors
+        from aqt.theme import theme_manager as tm
+        border, fill = tm.var(colors.BORDER_STRONG), tm.var(colors.CANVAS_ELEVATED)
+        check = tm.themed_icon("mdi:check")
+    except Exception:
+        return ""
+    if not check:
+        return ""
+    return (f"QTreeView::indicator {{ width: 11px; height: 11px; border: 1px solid {border};"
+            f" border-radius: 3px; background: {fill}; }}"
+            f" QTreeView::indicator:checked {{ image: url({check}); }}")
 
 
 class DecksDialog(QDialog):
@@ -57,6 +89,9 @@ class DecksDialog(QDialog):
         self.tree.setHeaderLabels(["Deck", "Cards", ""])
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(True)
+        css = box_css()
+        if css:
+            self.tree.setStyleSheet(css)
         header = self.tree.header()
         header.setStretchLastSection(True)
         root.addWidget(self.tree)
