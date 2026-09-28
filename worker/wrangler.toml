@@ -6,6 +6,15 @@ compatibility_date = "2026-08-20"
 workers_dev = false
 routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 
+# Workers Logs: what the code logs (errors, the bridge's counts), kept a few
+# days in the dashboard. Not each request: URLs carry friend and plan codes,
+# and CLAUDE.md says codes are never logged.
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false
+
 [vars]
 API_VERSION = "1"
 MIN_CLIENT = "3.0.0"

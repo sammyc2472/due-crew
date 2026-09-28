@@ -305,3 +305,22 @@ deck both share (Settings › Shared decks).
 
 - [ ] Paste a search on a day on the site: "counted in your Anki soon". Refresh Anki (the day's first refresh, or tomorrow): the site shows its count; a search that finds nothing says so.
 - [ ] Add to calendar › Google Calendar: Google offers to add "Step 1"; each date shows as an all-day event. Apple Calendar: the Calendar app subscribes. Move a date on the site: the calendar follows within a few hours.
+
+### 3.4.0: a calmer builder, cards by ID, print, events, a follower's own days
+
+On the site (as an author):
+- [ ] Click a day: the side panel's second tab is that day (never a third column). Click a tag's + : it lands on that day, and What to cover says "Adding to …".
+- [ ] The pace is one line; Finish by / Cards a day / I'll place each day each show only their own field. Fill says what it does ("Fill to Sun 1 Nov"); none when placing by hand.
+- [ ] Share ▾ holds the code, Copy link, Add to calendar and co-authors. Save shows only while something's unsaved; ⌘S saves.
+- [ ] E1: paste a column of note IDs into a day's Add cards: "N note IDs · all their cards", Add. The next refresh in your Anki counts them on the site.
+- [ ] E2: Print: the list by week, topics by resource; the browser's print window shows only the list. A follower can print too.
+- [ ] F1: on a day, Prep for › + New event (a name, a day). The event day shows "N days of prep"; pointing at it lights up its prep days. Finish by › "or an event…": Fill stops the day before and its new dates are for the event.
+
+In Anki (as a follower):
+- [ ] The plan card: "For Micro quiz on Thu · 2 more days of prep" while you prep.
+- [ ] G1: Open now on the next date: that date opens (one Edit › Undo step); its morning opens nothing twice.
+- [ ] G2: Not today, right after the morning: the cards close again, the card says they open tomorrow morning (Open it now works too); the next day they open.
+- [ ] G3: Plan ▾ › Skip a date: its row is crossed out with Undo skip; it never opens. Undo skip: it opens if its day has come.
+- [ ] G4: Plan ▾ › Pause until… (your Away dates fill it in if set). The day after, "Welcome back": move my dates later, or open what I missed. Plan ▾ › Push my dates back… sets the days by hand; the card says "your dates +N days".
+- [ ] G5: fall behind a day: "N new cards from earlier dates waiting · Catch up…": over 3 days, Anki's new count for the deck goes up today only; Stop puts it back.
+- [ ] G6: on the site, the follower's plan page shows "you: 20 of 34", "you: skipped".
