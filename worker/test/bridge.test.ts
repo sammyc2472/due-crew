@@ -27,7 +27,10 @@ function fakeFirestore(docs: Record<string, Record<string, unknown>>) {
     }
     expect((init?.headers as any).authorization).toBe("Bearer tok");
     if (!init?.method || init.method === "GET") {
-      // a collection listing: the docs directly under the path
+      // a collection listing: the docs directly under the path. Like
+      // Firestore, a mask naming a reserved field (__x__) other than __name__ is a 400
+      const mask = new URL(url).searchParams.getAll("mask.fieldPaths");
+      if (mask.some((f) => /^__.*__$/.test(f) && f !== "__name__")) return new Response("Invalid reserved name in field path", { status: 400 });
       const path = decodeURIComponent(url.split("/documents/")[1].split("?")[0]);
       const names = Object.keys(docs).filter((d) => d.startsWith(path + "/") && !d.slice(path.length + 1).includes("/"));
       return Response.json({ documents: names.map((n) => ({ name: `${DOCS}/${n}` })) });
