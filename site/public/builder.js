@@ -793,9 +793,13 @@ async function builder(id) {
         h("button", { class: "quiet", "aria-label": "No review day", onclick: () => { doc.reviews = doc.reviews.filter((x) => x !== r); if (!doc.reviews.length) delete doc.reviews; mark(); draw(); } }, "×")));
   }
 
-  /** Notes on a day, from anyone in the plan ("lab day, keep it light"). */
+  /** Notes on a day, from anyone in the plan ("lab day, keep it light").
+   *  In the library, where anyone can follow, only the authors write them. */
   function notesBox(d) {
     const list = notes.filter((x) => x.day === d);
+    if (plan.library && !author) {
+      return list.length ? h("div", { class: "notes" }, list.map((x) => h("div", { class: "note" }, h("b", {}, x.mine ? "You" : x.name), " ", h("span", {}, x.text)))) : null;
+    }
     const input = h("input", { placeholder: "Add a note", maxlength: 280, "aria-label": `A note on ${pretty(d)}`, style: "width:100%" });
     const add = async () => {
       const text = input.value.trim(); if (!text) return;
