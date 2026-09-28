@@ -1449,6 +1449,8 @@ async function builder(id) {
       t.addEventListener("input", () => { t.value = t.value.replace(/[\r\n]+/g, " "); meta.name = t.value; mark(); fit(); });
       t.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); t.blur(); } });
       requestAnimationFrame(fit);
+      // and again whenever its width changes (a window resized, the page laid out late)
+      if (window.ResizeObserver) { let w = 0; new ResizeObserver(() => { if (t.clientWidth !== w) { w = t.clientWidth; fit(); } }).observe(t); }
       return t;
     }
     const tabs = author ? [["calendar", "Calendar"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];

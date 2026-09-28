@@ -25,7 +25,7 @@ INVITE_COPIED = "Invite copied. Send one per friend."
 
 
 def friend_invite(code):
-    """3.4.1: one line and a link. The page behind it says the rest, and
+    """3.5.0: one line and a link. The page behind it says the rest, and
     the code box takes the whole paste. `code` is a one-time invite (10),
     or my friend code (6) when one couldn't be made."""
     return f"Study with me on Due Crew: duecrew.com/i/{code}"

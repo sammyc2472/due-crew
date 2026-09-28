@@ -273,7 +273,7 @@ def _fetch_decks(force=False):
 
 
 def _copy_friend_invite():
-    """Copy invite (3.4.1): a one-time link, made now. Offline, the link
+    """Copy invite (3.5.0): a one-time link, made now. Offline, the link
     carries my friend code instead (add, then Add back). An account without
     a code yet gets one made here too."""
     from .share import INVITE_COPIED, friend_invite
@@ -442,7 +442,7 @@ def _on_render(deck_browser, content):
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     if _state.get("settings_tab"):
-        return board.settings_html(_settings_view(), c)  # 3.4.1: Settings in its place
+        return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
     show_up = bool(c.get("show_up"))
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
@@ -698,7 +698,7 @@ def _on_js(handled, message, context):
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd in SETTINGS_CMDS:
-        _settings_cmd(cmd, parts[1:])  # 3.4.1: Settings in the board
+        _settings_cmd(cmd, parts[1:])  # 3.5.0: Settings in the board
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
@@ -800,11 +800,11 @@ def _add_code(code):
     typed = code
     invite = invite_code_from(typed)
     if invite:
-        _redeem(invite)  # 3.4.1: a one-time invite makes us crew at once
+        _redeem(invite)  # 3.5.0: a one-time invite makes us crew at once
         return
     code = friend_code_from(typed)
     if not code:
-        # 3.4.1: a plan's code opens Follow, a squad's opens Squads
+        # 3.5.0: a plan's code opens Follow, a squad's opens Squads
         longer = long_code_from(typed)
         if not longer:
             tooltip("That doesn't look like a code. Pasting the whole invite works too.")
@@ -1052,7 +1052,7 @@ def _delete_account():
 
 def open_settings(tab=None):
     """tab: "you", "board", or "privacy" (your card's Privacy… opens that
-    one; until 2.9 it landed on Account). 3.4.1: in the board when it's on
+    one; until 2.9 it landed on Account). 3.5.0: in the board when it's on
     screen; the dialog otherwise (the board turned off, signed out, or
     another screen)."""
     if _board_on_screen():

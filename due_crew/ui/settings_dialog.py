@@ -360,7 +360,7 @@ class SettingsDialog(QDialog):
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
         self._check(lay, "sync_notifications", "Tell me when my crew studies")
-        # 3.4.1: which tabs show (Today always does); per computer
+        # 3.5.0: which tabs show (Today always does); per computer
         from ..board import HIDEABLE_TABS
         hidden = set(self.config.get("hidden_tabs") or [])
         tabs_row = QHBoxLayout()

@@ -58,7 +58,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
 
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads", "plans")
-# 3.4.1: tabs a person can hide in Settings (per computer); Today always shows
+# 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 HIDEABLE_TABS = (("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
 
 
@@ -665,7 +665,7 @@ def _css(cfg):
     #due-crew .dc-pc .ss span {{ font-size: 10.5px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
     #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
-    /* 3.4.1: the Plans tab's Today box and week */
+    /* 3.5.0: the Plans tab's Today box and week */
     #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
       display: grid; gap: 6px; margin: 2px 0 10px; }}
     #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
@@ -890,7 +890,7 @@ def _table_html(data, cfg, period):
         # 3.4 review, C5: until a friend adds me back, the invite is the board
         code = str(data.get("my_code") or "")
         spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
-        # 3.4.1: a friend's, a plan's or a squad's code, or a whole invite
+        # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
         add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
                ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
                "pycmd('duecrew:addcode:'+v);return false;")
@@ -1028,7 +1028,7 @@ def _presence_html(fresh, dormant, labels, entries):
 
 def _tricky_html(tricky, mine=None):
     """2.10: cards a crewmate flagged, listed only when I have the same note.
-    3.4.1, K3: under their own headings, "Asked of you" (asks about cards
+    3.5.0, K3: under their own headings, "Asked of you" (asks about cards
     I have down first) and "Your asks", each with where it stands. Their
     text is theirs, and a card's text is my own copy's: escaped."""
     out = ""
@@ -1069,7 +1069,7 @@ def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None):
 
 
 def _plans_html(plans):
-    """3.3: the Plans tab, a card each; 3.4.1: with none, the ways in."""
+    """3.3: the Plans tab, a card each; 3.5.0: with none, the ways in."""
     cards = (plans or {}).get("cards") or []
     return "".join(_plan_card_html(card) for card in cards) if cards else _plans_empty_html()
 
@@ -1085,7 +1085,7 @@ def _pbar(done, total, solid=True):
 
 
 def _plans_empty_html():
-    """3.4.1: the Plans tab with no plan: three ways in."""
+    """3.5.0: the Plans tab with no plan: three ways in."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v);return false;")
@@ -1098,7 +1098,7 @@ def _plans_empty_html():
 
 
 def _plan_card_html(card):
-    """3.4.1, the Plans tab (mock "Plans Tab Review"): the plan, a Today
+    """3.5.0, the Plans tab (mock "Plans Tab Review"): the plan, a Today
     box, this week as the site's calendar draws it (a list when narrow),
     one note at most, and the crew. Plan, date and event names are the
     author's: escaped here."""
@@ -1613,9 +1613,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
     the cards on the Decks tab, a squad's offers on Decks and Squads.
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.4.1): my own asks about cards (together.my_asks_view), Decks tab."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Decks tab."""
     period = cfg.get("period", "today")
-    hidden = hidden_tabs(cfg)  # 3.4.1: Plans shows by default, with a plan or without
+    hidden = hidden_tabs(cfg)  # 3.5.0: Plans shows by default, with a plan or without
     if period not in PERIODS or period in hidden:
         period = "today"
     show_up = bool(cfg.get("show_up"))
@@ -1733,7 +1733,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'{_css(cfg)}{_head(period, show_up, hidden)}{body}{foot}</div>')
 
 
-# ---- 3.4.1: Settings, in the board ----
+# ---- 3.5.0: Settings, in the board ----
 
 SETTINGS_CSS = """
     #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
@@ -1929,7 +1929,7 @@ def _st_toggle_cmd(cmd, on, label):
 
 
 def settings_html(view, cfg):
-    """3.4.1: Settings in place of the board (mock "Settings in the Board").
+    """3.5.0: Settings in place of the board (mock "Settings in the Board").
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
     from the glue; every string in it is escaped here."""
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"

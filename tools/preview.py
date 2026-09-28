@@ -174,9 +174,9 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
              "waiting": 16}
-sections.append("<h3>3.4.1: a plan I follow, on the Plans tab</h3>" + board.render(
+sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
-sections.append("<h3>3.4.1: the Plans tab, following nothing</h3>" + board.render(
+sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [], "offers": []}))
 # the preview holds many boards; the add-on runs this once, for its one
 sections.append("<script>" + board.keep_me_in_view_js().replace(

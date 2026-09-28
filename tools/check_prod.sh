@@ -20,6 +20,7 @@ check "unknown route"                     404 "$API/nope"
 check "board needs sign-in"               401 "$API/board"
 check "a code look-up needs sign-in"      401 "$API/codes/ABC123"
 check "plan peek, no such code"           404 "$API/plans/public?code=ZZZZ2345"
+check "invite, no such code"              404 "$API/invites/ZZZZZZZZZZ"
 check "email link, not from the site"     403 -X POST -H 'content-type: application/json' \
       -d '{"email":"x@example.com","path":"/"}' "$API/links/email"
 
@@ -30,6 +31,7 @@ check "board.png"                         200 "$SITE/board.png"
 check "the app"                           200 "$SITE/app.js"
 check "/api reaches the API"              200 "$SITE/api/version"
 check "a plan page"                       200 "$SITE/p/ZZZZ2345"
+check "an invite page"                    200 "$SITE/i/ZZZZZZZZZZ"
 case $SITE in https://*) check "www" 200 -L "https://www.${SITE#https://}/" ;; esac
 
 echo

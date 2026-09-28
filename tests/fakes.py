@@ -217,7 +217,7 @@ class FakeWorker:
         self.bans = set()    # (sid, uid)
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
-        self.invites = {}    # 3.4.1: code -> {uid, used_by} (the Worker keeps only a hash)
+        self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
         self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
@@ -720,7 +720,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     def _invites(self, method, me, rest):
-        """3.4.1 (worker/src/invites.ts): a one-time invite makes us crew at
+        """3.5.0 (worker/src/invites.ts): a one-time invite makes us crew at
         once, both edges; one use."""
         if method == "POST" and not rest:
             code = f"I{len(self.invites):09d}"

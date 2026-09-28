@@ -657,7 +657,7 @@ class ApiClient:
                       "no_match": "That code doesn't match anyone."}.get(err, "Couldn't add. Try again.")
 
     def create_invite(self):
-        """3.4.1: a one-time invite's code, or None (offline, or the day's
+        """3.5.0: a one-time invite's code, or None (offline, or the day's
         ceiling). Whoever redeems it is crew with me at once."""
         try:
             status, data = self._call("POST", "/invites", {})

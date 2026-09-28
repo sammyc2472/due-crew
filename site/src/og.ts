@@ -212,7 +212,7 @@ export async function draw(p: Peek, code: string): Promise<Canvas> {
   return cv;
 }
 
-/** 3.4.1: an invite link's picture: who invited you, and what to. */
+/** 3.5.0: an invite link's picture: who invited you, and what to. */
 export async function drawInvite(name: string): Promise<Canvas> {
   const a = await load();
   const cv = new Canvas(BG);
