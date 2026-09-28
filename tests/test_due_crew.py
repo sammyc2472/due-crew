@@ -4041,7 +4041,7 @@ def test_who_knows_v32():
     check("log: minutes, reviews, new cards and retention, studied days only",
           log == {_day(-1): [0, 1, 1, 0.0], _day(0): [2, 2, 1, 50.0]}, str(log))
     sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)})
-    check("log: the long first upload marks it sent", sam.session["log_year"] == "sam" and len(store.logs["sam"]) == 18)
+    check("log: the long first upload marks it sent", sam.session["log_full"] == "sam" and len(store.logs["sam"]) == 18)
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     check("log: unchanged, not sent again", "log" not in store.bodies[-1][2])

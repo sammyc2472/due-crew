@@ -29,7 +29,7 @@ KNOWN_IVL = 21
 CLEAN_DAYS = 30
 STUCK_LAPSES = 2
 STUCK_MAX = 300
-LOG_FULL = 365  # 3.5: a year once (the site's log shows a year), then LOG_RECENT
+LOG_FULL = 120
 LOG_RECENT = 8
 
 
@@ -89,7 +89,7 @@ def log_days(col, days):
 def for_sync(c, light=False):
     """What a sync carries for 3.2, as push()'s keyword arguments: the cards
     I'm stuck on (every sync), and on a full sync the cards I know and my
-    log (the first time a year, then the last 8). Main thread."""
+    log (the first time 120 days, then the last 8). Main thread."""
     cl = client()
     if not mw.col or not cl.signed_in:
         return None
@@ -101,7 +101,7 @@ def for_sync(c, light=False):
         if not light:
             out["known"] = known
     if not light:
-        days = LOG_RECENT if cl.session.get("log_year") == cl.user_id else LOG_FULL
+        days = LOG_RECENT if cl.session.get("log_full") == cl.user_id else LOG_FULL
         log = log_days(mw.col, days)
         if log:
             out["log"] = log

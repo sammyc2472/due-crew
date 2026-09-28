@@ -499,9 +499,7 @@ class ApiClient:
         if "log" in body:
             self.session["log_hash"] = _digest(log)
             if len(log) > 8:
-                # the long first upload went: 8 days from now on (3.5: a year,
-                # so an install that sent 120 days under 3.2 sends a year once)
-                self.session["log_year"] = self.user_id
+                self.session["log_full"] = self.user_id  # the long first upload went: 8 days from now on
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]

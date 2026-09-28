@@ -171,8 +171,8 @@ add-on.
   change one, change both. Missed study days ask once on the plan card
   (spread, push my dates back, leave open); a checkpoint's morning builds
   Anki's own filtered deck, and its score stays on this computer. The
-  recap rides my week (`recap`). My log rides a full sync (`log`, a year
-  once since 3.5, then 8), read only by me on the site.
+  recap rides my week (`recap`). My log rides a full sync (`log`, 120 days
+  once, then 8), read only by me on the site.
 - 3.2 who knows this one (`cards.py`): no switch. In the decks I share,
   a card I have down (review, 21+ days, no Again in 30) goes up as its
   guid (`knows`, as changes, `known.json` beside the session); the cards
@@ -308,8 +308,8 @@ add-on.
   is per browser), crewmates' exams with Send good luck (a `luck` cheer),
   plans and friends. Log: tiles against last week so far, the year, this
   week and last, averages over days studied, 30 days by date (never by
-  size), each plan's history (`hist` on my follow), CSV. The add-on sends
-  a year of log once (`log_year`), then 8 days. Admin: counts only; the
+  size), each plan's history (`hist` on my follow), CSV; the year fills
+  in as the log grows (the server keeps 400 days). Admin: counts only; the
   daily cron keeps them (`admin_days`), sign-in steps and bridge runs are
   counters there (`admin.bump`), `bridge_last` is the bridge's last run,
   the cutover is 3.x / 2.x still studying / quiet, notices keep their
