@@ -1793,14 +1793,14 @@ SETTINGS_CSS = """
     #due-crew .st-acts { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0; }
     #due-crew .st-radio { display: grid; grid-template-columns: 16px 1fr; gap: 8px; padding: 8px 11px; cursor: pointer;
       width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; }
-    #due-crew .st-radio + .st-radio, #due-crew .st-radio + .st-sub { border-top: 1px solid var(--dc-line); }
+    #due-crew .st-radio + .st-radio, #due-crew .st-sub + .st-radio { border-top: 1px solid var(--dc-line); }
     #due-crew .st-radio i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%;
       border: 1.5px solid var(--dc-faded); margin-top: 2px; }
     #due-crew .st-radio.on { background: var(--dc-you-bg); }
     #due-crew .st-radio.on i { border: 4px solid var(--dc-accent); }
     #due-crew .st-radio span { display: grid; gap: 2px; }
     #due-crew .st-radio small { color: var(--dc-muted); font-size: 11.5px; }
-    #due-crew .st-sub { padding: 0 11px 8px 35px; background: var(--dc-you-bg); }
+    #due-crew .st-sub { padding: 0 11px 9px 35px; margin-top: -2px; background: var(--dc-you-bg); }
     #due-crew .st-foot { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
       margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
     #due-crew button:focus-visible, #due-crew a:focus-visible, #due-crew input:focus-visible {
