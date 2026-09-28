@@ -698,7 +698,7 @@ def _on_js(handled, message, context):
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd in SETTINGS_CMDS:
-        _settings_cmd(cmd, parts[1:])  # 3.5.0: Settings in the board
+        _settings_cmd(cmd, parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:

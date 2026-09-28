@@ -1736,6 +1736,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 # ---- 3.5.0: Settings, in the board ----
 
 SETTINGS_CSS = """
+    #due-crew.dc-set, #due-crew.dc-set .st-row, #due-crew.dc-set .st-l { text-align: left; }
     #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
     #due-crew .st-bar b { font-size: 15px; }
     #due-crew .st-back { color: var(--dc-accent); font-weight: 700; text-decoration: none; }

@@ -2787,6 +2787,37 @@ def test_settings_in_board_v341():
           "setsignin" in out and "follow your account" not in out)
 
 
+def test_settings_messages_reach_the_panel():
+    """3.5.0: the board's Settings clicks, sent as the board sends them
+    (duecrew:settab:board), change the tab and the setting; routed through
+    the add-on's own message handler, not only settings_model."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    conf = {"compact": False, "hidden_tabs": [], "accent": "green"}
+    saved = (dc._swap, dc.cfg, dc.save_cfg)
+    swaps = []
+    dc._swap = lambda c, focus=None: swaps.append(focus)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: None
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("settab:board")
+        tab = dc._state.get("settings_tab")
+        send("set:compact:1")
+        send("set:accent:rose")
+        send("settabs:plans:0")
+        send("setclose")
+        check("settings: the board's clicks reach it (a tab, a switch, a choice, a tab hidden, back)",
+              tab == "board" and conf["compact"] is True and conf["accent"] == "rose"
+              and conf["hidden_tabs"] == ["plans"] and dc._state.get("settings_tab") is None and len(swaps) == 5,
+              (tab, conf, swaps))
+    finally:
+        dc._swap, dc.cfg, dc.save_cfg = saved
+        dc._state["settings_tab"] = None
+
+
 def test_settings_saves_in_order_v341():
     """3.5.0: Settings in the board saves on every click, and the server keeps
     whichever save arrives last. One save at a time: a click while one is on
