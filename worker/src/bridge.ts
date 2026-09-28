@@ -329,12 +329,13 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
   return { pulled, pushed: writes.length };
 }
 
-/** The ids in a Firestore collection (names only, no fields read). */
+/** The ids in a Firestore collection (names only, no fields read: the mask
+ *  is `__name__`, the one reserved name a mask takes; `__none__` was a 400). */
 async function listIds(fetcher: Fetch, auth: Record<string, string>, path: string): Promise<string[]> {
   const out: string[] = [];
   let page = "";
   do {
-    const res = await fetcher(`${API}/${path}?pageSize=300&mask.fieldPaths=__none__${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`,
+    const res = await fetcher(`${API}/${path}?pageSize=300&mask.fieldPaths=__name__${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`,
       { headers: auth });
     if (!res.ok) throw new Error(`firestore list: ${res.status}`);
     const data = (await res.json()) as { documents?: { name: string }[]; nextPageToken?: string };
