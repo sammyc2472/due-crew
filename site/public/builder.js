@@ -1441,13 +1441,22 @@ async function builder(id) {
 
   function draw() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
+    // the plan's name, edited in place: it wraps and grows, so a long name is never cut off
+    function titleBox() {
+      const t = h("textarea", { class: "tname", rows: 1, maxlength: 60, "aria-label": "The plan's name", spellcheck: "false" });
+      t.value = meta.name;
+      const fit = () => { t.style.height = "auto"; t.style.height = `${t.scrollHeight}px`; };
+      t.addEventListener("input", () => { t.value = t.value.replace(/[\r\n]+/g, " "); meta.name = t.value; mark(); fit(); });
+      t.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); t.blur(); } });
+      requestAnimationFrame(fit);
+      return t;
+    }
     const tabs = author ? [["calendar", "Calendar"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
     const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
-        h("div", {}, owner ? h("input", { class: "tname", value: meta.name, maxlength: 60, "aria-label": "The plan's name",
-          oninput: (e) => { meta.name = e.target.value; mark(); } }) : h("h1", {}, meta.name || "Untitled"),
+        h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
           h("p", { class: "muted small bsub" }, subline())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
