@@ -190,7 +190,7 @@ def _select_squad(sid):
 
 
 def open_squads(code=""):
-    """code (3.4.1): a squad code pasted elsewhere (the welcome screen), looked up at once."""
+    """code (3.5.0): a squad code pasted elsewhere (the welcome screen), looked up at once."""
     from .ui.squad_dialog import SquadDialog, shared_note
     dlg = SquadDialog(mw, client(), _on_squad_joined, note=shared_note(cfg()), code=code)
     dlg.exec()

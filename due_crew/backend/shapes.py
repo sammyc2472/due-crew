@@ -382,13 +382,13 @@ INVITE_LEN = 10
 
 
 def _code_in_link(text, length):
-    """3.4.1: the code in an invite's link (duecrew.com/i/CODE), or ''."""
+    """3.5.0: the code in an invite's link (duecrew.com/i/CODE), or ''."""
     found = re.findall(r"/I/([A-Z0-9]{%d})(?![A-Z0-9])" % length, str(text or "").upper())
     return found[-1] if found else ""
 
 
 def invite_code_from(text):
-    """3.4.1: a one-time invite's code (10): from its link, or typed. ''
+    """3.5.0: a one-time invite's code (10): from its link, or typed. ''
     when none."""
     code = _code_in_link(text, INVITE_LEN)
     if code:
@@ -414,7 +414,7 @@ def squad_code_from(text):
 
 
 def long_code_from(text):
-    """3.4.1: a plan's or a squad's 8-character code from whatever was typed
+    """3.5.0: a plan's or a squad's 8-character code from whatever was typed
     or pasted: the code, spaced as the site shows it ("N4AP ULM2"), or a
     whole invite (the code after the word "code"). '' when none."""
     up = str(text or "").upper()

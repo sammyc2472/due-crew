@@ -1,4 +1,4 @@
-// 3.4.1: one-time invites (duecrew.com/i/CODE). Copy invite makes one; the
+// 3.5.0: one-time invites (duecrew.com/i/CODE). Copy invite makes one; the
 // first person to redeem it within 14 days and the one who made it are crew
 // at once, both edges, with no Add back: sending the link was the inviter's
 // yes, for one person. Anyone after that (a link in a group chat), or later,

@@ -540,7 +540,7 @@ button[hidden] { display: none; }
 .heat i, .hk i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; background: var(--well); }
 .heat i.fut { background: transparent; }
 .heat i.pre, .hk i.pre { background: transparent; border: 1px dashed var(--line); }
-/* 3.4.1: shades of my accent, whichever it is */
+/* 3.5.0: shades of my accent, whichever it is */
 .heat i.l1, .hk i.l1 { background: color-mix(in srgb, var(--accent) 28%, var(--well)); } .heat i.l2, .hk i.l2 { background: color-mix(in srgb, var(--accent) 52%, var(--well)); }
 .heat i.l3, .hk i.l3 { background: color-mix(in srgb, var(--accent) 76%, var(--well)); } .heat i.l4, .hk i.l4 { background: var(--accent); }
 .heat i.now { outline: 1.5px solid var(--ink); outline-offset: 0; }

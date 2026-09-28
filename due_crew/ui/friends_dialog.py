@@ -248,7 +248,7 @@ class FriendsDialog(QDialog):
             tooltip("Copied.")
 
     def _copy_invite(self):
-        """3.4.1: a one-time link; offline, the link carries my code."""
+        """3.5.0: a one-time link; offline, the link carries my code."""
         if not self.code:
             return
         from ..share import INVITE_COPIED

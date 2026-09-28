@@ -28,7 +28,7 @@ from .app import _state, cfg, client
 ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
                 "share_heatmap", "show_up", "paused", "exam_date", "away_from", "away_to",
                 "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
-                "accent")  # 3.4.1: the site wears it too
+                "accent")  # 3.5.0: the site wears it too
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused")
@@ -249,7 +249,7 @@ _pushing = {"busy": False, "again": False}
 
 def push(c):
     """Send this computer's account settings. The newest save wins. One
-    save at a time (3.4.1: Settings in the board saves on every click, and
+    save at a time (3.5.0: Settings in the board saves on every click, and
     the server keeps whichever arrives last): a change made while one is
     on its way goes after it, as the config is then, so a run of clicks is
     at most two saves and never lands out of order."""

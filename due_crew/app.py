@@ -92,7 +92,7 @@ _state = {
     "my_code": "",         # my friend code, for Copy invite on a solo board
     "milestones": [],      # [(uid, name, days)]: a crewmate's 100/365-day streak, today
     "anki_synced": False,  # an AnkiWeb sync finished since the profile opened
-    "settings_tab": None,  # 3.4.1: Settings open in the board, on this tab
+    "settings_tab": None,  # 3.5.0: Settings open in the board, on this tab
     "room_dismissed": set(),  # study-room invites waved off this session
     "room_skip": None,     # (room key, round): the break I skipped
     "room_break": False,   # the break is on screen (review shortcuts are off)

@@ -174,10 +174,23 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
              "waiting": 16}
-sections.append("<h3>3.4.1: a plan I follow, on the Plans tab</h3>" + board.render(
+sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
-sections.append("<h3>3.4.1: the Plans tab, following nothing</h3>" + board.render(
+sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [], "offers": []}))
+# 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
+SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status": "coffee, then 400 cards",
+            "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["BUSM 2028", "Block 3"],
+            "decks": ["AnKing Step 1"]}
+SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "busm", "exam_date": "2026-10-14"}
+for tab in ("you", "board", "privacy"):
+    sections.append(f"<h3>3.5.0: Settings, {tab}</h3>" + board.settings_html(dict(SET_VIEW, tab=tab), SET_CFG))
+sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.render(
+    DATA, {"period": "decks"}, now_ts - 60,
+    tricky=[{"name": "Maya", "text": "Which nerve innervates the deltoid?", "deck": "AnKing", "q": "why axillary?",
+             "uid": "m", "index": 0, "known": True}],
+    asks=[{"text": "The external iliac artery becomes the femoral artery as it c", "who": [], "state": "open", "index": 0},
+          {"text": "Warfarin inhibits vitamin K epoxide reductase", "who": ["Dre"], "state": "answered"}]))
 # the preview holds many boards; the add-on runs this once, for its one
 sections.append("<script>" + board.keep_me_in_view_js().replace(
     "var box = document.querySelector('#due-crew .dc-scroll');\n        if (!box) { return; }",
@@ -274,6 +287,11 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   .fancy table {{ background: var(--canvas-glass); }}
   h3 {{ max-width: 640px; margin: 26px auto 4px; font-size: 13px;
         font-family: monospace; opacity: 0.6; }}
+  /* Anki's Decks screen, as the board meets it (3.5.0): the page sits in
+     a <center> and every button gets Anki's own look. A board part that
+     leans on either shows it here, not first in someone's Anki. */
+  center button {{ margin: 4px 6px; padding: 6px 14px; border-radius: 10px;
+                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); min-width: 60px; }}
   .bar {{ position: fixed; top: 8px; right: 12px; z-index: 99; display: flex; gap: 6px; }}
   .bar button {{ font-size: 12px; padding: 4px 10px; }}
 </style></head><body class="fancy">
@@ -284,7 +302,7 @@ page = f"""<!doctype html><html><head><meta charset="utf-8">
   <button onclick="eval(STRANGER_JS)">stranger</button>
   <button onclick="eval(LUCK_JS)">luck</button>
 </div>
-{''.join(sections)}
+<center>{''.join(sections)}</center>
 <script>
   function pycmd(cmd) {{ console.log('pycmd', cmd); return false; }}
   var PROFILE_JS = {json.dumps(profile_js)};

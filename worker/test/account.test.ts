@@ -152,7 +152,7 @@ describe("housekeeping", () => {
   });
 });
 
-describe("3.4.1: my accent on the site", () => {
+describe("3.5.0: my accent on the site", () => {
   it("/auth/me carries the accent the add-on keeps in my settings; anything else is green", async () => {
     const { person } = await import("./helpers");
     const sam = await person("sam");

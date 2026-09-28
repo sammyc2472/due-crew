@@ -123,7 +123,7 @@ class WelcomeDialog(QDialog):
         run_bg(self, job, done)
 
     def _copy(self):
-        """3.4.1: a one-time link; offline, the link carries my code."""
+        """3.5.0: a one-time link; offline, the link carries my code."""
         from ..share import INVITE_COPIED, friend_invite
         if not self.code:
             return
@@ -156,7 +156,7 @@ class WelcomeDialog(QDialog):
         invite = invite_code_from(self.code_input.text())
         code = "" if invite else friend_code_from(self.code_input.text())
         if not code and not invite:
-            # 3.4.1: a plan's or a squad's code (8) works here too
+            # 3.5.0: a plan's or a squad's code (8) works here too
             longer = long_code_from(self.code_input.text())
             if longer:
                 self._plan_or_squad(longer)

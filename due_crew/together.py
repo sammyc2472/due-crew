@@ -133,7 +133,7 @@ def local_tips(guid):
 
 
 def mark_helped(guid, from_uid, on):
-    """Main thread. This helped, remembered on the kept tip (3.4.1)."""
+    """Main thread. This helped, remembered on the kept tip (3.5.0)."""
     w = _wrap_data()
     changed = False
     for t in (w.get("tips") or {}).get(guid, []):
@@ -265,6 +265,21 @@ def flag_card(card):
     tooltip(msg)
 
 
+def unask(index):
+    """3.5.0: Take back, on the Decks tab's own ask (by its place in my
+    flags: a guid can't ride a board command). Main thread."""
+    cl = client()
+    flags = clean_tricky(cl.session.get("tricky"), _today())
+    if not 0 <= index < len(flags):
+        return
+    del flags[index]
+    cl.session["tricky"] = flags
+    cl._save_session()
+    app.swap(cfg())
+    app.sync(light=True, fetch=False)
+    tooltip("Taken back.")
+
+
 def reviewer_menu(reviewer, menu):
     """gui_hooks.reviewer_will_show_context_menu: the More menu and a
     right-click on the card both get the flag."""
@@ -273,7 +288,7 @@ def reviewer_menu(reviewer, menu):
         return
     flagged = any(f["guid"] == card.note().guid
                   for f in clean_tricky(client().session.get("tricky"), _today()))
-    # 3.4.1, K2: one way to ask, on any card, a line optional
+    # 3.5.0, K2: one way to ask, on any card, a line optional
     if flagged:
         action = menu.addAction("Due Crew: take back my ask")
         action.triggered.connect(lambda: flag_card(card))
@@ -313,7 +328,7 @@ def tricky_view():
 
 
 def my_asks_view():
-    """3.4.1, K3: my asks, for the Decks tab: [{text, deck, state, who}].
+    """3.5.0, K3: my asks, for the Decks tab: [{text, deck, state, who}].
     Open ones (still on my week) say who has the card down when I know
     it; answered ones (a tip kept in the last TIP_DAYS) say who answered.
     The text is my own copy's; nothing here makes a request."""
@@ -322,10 +337,10 @@ def my_asks_view():
              for e in _state["entries"] or [] if not e.get("you")}
     info = cl.session.get("cards") or {}
     out = []
-    for f in clean_tricky(cl.session.get("tricky"), _today()):
+    for i, f in enumerate(clean_tricky(cl.session.get("tricky"), _today())):
         who = [names[u] for u in (info.get(f["guid"]) or {}).get("knows") or [] if u in names]
         out.append({"guid": f["guid"], "text": f.get("text") or "", "deck": f.get("deck") or "",
-                    "state": "open", "who": who})
+                    "state": "open", "who": who, "index": i})
     open_guids = {a["guid"] for a in out}
     tips = _wrap_data().get("tips") or {}
     answered = [(g, [t for t in ts if isinstance(t, dict)]) for g, ts in tips.items()

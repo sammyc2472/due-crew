@@ -119,7 +119,7 @@ add-on.
   Closing Anki leaves the room.
 - 2.13: settings that belong to a person (`account.ACCOUNT_KEYS`: privacy
   switches, show-up, paused, exam and away dates, status, emoji, squads,
-  crew label, shared decks by id and name, muted uids, and since 3.4.1 the
+  crew label, shared decks by id and name, muted uids, and since 3.5.0 the
   accent, which `/auth/me` hands the site to wear) live on the server
   (`GET/PUT /settings`), mine only. Theme, sort, tab and the room chip's
   side stay per computer. An install pulls before it uploads:
@@ -182,7 +182,7 @@ add-on.
   The chip is beside Edit on the answer side, never inside a card: who
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
-  3.4.1 (mock "Card Help Flow"): the chip shows a tip's own words (its
+  3.5.0 (mock "Card Help Flow"): the chip shows a tip's own words (its
   first tip, one per person, "+N more" opens the rest) with This helped
   as its own click (`knowshelped`); asking is one thing, "ask my crew
   about this…" from the chip or the reviewer's menu on any card, a line
@@ -322,7 +322,7 @@ add-on.
   counters there (`admin.bump`), `bridge_last` is the bridge's last run,
   the cutover is 3.x / 2.x still studying / quiet, notices keep their
   history.
-- 3.4.1 the Plans tab (mock "Plans Tab Review"): a Today box in the day's
+- 3.5.0 the Plans tab (mock "Plans Tab Review"): a Today box in the day's
   state (study, rest, done with what's next, behind with Catch up and
   Move my days back, paused), then one week in the site calendar's look
   (`plans.week_view`, my own shifted days; a list under 560px; ‹ › move a
@@ -334,7 +334,7 @@ add-on.
   (`hidden_tabs`, per computer). A code box anywhere (welcome, the
   board's) takes a friend's, a plan's or a squad's code
   (`shapes.long_code_from`).
-- 3.4.1 invites (mock "Invite Page", option B, migration 0010): Copy
+- 3.5.0 invites (mock "Invite Page", option B, migration 0010): Copy
   invite makes a one-time code (10, `POST /invites`, kept as a hash, one
   use, 14 days, 20 a day) and copies "Study with me on Due Crew:
   duecrew.com/i/CODE". Whoever redeems it (`POST /invites/{code}/redeem`,
@@ -349,7 +349,7 @@ add-on.
   (`GET /invites/{code}`, signed out: a name and an emoji, 300 an hour an
   address), the three steps on a computer, Email it on a phone; the site
   Worker writes its preview ("Sam invited you", `drawInvite`).
-- 3.4.1 Settings in the board (mock "Settings in the Board"): the board's
+- 3.5.0 Settings in the board (mock "Settings in the Board"): the board's
   Settings opens in the board's place (`board.settings_html`, You, Board,
   Privacy; ‹ Board goes back), in its own tokens, so night mode and the
   accent just work. Each click is one command (`settings_model.change`:
@@ -410,6 +410,17 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   The 2.3 removal test locked the squad first, which hid the bug above.
 - Escape every server-sourced string before webviews, tooltips, or rich-text
   labels.
+- The board lives in Anki's Decks screen, which sits in a `<center>` and
+  styles every button (margin, shadow, rounded corners). The board's older
+  parts are centred by it on purpose; a new part sets `text-align: left`
+  itself, and buttons start from the reset in `_css`. `tools/preview.py`
+  renders inside the same `<center>` and button style: look at a new part
+  there (light, dark, narrow) before calling it done.
+- Every `duecrew:` command a page emits needs a handler
+  (`test_every_board_command_has_a_handler`), and a new one gets a test
+  that sends it through `_on_js` as the board does (3.5.0's Settings went
+  out with its clicks reaching nothing). Anything a click adds has its way
+  back on the same screen.
 - The reviewer's page runs the card's own script too: from there only the
   room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from

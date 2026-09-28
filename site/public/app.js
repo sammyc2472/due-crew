@@ -93,7 +93,7 @@ async function copy(text, btn) {
   setTimeout(() => { btn.textContent = "Copy"; }, 1600);
 }
 
-// ---- my accent (3.4.1): the one I picked in Anki, here too ----
+// ---- my accent (3.5.0): the one I picked in Anki, here too ----
 
 // [accent, ink on it, my row's fill], by day and by night: board.py's ACCENTS
 const ACCENTS = {
@@ -132,7 +132,7 @@ function wearAccent(name) {
 
 try { wearAccent(localStorage.getItem("dc-accent") || "green"); } catch { /* no storage: green until I know */ }
 
-/** 3.4.1: Copy invite makes a one-time link, as in Anki; offline it
+/** 3.5.0: Copy invite makes a one-time link, as in Anki; offline it
  *  carries my friend code. Safari only lets a click write the clipboard
  *  if it starts writing at once, so the text goes in as a promise. */
 function copyInvite(friendCode, btn) {
@@ -429,7 +429,7 @@ function codeBox() {
   const say = (cls, ...kids) => out.replaceChildren(h("div", { class: `res ${cls}` }, ...kids));
   const code = () => {
     const t = input.value.toUpperCase();
-    const inLink = /\/I\/([A-Z0-9]{10}|[A-Z0-9]{6})(?![A-Z0-9])/.exec(t);  // 3.4.1: an invite's link
+    const inLink = /\/I\/([A-Z0-9]{10}|[A-Z0-9]{6})(?![A-Z0-9])/.exec(t);  // 3.5.0: an invite's link
     if (inLink) return inLink[1];
     const bare = t.replace(/[^A-Z0-9]/g, "");
     if (bare.length === 6 || bare.length === 8 || bare.length === 10) return bare;
@@ -566,7 +566,7 @@ async function codePage(code) {
     me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
 }
 
-/** 3.4.1: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
+/** 3.5.0: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
  *  at once; a friend code (6) adds them, and they add you back. */
 async function invitePage(code) {
   let inv = null;

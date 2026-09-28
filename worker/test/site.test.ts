@@ -98,7 +98,7 @@ describe("og.ts", () => {
   });
 });
 
-describe("3.4.1: an invite's link previews as who sent it", () => {
+describe("3.5.0: an invite's link previews as who sent it", () => {
   it("the head says who, escaped; the picture draws; an unknown code gets the plain head", async () => {
     const sam = await person("sam", 'Sam "<b>"');
     const code = (await sam.call("POST", "/invites")).body.code;

@@ -342,14 +342,14 @@ In Anki (as a follower):
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
 - [ ] Admin (sammy): tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
 
-### 3.4.1: asking about a card (K1–K3)
+### 3.5.0: asking about a card (K1–K3)
 
 - [ ] Right-click a card while reviewing (or More): "Due Crew: ask my crew about this…". The box names who has it down, if anyone; OK with or without a line. Right-click again: "take back my ask".
 - [ ] A crewmate's Decks tab: "Asked of you" with your line, the card from their own copy, and Tip. Your own Decks tab: "Your asks", waiting, and who has it down.
 - [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
 - [ ] Night mode and light mode: the chip and the new headings read clearly.
 
-### 3.4.1: the Plans tab, and codes anywhere
+### 3.5.0: the Plans tab, and codes anywhere
 
 - [ ] Plans tab with a plan: the Today box names today's date(s), reviews, new and minutes; Study now starts the plan's deck; Put off to tomorrow closes them until tomorrow's morning.
 - [ ] The week: today outlined, past days ticked or "N left", rest days faded, an event outlined. Click a later day: Open now opens it, Skip it skips it (Undo skip on the same day), Move my days back asks how many. ‹ › moves a week and "Today" comes back.
@@ -361,7 +361,7 @@ In Anki (as a follower):
 - [ ] Welcome screen and the board's code box: a friend's code adds them; a plan's code opens Follow; a squad's opens Squads. A pasted invite works in each.
 - [ ] Alone on the board after adding someone: "Waiting for Name to add you back."
 
-### 3.4.1: invites (option B)
+### 3.5.0: invites (option B)
 
 - [ ] Board › Copy invite: the clipboard is one line, "Study with me on
       Due Crew: duecrew.com/i/…", and the tooltip says "Send one per friend."
@@ -379,7 +379,7 @@ In Anki (as a follower):
 - [ ] Paste the link into iMessage or Discord: the preview reads "… invited
       you".
 
-### 3.4.1: Settings in the board
+### 3.5.0: Settings in the board
 
 - [ ] The board's ⚙ opens Settings where the board was; ‹ Board goes back.
       A name's card › Privacy… opens it on Privacy.

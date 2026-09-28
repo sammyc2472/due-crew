@@ -118,7 +118,7 @@ def names_by_uid():
 def tip_list(info, local_tips, names):
     """The tips on one card, each person once: [{from, name, text, helped}].
     The server's first (on a card I'm stuck on, from crewmates I can name),
-    then the ones kept here as they arrived (2.10 tuples or 3.4.1 dicts)."""
+    then the ones kept here as they arrived (2.10 tuples or 3.5.0 dicts)."""
     out, seen = [], set()
     for t in (info or {}).get("tips") or []:
         u = t.get("from")
@@ -142,7 +142,7 @@ def chip_view(info, local_tips, names, asks=()):
     """What the chip says for one card, or None. info: the session's entry
     for the card; local_tips: the tips kept here for it (together.local_tips);
     asks: [(uid, index)] crewmates asking about this card (on their week).
-    3.4.1, K1: a tip shows its own words in the bar, with This helped."""
+    3.5.0, K1: a tip shows its own words in the bar, with This helped."""
     asks = [(u, i) for u, i in asks if u in names]
     if asks:
         name, emoji = names[asks[0][0]]
@@ -243,7 +243,7 @@ def _card():
 
 
 def ask(card=None):
-    """3.4.1, K2: the one way to ask, from the chip or the reviewer's menu,
+    """3.5.0, K2: the one way to ask, from the chip or the reviewer's menu,
     on any card: a flag with my line (optional). It rides my week as the
     card's guid and the line; crewmates with the card read it from their
     own copy. The first tip takes it down."""

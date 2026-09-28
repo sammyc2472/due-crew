@@ -1534,7 +1534,7 @@ def test_settings_follow_account_v213():
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
     doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
-    check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.4.1)",
+    check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.5.0)",
           doc["accent"] == "rose" and "sort" not in doc
           and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
     here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
@@ -2084,7 +2084,7 @@ def test_together_v210():
           and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
     from due_crew import cards as crew_cards
     chip = crew_cards.chip_view(None, together.local_tips("guid000003"), {})
-    check("tips: 3.4.1, K1, the tip's own words beside Edit, with This helped, never inside the card",
+    check("tips: 3.5.0, K1, the tip's own words beside Edit, with This helped, never inside the card",
           chip["kind"] == "tip" and chip["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and chip["title"] == "S3 = Kentucky"
           and chip["cmd"] == "knowstip" and chip.get("act") == "This helped"
           and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
@@ -2092,7 +2092,7 @@ def test_together_v210():
     check("tips: This helped is its own click, the tip's words go in as text",
           "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
-    check("tips: a tip kept before 3.4.1 still shows, without This helped (no one to thank)",
+    check("tips: a tip kept before 3.5.0 still shows, without This helped (no one to thank)",
           old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)
     js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
     check("good-luck card: lines go in as text, and Thanks is wired",
@@ -2669,11 +2669,11 @@ def test_ui_review_board():
           and "copyinvite" in solo and "duecrew:addcode:" in solo)
     waiting = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": ["Sam <b>"], "my_code": "K7Q2ZP"},
                            {"period": "today"}, 0)
-    check("3.4.1: alone, it names who I'm waiting on, escaped; the box takes any code, whole",
+    check("3.5.0: alone, it names who I'm waiting on, escaped; the box takes any code, whole",
           "Waiting for Sam &lt;b&gt; to add you back." in waiting and "[^A-Z0-9 \\/]" in waiting and "{6}" not in waiting)
     from due_crew.backend.shapes import friend_code_from, long_code_from
     plan_invite = "Follow MS2 Block 1 on Due Crew \u00b7 code N4AP ULM2"
-    check("3.4.1: a plan's code or invite is no friend code, and reads as the 8-character code",
+    check("3.5.0: a plan's code or invite is no friend code, and reads as the 8-character code",
           friend_code_from(plan_invite) == "" and long_code_from(plan_invite) == "N4APULM2"
           and long_code_from("n4ap-ulm2") == "N4APULM2" and long_code_from("K7Q2ZP") == ""
           and friend_code_from("STUDY WITH ME CODE K7Q2ZP") == "K7Q2ZP")
@@ -2682,7 +2682,7 @@ def test_ui_review_board():
 
 
 def test_invite_link_v341():
-    """3.4.1, option B: Copy invite makes a one-time link; whoever pastes it
+    """3.5.0, option B: Copy invite makes a one-time link; whoever pastes it
     is crew with its maker at once, both edges. One use. A friend code in
     the same link still adds, and the other adds back."""
     from due_crew.backend.shapes import friend_code_from, invite_code_from, long_code_from
@@ -2721,7 +2721,7 @@ def test_invite_link_v341():
 
 
 def test_settings_in_board_v341():
-    """3.4.1 (mock "Settings in the Board"): Settings in the board's place,
+    """3.5.0 (mock "Settings in the Board"): Settings in the board's place,
     one command per change, the same keys and rules as the dialog."""
     from due_crew import account
     check("settings: the accent follows the account (the site wears it); only an accent's name",
@@ -2763,7 +2763,7 @@ def test_settings_in_board_v341():
           reset["hidden_tabs"] == [] and reset["accent"] == "green"
           and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
     view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
-            "sync": "sam@x.edu · Synced 2m ago · v3.4.1", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
+            "sync": "sam@x.edu · Synced 2m ago · v3.5.0", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
             "decks": ["AnKing"]}
     you = board.settings_html(view, {"crew_label": "Crew"})
     check("settings: You, escaped; three squads read as two and 1 more",
@@ -2787,8 +2787,85 @@ def test_settings_in_board_v341():
           "setsignin" in out and "follow your account" not in out)
 
 
+def test_settings_messages_reach_the_panel():
+    """3.5.0: the board's Settings clicks, sent as the board sends them
+    (duecrew:settab:board), change the tab and the setting; routed through
+    the add-on's own message handler, not only settings_model."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    conf = {"compact": False, "hidden_tabs": [], "accent": "green"}
+    saved = (dc._swap, dc.cfg, dc.save_cfg)
+    swaps = []
+    dc._swap = lambda c, focus=None: swaps.append(focus)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: None
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("settab:board")
+        tab = dc._state.get("settings_tab")
+        send("set:compact:1")
+        send("set:accent:rose")
+        send("settabs:plans:0")
+        send("setclose")
+        check("settings: the board's clicks reach it (a tab, a switch, a choice, a tab hidden, back)",
+              tab == "board" and conf["compact"] is True and conf["accent"] == "rose"
+              and conf["hidden_tabs"] == ["plans"] and dc._state.get("settings_tab") is None and len(swaps) == 5,
+              (tab, conf, swaps))
+    finally:
+        dc._swap, dc.cfg, dc.save_cfg = saved
+        dc._state["settings_tab"] = None
+
+
+def test_every_board_command_has_a_handler():
+    """Every duecrew: command the add-on puts on a page (the board, the
+    bars, the chip, Settings) has a handler (3.5.0: Settings shipped with
+    its clicks going nowhere). Prefix families (plan*, room*, knows*) go
+    to their modules, which must handle the name itself."""
+    import glob
+    src = {p: open(p).read() for p in glob.glob(os.path.join(REPO, "due_crew", "**", "*.py"), recursive=True)}
+    emitted = set()
+    for text in src.values():
+        for rx in (r'_pycmd\(\s*f?["\']([a-z]+)', r'_st_click\(\s*f?["\']([a-z]+)', r'duecrew:([a-z]+)',
+                   r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
+            emitted |= set(re.findall(rx, text))
+    handled = set()
+    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py"):
+        text = src[os.path.join(REPO, "due_crew", name)]
+        handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
+        for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
+            handled |= set(re.findall(r'"([a-z0-9]+)"', group))
+    prefixes = {"plan", "room", "knows"}  # 'duecrew:' + a name built at run time
+    missing = sorted(c for c in emitted - handled - prefixes)
+    check("commands: every one the add-on emits has a handler", not missing and len(emitted) > 60, missing)
+
+
+def test_take_back_an_ask():
+    """3.5.0: an open ask on the Decks tab has Take back; it leaves my flags."""
+    html = board._tricky_html([], [{"text": "The external iliac <b>", "who": [], "state": "open", "index": 1},
+                                   {"text": "x", "who": ["Maya"], "state": "answered"}])
+    check("asks: an open one offers Take back by its place; an answered one doesn't; text escaped",
+          html.count("Take back") == 1 and "duecrew:unask:1" in html and "&lt;b&gt;" in html, html)
+    from due_crew import together, app as appmod
+    today = together._today()
+    cl = together.client()
+    cl.session["tricky"] = [{"guid": "g1", "text": "a", "deck": "", "at": today},
+                            {"guid": "g2", "text": "b", "deck": "", "at": today}]
+    saved = (appmod.swap, appmod.sync)
+    appmod.swap, appmod.sync = (lambda c: None), (lambda **k: None)
+    try:
+        together.unask(1)
+        together.unask(9)  # gone already, or never there: nothing
+        check("asks: Take back drops that one and keeps the rest",
+              [f["guid"] for f in cl.session["tricky"]] == ["g1"], cl.session["tricky"])
+    finally:
+        appmod.swap, appmod.sync = saved
+        cl.session["tricky"] = []
+
+
 def test_settings_saves_in_order_v341():
-    """3.4.1: Settings in the board saves on every click, and the server keeps
+    """3.5.0: Settings in the board saves on every click, and the server keeps
     whichever save arrives last. One save at a time: a click while one is on
     its way goes after it, as the config is then."""
     from due_crew import account, app as appmod
@@ -4425,7 +4502,7 @@ def test_schedule_parity_v32():
 
 
 def test_plans_tab_v341():
-    """3.4.1: the Plans tab. The week of my own plan, a Today box in each
+    """3.5.0: the Plans tab. The week of my own plan, a Today box in each
     kind of day, a day's details, the tab with no plan, and names escaped."""
     from due_crew import plans as P
     mon = P.week_start("2026-10-07")

@@ -569,7 +569,7 @@ def week_start(today, offset=0):
 
 
 def week_view(doc, prog, today, start, skipped=()):
-    """3.4.1, the Plans tab's week: seven days from `start` (a Monday) of
+    """3.5.0, the Plans tab's week: seven days from `start` (a Monday) of
     my own plan (my_doc), each {day, dow, num, today, past, rest, prep,
     events, units, new, seen}. A unit is {uid, name, total, seen, state}:
     done, open, later, or skip (`skipped`: [unit] from the plan itself,

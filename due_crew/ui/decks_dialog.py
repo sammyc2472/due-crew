@@ -30,7 +30,7 @@ def _anki_style():
 
 
 def box_css():
-    """Anki's own checkbox look for the tree's boxes (3.4.1). Anki's style
+    """Anki's own checkbox look for the tree's boxes (3.5.0). Anki's style
     sheet dresses QCheckBox but not the boxes in a list, and in night mode
     they come out dark grey on near-black: there, but nobody can see them
     (a friend's "there isn't even a box"). Only where that happens (Anki's

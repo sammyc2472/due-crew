@@ -3,7 +3,7 @@ import { housekeeping } from "../src/index";
 import { env } from "cloudflare:workers";
 import { api, befriend, db, mailbox, person } from "./helpers";
 
-describe("3.4.1: one-time invites", () => {
+describe("3.5.0: one-time invites", () => {
   it("the link makes us crew at once, both edges, one use", async () => {
     const sam = await person("sam");
     const maya = await person("maya");
@@ -99,7 +99,7 @@ describe("3.4.1: one-time invites", () => {
   });
 });
 
-describe("3.4.1: invites and a deleted account", () => {
+describe("3.5.0: invites and a deleted account", () => {
   it("my invites go with me; one I used stays used, and no longer names me", async () => {
     const sam = await person("sam");
     const maya = await person("maya");

@@ -58,7 +58,7 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
 
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads", "plans")
-# 3.4.1: tabs a person can hide in Settings (per computer); Today always shows
+# 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
 HIDEABLE_TABS = (("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
 
 
@@ -418,6 +418,12 @@ def _css(cfg):
     {_theme_css(cfg)}
     #due-crew {{ margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }}
+    /* 3.5.0: Anki's Decks screen sits in a <center> (the board's older parts
+       have always been centred by it; a new part says text-align: left
+       itself) and gives every button a margin, a shadow and rounded
+       corners, which the board's buttons start without */
+    #due-crew button {{ -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none; }}
     /* the board is one rounded card — white by day, near-black by night —
        and inside it there are no rules and no fills: rows separate by
        spacing and the you-row highlight alone */
@@ -599,9 +605,12 @@ def _css(cfg):
       background: var(--dc-well); display: flex; flex-wrap: wrap; gap: 4px 10px; }}
     #due-crew .dc-flag a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-flag, #due-crew .dc-flag-h {{ text-align: left; }}
+    #due-crew .dc-flag {{ align-items: center; }}
     #due-crew .dc-flag small {{ display: block; color: var(--dc-muted); font-size: 11px; }}
     #due-crew .dc-flag-h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
       text-transform: uppercase; color: var(--dc-muted); margin: 2px 0 4px; }}
+    #due-crew .dc-ask-st + a {{ margin-left: 0; }}
     #due-crew .dc-ask-st {{ margin-left: auto; align-self: center; font-size: 10.5px; font-weight: 700;
       border-radius: 5px; padding: 1px 6px; background: var(--dc-line); white-space: nowrap; }}
     #due-crew .dc-ask-st.on {{ color: var(--dc-accent); }}
@@ -665,7 +674,9 @@ def _css(cfg):
     #due-crew .dc-pc .ss span {{ font-size: 10.5px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
     #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
-    /* 3.4.1: the Plans tab's Today box and week */
+    /* 3.5.0: the Plans tab's Today box and week (Anki centres the Decks
+       screen's text; the tab reads left to right) */
+    #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
       display: grid; gap: 6px; margin: 2px 0 10px; }}
     #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
@@ -890,7 +901,7 @@ def _table_html(data, cfg, period):
         # 3.4 review, C5: until a friend adds me back, the invite is the board
         code = str(data.get("my_code") or "")
         spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
-        # 3.4.1: a friend's, a plan's or a squad's code, or a whole invite
+        # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
         add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
                ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
                "pycmd('duecrew:addcode:'+v);return false;")
@@ -1028,7 +1039,7 @@ def _presence_html(fresh, dormant, labels, entries):
 
 def _tricky_html(tricky, mine=None):
     """2.10: cards a crewmate flagged, listed only when I have the same note.
-    3.4.1, K3: under their own headings, "Asked of you" (asks about cards
+    3.5.0, K3: under their own headings, "Asked of you" (asks about cards
     I have down first) and "Your asks", each with where it stands. Their
     text is theirs, and a card's text is my own copy's: escaped."""
     out = ""
@@ -1059,7 +1070,10 @@ def _tricky_html(tricky, mine=None):
         else:
             said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
                     f'{"knows" if len(who) == 1 else "know"} this') if who else "Nobody's answered yet"
-            tag = '<span class="dc-ask-st">waiting</span>'
+            tag = ('<span class="dc-ask-st">waiting</span>'
+                   + (f'<a href="#" title="Your crew stops seeing it" '
+                      f'onclick="{_pycmd("unask:" + str(int(a["index"])))}">Take back</a>'
+                      if isinstance(a.get("index"), int) else ""))
         out += f'<div class="dc-flag"><span>&ldquo;{text}&rdquo;<small>{said}</small></span>{tag}</div>'
     return out
 
@@ -1069,7 +1083,7 @@ def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None):
 
 
 def _plans_html(plans):
-    """3.3: the Plans tab, a card each; 3.4.1: with none, the ways in."""
+    """3.3: the Plans tab, a card each; 3.5.0: with none, the ways in."""
     cards = (plans or {}).get("cards") or []
     return "".join(_plan_card_html(card) for card in cards) if cards else _plans_empty_html()
 
@@ -1085,7 +1099,7 @@ def _pbar(done, total, solid=True):
 
 
 def _plans_empty_html():
-    """3.4.1: the Plans tab with no plan: three ways in."""
+    """3.5.0: the Plans tab with no plan: three ways in."""
     add = ("var v=(document.getElementById('dc-plancode').value||'').toUpperCase()"
            ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
            "pycmd('duecrew:addcode:'+v);return false;")
@@ -1098,7 +1112,7 @@ def _plans_empty_html():
 
 
 def _plan_card_html(card):
-    """3.4.1, the Plans tab (mock "Plans Tab Review"): the plan, a Today
+    """3.5.0, the Plans tab (mock "Plans Tab Review"): the plan, a Today
     box, this week as the site's calendar draws it (a list when narrow),
     one note at most, and the crew. Plan, date and event names are the
     author's: escaped here."""
@@ -1168,10 +1182,11 @@ def _today_box(card, pid):
     if op and int(card.get("early") or 0):
         early = int(card["early"])
         nums.append(f'<span>opened {early} day{"s" if early != 1 else ""} early</span>')
-    if s and kind == "study" and not behind and not s.get("ask"):
+    something = bool(target) or bool(int(due or 0))
+    if s and kind == "study" and not behind and not s.get("ask") and target:
         nums.append('<span class="ok">&#10003; on track</span>')
     btns = ""
-    if s and kind == "study":
+    if s and kind == "study" and something:
         btns += f'<a class="bt on" href="#" onclick="{_pycmd("planstudy:" + pid)}">Study now</a>'
     if op and op.get("undo") and not behind:
         btns += f'<a href="#" class="q" onclick="{_pycmd("plannottoday")}">Put off to tomorrow</a>'
@@ -1613,9 +1628,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
     the cards on the Decks tab, a squad's offers on Decks and Squads.
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.4.1): my own asks about cards (together.my_asks_view), Decks tab."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Decks tab."""
     period = cfg.get("period", "today")
-    hidden = hidden_tabs(cfg)  # 3.4.1: Plans shows by default, with a plan or without
+    hidden = hidden_tabs(cfg)  # 3.5.0: Plans shows by default, with a plan or without
     if period not in PERIODS or period in hidden:
         period = "today"
     show_up = bool(cfg.get("show_up"))
@@ -1733,9 +1748,16 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'{_css(cfg)}{_head(period, show_up, hidden)}{body}{foot}</div>')
 
 
-# ---- 3.4.1: Settings, in the board ----
+# ---- 3.5.0: Settings, in the board ----
 
 SETTINGS_CSS = """
+    #due-crew.dc-set, #due-crew.dc-set .st-row, #due-crew.dc-set .st-l { text-align: left; }
+    /* Anki styles every button on the Decks screen (a margin, a shadow,
+       rounded corners); the panel's own controls start from nothing */
+    #due-crew.dc-set button { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none; vertical-align: middle; }
+    #due-crew .st-radio { box-sizing: border-box; border-radius: 0; }
+    #due-crew .st-box { overflow: hidden; }
     #due-crew .st-bar { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
     #due-crew .st-bar b { font-size: 15px; }
     #due-crew .st-back { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
@@ -1758,6 +1780,7 @@ SETTINGS_CSS = """
     #due-crew .st-seg { display: inline-flex; }
     #due-crew .st-seg button, #due-crew .st-pill { font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
       border: 1px solid var(--dc-line); background: transparent; color: var(--dc-muted); padding: 2px 10px; }
+    #due-crew .st-seg button { border-radius: 0; }
     #due-crew .st-seg button:first-child { border-radius: 99px 0 0 99px; }
     #due-crew .st-seg button:last-child { border-radius: 0 99px 99px 0; }
     #due-crew .st-seg button + button { border-left: none; }
@@ -1782,14 +1805,14 @@ SETTINGS_CSS = """
     #due-crew .st-acts { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0; }
     #due-crew .st-radio { display: grid; grid-template-columns: 16px 1fr; gap: 8px; padding: 8px 11px; cursor: pointer;
       width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; }
-    #due-crew .st-radio + .st-radio, #due-crew .st-radio + .st-sub { border-top: 1px solid var(--dc-line); }
+    #due-crew .st-radio + .st-radio, #due-crew .st-sub + .st-radio { border-top: 1px solid var(--dc-line); }
     #due-crew .st-radio i { box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%;
       border: 1.5px solid var(--dc-faded); margin-top: 2px; }
     #due-crew .st-radio.on { background: var(--dc-you-bg); }
     #due-crew .st-radio.on i { border: 4px solid var(--dc-accent); }
     #due-crew .st-radio span { display: grid; gap: 2px; }
     #due-crew .st-radio small { color: var(--dc-muted); font-size: 11.5px; }
-    #due-crew .st-sub { padding: 0 11px 8px 35px; background: var(--dc-you-bg); }
+    #due-crew .st-sub { padding: 0 11px 9px 35px; margin-top: -2px; background: var(--dc-you-bg); }
     #due-crew .st-foot { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
       margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
     #due-crew button:focus-visible, #due-crew a:focus-visible, #due-crew input:focus-visible {
@@ -1929,7 +1952,7 @@ def _st_toggle_cmd(cmd, on, label):
 
 
 def settings_html(view, cfg):
-    """3.4.1: Settings in place of the board (mock "Settings in the Board").
+    """3.5.0: Settings in place of the board (mock "Settings in the Board").
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
     from the glue; every string in it is escaped here."""
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"

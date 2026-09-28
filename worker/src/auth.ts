@@ -187,7 +187,7 @@ const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
 
 /** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
-  // 3.4.1: and my accent, from the settings the add-on keeps, so the site wears it too
+  // 3.5.0: and my accent, from the settings the add-on keeps, so the site wears it too
   const u = await env.DB.prepare(
     `SELECT u.uid, u.email, u.name, u.emoji, json_extract(t.json, '$.accent') AS accent
        FROM users u LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`,
@@ -346,7 +346,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
 
 // ---- a link to open on the computer (3.4 review, C2) ----
 
-const LINK_PATH = /^\/(p\/[A-Z0-9]{8}|i\/[A-Z0-9]{6}|i\/[A-Z0-9]{10})?$/;  // 3.4.1: an invite too
+const LINK_PATH = /^\/(p\/[A-Z0-9]{8}|i\/[A-Z0-9]{6}|i\/[A-Z0-9]{10})?$/;  // 3.5.0: an invite too
 
 /** POST /links/email {email, path}: someone on a phone sends themselves the
  *  page they're on, to open where Anki is. One fixed message with that link

@@ -24,7 +24,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /version` | `{api, minClient}`, no auth. Replaces the rules-marker probe. |
 | `POST /auth/code {email}` | Sends a code: six digits, ten minutes, plain text, no links. The answer is the same whether or not the address has an account. |
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
-| `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.4.1: the accent from my settings, else green; the site wears it). |
+| `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.5.0: the accent from my settings, else green; the site wears it). |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
 | `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
@@ -78,7 +78,7 @@ import takes `Authorization: Bearer <token>`.
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
-| `POST /invites` | 3.4.1: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
+| `POST /invites` | 3.5.0: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
 | `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
 | `POST /invites/{code}/redeem` | The first use within 14 days: I'm crew with its maker at once, both edges, knocks between us cleared. After that (used, or old) it works as their friend code: I add them and they're knocked (`{mutual, knocked}`). 400 `own_code`. The same person again writes nothing. Shares the add's 30 an hour; rows are kept a year. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |

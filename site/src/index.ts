@@ -108,7 +108,7 @@ export default {
       ctx.waitUntil(caches.default.put(key, res.clone()));
       return res;
     }
-    // 3.4.1: an invite's picture: the name only, drawn per name
+    // 3.5.0: an invite's picture: the name only, drawn per name
     const ipic = INVITE_PNG.exec(url.pathname);
     if (ipic) {
       const code = ipic[1].toUpperCase();
@@ -136,7 +136,7 @@ export default {
       headers.set("referrer-policy", "no-referrer");  // the link's token never leaves in a Referer
       const out = new Response(page.body, { status: page.status, headers });
       // 3.5, A1: a plan's link previews as the plan in a chat
-      // 3.4.1: and an invite's as who sent it
+      // 3.5.0: and an invite's as who sent it
       const inv = INVITE_PAGE.exec(url.pathname);
       const ip = inv && page.status === 200 ? await peekInvite(inv[1].toUpperCase(), req, env, ctx) : null;
       if (inv && ip) {

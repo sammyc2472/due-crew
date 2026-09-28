@@ -1,4 +1,4 @@
-"""3.4.1 Settings in the board: what a click there changes. Pure: a
+"""3.5.0 Settings in the board: what a click there changes. Pure: a
 command's parts and the config in, the keys it changes out (or None when
 it's not a setting, or not a value the setting takes). The board's panel
 sends one command per change; the glue saves what comes back.

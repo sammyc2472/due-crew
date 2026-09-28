@@ -505,7 +505,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
     prep = None if plan.get("paused") else P.prep_for(doc, today)
     if prep:
         prep["when"] = _short_day(prep["day"], today)
-    # 3.4.1, the Plans tab: today's topics, the next one, and a week of the calendar
+    # 3.5.0, the Plans tab: today's topics, the next one, and a week of the calendar
     today_names = [str(u.get("name") or "?") for u in P.units(doc) if u.get("opens") == today]
     if not today_names and now_id and any(u["id"] == now_id and u.get("due") and u["due"] >= today for u in open_units):
         today_names = [str(u.get("name") or "?") for u in open_units if u["id"] == now_id]
@@ -1067,7 +1067,7 @@ def on_message(cmd, parts):
     elif cmd == "plancatchstop" and arg:
         stop_catch(arg)
     elif cmd == "planweek" and arg and len(parts) > 3:
-        # 3.4.1: the Plans tab's week, back and on (0: this week again); not saved
+        # 3.5.0: the Plans tab's week, back and on (0: this week again); not saved
         weeks = _state.setdefault("plan_week", {})
         step = parts[3]
         weeks[arg] = 0 if step == "0" else max(-26, min(26, int(weeks.get(arg, 0)) + (1 if step == "next" else -1)))
@@ -1752,7 +1752,7 @@ def open_make():
 
 
 def open_site(path):
-    """3.4.1: a page of duecrew.com in the browser, signed in when the link
+    """3.5.0: a page of duecrew.com in the browser, signed in when the link
     can be made (a one-time token in the fragment, never logged)."""
     cl, site = client(), site_base()
 
