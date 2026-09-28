@@ -265,6 +265,21 @@ def flag_card(card):
     tooltip(msg)
 
 
+def unask(index):
+    """3.5.0: Take back, on the Decks tab's own ask (by its place in my
+    flags: a guid can't ride a board command). Main thread."""
+    cl = client()
+    flags = clean_tricky(cl.session.get("tricky"), _today())
+    if not 0 <= index < len(flags):
+        return
+    del flags[index]
+    cl.session["tricky"] = flags
+    cl._save_session()
+    app.swap(cfg())
+    app.sync(light=True, fetch=False)
+    tooltip("Taken back.")
+
+
 def reviewer_menu(reviewer, menu):
     """gui_hooks.reviewer_will_show_context_menu: the More menu and a
     right-click on the card both get the flag."""
@@ -322,10 +337,10 @@ def my_asks_view():
              for e in _state["entries"] or [] if not e.get("you")}
     info = cl.session.get("cards") or {}
     out = []
-    for f in clean_tricky(cl.session.get("tricky"), _today()):
+    for i, f in enumerate(clean_tricky(cl.session.get("tricky"), _today())):
         who = [names[u] for u in (info.get(f["guid"]) or {}).get("knows") or [] if u in names]
         out.append({"guid": f["guid"], "text": f.get("text") or "", "deck": f.get("deck") or "",
-                    "state": "open", "who": who})
+                    "state": "open", "who": who, "index": i})
     open_guids = {a["guid"] for a in out}
     tips = _wrap_data().get("tips") or {}
     answered = [(g, [t for t in ts if isinstance(t, dict)]) for g, ts in tips.items()

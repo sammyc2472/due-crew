@@ -599,9 +599,11 @@ def _css(cfg):
       background: var(--dc-well); display: flex; flex-wrap: wrap; gap: 4px 10px; }}
     #due-crew .dc-flag a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-flag, #due-crew .dc-flag-h {{ text-align: left; }}
     #due-crew .dc-flag small {{ display: block; color: var(--dc-muted); font-size: 11px; }}
     #due-crew .dc-flag-h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
       text-transform: uppercase; color: var(--dc-muted); margin: 2px 0 4px; }}
+    #due-crew .dc-ask-st + a {{ margin-left: 0; }}
     #due-crew .dc-ask-st {{ margin-left: auto; align-self: center; font-size: 10.5px; font-weight: 700;
       border-radius: 5px; padding: 1px 6px; background: var(--dc-line); white-space: nowrap; }}
     #due-crew .dc-ask-st.on {{ color: var(--dc-accent); }}
@@ -1061,7 +1063,10 @@ def _tricky_html(tricky, mine=None):
         else:
             said = (f'{", ".join(who[:2])}{" and more" if len(who) > 2 else ""} '
                     f'{"knows" if len(who) == 1 else "know"} this') if who else "Nobody's answered yet"
-            tag = '<span class="dc-ask-st">waiting</span>'
+            tag = ('<span class="dc-ask-st">waiting</span>'
+                   + (f'<a href="#" title="Your crew stops seeing it" '
+                      f'onclick="{_pycmd("unask:" + str(int(a["index"])))}">Take back</a>'
+                      if isinstance(a.get("index"), int) else ""))
         out += f'<div class="dc-flag"><span>&ldquo;{text}&rdquo;<small>{said}</small></span>{tag}</div>'
     return out
 

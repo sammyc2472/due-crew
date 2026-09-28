@@ -2818,6 +2818,29 @@ def test_settings_messages_reach_the_panel():
         dc._state["settings_tab"] = None
 
 
+def test_take_back_an_ask():
+    """3.5.0: an open ask on the Decks tab has Take back; it leaves my flags."""
+    html = board._tricky_html([], [{"text": "The external iliac <b>", "who": [], "state": "open", "index": 1},
+                                   {"text": "x", "who": ["Maya"], "state": "answered"}])
+    check("asks: an open one offers Take back by its place; an answered one doesn't; text escaped",
+          html.count("Take back") == 1 and "duecrew:unask:1" in html and "&lt;b&gt;" in html, html)
+    from due_crew import together, app as appmod
+    today = together._today()
+    cl = together.client()
+    cl.session["tricky"] = [{"guid": "g1", "text": "a", "deck": "", "at": today},
+                            {"guid": "g2", "text": "b", "deck": "", "at": today}]
+    saved = (appmod.swap, appmod.sync)
+    appmod.swap, appmod.sync = (lambda c: None), (lambda **k: None)
+    try:
+        together.unask(1)
+        together.unask(9)  # gone already, or never there: nothing
+        check("asks: Take back drops that one and keeps the rest",
+              [f["guid"] for f in cl.session["tricky"]] == ["g1"], cl.session["tricky"])
+    finally:
+        appmod.swap, appmod.sync = saved
+        cl.session["tricky"] = []
+
+
 def test_settings_saves_in_order_v341():
     """3.5.0: Settings in the board saves on every click, and the server keeps
     whichever save arrives last. One save at a time: a click while one is on

@@ -632,6 +632,8 @@ def _on_js(handled, message, context):
         together.milestone_cheer(parts[2])
     elif cmd == "milestonex" and len(parts) > 2:
         together.dismiss_milestone(parts[2])
+    elif cmd == "unask" and len(parts) > 2 and parts[2].isdigit():
+        together.unask(int(parts[2]))  # 3.5.0: Take back, on the Decks tab
     elif cmd == "copyinvite":
         _copy_friend_invite()
     elif cmd == "addcode":
