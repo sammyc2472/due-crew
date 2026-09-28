@@ -450,7 +450,7 @@ def _short_day(iso, today):
     return f"{d:%a}" if 0 <= (d - t).days < 7 else P.fmt_day(iso)
 
 
-def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
+def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, week_offset=0):
     """What board._plans_html draws for one plan. Strings are raw here;
     the board escapes them."""
     plan = mine(plan)  # G3, G4: my shift, my skips
@@ -505,6 +505,15 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
     prep = None if plan.get("paused") else P.prep_for(doc, today)
     if prep:
         prep["when"] = _short_day(prep["day"], today)
+    # 3.4.1, the Plans tab: today's topics, the next one, and a week of the calendar
+    today_names = [str(u.get("name") or "?") for u in P.units(doc) if u.get("opens") == today]
+    if not today_names and now_id and any(u["id"] == now_id and u.get("due") and u["due"] >= today for u in open_units):
+        today_names = [str(u.get("name") or "?") for u in open_units if u["id"] == now_id]
+    skipped_units = [dict(u, opens=P._later(u["opens"], shift)) if shift else u
+                     for u in P.units(_plan_doc(plan)) if u["id"] in skipped]
+    week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units)
+    nxt_view = ({"name": str(nxt.get("name") or "?"), "uid": nxt["id"], "day": P.weekday_or_day(nxt["opens"], today),
+                 "n": P.unit_total(nxt)} if nxt else None)
     change = None
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
@@ -519,6 +528,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None):
             "prep": prep,
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
             "put_off": put_off, "waiting": waiting,
+            "today_names": today_names, "next": nxt_view, "week": week, "week_offset": int(week_offset),
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -1025,7 +1035,8 @@ def board_view(c):
     sess = _state.get("plan_session") or {}
     cards = [card_view(p, here(state.get(p["id"])), prog.get(p["id"]), today,
                        opened=(opened.get("per") or {}).get(p["id"]) if fresh_open else None,
-                       undo_ok=undo, session=sess.get(p["id"]))
+                       undo_ok=undo, session=sess.get(p["id"]),
+                       week_offset=(_state.get("plan_week") or {}).get(p["id"], 0))
              for p in plan_list]
     from .squads import _my_squads
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
@@ -1055,6 +1066,24 @@ def on_message(cmd, parts):
         catch_menu(arg)
     elif cmd == "plancatchstop" and arg:
         stop_catch(arg)
+    elif cmd == "planweek" and arg and len(parts) > 3:
+        # 3.4.1: the Plans tab's week, back and on (0: this week again); not saved
+        weeks = _state.setdefault("plan_week", {})
+        step = parts[3]
+        weeks[arg] = 0 if step == "0" else max(-26, min(26, int(weeks.get(arg, 0)) + (1 if step == "next" else -1)))
+        app.swap(cfg())
+    elif cmd == "planshift" and arg:
+        set_shift(arg)
+    elif cmd == "plansite" and arg:
+        open_site(f"/plans/{arg}")
+    elif cmd == "planlibrary":
+        open_site("/library")
+    elif cmd == "planmake":
+        open_make()
+    elif cmd == "planresume" and arg:
+        p = next((x for x in followed() if x["id"] == arg), None)
+        if p:
+            back(arg) if p.get("since") else set_paused(arg, False)
     elif cmd == "planmenu" and arg:
         plan_menu(arg)
     elif cmd == "planok" and arg:
@@ -1720,6 +1749,17 @@ def open_make():
         return
     from .ui.plan_dialog import MakePlanDialog
     MakePlanDialog(mw, client(), mw.col, site_base()).exec()
+
+
+def open_site(path):
+    """3.4.1: a page of duecrew.com in the browser, signed in when the link
+    can be made (a one-time token in the fragment, never logged)."""
+    cl, site = client(), site_base()
+
+    def done(token):
+        from aqt.utils import openLink
+        openLink(f"{site}{path}" + (f"#{token}" if token else ""))
+    _bg(lambda: cl.site_link() if cl.signed_in else None, done)
 
 
 def site_base():

@@ -361,6 +361,19 @@ class SettingsDialog(QDialog):
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
         self._check(lay, "sync_notifications", "Tell me when my crew studies")
+        # 3.4.1: which tabs show (Today always does); per computer
+        from ..board import HIDEABLE_TABS
+        hidden = set(self.config.get("hidden_tabs") or [])
+        tabs_row = QHBoxLayout()
+        tabs_row.addWidget(QLabel("Tabs"))
+        self.tab_boxes = {}
+        for key, label in HIDEABLE_TABS:
+            box = QCheckBox(label)
+            box.setChecked(key not in hidden)
+            tabs_row.addWidget(box)
+            self.tab_boxes[key] = box
+        tabs_row.addStretch()
+        lay.addLayout(tabs_row)
         lay.addSpacing(6)
         lay.addWidget(QLabel("<b>How it looks</b>"))
         self._combo(lay, "theme", "Theme", THEMES)
@@ -393,6 +406,8 @@ class SettingsDialog(QDialog):
         """This tab only. Until 2.9 Restore Defaults reset Privacy too, and
         since the defaults share the most, a reset only ever widened what
         went out."""
+        for box in self.tab_boxes.values():
+            box.setChecked(True)
         for key in BOARD_KEYS:
             widget = self._binds.get(key)
             if isinstance(widget, QCheckBox):
@@ -516,6 +531,7 @@ class SettingsDialog(QDialog):
                 changed[key] = kept[0] if untouched else widget.currentData()
             elif isinstance(widget, QLineEdit):
                 changed[key] = widget.text().strip()[:24]
+        changed["hidden_tabs"] = [k for k, box in self.tab_boxes.items() if not box.isChecked()]
         choice = self.choice.checkedId()
         # the numbers keep their settings under the other two choices, for
         # when "My numbers" comes back

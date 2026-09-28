@@ -552,6 +552,63 @@ def my_doc(doc, shift=0, skipped=()):
     return out
 
 
+def unit_total(u):
+    """A date's new cards as the plan counts them, before anyone opens it:
+    the author's count, single cards, searches and ids (the Worker's
+    unitCount)."""
+    sn = u.get("sn") if isinstance(u.get("sn"), dict) else {}
+    idn = u.get("idn")
+    ids = int(idn) if isinstance(idn, int) else len(u.get("nids") or []) + len(u.get("cids") or [])
+    return int(u.get("n") or 0) + len(u.get("cards") or []) + sum(int(v or 0) for v in sn.values()) + ids
+
+
+def week_start(today, offset=0):
+    """The Monday of today's week, `offset` weeks on."""
+    d = datetime.date.fromisoformat(str(today))
+    return (d - datetime.timedelta(days=d.weekday()) + datetime.timedelta(weeks=int(offset))).isoformat()
+
+
+def week_view(doc, prog, today, start, skipped=()):
+    """3.4.1, the Plans tab's week: seven days from `start` (a Monday) of
+    my own plan (my_doc), each {day, dow, num, today, past, rest, prep,
+    events, units, new, seen}. A unit is {uid, name, total, seen, state}:
+    done, open, later, or skip (`skipped`: [unit] from the plan itself,
+    shown on the day they'd have opened). Rest: not one of the plan's
+    study days and nothing opens. Numbers only; the board escapes names."""
+    prog = prog or {}
+    pdays = ((doc or {}).get("pace") or {}).get("days")
+    pdays = [1 if x else 0 for x in pdays] if isinstance(pdays, list) and len(pdays) == 7 and any(pdays) else [1] * 7
+    first = datetime.date.fromisoformat(str(start))
+    evs = {}
+    for e in (doc or {}).get("events") or []:
+        if isinstance(e, dict) and e.get("day"):
+            evs.setdefault(str(e["day"]), []).append(str(e.get("name") or "?"))
+    by_day = {}
+    for u in units(doc):
+        by_day.setdefault(str(u["opens"]), []).append((u, False))
+    for u in skipped or ():
+        if u.get("opens"):
+            by_day.setdefault(str(u["opens"]), []).append((u, True))
+    out = []
+    for i in range(7):
+        d = (first + datetime.timedelta(days=i)).isoformat()
+        rows = []
+        for u, skip in by_day.get(d, []):
+            _o, s, t = prog.get(u["id"], [0, 0, 0])
+            total = int(t) or unit_total(u)
+            state = ("skip" if skip else "later" if d > today
+                     else "done" if int(t) and int(s) >= int(t) else "open")
+            rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
+                         "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for"))})
+        live = [r for r in rows if r["state"] != "skip"]
+        dd = first + datetime.timedelta(days=i)
+        out.append({"day": d, "dow": f"{dd:%a}", "num": dd.day, "today": d == today, "past": d < today,
+                    "rest": not pdays[i] and not live, "prep": any(r["prep"] for r in live),
+                    "events": evs.get(d, []), "units": rows,
+                    "new": sum(r["total"] for r in live), "seen": sum(r["seen"] for r in live)})
+    return out
+
+
 def waiting_new(doc, prog, today):
     """G5: new cards of dates opened before today that I haven't seen yet."""
     n = 0

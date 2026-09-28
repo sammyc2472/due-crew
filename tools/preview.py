@@ -157,16 +157,27 @@ sections.append("<h3>squad of 18 (the row cap)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60,
     squad_view=dict(SQUAD_VIEW, rows=SROWS_MANY, people=18, studying=17)))
 # 3.1-3.3: a plan I follow, on my schedule, on the Decks tab
+from due_crew import plans as PL  # noqa: E402
+_PT = "2026-10-07"
+_PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
+         "units": [{"id": "a", "name": "Pathoma 1 · Cell injury", "opens": "2026-10-05", "n": 283},
+                   {"id": "b", "name": "B&B Biochem · Enzymes", "opens": "2026-10-06", "n": 96},
+                   {"id": "c", "name": "Pathoma 2 · Inflammation", "opens": "2026-10-07", "n": 42},
+                   {"id": "d", "name": "B&B Metabolism 1", "opens": "2026-10-08", "n": 38, "for": "q"},
+                   {"id": "e", "name": "Pathoma 3 · Neoplasia", "opens": "2026-10-09", "n": 55, "for": "q"}],
+         "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
 PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of 9 · 6 following",
-             "rows": [{"name": "Pathoma 1 · Cell injury", "state": "open", "seen": [283, 283], "crew": [5, 6], "n": "crew 5/6"},
-                      {"name": "B&B Biochem · Enzymes", "state": "open", "seen": [80, 96], "crew": [3, 6], "n": "crew 3/6"},
-                      {"name": "Pathoma 2 · Inflammation", "state": "now", "seen": [60, 210], "crew": [1, 6], "n": "crew 1/6 · due Fri"},
-                      {"name": "B&B Metabolism 1", "state": "later", "seen": None, "crew": None, "n": "opens Mon 12 Oct"}],
-             "opened": {"names": ["Pathoma 2 · Inflammation"], "n": 42, "undo": True},
+             "rows": [{"name": "Pathoma 1 · Cell injury", "state": "open", "crew": [5, 6]}],
+             "today_names": ["Pathoma 2 · Inflammation"], "next": {"name": "B&B Metabolism 1", "uid": "d", "day": "Thursday", "n": 38},
+             "week": PL.week_view(_PDOC, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT)),
+             "week_offset": 0, "opened": {"names": ["Pathoma 2 · Inflammation"], "n": 42, "undo": True},
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
-             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": True}
-sections.append("<h3>3.3: a plan I follow, on the Plans tab</h3>" + board.render(
+             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
+             "waiting": 16}
+sections.append("<h3>3.4.1: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
+sections.append("<h3>3.4.1: the Plans tab, following nothing</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [], "offers": []}))
 # the preview holds many boards; the add-on runs this once, for its one
 sections.append("<script>" + board.keep_me_in_view_js().replace(
     "var box = document.querySelector('#due-crew .dc-scroll');\n        if (!box) { return; }",

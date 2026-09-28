@@ -349,3 +349,15 @@ In Anki (as a follower):
 - [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
 - [ ] Night mode and light mode: the chip and the new headings read clearly.
 
+### 3.4.1: the Plans tab, and codes anywhere
+
+- [ ] Plans tab with a plan: the Today box names today's date(s), reviews, new and minutes; Study now starts the plan's deck; Put off to tomorrow closes them until tomorrow's morning.
+- [ ] The week: today outlined, past days ticked or "N left", rest days faded, an event outlined. Click a later day: Open now opens it, Skip it skips it (Undo skip on the same day), Move my days back asks how many. ‹ › moves a week and "Today" comes back.
+- [ ] Month on duecrew.com opens the plan's page, signed in.
+- [ ] Narrow the Anki window: the week becomes a list. Night mode: everything reads.
+- [ ] A rest day, a finished day (Next: … Open now), behind (Catch up…, Move my days back…), paused (Resume now).
+- [ ] Following nothing: Follow a plan with three ways in; paste a plan code and Follow opens with it.
+- [ ] Settings › Board › Tabs: untick Plans and Week; they're gone, and the board opens on Today. Tick them again.
+- [ ] Welcome screen and the board's code box: a friend's code adds them; a plan's code opens Follow; a squad's opens Squads. A pasted invite works in each.
+- [ ] Alone on the board after adding someone: "Waiting for Name to add you back."
+

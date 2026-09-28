@@ -6,7 +6,7 @@ Raw keys, for reference:
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `show_leaderboard` | true/false | Board on the Decks screen |
-| `period` | today / week / decks / squads | Default view |
+| `period` | today / week / decks / squads / plans | Default view |
 | `sort` | reviews / time / retention / streak | Default sort |
 | `show_stale` | true/false | Show yesterday for friends who haven't synced today |
 | `sync_notifications` | true/false | Toasts about your crew: studied, streaks, returns, milestones |
@@ -25,6 +25,7 @@ Raw keys, for reference:
 | `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 | `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
+| `hidden_tabs` | list of week / decks / squads / plans | Tabs this computer doesn't show (Settings › Board › Tabs); Today always shows |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 
 Sign-in state (account, name, tokens) lives in `user_files/<profile>/`,

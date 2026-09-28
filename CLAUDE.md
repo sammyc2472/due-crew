@@ -212,8 +212,7 @@ add-on.
 - 3.3 following is simpler: a follower does each date on its day (the
   plan's study days, `schedule.weight` falls back to `pace.days`); the
   add-on no longer asks for a schedule, and a 3.2 `sched` still runs. The
-  add-on's board has a Plans tab while I follow a plan (the cards left
-  Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
+  add-on's board has a Plans tab (the cards left Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
   ids last), so deep tags reach the builder.
 - 3.3 hold back (Sam's call): a deck imported with every card active
   can't wait for its days, so Follow offers (checked) "Hold back N cards
@@ -322,6 +321,18 @@ add-on.
   counters there (`admin.bump`), `bridge_last` is the bridge's last run,
   the cutover is 3.x / 2.x still studying / quiet, notices keep their
   history.
+- 3.4.1 the Plans tab (mock "Plans Tab Review"): a Today box in the day's
+  state (study, rest, done with what's next, behind with Catch up and
+  Move my days back, paused), then one week in the site calendar's look
+  (`plans.week_view`, my own shifted days; a list under 560px; ‹ › move a
+  week, not saved), a day's cell opening its details (Open now, Skip it,
+  Undo skip, Study, Move my days back), one note at most (the most
+  pressing first, `board._plan_notes`), and the crew in words. The tab is
+  always there; following nothing it's three ways in (a code, the
+  library, make one). Settings › Board › Tabs hides any tab but Today
+  (`hidden_tabs`, per computer). A code box anywhere (welcome, the
+  board's) takes a friend's, a plan's or a squad's code
+  (`shapes.long_code_from`).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

@@ -3054,14 +3054,14 @@ def test_plans_glue_v31():
                             {"period": "plans"}, 0, plans=view)
         check("card: the plan's title, week and followers",
               "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
-        check("card: names escaped, crew done as N of followers, Not today while it's Anki's latest step",
-              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:plannottoday" in html
-              and "<b>failure" not in html)
+        check("card: the crew line; behind, the box offers Catch up and Move my days back, not Put off",
+              "Crew: 1 done with" in html and "ptoday behind" in html and "plancatch:" in html
+              and "Put off to tomorrow" not in html and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
         col.undo_steps.append(("Edit note", []))
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "plans"}, 0, plans=F.board_view(box["cfg"]))
-        check("card: no Not today once Anki has done something since", "duecrew:plannottoday" not in html
-              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning (3 cards)" in html)
+        check("card: no Put off to tomorrow once Anki has done something since", "duecrew:plannottoday" not in html
+              and "Put off to tomorrow" not in html and "ptoday" in html)
         check("card: behind, only for me",
               "Heart failure</b> was due Mon. 2 cards not seen yet." in html
               or "was due Monday. 2 cards not seen yet." in html, "")
@@ -3372,8 +3372,12 @@ def test_plans_follower_days_g():
     check("card: what's waiting from earlier dates", card["waiting"] == 2)
     from due_crew import board
     html = board._plan_card_html(dict(card, id=pid))
-    check("card: Open now, Undo skip and Catch up on it", f"plannow:{pid}:cz" in html and f"planunskip:{pid}:ex" in html
-          and f"plancatch:{pid}" in html, html[:400])
+    weeks = lambda day: (datetime.date.fromisoformat(P.week_start(day)) - datetime.date.fromisoformat(P.week_start(_day(1)))).days // 7
+    in_week = lambda day: board._plan_card_html(dict(F.card_view(dict(plan, skipped=["ex"]), state[pid], {"hf": [2, 0, 2]},
+                                                                   _day(1), week_offset=weeks(day)), id=pid))
+    check("card: Open now (the next date's day), Undo skip (the skipped one's day) and Catch up",
+          f"plannow:{pid}:cz" in in_week(_day(7)) and f"planunskip:{pid}:ex" in in_week(_day(3))
+          and f"plancatch:{pid}" in html and "Skip it" in in_week(_day(7)), html[:400])
 
 
 def test_plans_fresh_after_cached_morning_v311():
@@ -3887,7 +3891,10 @@ def test_class_through_step_v33():
     check("snapshot: the note ids behind a date's tags, with the tags they came from",
           snap["r"][0] == ["Step1::Renal"] and len(snap["r"][2]) == 10)
     # C1 and C2 on the card
-    card = {"id": "p1", "title": "Block", "sub": "", "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
+    week = [{"day": "2026-09-0%d" % (i + 1), "dow": "Mon", "num": i + 1, "today": i == 0, "past": False, "rest": False, "prep": False,
+             "events": [], "units": [{"uid": "u1", "name": "L14", "total": 9, "seen": 3, "state": "open", "prep": False}] if i == 0 else [],
+             "new": 9 if i == 0 else 0, "seen": 3 if i == 0 else 0} for i in range(7)]
+    card = {"id": "p1", "title": "Block", "sub": "", "week": week, "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Mon", "sched": False, "early": 2,
             "opened": {"names": ["L14"], "n": 9, "undo": False},
             "session": {"kind": "study", "target": 60, "done": 0, "due": 10, "minutes": 20, "behind": 0, "limit": 20, "fell_back": 3}}
@@ -3895,10 +3902,11 @@ def test_class_through_step_v33():
     check("limit: the card says Anki shows fewer, with Raise", "Anki shows 20 new a day" in html and "planlimit:p1" in html)
     check("limit: not when Anki shows enough", "planlimit" not in board._plan_card_html(
         dict(card, session=dict(card["session"], limit=80))))
-    check("early: what opened says how early", "2 days early" in html)
-    check("study: a date's row builds its deck", "planstudydate:p1:u1" in html)
-    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in html
-          and "planidsok:p1" not in board._plan_card_html(dict(card, fallback_ok=True)))
+    check("early: what opened says how early", "opened 2 days early" in html)
+    check("study: a day's date builds its deck, in the day's details", "planstudydate:p1:u1" in html and 'class="pday"' in html)
+    enough = dict(card, session=dict(card["session"], limit=80))  # one note at a time: the limit comes first
+    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in board._plan_card_html(enough)
+          and "planidsok:p1" not in board._plan_card_html(dict(enough, fallback_ok=True)))
     # C2: the morning looks ahead
     store = world({"dre": "Dre", "maya": "Maya"})
     unit = {"id": "rn", "name": "Renal", "opens": _day(2), "tags": ["Step1::Renal"]}
@@ -3944,8 +3952,14 @@ def test_plans_tab_v33():
     decks = board.render(data, {"period": "decks"}, 0, plans={"cards": [card], "offers": []})
     check("plans tab: the card isn't on Decks any more", "Step 1 · Dre’s plan" not in decks)
     none = board.render(data, {"period": "plans"}, 0, plans={"cards": [], "offers": []})
-    check("plans tab: following nothing, no tab, and a saved Plans period falls back to Today",
-          "period:plans" not in none and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in none)
+    check("plans tab: following nothing, the tab is there with three ways in",
+          "period:plans" in none and "Follow a plan" in none and "planlibrary" in none and "planmake" in none
+          and "dc-plancode" in none)
+    hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "week"]}, 0, plans={"cards": [card], "offers": []})
+    check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Today",
+          "period:plans" not in hidden and "period:week" not in hidden and "period:decks" in hidden
+          and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in hidden)
+    check("tabs: Today can't be hidden", "period:today" in board.render(data, {"hidden_tabs": ["today"]}, 0))
 
 
 def test_even_split_v33():
@@ -4173,11 +4187,11 @@ def test_session_card_v32():
     v3 = F.session_view(plan, dict(st, catch=None), idx, seen_today, _day(0))
     check("session: cards first seen today count toward today", v3["done"] == 4)
     html_ = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v2))
-    check("board: the session tiles, and Study now", "new today" in html_ and "reviews due" in html_
+    check("board: the Today box, and Study now", "/ 6 new" in html_ and "reviews" in html_ and 'class="ptoday' in html_
           and "planstudy:p1" in html_ and "<i>" not in html_.replace("<i style", "").replace("<i class", ""))
     html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
     check("board: the missed-days question, three ways",
-          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
+          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "Missed" in html_q)
     check("board: 3.3, no schedule to set: the plan's days are it", "plansched:p1" not in board._plan_card_html(
         F.card_view(dict(plan, sched=None), st, {}, _day(0))))
     v0 = F.session_view(dict(plan, sched=None), st, idx, seen_today, _day(0))
@@ -4259,6 +4273,71 @@ def test_schedule_parity_v32():
         " console.log(bad);")
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
     check("schedule: the site's arithmetic is the add-on's", out.stdout.strip() == "0", out.stdout + out.stderr)
+
+
+def test_plans_tab_v341():
+    """3.4.1: the Plans tab. The week of my own plan, a Today box in each
+    kind of day, a day's details, the tab with no plan, and names escaped."""
+    from due_crew import plans as P
+    mon = P.week_start("2026-10-07")
+    check("week: starts on Monday, and moves by weeks", mon == "2026-10-05" and P.week_start("2026-10-07", 1) == "2026-10-12"
+          and P.week_start("2026-10-05") == "2026-10-05")
+    doc = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
+           "units": [{"id": "a", "name": "Pathoma 1", "opens": "2026-10-05", "n": 40},
+                     {"id": "b", "name": "B&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
+                     {"id": "c", "name": "Pathoma 2", "opens": "2026-10-07", "n": 42, "for": "q"},
+                     {"id": "d", "name": "Metab", "opens": "2026-10-08", "idn": 38}],
+           "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
+    w = P.week_view(doc, {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon,
+                    skipped=[{"id": "x", "name": "Extras", "opens": "2026-10-09"}])
+    by = {d["day"]: d for d in w}
+    check("week: seven days, today marked, past before it", len(w) == 7 and by["2026-10-07"]["today"]
+          and by["2026-10-05"]["past"] and not by["2026-10-08"]["past"])
+    check("week: a unit's state, done, open or later, with its counts",
+          [u["state"] for u in by["2026-10-05"]["units"]] == ["done"] and by["2026-10-06"]["units"][0]["state"] == "open"
+          and by["2026-10-08"]["units"][0] == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False})
+    check("week: a date's count before it opens (author's n, cards, searches, ids)",
+          P.unit_total(doc["units"][1]) == 8 and P.unit_total(doc["units"][3]) == 38)
+    check("week: rest days are the plan's off days with nothing opening; prep and events marked",
+          by["2026-10-10"]["rest"] and not by["2026-10-09"]["rest"] and by["2026-10-07"]["prep"]
+          and by["2026-10-09"]["events"] == ["Cardio quiz"] and by["2026-10-09"]["units"][0]["state"] == "skip"
+          and by["2026-10-09"]["new"] == 0)
+    week = w
+    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Pathoma 1", "state": "open", "crew": [5, 6]}],
+            "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
+            "today_names": ["Pathoma 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
+            "week_offset": 0, "opened": {"names": ["Pathoma 2"], "n": 42, "undo": True},
+            "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0}}
+    h = board._plan_card_html(base)
+    check("today: the topic, reviews, new and minutes, one bar, Study now and Put off to tomorrow",
+          'class="ptoday"' in h and "<b>Pathoma 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
+          and "~48" in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
+    check("week: the site's calendar look; names escaped; today outlined; a day opens its details",
+          'class="pwk"' in h and "B&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
+          and 'class="pc now"' in h and "dc-pd-p1-" in h and "Cardio quiz" in h and "plansite:p1" in h
+          and "planweek:p1:next" in h and "planweek:p1:prev" in h and "planweek:p1:0" not in h)
+    check("week: a later day offers Open now, Skip it and Move my days back",
+          "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Undo skip" in h)
+    check("crew: in words", "Crew: 5 done with Pathoma 1" in h)
+    check("week: moved, it says which, with a way back", "Week of 5 Oct" in board._plan_card_html(dict(base, week_offset=1))
+          and "planweek:p1:0" in board._plan_card_html(dict(base, week_offset=1)))
+    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, minutes=0)))
+    check("today: done, and what's next with Open now", "ptoday done" in done and "<b>Done</b>" in done
+          and "Next: <b>Metab</b>" in done and "plannow:p1:d" in done)
+    rest = board._plan_card_html(dict(base, session={"kind": "rest", "due": 212}))
+    check("today: a rest day, reviews only", "ptoday rest" in rest and "rest day" in rest and "<b>212</b> reviews" in rest
+          and "no new" in rest)
+    behind = board._plan_card_html(dict(base, session=dict(base["session"], behind=54)))
+    check("today: behind, with Catch up and Move my days back, and no on track",
+          "ptoday behind" in behind and "54 new behind" in behind and "plancatch:p1" in behind
+          and "planshift:p1" in behind and "on track" not in behind)
+    paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
+    check("today: paused, with Resume now", "Paused until Mon 12 Oct" in paused and "planresume:p1" in paused)
+    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Pathoma 2"], change=[("Dre moved a date", False)]))
+    check("notes: one at a time, the most pressing first", notes.count('class="pn') == 1 and "planok:p1" in notes)
+    css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "plans"}, 0,
+                       plans={"cards": [base], "offers": []})
+    check("narrow: the week becomes a list", "#due-crew .pwk {{ grid-template-columns: 1fr; }}".replace("{{", "{").replace("}}", "}") in css)
 
 
 def main():
