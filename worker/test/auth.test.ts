@@ -302,7 +302,7 @@ describe("sessions", () => {
     const old = await at();
     const me = await api("GET", "/auth/me", { token: s.token });
     expect(me.status).toBe(200);
-    expect(me.body).toEqual({ uid: s.uid, email: "sam@example.com", name: null, emoji: null });
+    expect(me.body).toEqual({ accent: "green", uid: s.uid, email: "sam@example.com", name: null, emoji: null });
     const touched = await at();
     expect(touched).toBeGreaterThan(old!);
     await api("GET", "/auth/me", { token: s.token });

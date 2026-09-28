@@ -93,12 +93,70 @@ async function copy(text, btn) {
   setTimeout(() => { btn.textContent = "Copy"; }, 1600);
 }
 
+// ---- my accent (3.4.1): the one I picked in Anki, here too ----
+
+// [accent, ink on it, my row's fill], by day and by night: board.py's ACCENTS
+const ACCENTS = {
+  green: [["#2e7d32", "#ffffff", "#e9f2e9"], ["#7cc47f", "#122912", "#2c372b"]],
+  blue: [["#1e5fb4", "#ffffff", "#e8f0fb"], ["#7fb2f0", "#0b1f3a", "#263244"]],
+  purple: [["#6b3fb5", "#ffffff", "#f0eafb"], ["#b89cf0", "#22143d", "#322a46"]],
+  teal: [["#0f766e", "#ffffff", "#e5f4f2"], ["#7dd3c8", "#0b2a28", "#22383a"]],
+  amber: [["#a35f00", "#ffffff", "#fbf1e2"], ["#e0a458", "#2d1d05", "#3d3323"]],
+  rose: [["#b03052", "#ffffff", "#fbe9ee"], ["#f08fa8", "#3a1220", "#3f2a31"]],
+};
+let worn = "green";
+let brandImgs = null;
+
+function wearAccent(name) {
+  if (!ACCENTS[name] || name === worn) return;
+  worn = name;
+  try { localStorage.setItem("dc-accent", name); } catch { /* private window: this page only */ }
+  const [day, night] = ACCENTS[name];
+  const vars = (t) => `--accent:${t[0]};--accent-ink:${t[1]};--you:${t[2]};`;
+  let tag = document.getElementById("dc-accent");
+  if (!tag) { tag = document.createElement("style"); tag.id = "dc-accent"; document.head.append(tag); }
+  tag.textContent = name === "green" ? "" : `:root{${vars(day)}}@media (prefers-color-scheme: dark){:root{${vars(night)}}}`;
+  // the logo's studied days wear it too, as in Anki: our own file, drawn inline
+  const brand = document.querySelector("header .brand");
+  if (!brand) return;
+  brandImgs ||= [...brand.children];
+  if (name === "green") { brand.replaceChildren(...brandImgs); return; }
+  fetch("/logo.svg").then((r) => r.text()).then((text) => {
+    if (worn !== name) return;
+    const svg = new DOMParser().parseFromString(text.replace(/fill="#2e7d32"/g, 'style="fill:var(--accent)"')
+      .replace(/fill="#242424"/g, 'style="fill:var(--ink)"').replace(/fill="#e2e2da"/g, 'style="fill:var(--line)"'), "image/svg+xml").documentElement;
+    svg.setAttribute("class", "logo-inline");
+    brand.replaceChildren(svg);
+  }).catch(() => {});
+}
+
+try { wearAccent(localStorage.getItem("dc-accent") || "green"); } catch { /* no storage: green until I know */ }
+
+/** 3.4.1: Copy invite makes a one-time link, as in Anki; offline it
+ *  carries my friend code. Safari only lets a click write the clipboard
+ *  if it starts writing at once, so the text goes in as a promise. */
+function copyInvite(friendCode, btn) {
+  const text = api("POST", "/invites").then((r) => r.code, () => friendCode)
+    .then((code) => `Study with me on Due Crew: duecrew.com/i/${code}`);
+  const done = (ok) => {
+    btn.textContent = ok ? "Copied. Send one per friend." : "Couldn't copy";
+    setTimeout(() => { btn.textContent = "Copy invite"; }, 2400);
+  };
+  try {
+    if (window.ClipboardItem) {
+      navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })])
+        .then(() => done(true), () => text.then((t) => navigator.clipboard.writeText(t)).then(() => done(true), () => done(false)));
+    } else text.then((t) => navigator.clipboard.writeText(t)).then(() => done(true), () => done(false));
+  } catch { done(false); }
+}
+
 // ---- who's signed in ----
 
 let me = null;  // {uid, name} or null
 
 async function whoami() {
   try { me = await api("GET", "/auth/me"); } catch { me = null; }
+  if (me) wearAccent(me.accent || "green");
   renderNav();
   return me;
 }
@@ -330,13 +388,7 @@ async function libraryPage() {
 
 /** /plans/new?deck=…#token: signed in by the add-on's link, then a plan for that deck. */
 async function newPlan() {
-  const token = location.hash.slice(1);
-  if (token) {
-    history.replaceState(null, "", location.pathname + location.search);  // the token leaves the address bar
-    try { await api("POST", "/auth/link/redeem", { token }); }
-    catch { /* expired or used: if there's a session already, carry on */ }
-    await whoami();
-  }
+  // the link's token was traded for a session at start
   if (!me) {
     page(h("h1", {}, "That link has expired"),
       h("p", { class: "muted" }, "Links from Anki work once, for five minutes. Open the builder from Anki again, or sign in here."),
@@ -377,17 +429,29 @@ function codeBox() {
   const say = (cls, ...kids) => out.replaceChildren(h("div", { class: `res ${cls}` }, ...kids));
   const code = () => {
     const t = input.value.toUpperCase();
+    const inLink = /\/I\/([A-Z0-9]{10}|[A-Z0-9]{6})(?![A-Z0-9])/.exec(t);  // 3.4.1: an invite's link
+    if (inLink) return inLink[1];
     const bare = t.replace(/[^A-Z0-9]/g, "");
-    if (bare.length === 6 || bare.length === 8) return bare;
+    if (bare.length === 6 || bare.length === 8 || bare.length === 10) return bare;
     const m = /(?:^|[^A-Z0-9])([A-Z0-9]{4}\s?[A-Z0-9]{4}|[A-Z0-9]{6})(?:[^A-Z0-9]|$)/.exec(t);  // pasted with its invite
     return m ? m[1].replace(/\s/g, "") : "";
   };
   const done = (text) => { say("ok", h("span", {}, text)); input.value = ""; };
   async function look() {
     const c = code();
-    if (!c) { say("bad", h("span", {}, "Codes are 6 or 8 letters and numbers. Pasting the whole invite works too.")); return; }
+    if (!c) { say("bad", h("span", {}, "That doesn't look like a code. Pasting the whole invite works too.")); return; }
     say("", h("span", { class: "muted" }, "Looking…"));
     try {
+      if (c.length === 10) {
+        const inv = await api("GET", `/invites/${c}`);
+        const who = `${inv.emoji ? `${inv.emoji} ` : ""}${inv.name}`;
+        return say("", h("b", {}, who), h("span", { class: "muted" }, "an invite"), h("button", { onclick: async () => {
+          try {
+            const r = await api("POST", `/invites/${c}/redeem`);
+            done(r.mutual ? `You and ${r.name} are crew.` : r.knocked ? `Added ${r.name}. You're crew once they add you back.` : `${r.name} isn't in your crew now.`);
+          } catch (err) { say("bad", h("span", {}, err.status === 400 ? "That's your own invite." : "That didn't work. Try again.")); }
+        } }, `Add ${inv.name}`));
+      }
       if (c.length === 6) {
         const f = await api("GET", `/codes/${c}`);
         const who = `${f.emoji ? `${f.emoji} ` : ""}${f.name}`;
@@ -502,10 +566,59 @@ async function codePage(code) {
     me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
 }
 
+/** 3.4.1: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
+ *  at once; a friend code (6) adds them, and they add you back. */
+async function invitePage(code) {
+  let inv = null;
+  try { inv = await api("GET", `/invites/${encodeURIComponent(code)}`); } catch (err) { inv = err.status === 429 ? "slow" : null; }
+  if (!inv || inv === "slow") {
+    page(h("h1", {}, inv ? "Too many tries" : "No invite with that code"),
+      h("p", { class: "muted" }, inv ? "Try again in an hour." : "Check the link with whoever sent it."),
+      h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
+    return;
+  }
+  // a one-time invite, first use within 14 days: crew at once. Used or old,
+  // it still adds, and the one who sent it adds back
+  const once = inv.kind === "invite" && inv.state === "ok";
+  const head = h("div", { class: "invwho" }, inv.emoji ? h("span", { class: "em" }, inv.emoji) : null,
+    h("h1", {}, `${inv.name} invited you to study together`));
+  if (me) {
+    const out = h("p", { class: "status", role: "status" });
+    const btn = h("button", { onclick: async () => {
+      btn.disabled = true;
+      try {
+        const r = inv.kind === "invite" ? await api("POST", `/invites/${code}/redeem`) : await api("POST", `/codes/${code}/add`);
+        out.textContent = r.mutual ? `You and ${r.name} are crew.` : r.knocked === false ? `${r.name} isn't in your crew now.`
+          : `Added ${r.name}. You're crew once they add you back.`;
+        btn.hidden = true;
+      } catch (err) {
+        btn.disabled = false;
+        out.className = "status bad";
+        out.textContent = err.status === 400 ? "That's your own invite." : err.status === 409 ? `${inv.name} is already in your crew.`
+          : "That didn't work. Try again.";
+      }
+    } }, `Add ${inv.name}`);
+    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "quiet")), out);
+    return;
+  }
+  const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
+  const shown = code.length === 10 ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
+  page(head,
+    emailMe(`/i/${code}`),
+    h("ol", { class: "steps wide-only" },
+      h("li", {}, h("b", {}, "Add Due Crew to Anki. "), "Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ",
+        copyBtn("2035408484"), ", then restart Anki.", h("br"),
+        h("span", { class: "muted small" }, "No Anki yet? ", h("a", { href: "https://apps.ankiweb.net" }, "Get it free"))),
+      h("li", {}, h("b", {}, "Start with your email. "), "On Anki's Decks screen. We'll email you a code."),
+      h("li", {}, h("b", {}, `Paste ${inv.name}'s code `), h("b", { class: "mono" }, shown), " ", copyBtn(code),
+        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`)),
+    h("p", { class: "muted small" }, "Free · your studying goes only to people you add · ", h("a", { href: "/" }, "What's Due Crew?")));
+}
+
 async function account() {
   const out = async (all) => {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
-    me = null; renderNav(); go("/sign-in");
+    me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
   page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
     h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
@@ -816,7 +929,7 @@ async function home() {
   // 3.4 review, H1 / 3.5, H: my code to give, and any code I was sent, in the rail
   const friends = h("section", { class: "panel" }, h("h4", {}, "Friends"),
     h("div", { class: "row" }, h("span", { class: "small" }, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
-      b.me.code ? h("button", { class: "linkish", onclick: (e) => copy(`Study with me on Due Crew · my code ${b.me.code}`, e.target) }, "Copy invite") : null),
+      b.me.code ? h("button", { class: "linkish", onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null),
     codeBox());
   page(todayStrip(followed, my[t]), h("div", { class: "wb" },
     h("div", { class: "stack" },
@@ -1210,6 +1323,82 @@ function hbars(rows, grey) {
 
 const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 
+/** The admin's account lookup: one person at a time (never a list of
+ *  everyone, never how anyone studies). */
+function peoplePanel() {
+  const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
+  const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
+  const offset = (m) => (m === null || m === undefined ? "" : ` · UTC${m < 0 ? "−" : "+"}${Math.floor(Math.abs(m) / 60)}${Math.abs(m) % 60 ? `:${String(Math.abs(m) % 60).padStart(2, "0")}` : ""}`);
+  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code or a uid", "aria-label": "Look up an account", style: "flex:1 1 220px" });
+  const hits = h("div", { class: "hits" });
+  const one = h("div");
+  const status = h("p", { class: "muted small", role: "status" });
+  const tile = (n, label) => h("div", {}, h("b", {}, String(n)), h("small", {}, label));
+  async function open(uid) {
+    one.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+    let p;
+    try { p = await api("GET", `/admin/people/${encodeURIComponent(uid)}`); } catch { one.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that account.")); return; }
+    const copyBtn = h("button", { class: "ghost", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
+    const outStatus = h("span", { class: "muted small", role: "status" });
+    const confirmBox = h("div", { class: "confirm", hidden: true });
+    const typed = h("input", { type: "email", placeholder: p.email, "aria-label": "Type their email to confirm", style: "width:100%" });
+    const delBtn = h("button", { class: "danger", onclick: async () => {
+      delBtn.disabled = true;
+      try { await api("DELETE", `/admin/people/${encodeURIComponent(p.uid)}`, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
+      catch (e) { delBtn.disabled = false; outStatus.textContent = e.body?.error === "confirm" ? "That isn't their email." : "That didn't work."; }
+    } }, "Delete");
+    confirmBox.append(h("b", {}, `Delete ${p.name}'s account?`),
+      h("span", {}, "Everything of theirs goes, as when they delete it themselves. It can't be undone, and they aren't told."),
+      h("label", {}, h("span", {}, "Type ", h("b", {}, p.email), " to confirm"), typed),
+      h("div", { class: "row" }, h("button", { class: "ghost", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
+    const list = (title, rows) => h("div", { class: "plist" }, h("span", { class: "lbl" }, title),
+      rows.length ? rows : h("span", { class: "muted small" }, "None"));
+    one.replaceChildren(h("div", { class: "person" },
+      h("div", { class: "who" }, h("span", { class: "em" }, p.emoji || "🙂"),
+        h("div", {}, h("b", {}, p.name), h("small", { class: "muted" }, ` · last seen ${seen(p.lastSeen)}`))),
+      h("div", { class: "agrid2" },
+        h("dl", { class: "kv" },
+          h("dt", {}, "Email"), h("dd", {}, p.email),
+          h("dt", {}, "uid"), h("dd", { class: "mono" }, p.uid),
+          h("dt", {}, "Friend code"), h("dd", { class: "mono" }, p.code ? spaced(p.code) : "none"),
+          h("dt", {}, "Joined"), h("dd", {}, when(p.joined)),
+          h("dt", {}, "Add-on"), h("dd", {}, `${p.version || "not yet"}${offset(p.tz)}`),
+          h("dt", {}, "Signed in on"), h("dd", {}, `${p.signedIn.computers} computer${p.signedIn.computers === 1 ? "" : "s"}, ${p.signedIn.browsers} browser${p.signedIn.browsers === 1 ? "" : "s"}`)),
+        h("div", { class: "tiles" }, tile(p.crew.mutual, "crew, mutual"), tile(p.crew.addedNotBack, "added, not back"),
+          tile(p.crew.addedThem, "added them, not back"), tile(p.squads.length, "squads"), tile(p.following.length, "plans followed"),
+          tile(p.made.length, "plans made"), tile(p.crew.muted, "muted"))),
+      h("div", { class: "agrid2" },
+        list("Squads", p.squads.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
+        list("Plans", [...p.made.map((x) => h("div", {}, h("span", {}, x.name, " ", h("span", { class: "madetag" }, "made")),
+          h("small", { class: "muted" }, `${x.audience === "squad" ? "squad" : "code"} · ${x.followers} following${x.listed ? " · in the library" : ""}`))),
+          ...p.following.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `following · ${x.owner}'s${x.paused ? " · paused" : ""}${x.listed ? " · in the library" : ""}`)))])),
+      h("div", { class: "row" },
+        h("button", { class: "ghost", onclick: async () => {
+          try { const r = await api("POST", `/admin/people/${encodeURIComponent(p.uid)}/signout`); outStatus.textContent = `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`; }
+          catch { outStatus.textContent = "That didn't work."; }
+        } }, "Sign out everywhere"), copyBtn, h("span", { style: "flex:1" }),
+        h("button", { class: "danger ghost", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
+      outStatus, confirmBox));
+  }
+  async function look() {
+    const text = q.value.trim();
+    one.replaceChildren();
+    if (text.length < 3) { status.textContent = "At least 3 characters."; hits.replaceChildren(); return; }
+    status.textContent = "Looking…";
+    let r;
+    try { r = await api("GET", `/admin/people?q=${encodeURIComponent(text)}`); } catch { status.textContent = "That didn't work."; return; }
+    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}` : "No one found.";
+    hits.replaceChildren(...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
+      for (const b of hits.children) b.classList.toggle("on", b === e.currentTarget); open(x.uid);
+    } }, h("span", {}, `${x.emoji ? x.emoji + " " : ""}`, h("b", {}, x.name), h("small", { class: "muted" }, ` · ${x.email} · joined ${when(x.joined)}`)),
+      h("small", { class: "muted" }, x.version || ""))));
+    if (r.people.length === 1) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+  }
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
+  return h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
+    h("div", { class: "row" }, q, h("button", { onclick: look }, "Look up")), status, hits, one);
+}
+
 async function adminPage() {
   let range = 90;
   const [s, nl, out] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices?all=1"), api("GET", "/admin/library").catch(() => ({ plans: [] }))]);
@@ -1325,7 +1514,8 @@ async function adminPage() {
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
   page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
-    h("p", { class: "muted" }, "Counts only. Never names or emails."),
+    h("p", { class: "muted" }, "Counts, and one account at a time when you look one up. Never how anyone studies."),
+    peoplePanel(),
     tilesBox,
     h("div", { class: "agrid3" }, codes, cutover, bridge),
     h("div", { class: "agrid2" }, library, notices),
@@ -1343,6 +1533,7 @@ async function route() {
     if (path === "/plans/new") return await newPlan();
     let m;
     if ((m = /^\/p\/([A-Za-z0-9]{1,16})$/.exec(path))) return await codePage(m[1].toUpperCase());
+    if ((m = /^\/i\/([A-Za-z0-9]{1,12})$/.exec(path))) return await invitePage(m[1].toUpperCase());
     if (!me) return needSignIn();
     if (path === "/plans") return await plansList();
     if (path === "/library") return await libraryPage();
@@ -1360,4 +1551,18 @@ async function route() {
   }
 }
 
-whoami().then(route);
+/** A link from Anki carries a one-time sign-in token after the # (never
+ *  sent to any server log): any page trades it for a session first, and
+ *  it leaves the address bar at once. */
+async function start() {
+  const token = /^#([A-Za-z0-9_-]{43})$/.exec(location.hash);
+  if (token) {
+    history.replaceState(null, "", location.pathname + location.search);
+    try { await api("POST", "/auth/link/redeem", { token: token[1] }); }
+    catch { /* expired or used: a session already here carries on */ }
+  }
+  await whoami();
+  await route();
+}
+
+start();

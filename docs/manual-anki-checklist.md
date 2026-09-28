@@ -342,3 +342,58 @@ In Anki (as a follower):
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
 - [ ] Admin (sammy): tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
 
+### 3.4.1: asking about a card (K1–K3)
+
+- [ ] Right-click a card while reviewing (or More): "Due Crew: ask my crew about this…". The box names who has it down, if anyone; OK with or without a line. Right-click again: "take back my ask".
+- [ ] A crewmate's Decks tab: "Asked of you" with your line, the card from their own copy, and Tip. Your own Decks tab: "Your asks", waiting, and who has it down.
+- [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
+- [ ] Night mode and light mode: the chip and the new headings read clearly.
+
+### 3.4.1: the Plans tab, and codes anywhere
+
+- [ ] Plans tab with a plan: the Today box names today's date(s), reviews, new and minutes; Study now starts the plan's deck; Put off to tomorrow closes them until tomorrow's morning.
+- [ ] The week: today outlined, past days ticked or "N left", rest days faded, an event outlined. Click a later day: Open now opens it, Skip it skips it (Undo skip on the same day), Move my days back asks how many. ‹ › moves a week and "Today" comes back.
+- [ ] Month on duecrew.com opens the plan's page, signed in.
+- [ ] Narrow the Anki window: the week becomes a list. Night mode: everything reads.
+- [ ] A rest day, a finished day (Next: … Open now), behind (Catch up…, Move my days back…), paused (Resume now).
+- [ ] Following nothing: Follow a plan with three ways in; paste a plan code and Follow opens with it.
+- [ ] Settings › Board › Tabs: untick Plans and Week; they're gone, and the board opens on Today. Tick them again.
+- [ ] Welcome screen and the board's code box: a friend's code adds them; a plan's code opens Follow; a squad's opens Squads. A pasted invite works in each.
+- [ ] Alone on the board after adding someone: "Waiting for Name to add you back."
+
+### 3.4.1: invites (option B)
+
+- [ ] Board › Copy invite: the clipboard is one line, "Study with me on
+      Due Crew: duecrew.com/i/…", and the tooltip says "Send one per friend."
+- [ ] Open the link signed out on a computer: "Name invited you", three
+      steps, both Copy buttons work. On a phone: Email it only.
+- [ ] Paste the whole line into a second account's welcome box: "You and
+      … are crew", and both boards show each other with no Add back.
+- [ ] Paste it again from a third account: "Added …", and the first
+      account's board shows "… added you" with Add back.
+- [ ] Pick an accent in Anki; sign in on duecrew.com: its buttons, links,
+      logo and year wear it (light and dark). A second computer takes it
+      at its next pull.
+- [ ] Offline, Copy invite still copies a link, with the friend code in it;
+      pasting that adds, and the other side sees Add back.
+- [ ] Paste the link into iMessage or Discord: the preview reads "… invited
+      you".
+
+### 3.4.1: Settings in the board
+
+- [ ] The board's ⚙ opens Settings where the board was; ‹ Board goes back.
+      A name's card › Privacy… opens it on Privacy.
+- [ ] Board: each switch, Theme, Accent (the logo and panel recolour at
+      once), Tabs (a hidden tab is gone on ‹ Board), Crew name (saved on
+      Enter or leaving the box), Reset board.
+- [ ] Privacy: the three choices; the number switches under My numbers;
+      a crewmate sees the change a few seconds later. Exam and Away: switch
+      on, pick dates, switch off.
+- [ ] You: Name…, Emoji…, Status… update the panel; Friends, Squads and
+      Shared Decks open their dialogs; Sign out lands on the signed-out card.
+- [ ] Night mode (Anki's and the Theme setting): every control readable,
+      the date pickers too.
+- [ ] Tab from control to control with the keyboard; Space toggles; focus
+      stays on the control after it redraws.
+- [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
+      tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.

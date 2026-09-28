@@ -217,6 +217,7 @@ class FakeWorker:
         self.bans = set()    # (sid, uid)
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
+        self.invites = {}    # 3.4.1: code -> {uid, used_by} (the Worker keeps only a hash)
         self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
@@ -331,6 +332,8 @@ class FakeWorker:
             return self._friends(method, me, parts[1:], body)
         if parts[:1] == ["codes"]:
             return self._codes(method, me, parts[1:], body)
+        if parts[:1] == ["invites"]:
+            return self._invites(method, me, parts[1:])
         if m == ("POST", "cheers") and len(parts) == 2:
             return self._cheer(me, parts[1], body or {})
         if parts[:1] == ["knocks"]:
@@ -694,6 +697,7 @@ class FakeWorker:
                 cand = f"C{abs(hash((me, n, len(self.codes)))) % 10**5:05d}"
                 code = cand if cand not in self.codes else None
             self.codes = {c: u for c, u in self.codes.items() if u != me}
+            self.invites = {c: i for c, i in self.invites.items() if i["uid"] != me}
             self.codes[code] = me
             self.users[me]["code"] = code
             return 200, {"code": code}
@@ -713,6 +717,38 @@ class FakeWorker:
             o = self.users[owner]
             return 200, {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or "",
                          "mutual": mutual, "knocked": not mutual}
+        raise Bad(405, "method")
+
+    def _invites(self, method, me, rest):
+        """3.4.1 (worker/src/invites.ts): a one-time invite makes us crew at
+        once, both edges; one use."""
+        if method == "POST" and not rest:
+            code = f"I{len(self.invites):09d}"
+            self.invites[code] = {"uid": me, "used_by": None}
+            return 200, {"code": code}
+        if method == "POST" and len(rest) == 2 and rest[1] == "redeem":
+            inv = self.invites.get(rest[0].upper())
+            if not inv:
+                raise Bad(404, "no_match")
+            owner = inv["uid"]
+            if owner == me:
+                raise Bad(400, "own_code")
+            o = self.users[owner]
+            info = {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or ""}
+            if inv["used_by"] == me:
+                return 200, {**info, "mutual": self.mutual(me, owner), "knocked": False}
+            if not inv["used_by"]:
+                inv["used_by"] = me
+                self.friends |= {(me, owner), (owner, me)}
+                self.knocks.pop((owner, me), None)
+                self.knocks.pop((me, owner), None)
+                return 200, {**info, "mutual": True, "knocked": False}
+            # used: as their friend code (add, then their Add back)
+            self.friends.add((me, owner))
+            mutual = self.mutual(me, owner)
+            if not mutual:
+                self.knocks[(owner, me)] = {"squad": "", "at": _now()}
+            return 200, {**info, "mutual": mutual, "knocked": not mutual}
         raise Bad(405, "method")
 
     def _cheer(self, me, to, body):

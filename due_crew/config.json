@@ -24,5 +24,6 @@
   "squad": "",
   "emoji": "",
   "room_chip_side": "right",
-  "muted": []
+  "muted": [],
+  "hidden_tabs": []
 }

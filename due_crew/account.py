@@ -27,7 +27,9 @@ from .app import _state, cfg, client
 
 ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
                 "share_heatmap", "show_up", "paused", "exam_date", "away_from", "away_to",
-                "status", "emoji", "squads", "crew_label", "shared_decks", "muted")
+                "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
+                "accent")  # 3.4.1: the site wears it too
+ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
@@ -92,6 +94,8 @@ def clean(s):
                 except (TypeError, ValueError):
                     continue
         out["shared_decks"] = decks
+    if s.get("accent") in ACCENT_NAMES:
+        out["accent"] = s["accent"]
     if isinstance(s.get("muted"), list):
         # 3.0.1: the people whose cheers and knocks I don't get, by uid
         out["muted"] = list(dict.fromkeys(
@@ -240,20 +244,36 @@ def _pulled(result):
                 traceback.print_exc()
 
 
+_pushing = {"busy": False, "again": False}
+
+
 def push(c):
-    """Send this computer's account settings. The newest save wins."""
+    """Send this computer's account settings. The newest save wins. One
+    save at a time (3.4.1: Settings in the board saves on every click, and
+    the server keeps whichever arrives last): a change made while one is
+    on its way goes after it, as the config is then, so a run of clicks is
+    at most two saves and never lands out of order."""
     cl = client()
     if not cl.signed_in:
         return
     at = _now()
-    settings = pick(c, _deck_name)
     cl.session.update(settings_dirty=True, settings_local_at=at)
     cl._save_session()
+    if _pushing["busy"]:
+        _pushing["again"] = True
+        return
+    _pushing["busy"] = True
+    settings = pick(c, _deck_name)
+    gen = app.generation
 
     def done(ok):
-        if ok:
+        _pushing["busy"] = False
+        again, _pushing["again"] = _pushing["again"], False
+        if ok and not again and gen == app.generation:
             cl.session.update(settings_seen=at, settings_dirty=False)
             cl._save_session()
+        if again:
+            push(cfg())  # whoever is signed in now, as the config is now
 
     app._bg(lambda: cl.put_settings(at, settings), done)
 

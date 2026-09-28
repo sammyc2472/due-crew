@@ -18,6 +18,7 @@ safe.
 import hashlib
 import json
 import os
+import re
 import threading
 
 import requests
@@ -26,7 +27,7 @@ from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
-    clean_tricky, day_doc, friend_code_from, live_now, normalize_code,
+    clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
 )
 
 API_BASE = "https://api.duecrew.com"
@@ -654,6 +655,30 @@ class ApiClient:
                     "mutual": bool(data.get("mutual")), "knocked": bool(data.get("knocked"))}, None
         return None, {"own_code": "That's your own code.", "already": "Already in your crew.",
                       "no_match": "That code doesn't match anyone."}.get(err, "Couldn't add. Try again.")
+
+    def create_invite(self):
+        """3.4.1: a one-time invite's code, or None (offline, or the day's
+        ceiling). Whoever redeems it is crew with me at once."""
+        try:
+            status, data = self._call("POST", "/invites", {})
+        except TransportError:
+            return None
+        code = str(data.get("code") or "")
+        return code if status == 200 and re.fullmatch(r"[A-Z0-9]{10}", code) else None
+
+    def redeem_invite(self, code):
+        """(info, error), as add_friend: the invite's maker and I are crew
+        (its first use), or I've added them and they add back (after)."""
+        code = invite_code_from(code)
+        if not code:
+            return None, "That invite doesn't match anyone."
+        status, data = self._call("POST", f"/invites/{code}/redeem")
+        if status == 200:
+            # used or old, it adds (knocked), and they add back
+            return {"user_id": str(data["uid"]), "name": str(data.get("name") or "?"),
+                    "mutual": bool(data.get("mutual")), "knocked": bool(data.get("knocked"))}, None
+        return None, {"own_code": "That's your own invite.",
+                      "no_match": "That invite doesn't match anyone."}.get(data.get("error"), "Couldn't add. Try again.")
 
     def add_back(self, uid):
         """Add someone by uid (Add back, a knock's Add). {uid, name, emoji,

@@ -92,6 +92,7 @@ _state = {
     "my_code": "",         # my friend code, for Copy invite on a solo board
     "milestones": [],      # [(uid, name, days)]: a crewmate's 100/365-day streak, today
     "anki_synced": False,  # an AnkiWeb sync finished since the profile opened
+    "settings_tab": None,  # 3.4.1: Settings open in the board, on this tab
     "room_dismissed": set(),  # study-room invites waved off this session
     "room_skip": None,     # (room key, round): the break I skipped
     "room_break": False,   # the break is on screen (review shortcuts are off)
@@ -180,7 +181,8 @@ def _reset_runtime(keep_sync=False):
                   milestones=[], anki_synced=synced,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
-                  settings_failed_ts=0.0, plan_progress={}, plan_session={}, notice=None)
+                  settings_failed_ts=0.0, plan_progress={}, plan_session={}, notice=None,
+                  settings_tab=None)
     _pending_cheers.clear()
 
 

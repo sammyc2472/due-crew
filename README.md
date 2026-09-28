@@ -78,8 +78,10 @@ newer. Restart Anki after installing.
 
 1. Click **Start with your email** on the Decks screen. Type in the code
    we send you. There's no password.
-2. Copy your invite and send it to a friend.
-3. When they add you, click **Add back**. You're crew.
+2. Got an invite, or a code from a class or a plan? Paste it on the
+   welcome screen. Otherwise, copy your invite and send it to a friend.
+   When they paste it, you're crew. One invite per friend.
+3. Someone added you? Click **Add back**.
 
 ## Privacy
 
@@ -90,7 +92,8 @@ to your account, where only you can read them, so they follow you to other
 computers. Anyone else sees your name and emoji, nothing more.
 
 You sign in with a code sent to your email; there's no password. Your email
-is only used for that. Deleting your account deletes your data.
+is only used for that, and so Sam, who runs Due Crew, can find your account
+if you write in. Deleting your account deletes your data.
 
 The add-on and the server that enforces all of this are open source, on
 [GitHub](https://github.com/sammyc2472/due-crew).

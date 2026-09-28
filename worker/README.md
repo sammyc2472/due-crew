@@ -24,9 +24,9 @@ import takes `Authorization: Bearer <token>`.
 | `GET /version` | `{api, minClient}`, no auth. Replaces the rules-marker probe. |
 | `POST /auth/code {email}` | Sends a code: six digits, ten minutes, plain text, no links. The answer is the same whether or not the address has an account. |
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
-| `GET /auth/me` | `{uid, email, name, emoji}`. |
+| `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.4.1: the accent from my settings, else green; the site wears it). |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
-| `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/` or `/p/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
+| `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
 | `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
@@ -56,6 +56,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /log` | 3.2: my log, for the site. Mine only. |
 | `GET` / `POST /admin/notices {text, link?, below?, days?}`, `DELETE /admin/notices/{id}` | 3.2.1: the admin's notice (at most 200 characters, an https link, only to add-ons older than `below`, 14 days unless said). `GET /board` carries the newest live one for the asking add-on's version as `notice: {id, text, link}`. |
 | `GET /admin/stats` | 3.2: counts only (accounts, on 3.x, seen, friendships, squads, plans, tips, versions), for the admin (`ADMINS` in wrangler.toml, and the `ADMIN_UIDS` secret); 404 for everyone else. `GET /auth/me` says `admin: true` for them. |
+| `GET /admin/people?q=` | The admin's account lookup: an exact email, uid or friend code, or up to 10 whose name starts with `q` (3+ characters); emails partly hidden. `GET /admin/people/{uid}`: one account (name, emoji, email, code, joined, last seen, version, tz, how many places signed in, squads, plans made and followed, and counts of crew, added-not-back and muted). Never their week, days, heatmap, decks, log, plan progress, settings, or who their crew are. `POST /admin/people/{uid}/signout` ends their sessions; `DELETE /admin/people/{uid} {email}` deletes the account as their own Delete does, with their email typed as confirmation (never the admin's own). 404 for everyone else. |
 | `GET /decks` | Shared-deck progress: mine and my mutual friends'. |
 | `GET /heatmap/{uid}` | Mine or a mutual friend's; `{counts: null}` when they don't share one. |
 | `GET` / `PUT /settings` | `{v, at, settings}`, mine only. |
@@ -77,6 +78,9 @@ import takes `Authorization: Bearer <token>`.
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
 | `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
+| `POST /invites` | 3.4.1: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
+| `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
+| `POST /invites/{code}/redeem` | The first use within 14 days: I'm crew with its maker at once, both edges, knocks between us cleared. After that (used, or old) it works as their friend code: I add them and they're knocked (`{mutual, knocked}`). 400 `own_code`. The same person again writes nothing. Shares the add's 30 an hour; rows are kept a year. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
 | `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card (5,000 a person), for mutual friends stuck on it. |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |

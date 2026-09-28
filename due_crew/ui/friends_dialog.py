@@ -14,7 +14,7 @@ from aqt.qt import (
 )
 from aqt.utils import tooltip
 
-from ..backend.shapes import friend_code_from
+from ..backend.shapes import friend_code_from, invite_code_from
 from . import accent, attach_alive, confirm, copy_text, run_bg
 
 
@@ -248,9 +248,16 @@ class FriendsDialog(QDialog):
             tooltip("Copied.")
 
     def _copy_invite(self):
-        if self.code:
-            copy_text(invite_text(self.code))
-            tooltip("Invite copied.")
+        """3.4.1: a one-time link; offline, the link carries my code."""
+        if not self.code:
+            return
+        from ..share import INVITE_COPIED
+        code = self.code
+
+        def done(invite, _err):
+            copy_text(invite_text(invite or code))
+            tooltip(INVITE_COPIED if invite else "Invite copied.")
+        run_bg(self, self.client.create_invite, done)
 
     def _new_code(self):
         if not self.loaded or not self.code:
@@ -278,9 +285,10 @@ class FriendsDialog(QDialog):
     def _add(self):
         if not self.loaded:
             return
-        code = friend_code_from(self.code_input.text())
-        if not code:
-            tooltip("Codes are 6 letters and numbers. Pasting the whole invite works too.")
+        invite = invite_code_from(self.code_input.text())
+        code = "" if invite else friend_code_from(self.code_input.text())
+        if not code and not invite:
+            tooltip("That doesn't look like a code. Pasting the whole invite works too.")
             return
         if self.code and code == self.code:
             tooltip("That's your own code.")
@@ -295,12 +303,15 @@ class FriendsDialog(QDialog):
             if not friend:
                 tooltip(html.escape(add_err or "Couldn't add. Check your connection."))
                 return
+            self.friends = [f for f in self.friends if f[0] != friend["user_id"]]
             self.friends.append((friend["user_id"], friend["name"], friend["mutual"]))
             self.changed = True
             self.code_input.clear()
             self._render_list()
             name = html.escape(friend["name"])
-            if friend["mutual"]:
+            if invite and not friend["mutual"] and not friend.get("knocked"):
+                tooltip(f"{name} isn't in your crew now.")
+            elif friend["mutual"]:
                 tooltip(f"You and {name} are crew.")
             elif friend.get("knocked"):
                 # 2.9: the add knocked; their board offers Add back
@@ -308,7 +319,8 @@ class FriendsDialog(QDialog):
             else:
                 tooltip(f"Added {name}. Send them your code to finish.")
 
-        run_bg(self, lambda: self.client.add_friend(code), done)
+        run_bg(self, lambda: (self.client.redeem_invite(invite) if invite
+                              else self.client.add_friend(code)), done)
 
     def _remove(self):
         if not self.loaded:

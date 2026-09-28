@@ -119,9 +119,10 @@ add-on.
   Closing Anki leaves the room.
 - 2.13: settings that belong to a person (`account.ACCOUNT_KEYS`: privacy
   switches, show-up, paused, exam and away dates, status, emoji, squads,
-  crew label, shared decks by id and name, muted uids) live on the server
-  (`GET/PUT /settings`), mine only. Accent, theme, sort, tab and the room
-  chip's side stay per computer. An install pulls before it uploads:
+  crew label, shared decks by id and name, muted uids, and since 3.4.1 the
+  accent, which `/auth/me` hands the site to wear) live on the server
+  (`GET/PUT /settings`), mine only. Theme, sort, tab and the room chip's
+  side stay per computer. An install pulls before it uploads:
   `_on_sync_done` waits for `account.ensure()` at profile open, sign-in and the day's first sync, so
   a new computer never sends defaults over the account's. Newest save
   wins. `app.save_cfg` pushes when an account key changes. An install that
@@ -181,6 +182,13 @@ add-on.
   The chip is beside Edit on the answer side, never inside a card: who
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
+  3.4.1 (mock "Card Help Flow"): the chip shows a tip's own words (its
+  first tip, one per person, "+N more" opens the rest) with This helped
+  as its own click (`knowshelped`); asking is one thing, "ask my crew
+  about this…" from the chip or the reviewer's menu on any card, a line
+  optional; the Decks tab heads "Asked of you" and "Your asks" (open
+  ones say who has the card down, answered ones who answered), from
+  local data only (`together.my_asks_view`).
 - 3.2 the site: signed in, `/` goes to `/home` (`GET /board?keep=1`,
   which leaves the cheers for Anki); `/log`; `/admin` for the admin.
 - 3.2.1 the admin's notice: the admin is Sam's "sammy" account (`ADMINS`
@@ -205,8 +213,7 @@ add-on.
 - 3.3 following is simpler: a follower does each date on its day (the
   plan's study days, `schedule.weight` falls back to `pace.days`); the
   add-on no longer asks for a schedule, and a 3.2 `sched` still runs. The
-  add-on's board has a Plans tab while I follow a plan (the cards left
-  Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
+  add-on's board has a Plans tab (the cards left Decks). The tree goes up nested (`plans.nest`, up to 1.5 MB, question
   ids last), so deep tags reach the builder.
 - 3.3 hold back (Sam's call): a deck imported with every card active
   can't wait for its days, so Follow offers (checked) "Hold back N cards
@@ -315,6 +322,51 @@ add-on.
   counters there (`admin.bump`), `bridge_last` is the bridge's last run,
   the cutover is 3.x / 2.x still studying / quiet, notices keep their
   history.
+- 3.4.1 the Plans tab (mock "Plans Tab Review"): a Today box in the day's
+  state (study, rest, done with what's next, behind with Catch up and
+  Move my days back, paused), then one week in the site calendar's look
+  (`plans.week_view`, my own shifted days; a list under 560px; ‹ › move a
+  week, not saved), a day's cell opening its details (Open now, Skip it,
+  Undo skip, Study, Move my days back), one note at most (the most
+  pressing first, `board._plan_notes`), and the crew in words. The tab is
+  always there; following nothing it's three ways in (a code, the
+  library, make one). Settings › Board › Tabs hides any tab but Today
+  (`hidden_tabs`, per computer). A code box anywhere (welcome, the
+  board's) takes a friend's, a plan's or a squad's code
+  (`shapes.long_code_from`).
+- 3.4.1 invites (mock "Invite Page", option B, migration 0010): Copy
+  invite makes a one-time code (10, `POST /invites`, kept as a hash, one
+  use, 14 days, 20 a day) and copies "Study with me on Due Crew:
+  duecrew.com/i/CODE". Whoever redeems it (`POST /invites/{code}/redeem`,
+  any code box, or the page signed in) is crew with its maker at once,
+  both edges: sending it was the maker's yes. Asking again writes
+  nothing, so a removal since stays a removal; a new friend code ends my
+  invites. Offline, the link carries my friend code, which adds
+  and knocks as before. After its first use, or after 14 days, an invite
+  works as the maker's friend code (add, knock, their Add back), so a link
+  in a group chat is never a dead end; rows are kept a year for that.
+  `/i/CODE` on the site (`invitePage`) says who
+  (`GET /invites/{code}`, signed out: a name and an emoji, 300 an hour an
+  address), the three steps on a computer, Email it on a phone; the site
+  Worker writes its preview ("Sam invited you", `drawInvite`).
+- 3.4.1 Settings in the board (mock "Settings in the Board"): the board's
+  Settings opens in the board's place (`board.settings_html`, You, Board,
+  Privacy; ‹ Board goes back), in its own tokens, so night mode and the
+  accent just work. Each click is one command (`settings_model.change`:
+  whitelisted keys and values, pure) and applies at once; no Save. A
+  sharing change pushes 2.5 seconds after the last click (one sync for a
+  run of them). Name, Emoji, Status, Friends, Squads and Shared Decks open
+  their dialogs. The Qt dialog stays for when the board isn't on screen
+  (turned off, signed out, another screen, Tools › Due Crew › Settings
+  from the reviewer).
+- The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
+  one person at a time, never a list of everyone. A search is an exact
+  email, uid or friend code, or up to 10 names that start with it,
+  emails partly hidden; one account shows who they are, where they are
+  (squads, plans) and counts of their crew, never how they study, who
+  their crew are, or their settings. Sign out everywhere, and Delete with
+  their email typed out. README's privacy section says Sam can find an
+  account when someone writes in.
 
 ## Releasing
 

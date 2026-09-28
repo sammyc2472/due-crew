@@ -127,6 +127,23 @@ def tips_for(guid):
     return [(t["name"], t["note"]) for t in (_wrap_data().get("tips") or {}).get(guid, [])]
 
 
+def local_tips(guid):
+    """The tips kept for this card, as they arrived: [{from, name, note, helped?}]."""
+    return [dict(t) for t in (_wrap_data().get("tips") or {}).get(guid, []) if isinstance(t, dict)]
+
+
+def mark_helped(guid, from_uid, on):
+    """Main thread. This helped, remembered on the kept tip (3.4.1)."""
+    w = _wrap_data()
+    changed = False
+    for t in (w.get("tips") or {}).get(guid, []):
+        if isinstance(t, dict) and t.get("from") == from_uid and bool(t.get("helped")) != on:
+            t["helped"] = on
+            changed = True
+    if changed:
+        _save_wrap()
+
+
 # ---- sending ----
 
 def _ask_line(title, prompt):
@@ -256,9 +273,14 @@ def reviewer_menu(reviewer, menu):
         return
     flagged = any(f["guid"] == card.note().guid
                   for f in clean_tricky(client().session.get("tricky"), _today()))
-    action = menu.addAction("Due Crew: unflag this card" if flagged
-                            else "Due Crew: this one's getting me")
-    action.triggered.connect(lambda: flag_card(card))
+    # 3.4.1, K2: one way to ask, on any card, a line optional
+    if flagged:
+        action = menu.addAction("Due Crew: take back my ask")
+        action.triggered.connect(lambda: flag_card(card))
+    else:
+        from . import cards as crew_cards
+        action = menu.addAction("Due Crew: ask my crew about this…")
+        action.triggered.connect(lambda: crew_cards.ask(card))
 
 
 def tricky_view():
@@ -288,3 +310,35 @@ def tricky_view():
            for e, i, t in flags if t["guid"] in text]
     out.sort(key=lambda v: not v["known"])  # asks about cards I know first
     return out
+
+
+def my_asks_view():
+    """3.4.1, K3: my asks, for the Decks tab: [{text, deck, state, who}].
+    Open ones (still on my week) say who has the card down when I know
+    it; answered ones (a tip kept in the last TIP_DAYS) say who answered.
+    The text is my own copy's; nothing here makes a request."""
+    cl = client()
+    names = {e["user_id"]: str(e.get("name") or "?").split(" ")[0]
+             for e in _state["entries"] or [] if not e.get("you")}
+    info = cl.session.get("cards") or {}
+    out = []
+    for f in clean_tricky(cl.session.get("tricky"), _today()):
+        who = [names[u] for u in (info.get(f["guid"]) or {}).get("knows") or [] if u in names]
+        out.append({"guid": f["guid"], "text": f.get("text") or "", "deck": f.get("deck") or "",
+                    "state": "open", "who": who})
+    open_guids = {a["guid"] for a in out}
+    tips = _wrap_data().get("tips") or {}
+    answered = [(g, [t for t in ts if isinstance(t, dict)]) for g, ts in tips.items()
+                if isinstance(ts, list) and ts and g not in open_guids][-50:]  # the newest; one bounded query
+    if answered and mw.col:
+        guids = [g for g, _ts in answered]
+        try:
+            rows = dict(mw.col.db.all(
+                f"SELECT guid, flds FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids))
+        except Exception:
+            rows = {}
+        for g, ts in answered:
+            if g in rows:
+                out.append({"guid": g, "text": _plain(str(rows[g]).split("\x1f", 1)[0]), "deck": "",
+                            "state": "answered", "who": [str(t.get("name") or "?").split(" ")[0] for t in ts]})
+    return out[:8]

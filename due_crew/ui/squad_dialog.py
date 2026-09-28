@@ -28,7 +28,7 @@ def shared_note(cfg):
 
 
 class SquadDialog(QDialog):
-    def __init__(self, parent, client, on_joined, note=None):
+    def __init__(self, parent, client, on_joined, note=None, code=""):
         super().__init__(parent)
         self.client = client
         self.on_joined = on_joined   # main thread: {id, code, name, founder}
@@ -85,6 +85,9 @@ class SquadDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)
+        if code:
+            self.code_edit.setText(code)
+            self._look_up()
 
     # ---- join ----
     def _code_changed(self, _text=""):

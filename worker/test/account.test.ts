@@ -151,3 +151,15 @@ describe("housekeeping", () => {
     expect((await api("GET", "/auth/me", { token: live.token })).status).toBe(200);
   });
 });
+
+describe("3.4.1: my accent on the site", () => {
+  it("/auth/me carries the accent the add-on keeps in my settings; anything else is green", async () => {
+    const { person } = await import("./helpers");
+    const sam = await person("sam");
+    expect((await sam.call("GET", "/auth/me")).body.accent).toBe("green");
+    await sam.call("PUT", "/settings", { v: 1, at: "2026-09-28T18:00:00Z", settings: { accent: "rose" } });
+    expect((await sam.call("GET", "/auth/me")).body.accent).toBe("rose");
+    await sam.call("PUT", "/settings", { v: 1, at: "2026-09-28T18:01:00Z", settings: { accent: "</style>" } });
+    expect((await sam.call("GET", "/auth/me")).body.accent).toBe("green");
+  });
+});

@@ -1534,15 +1534,15 @@ def test_settings_follow_account_v213():
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
     doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
-    check("pick: only what follows the account; decks with names; accent and sort stay",
-          "accent" not in doc and "sort" not in doc
+    check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.4.1)",
+          doc["accent"] == "rose" and "sort" not in doc
           and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
     here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
     resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
     got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
-    check("apply: the account's settings land; the deck matches by id, else by name; accent stays",
+    check("apply: the account's settings land, the accent too; the deck matches by id, else by name",
           got["share_retention"] is False and got["exam_date"] == "2026-10-02"
-          and got["shared_decks"] == [11, 99] and got["accent"] == "green" and got["shared_decks_set"])
+          and got["shared_decks"] == [11, 99] and got["accent"] == "rose" and got["shared_decks_set"])
     junk = account.clean({"share_retention": "no", "status": "x" * 500, "squads": [{"id": 5}, "x"],
                           "shared_decks": [{"id": "abc"}, {"id": 3, "name": 7}] + [{"id": 1}] * 500})
     check("clean: wrong types dropped, text and lists bounded",
@@ -1604,7 +1604,7 @@ def test_settings_follow_account_v213():
         account._pulled = real_pulled
         check("second computer: pulls before its first sync, and takes the account's settings",
               order == ["pulled", "sync"] and b["cfg"]["shared_decks"] == [11, 77]
-              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "blue")
+              and b["cfg"]["share_retention"] is False and b["cfg"]["accent"] == "rose")
         b["cfg"]["status"] = "200 cards, then bed"
         account.on_change(b["cfg"])
         use(a)
@@ -2048,7 +2048,13 @@ def test_together_v210():
     check("flags: a card I don't have stays out of view", together.tricky_view() == [])
     sys.modules["aqt"].mw.col = None
     flags = board._tricky_html([dict(view[0], text="S3 <b>")])
-    check("flags: escaped, with Send a tip wired", "&lt;b&gt;" in flags and "tricktip:dre:0" in flags)
+    check("flags: escaped, with Tip wired, under Asked of you",
+          "&lt;b&gt;" in flags and "tricktip:dre:0" in flags and "Asked of you" in flags and "Your asks" not in flags)
+    mine = board._tricky_html([], [{"text": "K+ <i>", "state": "open", "who": ["Dre"]},
+                                   {"text": "Digoxin", "state": "answered", "who": ["Priya <b>"]}])
+    check("your asks (K3): where each stands, escaped, no Asked of you when nobody asked",
+          "Your asks" in mine and "Asked of you" not in mine and "Dre knows this" in mine and "waiting" in mine
+          and "Priya &lt;b&gt; answered" in mine and "1 tip" in mine and "<i>" not in mine)
     check("flags: a cloze shows as [...], never its answer",
           together._plain("<b>S3</b>&nbsp;is heard in {{c1::Kentucky::rhythm}}") == "S3 is heard in [\u2026]")
 
@@ -2077,9 +2083,17 @@ def test_together_v210():
           w["luck"]["exam"] == exam and w["luck"]["lines"][0]["note"] == "Go"
           and together.tips_for("guid000003") == [("Eve", "S3 = Kentucky")] and len(toasts) == 2)
     from due_crew import cards as crew_cards
-    chip = crew_cards.chip_view(None, together.tips_for("guid000003"), {})
-    check("tips: 3.2, a chip beside Edit, never inside the card",
-          chip == {"kind": "tip", "text": "\U0001F4A1 Eve’s tip", "cmd": "knowstip"})
+    chip = crew_cards.chip_view(None, together.local_tips("guid000003"), {})
+    check("tips: 3.4.1, K1, the tip's own words beside Edit, with This helped, never inside the card",
+          chip["kind"] == "tip" and chip["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and chip["title"] == "S3 = Kentucky"
+          and chip["cmd"] == "knowstip" and chip.get("act") == "This helped"
+          and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
+    js = crew_cards.chip_js(dict(chip, accent="#0a0"))
+    check("tips: This helped is its own click, the tip's words go in as text",
+          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+    old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
+    check("tips: a tip kept before 3.4.1 still shows, without This helped (no one to thank)",
+          old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)
     js = board.luck_card_js("Marisa", [("Dre", "</div><script>x</script>")])
     check("good-luck card: lines go in as text, and Thanks is wired",
           "textContent" in js and "innerHTML" not in js and "duecrew:luckthanks" in js
@@ -2653,8 +2667,167 @@ def test_ui_review_board():
                         {"period": "today"}, 0)
     check("C5: alone, the invite is the board", 'class="dc-empty"' in solo and "K7Q2 ZP" in solo
           and "copyinvite" in solo and "duecrew:addcode:" in solo)
+    waiting = board.render({"entries": [me], "labels": labels, "tomorrow": "", "pending": ["Sam <b>"], "my_code": "K7Q2ZP"},
+                           {"period": "today"}, 0)
+    check("3.4.1: alone, it names who I'm waiting on, escaped; the box takes any code, whole",
+          "Waiting for Sam &lt;b&gt; to add you back." in waiting and "[^A-Z0-9 \\/]" in waiting and "{6}" not in waiting)
+    from due_crew.backend.shapes import friend_code_from, long_code_from
+    plan_invite = "Follow MS2 Block 1 on Due Crew \u00b7 code N4AP ULM2"
+    check("3.4.1: a plan's code or invite is no friend code, and reads as the 8-character code",
+          friend_code_from(plan_invite) == "" and long_code_from(plan_invite) == "N4APULM2"
+          and long_code_from("n4ap-ulm2") == "N4APULM2" and long_code_from("K7Q2ZP") == ""
+          and friend_code_from("STUDY WITH ME CODE K7Q2ZP") == "K7Q2ZP")
     card = board.profile_overlay_js({"name": "Dre", "you": False, "cells": [1, 0], "same_days": 42, "start": "2026-04-06"})
     check("card: the days in common, since the month the heatmap starts", "42 days</b> since April" in card, card[-400:])
+
+
+def test_invite_link_v341():
+    """3.4.1, option B: Copy invite makes a one-time link; whoever pastes it
+    is crew with its maker at once, both edges. One use. A friend code in
+    the same link still adds, and the other adds back."""
+    from due_crew.backend.shapes import friend_code_from, invite_code_from, long_code_from
+    from due_crew.share import friend_invite
+    store = world({"sam": "Sam", "priya": "Priya", "kai": "Kai"})
+    sam, priya, kai = (new_client(store, u) for u in ("sam", "priya", "kai"))
+    invite = sam.create_invite()
+    text = friend_invite(invite)
+    check("invite: one line and a link, the code in it",
+          text == f"Study with me on Due Crew: duecrew.com/i/{invite}" and "\n" not in text, text)
+    # the board's box sends the paste as capitals, with / kept
+    pasted = re.sub(r"[^A-Z0-9 /]", " ", text.upper())
+    check("invite: read from the link, a paste or typed; never a friend, plan or squad code",
+          invite_code_from(text) == invite == invite_code_from(pasted)
+          and invite_code_from(f"{invite[:5]} {invite[5:]}".lower()) == invite
+          and friend_code_from(text) == "" and long_code_from(text) == ""
+          and invite_code_from("SAM123") == "")
+    friend, err = priya.redeem_invite(pasted)
+    check("invite: pasting it makes us crew at once, both edges, no knock",
+          err is None and friend["user_id"] == "sam" and friend["mutual"]
+          and ("sam", "priya") in store.friends and ("priya", "sam") in store.friends
+          and not store.knocks, (friend, err))
+    late, err = kai.redeem_invite(invite)
+    check("invite: once only; after that it adds and knocks (a group chat); my own says so",
+          err is None and late["knocked"] and not late["mutual"] and ("sam", "kai") not in store.friends
+          and ("sam", "kai") in store.knocks
+          and sam.redeem_invite(sam.create_invite())[1] == "That's your own invite.", (late, err))
+    store.friends.discard(("kai", "sam"))
+    store.knocks.clear()
+    # offline, Copy invite falls back to my friend code in the same link
+    code = store.users["sam"]["code"] or sam.ensure_friend_code(None)
+    link = friend_invite(code)
+    check("invite: a friend code's link still adds (then Add back)",
+          friend_code_from(link) == code and invite_code_from(link) == ""
+          and kai.add_friend(friend_code_from(link))[0]["knocked"], link)
+
+
+def test_settings_in_board_v341():
+    """3.4.1 (mock "Settings in the Board"): Settings in the board's place,
+    one command per change, the same keys and rules as the dialog."""
+    from due_crew import account
+    check("settings: the accent follows the account (the site wears it); only an accent's name",
+          "accent" in account.ACCOUNT_KEYS and account.clean({"accent": "rose"}) == {"accent": "rose"}
+          and account.clean({"accent": "</style>"}) == {} and account.pick({"accent": "teal"})["accent"] == "teal")
+    from due_crew.settings_model import change
+    day = datetime.date(2026, 9, 28)
+    cfg = {"hidden_tabs": ["squads"], "exam_date": "", "away_from": "", "away_to": ""}
+    check("settings: a switch, a choice, only values it takes",
+          change(["set", "compact", "1"], cfg) == {"compact": True}
+          and change(["set", "accent", "rose"], cfg) == {"accent": "rose"}
+          and change(["set", "accent", "red"], cfg) is None
+          and change(["set", "api_base", "1"], cfg) is None
+          and change(["set", "compact", "yes"], cfg) is None)
+    check("settings: tabs hide and show; Today isn't one of them",
+          change(["settabs", "plans", "0"], cfg) == {"hidden_tabs": ["squads", "plans"]}
+          and change(["settabs", "squads", "1"], cfg) == {"hidden_tabs": []}
+          and change(["settabs", "today", "0"], cfg) is None)
+    check("settings: privacy is one of three, and the numbers keep their switches",
+          change(["setprivacy", "showup"], cfg) == {"show_up": True, "paused": False}
+          and change(["setprivacy", "paused"], cfg) == {"show_up": False, "paused": True}
+          and change(["setprivacy", "numbers"], cfg) == {"show_up": False, "paused": False})
+    check("settings: the exam on (a week out), a date, off; nonsense is nothing",
+          change(["setexam", "on"], cfg, today=day) == {"exam_date": "2026-10-05"}
+          and change(["setexam", "2026-11-02"], cfg) == {"exam_date": "2026-11-02"}
+          and change(["setexam", "off"], {"exam_date": "2026-11-02"}) == {"exam_date": ""}
+          and change(["setexam", "soon"], cfg) is None)
+    check("settings: away on (tomorrow to a week), dates in either order, off",
+          change(["setaway", "on"], cfg, today=day) == {"away_from": "2026-09-29", "away_to": "2026-10-05"}
+          and change(["setaway", "2026-10-09", "2026-10-02"], cfg) == {"away_from": "2026-10-02", "away_to": "2026-10-09"}
+          and change(["setaway", "off"], cfg) == {"away_from": "", "away_to": ""}
+          and change(["setaway", "2026-10-02", ""], cfg) is None)
+    check("settings: the crew name, decoded, one line, 24 at most; empty is Crew",
+          change(["setlabel", "Block%203%3A%20us"], cfg) == {"crew_label": "Block 3: us"}
+          and len(change(["setlabel", "x" * 60], cfg)["crew_label"]) == 24
+          and change(["setlabel", "%20"], cfg) == {"crew_label": "Crew"})
+    reset = change(["setreset"], cfg)
+    check("settings: Reset board puts the Board tab back, never Privacy",
+          reset["hidden_tabs"] == [] and reset["accent"] == "green"
+          and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
+    view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
+            "sync": "sam@x.edu · Synced 2m ago · v3.4.1", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
+            "decks": ["AnKing"]}
+    you = board.settings_html(view, {"crew_label": "Crew"})
+    check("settings: You, escaped; three squads read as two and 1 more",
+          'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;BUSM&lt;/i&gt;, Block 3 and 1 more" in you
+          and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>BUSM" not in you
+          and "duecrew:setclose" in you and "Delete account" in you, you[-600:])
+    bd = board.settings_html(dict(view, tab="board"), {"crew_label": 'a"><script>', "accent": "teal",
+                                                         "hidden_tabs": ["week"], "compact": True})
+    check("settings: Board, its switches and tabs as set, the crew name escaped",
+          'value="a&quot;&gt;&lt;script&gt;"' in bd and "<script>" not in bd
+          and "duecrew:settabs:week:1" in bd and "duecrew:settabs:plans:0" in bd
+          and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
+    pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
+                                                           "away_from": "", "away_to": ""})
+    check("settings: Privacy, one choice checked; numbers only under My numbers; exam on, away off",
+          pv.count('aria-checked="true"') == 2 and "duecrew:setprivacy:numbers" in pv
+          and "share_reviews" not in pv and 'value="2026-10-14"' in pv
+          and "duecrew:setexam:off" in pv and "duecrew:setaway:on" in pv, pv[-900:])
+    out = board.settings_html({"tab": "nope", "signed_in": False}, {})
+    check("settings: signed out, a way in; an unknown tab is You",
+          "setsignin" in out and "follow your account" not in out)
+
+
+def test_settings_saves_in_order_v341():
+    """3.4.1: Settings in the board saves on every click, and the server keeps
+    whichever save arrives last. One save at a time: a click while one is on
+    its way goes after it, as the config is then."""
+    from due_crew import account, app as appmod
+    sent, queue = [], []
+    now = {"cfg": {"share_time": True, "share_reviews": True}}
+
+    class Stub:
+        signed_in = True
+        session = {}
+
+        def _save_session(self):
+            pass
+
+        def put_settings(self, at, settings):
+            sent.append(dict(settings))
+            return True
+    saved = (account.client, account.cfg, appmod._bg)
+    account.client, account.cfg = (lambda: Stub()), (lambda: now["cfg"])
+    appmod._bg = lambda job, done=None: queue.append((job, done))
+    try:
+        now["cfg"] = {"share_time": False, "share_reviews": True}
+        account.push(now["cfg"])
+        now["cfg"] = {"share_time": False, "share_reviews": False}
+        account.push(now["cfg"])
+        now["cfg"] = {"share_time": True, "share_reviews": False}
+        account.push(now["cfg"])
+        check("settings saves: one on its way at a time", len(queue) == 1)
+        job, done = queue.pop(0)
+        done(job())
+        check("settings saves: the clicks meanwhile go as one save, of the config as it is now",
+              len(queue) == 1)
+        job, done = queue.pop(0)
+        done(job())
+        check("settings saves: two in all, in order, the last one the latest",
+              [x["share_time"] for x in sent] == [False, True] and sent[-1]["share_reviews"] is False
+              and not queue, sent)
+    finally:
+        account.client, account.cfg, appmod._bg = saved
+        account._pushing.update(busy=False, again=False)
 
 
 def test_retry_only_what_is_safe_twice():
@@ -3030,14 +3203,14 @@ def test_plans_glue_v31():
                             {"period": "plans"}, 0, plans=view)
         check("card: the plan's title, week and followers",
               "Step 1 &lt;i&gt; · Dre’s plan" in html and "week 2 of 4 · 2 following" in html)
-        check("card: names escaped, crew done as N of followers, Not today while it's Anki's latest step",
-              "Heart &lt;b&gt;failure" in html and "crew 1/2" in html and "duecrew:plannottoday" in html
-              and "<b>failure" not in html)
+        check("card: the crew line; behind, the box offers Catch up and Move my days back, not Put off",
+              "Crew: 1 done with" in html and "ptoday behind" in html and "plancatch:" in html
+              and "Put off to tomorrow" not in html and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
         col.undo_steps.append(("Edit note", []))
         html = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                             {"period": "plans"}, 0, plans=F.board_view(box["cfg"]))
-        check("card: no Not today once Anki has done something since", "duecrew:plannottoday" not in html
-              and "Opened <b>Heart &lt;b&gt;failure</b> and <b>Arrhythmia</b> this morning (3 cards)" in html)
+        check("card: no Put off to tomorrow once Anki has done something since", "duecrew:plannottoday" not in html
+              and "Put off to tomorrow" not in html and "ptoday" in html)
         check("card: behind, only for me",
               "Heart failure</b> was due Mon. 2 cards not seen yet." in html
               or "was due Monday. 2 cards not seen yet." in html, "")
@@ -3348,8 +3521,12 @@ def test_plans_follower_days_g():
     check("card: what's waiting from earlier dates", card["waiting"] == 2)
     from due_crew import board
     html = board._plan_card_html(dict(card, id=pid))
-    check("card: Open now, Undo skip and Catch up on it", f"plannow:{pid}:cz" in html and f"planunskip:{pid}:ex" in html
-          and f"plancatch:{pid}" in html, html[:400])
+    weeks = lambda day: (datetime.date.fromisoformat(P.week_start(day)) - datetime.date.fromisoformat(P.week_start(_day(1)))).days // 7
+    in_week = lambda day: board._plan_card_html(dict(F.card_view(dict(plan, skipped=["ex"]), state[pid], {"hf": [2, 0, 2]},
+                                                                   _day(1), week_offset=weeks(day)), id=pid))
+    check("card: Open now (the next date's day), Undo skip (the skipped one's day) and Catch up",
+          f"plannow:{pid}:cz" in in_week(_day(7)) and f"planunskip:{pid}:ex" in in_week(_day(3))
+          and f"plancatch:{pid}" in html and "Skip it" in in_week(_day(7)), html[:400])
 
 
 def test_plans_fresh_after_cached_morning_v311():
@@ -3863,7 +4040,10 @@ def test_class_through_step_v33():
     check("snapshot: the note ids behind a date's tags, with the tags they came from",
           snap["r"][0] == ["Step1::Renal"] and len(snap["r"][2]) == 10)
     # C1 and C2 on the card
-    card = {"id": "p1", "title": "Block", "sub": "", "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
+    week = [{"day": "2026-09-0%d" % (i + 1), "dow": "Mon", "num": i + 1, "today": i == 0, "past": False, "rest": False, "prep": False,
+             "events": [], "units": [{"uid": "u1", "name": "L14", "total": 9, "seen": 3, "state": "open", "prep": False}] if i == 0 else [],
+             "new": 9 if i == 0 else 0, "seen": 3 if i == 0 else 0} for i in range(7)]
+    card = {"id": "p1", "title": "Block", "sub": "", "week": week, "rows": [{"name": "L14", "uid": "u1", "state": "now", "seen": [3, 9], "n": "crew 1/2"}],
             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Mon", "sched": False, "early": 2,
             "opened": {"names": ["L14"], "n": 9, "undo": False},
             "session": {"kind": "study", "target": 60, "done": 0, "due": 10, "minutes": 20, "behind": 0, "limit": 20, "fell_back": 3}}
@@ -3871,10 +4051,11 @@ def test_class_through_step_v33():
     check("limit: the card says Anki shows fewer, with Raise", "Anki shows 20 new a day" in html and "planlimit:p1" in html)
     check("limit: not when Anki shows enough", "planlimit" not in board._plan_card_html(
         dict(card, session=dict(card["session"], limit=80))))
-    check("early: what opened says how early", "2 days early" in html)
-    check("study: a date's row builds its deck", "planstudydate:p1:u1" in html)
-    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in html
-          and "planidsok:p1" not in board._plan_card_html(dict(card, fallback_ok=True)))
+    check("early: what opened says how early", "opened 2 days early" in html)
+    check("study: a day's date builds its deck, in the day's details", "planstudydate:p1:u1" in html and 'class="pday"' in html)
+    enough = dict(card, session=dict(card["session"], limit=80))  # one note at a time: the limit comes first
+    check("renamed tags: said once, with OK", "3 dates use tags your deck names differently" in board._plan_card_html(enough)
+          and "planidsok:p1" not in board._plan_card_html(dict(enough, fallback_ok=True)))
     # C2: the morning looks ahead
     store = world({"dre": "Dre", "maya": "Maya"})
     unit = {"id": "rn", "name": "Renal", "opens": _day(2), "tags": ["Step1::Renal"]}
@@ -3920,8 +4101,14 @@ def test_plans_tab_v33():
     decks = board.render(data, {"period": "decks"}, 0, plans={"cards": [card], "offers": []})
     check("plans tab: the card isn't on Decks any more", "Step 1 · Dre’s plan" not in decks)
     none = board.render(data, {"period": "plans"}, 0, plans={"cards": [], "offers": []})
-    check("plans tab: following nothing, no tab, and a saved Plans period falls back to Today",
-          "period:plans" not in none and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in none)
+    check("plans tab: following nothing, the tab is there with three ways in",
+          "period:plans" in none and "Follow a plan" in none and "planlibrary" in none and "planmake" in none
+          and "dc-plancode" in none)
+    hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "week"]}, 0, plans={"cards": [card], "offers": []})
+    check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Today",
+          "period:plans" not in hidden and "period:week" not in hidden and "period:decks" in hidden
+          and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in hidden)
+    check("tabs: Today can't be hidden", "period:today" in board.render(data, {"hidden_tabs": ["today"]}, 0))
 
 
 def test_even_split_v33():
@@ -4023,6 +4210,10 @@ def test_who_knows_v32():
     v = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names)
     check("chip: who knows it, and Ask", v["text"] == "\U0001F419 Dre and 1 more know this" and v["cmd"] == "knowsask")
     check("chip: a tip comes first", K.chip_view(cardsin["guid000003"], [], names)["cmd"] == "knowstip")
+    both = K.chip_view(cardsin["guid000003"], [{"from": "dre", "name": "Dre Ng", "note": "same tip"},
+                                               {"from": "mo", "name": "Mo", "note": "another"}], names)
+    check("chip: one tip per person, the rest counted, This helped for the first",
+          both["more"] == 1 and both["actcmd"] == "knowshelped:dre" and both["act"] == "\u2713 Helped", str(both))
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
     check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
@@ -4030,6 +4221,24 @@ def test_who_knows_v32():
     check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
     sam.fetch_board(labels)  # Dre's tip is read, so a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
+    from due_crew import together
+    from due_crew.app import _state
+    real_client, real_entries, real_labels = together.client, _state["entries"], _state["labels"]
+    together.client = lambda: sam
+    _state["labels"] = labels
+    col.db.conn.execute("UPDATE notes SET flds = ? WHERE guid = 'guid000001'", ("Insulin drives {{c1::K}} in\x1fback",))
+    _state["entries"] = [{"user_id": "dre", "name": "Dre Ng", "you": False}]
+    sam.session.setdefault("cards", {})["guid000003"] = {"knows": ["dre"], "tips": []}
+    w = together._wrap_data()
+    w["tips"] = {"guid000001": [{"from": "dre", "name": "Dre Ng", "note": "x", "day": _day(0)}]}
+    sys.modules["aqt"].mw.col = col
+    asks = together.my_asks_view()
+    sys.modules["aqt"].mw.col = None
+    check("your asks (K3): my open ask says who has it down; an answered one reads its text from my copy",
+          [(a["guid"], a["state"], a["who"]) for a in asks] == [("guid000003", "open", ["Dre"]), ("guid000001", "answered", ["Dre"])]
+          and asks[1]["text"] == "Insulin drives [\u2026] in", str(asks))
+    w.pop("tips", None)
+    together.client, _state["entries"], _state["labels"] = real_client, real_entries, real_labels
     doc = sam.week_doc(labels, {})
     check("ask: rides my week as the guid and my line, never the card's text",
           doc["tricky"] == [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "q": "Trick?"}])
@@ -4127,11 +4336,11 @@ def test_session_card_v32():
     v3 = F.session_view(plan, dict(st, catch=None), idx, seen_today, _day(0))
     check("session: cards first seen today count toward today", v3["done"] == 4)
     html_ = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v2))
-    check("board: the session tiles, and Study now", "new today" in html_ and "reviews due" in html_
+    check("board: the Today box, and Study now", "/ 6 new" in html_ and "reviews" in html_ and 'class="ptoday' in html_
           and "planstudy:p1" in html_ and "<i>" not in html_.replace("<i style", "").replace("<i class", ""))
     html_q = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v))
     check("board: the missed-days question, three ways",
-          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "You missed" in html_q)
+          "planspread:p1" in html_q and "planpush:p1" in html_q and "planleave:p1" in html_q and "Missed" in html_q)
     check("board: 3.3, no schedule to set: the plan's days are it", "plansched:p1" not in board._plan_card_html(
         F.card_view(dict(plan, sched=None), st, {}, _day(0))))
     v0 = F.session_view(dict(plan, sched=None), st, idx, seen_today, _day(0))
@@ -4213,6 +4422,71 @@ def test_schedule_parity_v32():
         " console.log(bad);")
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
     check("schedule: the site's arithmetic is the add-on's", out.stdout.strip() == "0", out.stdout + out.stderr)
+
+
+def test_plans_tab_v341():
+    """3.4.1: the Plans tab. The week of my own plan, a Today box in each
+    kind of day, a day's details, the tab with no plan, and names escaped."""
+    from due_crew import plans as P
+    mon = P.week_start("2026-10-07")
+    check("week: starts on Monday, and moves by weeks", mon == "2026-10-05" and P.week_start("2026-10-07", 1) == "2026-10-12"
+          and P.week_start("2026-10-05") == "2026-10-05")
+    doc = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
+           "units": [{"id": "a", "name": "Pathoma 1", "opens": "2026-10-05", "n": 40},
+                     {"id": "b", "name": "B&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
+                     {"id": "c", "name": "Pathoma 2", "opens": "2026-10-07", "n": 42, "for": "q"},
+                     {"id": "d", "name": "Metab", "opens": "2026-10-08", "idn": 38}],
+           "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
+    w = P.week_view(doc, {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon,
+                    skipped=[{"id": "x", "name": "Extras", "opens": "2026-10-09"}])
+    by = {d["day"]: d for d in w}
+    check("week: seven days, today marked, past before it", len(w) == 7 and by["2026-10-07"]["today"]
+          and by["2026-10-05"]["past"] and not by["2026-10-08"]["past"])
+    check("week: a unit's state, done, open or later, with its counts",
+          [u["state"] for u in by["2026-10-05"]["units"]] == ["done"] and by["2026-10-06"]["units"][0]["state"] == "open"
+          and by["2026-10-08"]["units"][0] == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False})
+    check("week: a date's count before it opens (author's n, cards, searches, ids)",
+          P.unit_total(doc["units"][1]) == 8 and P.unit_total(doc["units"][3]) == 38)
+    check("week: rest days are the plan's off days with nothing opening; prep and events marked",
+          by["2026-10-10"]["rest"] and not by["2026-10-09"]["rest"] and by["2026-10-07"]["prep"]
+          and by["2026-10-09"]["events"] == ["Cardio quiz"] and by["2026-10-09"]["units"][0]["state"] == "skip"
+          and by["2026-10-09"]["new"] == 0)
+    week = w
+    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Pathoma 1", "state": "open", "crew": [5, 6]}],
+            "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
+            "today_names": ["Pathoma 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
+            "week_offset": 0, "opened": {"names": ["Pathoma 2"], "n": 42, "undo": True},
+            "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0}}
+    h = board._plan_card_html(base)
+    check("today: the topic, reviews, new and minutes, one bar, Study now and Put off to tomorrow",
+          'class="ptoday"' in h and "<b>Pathoma 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
+          and "~48" in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
+    check("week: the site's calendar look; names escaped; today outlined; a day opens its details",
+          'class="pwk"' in h and "B&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
+          and 'class="pc now"' in h and "dc-pd-p1-" in h and "Cardio quiz" in h and "plansite:p1" in h
+          and "planweek:p1:next" in h and "planweek:p1:prev" in h and "planweek:p1:0" not in h)
+    check("week: a later day offers Open now, Skip it and Move my days back",
+          "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Undo skip" in h)
+    check("crew: in words", "Crew: 5 done with Pathoma 1" in h)
+    check("week: moved, it says which, with a way back", "Week of 5 Oct" in board._plan_card_html(dict(base, week_offset=1))
+          and "planweek:p1:0" in board._plan_card_html(dict(base, week_offset=1)))
+    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, minutes=0)))
+    check("today: done, and what's next with Open now", "ptoday done" in done and "<b>Done</b>" in done
+          and "Next: <b>Metab</b>" in done and "plannow:p1:d" in done)
+    rest = board._plan_card_html(dict(base, session={"kind": "rest", "due": 212}))
+    check("today: a rest day, reviews only", "ptoday rest" in rest and "rest day" in rest and "<b>212</b> reviews" in rest
+          and "no new" in rest)
+    behind = board._plan_card_html(dict(base, session=dict(base["session"], behind=54)))
+    check("today: behind, with Catch up and Move my days back, and no on track",
+          "ptoday behind" in behind and "54 new behind" in behind and "plancatch:p1" in behind
+          and "planshift:p1" in behind and "on track" not in behind)
+    paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
+    check("today: paused, with Resume now", "Paused until Mon 12 Oct" in paused and "planresume:p1" in paused)
+    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Pathoma 2"], change=[("Dre moved a date", False)]))
+    check("notes: one at a time, the most pressing first", notes.count('class="pn') == 1 and "planok:p1" in notes)
+    css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "plans"}, 0,
+                       plans={"cards": [base], "offers": []})
+    check("narrow: the week becomes a list", "#due-crew .pwk {{ grid-template-columns: 1fr; }}".replace("{{", "{").replace("}}", "}") in css)
 
 
 def main():

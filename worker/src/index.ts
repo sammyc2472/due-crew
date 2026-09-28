@@ -5,10 +5,12 @@ import * as Ad from "./admin";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
+import * as I from "./invites";
 import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
+import * as People from "./people";
 import * as Q from "./squads";
 import * as S from "./social";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
@@ -54,6 +56,10 @@ authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, 
 authed("POST", r("/codes"), S.newCode);
 authed("GET", r("/codes/([A-Za-z0-9]{1,12})"), (_q, s, env, p) => S.peekCode(s, env, p));
 authed("POST", r("/codes/([A-Za-z0-9]{1,12})/add"), (_q, s, env, p) => S.addByCode(s, env, p));
+// 3.4.1: one-time invites (duecrew.com/i/CODE); the page asks signed out
+open("GET", r("/invites/([A-Za-z0-9]{1,12})"), (q, env, p) => I.peek(q, env, p));
+authed("POST", r("/invites"), (_q, s, env) => I.create(s, env));
+authed("POST", r("/invites/([A-Za-z0-9]{1,12})/redeem"), (_q, s, env, p) => I.redeem(s, env, p));
 authed("POST", r(`/cheers/${ID}`), S.sendCheer);
 authed("GET", r("/knocks"), (_q, s, env) => S.getKnocks(s, env));
 authed("POST", r(`/knocks/${ID}`), S.sendKnock);
@@ -65,6 +71,11 @@ authed("POST", r("/tips/helped"), C.helped);
 authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
 authed("GET", r("/admin/stats"), (_q, s, env) => Ad.stats(s, env));
 authed("GET", r("/admin/trends"), Ad.trends);  // 3.5, X
+// the admin's account lookup: one person at a time
+authed("GET", r("/admin/people"), People.search);
+authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
+authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
+authed("DELETE", r(`/admin/people/${ID}`), People.remove);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
 authed("POST", r("/admin/notices"), N.post);
@@ -120,6 +131,8 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM limits WHERE window_start <= ?").bind(now - 86400),
     env.DB.prepare("DELETE FROM sessions WHERE last_used <= ?").bind(now - A.SESSION_IDLE),
     env.DB.prepare("DELETE FROM login_links WHERE expires_at <= ?").bind(now),
+    // 3.4.1: an invite keeps working as an add (then Add back) for a year
+    env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
   ]);
 }
 

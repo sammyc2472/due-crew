@@ -97,3 +97,22 @@ describe("og.ts", () => {
     expect(wrap(f, "Short", 1040, 2)).toEqual(["Short"]);
   });
 });
+
+describe("3.4.1: an invite's link previews as who sent it", () => {
+  it("the head says who, escaped; the picture draws; an unknown code gets the plain head", async () => {
+    const sam = await person("sam", 'Sam "<b>"');
+    const code = (await sam.call("POST", "/invites")).body.code;
+    const { res, body } = await get(`/i/${code.toLowerCase()}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    const html = body as string;
+    expect(html).toContain(`<meta property="og:title" content="Sam &quot;&lt;b&gt;&quot; invited you to Due Crew">`);
+    expect(html).toContain(`<meta property="og:image" content="https://duecrew.com/i/${code}.png">`);
+    expect(html).not.toContain("<b>");
+    const pic = await get(`/i/${code}.png`);
+    expect(pic.res.headers.get("content-type")).toBe("image/png");
+    expect((pic.body as Uint8Array).slice(1, 4)).toEqual(new Uint8Array([80, 78, 71]));
+    expect((await get("/i/ZZZZZZZZZZ")).body).not.toContain("og:title");
+    expect((await get("/i/ZZZZZZZZZZ.png")).res.status).toBe(404);
+  });
+});

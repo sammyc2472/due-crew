@@ -183,12 +183,19 @@ export async function authenticate(req: Request, env: Env): Promise<Session> {
   return { uid: row.uid, tokenHash };
 }
 
+const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
+
 /** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
-  const u = await env.DB.prepare("SELECT uid, email, name, emoji FROM users WHERE uid = ?")
-    .bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null }>();
+  // 3.4.1: and my accent, from the settings the add-on keeps, so the site wears it too
+  const u = await env.DB.prepare(
+    `SELECT u.uid, u.email, u.name, u.emoji, json_extract(t.json, '$.accent') AS accent
+       FROM users u LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`,
+  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; accent: unknown }>();
   if (!u) throw new HttpError(401, "auth");
-  return json(isAdmin(env, u.uid) ? { ...u, admin: true } : u);  // 3.2.1: the site shows Admin
+  const out = { uid: u.uid, email: u.email, name: u.name, emoji: u.emoji,
+    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green" };
+  return json(isAdmin(env, u.uid) ? { ...out, admin: true } : out);  // 3.2.1: the site shows Admin
 }
 
 export async function signOut(s: Session, env: Env, req?: Request): Promise<Response> {
@@ -242,6 +249,9 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plans WHERE owner = ?1",
     "DELETE FROM plan_trees WHERE uid = ?1",
     "DELETE FROM login_links WHERE uid = ?1",
+    "DELETE FROM invites WHERE uid = ?1",
+    // an invite I used stays used (so it can't make someone else crew at once), but not by me
+    "UPDATE invites SET used_by = '-' WHERE used_by = ?1",
     // 3.2
     "DELETE FROM knows WHERE uid = ?1",
     "DELETE FROM tips WHERE uid = ?1",
@@ -336,7 +346,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
 
 // ---- a link to open on the computer (3.4 review, C2) ----
 
-const LINK_PATH = /^\/(p\/[A-Z0-9]{8})?$/;
+const LINK_PATH = /^\/(p\/[A-Z0-9]{8}|i\/[A-Z0-9]{6}|i\/[A-Z0-9]{10})?$/;  // 3.4.1: an invite too
 
 /** POST /links/email {email, path}: someone on a phone sends themselves the
  *  page they're on, to open where Anki is. One fixed message with that link
