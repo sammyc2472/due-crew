@@ -7,10 +7,31 @@ Your friends' studying next to yours, on Anki's Decks screen.
 
 <img alt="The Due Crew board on the Decks screen" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png" width="600">
 
-Studying for a big exam can get lonely. Due Crew puts your friends on
+Studying for a big exam is more fun with friends! Due Crew puts your friends on
 Anki's Decks screen: who's studied today, who's studying now, how far
 each of you has gotten. You only see people you've added, and they see
 you once they add you back. Your cards never leave your computer.
+
+## Showing up for each other
+
+**Cheers.** Tap 🎉 next to a friend's name and it rains down their
+screen, with your note.
+
+<img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
+
+**Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
+bar, breaks together.
+
+<img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
+
+- **Stuck on a card?** Ask your crew. Anyone who has it down can send a
+  tip, which shows next time the card comes up.
+- **Good-luck cards.** Leave a line the night before a friend's exam.
+- **Profiles.** Half a year of a friend's studying, and your days in a
+  row together.
+- **Shared decks.** Decks you have in common, like AnKing, match up.
+- **Status, exam and away dates, just-show-up mode,** six accent colours,
+  and your board and log on duecrew.com.
 
 ## Squad bingo
 
@@ -32,28 +53,6 @@ Plans can have co-authors and notes, go in your calendar app, and be
 shared in the library.
 
 <img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png" width="600">
-
-## Showing up for each other
-
-**Cheers.** Tap 🎉 next to a friend's name and it rains down their
-screen, with your note.
-
-<img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
-
-**Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
-bar, breaks together.
-
-<img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
-
-- **Stuck on a card?** Ask your crew. Anyone who has it down can send a
-  tip, which shows next time the card comes up.
-- **Good-luck cards.** Leave a line the night before a friend's exam.
-- **Profiles.** Half a year of a friend's studying, and your days in a
-  row together.
-- **Squads.** A private board for your class or Discord, with bingo.
-- **Shared decks.** Decks you have in common, like AnKing, match up.
-- **Status, exam and away dates, just-show-up mode,** six accent colours,
-  and your board and log on duecrew.com.
 
 ## Install
 
@@ -88,6 +87,5 @@ Worker in `worker/`. Tests: `python3 tests/test_due_crew.py`, and
 ## License
 
 The add-on is MIT. The server and site (`worker/`, `site/`) are
-[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0):
-read, run and change them, just not to offer a competing service.
+[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0).
 Copyright (c) 2026 Sammy Caplan.
