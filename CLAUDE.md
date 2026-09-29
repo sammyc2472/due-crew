@@ -16,6 +16,9 @@ add-on.
   `worker/README.md` has the API, `migrations/` the schema.
   `docs/cloudflare-setup.md` is the one-time setup (Sam's). Nothing runs on
   Google after the cutover.
+  `worker/` and `site/` are PolyForm Shield 1.0.0 (their LICENSE.md) since
+  29 Sep 2026: readable and runnable, not for a competing service. The
+  add-on, tests and tools stay MIT (root LICENSE).
 - `site/` — duecrew.com: the landing page, and the app (`public/app.*`,
   plain JS, no framework: sign-in, plans, the builder). Its Worker
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so

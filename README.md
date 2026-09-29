@@ -107,4 +107,7 @@ Cloudflare Worker in `worker/`. Run the tests with
 
 ## License
 
-MIT. Copyright (c) 2026 Sammy Caplan.
+The add-on is MIT. The server and the site (`worker/`, `site/`) are
+[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0):
+read them, run them, change them, just not to offer a competing service.
+Copyright (c) 2026 Sammy Caplan.

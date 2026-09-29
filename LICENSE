@@ -1,3 +1,8 @@
+This MIT License covers this repository except `worker/` and `site/`
+(the Due Crew server and duecrew.com), which from 29 September 2026 are
+under the PolyForm Shield License 1.0.0: see the LICENSE.md in each.
+Copies of those folders taken before then stay under this MIT License.
+
 MIT License
 
 Copyright (c) 2026 Sammy Caplan
