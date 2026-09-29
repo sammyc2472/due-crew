@@ -43,6 +43,8 @@ describe("the seeded pool", () => {
     const rows = await db().prepare("SELECT id, kind, json FROM bingo_pool").all<{ id: string; kind: string; json: string }>();
     expect(rows.results.length).toBeGreaterThan(40);
     for (const r of rows.results) expect(() => B.entry(r.kind, JSON.parse(r.json)), r.id).not.toThrow();
+    const deck = JSON.parse(rows.results.find((r) => r.id === "deck")!.json);
+    expect([deck.rule, deck.goal]).toEqual(["Share a deck", "third"]);  // the number shows under it, not a fraction
   });
 });
 

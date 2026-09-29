@@ -389,8 +389,11 @@ add-on.
   a row, and every medium and hard square is a streak (`isStreak`: the
   draw picks one when the family has one at that level). Only members
   whose add-on plays can stamp; ones on an older add-on are one line
-  under the card. The middle never asks you to ask about a card. My own
-  row is the one this sync worked out, not the fetched one.
+  under the card. The middle never asks you to ask about a card, and its
+  rule line has no fraction (the number is under it). No square pays for
+  studying less: volume streaks are against my usual (`rel` with days),
+  not the day before. My own row is the one this sync worked out, not
+  the fetched one, and follows a redrawn card at once.
 - 3.6.1 a reset config: a copy installed into another folder starts from
   defaults while the session remembers the account save it saw. The config
   now remembers it too (`account.SEEN_KEY`); one that doesn't takes the

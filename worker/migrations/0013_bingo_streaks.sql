@@ -15,4 +15,16 @@ INSERT INTO bingo_pool (id, kind, json, enabled, updated_at) VALUES ('vus3', 'sq
 INSERT INTO bingo_pool (id, kind, json, enabled, updated_at) VALUES ('vbig2', 'square', '{"fam":"volume","diff":"h","icon":"🚀","title":"Big back to back","rule":"1.3× your usual, 2 days in a row","detail":"At least 1.3 times your usual day of reviews, two days in a row.","type":"rel","params":{"x":1.3,"days":2,"row":true},"team":true}', 1, 0) ON CONFLICT(id) DO NOTHING;
 INSERT INTO bingo_pool (id, kind, json, enabled, updated_at) VALUES ('o5row', 'square', '{"fam":"often","diff":"h","icon":"⛓️","title":"Five in a row","rule":"Study 5 days in a row","detail":"At least one review on five days in a row.","type":"days","params":{"days":5,"row":true},"team":true}', 1, 0) ON CONFLICT(id) DO NOTHING;
 
+-- the middle says what; the number under it says how many of you (a
+-- share reads oddly in a small squad)
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Before 8am, together on one day') WHERE id = 'dawn' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Due zero, a few of you') WHERE id = 'clean' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Send a cheer') WHERE id = 'hi' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Join a study room') WHERE id = 'room' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Turn on I''m studying') WHERE id = 'buddy' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Write a tip on a card') WHERE id = 'tip' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Share a deck') WHERE id = 'deck' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'Set a status') WHERE id = 'status' AND updated_at = 0;
+UPDATE bingo_pool SET json = json_set(json, '$.rule', 'After 10pm, together on one night') WHERE id = 'spooky' AND updated_at = 0;
+
 DELETE FROM bingo_cards;

@@ -104,6 +104,8 @@ def _observe(q, d, today):
     """Today, if the decks I studied have nothing left due, or none of the
     new cards they give: the days the "keeping up" and "new done" squares
     count. Seen when it's true at a sync; one deck tree and one query."""
+    if today in d["zero"] and today in d["newdone"]:
+        return  # both seen: the deck tree (slow in a big collection) can wait for tomorrow
     start, end = q.day_bounds_ms(0)
     rows = mw.col.db.all(
         "SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, MAX(CASE WHEN r.type = 0 THEN 1 ELSE 0 END) "

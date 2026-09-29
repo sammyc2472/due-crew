@@ -1741,15 +1741,16 @@ def bingo_html(bv, cfg, loading=False):
                 f'<span>{"A line" if ev["lines"] == 1 else str(ev["lines"]) + " lines"} this week.</span>')
     else:
         foot = f'<span class="bg-q">Closest: {e(", ".join(bv.get("closest") or []))}</span>'
+    older = ""
     if ev.get("older"):
         n = ev["older"]
-        foot += f'<span class="bg-q">&middot; {n} of you need{"s" if n == 1 else ""} to update Due Crew to play</span>'
+        older = f'<div class="bg-row bg-q">{n} of you need{"s" if n == 1 else ""} to update Due Crew to play.</div>'
     return (head
             + f'<div class="bg-bar">{back}<b>{e(bv.get("squad") or "Squad")} bingo</b>'
               f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>'
               f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a></div>'
             + f'<div class="bg-grid">{squares}</div>'
-            + f'<div class="bg-row">{foot}</div>'
+            + f'<div class="bg-row">{foot}</div>' + older
             + f'<div class="bg-info"><div data-i=""></div>{infos}</div>'
             + "</div>")
 
