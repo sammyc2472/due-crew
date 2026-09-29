@@ -7,67 +7,52 @@ Your friends' studying next to yours, on Anki's Decks screen.
 
 <img alt="The Due Crew board on the Decks screen" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png" width="600">
 
-Studying for a big exam can get lonely. Due Crew puts your friends'
-studying next to yours on Anki's Decks screen, so you can keep each other
-going.
+Studying for a big exam is more fun with friends! Due Crew puts your friends on
+Anki's Decks screen: who's studied today, who's studying now, how far
+each of you has gotten. You only see people you've added, and they see
+you once they add you back. Your cards never leave your computer.
 
-It's meant for friends helping friends. You only see people you've added,
-and they only see you once they've added you back.
+## Showing up for each other
 
-## Ways to show up for each other
-
-**Cheers.** Tap 🎉 next to a friend's name and it rains down their screen
-after their next sync, with your name and any note you added. They can
-send one right back.
+**Cheers.** Tap 🎉 next to a friend's name and it rains down their
+screen, with your note.
 
 <img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
-**Study rooms.** Open a room and your crew can join you for 25-minute
-rounds with short breaks in between. While you review, the timer and
-who's in the room sit in Anki's top bar, out of the way of your cards.
-When a round ends you finish the card you're on, and then everyone takes
-the break together.
+**Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
+bar, breaks together.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
 
-**Good-luck cards.** The night before a friend's exam, leave them a line.
-On exam morning they open Anki to every note their crew wrote.
+- **Stuck on a card?** Ask your crew. Anyone who has it down can send a
+  tip, which shows next time the card comes up.
+- **Good-luck cards.** Leave a line the night before a friend's exam.
+- **Profiles.** Half a year of a friend's studying, and your days in a
+  row together.
+- **Shared decks.** Decks you have in common, like AnKing, match up.
+- **Status, exam and away dates, just-show-up mode,** six accent colours,
+  and your board and log on duecrew.com.
 
-<img alt="A good-luck card on exam morning" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/luck.png" width="420">
+## Squad bingo
 
-**Friend profiles.** Click a name for half a year of their studying, and
-how many days in a row the two of you have both shown up.
+Every Monday your squad gets a new 3×3 card of studying squares: an early
+start, twenty minutes without a break, a day with nothing left due, new
+cards three days in a row. Most need more than one of you, and the middle
+unlocks when enough of you do something together. Three in a row is
+bingo. Copy the card to your group chat.
 
-<img alt="A friend's profile with a heatmap" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/profile.png" width="420">
+<img alt="A squad's bingo card with a line" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/bingo.png" width="600">
 
-**Group chat material.** Copy your crew's week as a grid of squares and
-paste it into your group chat.
+## Study plans
 
-<img alt="The crew's week pasted into a group chat" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/share.png" width="420">
+Plan a class's or a crew's studying on a calendar at duecrew.com: pick
+chapters from a deck (Tools → Due Crew → Make a plan from a deck), set a
+pace, mark the exam, and share the code. Everyone following gets that
+day's cards each morning. Behind? **Catch up** or **Move my days back**.
+Plans can have co-authors and notes, go in your calendar app, and be
+shared in the library.
 
-**Study plans.** Plan a class's or a crew's studying on a calendar at
-duecrew.com: Tools → Due Crew → Make a plan from a deck, tick the
-chapters (tags, subdecks, or just the deck in order), pick a pace, and
-share the link. Everyone following gets that day's cards each morning,
-and sees how the crew is doing on the Plans tab. Plan it with co-authors,
-and leave notes on a day.
-
-**And also**
-
-- **Status.** One line under your name. Start it with a number, like
-  "200 cards, then bed", and it ticks itself off as you go.
-- **Stuck on a card?** Flag it from the reviewer's More menu. A friend
-  with the same card can send you a tip, which shows under the answer
-  next time.
-- **Shared decks.** Decks you have in common, like AnKing, match up
-  automatically, so you can see how far each of you has gotten.
-- **Squads.** A private board for your class or your Discord, behind an
-  invite code.
-- **Just show up.** If you'd rather not share numbers, share only
-  whether you studied.
-- **Exam and away dates.** Add an exam date and your crew sees it
-  coming. Add away dates and a few missed days read as a trip.
-- **Six accent colours.** The logo changes with them.
+<img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png" width="600">
 
 ## Install
 
@@ -76,38 +61,31 @@ newer. Restart Anki after installing.
 
 ## Get started
 
-1. Click **Start with your email** on the Decks screen. Type in the code
-   we send you. There's no password.
-2. Got an invite, or a code from a class or a plan? Paste it on the
-   welcome screen. Otherwise, copy your invite and send it to a friend.
-   When they paste it, you're crew. One invite per friend.
+1. Click **Start with your email** on the Decks screen and type in the
+   code we send you. No password.
+2. Paste an invite, or a class, squad or plan code, on the welcome
+   screen. Or copy your invite and send it to a friend.
 3. Someone added you? Click **Add back**.
 
 ## Privacy
 
-Your stats go only to people you've added, and to squads you join, where
-squadmates see your name and today's numbers. Choose what you share in
-Settings → Privacy, or pause sharing at any time. Those choices are saved
-to your account, where only you can read them, so they follow you to other
-computers. Anyone else sees your name and emoji, nothing more.
-
-You sign in with a code sent to your email; there's no password. Your email
-is only used for that, and so Sam, who runs Due Crew, can find your account
-if you write in. Deleting your account deletes your data.
-
-The add-on and the server that enforces all of this are open source, on
+Your stats go only to people you've added and squads you join. Choose
+what you share in Settings → Privacy, or pause at any time. Anyone else
+sees your name and emoji, nothing more. Card text never leaves your
+computer: a crewmate sees a card's text only if they have the same card.
+Your email is used to sign you in, and so Sam, who runs Due Crew, can find
+your account if you write in. Deleting your account deletes your data.
+The add-on and server are on
 [GitHub](https://github.com/sammyc2472/due-crew).
 
 ## Development
 
-The add-on is plain Python and Anki hooks, no build step; the server is a
-Cloudflare Worker in `worker/`. Run the tests with
-`python3 tests/test_due_crew.py` and, in `worker/`, `npx vitest run`;
-`tests/README.md` has the rest. Issues and pull requests are welcome.
+Plain Python and Anki hooks, no build step; the server is a Cloudflare
+Worker in `worker/`. Tests: `python3 tests/test_due_crew.py`, and
+`npx vitest run` in `worker/`. See `tests/README.md`.
 
 ## License
 
-The add-on is MIT. The server and the site (`worker/`, `site/`) are
-[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0):
-read them, run them, change them, just not to offer a competing service.
+The add-on is MIT. The server and site (`worker/`, `site/`) are
+[PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0).
 Copyright (c) 2026 Sammy Caplan.
