@@ -4597,6 +4597,47 @@ def _bingo_card(wk="2026-W36", needs=(1, 1, 1, 1, 1, 1, 1, 1), middle=None, squa
                             "detail": "d", "type": "free", "params": {}, "goal": 1, "unit": ""}, **(middle or {}))}
 
 
+def test_board_escapes_everything():
+    """A crewmate whose every field is hostile: no tab ever makes it markup."""
+    x = '<zz onmouseover="a()">'
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    day = {"studied": True, "reviews": 50, "studyTimeMs": 100000, "accuracy": 88.0, "streak": 3, "newCards": 2,
+           "status": x, "emoji": x[:8], "room": {"host": x, "start": 0, "rounds": 2, "round": 25, "brk": 5}}
+    bad = {"user_id": "u'<zz>", "name": x, "emoji": x[:8], "you": False, "paused": False, "last_updated": x,
+           "exam_date": x, "status": x, "days": {labels[0]: day, labels[1]: day},
+           "decks": [{"name": x, "mature": 5, "young": 2, "total": 10, "id": 1}]}
+    me = dict(bad, user_id="sam", name="Sammy", you=True, emoji="", status="", exam_date="")
+    base = {"entries": [me, bad], "labels": labels, "tomorrow": "", "pending": [(x, x)]}
+    out = ""
+    for period in ("today", "week", "decks", "squads", "plans"):
+        try:
+            out += board.render(base, {"period": period}, 0)
+        except Exception as e:  # a field in a shape the board doesn't take is a test gap, not a pass
+            out += f"RAISED {period} {e!r}"
+    check("board: every tab keeps a hostile crewmate's fields as text", "<zz" not in out and "RAISED" not in out,
+          [out[max(0, i - 80):i + 40] for i in [out.find("<zz")] if i >= 0] or out[out.find("RAISED"):][:200])
+
+
+def test_bingo_escapes_everything():
+    """Every word on the card and every name comes from the server: none of
+    it is ever markup, on the Squads tab's card or the whole card."""
+    from due_crew import bingo as B
+    x = '<zz onmouseover="a()">'
+    hostile = [{"id": f"q{i}", "fam": "often", "diff": "m", "icon": x[:8], "title": x, "rule": x, "detail": x,
+                "type": "days", "params": {"days": 1}, "need": "half"} for i in range(8)]
+    card = B.clean_card(_bingo_card(squares=hostile, middle={"icon": x[:8], "name": x, "rule": x, "detail": x,
+                                                             "unit": x, "type": "people", "params": {"key": "dk"}, "goal": "half"}))
+    rows = [{"user_id": u, "emoji": x[:8], "day": "2026-09-01", "joined": "2026-01-01",
+             "play": {"wk": 202636, "s": 0b1111, "dk": 1}} for u in ("a", "b")] + [
+            {"user_id": "old", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"}]
+    ev = B.evaluate(card, rows)
+    bv = {"card": card, "ev": ev, "names": {u: (x, x[:8]) for u in ("a", "b", "old")}, "me": "a", "squad": x,
+          "squad_id": "s", "closest": B.closest(card, ev), "progress": [(False, x)] * 8, "new": True,
+          "withheld": [], "today": "2026-09-01"}
+    html = board.bingo_html(bv, {}) + board.bingo_card_html(bv) + board.bingo_card_html(dict(bv, new=False))
+    check("bingo: the server's words and names are never markup", "<zz" not in html and "&lt;zz" in html, html[:0])
+
+
 def test_bingo_rules():
     """3.6: each square from my own reviews, as marks passed on the way up;
     my play; a squad's card from its rows (bingo.ts: evaluate, restated)."""
