@@ -398,13 +398,6 @@ In Anki (as a follower):
 - [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
       tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.
 
-### 3.5.1: the crew streak
-
-- [ ] With a crew and two or more days in a row studied between you, Today
-      and Week show "Crew streak · N days · someone's studied every day
-      since …". After 6pm on a day nobody has studied, the end of the line
-      says so in amber; it goes back once anyone studies.
-
 ### 3.6: squad bingo (two accounts in one squad)
 
 - [ ] The Squads tab shows the card above the table: the mini grid, and on

@@ -109,8 +109,7 @@ for period, wrap in (("today", WRAP), ("week", None), ("decks", None)):
     cfg = {"period": period}
     html_out = board.render(DATA, cfg, now_ts - 180, wrap=wrap, deltas=DELTAS,
                             exam_eve=EVE if period == "today" else None,
-                            rules_stale=(period == "today"),
-                            streak={"days": 41, "since": L[6], "open": period == "today"})
+                            rules_stale=(period == "today"))
     sections.append(f'<h3>{period}</h3>{html_out}')
 SROWS = [
     {"user_id": "u1", "name": "StepQueen", "day": L[0], "reviews": 1412,
@@ -285,8 +284,7 @@ def _framed(markup, dark):
 for accent in board.ACCENTS:
     frames = "".join(
         _framed(board.render(DATA, {"period": "today", "accent": accent, "theme": theme},
-                             now_ts - 60, streak={"days": 41, "since": L[6], "open": theme == "dark"}),
-                theme == "dark")
+                             now_ts - 60), theme == "dark")
         for theme in ("light", "dark"))
     sections.append(f"<h3>accent: {accent}</h3><div style='display:flex;flex-wrap:wrap'>{frames}</div>")
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))

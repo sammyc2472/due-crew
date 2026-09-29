@@ -48,7 +48,7 @@ from .ui import copy_text
 from . import account, bingo_flow, plan_flow, rooms, together
 from . import cards as crew_cards
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
-                   _streak_info, _update_wrap, _wrap_data, _wrap_info)
+                   _update_wrap, _wrap_data, _wrap_info)
 
 _lock = threading.Lock()
 _fetching = False
@@ -487,7 +487,7 @@ def _board_html(c):
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
         notice = None
     return board.render(_board_data(), c, _state["ts"], notice=notice,
-                        wrap=_wrap_info(), deltas=_deck_deltas(), streak=_streak_info(),
+                        wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
                         rules_stale=client().rules_stale,
                         squad_view=_squad_view_with_bingo(c), knocks=_visible_knocks(c),
