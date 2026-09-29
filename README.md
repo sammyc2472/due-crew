@@ -41,7 +41,7 @@ cards three days in a row. Most need more than one of you, and the middle
 unlocks when enough of you do something together. Three in a row is
 bingo. Copy the card to your group chat.
 
-<img alt="A squad's bingo card with a line" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/bingo.png" width="600">
+<img alt="A squad's bingo card with a line" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/bingo.png?v=2" width="600">
 
 ## Study plans
 
@@ -52,7 +52,7 @@ day's cards each morning. Behind? **Catch up** or **Move my days back**.
 Plans can have co-authors and notes, go in your calendar app, and be
 shared in the library.
 
-<img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png" width="600">
+<img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=2" width="600">
 
 ## Install
 
