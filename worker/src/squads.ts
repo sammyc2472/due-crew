@@ -4,6 +4,7 @@
 // locks, blocks, removes and hands over.
 
 import type { Session } from "./auth";
+import * as B from "./bingo";
 import { limitOrThrow } from "./limits";
 import { checkUid, nameOf } from "./social";
 import * as V from "./validate";
@@ -144,16 +145,18 @@ export async function restore(req: Request, s: Session, env: Env): Promise<Respo
   return json({ ...(await r.json() as object), code });
 }
 
-/** GET /squads/{id}: the squad and every member's row, one query. Members only. */
-export async function fetchSquad(s: Session, env: Env, [id]: string[]): Promise<Response> {
+/** GET /squads/{id}[?wk=2026-W40]: the squad and every member's row, one
+ *  query. Members only. 3.6: with wk, the week's bingo card too. */
+export async function fetchSquad(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const sq = await getSquad(env, id);
   if (!(await isMember(env, id, s.uid))) throw new HttpError(403, "not_member");
   const [rows, bans] = await env.DB.batch([
     env.DB.prepare(
       `SELECT uid, name, emoji, day, reviews, study_time_ms, accuracy, streak, week, new_cards,
-              joined_at, updated_at FROM members WHERE squad = ? ORDER BY joined_at, uid`).bind(id),
+              joined_at, updated_at, play FROM members WHERE squad = ? ORDER BY joined_at, uid`).bind(id),
     env.DB.prepare("SELECT uid FROM bans WHERE squad = ?").bind(id),
   ]);
+  const wk = new URL(req.url).searchParams.get("wk");
   return json({
     ...info(sq),
     banned: sq.founder === s.uid ? (bans.results as any[]).map((b) => b.uid) : [],
@@ -161,7 +164,9 @@ export async function fetchSquad(s: Session, env: Env, [id]: string[]): Promise<
       uid: m.uid, name: m.name, emoji: m.emoji || "", day: m.day || "",
       reviews: m.reviews, studyTimeMs: m.study_time_ms, accuracy: m.accuracy, streak: m.streak,
       week: m.week, newCards: m.new_cards,
+      joined: new Date(m.joined_at * 1000).toISOString().slice(0, 10), play: m.play ? JSON.parse(m.play) : null,
     })),
+    ...(B.askable(wk) ? { bingo: await B.cardFor(env, wk) } : {}),
   });
 }
 
@@ -170,9 +175,9 @@ export async function putRow(req: Request, s: Session, env: Env, [id]: string[])
   const r = V.memberRow(await readJson(req));
   const res = await env.DB.prepare(
     `UPDATE members SET name = COALESCE(?, name), day = ?, reviews = ?, study_time_ms = ?, accuracy = ?,
-       streak = ?, week = ?, emoji = ?, new_cards = ?, updated_at = ? WHERE squad = ? AND uid = ?`,
+       streak = ?, week = ?, emoji = ?, new_cards = ?, play = ?, updated_at = ? WHERE squad = ? AND uid = ?`,
   ).bind(r.name, r.day, r.reviews, r.study_time_ms, r.accuracy, r.streak, r.week, r.emoji, r.new_cards,
-         nowSec(), id, s.uid).run();
+         r.play, nowSec(), id, s.uid).run();
   if (!res.meta.changes) throw new HttpError(403, "not_member");
   return json({ ok: true });
 }

@@ -204,11 +204,28 @@ export function heatmap(v: unknown): Obj {
   return { counts };
 }
 
+/** 3.6, squad bingo: my own week's facts on my row, the same in every
+ *  squad I'm in. Short lowercase ids, whole numbers; the Worker never reads
+ *  what they mean (the boards and the daily counts do). `wk` is the week
+ *  as yyyyww. Returns the JSON to keep, or null. */
+export const PLAY_KEYS_MAX = 24;
+export function play(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  if (!isObj(v) || Object.keys(v).length > PLAY_KEYS_MAX) throw bad("play");
+  const out: Obj = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (!/^[a-z0-9]{1,8}$/.test(k) || !isInt(x, 0, 2 ** 31 - 1)) throw bad("play");
+    out[k] = x;
+  }
+  if (!isInt(out.wk, 200001, 299953)) throw bad("play");
+  return JSON.stringify(out);
+}
+
 /** A squad member's row: memberShape, field for field. Absent fields are
  *  cleared (null), as the client's always-in-the-mask write did. */
 export function memberRow(v: unknown) {
   if (!isObj(v)) throw bad("row");
-  const allowed = new Set(["name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards"]);
+  const allowed = new Set(["name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards", "play"]);
   for (const k of Object.keys(v)) if (!allowed.has(k)) throw bad("row");
   const int = (k: string, hi = Number.MAX_SAFE_INTEGER) => {
     if (!(k in v) || v[k] === null) return null;
@@ -233,6 +250,7 @@ export function memberRow(v: unknown) {
     week: int("week", 7),
     emoji: isEmoji(v.emoji) ? v.emoji : null,  // what the slot shows: an emoji or nothing
     new_cards: int("newCards"),
+    play: play(v.play),  // 3.6: absent clears it, like the rest
   };
 }
 
