@@ -263,6 +263,8 @@ def progress(sq, f):
             return False, f"{to_go} more today beats yesterday" if p["run"] == 1 else f"{best} of {p['run']} days running"
         if t == "rel":
             target = math.ceil(f["usual"] * p["x"])
+            if int(p.get("days") or 1) > 1:
+                return _tally(f, lambda lb: daily.get(lb, 0) >= target, p)
             best = max([daily.get(lb, 0) for lb in _days(f)] or [0])
             if best >= target:
                 return True, "Done"
@@ -384,7 +386,8 @@ def evaluate(card, rows):
         days = [m["params"]["day"]] if isinstance((m.get("params") or {}).get("day"), int) else range(7)
         have = max(sum(1 for r in rows if (val(r) >> d) & 1) for d in days)
     elif t == "emoji":
-        have = sum(1 for r in active if r.get("emoji"))
+        # everyone studying, as the goal counts them
+        have = sum(1 for r in rows if r.get("emoji") and (mine(r) or (r.get("day") or "") >= since))
     elif t == "joined":
         have = sum(1 for r in rows if (r.get("joined") or "") >= monday.isoformat())
     else:

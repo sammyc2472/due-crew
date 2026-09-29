@@ -42,7 +42,7 @@ const hm = (x: unknown) => Array.isArray(x) && x.length >= 1 && x.length <= 4
 const parts = (x: unknown) => Array.isArray(x) && x.length >= 2 && x.length <= 3
   && x.every((p) => Array.isArray(p) && p.length === 2 && V.isInt(p[0], 0, 23) && V.isInt(p[1], 1, 24) && p[0] < p[1]);
 const bool = (x: unknown) => typeof x === "boolean";
-const ratio = (x: unknown) => typeof x === "number" && x >= 1.1 && x <= 3 && Math.round(x * 10) === x * 10;
+const ratio = (x: unknown) => typeof x === "number" && x >= 1 && x <= 3 && Math.round(x * 10) === x * 10;
 const playKey = (x: unknown) => (PLAY_KEYS as readonly unknown[]).includes(x) && x !== "s";
 
 /** Each rule type the add-on knows, with its numbers: [required, optional]. */
@@ -54,7 +54,7 @@ const SQUARE_TYPES: Record<string, [Record<string, (x: unknown) => boolean>, Rec
   parts: [{ parts, days: int(1, 7) }, { row: bool }],
   focus: [{ minutes: int(5, 180), gap: int(1, 30) }, { days: int(1, 7), row: bool }],
   beat: [{ run: int(1, 7) }, {}],
-  rel: [{ x: ratio }, {}],
+  rel: [{ x: ratio }, { days: int(1, 7), row: bool }],  // days: that many days at x times my usual
   best: [{ days: int(7, 90) }, {}],
   newdays: [{ days: int(1, 7) }, { row: bool }],
   newdone: [{ days: int(1, 7) }, { row: bool }],
@@ -295,7 +295,7 @@ export function evaluate(card: Card, rows: Row[]) {
   else if (m.type === "day") {
     const days = typeof m.params.day === "number" ? [m.params.day as number] : [0, 1, 2, 3, 4, 5, 6];
     have = Math.max(...days.map((d) => rows.filter((r) => val(r) & (1 << d)).length));
-  } else if (m.type === "emoji") have = active.filter((r) => r.emoji).length;
+  } else if (m.type === "emoji") have = rows.filter((r) => r.emoji && (play(r) || (r.day && r.day >= since))).length;
   else if (m.type === "joined") have = rows.filter((r) => r.joined >= monday).length;
   const goal = m.type === "free" ? 1 : m.type === "sum" && typeof m.goal === "number" ? m.goal : cap(m.goal);
   const middle = { have: Math.min(have, goal), goal, done: have >= goal };

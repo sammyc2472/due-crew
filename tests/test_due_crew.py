@@ -4797,6 +4797,20 @@ def test_bingo_end_to_end():
         saved_json = json.load(open(os.path.join(tmp, "bingo.json")))
         check("bingo: this week's record on this computer, started over each week",
               saved_json["wk"] == wk and saved_json["zero"] == [TODAY.isoformat()] and saved_json["counts"] == {"ch": 2})
+        # a redraw since the sync: my squares against the new card, at once
+        from due_crew.app import _state as st
+        was_labels = st["labels"]
+        st["labels"] = labels
+        bingo_flow.for_row({"squads": [{"id": sid}]})
+        redrawn = B.clean_card(_bingo_card(wk=wk, needs=("half", 1, 1, 1, 1, 1, 1, 1)))
+        redrawn["squares"] = redrawn["squares"][1:] + redrawn["squares"][:1]  # square 0 now last
+        sam.session["bingo"] = redrawn
+        me_row = {"user_id": "sam", "emoji": "", "day": TODAY.isoformat(), "joined": "2026-01-01", "play": st["bingo_mine"]["play"]}
+        v = bingo_flow.view({"state": "ok", "rows": [me_row], "name": "s", "current": sid}, {"squads": [{"id": sid}]})
+        check("bingo: a card redrawn since the sync: my stamps move with their squares, now",
+              v is not None and st["bingo_mine"]["ids"] == [q["id"] for q in redrawn["squares"]]
+              and st["bingo_mine"]["play"] is not None and st["bingo_mine"]["progress"] is not None)
+        st["labels"] = was_labels
     finally:
         bingo_flow.mw.col, bingo_flow._profile_files, bingo_flow._profile_key, bingo_flow.client = saved
 
@@ -4831,6 +4845,45 @@ def test_bingo_end_to_end():
     finally:
         dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen = saved
         dc._state["bingo_open"] = False
+
+
+def test_bingo_pool_plays():
+    """Every square and middle the migrations seed is one this add-on plays:
+    none shows "Update Due Crew to play" on a card drawn from it, and a
+    streak's words say days in a row."""
+    import glob
+    import re as _re
+    from due_crew import bingo as B
+    pool = {}
+    for path in sorted(glob.glob(os.path.join(REPO, "worker", "migrations", "*.sql"))):
+        for line in open(path, encoding="utf-8"):
+            m = _re.search(r"VALUES \('([a-z0-9]+)', '(square|middle)', '(.*)', [01], 0\)", line) \
+                or _re.search(r"SET json = '(.*)' WHERE id = '([a-z0-9]+)'", line)
+            if not m:
+                continue
+            if line.lstrip().startswith("UPDATE"):
+                raw, eid = m.group(1), m.group(2)
+                kind = pool[eid][0]
+            else:
+                eid, kind, raw = m.group(1), m.group(2), m.group(3)
+            pool[eid] = (kind, json.loads(raw.replace("''", "'")))
+    check("pool: the migrations seed at least 40 entries", len(pool) > 40, len(pool))
+    D, T = datetime.date, datetime.datetime
+    week = B.week_labels("2026-09-04")
+    times = {lb: [T.combine(D.fromisoformat(lb), datetime.time(h)) for h in (7, 12, 19)] for lb in week[:5]}
+    f = B.facts(week, week[4], times, {lb: 80 for lb in week[:5]}, {lb: 3 for lb in week[:5]},
+                zero=set(week[:5]), newdone=set(week[:5]), rollover=4)
+    bad = []
+    for eid, (kind, e) in pool.items():
+        if kind == "square":
+            sq = B.clean_card({"wk": "2026-W36", "squares": [dict(e, id=eid)] * 8,
+                               "middle": {"type": "free"}})["squares"][0]
+            done, words = B.progress(sq, f)
+            if not B.known(sq) or "Update" in words or (sq["params"].get("row") and not done and "in a row" not in words):
+                bad.append((eid, words))
+        elif e.get("type") not in B.MIDDLE_TYPES:
+            bad.append((eid, e.get("type")))
+    check("pool: every seeded square and middle is one this add-on plays", not bad, bad)
 
 
 def test_bingo_scales_and_streaks():

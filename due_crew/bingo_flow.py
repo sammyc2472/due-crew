@@ -169,7 +169,7 @@ def for_row(c):
         counts["dk"] = 1 if c.get("shared_decks") else 0
         counts["st"] = 1 if str(c.get("status") or "").strip() else 0
         play = B.play(cd, f, show_up=bool(c.get("show_up")), counts=counts, hide=B.withheld(c))
-        _state["bingo_mine"] = {"wk": wk, "play": play,
+        _state["bingo_mine"] = {"wk": wk, "play": play, "ids": _ids(cd),
                                 "progress": [B.progress(sq, f) if B.known(sq) else (False, "")
                                              for sq in cd["squares"]] if cd else None}
         _save()
@@ -177,6 +177,10 @@ def for_row(c):
     except Exception:
         traceback.print_exc()
         return None
+
+
+def _ids(cd):
+    return [q.get("id") for q in cd["squares"]] if cd else None
 
 
 # ---- the board's view ----
@@ -190,6 +194,12 @@ def view(squad_view, c):
         return None
     me = client().user_id
     mine = _state.get("bingo_mine") or {}
+    if mine.get("wk") == wk and mine.get("ids") != _ids(cd):
+        # a new card since the sync (a redraw): my squares against this one,
+        # now, not at the next sync (once: a failure leaves nothing of mine)
+        _state["bingo_mine"] = dict(mine, ids=_ids(cd), play=None, progress=None)
+        for_row(c)
+        mine = _state.get("bingo_mine") or {}
     if mine.get("wk") == wk and mine.get("play"):
         # my own row as this computer worked it out at the sync, not as the
         # squad was last fetched (up to a few minutes old)

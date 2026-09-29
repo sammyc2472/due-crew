@@ -38,6 +38,14 @@ describe("weeks", () => {
   });
 });
 
+describe("the seeded pool", () => {
+  it("every entry, on or off, is one the admin could save", async () => {
+    const rows = await db().prepare("SELECT id, kind, json FROM bingo_pool").all<{ id: string; kind: string; json: string }>();
+    expect(rows.results.length).toBeGreaterThan(40);
+    for (const r of rows.results) expect(() => B.entry(r.kind, JSON.parse(r.json)), r.id).not.toThrow();
+  });
+});
+
 describe("the draw", () => {
   it("one square a family, 3 easy / 3 medium / 2 hard; all team squares but one hard one, the easier the more of you", async () => {
     const { squares, middles } = await pool();
@@ -179,7 +187,7 @@ describe("the admin's pool", () => {
     expect((await admin(dre, "/admin/bingo")).status).toBe(404);
     const got = (await admin(sam, "/admin/bingo")).body;
     expect(got.week).toBe(thisWeek());
-    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(36);  // 26, 0012's six streaks and 0013's four
+    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(37);  // 26, 0012's six streaks and 0013's five
     expect(got.cards[0].wk).toBe(thisWeek());
     const f20 = got.pool.find((p: any) => p.id === "f20");
     const put = (id: string, body: unknown) => admin(sam, `/admin/bingo/${id}`, "PUT", body);
