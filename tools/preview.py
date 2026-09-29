@@ -228,7 +228,8 @@ def _bv(rows, new=False, show_up=False):
                          (False, "1 of 3 days"), (True, "Done"), (False, "38 to go today (your best is 212)"), (True, "Done")],
             "names": {"pat": ("Pat", "🐢"), "sam": ("Sammy", "😺"), "dre": ("Dre", "🦊"), "maya": ("Maya", "🐸"), "theo": ("Theo", "🐧"), "noah": ("Noah", "🦄")},
             "squad": "BUSM 2028", "squad_id": "sq1", "closest": _B.closest(_CARD, ev)}
-_LINE = [dict(r, play=dict(r["play"], rm=1)) if "play" in r else r for r in _ROWS]
+_LINE = [dict(r, play=dict(r["play"], rm=1, s=r["play"]["s"] | (0b1000 if r["user_id"] == "sam" else 0)))
+         for r in _ROWS if "play" in r]  # everyone updated; Sam also kept the same hour: the left column is a line
 sections.append("<h3>3.6: squad bingo on the Squads tab (Monday)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60, squad_view=dict(SQUAD_VIEW, bingo=_bv(_ROWS, new=True))))
 sections.append("<h3>3.6: squad bingo on the Squads tab (midweek)</h3>" + board.render(
