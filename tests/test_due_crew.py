@@ -2349,8 +2349,9 @@ def test_new_cards_v213():
     mixed = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12}),
                                              dict(ent({"studied": True, "reviews": 20, "newCards": 0}), uid="u2", name="Dre")]),
                          {"period": "week"}, 0)
-    check("board: with one row showing new cards, the others hold a blank line, so rows are evenly spaced",
-          mixed.count('class="nw"') == 2 and '<small class="nw">&nbsp;</small>' in mixed and "<!--nw-->" not in mixed
+    check("board: with one row showing new cards, the others hold half a line above and below, so rows match and the number stays level",
+          mixed.count('class="nw"') == 1 and mixed.count('<small class="nwh"></small>') == 2 and "<!--nw-->" not in mixed
+          and '<small class="nwh"></small>20<small class="nwh"></small>' in mixed
           and "<!--nw-->" not in none + today_only)
     wk = board._week_row({lb: {"reviews": 10, "newCards": 3},
                           (TODAY - datetime.timedelta(days=1)).isoformat(): {"reviews": 5, "newCards": 1}},

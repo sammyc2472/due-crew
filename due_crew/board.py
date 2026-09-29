@@ -399,7 +399,9 @@ _NW_ROOM = "<!--nw-->"
 
 def _even_rows(body):
     if 'class="nw"' in body:
-        return body.replace(_NW_ROOM, '<small class="nw">&nbsp;</small>')
+        # half a line above the number and half below: the row matches the
+        # two-line ones, and the number stays level with the row's other cells
+        return body.replace(_NW_ROOM, '<small class="nwh"></small>')
     return body.replace(_NW_ROOM, "")
 
 
@@ -407,14 +409,14 @@ def _reviews_cell(reviews, new):
     """The Reviews number, and under it how many were new cards (2.13): "all
     new" when every one was, nothing when none were or they didn't say."""
     if reviews is None:
-        return "&mdash;" + _NW_ROOM
+        return _NW_ROOM + "&mdash;" + _NW_ROOM
     out = format(int(reviews), ",")
     try:
         new = int(new)
     except (TypeError, ValueError):
-        return out + _NW_ROOM
+        return _NW_ROOM + out + _NW_ROOM
     if new <= 0 or reviews <= 0:
-        return out + _NW_ROOM
+        return _NW_ROOM + out + _NW_ROOM
     new = min(new, int(reviews))
     line = "all new" if new == reviews else f"{new:,} new"
     return (f'<span title="{new:,} of {int(reviews):,} were new cards">{out}'
@@ -504,6 +506,7 @@ def _css(cfg):
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
+    #due-crew small.nwh {{ display: block; height: 5.5px; }}
     #due-crew small.nw {{ display: block; font-size: 10px; line-height: 1.1;
                           color: var(--dc-muted); font-weight: 400; }}
     #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
@@ -826,10 +829,10 @@ def _row_html(row, rank, cfg, period="today"):
     if row["paused"]:
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
-        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
-        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
         # T2: when they last synced is a quiet row's whole story; the others
         # show it on their card
         txt, _tone = _ago(row["last_updated"])
