@@ -399,7 +399,9 @@ _NW_ROOM = "<!--nw-->"
 
 def _even_rows(body):
     if 'class="nw"' in body:
-        return body.replace(_NW_ROOM, '<small class="nw">&nbsp;</small>')
+        # half a line above the number and half below: the row matches the
+        # two-line ones, and the number stays level with the row's other cells
+        return body.replace(_NW_ROOM, '<small class="nwh"></small>')
     return body.replace(_NW_ROOM, "")
 
 
@@ -407,14 +409,14 @@ def _reviews_cell(reviews, new):
     """The Reviews number, and under it how many were new cards (2.13): "all
     new" when every one was, nothing when none were or they didn't say."""
     if reviews is None:
-        return "&mdash;" + _NW_ROOM
+        return _NW_ROOM + "&mdash;" + _NW_ROOM
     out = format(int(reviews), ",")
     try:
         new = int(new)
     except (TypeError, ValueError):
-        return out + _NW_ROOM
+        return _NW_ROOM + out + _NW_ROOM
     if new <= 0 or reviews <= 0:
-        return out + _NW_ROOM
+        return _NW_ROOM + out + _NW_ROOM
     new = min(new, int(reviews))
     line = "all new" if new == reviews else f"{new:,} new"
     return (f'<span title="{new:,} of {int(reviews):,} were new cards">{out}'
@@ -504,6 +506,7 @@ def _css(cfg):
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
+    #due-crew small.nwh {{ display: block; height: 5.5px; }}
     #due-crew small.nw {{ display: block; font-size: 10px; line-height: 1.1;
                           color: var(--dc-muted); font-weight: 400; }}
     #due-crew .la.fresh {{ color: var(--dc-fresh); }} #due-crew .la.hours {{ color: var(--dc-hours); }}
@@ -826,10 +829,10 @@ def _row_html(row, rank, cfg, period="today"):
     if row["paused"]:
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
-        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
-        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
         # T2: when they last synced is a quiet row's whole story; the others
         # show it on their card
         txt, _tone = _ago(row["last_updated"])
@@ -963,6 +966,17 @@ def keep_me_in_view_js():
     """
 
 
+# a deck row without a "+N today" line holds its place, filled when another
+# row has one, so the rows stay evenly spaced (_even_rows, for the bars)
+_DD_ROOM = "<!--dd-->"
+
+
+def _even_bars(html):
+    if 'class="dc-delta"' in html:
+        return html.replace(_DD_ROOM, '<span class="dc-delta">&nbsp;</span>')
+    return html.replace(_DD_ROOM, "")
+
+
 def _bar(name, is_me, d, delta=None, today_labels=()):
     """One person's progress through one shared deck. Three fills on one
     track: mature (solid), seen (faded), then unlocked-but-unseen (hatched) —
@@ -991,7 +1005,7 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
         chips.append(f'+{int(d["today"]):,} today')
     if delta:
         chips.append(f'+{delta:,} wk')
-    chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else "")
+    chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else _DD_ROOM)
     tip = [f'{seen:,} seen', f'{mature:,} mature']
     if opened is not None:
         tip.append(f'{int(opened):,} unlocked')
@@ -1421,7 +1435,7 @@ def _decks_body(data, deltas=None):
             _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
-    html = _scroll(html, sum(len(g["rows"]) for g in groups))
+    html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     html += ('<div class="dc-line" style="padding-top: 2px;">'
              # named by texture, not by light/dark: in dark mode the mature fill
              # is the bright one, and "dark = mature" read backwards there

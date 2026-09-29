@@ -116,7 +116,7 @@ describe("plans: following", () => {
     const sq = (await dre.call("POST", "/squads", { name: "busm" })).body;
     const maya = await person("maya");
     const zed = await person("zed");
-    await maya.call("POST", `/squads/${sq.id}/join`);
+    await maya.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     expect(await dre.status("PUT", `/plans/${plan.id}`, { version: 2, audience: "squad", squad: sq.id })).toBe(200);
     expect(await zed.status("POST", "/plans/follow", { code: plan.code })).toBe(404);  // the code alone isn't enough
     const offers = (await maya.call("GET", "/board?decks=1")).body.planOffers;

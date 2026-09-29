@@ -8,7 +8,7 @@ import * as B from "./bingo";
 import { limitOrThrow } from "./limits";
 import { checkUid, nameOf } from "./social";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
+import { Env, HttpError, json, nowSec, readJson } from "./util";
 
 export const SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no 0/O/1/I
 export const SQUAD_CODE_LEN = 8;
@@ -92,15 +92,12 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 /** POST /squads/{id}/join: the only way in. The door must be open and I
  *  mustn't be blocked. Joining twice is a no-op. */
 export async function join(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
-  // The invite code is what only a join sends. 3.1 sends it and it must
-  // match; 3.0.x sends none (allowed until MIN_CLIENT reaches 3.1).
-  const text = await readText(req);
-  if (text) {
-    let body: unknown;
-    try { body = JSON.parse(text); } catch { throw new HttpError(400, "bad_json"); }
-    const code = V.isObj(body) && typeof body.code === "string" ? body.code : null;
-    if (code === null || (await squadId(code)) !== id) throw new HttpError(403, "wrong_code");
-  }
+  // The code is what only a join sends, and it must be this squad's (since
+  // 3.6.2, with MIN_CLIENT 3.1.0: 3.0.x add-ons sent none, and an id alone,
+  // which members and past members know, let anyone back in).
+  const body = await readJson(req);
+  const code = typeof body.code === "string" ? body.code : null;
+  if (code === null || (await squadId(code)) !== id) throw new HttpError(403, "wrong_code");
   return joinById(s, env, id);
 }
 

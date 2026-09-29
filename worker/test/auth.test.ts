@@ -7,7 +7,7 @@ describe("version", () => {
   it("answers without auth: the api and the oldest client it serves", async () => {
     const r = await api("GET", "/version");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ api: 1, minClient: "3.0.0" });
+    expect(r.body).toEqual({ api: 1, minClient: "3.1.0" });
   });
   it("unknown paths are 404, wrong methods 405", async () => {
     expect((await api("GET", "/nope")).status).toBe(404);

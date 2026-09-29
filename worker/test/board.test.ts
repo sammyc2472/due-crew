@@ -242,8 +242,8 @@ describe("squads", () => {
 
   it("only the founder sees the block list", async () => {
     const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
-    await dre.call("POST", `/squads/${sq.id}/join`);
-    await nia.call("POST", `/squads/${sq.id}/join`);
+    await dre.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
+    await nia.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
     await sam.call("POST", `/squads/${sq.id}/block/nia`);
     expect((await sam.call("GET", `/squads/${sq.id}`)).body.banned).toEqual(["nia"]);
     expect((await dre.call("GET", `/squads/${sq.id}`)).body.banned).toEqual([]);

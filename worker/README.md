@@ -173,7 +173,7 @@ keeps its row.
 |---|---|
 | `POST /squads {name}` | `{id, code, name, founder, open}`; I'm the founder and a member. |
 | `GET /squads/peek?code=` | The join preview. 60 an hour. |
-| `POST /squads/{id}/join` | The only way in: the door must be open, I mustn't be blocked, and it holds at most 500. |
+| `POST /squads/{id}/join {code}` | The only way in: the squad's code (since 3.6.2 always; an id alone is not a join), the door open, I mustn't be blocked, and it holds at most 500. |
 | `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
 | `GET /squads/{id}[?wk=2026-W40]` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. 3.6: each row has `joined` (a date) and `play`; with `wk`, `bingo` is that week's card. |
 | `PUT /squads/{id}/row` | My numbers, as an update. Never a join. |
