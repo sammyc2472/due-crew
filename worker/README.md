@@ -203,9 +203,12 @@ against the rule types the add-on knows.
 a share (`half`, `third`, `quarter`: at least 2, never more than there are
 of you), so a bigger squad needs more of you. The draw makes every square
 a team square except one hard one: easy ones half, medium a third, the
-other hard one a quarter. A rule's `row: true` wants its days in a row.
-Only members whose add-on plays count toward a share (`active`); studying
-members on an older add-on are `older`, and the card says so. `GET
+other hard one a quarter. A rule's `row: true` wants its days in a row;
+a medium or hard square is a streak whenever its family has one at that
+level (`isStreak`; migration 0013 gives every family one, and turns off
+the "ask about a card" middle). A share is of everyone studying this
+week: members whose add-on plays (`active`) and those on an older add-on
+(`older`, who can't stamp; the card says so). `GET
 /board?decks=1` also returns `squads` (the squads I'm a member of), so an
 add-on whose config lost them puts them back.
 

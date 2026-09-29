@@ -1617,8 +1617,8 @@ BINGO_CSS = """
 
 
 def _bg_need(sq, need):
-    from .bingo import SHARE_WORDS
-    return SHARE_WORDS.get(sq.get("need"), f"{need} of you")
+    # the number, never the share: "a third of you" said nothing in a small squad
+    return f"{need} of you"
 
 
 def bingo_card_html(bv):
@@ -1740,19 +1740,17 @@ def bingo_html(bv, cfg, loading=False):
         foot = (f'<span class="bg-shout">BINGO!</span>'
                 f'<span>{"A line" if ev["lines"] == 1 else str(ev["lines"]) + " lines"} this week.</span>')
     else:
-        foot = f'<span class="bg-q">For bingo you need: {e(", ".join(bv.get("closest") or []))}</span>'
-    players = {u for q in ev["squares"] for u in q["who"]}
-    faces = "".join(e(names.get(u, ("?", ""))[1]) for u in sorted(players))
+        foot = f'<span class="bg-q">Closest: {e(", ".join(bv.get("closest") or []))}</span>'
+    if ev.get("older"):
+        n = ev["older"]
+        foot += f'<span class="bg-q">&middot; {n} of you need{"s" if n == 1 else ""} to update Due Crew to play</span>'
     return (head
             + f'<div class="bg-bar">{back}<b>{e(bv.get("squad") or "Squad")} bingo</b>'
               f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>'
               f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a></div>'
             + f'<div class="bg-grid">{squares}</div>'
             + f'<div class="bg-row">{foot}</div>'
-            + f'<div class="bg-row bg-q">{len(players)} of {ev["active"]} of you have stamped <span>{faces}</span></div>'
-            + (f'<div class="bg-row bg-q">{ev["older"]} of you {"is" if ev["older"] == 1 else "are"} on an older Due Crew '
-               f'and can&rsquo;t play yet. They count once they update.</div>' if ev.get("older") else "")
-            + f'<div class="bg-info"><div data-i="" ><span class="k">Click a square: exactly what counts, how close you are, and who stamped it.</span></div>{infos}</div>'
+            + f'<div class="bg-info"><div data-i=""></div>{infos}</div>'
             + "</div>")
 
 

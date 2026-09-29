@@ -381,13 +381,16 @@ add-on.
   refresh and the squad fetch (`wk=`): no new requests. The Squads tab
   shows it small; Open puts it in the board's place (`bingo`,
   `bingoback`, `bingocopy`).
-  3.6.1 (migration 0012): a share (`half`, `third`, `quarter`) is at
-  least 2 and never more than there are of you (`how_many`), so a bigger
-  squad needs more of you; a middle's goal can be one too. `row: true` on
-  a rule wants its days in a row. Only members whose add-on plays count
-  (`active`); studying ones on an older add-on are named under the card
-  (`older`). My own row is the one this sync worked out, not the fetched
-  one.
+  3.6.1 (migrations 0012, 0013): a share (`half`, `third`, `quarter`)
+  is of everyone studying this week, older add-ons too, at least 2 and
+  never more than there are of you (`how_many`), so a bigger squad needs
+  more of you; a middle's goal can be one too. A square shows the number
+  ("2 of you"), never the share. `row: true` on a rule wants its days in
+  a row, and every medium and hard square is a streak (`isStreak`: the
+  draw picks one when the family has one at that level). Only members
+  whose add-on plays can stamp; ones on an older add-on are one line
+  under the card. The middle never asks you to ask about a card. My own
+  row is the one this sync worked out, not the fetched one.
 - 3.6.1 a reset config: a copy installed into another folder starts from
   defaults while the session remembers the account save it saw. The config
   now remembers it too (`account.SEEN_KEY`); one that doesn't takes the

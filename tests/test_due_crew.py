@@ -4722,7 +4722,7 @@ def test_bingo_board():
     check("bingo: nine squares, a way back, Copy, and each square's details in the page",
           full.count('class="bg-sq') == 9 and "duecrew:bingoback" in full and "duecrew:bingocopy" in full
           and full.count('<div data-i="') == 10 and "You: done." in full and "You: 1 of 4 days" in full)
-    check("bingo: a team square says how many of you, and so far", "half of you" in full and "&#128101;" in full)
+    check("bingo: a team square says how many of you, and so far", "2 of you" in full and "&#128101;" in full)
     check("bingo: a square my switches keep home still shows me my progress, and says it stays here",
           "keep yours on this computer" in full)
     check("bingo: while the squad loads, the card says so, not that there's none",
@@ -4853,8 +4853,13 @@ def test_bingo_scales_and_streaks():
     check("evaluate: a squad of 9: half is 5, a third 3, a quarter 3; the middle a third (3 sharing: done)",
           [(q["need"], q["done"]) for q in e["squares"][:3]] == [(5, True), (3, True), (3, False)]
           and e["middle"] == {"have": 3, "goal": 3, "done": True, "known": True}, e)
+    lag3 = B.evaluate(card, [nine[0], {"user_id": "o1", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"},
+                             {"user_id": "o2", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"}])
+    check("evaluate: a share counts everyone studying: 1 playing and 2 on an older add-on still needs 2, not 1",
+          lag3["active"] == 1 and lag3["older"] == 2 and [q["need"] for q in lag3["squares"][:3]] == [2, 2, 2], lag3)
     board_html = board.bingo_html({"card": card, "ev": e, "names": {}, "me": "u0", "squad": "s", "closest": []}, {})
-    check("board: a team square says its share", "a third of you" in board_html and "a quarter of you" in board_html)
+    check("board: a team square says how many, as a number", "5 of you" in board_html and "3 of you" in board_html
+          and "a third of you" not in board_html)
 
     D, T = datetime.date, datetime.datetime
     week = B.week_labels("2026-09-04")          # Mon 31 Aug .. Fri 4 Sep today

@@ -358,7 +358,8 @@ def evaluate(card, rows):
         return p if isinstance(p, dict) and p.get("wk") == n else None
     active = [r for r in rows if mine(r) or (r.get("play") and (r.get("day") or "") >= since)]
     older = sum(1 for r in rows if not r.get("play") and (r.get("day") or "") >= since)
-    count = max(1, len(active))
+    # a share is of everyone studying, older add-ons too (bingo.ts)
+    count = max(1, len(active) + older)
 
     def cap(need):
         return how_many(need, count)

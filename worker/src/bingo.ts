@@ -184,6 +184,9 @@ function inSeason(season: { from: string; to: string }, monday: Date): boolean {
 
 /** Pure: the week's card from the enabled pool. The same week and pool
  *  always draw the same card. */
+/** A square that wants days in a row (3.6.1): `row`, or a run of 2+. */
+export const isStreak = (s: Square) => s.params?.row === true || (typeof s.params?.run === "number" && (s.params.run as number) >= 2);
+
 export function draw(wk: string, squares: Square[], middles: Middle[]): Card {
   const r = rng(wk);
   // 3 easy, 3 medium, 2 hard, dealt across the families
@@ -193,7 +196,9 @@ export function draw(wk: string, squares: Square[], middles: Middle[]): Card {
     const fam = squares.filter((s) => s.fam === f);
     if (!fam.length) return;
     const want = fam.filter((s) => s.diff === diffs[k]);
-    const from = want.length ? want : fam;
+    // a medium or hard square is a streak when the family has one
+    const streaks = want.filter(isStreak);
+    const from = streaks.length ? streaks : want.length ? want : fam;
     picks.push({ ...from[Math.floor(r() * from.length)] });
   });
   const card = shuffle(picks, r);
@@ -271,7 +276,10 @@ export function evaluate(card: Card, rows: Row[]) {
   const since = new Date(mondayOf(card.wk).getTime() - 7 * 86400000).toISOString().slice(0, 10);
   const play = (r: Row) => (r.play && r.play.wk === n ? r.play : null);
   const active = rows.filter((r) => play(r) || (r.play && r.day && r.day >= since));
-  const count = Math.max(1, active.length);
+  const older = rows.filter((r) => !r.play && r.day && r.day >= since).length;  // studying, on an add-on that can't play
+  // a share is of everyone studying, older add-ons too: a squad of 3 where
+  // two haven't updated still needs 2 of you, not 1
+  const count = Math.max(1, active.length + older);
   const cap = (need: number | Share | "all") => howMany(need, count);
   const squares = card.squares.map((s, i) => {
     const who = rows.filter((r) => ((play(r)?.s as number) ?? 0) & (1 << i)).map((r) => r.uid);
@@ -293,7 +301,6 @@ export function evaluate(card: Card, rows: Row[]) {
   const middle = { have: Math.min(have, goal), goal, done: have >= goal };
   const cell = (c: number) => (c === 4 ? middle.done : squares[CELLS.indexOf(c)]?.done ?? false);
   const lines = LINES.filter((l) => l.every(cell)).length;
-  const older = rows.filter((r) => !r.play && r.day && r.day >= since).length;  // studying, on an add-on that can't play
   return { active: active.length, players: rows.filter(play).length, older, squares, middle, lines };
 }
 
