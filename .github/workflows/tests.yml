@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# nothing here writes to the repo: the token reads, no more
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: undefined names (pyflakes)

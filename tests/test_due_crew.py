@@ -1334,6 +1334,23 @@ def test_cheer_any_emoji():
           social.cheer_allowed(party + "\U0001F389") == party and social.cheer_allowed("lol") == "")
 
 
+def test_request_paths_and_errors():
+    """An id that isn't one never becomes another route, and a failed
+    request's message never carries a code (codes are never logged)."""
+    from due_crew.backend import api as A
+    store = world({"sam": "Sammy"}, {})
+    cl = new_client(store, "sam", "Sammy")
+    for bad in ("/squads/../admin/people", "squads/x", "/squads/x\\..\\y"):
+        try:
+            cl._call("GET", bad)
+            ok = False
+        except A.TransportError:
+            ok = True
+        check(f"paths: {bad!r} refused before it goes", ok)
+    check("errors: codes in paths are left out", A._said("/codes/ABC123/add?x=1") == "/codes/…/add"
+          and A._said("/invites/ABCDEFGHJK/redeem") == "/invites/…/redeem" and A._said("/squads/s1") == "/squads/s1")
+
+
 def test_request_budget():
     """3.0: a refresh is ONE request, whatever the crew's size, and a sync
     is one. The numbers below are the budget: a change here is a change in
@@ -4580,6 +4597,47 @@ def _bingo_card(wk="2026-W36", needs=(1, 1, 1, 1, 1, 1, 1, 1), middle=None, squa
                             "detail": "d", "type": "free", "params": {}, "goal": 1, "unit": ""}, **(middle or {}))}
 
 
+def test_board_escapes_everything():
+    """A crewmate whose every field is hostile: no tab ever makes it markup."""
+    x = '<zz onmouseover="a()">'
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    day = {"studied": True, "reviews": 50, "studyTimeMs": 100000, "accuracy": 88.0, "streak": 3, "newCards": 2,
+           "status": x, "emoji": x[:8], "room": {"host": x, "start": 0, "rounds": 2, "round": 25, "brk": 5}}
+    bad = {"user_id": "u'<zz>", "name": x, "emoji": x[:8], "you": False, "paused": False, "last_updated": x,
+           "exam_date": x, "status": x, "days": {labels[0]: day, labels[1]: day},
+           "decks": [{"name": x, "mature": 5, "young": 2, "total": 10, "id": 1}]}
+    me = dict(bad, user_id="sam", name="Sammy", you=True, emoji="", status="", exam_date="")
+    base = {"entries": [me, bad], "labels": labels, "tomorrow": "", "pending": [(x, x)]}
+    out = ""
+    for period in ("today", "week", "decks", "squads", "plans"):
+        try:
+            out += board.render(base, {"period": period}, 0)
+        except Exception as e:  # a field in a shape the board doesn't take is a test gap, not a pass
+            out += f"RAISED {period} {e!r}"
+    check("board: every tab keeps a hostile crewmate's fields as text", "<zz" not in out and "RAISED" not in out,
+          [out[max(0, i - 80):i + 40] for i in [out.find("<zz")] if i >= 0] or out[out.find("RAISED"):][:200])
+
+
+def test_bingo_escapes_everything():
+    """Every word on the card and every name comes from the server: none of
+    it is ever markup, on the Squads tab's card or the whole card."""
+    from due_crew import bingo as B
+    x = '<zz onmouseover="a()">'
+    hostile = [{"id": f"q{i}", "fam": "often", "diff": "m", "icon": x[:8], "title": x, "rule": x, "detail": x,
+                "type": "days", "params": {"days": 1}, "need": "half"} for i in range(8)]
+    card = B.clean_card(_bingo_card(squares=hostile, middle={"icon": x[:8], "name": x, "rule": x, "detail": x,
+                                                             "unit": x, "type": "people", "params": {"key": "dk"}, "goal": "half"}))
+    rows = [{"user_id": u, "emoji": x[:8], "day": "2026-09-01", "joined": "2026-01-01",
+             "play": {"wk": 202636, "s": 0b1111, "dk": 1}} for u in ("a", "b")] + [
+            {"user_id": "old", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"}]
+    ev = B.evaluate(card, rows)
+    bv = {"card": card, "ev": ev, "names": {u: (x, x[:8]) for u in ("a", "b", "old")}, "me": "a", "squad": x,
+          "squad_id": "s", "closest": B.closest(card, ev), "progress": [(False, x)] * 8, "new": True,
+          "withheld": [], "today": "2026-09-01"}
+    html = board.bingo_html(bv, {}) + board.bingo_card_html(bv) + board.bingo_card_html(dict(bv, new=False))
+    check("bingo: the server's words and names are never markup", "<zz" not in html and "&lt;zz" in html, html[:0])
+
+
 def test_bingo_rules():
     """3.6: each square from my own reviews, as marks passed on the way up;
     my play; a squad's card from its rows (bingo.ts: evaluate, restated)."""
@@ -4722,7 +4780,7 @@ def test_bingo_board():
     check("bingo: nine squares, a way back, Copy, and each square's details in the page",
           full.count('class="bg-sq') == 9 and "duecrew:bingoback" in full and "duecrew:bingocopy" in full
           and full.count('<div data-i="') == 10 and "You: done." in full and "You: 1 of 4 days" in full)
-    check("bingo: a team square says how many of you, and so far", "half of you" in full and "&#128101;" in full)
+    check("bingo: a team square says how many of you, and so far", "2 of you" in full and "&#128101;" in full)
     check("bingo: a square my switches keep home still shows me my progress, and says it stays here",
           "keep yours on this computer" in full)
     check("bingo: while the squad loads, the card says so, not that there's none",
@@ -4797,6 +4855,20 @@ def test_bingo_end_to_end():
         saved_json = json.load(open(os.path.join(tmp, "bingo.json")))
         check("bingo: this week's record on this computer, started over each week",
               saved_json["wk"] == wk and saved_json["zero"] == [TODAY.isoformat()] and saved_json["counts"] == {"ch": 2})
+        # a redraw since the sync: my squares against the new card, at once
+        from due_crew.app import _state as st
+        was_labels = st["labels"]
+        st["labels"] = labels
+        bingo_flow.for_row({"squads": [{"id": sid}]})
+        redrawn = B.clean_card(_bingo_card(wk=wk, needs=("half", 1, 1, 1, 1, 1, 1, 1)))
+        redrawn["squares"] = redrawn["squares"][1:] + redrawn["squares"][:1]  # square 0 now last
+        sam.session["bingo"] = redrawn
+        me_row = {"user_id": "sam", "emoji": "", "day": TODAY.isoformat(), "joined": "2026-01-01", "play": st["bingo_mine"]["play"]}
+        v = bingo_flow.view({"state": "ok", "rows": [me_row], "name": "s", "current": sid}, {"squads": [{"id": sid}]})
+        check("bingo: a card redrawn since the sync: my stamps move with their squares, now",
+              v is not None and st["bingo_mine"]["ids"] == [q["id"] for q in redrawn["squares"]]
+              and st["bingo_mine"]["play"] is not None and st["bingo_mine"]["progress"] is not None)
+        st["labels"] = was_labels
     finally:
         bingo_flow.mw.col, bingo_flow._profile_files, bingo_flow._profile_key, bingo_flow.client = saved
 
@@ -4833,6 +4905,45 @@ def test_bingo_end_to_end():
         dc._state["bingo_open"] = False
 
 
+def test_bingo_pool_plays():
+    """Every square and middle the migrations seed is one this add-on plays:
+    none shows "Update Due Crew to play" on a card drawn from it, and a
+    streak's words say days in a row."""
+    import glob
+    import re as _re
+    from due_crew import bingo as B
+    pool = {}
+    for path in sorted(glob.glob(os.path.join(REPO, "worker", "migrations", "*.sql"))):
+        for line in open(path, encoding="utf-8"):
+            m = _re.search(r"VALUES \('([a-z0-9]+)', '(square|middle)', '(.*)', [01], 0\)", line) \
+                or _re.search(r"SET json = '(.*)' WHERE id = '([a-z0-9]+)'", line)
+            if not m:
+                continue
+            if line.lstrip().startswith("UPDATE"):
+                raw, eid = m.group(1), m.group(2)
+                kind = pool[eid][0]
+            else:
+                eid, kind, raw = m.group(1), m.group(2), m.group(3)
+            pool[eid] = (kind, json.loads(raw.replace("''", "'")))
+    check("pool: the migrations seed at least 40 entries", len(pool) > 40, len(pool))
+    D, T = datetime.date, datetime.datetime
+    week = B.week_labels("2026-09-04")
+    times = {lb: [T.combine(D.fromisoformat(lb), datetime.time(h)) for h in (7, 12, 19)] for lb in week[:5]}
+    f = B.facts(week, week[4], times, {lb: 80 for lb in week[:5]}, {lb: 3 for lb in week[:5]},
+                zero=set(week[:5]), newdone=set(week[:5]), rollover=4)
+    bad = []
+    for eid, (kind, e) in pool.items():
+        if kind == "square":
+            sq = B.clean_card({"wk": "2026-W36", "squares": [dict(e, id=eid)] * 8,
+                               "middle": {"type": "free"}})["squares"][0]
+            done, words = B.progress(sq, f)
+            if not B.known(sq) or "Update" in words or (sq["params"].get("row") and not done and "in a row" not in words):
+                bad.append((eid, words))
+        elif e.get("type") not in B.MIDDLE_TYPES:
+            bad.append((eid, e.get("type")))
+    check("pool: every seeded square and middle is one this add-on plays", not bad, bad)
+
+
 def test_bingo_scales_and_streaks():
     """3.6.1: team squares and the middle are shares of the squad (at least
     2, never more than there are), so a bigger squad needs more of you;
@@ -4853,8 +4964,13 @@ def test_bingo_scales_and_streaks():
     check("evaluate: a squad of 9: half is 5, a third 3, a quarter 3; the middle a third (3 sharing: done)",
           [(q["need"], q["done"]) for q in e["squares"][:3]] == [(5, True), (3, True), (3, False)]
           and e["middle"] == {"have": 3, "goal": 3, "done": True, "known": True}, e)
+    lag3 = B.evaluate(card, [nine[0], {"user_id": "o1", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"},
+                             {"user_id": "o2", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01"}])
+    check("evaluate: a share counts everyone studying: 1 playing and 2 on an older add-on still needs 2, not 1",
+          lag3["active"] == 1 and lag3["older"] == 2 and [q["need"] for q in lag3["squares"][:3]] == [2, 2, 2], lag3)
     board_html = board.bingo_html({"card": card, "ev": e, "names": {}, "me": "u0", "squad": "s", "closest": []}, {})
-    check("board: a team square says its share", "a third of you" in board_html and "a quarter of you" in board_html)
+    check("board: a team square says how many, as a number", "5 of you" in board_html and "3 of you" in board_html
+          and "a third of you" not in board_html)
 
     D, T = datetime.date, datetime.datetime
     week = B.week_labels("2026-09-04")          # Mon 31 Aug .. Fri 4 Sep today

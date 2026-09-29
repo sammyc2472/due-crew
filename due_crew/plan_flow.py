@@ -26,6 +26,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import traceback
 
 from aqt import mw
@@ -1074,8 +1075,8 @@ def on_message(cmd, parts):
         app.swap(cfg())
     elif cmd == "planshift" and arg:
         set_shift(arg)
-    elif cmd == "plansite" and arg:
-        open_site(f"/plans/{arg}")
+    elif cmd == "plansite" and arg and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", arg):
+        open_site(f"/plans/{arg}")  # an id, nothing else: the link carries a sign-in token
     elif cmd == "planlibrary":
         open_site("/library")
     elif cmd == "planmake":

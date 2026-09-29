@@ -419,8 +419,9 @@ In Anki (as a follower):
       card, a tooltip once, and Copy for the group chat pastes the 3×3
       emoji grid with no names.
 - [ ] 3.6.1: a squadmate on 3.5 is left out of "N of you" and named under
-      the card ("1 of you is on an older Due Crew…"). Seven squares ask for
-      more than one of you; in a squad of 6, a half is 3.
+      the card ("1 of you needs to update Due Crew to play"), but still
+      counts in "N of you". Squares say a number ("2 of you"); in a squad
+      of 6, a half is 3. Every medium and hard square is days in a row.
 - [ ] 3.6.1: install into a new add-on folder (config back to defaults,
       same sign-in): the squads come back on the first refresh, and the
       emoji and accent come back from the account.

@@ -48,6 +48,12 @@ def _digest(obj):
     return hashlib.sha1(json.dumps(obj, sort_keys=True).encode()).hexdigest()
 
 
+def _said(path):
+    """A path fit for an error message: no query, and never a code (friend
+    codes and invites are in some paths; codes are never logged)."""
+    return re.sub(r"/(codes|invites)/[^/]+", r"/\1/…", path.split("?")[0])
+
+
 class ApiClient:
     def __init__(self, session_file, base=None):
         self.session_file = session_file
@@ -127,6 +133,8 @@ class ApiClient:
     def _call(self, method, path, body=None, auth=True, retry=True):
         """(status, json). Raises TransportError when there's no answer, and
         on a 401 (after marking the session dead)."""
+        if ".." in path or "\\" in path or not path.startswith("/"):
+            raise TransportError("bad path")  # an id that isn't one never becomes another route
         headers = {}
         if auth:
             headers["Authorization"] = f"Bearer {self.session.get('token', '')}"
@@ -144,7 +152,7 @@ class ApiClient:
                      or isinstance(e, requests.exceptions.ConnectTimeout))
             if retry and again:
                 return self._call(method, path, body, auth, retry=False)
-            raise TransportError(f"{method} {path.split('?')[0]} failed")
+            raise TransportError(f"{method} {_said(path)} failed")
         try:
             data = r.json() if r.content else {}
         except ValueError:
@@ -154,7 +162,7 @@ class ApiClient:
             self._save_session()
             raise TransportError("signed out", 401)
         if r.status_code >= 500 or r.status_code == 429:
-            raise TransportError(f"{method} {path.split('?')[0]}: {r.status_code}", r.status_code)
+            raise TransportError(f"{method} {_said(path)}: {r.status_code}", r.status_code)
         return r.status_code, data if isinstance(data, dict) else {}
 
     # ---- sign-in (3.0: an emailed code; no passwords) ----

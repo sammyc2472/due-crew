@@ -104,6 +104,8 @@ def _observe(q, d, today):
     """Today, if the decks I studied have nothing left due, or none of the
     new cards they give: the days the "keeping up" and "new done" squares
     count. Seen when it's true at a sync; one deck tree and one query."""
+    if today in d["zero"] and today in d["newdone"]:
+        return  # both seen: the deck tree (slow in a big collection) can wait for tomorrow
     start, end = q.day_bounds_ms(0)
     rows = mw.col.db.all(
         "SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, MAX(CASE WHEN r.type = 0 THEN 1 ELSE 0 END) "
@@ -169,7 +171,7 @@ def for_row(c):
         counts["dk"] = 1 if c.get("shared_decks") else 0
         counts["st"] = 1 if str(c.get("status") or "").strip() else 0
         play = B.play(cd, f, show_up=bool(c.get("show_up")), counts=counts, hide=B.withheld(c))
-        _state["bingo_mine"] = {"wk": wk, "play": play,
+        _state["bingo_mine"] = {"wk": wk, "play": play, "ids": _ids(cd),
                                 "progress": [B.progress(sq, f) if B.known(sq) else (False, "")
                                              for sq in cd["squares"]] if cd else None}
         _save()
@@ -177,6 +179,10 @@ def for_row(c):
     except Exception:
         traceback.print_exc()
         return None
+
+
+def _ids(cd):
+    return [q.get("id") for q in cd["squares"]] if cd else None
 
 
 # ---- the board's view ----
@@ -190,6 +196,12 @@ def view(squad_view, c):
         return None
     me = client().user_id
     mine = _state.get("bingo_mine") or {}
+    if mine.get("wk") == wk and mine.get("ids") != _ids(cd):
+        # a new card since the sync (a redraw): my squares against this one,
+        # now, not at the next sync (once: a failure leaves nothing of mine)
+        _state["bingo_mine"] = dict(mine, ids=_ids(cd), play=None, progress=None)
+        for_row(c)
+        mine = _state.get("bingo_mine") or {}
     if mine.get("wk") == wk and mine.get("play"):
         # my own row as this computer worked it out at the sync, not as the
         # squad was last fetched (up to a few minutes old)

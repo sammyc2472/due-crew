@@ -38,6 +38,16 @@ describe("weeks", () => {
   });
 });
 
+describe("the seeded pool", () => {
+  it("every entry, on or off, is one the admin could save", async () => {
+    const rows = await db().prepare("SELECT id, kind, json FROM bingo_pool").all<{ id: string; kind: string; json: string }>();
+    expect(rows.results.length).toBeGreaterThan(40);
+    for (const r of rows.results) expect(() => B.entry(r.kind, JSON.parse(r.json)), r.id).not.toThrow();
+    const deck = JSON.parse(rows.results.find((r) => r.id === "deck")!.json);
+    expect([deck.rule, deck.goal]).toEqual(["Share a deck", "third"]);  // the number shows under it, not a fraction
+  });
+});
+
 describe("the draw", () => {
   it("one square a family, 3 easy / 3 medium / 2 hard; all team squares but one hard one, the easier the more of you", async () => {
     const { squares, middles } = await pool();
@@ -55,7 +65,12 @@ describe("the draw", () => {
       expect(c.squares.filter((s) => s.need !== 1).length).toBeGreaterThanOrEqual(5);  // 11:11 and the like aren't team squares
       expect(c.squares.filter((s) => s.need !== 1).every((s) => s.team)).toBe(true);
       expect(B.draw(wk, squares, middles)).toEqual(c);  // the same week draws the same card
+      // a medium or hard square is a streak whenever its family has one at that level
+      for (const s of c.squares.filter((q) => q.diff !== "e"))
+        if (squares.some((q) => q.fam === s.fam && q.diff === s.diff && B.isStreak(q))) expect(B.isStreak(s)).toBe(true);
+      expect(c.squares.filter((q) => q.diff !== "e").every(B.isStreak)).toBe(true);  // every family has one
     }
+    expect(middles.some((m) => m.id === "ask")).toBe(false);  // the middle never asks you to ask about a card
   });
 
   it("the middle: a season first, every sixth week free, else study and crew weeks take turns", async () => {
@@ -137,7 +152,7 @@ describe("a squad's card, from its rows", () => {
                   row("gone", null, { day: "2026-08-01" })];
     const e = B.evaluate(c, rows);
     expect(e.active).toBe(3);  // d studies on an add-on that can't play: not counted on
-    expect(e.older).toBe(1);
+    expect(e.older).toBe(1);  // but counted in the squad's size: a share of 4 studying
     expect(e.squares.slice(0, 3).map((s) => [s.who.length, s.need, s.done])).toEqual([[3, 2, true], [2, 3, false], [1, 2, false]]);
     const big = Array.from({ length: 30 }, (_, i) => row(`p${i}`, { s: i < 15 ? 1 : 0 }));
     expect(B.evaluate(c, big).squares[0]).toMatchObject({ need: 15, done: true });  // half of 30: no cap
@@ -174,7 +189,7 @@ describe("the admin's pool", () => {
     expect((await admin(dre, "/admin/bingo")).status).toBe(404);
     const got = (await admin(sam, "/admin/bingo")).body;
     expect(got.week).toBe(thisWeek());
-    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(32);  // 26, and 0012's six streaks
+    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(37);  // 26, 0012's six streaks and 0013's five
     expect(got.cards[0].wk).toBe(thisWeek());
     const f20 = got.pool.find((p: any) => p.id === "f20");
     const put = (id: string, body: unknown) => admin(sam, `/admin/bingo/${id}`, "PUT", body);
