@@ -44,9 +44,9 @@ describe("squads: the id is the invite; only the founder shapes it", () => {
 
 describe("members: join while open, own row only, allowed shape only", () => {
   it("joins and rows", async () => {
-    const { id } = await squadOf(alice);
+    const { id, code } = await squadOf(alice);
     expect((await rowsOf(alice, id)).map((r) => r.uid), "member: founder joins own squad").toEqual(["alice"]);
-    expect(await bob.status("POST", `/squads/${id}/join`), "member: bob joins while open").toBe(200);
+    expect(await bob.status("POST", `/squads/${id}/join`, { code }), "member: bob joins while open").toBe(200);
     expect((await rowsOf(alice, id)).map((r) => r.uid).sort(), "member: cannot join as someone else (a join is always the caller)").toEqual(["alice", "bob"]);
     expect(await bob.status("PUT", `/squads/${id}/row`, row), "row: member writes own numbers").toBe(200);
     expect(await bob.status("PUT", `/squads/${id}/row`, { server: "x" }), "row: extra field rejected").toBe(400);
@@ -57,8 +57,8 @@ describe("members: join while open, own row only, allowed shape only", () => {
   });
 
   it("reads: members only", async () => {
-    const { id } = await squadOf(alice);
-    await bob.call("POST", `/squads/${id}/join`);
+    const { id, code } = await squadOf(alice);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await bob.status("GET", `/squads/${id}`), "board: member lists rows").toBe(200);
     expect(await carol.status("GET", `/squads/${id}`), "board: non-member cannot list").toBe(403);
     expect(await carol.status("GET", `/squads/${id}`), "board: non-member cannot get a row").toBe(403);
@@ -68,11 +68,11 @@ describe("members: join while open, own row only, allowed shape only", () => {
   });
 
   it("the door: lock, founder only; existing members keep syncing", async () => {
-    const { id } = await squadOf(alice);
-    await bob.call("POST", `/squads/${id}/join`);
+    const { id, code } = await squadOf(alice);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await alice.status("PATCH", `/squads/${id}`, { open: false }), "lock: founder locks").toBe(200);
     expect(await bob.status("PATCH", `/squads/${id}`, { open: true }), "lock: non-founder cannot").toBe(403);
-    expect(await carol.status("POST", `/squads/${id}/join`), "lock: join refused while locked").toBe(403);
+    expect(await carol.status("POST", `/squads/${id}/join`, { code }), "lock: join refused while locked").toBe(403);
     expect(await bob.status("PUT", `/squads/${id}/row`, { reviews: 11 }), "lock: existing member still writes").toBe(200);
     expect(await alice.status("PATCH", `/squads/${id}`, { founder: "dave" }), "lock: founder cannot be handed to a non-member").toBe(403);
   });
@@ -80,8 +80,8 @@ describe("members: join while open, own row only, allowed shape only", () => {
 
 describe("knocks: both in the same squad", () => {
   it("squad knocks", async () => {
-    const { id } = await squadOf(alice);
-    await bob.call("POST", `/squads/${id}/join`);
+    const { id, code } = await squadOf(alice);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await bob.status("POST", "/knocks/alice", { squad: id }), "knock: squadmate to squadmate").toBe(200);
     expect(await bob.status("POST", "/knocks/carol", { squad: id }), "knock: to a non-member rejected").toBe(403);
     expect(await carol.status("POST", "/knocks/alice", { squad: id }), "knock: from a non-member rejected").toBe(403);
@@ -97,10 +97,10 @@ describe("knocks: both in the same squad", () => {
 
 describe("remove and leave", () => {
   it("founder removes; members leave; reads close", async () => {
-    const { id } = await squadOf(alice);
-    await bob.call("POST", `/squads/${id}/join`);
+    const { id, code } = await squadOf(alice);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await alice.status("DELETE", `/squads/${id}/members/bob`), "member: founder removes anyone").toBe(200);
-    await bob.call("POST", `/squads/${id}/join`);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await bob.status("DELETE", `/squads/${id}/members/alice`), "member: cannot remove someone else").toBe(403);
     expect(await bob.status("DELETE", `/squads/${id}/members/bob`), "member: leaves").toBe(200);
     expect(await bob.status("GET", `/squads/${id}`), "board: after leaving, reads are denied").toBe(403);
@@ -141,7 +141,7 @@ describe("hardening: no listing of people or codes; bounded strings", () => {
     expect(await bob.status("POST", "/sync", { profile: { name: "x".repeat(61) } }), "profile: 61-char display name rejected").toBe(400);
     expect(await bob.status("POST", "/sync", { profile: { name: "x".repeat(60) } }), "profile: 60-char display name allowed").toBe(200);
     expect(await dave.status("POST", "/cheers/alice", { emoji: "🔥", at: "t" }), "cheer: at is the server's, never the sender's").toBe(400);
-    const { id } = await squadOf(alice);
+    const { id, code } = await squadOf(alice);
     expect(await alice.status("PUT", `/squads/${id}/row`, { studyTimeMs: -5 }), "member: negative study time rejected").toBe(400);
     expect(await alice.status("PUT", `/squads/${id}/row`, { accuracy: 101.5 }), "member: retention over 100 rejected").toBe(400);
   });
@@ -166,7 +166,7 @@ describe("friend edges, emoji, week, ban list, founder handoff (v2.5)", () => {
   });
 
   it("member week, emoji, new cards", async () => {
-    const { id } = await squadOf(alice);
+    const { id, code } = await squadOf(alice);
     expect(await alice.status("PUT", `/squads/${id}/row`, { week: 5, emoji: "🐢" }), "member: week and emoji accepted").toBe(200);
     expect(await alice.status("PUT", `/squads/${id}/row`, { week: 8 }), "member: week over 7 rejected").toBe(400);
     expect(await alice.status("PUT", `/squads/${id}/row`, { newCards: 20 }), "member: newCards accepted").toBe(200);
@@ -175,12 +175,12 @@ describe("friend edges, emoji, week, ban list, founder handoff (v2.5)", () => {
   });
 
   it("block and handoff", async () => {
-    const { id } = await squadOf(alice);
-    await bob.call("POST", `/squads/${id}/join`);
+    const { id, code } = await squadOf(alice);
+    await bob.call("POST", `/squads/${id}/join`, { code });
     expect(await alice.status("POST", `/squads/${id}/block/bob`), "ban: founder sets the list").toBe(200);
     expect(await bob.status("POST", `/squads/${id}/block/alice`), "ban: non-founder cannot").toBe(403);
-    expect(await bob.status("POST", `/squads/${id}/join`), "ban: a blocked person cannot rejoin an open squad").toBe(403);
-    expect(await carol.status("POST", `/squads/${id}/join`), "ban: others still can").toBe(200);
+    expect(await bob.status("POST", `/squads/${id}/join`, { code }), "ban: a blocked person cannot rejoin an open squad").toBe(403);
+    expect(await carol.status("POST", `/squads/${id}/join`, { code }), "ban: others still can").toBe(200);
     expect(await alice.status("PATCH", `/squads/${id}`, { founder: "dave" }), "handoff: to a non-member rejected").toBe(403);
     expect(await alice.status("PATCH", `/squads/${id}`, { founder: "carol" }), "handoff: to a member allowed").toBe(200);
     expect(await alice.status("PATCH", `/squads/${id}`, { open: false }), "handoff: the old founder lost the keys").toBe(403);
@@ -210,10 +210,10 @@ describe("retired paths: nothing answers", () => {
 
 describe("a row update must never become a join (v2.5.1)", () => {
   it("Remove sticks", async () => {
-    const { id } = await squadOf(alice, "open");
+    const { id, code } = await squadOf(alice, "open");
     expect(await dave.status("PUT", `/squads/${id}/row`, { name: "Dave" }), "join: refused without joining (a row is no join)").toBe(403);
     expect(await dave.status("PUT", `/squads/${id}/row`, { name: "Dave", joinedAt: "t" }), "join: joinedAt isn't a row field").toBe(400);
-    expect(await dave.status("POST", `/squads/${id}/join`), "join: accepted through the join").toBe(200);
+    expect(await dave.status("POST", `/squads/${id}/join`, { code }), "join: accepted through the join").toBe(200);
     expect(await dave.status("PUT", `/squads/${id}/row`, { reviews: 7 }), "row: a member's update needs no joinedAt in the request").toBe(200);
     const s1 = await dave.call("POST", "/sync", { squads: { row: { reviews: 8 }, ids: [id] } });
     expect(s1.body.gone, "row: and works as an update-only write too (sync)").toEqual([]);
@@ -223,7 +223,7 @@ describe("a row update must never become a join (v2.5.1)", () => {
     const s2 = await dave.call("POST", "/sync", { squads: { row: { reviews: 10 }, ids: [id] } });
     expect(s2.body.gone, "remove: a sync's update-only write is refused, says so, and creates nothing").toEqual([id]);
     expect((await rowsOf(alice, id)).map((r) => r.uid)).toEqual(["alice"]);
-    expect(await dave.status("POST", `/squads/${id}/join`), "remove: a deliberate rejoin with the code still works (Block is what stops that)").toBe(200);
+    expect(await dave.status("POST", `/squads/${id}/join`, { code }), "remove: a deliberate rejoin with the code still works (Block is what stops that)").toBe(200);
   });
 
   it("emoji: 16 UTF-8 bytes, the 2.x client's ceiling, is accepted", async () => {
@@ -308,7 +308,7 @@ describe("a cheer may carry luck or a card's guid (v2.10)", () => {
 
 describe("markers: /version takes their place", () => {
   it("version", async () => {
-    expect((await api("GET", "/version")).body, "marker: the client asks /version, once a day").toEqual({ api: 1, minClient: "3.0.0" });
+    expect((await api("GET", "/version")).body, "marker: the client asks /version, once a day").toEqual({ api: 1, minClient: "3.1.0" });
     for (const m of ["rules-v2", "rules-v11", "rules-v12"]) {
       expect(await alice.status("GET", `/meta/${m}`), `marker ${m}: there are no markers any more`).toBe(404);
     }

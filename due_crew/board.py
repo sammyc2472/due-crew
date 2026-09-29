@@ -963,6 +963,17 @@ def keep_me_in_view_js():
     """
 
 
+# a deck row without a "+N today" line holds its place, filled when another
+# row has one, so the rows stay evenly spaced (_even_rows, for the bars)
+_DD_ROOM = "<!--dd-->"
+
+
+def _even_bars(html):
+    if 'class="dc-delta"' in html:
+        return html.replace(_DD_ROOM, '<span class="dc-delta">&nbsp;</span>')
+    return html.replace(_DD_ROOM, "")
+
+
 def _bar(name, is_me, d, delta=None, today_labels=()):
     """One person's progress through one shared deck. Three fills on one
     track: mature (solid), seen (faded), then unlocked-but-unseen (hatched) —
@@ -991,7 +1002,7 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
         chips.append(f'+{int(d["today"]):,} today')
     if delta:
         chips.append(f'+{delta:,} wk')
-    chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else "")
+    chip_html = (f'<span class="dc-delta">{" &middot; ".join(chips)}</span>' if chips else _DD_ROOM)
     tip = [f'{seen:,} seen', f'{mature:,} mature']
     if opened is not None:
         tip.append(f'{int(opened):,} unlocked')
@@ -1421,7 +1432,7 @@ def _decks_body(data, deltas=None):
             _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
-    html = _scroll(html, sum(len(g["rows"]) for g in groups))
+    html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     html += ('<div class="dc-line" style="padding-top: 2px;">'
              # named by texture, not by light/dark: in dark mode the mature fill
              # is the bright one, and "dark = mature" read backwards there

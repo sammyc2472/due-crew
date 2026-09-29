@@ -107,14 +107,14 @@ check("cheer arrives once, marked", len(c) == 1 and c[0]["luck"] and c[0]["name"
       and sam.fetch_board(labels, tomorrow)["cheers"] == [], str(c))
 sq = sam.create_squad("busm")
 info, st = dre.peek_squad(sq["code"].lower())
-check("squad: peek and join", info and info["id"] == sq["id"] and dre.join_squad(sq["id"]) == 200)
+check("squad: peek and join", info and info["id"] == sq["id"] and dre.join_squad(sq["id"], sq["code"]) == 200 and dre.join_squad(sq["id"]) == 403)
 row = {"name": "Dre", "day": labels[0], "reviews": 205, "studyTimeMs": 3600000, "accuracy": 91.5, "streak": 12, "week": 5, "emoji": "🐢", "newCards": 20}
 ok3, gone3 = dre.push(labels, cfg, squad_row=row, squads=[sq["id"], "f" * 24])
 check("squad: row via sync; a squad I'm not in is gone", ok3 and gone3 == ["f" * 24], str((ok3, gone3)))
 rows = sam.fetch_squad(sq["id"])["rows"]
 r = next(x for x in rows if x["user_id"] == dre.user_id)
 check("squad: rows read back", r["reviews"] == 205 and r["new_cards"] == 20 and r["retention"] == 91.5 and r["week"] == 5)
-check("squad: block", sam.block_member(sq["id"], dre.user_id) and dre.join_squad(sq["id"]) == 403)
+check("squad: block", sam.block_member(sq["id"], dre.user_id) and dre.join_squad(sq["id"], sq["code"]) == 403)
 check("settings: put, get", sam.put_settings("2026-09-26T10:00:00Z", {"share_time": False})
       and sam.get_settings()[0]["settings"] == {"share_time": False})
 check("version: current", sam.check_version(labels[0], "3.0.0") is False)
@@ -173,7 +173,7 @@ check("plans: pause, sharing off", dre.set_follow(pid, paused=True) == {"share":
       and dre.set_follow(pid, share=False) == {"share": False, "paused": True})
 check("plans: stop following", dre.unfollow_plan(pid) and dre.fetch_board(labels, tomorrow, with_decks=True)["plans"] == [])
 sq2 = sam.create_squad("plans")
-dre.join_squad(sq2["id"])
+dre.join_squad(sq2["id"], sq2["code"])
 _st, offer = sam._call("POST", "/plans", {"name": "Pharm", "deck": "Pharm"})
 sam._call("PUT", f"/plans/{offer['id']}", {"version": offer["version"], "audience": "squad", "squad": sq2["id"]})
 offers = dre.fetch_board(labels, tomorrow, with_decks=True)["plan_offers"]

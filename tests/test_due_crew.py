@@ -641,7 +641,7 @@ def test_squads():
           bool(info) and info["name"] == "busm <b>" and info["founder"] == "sam"
           and info["open"], str((info, status)))
     check("squad: unknown code is a 404, not an error", dre.peek_squad("ZZZZZZZZ") == (None, 404))
-    check("squad: join while open", dre.join_squad(sid) == 200)
+    check("squad: join while open", dre.join_squad(sid, squad["code"]) == 200)
     eve = new_client(store, "eve", "Eve")
     check("squad: non-member cannot read the board", _denied(lambda: eve.fetch_squad(sid)))
     day = TODAY.isoformat()
@@ -660,7 +660,7 @@ def test_squads():
           and data["open"] and data["founder"] == "sam", str(data))
     check("squad: founder locks", sam.set_squad_open(sid, False))
     zed = new_client(store, "zed", "Zed")
-    check("squad: join refused while locked", zed.join_squad(sid) == 403)
+    check("squad: join refused while locked", zed.join_squad(sid, squad["code"]) == 403)
     check("squad: existing member still writes while locked",
           _row_sync(dre, dict(row, reviews=900), [sid]) == (True, []))
     check("squad: non-founder cannot lock or remove",
@@ -677,7 +677,7 @@ def test_knocks_squad():
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad(sid)
+    dre.join_squad(sid, squad["code"])
     ok = dre.send_knock("sam", sid)
     check("knock: needs a squad both are in", not dre.send_knock("eve", sid))
     eve = new_client(store, "eve", "Eve")
@@ -764,7 +764,7 @@ def test_deletion_sweep():
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad(sid)
+    dre.join_squad(sid, squad["code"])
     dre.send_knock("sam", sid)
     sam.push([TODAY.isoformat()], {}, heatmap={TODAY.isoformat(): 3})
     n = len(store.log)
@@ -847,7 +847,7 @@ def test_v25_edges_emoji_week():
     squad = sam.create_squad("busm")
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad(sid)
+    dre.join_squad(sid, squad["code"])
     row = {"name": "Dre", "day": TODAY.isoformat(), "reviews": 10, "studyTimeMs": 1000, "streak": 1,
            "week": 5, "emoji": "🐢"}
     check("squad row: week and emoji ride along", _row_sync(dre, row, [sid]) == (True, []))
@@ -862,8 +862,8 @@ def test_v25_edges_emoji_week():
     check("block: non-founder cannot", not dre.block_member(sid, "sam"))
     check("block: founder blocks; the member is gone",
           sam.block_member(sid, "dre") and (sid, "dre") not in store.members)
-    check("block: rejoining is refused even with the door open", dre.join_squad(sid) == 403)
-    eve.join_squad(sid)
+    check("block: rejoining is refused even with the door open", dre.join_squad(sid, squad["code"]) == 403)
+    eve.join_squad(sid, squad["code"])
     check("handoff: only to a member",
           not sam.set_founder(sid, "dre") and sam.set_founder(sid, "eve")
           and store.squads[sid]["founder"] == "eve")
@@ -999,7 +999,7 @@ def test_sync_reliability_v251():
     squad = cl.create_squad("busm")
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad(sid)
+    dre.join_squad(sid, squad["code"])
     bad = {"name": "Dre", "reviews": 1, "studyTimeMs": 1, "streak": 1, "week": 9, "day": TODAY.isoformat()}
     ok, gone = _row_sync(dre, bad, [sid])
     check("squad: a row the server refuses is NOT read as removal",
@@ -1046,7 +1046,7 @@ def test_remove_sticks():
     row = {"name": "Dre", "reviews": 5, "studyTimeMs": 1, "streak": 1, "day": TODAY.isoformat()}
     check("join: a row is not a join", _row_sync(dre, row, [sid]) == (True, [sid])
           and (sid, "dre") not in store.members)
-    check("join: the real join works", dre.join_squad(sid) == 200)
+    check("join: the real join works", dre.join_squad(sid, squad["code"]) == 200)
     check("row: a member's sync still lands", _row_sync(dre, row, [sid]) == (True, [])
           and store.members[(sid, "dre")]["reviews"] == 5)
     sam.remove_member(sid, "dre")            # the squad is OPEN — never locked
@@ -1055,7 +1055,7 @@ def test_remove_sticks():
     check("remove sticks: the founder's board no longer lists them",
           sorted(r["name"] for r in sam.fetch_squad(sid)["rows"]) == ["Sammy"])
     check("a deliberate rejoin with the code still works — Block is what stops that",
-          dre.join_squad(sid) == 200)
+          dre.join_squad(sid, squad["code"]) == 200)
 
 
 def _deck_col():
@@ -1136,6 +1136,10 @@ def test_decks():
     stale = board._bar("Ameya", False, clean(payload)[0], today_labels=(other,))
     check("bar: yesterday's 'today' is not shown as today", "today" not in stale.split("title=")[0]
           and "+4 today" not in stale)
+    rows = bar + board._bar("igk", False, {"name": "d", "sig": [], "total": 10, "seen": 3, "mature": 1})
+    check("bars: with one row showing +N today, the others keep a blank line, so rows are evenly spaced",
+          board._even_bars(rows).count('class="dc-delta"') == 2 and "<!--dd-->" not in board._even_bars(rows)
+          and 'class="dc-delta"' not in board._even_bars(board._bar("igk", False, {"name": "d", "sig": [], "total": 10, "seen": 3, "mature": 1})))
     old = board._bar("igk", False, {"name": "x", "sig": [], "total": 10, "seen": 3, "mature": 1})
     check("bar: an older client's deck renders without the unlocked fill",
           'class="fo"' not in old and "3 / 10" in old and "unlocked" not in old)
@@ -4807,7 +4811,7 @@ def test_bingo_end_to_end():
     store, sam, squad = _squad_fixture()
     sid = squad["id"]
     dre = new_client(store, "dre", "Dre")
-    dre.join_squad(sid)
+    dre.join_squad(sid, squad["code"])
     wk = B.week_key(TODAY.isoformat())
     store.bingo_cards[wk] = _bingo_card(wk=wk, needs=("half", 1, 1, 1, 1, 1, 1, 1))
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]

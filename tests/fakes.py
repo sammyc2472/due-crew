@@ -904,15 +904,15 @@ class FakeWorker:
             if sid not in self.squads:
                 founder = body.get("founder") if body.get("founder") in self.users else me
                 self.squads[sid] = {"name": body.get("name") or "squad", "founder": founder, "open": True}
-            st, info = self._squad("POST", me, [sid, "join"], {}, {})
+            st, info = self._squad("POST", me, [sid, "join"], {}, {"code": code})
             return st, dict(info, code=code)
         sid = rest[0] if rest else ""
         if sid not in self.squads:
             raise Bad(404, "no_squad")
         sq = self.squads[sid]
         if method == "POST" and rest[1:] == ["join"]:
-            # 3.0.1: a code sent must be this squad's (3.0.x sends none)
-            if body and "code" in body and self.squad_id(str(body.get("code") or "")) != sid:
+            # 3.6.2: the code is required and must be this squad's (an id alone isn't a join)
+            if not isinstance(body, dict) or not isinstance(body.get("code"), str) or self.squad_id(body["code"]) != sid:
                 raise Bad(403, "wrong_code")
             if (sid, me) in self.members:
                 return 200, self._info(sid)

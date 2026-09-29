@@ -78,7 +78,8 @@ add-on.
   squad in common or comes from adding the recipient's code. Anyone signed
   in gets a name and an emoji for a uid, nothing more.
 - A squad row is an UPDATE on the server, never an insert; the join
-  (`POST /squads/{id}/join`) is the only way in. That is what keeps Remove
+  (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
+  `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
   removed (the 2.3–2.5 bug: a row sync re-created the member).
 - Cutover from 2.x: no data is migrated. Sam imports the Firebase accounts
   (`tools/import_users.py`), so a first 3.0 sign-in lands on the old uid.
