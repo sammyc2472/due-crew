@@ -505,6 +505,9 @@ def _css(cfg):
     #due-crew .dc-foot a.pb.warn {{ border-color: var(--dc-hours); color: var(--dc-hours); }}
     #due-crew .dc-foot a.ic {{ color: var(--dc-muted); font-weight: 400; font-size: 13px; }}
     #due-crew .dc-wrap[hidden] {{ display: none; }}
+    #due-crew .dc-streak {{ text-align: left; font-size: 11.5px; color: var(--dc-muted); margin: 0 2px 8px; }}
+    #due-crew .dc-streak b {{ color: var(--dc-ink); }}
+    #due-crew .dc-streak .op {{ color: var(--dc-hours); font-weight: 700; }}
     #due-crew .dc-wrap a.wn {{ color: var(--dc-muted); text-decoration: none; font-size: 11px; white-space: nowrap; margin-left: 8px; }}
     #due-crew .dc-empty {{ border: 1px dashed var(--dc-accent); border-radius: 10px; padding: 12px 14px; margin: 8px 0 2px;
       display: grid; gap: 8px; font-size: 12px; }}
@@ -1620,7 +1623,7 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None):
+           notice=None, asks=None, streak=None):
     """live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
@@ -1628,7 +1631,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
     the cards on the Decks tab, a squad's offers on Decks and Squads.
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.5.0): my own asks about cards (together.my_asks_view), Decks tab."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Decks tab.
+    streak (3.5.1): the crew streak, {days, since, open} (wrap._streak_info),
+    one line on Today and Week."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)  # 3.5.0: Plans shows by default, with a plan or without
     if period not in PERIODS or period in hidden:
@@ -1709,6 +1714,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             bans.append(_review_banner(kind, reviews[kind]))
     if period in ("decks", "squads", "plans"):
         bans += _split_wraps(_offer_banners((plans or {}).get("offers")))
+    if streak and period in ("today", "week"):
+        lobby += streak_html(streak)
     body = (notice_html(notice) if notice else "") + _one_at_a_time(bans) + lobby + body
 
     # 3.4 review, H5: the day's two social actions as buttons, the rest in
@@ -1746,6 +1753,23 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
 
     return (f'<div id="due-crew" class="dc-frame">'
             f'{_css(cfg)}{_head(period, show_up, hidden)}{body}{foot}</div>')
+
+
+def streak_html(streak):
+    """The crew streak: any day at least one of us studied keeps it. It never
+    blames anyone; in the evening of a day nobody has studied yet, it says
+    the chain is open (anyone can keep it), and that's all it ever asks."""
+    days = int(streak.get("days") or 0)
+    try:
+        d = _dt.date.fromisoformat(str(streak.get("since")))
+        since = f" &middot; someone&rsquo;s studied every day since {d.day} {d:%b}"
+    except ValueError:
+        since = ""
+    tail = (' &middot; <span class="op">nobody&rsquo;s studied yet today</span>'
+            if streak.get("open") else since)
+    return (f'<div class="dc-streak{" open" if streak.get("open") else ""}" '
+            f'title="Any day at least one of you studies keeps it going">'
+            f'&#128279; <b>Crew streak &middot; {days} days</b>{tail}</div>')
 
 
 # ---- 3.5.0: Settings, in the board ----

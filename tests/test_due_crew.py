@@ -4566,6 +4566,74 @@ def test_plans_tab_v341():
     check("narrow: the week becomes a list", "#due-crew .pwk {{ grid-template-columns: 1fr; }}".replace("{{", "{").replace("}}", "}") in css)
 
 
+def test_crew_streak():
+    """3.5.1: the crew streak. Any day at least one of us studied keeps it;
+    it carries on past the board's window from wrap.json, a friend's late
+    sync can still join two runs, and it asks for something only in the
+    evening of a day nobody has studied yet."""
+    from due_crew import wrap as W
+    D = datetime.date
+    iso = lambda d: d.isoformat()
+    today, yday = "2026-09-29", "2026-09-28"
+    window = {iso(D(2026, 9, 29) - datetime.timedelta(days=i)) for i in range(7)}
+    days, run = W.crew_streak(window, None, today, yday)
+    check("streak: seven days in the window", days == 7 and run == {"start": "2026-09-23", "end": today})
+    days, run = W.crew_streak(window - {today}, None, today, yday)
+    check("streak: today not studied yet still counts from yesterday", days == 6 and run["end"] == yday)
+    days, run = W.crew_streak(window, {"start": "2026-08-19", "end": "2026-09-24"}, today, yday)
+    check("streak: a stored run the window reaches carries it on (19 Aug to today, 42 days)",
+          days == 42 and run == {"start": "2026-08-19", "end": today})
+    old = {"start": "2026-08-19", "end": "2026-09-26"}
+    days, run = W.crew_streak(window - {"2026-09-27", "2026-09-28", today}, old, today, yday)
+    check("streak: two empty days end it, and the old run is kept", days == 0 and run == old)
+    days, run = W.crew_streak(window - {"2026-09-27"}, old, today, yday)
+    check("streak: one gap in the window starts over after it", days == 2 and run["start"] == "2026-09-28")
+    days, run = W.crew_streak(window, old, today, yday)
+    check("streak: the friend's late sync fills the gap and joins the runs", days == 42)
+    days, _run = W.crew_streak(set(), {"start": "x", "end": "y"}, today, yday)
+    check("streak: nothing studied is no streak", days == 0)
+
+    wrap = _patched_due_crew()
+    keep = dict(wrap._state)
+    try:
+        labels = [iso(D(2026, 9, 29) - datetime.timedelta(days=i)) for i in range(7)]
+        def person(uid, studied):
+            return {"user_id": uid, "name": uid, "you": uid == "sam", "paused": False,
+                    "days": {lb: {"studied": True} for lb in studied}}
+        # Sam studies on even days, Dre on odd: neither has a streak, the crew has one
+        crew = [person("sam", labels[1::2]), person("dre", labels[2::2])]
+        wrap._state.update(labels=labels, entries=crew, tomorrow="2026-09-30")
+        wrap._update_wrap(crew, labels)
+        info = wrap._streak_info(now=datetime.datetime(2026, 9, 29, 19))
+        check("streak: taking turns is a streak", info["days"] == 6 and info["since"] == labels[6])
+        check("streak: evening, nobody yet today: open", info["open"] is True)
+        check("streak: afternoon is not open", wrap._streak_info(now=datetime.datetime(2026, 9, 29, 15))["open"] is False)
+        page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, streak=info)
+        check("streak: the board says it, and that the chain is open, blaming nobody",
+              "Crew streak &middot; 6 days" in page and "nobody&rsquo;s studied yet today" in page)
+        ahead = [person("sam", labels[1::2]), dict(person("dre", labels[2::2]),
+                                                   days={"2026-09-30": {"studied": True}, **{lb: {"studied": True} for lb in labels[2::2]}})]
+        wrap._state.update(entries=ahead)
+        info = wrap._streak_info(now=datetime.datetime(2026, 9, 29, 19))
+        check("streak: a friend a day ahead studying counts for today", info["days"] == 7 and not info["open"])
+        page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, streak=info)
+        check("streak: studied today says since when", "since 23 Sep" in page and "yet today" not in page)
+        check("streak: only on Today and Week",
+              'class="dc-streak' not in board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
+                                              {"period": "decks"}, 0, streak=info))
+        wrap._state.update(entries=ahead[:1])
+        check("streak: no crew, no streak", wrap._streak_info() is None)
+        wrap._state.update(entries=[person("sam", [today]), person("dre", [])])
+        wrap._wrap["data"].pop("streak", None)
+        check("streak: one day isn't shown", wrap._streak_info() is None)
+        wrap._wrap["data"]["streak"] = {"start": "2026-09-30", "end": "2026-09-01"}
+        check("wrap.json: a streak that ends before it starts is dropped",
+              "streak" not in wrap._sane(wrap._wrap["data"]))
+    finally:
+        wrap._state.clear()
+        wrap._state.update(keep)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

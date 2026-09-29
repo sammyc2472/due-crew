@@ -28,9 +28,16 @@ def _sane(data):
                     and all(isinstance(n, int) for n in d.get("p", {}).values()))
         if not (isinstance(ledger, dict) and all(day_ok(d) for d in ledger.values())):
             data.pop("ledger")
-    for key in ("best", "banner", "life"):
+    for key in ("best", "banner", "life", "streak"):
         if key in data and not isinstance(data[key], dict):
             data.pop(key)
+    run = data.get("streak")
+    if run is not None:
+        try:
+            if datetime.date.fromisoformat(run["start"]) > datetime.date.fromisoformat(run["end"]):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            data.pop("streak")
     return data
 
 
@@ -162,8 +169,77 @@ def _update_wrap(entries, labels):
         w["week"] = week
         w["deck_base"] = {f"{e['user_id']}|{d.get('name', '')}": int(d.get("seen") or 0)
                           for e in entries for d in (e.get("decks") or [])}
+    _update_streak(w, entries, labels)
     _save_wrap()
     return toast
+
+
+def crew_streak(studied, stored, today, yesterday):
+    """The crew streak: days in a row on which at least one of us studied.
+    Pure. `studied` is the days in the board's window that someone showed
+    up; `stored` ({start, end}) is the run this computer saw before, every
+    day of it studied, so a window that reaches back into it carries it on.
+    Counts from today once someone has studied, else from yesterday (the
+    day isn't over). Returns (days, run to store): a broken chain keeps the
+    old run, so a friend's late sync can still join the two."""
+    lo = hi = None
+    if isinstance(stored, dict):
+        lo, hi = str(stored.get("start") or ""), str(stored.get("end") or "")
+    anchor = today if today in studied else yesterday
+    day, start = datetime.date.fromisoformat(anchor), None
+    while True:
+        iso = day.isoformat()
+        if iso in studied:
+            start = iso
+        elif lo and lo <= iso <= hi:
+            start, day = lo, datetime.date.fromisoformat(lo)
+        else:
+            break
+        day -= datetime.timedelta(days=1)
+    if start is None:
+        return 0, stored
+    days = (datetime.date.fromisoformat(anchor) - datetime.date.fromisoformat(start)).days + 1
+    return days, {"start": start, "end": max(anchor, hi or anchor)}
+
+
+def _studied_days(entries, labels, tomorrow=""):
+    """Days in the window that anyone on the board showed up. A friend a
+    time zone ahead may have filed today under tomorrow."""
+    out = set()
+    for e in entries:
+        days = e.get("days") or {}
+        for i, lb in enumerate(labels):
+            if board._showed(days.get(lb)) or (i == 0 and tomorrow and board._showed(days.get(tomorrow))):
+                out.add(lb)
+    return out
+
+
+def _update_streak(w, entries, labels):
+    if len(labels) < 2 or len(entries) < 2:
+        return
+    _days, run = crew_streak(_studied_days(entries, labels, _state.get("tomorrow") or ""),
+                             w.get("streak"), labels[0], labels[1])
+    if run:
+        w["streak"] = run
+
+
+def _streak_info(now=None):
+    """{days, since, open} for the board, or None. `open`: it's evening and
+    nobody has studied today, so the chain is waiting on someone. Only with
+    a crew, and only from two days."""
+    labels, entries = _state["labels"], _state["entries"] or []
+    if not labels or len(labels) < 2 or len(entries) < 2:
+        return None
+    studied = _studied_days(entries, labels, _state.get("tomorrow") or "")
+    days, run = crew_streak(studied, _wrap_data().get("streak"), labels[0], labels[1])
+    if days < 2:
+        return None
+    hour = (now or datetime.datetime.now()).hour
+    return {"days": days, "since": run["start"],
+            "open": labels[0] not in studied and hour >= STREAK_EVENING}
+
+
+STREAK_EVENING = 18
 
 
 def _accrue_milestones(w, week_reviews, week_time_ms, today_label):

@@ -359,6 +359,13 @@ add-on.
   their dialogs. The Qt dialog stays for when the board isn't on screen
   (turned off, signed out, another screen, Tools › Due Crew › Settings
   from the reviewer).
+- 3.5.1 the crew streak (mock "Crew Challenges", 1): days in a row on
+  which at least one of us studied (`wrap.crew_streak`, pure). Counted
+  from the board's window, carried past it by the run in wrap.json
+  (`streak: {start, end}`); a broken chain keeps the old run so a late
+  sync can join them. One line on Today and Week from two days, only with
+  a crew; after 6pm on a day nobody has studied, it says so, and that's
+  all it asks. No server change, no request. Never anyone's fault.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
