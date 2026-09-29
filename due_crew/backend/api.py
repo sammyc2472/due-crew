@@ -27,7 +27,7 @@ from .. import bingo as _bingo
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
+    _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
 )
 
@@ -315,6 +315,12 @@ class ApiClient:
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
                 self._save_session()
+        squads = None
+        if with_decks and isinstance(data.get("squads"), list):
+            # 3.6: the squads I'm in, as the server knows (it's the truth; the config caches it)
+            squads = [{"id": q["id"], "name": clean_squad_name(q.get("name")) or "squad",
+                       "founder": str(q.get("founder") or "")}
+                      for q in data["squads"] if isinstance(q, dict) and isinstance(q.get("id"), str) and q["id"]]
         if with_decks:
             card = _bingo.clean_card(data.get("bingo"))  # 3.6: none when I'm in no squad
             if card != self.session.get("bingo"):
@@ -329,6 +335,7 @@ class ApiClient:
                 "my_friends": friends,
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
+                "squads": squads,
                 "notice": clean_notice(data.get("notice"))}  # 3.2.1
 
     @staticmethod

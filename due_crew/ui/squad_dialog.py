@@ -2,8 +2,8 @@
 and lands on the main thread; the dialog never blocks Anki."""
 
 from aqt.qt import (
-    QDialog, QDialogButtonBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QWidget, Qt,
+    QDialog, QDialogButtonBox, QGridLayout, QLabel, QLineEdit, QPushButton,
+    QVBoxLayout, Qt,
 )
 
 from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
@@ -53,19 +53,17 @@ class SquadDialog(QDialog):
         self.look_btn.clicked.connect(self._look_up)
         grid.addWidget(self.code_edit, 1, 0)
         grid.addWidget(self.look_btn, 1, 1)
-        # what the code is, with Join beside it; nothing at all until then
-        self.found = QWidget()
-        found = QHBoxLayout(self.found)
-        found.setContentsMargins(0, 0, 0, 0)
+        # what the code is, with Join under Look Up (the buttons' column, so
+        # it's never squeezed by a long name); nothing at all until then
         self.peek_label = QLabel("")
         self.peek_label.setWordWrap(True)
-        found.addWidget(self.peek_label, 1)
+        self.peek_label.setVisible(False)
         self.join_btn = QPushButton("Join")
         self.join_btn.setVisible(False)
+        self.join_btn.setDefault(True)
         self.join_btn.clicked.connect(self._join)
-        found.addWidget(self.join_btn)
-        self.found.setVisible(False)
-        grid.addWidget(self.found, 2, 0, 1, 2)
+        grid.addWidget(self.peek_label, 2, 0)
+        grid.addWidget(self.join_btn, 2, 1, Qt.AlignmentFlag.AlignTop)
 
         grid.addWidget(_head("Start a squad"), 3, 0, 1, 2)
         self.name_edit = QLineEdit()
@@ -82,9 +80,10 @@ class SquadDialog(QDialog):
             Qt.TextInteractionFlag.TextSelectableByMouse)
         self.made_label.setVisible(False)
         grid.addWidget(self.made_label, 5, 0, 1, 2)
-        width = max(self.look_btn.sizeHint().width(), self.create_btn.sizeHint().width())
-        for b in (self.look_btn, self.create_btn):
+        width = max(b.sizeHint().width() for b in (self.look_btn, self.create_btn, self.join_btn))
+        for b in (self.look_btn, self.create_btn, self.join_btn):
             b.setMinimumWidth(width)
+            b.setMinimumHeight(b.sizeHint().height())
         lay.addLayout(grid)
 
         lay.addSpacing(6)
@@ -102,16 +101,16 @@ class SquadDialog(QDialog):
     # ---- join ----
     def _code_changed(self, _text=""):
         self.peek = None
-        self.join_btn.setVisible(False)
-        self.found.setVisible(False)
-        self.peek_label.setText("")
+        self._say("")
 
     def _say(self, text, join=False):
         """The line under the code: what it is, or what went wrong."""
         self.peek_label.setText(text)
         self.join_btn.setVisible(join)
         self.join_btn.setEnabled(join)
-        self.found.setVisible(bool(text))
+        self.peek_label.setVisible(bool(text))
+        # the dialog grows to fit the row (it was drawn without it)
+        self.adjustSize()
 
     def _look_up(self):
         # a pasted invite works too: the code is taken from after "code"

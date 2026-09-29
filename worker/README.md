@@ -199,6 +199,16 @@ pool (off entries too) and the last few cards with their counts; `PUT
 /admin/bingo/{id} {kind, entry, enabled}` adds or changes an entry, checked
 against the rule types the add-on knows.
 
+3.6.1 (migration 0012): a team square's `need` and a middle's `goal` can be
+a share (`half`, `third`, `quarter`: at least 2, never more than there are
+of you), so a bigger squad needs more of you. The draw makes every square
+a team square except one hard one: easy ones half, medium a third, the
+other hard one a quarter. A rule's `row: true` wants its days in a row.
+Only members whose add-on plays count toward a share (`active`); studying
+members on an older add-on are `older`, and the card says so. `GET
+/board?decks=1` also returns `squads` (the squads I'm a member of), so an
+add-on whose config lost them puts them back.
+
 ## Tests
 
 - `test/consent.test.ts` restates every check of `tests/rules/emulator_rules_test.py` (the 2.x Firestore rules) against the Worker, in its order and under its label.

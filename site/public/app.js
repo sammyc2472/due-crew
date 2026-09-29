@@ -1414,7 +1414,7 @@ function bingoPanel() {
   let data = null;
   const status = h("p", { class: "status", role: "status" });
   const errText = (e) => ({ bad_rule: "The rule's numbers don't fit its type.", bad_icon: "The icon must be one emoji.", bad_season: "A season needs from and to as MM-DD.",
-    bad_goal: "The goal is a number, all or half.", bad_entry: "Something in it isn't allowed.", bad_title: "It needs a title.", bad_name: "It needs a name.", bad_detail: "Say exactly what counts.", kind: "That id is already the other kind." }[e] || "That didn't save.");
+    bad_goal: "The goal is a number, all, half, third or quarter.", bad_entry: "Something in it isn't allowed.", bad_title: "It needs a title.", bad_name: "It needs a name.", bad_detail: "Say exactly what counts.", kind: "That id is already the other kind." }[e] || "That didn't save.");
   // last week's rate for an entry: the share of playing squads it was done in
   const rateOf = (id) => {
     for (const c of data.cards) {
@@ -1432,7 +1432,7 @@ function bingoPanel() {
     const sel = (k, opts, v) => (f[k] = h("select", {}, Object.entries(opts).map(([val, label]) => h("option", { value: val, selected: val === v }, label))));
     const id = isNew ? h("input", { placeholder: "short id: a-z 0-9", maxlength: 12, style: "width:9em" }) : null;
     const en = h("input", { type: "checkbox", checked: item.enabled });
-    const params = h("textarea", { rows: 2, style: "width:100%;font-family:monospace" }, JSON.stringify(e.params || {}));
+    const params = h("textarea", { rows: 2, style: "width:100%;font-family:monospace", title: "Add \"row\": true for days in a row" }, JSON.stringify(e.params || {}));
     const row = (label, el) => h("label", { class: "brow" }, h("span", {}, label), el);
     const fields = [
       isNew ? row("Id", id) : null,
@@ -1441,7 +1441,7 @@ function bingoPanel() {
       row("On the square", inp("rule", e.rule, { maxlength: 48, style: "width:100%" })),
       row("Exactly", inp("detail", e.detail, { maxlength: 160, style: "width:100%" })),
       sq ? row("Family", sel("fam", BINGO_FAMS, e.fam)) : row("Kind", sel("group", BINGO_GROUPS, e.group)),
-      sq ? row("Difficulty", sel("diff", BINGO_DIFF, e.diff)) : row("Goal", inp("goal", e.goal, { placeholder: "3, all or half", style: "width:8em" })),
+      sq ? row("Difficulty", sel("diff", BINGO_DIFF, e.diff)) : row("Goal", inp("goal", e.goal, { placeholder: "3, all, half, third, quarter", style: "width:12em" })),
       sq ? row("Team square", (f.team = h("input", { type: "checkbox", checked: e.team }))) : row("Unit", inp("unit", e.unit, { maxlength: 20, style: "width:10em" })),
       !sq ? row("Season", h("span", { class: "row" }, inp("sfrom", e.season?.from, { placeholder: "10-26", style: "width:6em" }), "to", inp("sto", e.season?.to, { placeholder: "11-01", style: "width:6em" }))) : null,
       row("Rule", sel("type", Object.fromEntries((sq ? BINGO_SQUARE_TYPES : BINGO_MIDDLE_TYPES).map((t) => [t, t])), e.type)),
@@ -1497,7 +1497,7 @@ function bingoPanel() {
         h("small", {}, st && st.squads ? `${Math.round((100 * st.middle) / st.squads)}% unlocked` : cur.card.middle.rule));
       const i = [0, 1, 2, 3, null, 4, 5, 6, 7][cell], q = cur.card.squares[i];
       return h("div", { class: "bcell" }, h("span", {}, q.icon), h("b", {}, q.title),
-        h("small", {}, [q.need !== 1 ? (q.need === "half" ? "half of you" : `${q.need} of you`) : BINGO_DIFF[q.diff],
+        h("small", {}, [q.need !== 1 ? ({ half: "half of you", third: "a third of you", quarter: "a quarter of you" }[q.need] || `${q.need} of you`) : BINGO_DIFF[q.diff],
           st && st.squads ? `${Math.round((100 * st.squares[i].squads) / st.squads)}% done` : null].filter(Boolean).join(" · ")));
     })) : h("p", { class: "muted small" }, "No card yet this week.");
     const add = (kind) => h("button", { class: "quiet", onclick: (ev) => {

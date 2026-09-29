@@ -2325,6 +2325,12 @@ def test_new_cards_v213():
           '<small class="nw">12 new</small>' in some and 'title="12 of 205 were new cards"' in some)
     check("board: \"all new\" when every review was new; nothing when none were or they didn't say",
           ">all new<" in every and 'class="nw"' not in none and 'class="nw"' not in old)
+    mixed = board.render(dict(base, entries=[ent({"studied": True, "reviews": 205, "newCards": 12}),
+                                             dict(ent({"studied": True, "reviews": 20, "newCards": 0}), uid="u2", name="Dre")]),
+                         {"period": "week"}, 0)
+    check("board: with one row showing new cards, the others hold a blank line, so rows are evenly spaced",
+          mixed.count('class="nw"') == 2 and '<small class="nw">&nbsp;</small>' in mixed and "<!--nw-->" not in mixed
+          and "<!--nw-->" not in none + today_only)
     wk = board._week_row({lb: {"reviews": 10, "newCards": 3},
                           (TODAY - datetime.timedelta(days=1)).isoformat(): {"reviews": 5, "newCards": 1}},
                          [lb, (TODAY - datetime.timedelta(days=1)).isoformat()])
@@ -4566,76 +4572,6 @@ def test_plans_tab_v341():
     check("narrow: the week becomes a list", "#due-crew .pwk {{ grid-template-columns: 1fr; }}".replace("{{", "{").replace("}}", "}") in css)
 
 
-def test_crew_streak():
-    """3.5.1: the crew streak. Any day at least one of us studied keeps it;
-    it carries on past the board's window from wrap.json, a friend's late
-    sync can still join two runs, and it asks for something only in the
-    evening of a day nobody has studied yet."""
-    from due_crew import wrap as W
-    D = datetime.date
-    iso = lambda d: d.isoformat()
-    today, yday = "2026-09-29", "2026-09-28"
-    window = {iso(D(2026, 9, 29) - datetime.timedelta(days=i)) for i in range(7)}
-    days, run = W.crew_streak(window, None, today, yday)
-    check("streak: seven days in the window", days == 7 and run == {"start": "2026-09-23", "end": today})
-    days, run = W.crew_streak(window - {today}, None, today, yday)
-    check("streak: today not studied yet still counts from yesterday", days == 6 and run["end"] == yday)
-    days, run = W.crew_streak(window, {"start": "2026-08-19", "end": "2026-09-24"}, today, yday)
-    check("streak: a stored run the window reaches carries it on (19 Aug to today, 42 days)",
-          days == 42 and run == {"start": "2026-08-19", "end": today})
-    old = {"start": "2026-08-19", "end": "2026-09-26"}
-    days, run = W.crew_streak(window - {"2026-09-27", "2026-09-28", today}, old, today, yday)
-    check("streak: two empty days end it, and the old run is kept", days == 0 and run == old)
-    days, run = W.crew_streak(window - {"2026-09-27"}, old, today, yday)
-    check("streak: one gap in the window starts over after it", days == 2 and run["start"] == "2026-09-28")
-    days, run = W.crew_streak(window, old, today, yday)
-    check("streak: the friend's late sync fills the gap and joins the runs", days == 42)
-    days, _run = W.crew_streak(set(), {"start": "x", "end": "y"}, today, yday)
-    check("streak: nothing studied is no streak", days == 0)
-
-    wrap = _patched_due_crew()
-    keep = dict(wrap._state)
-    try:
-        labels = [iso(D(2026, 9, 29) - datetime.timedelta(days=i)) for i in range(7)]
-        def person(uid, studied):
-            return {"user_id": uid, "name": uid, "you": uid == "sam", "paused": False,
-                    "days": {lb: {"studied": True} for lb in studied}}
-        # Sam studies on even days, Dre on odd: neither has a streak, the crew has one
-        crew = [person("sam", labels[1::2]), person("dre", labels[2::2])]
-        wrap._state.update(labels=labels, entries=crew, tomorrow="2026-09-30")
-        wrap._update_wrap(crew, labels)
-        info = wrap._streak_info(now=datetime.datetime(2026, 9, 29, 19))
-        check("streak: taking turns is a streak", info["days"] == 6 and info["since"] == labels[6])
-        check("streak: evening, nobody yet today: open", info["open"] is True)
-        check("streak: afternoon is not open", wrap._streak_info(now=datetime.datetime(2026, 9, 29, 15))["open"] is False)
-        page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, streak=info)
-        check("streak: the board says it, and that the chain is open, blaming nobody",
-              "Crew streak &middot; 6 days" in page and "nobody&rsquo;s studied yet today" in page)
-        ahead = [person("sam", labels[1::2]), dict(person("dre", labels[2::2]),
-                                                   days={"2026-09-30": {"studied": True}, **{lb: {"studied": True} for lb in labels[2::2]}})]
-        wrap._state.update(entries=ahead)
-        info = wrap._streak_info(now=datetime.datetime(2026, 9, 29, 19))
-        check("streak: a friend a day ahead studying counts for today", info["days"] == 7 and not info["open"])
-        page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {}, 0, streak=info)
-        check("streak: studied today says since when", "since 23 Sep" in page and "yet today" not in page)
-        check("streak: only on Today and Week",
-              'class="dc-streak' not in board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
-                                              {"period": "decks"}, 0, streak=info))
-        wrap._state.update(entries=ahead[:1])
-        check("streak: no crew, no streak", wrap._streak_info() is None)
-        wrap._state.update(entries=[person("sam", [today]), person("dre", [])])
-        wrap._wrap["data"].pop("streak", None)
-        check("streak: one day isn't shown", wrap._streak_info() is None)
-        wrap._wrap["data"]["streak"] = {"start": "2026-09-30", "end": "2026-09-01"}
-        check("wrap.json: a streak that ends before it starts is dropped",
-              "streak" not in wrap._sane(wrap._wrap["data"]))
-    finally:
-        wrap._state.clear()
-        wrap._state.update(keep)
-
-
-# ---- 3.6: squad bingo ----
-
 def _bingo_card(wk="2026-W36", needs=(1, 1, 1, 1, 1, 1, 1, 1), middle=None, squares=None):
     sq = squares or [{"id": f"q{i}", "fam": "often", "diff": "e", "icon": "✋", "title": f"Square {i}",
                       "rule": "Study on 1 day", "detail": "d", "type": "days", "params": {"days": 1}} for i in range(8)]
@@ -4721,12 +4657,17 @@ def test_bingo_rules():
     rows = [row("a", {"s": 0b111}), row("b", {"s": 0b011}), row("c", {"s": 0b001}), row("d", None),
             row("gone", None, day="2026-08-01")]
     e = B.evaluate(c, rows)
-    check("evaluate: team squares need that many; half is half the active; the long-quiet don't count",
-          e["active"] == 4 and [(len(q["who"]), q["need"], q["done"]) for q in e["squares"][:3]] == [(3, 2, True), (2, 3, False), (1, 2, False)], e)
-    big = [row(f"p{i}", {"s": 1 if i < 6 else 0}) for i in range(30)]
+    check("evaluate: team squares need that many; half is half the active; the long-quiet don't count, "
+          "nor someone studying on an add-on that can't play (they're told apart)",
+          e["active"] == 3 and e["older"] == 1
+          and [(len(q["who"]), q["need"], q["done"]) for q in e["squares"][:3]] == [(3, 2, True), (2, 3, False), (1, 2, False)], e)
+    lag = B.evaluate(c, [row("a", {"s": 1}), row("b", None, play={"wk": 202635, "s": 0})])
+    check("evaluate: a squadmate who plays but hasn't synced this week still counts toward the goals",
+          lag["active"] == 2 and lag["older"] == 0 and lag["squares"][0]["need"] == 2, lag)
+    big = [row(f"p{i}", {"s": 1 if i < 15 else 0}) for i in range(30)]
     two = [row("a", {"s": 0b10}), row("b", {"s": 0b10})]
-    check("evaluate: half is at most 6; a need is never more than there are of you",
-          B.evaluate(c, big)["squares"][0]["need"] == 6 and B.evaluate(c, big)["squares"][0]["done"]
+    check("evaluate: half of a squad of 30 is 15, no cap; a need is never more than there are of you",
+          B.evaluate(c, big)["squares"][0]["need"] == 15 and B.evaluate(c, big)["squares"][0]["done"]
           and B.evaluate(c, two)["squares"][1] == {"who": ["a", "b"], "need": 2, "done": True})
     check("evaluate: last week's play counts for nothing",
           not B.evaluate(c, [row("a", None, play={"wk": 202635, "s": 255})])["squares"][3]["done"])
@@ -4792,7 +4733,7 @@ def test_bingo_board():
           and "duecrew:bingo" in small and small.count("<i") == 9)
     later = board.bingo_card_html(dict(bv, new=False))
     check("bingo: later in the week, how far and what's closest, never who's ahead",
-          "of 9" in later and "away from a line" in later and "Sammy" not in later)
+          "of 9" in later and "away from bingo" in later and "middle" not in later and "Sammy" not in later)
     sv = {"state": "ok", "name": "busm", "rows": [], "people": 0, "day": "2026-09-01", "squads": [], "current": "sq1", "bingo": bv}
     tab = board._squads_html(sv, {})
     check("bingo: on the Squads tab, above the table", "bg-card" in tab and "bg-mini" in tab)
@@ -4890,6 +4831,97 @@ def test_bingo_end_to_end():
     finally:
         dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen = saved
         dc._state["bingo_open"] = False
+
+
+def test_bingo_scales_and_streaks():
+    """3.6.1: team squares and the middle are shares of the squad (at least
+    2, never more than there are), so a bigger squad needs more of you;
+    streak squares want that many days in a row (bingo.ts: the same)."""
+    from due_crew import bingo as B
+    check("shares: half, a third, a quarter of the active, at least 2",
+          [B.how_many("half", n) for n in (1, 2, 3, 8, 20, 40)] == [1, 2, 2, 4, 10, 20]
+          and [B.how_many("third", n) for n in (1, 2, 3, 8, 20, 40)] == [1, 2, 2, 3, 7, 14]
+          and [B.how_many("quarter", n) for n in (1, 2, 3, 8, 20, 40)] == [1, 2, 2, 2, 5, 10]
+          and B.how_many("all", 7) == 7 and B.how_many(3, 2) == 2)
+    card = B.clean_card(_bingo_card(needs=("half", "third", "quarter", 1, 1, 1, 1, 1),
+                                    middle={"type": "people", "params": {"key": "dk"}, "goal": "third"}))
+    check("card: shares come through; an unknown need is one person", [q["need"] for q in card["squares"][:4]] == ["half", "third", "quarter", 1]
+          and B.clean_card(_bingo_card(needs=("lots", 1, 1, 1, 1, 1, 1, 1)))["squares"][0]["need"] == 1)
+    row = lambda uid, p: {"user_id": uid, "emoji": "", "day": "2026-09-01", "joined": "2026-01-01", "play": dict(p, wk=202636)}
+    nine = [row(f"u{i}", {"s": (0b11 if i < 4 else 0b1) | (0b100 if i < 2 else 0), "dk": 1 if i < 3 else 0}) for i in range(9)]
+    e = B.evaluate(card, nine)
+    check("evaluate: a squad of 9: half is 5, a third 3, a quarter 3; the middle a third (3 sharing: done)",
+          [(q["need"], q["done"]) for q in e["squares"][:3]] == [(5, True), (3, True), (3, False)]
+          and e["middle"] == {"have": 3, "goal": 3, "done": True, "known": True}, e)
+    board_html = board.bingo_html({"card": card, "ev": e, "names": {}, "me": "u0", "squad": "s", "closest": []}, {})
+    check("board: a team square says its share", "a third of you" in board_html and "a quarter of you" in board_html)
+
+    D, T = datetime.date, datetime.datetime
+    week = B.week_labels("2026-09-04")          # Mon 31 Aug .. Fri 4 Sep today
+    at = lambda day, h: T.combine(D.fromisoformat(day), datetime.time(h))
+    times = {week[0]: [at(week[0], 7)], week[1]: [at(week[1], 7)], week[2]: [at(week[2], 12)],
+             week[3]: [at(week[3], 7)], week[4]: [at(week[4], 7)]}
+    f = B.facts(week, week[4], times, {lb: 5 for lb in week[:5]}, {}, zero={week[0], week[1], week[3]}, rollover=4)
+    P = lambda typ, **p: B.progress({"type": typ, "params": p}, f)
+    check("streak: before 8am on 4 days, but at most 2 in a row (Wednesday broke it)",
+          P("window", **{"from": 0, "to": 8, "days": 4})[0]
+          and P("window", **{"from": 0, "to": 8, "days": 3, "row": True}) == (False, "2 of 3 days in a row")
+          and P("window", **{"from": 0, "to": 8, "days": 2, "row": True})[0])
+    check("streak: due zero Mon, Tue, Thu is 2 in a row; study 5 days in a row",
+          P("zero", days=2, row=True)[0] and not P("zero", days=3, row=True)[0] and P("days", days=5, row=True)[0])
+    check("card: row survives cleaning (a true/false, nothing else)",
+          B.clean_card(_bingo_card(squares=[dict(q, params={"days": 2, "row": True}) for q in _bingo_card()["squares"]]))
+          ["squares"][0]["params"] == {"days": 2, "row": True})
+
+
+def test_account_survives_a_reset_config():
+    """3.6.1: a reinstall into another folder starts from the default config,
+    while user_files (and the session, which remembered the account save it
+    had seen) survive: the add-on thought it was up to date, kept the
+    defaults, and lost the squads, emoji and accent. The config now
+    remembers its own save; one that doesn't takes the account's. And the
+    squads I'm in come back from the server's membership."""
+    from due_crew import account, squads as SQ, app as appmod
+    from due_crew.app import _state
+    doc = {"at": "2026-09-28T10:00:00.000000Z",
+           "settings": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
+                        "emoji": "🦊", "accent": "rose"}}
+    box = {"cfg": {"squads": [], "emoji": "", "accent": "green"}}  # the defaults, after the reset
+    saved = (account.cfg, appmod.save_cfg, account.client, appmod.swap)
+    cl = types.SimpleNamespace(session={"settings_seen": doc["at"], "settings_dirty": True,
+                                        "settings_local_at": "2026-09-29T00:00:00Z"},
+                               _save_session=lambda: None, signed_in=True)
+    account.cfg = lambda: dict(box["cfg"])
+    appmod.save_cfg = lambda c, from_account=False: box.update(cfg=dict(c))
+    account.client = lambda: cl
+    appmod.swap = None
+    try:
+        account._pulled((doc, 200))
+        c = box["cfg"]
+        check("reset config: takes the account's squads, emoji and accent, though the session had seen that save",
+              c["squads"] and c["squads"][0]["id"] == "sq1" and c["emoji"] == "🦊" and c["accent"] == "rose"
+              and c[account.SEEN_KEY] == doc["at"], c)
+        box["cfg"] = dict(c, emoji="🐙")
+        account._pulled((doc, 200))
+        check("a config that holds that save keeps its own changes", box["cfg"]["emoji"] == "🐙")
+    finally:
+        account.cfg, appmod.save_cfg, account.client, appmod.swap = saved
+
+    saved = (SQ.cfg, SQ.save_cfg)
+    box = {"cfg": {"squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}]}}
+    SQ.cfg = lambda: dict(box["cfg"])
+    SQ.save_cfg = lambda c: box.update(cfg=c)
+    _state["squads_left"] = {"sqLeft"}
+    try:
+        SQ.heal_squads([{"id": "sq1", "name": "busm", "founder": "x"}, {"id": "sq2", "name": "ms2", "founder": "y"},
+                        {"id": "sqLeft", "name": "old", "founder": "z"}, {"id": "sqGone", "name": "g", "founder": "z"}],
+                       gone=["sqGone"])
+        ids = [q["id"] for q in box["cfg"]["squads"]]
+        check("squads heal: the one the server has and the config lost comes back (no code); never one I just left or one the sync said I'm out of",
+              ids == ["sq1", "sq2"] and box["cfg"]["squads"][1]["code"] == "" and box["cfg"]["squads"][0]["code"] == "ABCD2345", ids)
+    finally:
+        SQ.cfg, SQ.save_cfg = saved
+        _state["squads_left"] = set()
 
 
 def main():

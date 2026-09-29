@@ -35,6 +35,7 @@ _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40}
 MAX_SQUADS = 20
+SEEN_KEY = "account_seen"  # 3.6: in the config: the account save this config holds
 MAX_DECKS = 200
 MAX_MUTED = 500
 
@@ -211,12 +212,19 @@ def _pulled(result):
     try:
         if status == 200 and isinstance(doc, dict):
             at = str(doc.get("at") or "")
-            if at != cl.session.get("settings_seen"):
+            # 3.6: the config remembers which save it holds, as the session
+            # does. A config that doesn't (reset: a reinstall into another
+            # folder starts from the defaults, while user_files and the
+            # session survive) takes the account's, whatever the session says,
+            # and is never "newer" than it
+            here = cfg().get(SEEN_KEY)
+            if at != cl.session.get("settings_seen") or here != at:
                 mine = cl.session.get("settings_local_at")
-                if cl.session.get("settings_dirty") and newer(mine, at):
+                if here and cl.session.get("settings_dirty") and newer(mine, at):
                     push(cfg())  # this computer's save is the newest
                 else:
                     c = apply(cfg(), doc.get("settings"), _resolve)
+                    c[SEEN_KEY] = at
                     app.save_cfg(c, from_account=True)
                     cl.session.update(settings_seen=at, settings_dirty=False)
                     cl._save_session()
@@ -272,6 +280,9 @@ def push(c):
         if ok and not again and gen == app.generation:
             cl.session.update(settings_seen=at, settings_dirty=False)
             cl._save_session()
+            c2 = cfg()
+            c2[SEEN_KEY] = at
+            app.save_cfg(c2, from_account=True)
         if again:
             push(cfg())  # whoever is signed in now, as the config is now
 

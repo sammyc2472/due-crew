@@ -398,13 +398,6 @@ In Anki (as a follower):
 - [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
       tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.
 
-### 3.5.1: the crew streak
-
-- [ ] With a crew and two or more days in a row studied between you, Today
-      and Week show "Crew streak · N days · someone's studied every day
-      since …". After 6pm on a day nobody has studied, the end of the line
-      says so in amber; it goes back once anyone studies.
-
 ### 3.6: squad bingo (two accounts in one squad)
 
 - [ ] The Squads tab shows the card above the table: the mini grid, and on
@@ -425,6 +418,15 @@ In Anki (as a follower):
 - [ ] Complete a line (or let the admin's test squad): "BINGO!" on the
       card, a tooltip once, and Copy for the group chat pastes the 3×3
       emoji grid with no names.
+- [ ] 3.6.1: a squadmate on 3.5 is left out of "N of you" and named under
+      the card ("1 of you is on an older Due Crew…"). Seven squares ask for
+      more than one of you; in a squad of 6, a half is 3.
+- [ ] 3.6.1: install into a new add-on folder (config back to defaults,
+      same sign-in): the squads come back on the first refresh, and the
+      emoji and accent come back from the account.
+- [ ] 3.6.1: Squads › Join a squad: look up a code; Join sits under Look
+      Up at full size. Week tab with one row showing new cards: rows
+      evenly spaced.
 - [ ] /admin › Squad bingo: this week's card; edit a square's numbers
       (a wrong one says so), turn one off, add one; the counts appear the
       day after the cron runs.

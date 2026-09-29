@@ -114,8 +114,12 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
   if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
-  // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad
+  // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad;
+  // and the squads I'm in, so an add-on whose config was reset finds them
   if (withDecks && !keep) {
+    out.squads = (await db.prepare(
+      "SELECT q.id, q.name, q.founder FROM members m JOIN squads q ON q.id = m.squad WHERE m.uid = ? ORDER BY m.joined_at LIMIT 50",
+    ).bind(s.uid).all<{ id: string; name: string; founder: string }>()).results;
     const card = await B.forMember(env, s.uid, params.get("wk"));
     if (card) out.bingo = card;
   }

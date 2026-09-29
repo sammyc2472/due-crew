@@ -228,6 +228,28 @@ def _drop_squad(sid, swap=True):
         _fetch_squad()
 
 
+def heal_squads(known, gone=()):
+    """3.6: the squads the server says I'm in, back in the config when it
+    lost them (a reinstall into another folder starts from the defaults,
+    and the account's own copy may have been overwritten since). The
+    server's membership is the truth; the config caches it. Never one I
+    left this session, or one the sync just said I'm out of. Main thread.
+    Their codes aren't on the server (holding the code is the invite), so
+    Copy invite says so until someone shares it again."""
+    from .account import MAX_SQUADS
+    c = cfg()
+    have = {sq["id"] for sq in _my_squads(c)}
+    skip = have | set(gone or ()) | _state["squads_left"]
+    add = [q for q in known or () if q.get("id") and q["id"] not in skip]
+    room = max(0, MAX_SQUADS - len(have))
+    if not add or not room:
+        return
+    c["squads"] = list(c.get("squads") or []) + [
+        {"id": q["id"], "code": "", "name": q.get("name") or "squad", "founder": q.get("founder") or ""}
+        for q in add[:room]]
+    save_cfg(c)  # an account key: the account's copy gets them back too
+
+
 def _copy_invite():
     cur = _current_squad()
     if cur is None:
@@ -248,6 +270,7 @@ def _leave_squad():
         return
     cl = client()
     sid = cur["id"]
+    _state["squads_left"].add(sid)  # the day's board mustn't bring it back
     _bg(lambda: cl.leave_squad(sid))
     _drop_squad(sid)
 

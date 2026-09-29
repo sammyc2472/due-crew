@@ -39,7 +39,7 @@ from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _ope
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
-                     _toggle_squad_lock, _visible_knocks, open_squads)
+                     _toggle_squad_lock, _visible_knocks, heal_squads, open_squads)
 from .stats import gather_stats, gather_week, held_streak, week_days
 from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
@@ -48,7 +48,7 @@ from .ui import copy_text
 from . import account, bingo_flow, plan_flow, rooms, together
 from . import cards as crew_cards
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
-                   _streak_info, _update_wrap, _wrap_data, _wrap_info)
+                   _update_wrap, _wrap_data, _wrap_info)
 
 _lock = threading.Lock()
 _fetching = False
@@ -386,6 +386,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
         tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
+    if data.get("squads") is not None:
+        heal_squads(data["squads"], gone)  # 3.6: squads the server has and this config lost
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time(), sync_error=bool(failed),
@@ -487,7 +489,7 @@ def _board_html(c):
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
         notice = None
     return board.render(_board_data(), c, _state["ts"], notice=notice,
-                        wrap=_wrap_info(), deltas=_deck_deltas(), streak=_streak_info(),
+                        wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
                         rules_stale=client().rules_stale,
                         squad_view=_squad_view_with_bingo(c), knocks=_visible_knocks(c),
