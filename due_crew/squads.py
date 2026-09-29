@@ -80,6 +80,8 @@ def _fetch_squad(force=False):
         sq.update(id=cur["id"], data=None, state="loading")
     cl = client()
     sid = cur["id"]
+    from .bingo import week_key
+    bingo_wk = week_key(day)
 
     def job():
         try:
@@ -87,7 +89,7 @@ def _fetch_squad(force=False):
         except Exception:
             knocks = None
         try:
-            data = cl.fetch_squad(sid)
+            data = cl.fetch_squad(sid, wk=bingo_wk)  # 3.6: this week's card with it
             return data, ("ok" if data is not None else "gone"), knocks
         except TransportError as e:
             return None, ("gone" if e.status == 403 else "error"), knocks

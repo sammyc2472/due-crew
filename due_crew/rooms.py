@@ -89,6 +89,8 @@ def open_room():
         return
     start, rounds, round_min, brk_min = dlg.result_room
     room = room_model.make_room(client().user_id, start, rounds, round_min, brk_min)
+    from .bingo_flow import bump
+    bump("rm")  # 3.6
     _set_room(room, "Room open. Your crew sees it on their next refresh.")
 
 
@@ -96,6 +98,8 @@ def join(key):
     for e in _state["entries"] or []:
         r = e.get("room")
         if r and room_model.cmd_key(r) == key and not room_model.is_over(r):
+            from .bingo_flow import bump
+            bump("rm")  # 3.6
             _set_room(dict(r), f"You're in {html.escape(room_model.title(_state['entries'], r))}.")  # a crewmate's name
             return
     tooltip("That room has ended.")

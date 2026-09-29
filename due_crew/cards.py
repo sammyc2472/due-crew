@@ -281,6 +281,8 @@ def flag(card, q):
     flags.append(entry)
     cl.session["tricky"] = flags[-TRICKY_MAX:]
     cl._save_session()
+    from .bingo_flow import bump
+    bump("aq")  # 3.6
     app.sync(light=True, fetch=False)
     tooltip("Asked. Tips show here when the card comes up.")
 

@@ -1541,10 +1541,219 @@ def _squads_html(view, cfg):
     acts.append(f'<a href="#" onclick="{_pycmd("squadleave")}">Leave</a>')
     foot = ('<div class="dc-line">'
             + " &middot; ".join(acts) + "</div>")
+    bingo = (f"<style>{BINGO_CSS}</style>" + bingo_card_html(view["bingo"])) if view.get("bingo") else ""  # 3.6
     if not body:
-        return (sw + '<div class="dc-line">No one&rsquo;s '
+        return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
-    return sw + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
+    return sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
+
+
+# ---- 3.6: squad bingo (mock "Squad Bingo") ----
+
+BINGO_CSS = """
+    /* the whole card's frame is #due-crew.bg-full itself: its rules say so */
+    #due-crew .bg-card, #due-crew.bg-full, #due-crew .bg-row, #due-crew .bg-bar, #due-crew .bg-info { text-align: left; }
+    #due-crew [hidden] { display: none !important; }
+    #due-crew .bg-card { border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 12px; margin: 2px 0 10px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+    #due-crew .bg-card .bg-t { display: grid; gap: 1px; flex: 1 1 180px; min-width: 0; }
+    #due-crew .bg-card .bg-t span, #due-crew .bg-q { color: var(--dc-muted); }
+    #due-crew .bg-card a, #due-crew a.bg-a { color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }
+    #due-crew .bg-mini { display: grid; grid-template-columns: repeat(3, 9px); gap: 2px; flex: none; }
+    #due-crew .bg-mini i { width: 9px; height: 9px; border-radius: 2px; background: var(--dc-line); }
+    #due-crew .bg-mini i.on { background: var(--dc-accent); }
+    #due-crew .bg-mini i.m { background: var(--dc-hours); }
+    #due-crew .bg-bar { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; margin: 2px 0 10px; }
+    #due-crew .bg-bar b { font-size: 15px; }
+    #due-crew .bg-bar .bg-a:last-child { margin-left: auto; }
+    #due-crew .bg-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    #due-crew .bg-sq { position: relative; min-height: 118px; padding: 17px 5px 22px; border: 1px solid var(--dc-line) !important;
+      border-radius: 9px; background: var(--dc-bg); color: var(--dc-ink); font: inherit; cursor: pointer;
+      display: grid; align-content: start; justify-items: center; gap: 2px; text-align: center; }
+    #due-crew .bg-sq .ic { font-size: 22px; line-height: 1.1; }
+    #due-crew .bg-sq .tt { font-size: 12px; font-weight: 700; line-height: 1.2; }
+    #due-crew .bg-sq .rl { font-size: 10.5px; line-height: 1.25; color: var(--dc-muted); }
+    #due-crew .bg-sq .fm { position: absolute; top: 4px; left: 6px; font-size: 8px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--dc-muted); }
+    #due-crew .bg-sq .df { position: absolute; top: 4px; right: 6px; font-size: 7px; letter-spacing: 1px; color: var(--dc-muted); }
+    #due-crew .bg-sq .tm { font-size: 9.5px; font-weight: 700; color: var(--dc-hours); background: var(--dc-amber-bg, rgba(178,106,0,.1));
+      border-radius: 99px; padding: 0 6px; }
+    #due-crew .bg-sq .tm.ok { color: var(--dc-accent); background: var(--dc-you-bg); }
+    #due-crew .bg-sq .st { position: absolute; bottom: 3px; width: 22px; height: 22px; border-radius: 50%; display: grid;
+      place-items: center; font-size: 13px; background: var(--dc-you-bg); box-shadow: inset 0 0 0 1.5px var(--dc-accent); }
+    #due-crew .bg-sq.done { background: var(--dc-you-bg); }
+    #due-crew .bg-sq.line { border-color: var(--dc-accent) !important; box-shadow: inset 0 0 0 1px var(--dc-accent) !important; }
+    #due-crew .bg-sq.mid { border-color: var(--dc-hours) !important; }
+    #due-crew .bg-sq.mid.done { border-color: var(--dc-accent) !important; }
+    #due-crew .bg-sq.sel { outline: 2px solid var(--dc-ink) !important; outline-offset: -2px; }
+    #due-crew .bg-sq .pb { width: 80%; height: 4px; border-radius: 2px; background: var(--dc-line); overflow: hidden; }
+    #due-crew .bg-sq .pb i { display: block; height: 100%; background: var(--dc-hours); }
+    #due-crew .bg-sq.done .pb i { background: var(--dc-accent); }
+    #due-crew .bg-sq .pp { font-size: 9.5px; font-weight: 700; color: var(--dc-hours); }
+    #due-crew .bg-row { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 12px; }
+    #due-crew .bg-shout { font-weight: 800; font-size: 15px; color: var(--dc-accent); letter-spacing: .03em; }
+    #due-crew .bg-info { border-top: 1px solid var(--dc-line); margin-top: 10px; padding-top: 8px; font-size: 12px; }
+    #due-crew .bg-info > div { display: grid; gap: 3px; }
+    #due-crew .bg-info .k { color: var(--dc-muted); font-size: 11px; }
+    #due-crew .bg-info .me { font-weight: 700; }
+    @media (max-width: 460px) {
+      #due-crew .bg-sq { min-height: 126px; padding: 15px 2px 20px; }
+      #due-crew .bg-sq .tt { font-size: 11px; }
+      #due-crew .bg-sq .rl { font-size: 9.5px; }
+      #due-crew .bg-sq .fm { font-size: 7px; left: 4px; }
+      #due-crew .bg-sq .st { width: 18px; height: 18px; font-size: 10px; }
+    }
+"""
+
+
+def _bg_need(sq, need):
+    return "half of you" if sq.get("need") == "half" else f"{need} of you"
+
+
+def bingo_card_html(bv):
+    """The Squads tab's card, above the squad's table: the grid small, the
+    middle's progress, what's closest to a line. Never who's ahead."""
+    if not bv:
+        return ""
+    e = _html.escape
+    card, ev = bv["card"], bv["ev"]
+    cells = ""
+    for c in range(9):
+        if c == 4:
+            cells += f'<i class="{"on" if ev["middle"]["done"] else "m"}"></i>'
+        else:
+            cells += f'<i class="{"on" if ev["squares"][CELLS_BINGO.index(c)]["done"] else ""}"></i>'
+    m, mid = card["middle"], ev["middle"]
+    if bv.get("new"):
+        line = (f'&#129376; A new card. This week&rsquo;s middle: {e(m["icon"])} '
+                f'<b>{e(m["name"])}</b>, {e(m["rule"][:1].lower() + m["rule"][1:])}.')
+    else:
+        stamps = sum(1 for q in ev["squares"] if q["done"]) + (1 if mid["done"] else 0)
+        if ev["lines"] >= 8:
+            state = "the whole card"
+        elif ev["lines"]:
+            state = "BINGO" if ev["lines"] == 1 else f'{ev["lines"]} lines'
+        else:
+            left = len(bv.get("closest") or [])
+            state = "one away from a line" if left == 1 else f"{left} away from a line"
+        middle = "unlocked" if mid["done"] else f'{mid["have"]} of {mid["goal"]}'
+        line = f'{stamps} of 9 &middot; {state} &middot; {e(m["icon"])} middle {middle}'
+    return (f'<div class="bg-card"><span class="bg-mini">{cells}</span>'
+            f'<span class="bg-t"><b>Squad bingo</b><span>{line}</span></span>'
+            f'<a href="#" onclick="{_pycmd("bingo")}">Open the card</a></div>')
+
+
+CELLS_BINGO = (0, 1, 2, 3, 5, 6, 7, 8)
+
+
+def bingo_html(bv, cfg, loading=False):
+    """The whole card, in the board's place (like Settings). Every string
+    from the server is escaped here. A square's details show in the page
+    when it's clicked: no request."""
+    e = _html.escape
+    head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
+            f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
+    back = f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>'
+    if not bv:
+        said = "Fetching&hellip;" if loading else "No card this week yet. Refresh brings it."
+        return head + f'<div class="bg-bar">{back}<b>Squad bingo</b></div><div class="bg-q">{said}</div></div>'
+    card, ev = bv["card"], bv["ev"]
+    names, me = bv.get("names") or {}, bv.get("me")
+    progress = bv.get("progress") or []
+    lined = set(ev.get("cells") or [])
+    squares, infos = "", ""
+    fams = {"early": "Early", "spread": "Spread out", "focus": "Focus", "volume": "Bigger day", "fresh": "New cards",
+            "often": "Showing up", "clean": "Keeping up", "wild": "Wildcard"}
+    diffs = {"e": ("&#9679;", "easy"), "m": ("&#9679;&#9679;", "medium"), "h": ("&#9679;&#9679;&#9679;", "hard")}
+    show = "var i=this.dataset.i;document.querySelectorAll('#due-crew .bg-info>div').forEach(function(x){x.hidden=x.dataset.i!==i});" \
+           "document.querySelectorAll('#due-crew .bg-sq').forEach(function(x){x.classList.toggle('sel',x.dataset.i===i)});return false;"
+    for c in range(9):
+        cls = "line" if c in lined else ""
+        if c == 4:
+            m, mid = card["middle"], ev["middle"]
+            pct = 100 if mid["done"] else int(100 * mid["have"] / max(1, mid["goal"]))
+            free = m.get("type") == "free"
+            said = "Unlocked" if mid["done"] else f'{mid["have"]} of {mid["goal"]} {e(m.get("unit") or "")}'.strip()
+            prog = "" if free else (f'<span class="pb"><i style="width:{pct}%"></i></span>'
+                                    f'<span class="pp">{said}</span>')
+            squares += (f'<button class="bg-sq mid {"done" if mid["done"] else ""} {cls}" data-i="m" onclick="{show}">'
+                        f'<span class="ic">{e(m["icon"]) if mid["done"] else "&#128274;"}</span>'
+                        f'<span class="tt">{e(m["name"])}</span><span class="rl">{e(m["rule"])}</span>{prog}</button>')
+            state = ("Unlocked. It counts toward all four lines through the middle." if mid["done"]
+                     else f'{mid["have"]} of {mid["goal"]} so far. The squad unlocks it together.')
+            infos += (f'<div data-i="m" hidden><b>{e(m["icon"])} {e(m["name"])}: {e(m["rule"])}</b>'
+                      f'<span>{e(m["detail"])}</span><span class="k">{"This week the middle is free." if free else state}</span></div>')
+            continue
+        i = CELLS_BINGO.index(c)
+        sq, st = card["squares"][i], ev["squares"][i]
+        known = sq.get("type") in _BINGO_TYPES
+        who = st["who"]
+        team = ""
+        if st["need"] > 1 or sq.get("need") == "half":
+            so_far = " &#10003;" if st["done"] else f' &middot; {len(who)}/{st["need"]}'
+            team = (f'<span class="tm{" ok" if st["done"] else ""}">&#128101; {_bg_need(sq, st["need"])}'
+                    f'{so_far}</span>')
+        marks = "".join(
+            f'<span class="st" style="right:{3 + k * 15}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
+            f'{e(names.get(u, ("?", ""))[1]) or "&#10003;"}</span>' for k, u in enumerate(who[:3]))
+        dots, dname = diffs.get(sq.get("diff"), diffs["m"])
+        rule = f'<span class="rl">{e(sq["rule"])}</span>' if known else ""
+        squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}" data-i="{i}" onclick="{show}">'
+                    f'<span class="fm">{fams.get(sq.get("fam"), "")}</span><span class="df" title="{dname}">{dots}</span>'
+                    f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
+                    f'{rule}{team}{marks}</button>')
+        whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who)
+        if st["need"] > 1 or sq.get("need") == "half":
+            state = (f'A team square: {_bg_need(sq, st["need"])} have to pass the mark this week. '
+                     + (f"Done by {whose}." if st["done"] else f"So far: {whose}." if who else "Nobody yet."))
+        else:
+            state = f"Stamped by {whose}." if who else "Not yet. Any one of you can stamp it."
+        mine = ""
+        if known and i < len(progress) and progress[i]:
+            done, words = progress[i]
+            if me in who or done:
+                mine = '<span class="me">You: done.</span>'
+            elif sq.get("type") in (bv.get("withheld") or ()):
+                mine = (f'<span class="me">You: {e(words)}</span>'
+                        '<span class="k">Your Privacy switches keep yours on this computer: it would say when or how much.</span>')
+            else:
+                mine = f'<span class="me">You: {e(words)}</span>'
+        elif not known:
+            mine = '<span class="k">New this week. Update Due Crew to play it; your squad can still stamp it.</span>'
+        infos += (f'<div data-i="{i}" hidden><b>{e(sq["icon"])} {e(sq["title"])}</b>'
+                  f'<span class="k">{fams.get(sq.get("fam"), "")} &middot; {dname}</span>'
+                  f'<span>{e(sq["detail"])}</span>{mine}<span class="k">{state}</span></div>')
+    stamps = sum(1 for q in ev["squares"] if q["done"]) + (1 if ev["middle"]["done"] else 0)
+    if ev["lines"] >= 8:
+        foot = '<span class="bg-shout">THE WHOLE CARD</span><span>All nine, together.</span>'
+    elif ev["lines"]:
+        foot = (f'<span class="bg-shout">BINGO!</span>'
+                f'<span>{"A line" if ev["lines"] == 1 else str(ev["lines"]) + " lines"} this week.</span>')
+    else:
+        foot = f'<span class="bg-q">Closest line needs: {e(", ".join(bv.get("closest") or []))}</span>'
+    players = {u for q in ev["squares"] for u in q["who"]}
+    faces = "".join(e(names.get(u, ("?", ""))[1]) for u in sorted(players))
+    return (head
+            + f'<div class="bg-bar">{back}<b>{e(bv.get("squad") or "Squad")} bingo</b>'
+              f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>'
+              f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a></div>'
+            + f'<div class="bg-grid">{squares}</div>'
+            + f'<div class="bg-row">{foot}</div>'
+            + f'<div class="bg-row bg-q">{len(players)} of {ev["active"]} of you have stamped <span>{faces}</span></div>'
+            + f'<div class="bg-info"><div data-i="" ><span class="k">Click a square: exactly what counts, how close you are, and who stamped it.</span></div>{infos}</div>'
+            + "</div>")
+
+
+_BINGO_TYPES = ("window", "minute", "sittings", "parts", "focus", "beat", "rel", "best",
+                "newdays", "newdone", "days", "zero", "samehour")
+
+
+def _week_span(wk):
+    try:
+        monday = _dt.date.fromisocalendar(int(wk[:4]), int(wk[6:]), 1)
+    except ValueError:
+        return ""
+    return f"week of {monday.day} {monday:%b}"
 
 
 def _review_banner(kind, info):

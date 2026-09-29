@@ -456,7 +456,26 @@ def _clean_member(row):
             "time_ms": _as_int(row.get("studyTimeMs")),
             "retention": acc if acc is not None and 0 <= acc <= 100 else None,
             "streak": _as_int(row.get("streak")),
-            "week": week if week is not None and 0 <= week <= 7 else None}
+            "week": week if week is not None and 0 <= week <= 7 else None,
+            # 3.6: bingo: when they joined, and their week's facts (short ids, whole numbers)
+            "joined": _iso_or_empty(row.get("joined")),
+            "play": _clean_play(row.get("play"))}
+
+
+def _iso_or_empty(v):
+    try:
+        return datetime.date.fromisoformat(str(v)).isoformat()
+    except ValueError:
+        return ""
+
+
+def _clean_play(v):
+    if not isinstance(v, dict):
+        return None
+    out = {k: x for k, x in list(v.items())[:24]
+           if isinstance(k, str) and re.fullmatch(r"[a-z0-9]{1,8}", k)
+           and isinstance(x, int) and not isinstance(x, bool) and 0 <= x < 2 ** 31}
+    return out if "wk" in out else None
 
 
 # ---- 3.1: plans ----

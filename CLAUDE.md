@@ -366,6 +366,28 @@ add-on.
   sync can join them. One line on Today and Week from two days, only with
   a crew; after 6pm on a day nobody has studied, it says so, and that's
   all it asks. No server change, no request. Never anyone's fault.
+- 3.6 squad bingo (mock "Squad Bingo", migration 0011): every squad plays
+  the same 3×3 card a week: eight squares about studying (one from each
+  family: early, spread out, focus, bigger day, new cards, showing up,
+  keeping up, wildcard; 3 easy, 3 medium, 2 hard; four team squares, easy
+  ones for half of you or 3, medium ones for 2; hard ones are one
+  person's) around a middle the squad unlocks together (studying together
+  or Due Crew weeks in turn, a season's first, free every sixth week). The
+  only part about Due Crew is the middle. Every mark is passed on the way
+  up, never stopped on; bigger days are against my own usual (30 days).
+  The Worker draws and keeps the card (`bingo.ts`) from the pool the admin
+  edits on /admin, and never works a square out: my add-on does, from my
+  own reviews at the sync (`bingo_flow.for_row`, `bingo.progress`), and
+  sends `play` on my squad rows (the same in every squad; squares as bits,
+  days, counts for the middle), which boards add up (`bingo.evaluate` =
+  `bingo.ts evaluate`: change one, change both). Show-up mode and the
+  Privacy switches keep the squares built from hidden numbers home
+  (`withheld`). My progress on each square stays on this computer.
+  bingo.json per profile keeps the week's due-zero and new-done days (seen
+  at a sync) and the middle's counts. The card rides the day's first
+  refresh and the squad fetch (`wk=`): no new requests. The Squads tab
+  shows it small; Open puts it in the board's place (`bingo`,
+  `bingoback`, `bingocopy`). The crew keeps only the crew streak.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

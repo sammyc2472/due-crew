@@ -45,7 +45,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, plan_flow, rooms, together
+from . import account, bingo_flow, plan_flow, rooms, together
 from . import cards as crew_cards
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _streak_info, _update_wrap, _wrap_data, _wrap_info)
@@ -439,10 +439,49 @@ def _on_render(deck_browser, content):
         traceback.print_exc()
 
 
+def _bingo_view(c):
+    sv = _squad_view(c)
+    return bingo_flow.view(sv, c) if sv.get("state") == "ok" else None
+
+
+def _squad_view_with_bingo(c):
+    """The Squads tab's view, with this week's card when there is one (3.6)."""
+    sv = _squad_view(c)
+    if c.get("period") == "squads" and sv.get("state") == "ok":
+        bv = bingo_flow.view(sv, c)
+        if bv:
+            sv = dict(sv, bingo=bv)
+            if bingo_flow.new_lines(bv):
+                tooltip("BINGO! Your squad just made a line.", period=4000)
+    return sv
+
+
+def _bingo_cmd(cmd):
+    """3.6: open the card, go back, copy it for the group chat."""
+    c = cfg()
+    if cmd == "bingo":
+        _state["bingo_open"] = True
+        bingo_flow.seen()
+        _swap(c)
+        _fetch_squad()
+    elif cmd == "bingoback":
+        _state["bingo_open"] = False
+        _swap(c)
+    elif cmd == "bingocopy":
+        bv = _bingo_view(c)
+        if bv:
+            from .bingo import share_text
+            copy_text(share_text(bv["card"], bv["ev"], bv["squad"]))
+            tooltip("Copied.")
+
+
 def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
+    if _state.get("bingo_open"):
+        return board.bingo_html(_bingo_view(c), c,  # 3.6: the squad's card in its place
+                                loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()))
     show_up = bool(c.get("show_up"))
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
@@ -451,7 +490,7 @@ def _board_html(c):
                         wrap=_wrap_info(), deltas=_deck_deltas(), streak=_streak_info(),
                         exam_eve=_exam_eve_info(),
                         rules_stale=client().rules_stale,
-                        squad_view=_squad_view(c), knocks=_visible_knocks(c),
+                        squad_view=_squad_view_with_bingo(c), knocks=_visible_knocks(c),
                         reviews=review_banners(), sync_error=_state["sync_error"],
                         live=together.is_live(),
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
@@ -550,6 +589,9 @@ def _on_sync_done(full=False, light=False, fetch=None):
         emoji = clean_emoji(c.get("emoji"))
         if emoji:
             row["emoji"] = emoji
+        play = bingo_flow.for_row(c)  # 3.6: squad bingo, my week's facts
+        if play:
+            row["play"] = play
     plan_prog = None
     try:
         plan_prog = plan_flow.for_sync()
@@ -604,7 +646,10 @@ def _on_js(handled, message, context):
         c["sort"] = parts[2]
         save_cfg(c)
         _swap(c)
+    elif cmd in ("bingo", "bingoback", "bingocopy"):
+        _bingo_cmd(cmd)
     elif cmd == "period" and len(parts) > 2 and parts[2] in board.PERIODS:
+        _state["bingo_open"] = False
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)

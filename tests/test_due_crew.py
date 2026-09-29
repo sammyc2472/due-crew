@@ -4634,6 +4634,264 @@ def test_crew_streak():
         wrap._state.update(keep)
 
 
+# ---- 3.6: squad bingo ----
+
+def _bingo_card(wk="2026-W36", needs=(1, 1, 1, 1, 1, 1, 1, 1), middle=None, squares=None):
+    sq = squares or [{"id": f"q{i}", "fam": "often", "diff": "e", "icon": "✋", "title": f"Square {i}",
+                      "rule": "Study on 1 day", "detail": "d", "type": "days", "params": {"days": 1}} for i in range(8)]
+    return {"wk": wk, "squares": [dict(x, need=n) for x, n in zip(sq, needs)],
+            "middle": dict({"id": "m", "group": "crew", "icon": "🎨", "name": "Picture day", "rule": "Everyone has an emoji",
+                            "detail": "d", "type": "free", "params": {}, "goal": 1, "unit": ""}, **(middle or {}))}
+
+
+def test_bingo_rules():
+    """3.6: each square from my own reviews, as marks passed on the way up;
+    my play; a squad's card from its rows (bingo.ts: evaluate, restated)."""
+    from due_crew import bingo as B
+    D, T = datetime.date, datetime.datetime
+    check("bingo: weeks are ISO weeks of Anki days, Monday to Sunday",
+          B.week_key("2026-09-01") == "2026-W36" and B.week_labels("2026-09-03")[0] == "2026-08-31"
+          and B.week_key("2027-01-01") == "2026-W53" and B.week_labels_for("2026-W36")[6] == "2026-09-06")
+    week = B.week_labels("2026-09-03")          # Mon 31 Aug .. Sun 6 Sep; today is Thursday
+    mon, tue, wed, thu = week[:4]
+    at = lambda day, hm: T.combine(D.fromisoformat(day), datetime.time(*hm))
+    times = {
+        mon: [at(mon, (7, 30)), at(mon, (8, 20)), at(mon, (10, 0)), at(mon, (19, 0))],
+        tue: [at(tue, (9, 0)), at(tue, (23, 11)), at(wed, (1, 30))],   # 1:30 after Tuesday: still Tuesday's night
+        wed: [at(wed, (6, 59))] + [at(wed, (9, 0)) + datetime.timedelta(minutes=3 * i) for i in range(15)],
+        thu: [at(thu, (12, 15))],
+    }
+    before = {(D(2026, 8, 31) - datetime.timedelta(days=i)).isoformat(): 100 for i in range(1, 31)}
+    daily = dict(before, **{week[0]: 120, week[1]: 90, week[2]: 130, week[3]: 40})
+    f = B.facts(week, thu, times, daily, {mon: 5, wed: 2}, zero={mon, tue}, newdone={mon}, rollover=4)
+    P = lambda typ, **params: B.progress({"type": typ, "params": params}, f)
+    check("bingo: before 8am on 2 days (Mon 7:30, Wed 6:59); after midnight isn't morning",
+          P("window", **{"from": 0, "to": 8, "days": 2})[0] and not P("window", **{"from": 0, "to": 8, "days": 3})[0])
+    check("bingo: after 10pm, 2 nights: 23:11 and 1:30 are both Tuesday's night, so one",
+          P("window", **{"from": 22, "to": 24, "days": 1})[0] and not P("window", **{"from": 22, "to": 24, "days": 2})[0])
+    check("bingo: Monday before noon, by weekday", P("window", **{"from": 0, "to": 12, "days": 1, "dow": [0]})[0]
+          and not P("window", **{"from": 0, "to": 9, "days": 1, "dow": [3]})[0])
+    check("bingo: a review at 11:11 (or 23:11)", P("minute", hm=["11:11", "23:11"])[0] and not P("minute", hm=["15:14"])[0])
+    check("bingo: sittings an hour apart (Monday: 7:30 and 8:20 are one, then 10:00, then 19:00)",
+          P("sittings", n=3, gap=60)[0] and not P("sittings", n=4, gap=60)[0] and P("sittings", n=4, gap=60)[1] == "Best day: 3 of 4 sittings")
+    check("bingo: parts of one day", P("parts", parts=[[0, 12], [18, 24]], days=1)[0]
+          and not P("parts", parts=[[0, 12], [12, 18], [18, 24]], days=1)[0])
+    check("bingo: focus is the longest stretch without a 5-minute gap (Wednesday: 42 minutes)",
+          P("focus", minutes=40, gap=5)[0] and P("focus", minutes=60, gap=5) == (False, "Longest: 42 of 60 min"))
+    check("bingo: more than the day before (Mon 120 > Sun 100; Wed 130 > Tue 90), never 3 running",
+          P("beat", run=2)[0] is False and P("beat", run=1)[0])
+    check("bingo: 1.5x my usual (100 over 30 days: 150): 110 to go today",
+          P("rel", x=1.5) == (False, "110 to go today (150 is 1.5× your usual)"))
+    check("bingo: best in a month: Wednesday's 130 beats every day of the 30 before it", P("best", days=30)[0])
+    check("bingo: new cards on days, new done, study days by weekday, due zero",
+          P("newdays", days=2)[0] and not P("newdays", days=3)[0] and P("newdone", days=1)[0]
+          and P("days", days=4)[0] and not P("days", days=1, dow=[5, 6])[0] and P("zero", days=2)[0] and not P("zero", days=3)[0])
+    check("bingo: counts say how far: 2 of 3 days", P("newdays", days=3) == (False, "2 of 3 days"))
+    check("bingo: a rule this version doesn't know asks for an update",
+          B.progress({"type": "teleport", "params": {}}, f) == (False, "Update Due Crew to play this one")
+          and not B.known({"type": "teleport"}))
+    new = B.facts(week, thu, times, {thu: 10}, {}, rollover=4)
+    check("bingo: until there's a week of history, my usual day is 50", new["usual"] == 50)
+
+    card = _bingo_card(squares=[
+        {"id": "a", "fam": "early", "diff": "m", "icon": "🌅", "title": "Early bird", "rule": "r", "detail": "d", "type": "window", "params": {"from": 0, "to": 8, "days": 2}},
+        {"id": "b", "fam": "often", "diff": "e", "icon": "✋", "title": "Four days", "rule": "r", "detail": "d", "type": "days", "params": {"days": 4}},
+        {"id": "c", "fam": "focus", "diff": "h", "icon": "🧘", "title": "Hour", "rule": "r", "detail": "d", "type": "focus", "params": {"minutes": 60, "gap": 5}},
+        {"id": "d", "fam": "clean", "diff": "e", "icon": "🧹", "title": "Zero", "rule": "r", "detail": "d", "type": "zero", "params": {"days": 1}},
+        {"id": "e", "fam": "wild", "diff": "m", "icon": "✨", "title": "11:11", "rule": "r", "detail": "d", "type": "minute", "params": {"hm": ["23:11"]}},
+        {"id": "f", "fam": "fresh", "diff": "e", "icon": "🌱", "title": "New", "rule": "r", "detail": "d", "type": "newdays", "params": {"days": 1}},
+        {"id": "g", "fam": "volume", "diff": "h", "icon": "🚀", "title": "Best", "rule": "r", "detail": "d", "type": "best", "params": {"days": 30}},
+        {"id": "h", "fam": "spread", "diff": "e", "icon": "🔁", "title": "Two", "rule": "r", "detail": "d", "type": "teleport", "params": {}},
+    ], wk="2026-W36")
+    play = B.play(card, f, counts={"ch": 2, "zz": 5, "rm": 0})
+    check("play: squares passed as bits (not the hour, not the unknown one), the days, early and late days, counts",
+          play == {"wk": 202636, "s": 0b1111011, "d": 0b1111, "z": 0b11, "e8": 0b101, "n10": 0b10, "ch": 2}, play)
+    quiet = B.play(card, f, hide=B.withheld({"share_time": False, "share_reviews": False}))
+    check("play: with Reviews and Time switched off, the squares built from them stay home (the hour, best)",
+          B.withheld({"share_time": False}) == {"focus"} and quiet["s"] == play["s"] & ~(1 << 6) and B.withheld({}) == set()
+          and B.withheld({"show_up": True}) == set(B.SQUARE_TYPES) - set(B.SHOW_UP_TYPES))
+    shy = B.play(card, f, show_up=True)
+    check("play: show-up mode sends which days only: no times, no amounts",
+          shy == {"wk": 202636, "s": 0b101010, "d": 0b1111, "z": 0b11}, shy)
+
+    # a squad's card: bingo.ts evaluate, restated case for case
+    row = lambda uid, p, **x: dict({"user_id": uid, "emoji": "", "day": "2026-09-01", "joined": "2026-01-01",
+                                    "play": None if p is None else dict(p, wk=202636)}, **x)
+    c = _bingo_card(needs=("half", 3, 2, 1, 1, 1, 1, 1))
+    rows = [row("a", {"s": 0b111}), row("b", {"s": 0b011}), row("c", {"s": 0b001}), row("d", None),
+            row("gone", None, day="2026-08-01")]
+    e = B.evaluate(c, rows)
+    check("evaluate: team squares need that many; half is half the active; the long-quiet don't count",
+          e["active"] == 4 and [(len(q["who"]), q["need"], q["done"]) for q in e["squares"][:3]] == [(3, 2, True), (2, 3, False), (1, 2, False)], e)
+    big = [row(f"p{i}", {"s": 1 if i < 6 else 0}) for i in range(30)]
+    two = [row("a", {"s": 0b10}), row("b", {"s": 0b10})]
+    check("evaluate: half is at most 6; a need is never more than there are of you",
+          B.evaluate(c, big)["squares"][0]["need"] == 6 and B.evaluate(c, big)["squares"][0]["done"]
+          and B.evaluate(c, two)["squares"][1] == {"who": ["a", "b"], "need": 2, "done": True})
+    check("evaluate: last week's play counts for nothing",
+          not B.evaluate(c, [row("a", None, play={"wk": 202635, "s": 255})])["squares"][3]["done"])
+    rows = [row("a", {"d": 0b1000001, "ch": 3, "z": 1}, emoji="🦊"), row("b", {"d": 0b0000001, "ch": 2}, emoji="🐙"),
+            row("c", {"d": 0b1000000}, joined="2026-09-02")]
+    M = lambda **m: B.evaluate(_bingo_card(middle=m), rows)["middle"]
+    check("evaluate: the middle's kinds",
+          M(type="day", params={"key": "d"}, goal="all")["done"] is False
+          and M(type="day", params={"key": "d", "day": 6}, goal=2)["done"]
+          and M(type="people", params={"key": "d"}, goal="all")["done"]
+          and M(type="sum", params={"key": "ch"}, goal=5)["have"] == 5
+          and M(type="sum", params={"key": "ch"}, goal=9)["goal"] == 9
+          and M(type="people", params={"key": "z"}, goal=4)["goal"] == 3
+          and M(type="emoji", params={}, goal="all")["have"] == 2
+          and M(type="joined", params={}, goal=1)["done"])
+    lined = B.evaluate(_bingo_card(), [row("a", {"s": 0b11000})])
+    whole = B.evaluate(_bingo_card(), [row("a", {"s": 255})])
+    check("evaluate: the middle row is a line; every square and the middle, all eight lines",
+          lined["lines"] == 1 and lined["cells"] == [3, 4, 5] and whole["lines"] == 8)
+    locked = B.evaluate(_bingo_card(middle={"type": "sum", "params": {"key": "ch"}, "goal": 99}), [row("a", {"s": 0b11000})])
+    text = B.share_text(_bingo_card(), locked, "busm <b>")
+    check("share: the grid in emoji, the middle locked until it's unlocked, no names",
+          text.splitlines()[1:4] == ["⬜⬜⬜", "🟩🔒🟩", "⬜⬜⬜"] and "a" not in text.splitlines()[1] and "2 of 9" in text
+          and B.closest(_bingo_card(middle={"type": "sum", "params": {"key": "ch"}, "goal": 99}), locked) == ["Picture day"], text)
+    check("card: a card that isn't eight squares and a middle is no card; words bounded",
+          B.clean_card({"wk": "2026-W36", "squares": [], "middle": {}}) is None
+          and B.clean_card(dict(_bingo_card(), wk="36")) is None
+          and len(B.clean_card(dict(_bingo_card(), squares=[dict(q, title="x" * 99) for q in _bingo_card()["squares"]]))["squares"][0]["title"]) == 28)
+
+
+def test_bingo_board():
+    """3.6: the card on the Squads tab and in the board's place: every
+    server string escaped, laid out left inside Anki's <center>, its
+    clicks wired, a square's details in the page."""
+    from due_crew import bingo as B
+    card = B.clean_card(_bingo_card(needs=("half", 1, 1, 2, 1, 1, 1, 1), middle={"name": "Picture <b>", "type": "emoji", "goal": "all"}))
+    card["squares"][1]["title"] = "Early <i>"
+    rows = [{"user_id": "sam", "emoji": "😺", "day": "2026-09-01", "joined": "2026-01-01", "play": {"wk": 202636, "s": 0b11}},
+            {"user_id": "dre", "emoji": "", "day": "2026-09-01", "joined": "2026-01-01", "play": {"wk": 202636, "s": 0b1}}]
+    ev = B.evaluate(card, rows)
+    bv = {"card": card, "ev": ev, "progress": [(True, "Done")] + [(False, "1 of 4 days")] * 7, "me": "sam",
+          "names": {"sam": ("Sammy", "😺"), "dre": ("Dre <x>", "")}, "squad": "busm <b>", "squad_id": "sq1",
+          "new": True, "closest": B.closest(card, ev), "withheld": ["days"], "today": "2026-09-01"}
+    full = board.bingo_html(bv, {})
+    check("bingo: the card escapes the server's words and names",
+          "Early &lt;i&gt;" in full and "Picture &lt;b&gt;" in full and "busm &lt;b&gt;" in full and "Dre &lt;x&gt;" in full
+          and "<i>" not in full.split("</style>")[-1].replace("<i style", "").replace("<i></i>", ""), full[-1500:])
+    check("bingo: laid out left inside Anki's <center>, its buttons from the reset, [hidden] hidden",
+          "#due-crew .bg-card, #due-crew.bg-full, #due-crew .bg-row, #due-crew .bg-bar, #due-crew .bg-info { text-align: left; }" in full
+          and 'id="due-crew" class="dc-frame bg-full"' in full and "#due-crew a.bg-a {" in full
+          and "#due-crew button {" in full and "#due-crew [hidden] { display: none !important; }" in full)
+    check("bingo: nine squares, a way back, Copy, and each square's details in the page",
+          full.count('class="bg-sq') == 9 and "duecrew:bingoback" in full and "duecrew:bingocopy" in full
+          and full.count('<div data-i="') == 10 and "You: done." in full and "You: 1 of 4 days" in full)
+    check("bingo: a team square says how many of you, and so far", "half of you" in full and "&#128101;" in full)
+    check("bingo: a square my switches keep home still shows me my progress, and says it stays here",
+          "keep yours on this computer" in full)
+    check("bingo: while the squad loads, the card says so, not that there's none",
+          "Fetching" in board.bingo_html(None, {}, loading=True) and "No card" not in board.bingo_html(None, {}, loading=True))
+    check("bingo: the middle locked, with how far", "&#128274;" in full and "1 of 2" in full)
+    small = board.bingo_card_html(bv)
+    check("bingo: the Squads tab's card: the Monday line, and Open", "A new card" in small and "Picture &lt;b&gt;" in small
+          and "duecrew:bingo" in small and small.count("<i") == 9)
+    later = board.bingo_card_html(dict(bv, new=False))
+    check("bingo: later in the week, how far and what's closest, never who's ahead",
+          "of 9" in later and "away from a line" in later and "Sammy" not in later)
+    sv = {"state": "ok", "name": "busm", "rows": [], "people": 0, "day": "2026-09-01", "squads": [], "current": "sq1", "bingo": bv}
+    tab = board._squads_html(sv, {})
+    check("bingo: on the Squads tab, above the table", "bg-card" in tab and "bg-mini" in tab)
+    check("bingo: no card yet, the full view says so and has its way back",
+          "No card this week" in board.bingo_html(None, {}) and "duecrew:bingoback" in board.bingo_html(None, {}))
+
+
+def test_bingo_end_to_end():
+    """3.6: the card rides the day's first refresh and the squad fetch; my
+    play rides the sync's squad row, worked out from my own collection;
+    the board's clicks reach their handlers."""
+    from due_crew import bingo as B, bingo_flow
+    store, sam, squad = _squad_fixture()
+    sid = squad["id"]
+    dre = new_client(store, "dre", "Dre")
+    dre.join_squad(sid)
+    wk = B.week_key(TODAY.isoformat())
+    store.bingo_cards[wk] = _bingo_card(wk=wk, needs=("half", 1, 1, 1, 1, 1, 1, 1))
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    n = len(store.log)
+    sam.fetch_board(labels, with_decks=True)
+    check("bingo: the day's first refresh brings the card, in the same one request",
+          sam.session.get("bingo", {}).get("wk") == wk and len(store.log) == n + 1)
+    del store.bingo_cards[wk]
+    sam.fetch_board(labels)
+    check("bingo: later refreshes keep the day's card", sam.session["bingo"]["wk"] == wk)
+    store.bingo_cards[wk] = _bingo_card(wk=wk, needs=("half", 1, 1, 1, 1, 1, 1, 1))
+    ok, _gone = _row_sync(dre, {"name": "Dre", "day": TODAY.isoformat(), "play": {"wk": B.wk_num(wk), "s": 1, "d": 2}}, [sid])
+    data = sam.fetch_squad(sid, wk=wk)
+    row = next(r for r in data["rows"] if r["user_id"] == "dre")
+    check("bingo: play rides the squad row and comes back with the squad; the card too",
+          ok and row["play"] == {"wk": B.wk_num(wk), "s": 1, "d": 2} and row["joined"] and data["bingo"]["wk"] == wk)
+    check("bingo: a play the Worker wouldn't take isn't sent quietly: the sync fails",
+          _row_sync(dre, {"name": "Dre", "play": {"s": 1}}, [sid])[0] is False)
+
+    # my play from my own collection, at the sync (main thread)
+    col = make_user_col([])
+    conn = col.db.conn
+    fakes.add_card(conn, 7, did=1)
+    tue9 = int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000)
+    for i in range(3):
+        fakes.add_review(conn, tue9 + i * 60000, cid=7)
+    col.sched.due = {1: (0, 0)}
+    tmp = tempfile.mkdtemp()
+    saved = (bingo_flow.mw.col, bingo_flow._profile_files, bingo_flow._profile_key, bingo_flow.client)
+    bingo_flow.mw.col = col
+    bingo_flow._profile_files = lambda: tmp
+    bingo_flow._profile_key = lambda: "p1"
+    bingo_flow._mem.update(profile=None, data=None)
+    bingo_flow.client = lambda: sam
+    try:
+        bingo_flow.bump("ch")
+        bingo_flow.bump("ch")
+        bingo_flow.bump("nope")
+        play = bingo_flow.for_row({"squads": [{"id": sid}], "status": "coffee"})
+        check("bingo: my play from my own reviews: Tuesday studied and due-zero, square 0 passed, my counts",
+              play is not None and play["wk"] == B.wk_num(wk) and play["d"] == 0b10 and play["z"] == 0b10
+              and play["s"] & 1 and play["ch"] == 2 and play["st"] == 1 and "nope" not in play, play)
+        check("bingo: in no squad, or paused, no play", bingo_flow.for_row({"squads": []}) is None
+              and bingo_flow.for_row({"squads": [{"id": sid}], "paused": True}) is None)
+        saved_json = json.load(open(os.path.join(tmp, "bingo.json")))
+        check("bingo: this week's record on this computer, started over each week",
+              saved_json["wk"] == wk and saved_json["zero"] == [TODAY.isoformat()] and saved_json["counts"] == {"ch": 2})
+    finally:
+        bingo_flow.mw.col, bingo_flow._profile_files, bingo_flow._profile_key, bingo_flow.client = saved
+
+    # the board's clicks, as the board sends them
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    conf = {"period": "squads", "squads": [{"id": sid, "code": squad["code"], "name": "busm"}]}
+    copied, swaps = [], []
+    saved = (dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: None
+    dc._fetch_squad = lambda force=False: None
+    dc.copy_text = copied.append
+    card = B.clean_card(store.bingo_cards[wk])
+    dc._bingo_view = lambda c: {"card": card, "ev": B.evaluate(card, []), "squad": "busm"}
+    bingo_flow.seen = lambda: None
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("bingo")
+        opened = dc._state.get("bingo_open")
+        send("bingocopy")
+        send("bingoback")
+        back = dc._state.get("bingo_open")
+        send("bingo")
+        send("period:today")
+        check("bingo: Open, Copy and back reach their handlers; another tab closes the card",
+              opened is True and back is False and dc._state.get("bingo_open") is False
+              and copied and copied[0].startswith("busm · squad bingo") and len(swaps) >= 4, (opened, back, copied))
+    finally:
+        dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen = saved
+        dc._state["bingo_open"] = False
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

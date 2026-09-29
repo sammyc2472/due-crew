@@ -175,7 +175,7 @@ keeps its row.
 | `GET /squads/peek?code=` | The join preview. 60 an hour. |
 | `POST /squads/{id}/join` | The only way in: the door must be open, I mustn't be blocked, and it holds at most 500. |
 | `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
-| `GET /squads/{id}` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. |
+| `GET /squads/{id}[?wk=2026-W40]` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. 3.6: each row has `joined` (a date) and `play`; with `wk`, `bingo` is that week's card. |
 | `PUT /squads/{id}/row` | My numbers, as an update. Never a join. |
 | `DELETE /squads/{id}/members/{uid}` | Leave, or (founder) remove. |
 | `POST /squads/{id}/block/{uid}` | Founder: out, and can't rejoin. |
@@ -183,11 +183,28 @@ keeps its row.
 
 Squad ids are 2.x's (`sha1("due-crew-squad:" + code)[:24]`), so squads in a 2.x config keep their ids.
 
+3.6, squad bingo (migration 0011, `src/bingo.ts`): every squad plays the
+same 3×3 card each week. The server draws it the first time anyone asks
+(`draw`: one square from each of eight families, 3 easy, 3 medium, 2 hard,
+four of them team squares; a middle that's a season's, free every sixth
+week, else study and crew weeks in turn) and keeps it in `bingo_cards`, so
+an edit to the pool shows from the next week. `GET /board?decks=1&wk=` and
+`GET /squads/{id}?wk=` (last week, this or next only) bring it to anyone in
+a squad. A squad row's `play` is the member's own week as short ids and
+whole numbers (which squares they passed as bits of `s`, days studied,
+cheers sent, and so on); the Worker checks only its shape, and boards add
+the rows up (`evaluate`, restated in `due_crew/bingo.py`). The daily cron
+keeps counts per square in `bingo_cards.stats`. `GET /admin/bingo` is the
+pool (off entries too) and the last few cards with their counts; `PUT
+/admin/bingo/{id} {kind, entry, enabled}` adds or changes an entry, checked
+against the rule types the add-on knows.
+
 ## Tests
 
 - `test/consent.test.ts` restates every check of `tests/rules/emulator_rules_test.py` (the 2.x Firestore rules) against the Worker, in its order and under its label.
 - `test/auth.test.ts` and `test/account.test.ts` cover sign-in, sessions, limits, deletion and the import.
 - `test/board.test.ts` covers the board, sync, codes and squads.
+- `test/bingo.test.ts` covers squad bingo: weeks, the draw, the kept card, play on rows, a squad's card from its rows, the admin's pool and the daily counts.
 
 ## Schema
 
