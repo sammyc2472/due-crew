@@ -191,6 +191,9 @@ def main(out):
 
     def squads():
         from due_crew.ui.squad_dialog import SquadDialog
+        empty = SquadDialog(None, CLIENT, noop)
+        app.processEvents()
+        shoot(empty, os.path.join(out, "squads-empty.png"))
         dlg = SquadDialog(None, CLIENT, noop)
         dlg.code_edit.setText(SQUAD["code"])
         dlg._look_up()
