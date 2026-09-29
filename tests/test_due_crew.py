@@ -1334,6 +1334,23 @@ def test_cheer_any_emoji():
           social.cheer_allowed(party + "\U0001F389") == party and social.cheer_allowed("lol") == "")
 
 
+def test_request_paths_and_errors():
+    """An id that isn't one never becomes another route, and a failed
+    request's message never carries a code (codes are never logged)."""
+    from due_crew.backend import api as A
+    store = world({"sam": "Sammy"}, {})
+    cl = new_client(store, "sam", "Sammy")
+    for bad in ("/squads/../admin/people", "squads/x", "/squads/x\\..\\y"):
+        try:
+            cl._call("GET", bad)
+            ok = False
+        except A.TransportError:
+            ok = True
+        check(f"paths: {bad!r} refused before it goes", ok)
+    check("errors: codes in paths are left out", A._said("/codes/ABC123/add?x=1") == "/codes/…/add"
+          and A._said("/invites/ABCDEFGHJK/redeem") == "/invites/…/redeem" and A._said("/squads/s1") == "/squads/s1")
+
+
 def test_request_budget():
     """3.0: a refresh is ONE request, whatever the crew's size, and a sync
     is one. The numbers below are the budget: a change here is a change in
