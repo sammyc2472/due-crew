@@ -141,10 +141,9 @@ def _facts(q, d, today):
             times.setdefault(lb, []).append(datetime.datetime.fromtimestamp(rid / 1000))
     daily = {lb: t[0] for lb, t in q.daily_totals(45).items()}
     new = q.new_cards_by_day(8)
-    try:
-        roll = int(mw.col.get_config("rollover", 4))
-    except Exception:
-        roll = 4
+    # the hour Anki's day rolls over, as _clock reads it: Anki keeps it in
+    # its preferences, not the collection's config
+    roll = datetime.datetime.fromtimestamp(cutoff).hour
     return B.facts(week, today, times, daily, new, d["zero"], d["newdone"], rollover=roll)
 
 

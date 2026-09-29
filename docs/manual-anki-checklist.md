@@ -397,3 +397,34 @@ In Anki (as a follower):
       stays on the control after it redraws.
 - [ ] Turn off "Due Crew on the Decks screen": the board goes, with a
       tooltip; Tools › Due Crew › Settings opens the dialog to turn it back on.
+
+### 3.5.1: the crew streak
+
+- [ ] With a crew and two or more days in a row studied between you, Today
+      and Week show "Crew streak · N days · someone's studied every day
+      since …". After 6pm on a day nobody has studied, the end of the line
+      says so in amber; it goes back once anyone studies.
+
+### 3.6: squad bingo (two accounts in one squad)
+
+- [ ] The Squads tab shows the card above the table: the mini grid, and on
+      the first open of the week "A new card. This week's middle: …".
+      After Open the card, that line gives way to how far you are.
+- [ ] Open the card: it fills the board's place; ‹ Squads goes back, and
+      so does switching tab. Light, dark, and a narrow window: squares
+      readable, nothing centred that shouldn't be, no Anki button shadows.
+- [ ] Click a square: its details show under the card (what exactly
+      counts, "You: …" how close you are, who stamped it). Click another:
+      it swaps. No request goes out.
+- [ ] Study past a square's mark (Twenty minutes, Lunch break, a Due zero
+      day), sync: your stamp shows on both accounts' cards. A team square
+      says "2 of you · 1/2" until the second person passes it.
+- [ ] Turn Time sharing off: a focus square keeps your "You: …" but says it
+      stays on this computer, and your stamp leaves the other account's
+      card at the next sync. Show-up mode: only the days squares go.
+- [ ] Complete a line (or let the admin's test squad): "BINGO!" on the
+      card, a tooltip once, and Copy for the group chat pastes the 3×3
+      emoji grid with no names.
+- [ ] /admin › Squad bingo: this week's card; edit a square's numbers
+      (a wrong one says so), turn one off, add one; the counts appear the
+      day after the cron runs.
