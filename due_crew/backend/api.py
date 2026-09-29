@@ -23,6 +23,7 @@ import threading
 
 import requests
 
+from .. import bingo as _bingo
 from ..room_model import clean_room, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
@@ -247,7 +248,9 @@ class ApiClient:
     def fetch_board(self, labels, tomorrow=None, with_decks=False):
         """Everything the board shows. labels: this week's day labels,
         newest first. Raises TransportError; the caller keeps its cache."""
-        status, data = self._call("GET", "/board?decks=1" if with_decks else "/board")
+        # 3.6: the day's first refresh asks for my week's bingo card too
+        wk = _bingo.week_key(labels[0]) if with_decks and labels else ""
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}" if with_decks else "/board")
         if status != 200:
             raise TransportError(f"board: {status}", status)
         span = list(labels) + ([tomorrow] if tomorrow else [])
@@ -311,6 +314,11 @@ class ApiClient:
                     or authored != self.session.get("plans_authored")):
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
+                self._save_session()
+        if with_decks:
+            card = _bingo.clean_card(data.get("bingo"))  # 3.6: none when I'm in no squad
+            if card != self.session.get("bingo"):
+                self.session["bingo"] = card
                 self._save_session()
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
@@ -762,10 +770,11 @@ class ApiClient:
     def set_squad_open(self, sid, is_open):
         return self._call("PATCH", f"/squads/{sid}", {"open": bool(is_open)})[0] == 200
 
-    def fetch_squad(self, sid):
+    def fetch_squad(self, sid, wk=""):
         """The squad and every member's row, or None when it's gone. Raises
-        TransportError (status 403: I'm not in it any more)."""
-        status, data = self._call("GET", f"/squads/{sid}")
+        TransportError (status 403: I'm not in it any more). 3.6: with wk,
+        the week's bingo card too (kept in the session, as from the board)."""
+        status, data = self._call("GET", f"/squads/{sid}?wk={wk}" if wk else f"/squads/{sid}")
         if status == 404:
             return None
         if status != 200:
@@ -773,7 +782,15 @@ class ApiClient:
         return {"id": sid, "name": data.get("name") or "?", "founder": str(data.get("founder") or ""),
                 "open": data.get("open") is True,
                 "banned": [b for b in data.get("banned") or [] if isinstance(b, str)],
-                "rows": [r for r in map(_clean_member, data.get("rows") or []) if r]}
+                "rows": [r for r in map(_clean_member, data.get("rows") or []) if r],
+                "bingo": self._keep_card(data.get("bingo")) if wk else self.session.get("bingo")}
+
+    def _keep_card(self, v):
+        card = _bingo.clean_card(v)
+        if card and card != self.session.get("bingo"):
+            self.session["bingo"] = card
+            self._save_session()
+        return card or self.session.get("bingo")
 
     # ---- 3.1: plans (each one request, on a click) ----
 

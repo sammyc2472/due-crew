@@ -2,7 +2,7 @@
   "package": "2035408484",
   "name": "Due Crew",
   "author": "Sammy Caplan",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "homepage": "",
   "conflicts": [
     "leaderboard_sidebar"

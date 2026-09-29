@@ -1399,6 +1399,129 @@ function peoplePanel() {
     h("div", { class: "row" }, q, h("button", { onclick: look }, "Look up")), status, hits, one);
 }
 
+/** 3.6: squad bingo's pool, the admin's to tune. This week's card with how
+ *  many squads have each square done; every square and middle (on or off)
+ *  with its rule, last week's rate, and an editor. A card already drawn
+ *  keeps what it was drawn with: an edit shows from the next week. */
+const BINGO_FAMS = { early: "Early", spread: "Spread out", focus: "Focus", volume: "Bigger day", fresh: "New cards", often: "Showing up", clean: "Keeping up", wild: "Wildcard" };
+const BINGO_DIFF = { e: "easy", m: "medium", h: "hard" };
+const BINGO_SQUARE_TYPES = ["window", "minute", "sittings", "parts", "focus", "beat", "rel", "best", "newdays", "newdone", "days", "zero", "samehour"];
+const BINGO_MIDDLE_TYPES = ["people", "sum", "day", "emoji", "joined", "free"];
+const BINGO_GROUPS = { study: "studying together", crew: "Due Crew", free: "free", season: "a season" };
+
+function bingoPanel() {
+  const box = h("section", { class: "panel" }, h("h4", {}, "Squad bingo", h("span", { class: "muted" }, "loading…")));
+  let data = null;
+  const status = h("p", { class: "status", role: "status" });
+  const errText = (e) => ({ bad_rule: "The rule's numbers don't fit its type.", bad_icon: "The icon must be one emoji.", bad_season: "A season needs from and to as MM-DD.",
+    bad_goal: "The goal is a number, all or half.", bad_entry: "Something in it isn't allowed.", bad_title: "It needs a title.", bad_name: "It needs a name.", bad_detail: "Say exactly what counts.", kind: "That id is already the other kind." }[e] || "That didn't save.");
+  // last week's rate for an entry: the share of playing squads it was done in
+  const rateOf = (id) => {
+    for (const c of data.cards) {
+      if (!c.stats || !c.stats.squads) continue;
+      const i = c.card.squares.findIndex((q) => q.id === id);
+      if (i >= 0) return `${Math.round((100 * c.stats.squares[i].squads) / c.stats.squads)}% of ${c.stats.squads} squads (${c.wk})`;
+      if (c.card.middle.id === id) return `${Math.round((100 * c.stats.middle) / c.stats.squads)}% of ${c.stats.squads} squads (${c.wk})`;
+    }
+    return "";
+  };
+  function editor(item, isNew) {
+    const e = item.entry, sq = item.kind === "square";
+    const f = {};
+    const inp = (k, v, attrs = {}) => (f[k] = h("input", { value: v ?? "", ...attrs }));
+    const sel = (k, opts, v) => (f[k] = h("select", {}, Object.entries(opts).map(([val, label]) => h("option", { value: val, selected: val === v }, label))));
+    const id = isNew ? h("input", { placeholder: "short id: a-z 0-9", maxlength: 12, style: "width:9em" }) : null;
+    const en = h("input", { type: "checkbox", checked: item.enabled });
+    const params = h("textarea", { rows: 2, style: "width:100%;font-family:monospace" }, JSON.stringify(e.params || {}));
+    const row = (label, el) => h("label", { class: "brow" }, h("span", {}, label), el);
+    const fields = [
+      isNew ? row("Id", id) : null,
+      row("Icon", inp("icon", e.icon, { style: "width:4em" })),
+      row(sq ? "Title" : "Name", inp(sq ? "title" : "name", sq ? e.title : e.name, { maxlength: 28 })),
+      row("On the square", inp("rule", e.rule, { maxlength: 48, style: "width:100%" })),
+      row("Exactly", inp("detail", e.detail, { maxlength: 160, style: "width:100%" })),
+      sq ? row("Family", sel("fam", BINGO_FAMS, e.fam)) : row("Kind", sel("group", BINGO_GROUPS, e.group)),
+      sq ? row("Difficulty", sel("diff", BINGO_DIFF, e.diff)) : row("Goal", inp("goal", e.goal, { placeholder: "3, all or half", style: "width:8em" })),
+      sq ? row("Team square", (f.team = h("input", { type: "checkbox", checked: e.team }))) : row("Unit", inp("unit", e.unit, { maxlength: 20, style: "width:10em" })),
+      !sq ? row("Season", h("span", { class: "row" }, inp("sfrom", e.season?.from, { placeholder: "10-26", style: "width:6em" }), "to", inp("sto", e.season?.to, { placeholder: "11-01", style: "width:6em" }))) : null,
+      row("Rule", sel("type", Object.fromEntries((sq ? BINGO_SQUARE_TYPES : BINGO_MIDDLE_TYPES).map((t) => [t, t])), e.type)),
+      row("Numbers", params),
+      row("On", en),
+    ].filter(Boolean);
+    const msg = h("span", { class: "muted small" });
+    const save = h("button", { onclick: async () => {
+      let p;
+      try { p = JSON.parse(params.value || "{}"); } catch { msg.textContent = "Numbers must be JSON, like {\"days\": 3}."; return; }
+      const entry = sq
+        ? { fam: f.fam.value, diff: f.diff.value, icon: f.icon.value.trim(), title: f.title.value, rule: f.rule.value, detail: f.detail.value, type: f.type.value, params: p, team: f.team.checked }
+        : { group: f.group.value, icon: f.icon.value.trim(), name: f.name.value, rule: f.rule.value, detail: f.detail.value, type: f.type.value, params: p,
+            goal: /^\d+$/.test(f.goal.value.trim()) ? Number(f.goal.value.trim()) : f.goal.value.trim(), unit: f.unit.value,
+            ...(f.group.value === "season" ? { season: { from: f.sfrom.value.trim(), to: f.sto.value.trim() } } : {}) };
+      const key = isNew ? id.value.trim() : item.id;
+      if (!/^[a-z0-9]{1,12}$/.test(key)) { msg.textContent = "The id is 1 to 12 of a-z and 0-9."; return; }
+      save.disabled = true;
+      try {
+        await api("PUT", `/admin/bingo/${key}`, { kind: item.kind, entry, enabled: en.checked });
+        status.className = "status"; status.textContent = "Saved. It shows from next week's card.";
+        await load();
+      } catch (err) { msg.textContent = errText(err.body?.error); save.disabled = false; }
+    } }, "Save");
+    return h("div", { class: "bedit" }, fields, h("div", { class: "row" }, save, h("button", { class: "quiet", onclick: () => draw() }, "Cancel"), msg));
+  }
+  function table(kind) {
+    const items = data.pool.filter((p) => p.kind === kind);
+    const order = kind === "square" ? Object.keys(BINGO_FAMS) : Object.keys(BINGO_GROUPS);
+    items.sort((a, b) => order.indexOf(kind === "square" ? a.entry.fam : a.entry.group) - order.indexOf(kind === "square" ? b.entry.fam : b.entry.group)
+      || (a.entry.diff || "").localeCompare(b.entry.diff || "") || a.id.localeCompare(b.id));
+    const list = h("div", { class: "blist" });
+    list.append(...items.map((item) => {
+      const e = item.entry;
+      const holder = h("div", { class: `bitem${item.enabled ? "" : " off"}` });
+      const line = h("div", { class: "bline" },
+        h("span", { class: "bic" }, e.icon),
+        h("div", {}, h("b", {}, kind === "square" ? e.title : e.name), h("small", { class: "muted" }, ` ${e.rule}`),
+          h("div", { class: "muted small" }, [kind === "square" ? `${BINGO_FAMS[e.fam]} · ${BINGO_DIFF[e.diff]}${e.team ? " · can be a team square" : ""}`
+            : `${BINGO_GROUPS[e.group]} · goal ${e.goal}${e.season ? ` · ${e.season.from} to ${e.season.to}` : ""}`,
+            `${e.type} ${JSON.stringify(e.params)}`, rateOf(item.id), item.enabled ? null : "off"].filter(Boolean).join(" · "))),
+        h("button", { class: "linkish", onclick: () => holder.replaceChildren(editor(item, false)) }, "Edit"));
+      holder.append(line);
+      return holder;
+    }));
+    return list;
+  }
+  function draw() {
+    const cur = data.cards.find((c) => c.wk === data.week);
+    const st = cur?.stats;
+    const cardView = cur ? h("div", { class: "bcard" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((cell) => {
+      if (cell === 4) return h("div", { class: "bcell mid" }, h("span", {}, cur.card.middle.icon), h("b", {}, cur.card.middle.name),
+        h("small", {}, st && st.squads ? `${Math.round((100 * st.middle) / st.squads)}% unlocked` : cur.card.middle.rule));
+      const i = [0, 1, 2, 3, null, 4, 5, 6, 7][cell], q = cur.card.squares[i];
+      return h("div", { class: "bcell" }, h("span", {}, q.icon), h("b", {}, q.title),
+        h("small", {}, [q.need !== 1 ? (q.need === "half" ? "half of you" : `${q.need} of you`) : BINGO_DIFF[q.diff],
+          st && st.squads ? `${Math.round((100 * st.squares[i].squads) / st.squads)}% done` : null].filter(Boolean).join(" · ")));
+    })) : h("p", { class: "muted small" }, "No card yet this week.");
+    const add = (kind) => h("button", { class: "quiet", onclick: (ev) => {
+      const blank = kind === "square"
+        ? { kind, enabled: true, entry: { fam: "wild", diff: "m", icon: "✨", title: "", rule: "", detail: "", type: "days", params: { days: 3 }, team: true } }
+        : { kind, enabled: true, entry: { group: "crew", icon: "✨", name: "", rule: "", detail: "", type: "people", params: { key: "d" }, goal: 3, unit: "" } };
+      ev.target.replaceWith(editor(blank, true));
+    } }, kind === "square" ? "Add a square" : "Add a middle");
+    box.replaceChildren(
+      h("h4", {}, "Squad bingo", h("span", { class: "muted" }, st ? `${data.week} · ${st.players} playing in ${st.squads} squads · ${st.lines} with a line · ${st.whole} whole cards` : data.week)),
+      cardView,
+      h("small", { class: "muted" }, "Every squad plays this card. The counts are kept daily. Tune a square whose rate is far from its difficulty: easy ones should be done in most squads, hard ones in a few."),
+      status,
+      h("h3", {}, "Squares"), table("square"), add("square"),
+      h("h3", {}, "The middle"), table("middle"), add("middle"),
+      h("small", { class: "muted" }, "A card already drawn keeps what it was drawn with; an edit or a new entry shows from next week. A season's middle comes first in any week its dates touch."));
+  }
+  async function load() {
+    try { data = await api("GET", "/admin/bingo"); draw(); } catch { box.replaceChildren(h("h4", {}, "Squad bingo"), h("p", { class: "muted small" }, "Couldn't load the pool.")); }
+  }
+  load();
+  return box;
+}
+
 async function adminPage() {
   let range = 90;
   const [s, nl, out] = await Promise.all([api("GET", "/admin/stats"), api("GET", "/admin/notices?all=1"), api("GET", "/admin/library").catch(() => ({ plans: [] }))]);
@@ -1519,6 +1642,7 @@ async function adminPage() {
     tilesBox,
     h("div", { class: "agrid3" }, codes, cutover, bridge),
     h("div", { class: "agrid2" }, library, notices),
+    bingoPanel(),
     versions);
   $app().classList.add("wide");
   await drawTiles();

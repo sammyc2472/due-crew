@@ -109,7 +109,8 @@ for period, wrap in (("today", WRAP), ("week", None), ("decks", None)):
     cfg = {"period": period}
     html_out = board.render(DATA, cfg, now_ts - 180, wrap=wrap, deltas=DELTAS,
                             exam_eve=EVE if period == "today" else None,
-                            rules_stale=(period == "today"))
+                            rules_stale=(period == "today"),
+                            streak={"days": 41, "since": L[6], "open": period == "today"})
     sections.append(f'<h3>{period}</h3>{html_out}')
 SROWS = [
     {"user_id": "u1", "name": "StepQueen", "day": L[0], "reviews": 1412,
@@ -198,6 +199,43 @@ sections.append("<script>" + board.keep_me_in_view_js().replace(
     .replace("if (want > 0) { box.scrollTop = want; }\n    })();", "if (want > 0) { box.scrollTop = want; }\n    }); })();") + "</script>")
 sections.append("<h3>squads (founder view)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60, squad_view=SQUAD_VIEW))
+# 3.6: squad bingo, as the Worker draws it (seeded squares from migration 0011)
+from due_crew import bingo as _B
+_SQ = [
+    ("early", "m", "🌅", "Early bird", "Before 8am, on 2 days", "window", {"from": 0, "to": 8, "days": 2}, 2),
+    ("often", "m", "🧦", "Weekend", "Saturday and Sunday", "days", {"days": 2, "dow": [5, 6]}, 1),
+    ("clean", "e", "🧹", "Due zero", "A day with nothing left due", "zero", {"days": 1}, 1),
+    ("wild", "h", "🕰️", "Same time", "Start in the same hour, 4 days running", "samehour", {"run": 4}, 1),
+    ("fresh", "m", "🌿", "New done", "All your new cards, 3 days", "newdone", {"days": 3}, 2),
+    ("focus", "e", "⏱️", "Twenty minutes", "20 minutes, no break", "focus", {"minutes": 20, "gap": 5}, "half"),
+    ("volume", "h", "🚀", "Best in a month", "Your biggest day in 30", "best", {"days": 30}, 1),
+    ("spread", "e", "🔁", "Two sittings", "2 sessions in a day, an hour apart", "sittings", {"n": 2, "gap": 60}, 3),
+]
+_WK = _B.week_key(L[0])
+_CARD = _B.clean_card({"wk": _WK, "squares": [
+    {"id": f"s{i}", "fam": f, "diff": d, "icon": ic, "title": t, "rule": r, "detail": r + ".", "type": ty, "params": pa, "need": n}
+    for i, (f, d, ic, t, r, ty, pa, n) in enumerate(_SQ)],
+    "middle": {"id": "room", "group": "crew", "icon": "🏕️", "name": "Campfire", "rule": "3 of you in a study room",
+               "detail": "Three of you join a study room this week.", "type": "people", "params": {"key": "rm"}, "goal": 3, "unit": "joined"}})
+_MON = _B.week_labels(L[0])[0]
+_ROWS = [dict(r, user_id=u, emoji=e, day=L[0], joined="2026-01-01", play={"wk": _B.wk_num(_WK), "s": s_, "rm": rm})
+         for (u, e, s_, rm), r in zip([("sam", "😺", 0b10110101, 1), ("dre", "🦊", 0b10100111, 1), ("maya", "🐸", 0b00100001, 0),
+                                        ("theo", "🐧", 0b00000001, 0), ("noah", "🦄", 0, 0)], [{}] * 5)]
+def _bv(rows, new=False, show_up=False):
+    ev = _B.evaluate(_CARD, rows)
+    return {"card": _CARD, "ev": ev, "me": "sam", "new": new, "show_up": show_up, "today": L[0],
+            "progress": [(True, "Done"), (False, "1 of 2 days"), (True, "Done"), (False, "2 of 4 days running"),
+                         (False, "1 of 3 days"), (True, "Done"), (False, "38 to go today (your best is 212)"), (True, "Done")],
+            "names": {"sam": ("Sammy", "😺"), "dre": ("Dre", "🦊"), "maya": ("Maya", "🐸"), "theo": ("Theo", "🐧"), "noah": ("Noah", "🦄")},
+            "squad": "BUSM 2028", "squad_id": "sq1", "closest": _B.closest(_CARD, ev)}
+_LINE = [dict(r, play=dict(r["play"], rm=1)) for r in _ROWS]
+sections.append("<h3>3.6: squad bingo on the Squads tab (Monday)</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60, squad_view=dict(SQUAD_VIEW, bingo=_bv(_ROWS, new=True))))
+sections.append("<h3>3.6: squad bingo on the Squads tab (midweek)</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60, squad_view=dict(SQUAD_VIEW, bingo=_bv(_ROWS))))
+sections.append("<h3>3.6: the whole card, midweek</h3>" + board.bingo_html(_bv(_ROWS), {}))
+sections.append("<h3>3.6: the whole card, the middle unlocked: BINGO</h3>" + board.bingo_html(_bv(_LINE), {}))
+sections.append("<h3>3.6: no card yet</h3>" + board.bingo_html(None, {}))
 sections.append("<h3>squads (none yet)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60,
     squad_view={"state": "none", "squads": [], "current": ""}))
@@ -247,7 +285,8 @@ def _framed(markup, dark):
 for accent in board.ACCENTS:
     frames = "".join(
         _framed(board.render(DATA, {"period": "today", "accent": accent, "theme": theme},
-                             now_ts - 60), theme == "dark")
+                             now_ts - 60, streak={"days": 41, "since": L[6], "open": theme == "dark"}),
+                theme == "dark")
         for theme in ("light", "dark"))
     sections.append(f"<h3>accent: {accent}</h3><div style='display:flex;flex-wrap:wrap'>{frames}</div>")
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))

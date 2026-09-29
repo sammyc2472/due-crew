@@ -4,6 +4,7 @@
 
 import type { Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
+import * as B from "./bingo";
 import * as C from "./cards";
 import * as N from "./notices";
 import * as P from "./plans";
@@ -60,7 +61,7 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** GET /board[?decks=1][&keep=1][&feed=1]: me, the people I added (with their week
+/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1]: me, the people I added (with their week
  *  when they added me back, name and emoji only when they haven't yet), my
  *  cheers (delivered once: they go as they're read), my knocks. One
  *  request. keep=1 (3.2, the site's home) shows the cheers waiting and
@@ -113,6 +114,11 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
   if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
+  // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad
+  if (withDecks && !keep) {
+    const card = await B.forMember(env, s.uid, params.get("wk"));
+    if (card) out.bingo = card;
+  }
   // 3.5, H: only the site's home asks (the add-on never sends feed=1)
   if (keep && params.get("feed") === "1") out.feed = await feed(env, s.uid);
   await touchSeen(env, s.uid);
@@ -258,12 +264,12 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
       squadAt.push(writes.length);
       writes.push(db.prepare(
         `UPDATE members SET name = COALESCE(?3, name), day = ?4, reviews = ?5, study_time_ms = ?6,
-           accuracy = ?7, streak = ?8, week = ?9, emoji = ?10, new_cards = ?11, updated_at = ?12
+           accuracy = ?7, streak = ?8, week = ?9, emoji = ?10, new_cards = ?11, updated_at = ?12, play = ?13
          WHERE squad = ?1 AND uid = ?2 AND NOT (name IS COALESCE(?3, name) AND day IS ?4
            AND reviews IS ?5 AND study_time_ms IS ?6 AND accuracy IS ?7 AND streak IS ?8
-           AND week IS ?9 AND emoji IS ?10 AND new_cards IS ?11)`,
+           AND week IS ?9 AND emoji IS ?10 AND new_cards IS ?11 AND play IS ?13)`,
       ).bind(id, s.uid, r.name, r.day, r.reviews, r.study_time_ms, r.accuracy, r.streak, r.week,
-             r.emoji, r.new_cards, now));
+             r.emoji, r.new_cards, now, r.play));
     }
   }
   if (planProgress) {

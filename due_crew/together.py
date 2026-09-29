@@ -223,6 +223,8 @@ def toggle_live():
     else:
         until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=LIVE_MINUTES)
         cl.session["live_until"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+        from .bingo_flow import bump
+        bump("lv")  # 3.6
         msg = "Your crew sees you're studying, for the next hour."
     cl._save_session()
     for e in _state["entries"] or []:

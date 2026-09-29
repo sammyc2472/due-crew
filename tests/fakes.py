@@ -39,6 +39,13 @@ class FakeSched:
         self.day_cutoff = day_cutoff
         self.db = db
         self.col = None
+        self.due = {}  # 3.6: {deck id: (reviews + learning due, new)} for deck_due_tree
+
+    def deck_due_tree(self):
+        """Anki's tree, flat under a root: each deck with what's due in it."""
+        node = lambda did, rl, new, kids=(): types.SimpleNamespace(
+            deck_id=did, review_count=rl, learn_count=0, new_count=new, children=list(kids))
+        return node(0, 0, 0, [node(did, rl, new) for did, (rl, new) in self.due.items()])
 
     def unsuspend_cards(self, ids):
         """Anki's: a suspended card goes back to the queue its type says
@@ -215,6 +222,7 @@ class FakeWorker:
         self.squads = {}     # id -> {name, founder, open}
         self.members = {}    # (sid, uid) -> row
         self.bans = set()    # (sid, uid)
+        self.bingo_cards = {}  # 3.6: wk -> the card the Worker drew and kept (tests put them in)
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
@@ -306,7 +314,7 @@ class FakeWorker:
             return self._auth(method, parts[1:], auth, body or {})
         me = self._me(auth)
         if m == ("GET", "board"):
-            return 200, self._board(me, query.get("decks") == "1")
+            return 200, self._board(me, query.get("decks") == "1", query.get("wk"))
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -407,7 +415,7 @@ class FakeWorker:
         w = self.weeks.get(uid)
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
-    def _board(self, me, with_decks):
+    def _board(self, me, with_decks, wk=None):
         u = self.users[me]
         week, at = self._week_of(me)
         friends = []
@@ -439,6 +447,9 @@ class FakeWorker:
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
+            # 3.6: the week's bingo card, to anyone in a squad
+            if wk in self.bingo_cards and any(u == me for (_s, u) in self.members):
+                out["bingo"] = self.bingo_cards[wk]
         return out
 
     def _notice_for(self, version):
@@ -491,7 +502,21 @@ class FakeWorker:
             out["recap"] = {"name": r["name"][:60], "n": r["n"], "day": r["day"]}
         return out
 
-    ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards"}
+    ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards", "play"}
+
+    @staticmethod
+    def _clean_play(v):
+        """3.6 (validate.ts: play): short ids, whole numbers, wk as yyyyww."""
+        if v is None:
+            return None
+        if not isinstance(v, dict) or len(v) > 24:
+            raise Bad(400, "bad_play")
+        for k, x in v.items():
+            if not re.fullmatch(r"[a-z0-9]{1,8}", k) or not _is_int(x, 0, 2 ** 31 - 1):
+                raise Bad(400, "bad_play")
+        if not _is_int(v.get("wk"), 200001, 299953):
+            raise Bad(400, "bad_play")
+        return dict(v)
 
     def _clean_row(self, r):
         if not isinstance(r, dict) or not set(r) <= self.ROW_KEYS:
@@ -507,7 +532,9 @@ class FakeWorker:
             raise Bad(400, "bad_row")
         if r.get("emoji") is not None and (not isinstance(r["emoji"], str) or _u16(r["emoji"]) > 16):
             raise Bad(400, "bad_row")
-        return {k: r.get(k) for k in self.ROW_KEYS - {"name"}}, r.get("name")
+        out = {k: r.get(k) for k in self.ROW_KEYS - {"name"}}
+        out["play"] = self._clean_play(r.get("play"))
+        return out, r.get("name")
 
     def _sync(self, me, body):
         if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log"}:
@@ -841,7 +868,8 @@ class FakeWorker:
     def _join(self, sid, me):
         self.members[(sid, me)] = {"name": self.users[me]["name"] or "?", "joined": len(self.members),
                                    "day": None, "reviews": None, "studyTimeMs": None, "accuracy": None,
-                                   "streak": None, "week": None, "emoji": None, "newCards": None}
+                                   "streak": None, "week": None, "emoji": None, "newCards": None, "play": None,
+                                   "joined_day": datetime.date.today().isoformat()}
 
     def _info(self, sid, code=None):
         sq = self.squads[sid]
@@ -898,8 +926,12 @@ class FakeWorker:
             if (sid, me) not in self.members:
                 raise Bad(403, "not_member")
             rows = sorted(((u, r) for (s2, u), r in self.members.items() if s2 == sid), key=lambda x: x[1]["joined"])
-            return 200, dict(self._info(sid), banned=sorted(u for s2, u in self.bans if s2 == sid) if sq["founder"] == me else [],
-                             rows=[dict({k: v for k, v in r.items() if k != "joined"}, uid=u) for u, r in rows])
+            out = dict(self._info(sid), banned=sorted(u for s2, u in self.bans if s2 == sid) if sq["founder"] == me else [],
+                       rows=[dict({k: v for k, v in r.items() if k not in ("joined", "joined_day")}, uid=u, joined=r["joined_day"])
+                             for u, r in rows])
+            if query.get("wk") in self.bingo_cards:  # 3.6: the week's card with ?wk=
+                out["bingo"] = self.bingo_cards[query["wk"]]
+            return 200, out
         if method == "PUT" and rest[1:] == ["row"]:
             row, name = self._clean_row(body)
             if (sid, me) not in self.members:

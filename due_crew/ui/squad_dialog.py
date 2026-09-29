@@ -2,8 +2,8 @@
 and lands on the main thread; the dialog never blocks Anki."""
 
 from aqt.qt import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, Qt,
+    QDialog, QDialogButtonBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QVBoxLayout, QWidget, Qt,
 )
 
 from ..backend.shapes import SQUAD_CODE_LEN, SQUAD_NAME_MAX, squad_code_from
@@ -35,51 +35,61 @@ class SquadDialog(QDialog):
         self.peek = None
         attach_alive(self)
         self.setWindowTitle("Squads")
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(400)
         lay = QVBoxLayout(self)
+        lay.setSpacing(8)
+        # one grid, so both fields and both buttons line up (3.5.0)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.setColumnStretch(0, 1)
 
-        lay.addWidget(QLabel("<b>Join</b>"))
-        row = QHBoxLayout()
+        grid.addWidget(_head("Join a squad"), 0, 0, 1, 2)
         self.code_edit = QLineEdit()
-        self.code_edit.setPlaceholderText("Invite code, or paste the invite")
+        self.code_edit.setPlaceholderText("Its code, or paste the invite")
         self.code_edit.textChanged.connect(self._code_changed)
         self.code_edit.returnPressed.connect(self._look_up)
         self.look_btn = QPushButton("Look Up")
         self.look_btn.clicked.connect(self._look_up)
-        row.addWidget(self.code_edit)
-        row.addWidget(self.look_btn)
-        lay.addLayout(row)
+        grid.addWidget(self.code_edit, 1, 0)
+        grid.addWidget(self.look_btn, 1, 1)
+        # what the code is, with Join beside it; nothing at all until then
+        self.found = QWidget()
+        found = QHBoxLayout(self.found)
+        found.setContentsMargins(0, 0, 0, 0)
         self.peek_label = QLabel("")
         self.peek_label.setWordWrap(True)
-        lay.addWidget(self.peek_label)
-        jrow = QHBoxLayout()
-        jrow.addStretch()
+        found.addWidget(self.peek_label, 1)
         self.join_btn = QPushButton("Join")
-        self.join_btn.setEnabled(False)
+        self.join_btn.setVisible(False)
         self.join_btn.clicked.connect(self._join)
-        jrow.addWidget(self.join_btn)
-        lay.addLayout(jrow)
+        found.addWidget(self.join_btn)
+        self.found.setVisible(False)
+        grid.addWidget(self.found, 2, 0, 1, 2)
 
-        lay.addSpacing(10)
-        lay.addWidget(QLabel("<b>Create</b>"))
-        row2 = QHBoxLayout()
+        grid.addWidget(_head("Start a squad"), 3, 0, 1, 2)
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Squad name")
+        self.name_edit.setPlaceholderText("Its name")
         self.name_edit.setMaxLength(SQUAD_NAME_MAX)
         self.name_edit.returnPressed.connect(self._create)
         self.create_btn = QPushButton("Create")
         self.create_btn.clicked.connect(self._create)
-        row2.addWidget(self.name_edit)
-        row2.addWidget(self.create_btn)
-        lay.addLayout(row2)
+        grid.addWidget(self.name_edit, 4, 0)
+        grid.addWidget(self.create_btn, 4, 1)
         self.made_label = QLabel("")
         self.made_label.setWordWrap(True)
         self.made_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse)
-        lay.addWidget(self.made_label)
+        self.made_label.setVisible(False)
+        grid.addWidget(self.made_label, 5, 0, 1, 2)
+        width = max(self.look_btn.sizeHint().width(), self.create_btn.sizeHint().width())
+        for b in (self.look_btn, self.create_btn):
+            b.setMinimumWidth(width)
+        lay.addLayout(grid)
 
+        lay.addSpacing(6)
         hint = QLabel(note or shared_note({}))
-        hint.setStyleSheet("font-size: 11px;")
+        hint.setStyleSheet("font-size: 11px; color: palette(placeholder-text);")
         hint.setWordWrap(True)
         lay.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -92,17 +102,25 @@ class SquadDialog(QDialog):
     # ---- join ----
     def _code_changed(self, _text=""):
         self.peek = None
-        self.join_btn.setEnabled(False)
+        self.join_btn.setVisible(False)
+        self.found.setVisible(False)
         self.peek_label.setText("")
+
+    def _say(self, text, join=False):
+        """The line under the code: what it is, or what went wrong."""
+        self.peek_label.setText(text)
+        self.join_btn.setVisible(join)
+        self.join_btn.setEnabled(join)
+        self.found.setVisible(bool(text))
 
     def _look_up(self):
         # a pasted invite works too: the code is taken from after "code"
         code = squad_code_from(self.code_edit.text())
         if len(code) != SQUAD_CODE_LEN:
-            self.peek_label.setText(f"Codes are {SQUAD_CODE_LEN} letters and numbers.")
+            self._say(f"Codes are {SQUAD_CODE_LEN} letters and numbers.")
             return
         self.look_btn.setEnabled(False)
-        self.peek_label.setText("Looking up…")
+        self._say("Looking up…")
         cl = self.client
 
         def job():
@@ -121,16 +139,16 @@ class SquadDialog(QDialog):
     def _peeked(self, info, status, founder):
         self.look_btn.setEnabled(True)
         if info is None:
-            self.peek_label.setText("No squad with that code." if status == 404
-                                    else "Couldn't look it up. Check your connection.")
+            self._say("No squad with that code." if status == 404
+                      else "Couldn't look it up. Check your connection.")
             return
         self.peek = info
         bits = [f"<b>{_esc(info['name'])}</b>"]
         if founder:
             bits.append(f"founded by {_esc(founder)}")
-        bits.append("open" if info["open"] else "locked")
-        self.peek_label.setText(" · ".join(bits))
-        self.join_btn.setEnabled(bool(info["open"]))
+        if not info["open"]:
+            bits.append("locked")
+        self._say(" · ".join(bits), join=bool(info["open"]))
 
     def _join(self):
         info = self.peek
@@ -152,15 +170,18 @@ class SquadDialog(QDialog):
             return
         if not self._alive:
             return
-        self.join_btn.setEnabled(True)
-        self.peek_label.setText("Locked." if status == 403
-                                else "Couldn't join. Check your connection.")
+        self._say("Locked." if status == 403 else "Couldn't join. Check your connection.",
+                  join=status != 403)
 
     # ---- create ----
+    def _made(self, text):
+        self.made_label.setText(text)
+        self.made_label.setVisible(bool(text))
+
     def _create(self):
         name = " ".join(self.name_edit.text().split())[:SQUAD_NAME_MAX]
         if not name:
-            self.made_label.setText("Give it a name.")
+            self._made("Give it a name.")
             return
         self.create_btn.setEnabled(False)
         cl = self.client
@@ -174,11 +195,16 @@ class SquadDialog(QDialog):
             return
         self.create_btn.setEnabled(True)
         if not squad:
-            self.made_label.setText("Couldn't create it. Check your connection.")
+            self._made("Couldn't create it. Check your connection.")
             return
-        self.made_label.setText(f"<b>{_esc(squad['name'])}</b> · code "
-                                f"<b>{squad['code']}</b> · invite copied")
+        self._made(f"<b>{_esc(squad['name'])}</b> · code <b>{squad['code']}</b> · invite copied")
         self.name_edit.setText("")
+
+
+def _head(text):
+    label = QLabel(f"<b>{text}</b>")
+    label.setStyleSheet("margin-top: 4px;")
+    return label
 
 
 def _esc(text):

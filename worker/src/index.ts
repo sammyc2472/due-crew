@@ -12,6 +12,7 @@ import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as People from "./people";
 import * as Q from "./squads";
+import * as Bingo from "./bingo";
 import * as S from "./social";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
@@ -76,6 +77,9 @@ authed("GET", r("/admin/people"), People.search);
 authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
 authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
 authed("DELETE", r(`/admin/people/${ID}`), People.remove);
+// 3.6: squad bingo's pool, the admin's to edit
+authed("GET", r("/admin/bingo"), (_q, s, env) => Bingo.adminGet(s, env));
+authed("PUT", r("/admin/bingo/([a-z0-9]{1,12})"), Bingo.adminPut);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
 authed("POST", r("/admin/notices"), N.post);
@@ -117,7 +121,7 @@ authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
 authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
 authed("POST", r("/squads/restore"), Q.restore);
-authed("GET", r(`/squads/${ID}`), (_q, s, env, p) => Q.fetchSquad(s, env, p));
+authed("GET", r(`/squads/${ID}`), Q.fetchSquad);
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
 authed("POST", r(`/squads/${ID}/join`), Q.join);
 authed("PUT", r(`/squads/${ID}/row`), Q.putRow);
@@ -161,7 +165,8 @@ export default {
       }));
       return;
     }
-    ctx.waitUntil(housekeeping(env).then(() => Ad.snapshot(env)));  // 3.5, X: the day's counts, kept
+    // 3.5, X: the day's counts, kept; 3.6: bingo's counts per square
+    ctx.waitUntil(housekeeping(env).then(() => Ad.snapshot(env)).then(() => Bingo.keepStats(env)));
   },
 
   async fetch(req: Request, env: Env): Promise<Response> {

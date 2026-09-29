@@ -82,6 +82,9 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
     cl = client()
 
     def done(ok):
+        if ok is True and not luck:
+            from .bingo_flow import bump
+            bump("tp" if guid else "ch")  # 3.6: the middle counts cheers and tips
         if then is not None:
             then(ok is True)
         if ok is True and luck:
