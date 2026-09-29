@@ -392,18 +392,29 @@ def today_text(reviews, new=None):
     return out + (" (all new)" if new == reviews else f" ({new:,} new)")
 
 
+# where a row without the new-cards line would take one; _even_rows fills it
+# when another row in the table has a line, so every row is the same height
+_NW_ROOM = "<!--nw-->"
+
+
+def _even_rows(body):
+    if 'class="nw"' in body:
+        return body.replace(_NW_ROOM, '<small class="nw">&nbsp;</small>')
+    return body.replace(_NW_ROOM, "")
+
+
 def _reviews_cell(reviews, new):
     """The Reviews number, and under it how many were new cards (2.13): "all
     new" when every one was, nothing when none were or they didn't say."""
     if reviews is None:
-        return "&mdash;"
+        return "&mdash;" + _NW_ROOM
     out = format(int(reviews), ",")
     try:
         new = int(new)
     except (TypeError, ValueError):
-        return out
+        return out + _NW_ROOM
     if new <= 0 or reviews <= 0:
-        return out
+        return out + _NW_ROOM
     new = min(new, int(reviews))
     line = "all new" if new == reviews else f"{new:,} new"
     return (f'<span title="{new:,} of {int(reviews):,} were new cards">{out}'
@@ -815,10 +826,10 @@ def _row_html(row, rank, cfg, period="today"):
     if row["paused"]:
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
-        cells = '<td class="n">&mdash;</td>' * 4
+        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
-        cells = '<td class="n">&mdash;</td>' * 4
+        cells = f'<td class="n">&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
         # T2: when they last synced is a quiet row's whole story; the others
         # show it on their card
         txt, _tone = _ago(row["last_updated"])
@@ -896,6 +907,7 @@ def _table_html(data, cfg, period):
         body += _row_html(row, rank, cfg, period)
     for row in dormant:
         body += _row_html(row, "&mdash;", cfg, period)
+    body = _even_rows(body)
     solo = ""
     if len(data["entries"]) == 1:
         # 3.4 review, C5: until a friend adds me back, the invite is the board
@@ -1530,6 +1542,7 @@ def _squads_html(view, cfg):
                  f'<td class="n">{_cell(r.get("retention"), lambda v: f"{v:.1f}%")}</td>'
                  f'<td class="n">{_cell(r.get("streak"))}</td>'
                  f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+    body = _even_rows(body)
     # the squad's own line; Share today sits in the footer, as on Today
     acts = [f'<a href="#" onclick="{_pycmd("squadinvite")}">Copy invite</a>']
     if view.get("founder_me"):
@@ -1604,7 +1617,8 @@ BINGO_CSS = """
 
 
 def _bg_need(sq, need):
-    return "half of you" if sq.get("need") == "half" else f"{need} of you"
+    from .bingo import SHARE_WORDS
+    return SHARE_WORDS.get(sq.get("need"), f"{need} of you")
 
 
 def bingo_card_html(bv):
@@ -1632,9 +1646,8 @@ def bingo_card_html(bv):
             state = "BINGO" if ev["lines"] == 1 else f'{ev["lines"]} lines'
         else:
             left = len(bv.get("closest") or [])
-            state = "one away from a line" if left == 1 else f"{left} away from a line"
-        middle = "unlocked" if mid["done"] else f'{mid["have"]} of {mid["goal"]}'
-        line = f'{stamps} of 9 &middot; {state} &middot; {e(m["icon"])} middle {middle}'
+            state = "one away from bingo" if left == 1 else f"{left} away from bingo"
+        line = f"{stamps} of 9 &middot; {state}"
     return (f'<div class="bg-card"><span class="bg-mini">{cells}</span>'
             f'<span class="bg-t"><b>Squad bingo</b><span>{line}</span></span>'
             f'<a href="#" onclick="{_pycmd("bingo")}">Open the card</a></div>')
@@ -1686,7 +1699,7 @@ def bingo_html(bv, cfg, loading=False):
         known = sq.get("type") in _BINGO_TYPES
         who = st["who"]
         team = ""
-        if st["need"] > 1 or sq.get("need") == "half":
+        if st["need"] > 1 or sq.get("need") in ("half", "third", "quarter"):
             so_far = " &#10003;" if st["done"] else f' &middot; {len(who)}/{st["need"]}'
             team = (f'<span class="tm{" ok" if st["done"] else ""}">&#128101; {_bg_need(sq, st["need"])}'
                     f'{so_far}</span>')
@@ -1700,7 +1713,7 @@ def bingo_html(bv, cfg, loading=False):
                     f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
                     f'{rule}{team}{marks}</button>')
         whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who)
-        if st["need"] > 1 or sq.get("need") == "half":
+        if st["need"] > 1 or sq.get("need") in ("half", "third", "quarter"):
             state = (f'A team square: {_bg_need(sq, st["need"])} have to pass the mark this week. '
                      + (f"Done by {whose}." if st["done"] else f"So far: {whose}." if who else "Nobody yet."))
         else:
@@ -1727,7 +1740,7 @@ def bingo_html(bv, cfg, loading=False):
         foot = (f'<span class="bg-shout">BINGO!</span>'
                 f'<span>{"A line" if ev["lines"] == 1 else str(ev["lines"]) + " lines"} this week.</span>')
     else:
-        foot = f'<span class="bg-q">Closest line needs: {e(", ".join(bv.get("closest") or []))}</span>'
+        foot = f'<span class="bg-q">For bingo you need: {e(", ".join(bv.get("closest") or []))}</span>'
     players = {u for q in ev["squares"] for u in q["who"]}
     faces = "".join(e(names.get(u, ("?", ""))[1]) for u in sorted(players))
     return (head
@@ -1737,6 +1750,8 @@ def bingo_html(bv, cfg, loading=False):
             + f'<div class="bg-grid">{squares}</div>'
             + f'<div class="bg-row">{foot}</div>'
             + f'<div class="bg-row bg-q">{len(players)} of {ev["active"]} of you have stamped <span>{faces}</span></div>'
+            + (f'<div class="bg-row bg-q">{ev["older"]} of you {"is" if ev["older"] == 1 else "are"} on an older Due Crew '
+               f'and can&rsquo;t play yet. They count once they update.</div>' if ev.get("older") else "")
             + f'<div class="bg-info"><div data-i="" ><span class="k">Click a square: exactly what counts, how close you are, and who stamped it.</span></div>{infos}</div>'
             + "</div>")
 

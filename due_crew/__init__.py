@@ -39,7 +39,7 @@ from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _ope
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
                      _fetch_squad, _kick_member, _leave_squad, _make_founder, _my_squads,
                      _open_squad_card, _select_squad, _send_knock, _share_squad, _squad_view,
-                     _toggle_squad_lock, _visible_knocks, open_squads)
+                     _toggle_squad_lock, _visible_knocks, heal_squads, open_squads)
 from .stats import gather_stats, gather_week, held_streak, week_days
 from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
@@ -386,6 +386,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
         tooltip(f"You're no longer in {html.escape(name or 'a squad')}.")
+    if data.get("squads") is not None:
+        heal_squads(data["squads"], gone)  # 3.6: squads the server has and this config lost
 
     _state.update(entries=data["entries"], labels=labels, tomorrow=tomorrow,
                   pending=data["pending"], ts=time.time(), sync_error=bool(failed),

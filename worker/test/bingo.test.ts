@@ -39,7 +39,7 @@ describe("weeks", () => {
 });
 
 describe("the draw", () => {
-  it("one square a family, 3 easy / 3 medium / 2 hard, four team squares, hard ones never", async () => {
+  it("one square a family, 3 easy / 3 medium / 2 hard; all team squares but one hard one, the easier the more of you", async () => {
     const { squares, middles } = await pool();
     for (let w = 1; w <= 52; w++) {
       const wk = `2026-W${String(w).padStart(2, "0")}`;
@@ -47,11 +47,12 @@ describe("the draw", () => {
       expect(c.squares).toHaveLength(8);
       expect(new Set(c.squares.map((s) => s.fam)).size).toBe(8);
       expect(c.squares.map((s) => s.diff).sort().join("")).toBe("eeehhmmm");
-      const needs = c.squares.map((s) => s.need);
-      expect(needs.filter((n) => n === "half")).toHaveLength(1);
-      expect(needs.filter((n) => n === 3)).toHaveLength(1);
-      expect(needs.filter((n) => n === 2)).toHaveLength(2);
-      expect(c.squares.filter((s) => s.diff === "h").every((s) => s.need === 1)).toBe(true);
+      const by = (d: string) => c.squares.filter((s) => s.diff === d);
+      expect(by("e").every((s) => s.need === (s.team ? "half" : 1))).toBe(true);
+      expect(by("m").every((s) => s.need === (s.team ? "third" : 1))).toBe(true);
+      expect(by("h").filter((s) => s.need === 1).length).toBeGreaterThanOrEqual(1);  // one stays one person's
+      expect(by("h").filter((s) => s.need === "quarter").length).toBeLessThanOrEqual(1);
+      expect(c.squares.filter((s) => s.need !== 1).length).toBeGreaterThanOrEqual(5);  // 11:11 and the like aren't team squares
       expect(c.squares.filter((s) => s.need !== 1).every((s) => s.team)).toBe(true);
       expect(B.draw(wk, squares, middles)).toEqual(c);  // the same week draws the same card
     }
@@ -123,15 +124,23 @@ describe("a squad's card, from its rows", () => {
   const row = (uid: string, play: Record<string, number> | null, extra: Partial<B.Row> = {}): B.Row =>
     ({ uid, emoji: null, day: "2026-09-29", joined: "2026-01-01", play: play && { wk: 202640, ...play }, ...extra });
 
-  it("team squares need that many of you; half is half the active, at most 6; never more than there are", () => {
+  it("a share is of the active, at least 2, never more than there are; a bigger squad needs more of you", () => {
+    expect([1, 2, 3, 8, 20, 40].map((n) => B.howMany("half", n))).toEqual([1, 2, 2, 4, 10, 20]);
+    expect([1, 2, 3, 8, 20, 40].map((n) => B.howMany("third", n))).toEqual([1, 2, 2, 3, 7, 14]);
+    expect([1, 2, 3, 8, 20, 40].map((n) => B.howMany("quarter", n))).toEqual([1, 2, 2, 2, 5, 10]);
+    expect([B.howMany("all", 7), B.howMany(3, 2), B.howMany(2, 9)]).toEqual([7, 2, 2]);
+  });
+
+  it("team squares need that many of you; never more than there are", () => {
     const c = card(["half", 3, 2, 1, 1, 1, 1, 1], {});
     const rows = [row("a", { s: 0b111 }), row("b", { s: 0b011 }), row("c", { s: 0b001 }), row("d", null),
                   row("gone", null, { day: "2026-08-01" })];
     const e = B.evaluate(c, rows);
-    expect(e.active).toBe(4);
+    expect(e.active).toBe(3);  // d studies on an add-on that can't play: not counted on
+    expect(e.older).toBe(1);
     expect(e.squares.slice(0, 3).map((s) => [s.who.length, s.need, s.done])).toEqual([[3, 2, true], [2, 3, false], [1, 2, false]]);
-    const big = Array.from({ length: 30 }, (_, i) => row(`p${i}`, { s: i < 6 ? 1 : 0 }));
-    expect(B.evaluate(c, big).squares[0]).toMatchObject({ need: 6, done: true });
+    const big = Array.from({ length: 30 }, (_, i) => row(`p${i}`, { s: i < 15 ? 1 : 0 }));
+    expect(B.evaluate(c, big).squares[0]).toMatchObject({ need: 15, done: true });  // half of 30: no cap
     const two = B.evaluate(c, [row("a", { s: 0b10 }), row("b", { s: 0b10 })]);
     expect(two.squares[1]).toMatchObject({ need: 2, done: true });  // "3 of you" in a squad of two
     // last week's play counts for nothing this week
@@ -165,7 +174,7 @@ describe("the admin's pool", () => {
     expect((await admin(dre, "/admin/bingo")).status).toBe(404);
     const got = (await admin(sam, "/admin/bingo")).body;
     expect(got.week).toBe(thisWeek());
-    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(26);
+    expect(got.pool.filter((p: any) => p.kind === "square")).toHaveLength(32);  // 26, and 0012's six streaks
     expect(got.cards[0].wk).toBe(thisWeek());
     const f20 = got.pool.find((p: any) => p.id === "f20");
     const put = (id: string, body: unknown) => admin(sam, `/admin/bingo/${id}`, "PUT", body);
@@ -207,9 +216,9 @@ describe("the admin's pool", () => {
     expect(stats).toMatchObject({ players: 2, squads: 1 });
     expect(stats.squares[0].people).toBe(2);
     expect(stats.squares[1].people).toBe(1);
-    // two active: a square is done by Sam alone when it needs one (1, or half of two);
-    // square 0 has both of them, so it's done whatever it needs
-    const done = card.squares.map((sq, i) => i === 0 || sq.need === 1 || sq.need === "half" ? 1 : 0);
+    // two active: a share of two is both of them, so Sam alone does only the
+    // squares that need one person; square 0 has both, so it's done whatever it needs
+    const done = card.squares.map((sq, i) => i === 0 || sq.need === 1 ? 1 : 0);
     expect(stats.squares.map((x: any) => x.squads)).toEqual(done);
     expect(JSON.stringify(stats)).not.toMatch(/sam|dre/);
   });

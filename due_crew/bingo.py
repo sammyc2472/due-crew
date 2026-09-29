@@ -35,7 +35,10 @@ def withheld(cfg):
 PLAY_KEYS = ("s", "d", "e8", "n10", "z", "ch", "rm", "lv", "aq", "tp", "dk", "st")
 CELLS = (0, 1, 2, 3, 5, 6, 7, 8)   # the squares' places around the middle (4)
 LINES = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6))
-HALF_CAP = 6
+# a team square's need, or a middle's goal, as a share of the squad (at
+# least 2 of you, never more than there are): worker/src/bingo.ts SHARES
+SHARES = {"half": 1 / 2, "third": 1 / 3, "quarter": 1 / 4}
+SHARE_WORDS = {"half": "half of you", "third": "a third of you", "quarter": "a quarter of you"}
 USUAL_DEFAULT = 50     # "your usual day" until there's a week of history
 USUAL_MIN_DAYS = 7
 _WK = re.compile(r"(\d{4})-W(\d{2})$")
@@ -83,7 +86,9 @@ def _clean_params(p):
     for k, v in list(p.items())[:8]:
         if not isinstance(k, str) or len(k) > 12:
             continue
-        if _int(v, 0, 100000):
+        if k == "row" and isinstance(v, bool):
+            out[k] = v
+        elif _int(v, 0, 100000):
             out[k] = v
         elif isinstance(v, float) and 0 < v <= 10:
             out[k] = v
@@ -118,14 +123,14 @@ def clean_card(v):
             "icon": _text(s.get("icon"), 8), "title": _text(s.get("title"), 28), "rule": _text(s.get("rule"), 48),
             "detail": _text(s.get("detail"), 160), "type": _text(s.get("type"), 16),
             "params": _clean_params(s.get("params")),
-            "need": need if need == "half" or _int(need, 1, 3) else 1,
+            "need": need if need in SHARES or _int(need, 1, 3) else 1,
         })
     goal = mid.get("goal")
     middle = {
         "id": _text(mid.get("id"), 12), "group": _text(mid.get("group"), 8), "icon": _text(mid.get("icon"), 8),
         "name": _text(mid.get("name"), 28), "rule": _text(mid.get("rule"), 48), "detail": _text(mid.get("detail"), 160),
         "type": _text(mid.get("type"), 16), "params": _clean_params(mid.get("params")),
-        "goal": goal if goal in ("all", "half") or _int(goal, 1, 500) else 1, "unit": _text(mid.get("unit"), 20),
+        "goal": goal if goal == "all" or goal in SHARES or _int(goal, 1, 500) else 1, "unit": _text(mid.get("unit"), 20),
     }
     return {"wk": v["wk"], "squares": out, "middle": middle}
 
@@ -196,6 +201,22 @@ def _longest_run(ts, gap):
     return best
 
 
+def _tally(f, test, p, unit="days"):
+    """(done, words) for "that many days" (row: that many days in a row,
+    this week so far). Days are Monday on; a gap day starts the run again."""
+    need = int(p.get("days") or 1)
+    days = _days(f, p.get("dow"))
+    if p.get("row"):
+        run = best = 0
+        for lb in days:
+            run = run + 1 if test(lb) else 0
+            best = max(best, run)
+        have = min(best, need)
+        done = best >= need
+        return done, "Done" if done else f"{have} of {need} days in a row"
+    return _count(sum(1 for lb in days if test(lb)), need, unit if need > 1 else unit.rstrip("s"))
+
+
 def progress(sq, f):
     """(done, words) for one square: how close I am. My own; never sent."""
     t, p = sq.get("type"), sq.get("params") or {}
@@ -205,9 +226,7 @@ def progress(sq, f):
             lo, hi = p["from"], p["to"]
             if hi == 24:
                 hi = 24 + roll        # after midnight, before the rollover: still that night
-            n = sum(1 for lb in _days(f, p.get("dow"))
-                    if any(lo <= _eff_hour(x, roll) < hi for x in times.get(lb, ())))
-            return _count(n, p["days"], "days" if p["days"] > 1 else "day")
+            return _tally(f, lambda lb: any(lo <= _eff_hour(x, roll) < hi for x in times.get(lb, ())), p)
         if t == "minute":
             hit = any(x.strftime("%H:%M") in p["hm"] for lb in _days(f) for x in times.get(lb, ()))
             return hit, "Done" if hit else "Not yet"
@@ -221,11 +240,13 @@ def progress(sq, f):
             def covered(lb):
                 hours = [_eff_hour(x, roll) for x in times.get(lb, ())]
                 return sum(1 for a, b in parts if any(a <= h < (b + roll if b == 24 else b) for h in hours))
-            n = sum(1 for lb in _days(f) if covered(lb) == len(parts))
-            if n >= p["days"]:
-                return True, "Done"
+            done, words = _tally(f, lambda lb: covered(lb) == len(parts), p)
+            if done or p.get("row"):
+                return done, words
             return False, f"Today: {covered(f['today'])} of {len(parts)} parts"
         if t == "focus":
+            if int(p.get("days") or 1) > 1:
+                return _tally(f, lambda lb: _longest_run(times.get(lb, ()), p["gap"]) >= p["minutes"], p)
             best = max([_longest_run(times.get(lb, ()), p["gap"]) for lb in _days(f)] or [0])
             done = best >= p["minutes"]
             return done, "Done" if done else f"Longest: {int(best)} of {p['minutes']} min"
@@ -256,13 +277,13 @@ def progress(sq, f):
             top = beat_month(f["today"])[1]
             return False, f"{top + 1 - daily.get(f['today'], 0)} to go today (your best is {top})"
         if t == "newdays":
-            return _count(sum(1 for lb in _days(f) if f["new"].get(lb, 0) > 0), p["days"], "days")
+            return _tally(f, lambda lb: f["new"].get(lb, 0) > 0, p)
         if t == "newdone":
-            return _count(sum(1 for lb in _days(f) if lb in f["newdone"]), p["days"], "days")
+            return _tally(f, lambda lb: lb in f["newdone"], p)
         if t == "days":
-            return _count(sum(1 for lb in _days(f, p.get("dow")) if daily.get(lb, 0) > 0), p["days"], "days")
+            return _tally(f, lambda lb: daily.get(lb, 0) > 0, p)
         if t == "zero":
-            return _count(sum(1 for lb in _days(f) if lb in f["zero"]), p["days"], "days")
+            return _tally(f, lambda lb: lb in f["zero"], p)
         if t == "samehour":
             run = best = 0
             last = None
@@ -312,10 +333,22 @@ def play(card, f, show_up=False, counts=None, hide=()):
 
 # ---- a squad's card, from its rows (worker/src/bingo.ts: evaluate) ----
 
+def how_many(need, count):
+    """How many of you a need or a goal means, with this many active:
+    worker/src/bingo.ts howMany. Numbers (cards before 3.6.1) as they are."""
+    if need == "all":
+        return count
+    if need in SHARES:
+        return 1 if count <= 1 else min(count, max(2, math.ceil(SHARES[need] * count)))
+    return min(int(need), count)
+
+
 def evaluate(card, rows):
     """rows: [{user_id, emoji, day, joined, play}]. Whose play counts this
-    week, who's active (played, or studied since last week's Monday), and
-    where each square and the middle stand."""
+    week, who's active, and where each square and the middle stand.
+    Active: an add-on that plays (an older one never sends play, and
+    can't be counted on), which played this week or studied since last
+    week's Monday. `older` is those studying on an add-on that can't."""
     n = wk_num(card["wk"])
     monday = _dt.date.fromisoformat(week_labels_for(card["wk"])[0])
     since = (monday - _dt.timedelta(days=7)).isoformat()
@@ -323,15 +356,12 @@ def evaluate(card, rows):
     def mine(r):
         p = r.get("play")
         return p if isinstance(p, dict) and p.get("wk") == n else None
-    active = [r for r in rows if mine(r) or (r.get("day") or "") >= since]
+    active = [r for r in rows if mine(r) or (r.get("play") and (r.get("day") or "") >= since)]
+    older = sum(1 for r in rows if not r.get("play") and (r.get("day") or "") >= since)
     count = max(1, len(active))
 
     def cap(need):
-        if need == "half":
-            return min(HALF_CAP, max(1, math.ceil(count / 2)))
-        if need == "all":
-            return count
-        return min(int(need), count)
+        return how_many(need, count)
     squares = []
     for i, sq in enumerate(card["squares"]):
         who = [r["user_id"] for r in rows if (int((mine(r) or {}).get("s") or 0) >> i) & 1]
@@ -364,7 +394,7 @@ def evaluate(card, rows):
     def cell(c):
         return middle["done"] if c == 4 else squares[CELLS.index(c)]["done"]
     lines = [l for l in LINES if all(cell(c) for c in l)]
-    return {"active": len(active), "players": sum(1 for r in rows if mine(r)), "squares": squares,
+    return {"active": len(active), "players": sum(1 for r in rows if mine(r)), "older": older, "squares": squares,
             "middle": middle, "lines": len(lines), "cells": sorted({c for l in lines for c in l})}
 
 

@@ -362,9 +362,9 @@ add-on.
 - 3.6 squad bingo (mock "Squad Bingo", migration 0011): every squad plays
   the same 3×3 card a week: eight squares about studying (one from each
   family: early, spread out, focus, bigger day, new cards, showing up,
-  keeping up, wildcard; 3 easy, 3 medium, 2 hard; four team squares, easy
-  ones for half of you or 3, medium ones for 2; hard ones are one
-  person's) around a middle the squad unlocks together (studying together
+  keeping up, wildcard; 3 easy, 3 medium, 2 hard; since 3.6.1 all team
+  squares but one hard one: easy ones half of you, medium a third, the
+  other hard one a quarter) around a middle the squad unlocks together (studying together
   or Due Crew weeks in turn, a season's first, free every sixth week). The
   only part about Due Crew is the middle. Every mark is passed on the way
   up, never stopped on; bigger days are against my own usual (30 days).
@@ -381,6 +381,19 @@ add-on.
   refresh and the squad fetch (`wk=`): no new requests. The Squads tab
   shows it small; Open puts it in the board's place (`bingo`,
   `bingoback`, `bingocopy`).
+  3.6.1 (migration 0012): a share (`half`, `third`, `quarter`) is at
+  least 2 and never more than there are of you (`how_many`), so a bigger
+  squad needs more of you; a middle's goal can be one too. `row: true` on
+  a rule wants its days in a row. Only members whose add-on plays count
+  (`active`); studying ones on an older add-on are named under the card
+  (`older`). My own row is the one this sync worked out, not the fetched
+  one.
+- 3.6.1 a reset config: a copy installed into another folder starts from
+  defaults while the session remembers the account save it saw. The config
+  now remembers it too (`account.SEEN_KEY`); one that doesn't takes the
+  account's settings. And `GET /board?decks=1` returns my squads
+  (membership): one missing from the config comes back (`heal_squads`,
+  no code on this computer), never one I left this session.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

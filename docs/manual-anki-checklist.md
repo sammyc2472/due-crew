@@ -418,6 +418,15 @@ In Anki (as a follower):
 - [ ] Complete a line (or let the admin's test squad): "BINGO!" on the
       card, a tooltip once, and Copy for the group chat pastes the 3×3
       emoji grid with no names.
+- [ ] 3.6.1: a squadmate on 3.5 is left out of "N of you" and named under
+      the card ("1 of you is on an older Due Crew…"). Seven squares ask for
+      more than one of you; in a squad of 6, a half is 3.
+- [ ] 3.6.1: install into a new add-on folder (config back to defaults,
+      same sign-in): the squads come back on the first refresh, and the
+      emoji and accent come back from the account.
+- [ ] 3.6.1: Squads › Join a squad: look up a code; Join sits under Look
+      Up at full size. Week tab with one row showing new cards: rows
+      evenly spaced.
 - [ ] /admin › Squad bingo: this week's card; edit a square's numbers
       (a wrong one says so), turn one off, add one; the counts appear the
       day after the cron runs.

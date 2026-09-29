@@ -18,15 +18,19 @@ const DIFFS = ["e", "m", "h"] as const;
 const GROUPS = ["study", "crew", "free", "season"] as const;
 /** What a member's play may carry; a middle's rule reads one of these. */
 export const PLAY_KEYS = ["s", "d", "e8", "n10", "z", "ch", "rm", "lv", "aq", "tp", "dk", "st"] as const;
-const HALF_CAP = 6;          // "half of you" in a big squad means at most 6
+/** A team square's need, or a middle's goal, as a share of the squad:
+ *  never fewer than 2 of you (1 in a squad of one), never more than there
+ *  are. A bigger squad needs more of you. */
+export const SHARES = { half: 1 / 2, third: 1 / 3, quarter: 1 / 4 } as const;
+type Share = keyof typeof SHARES;
 const CARDS_SHOWN = 6;       // the admin's page: this week's card and the last few
 const STATS_ROWS_MAX = 50000;
 
 type Obj = Record<string, unknown>;
 export type Square = { id: string; fam: string; diff: string; icon: string; title: string; rule: string; detail: string;
-  type: string; params: Obj; team: boolean; need?: number | "half" };
+  type: string; params: Obj; team: boolean; need?: number | Share };
 export type Middle = { id: string; group: string; icon: string; name: string; rule: string; detail: string;
-  type: string; params: Obj; goal: number | "all" | "half"; unit: string; season?: { from: string; to: string } };
+  type: string; params: Obj; goal: number | "all" | Share; unit: string; season?: { from: string; to: string } };
 export type Card = { wk: string; squares: Square[]; middle: Middle };
 
 // ---- the pool: what an entry may say ----
@@ -37,23 +41,25 @@ const hm = (x: unknown) => Array.isArray(x) && x.length >= 1 && x.length <= 4
   && x.every((t) => typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t));
 const parts = (x: unknown) => Array.isArray(x) && x.length >= 2 && x.length <= 3
   && x.every((p) => Array.isArray(p) && p.length === 2 && V.isInt(p[0], 0, 23) && V.isInt(p[1], 1, 24) && p[0] < p[1]);
+const bool = (x: unknown) => typeof x === "boolean";
 const ratio = (x: unknown) => typeof x === "number" && x >= 1.1 && x <= 3 && Math.round(x * 10) === x * 10;
 const playKey = (x: unknown) => (PLAY_KEYS as readonly unknown[]).includes(x) && x !== "s";
 
 /** Each rule type the add-on knows, with its numbers: [required, optional]. */
 const SQUARE_TYPES: Record<string, [Record<string, (x: unknown) => boolean>, Record<string, (x: unknown) => boolean>]> = {
-  window: [{ from: int(0, 23), to: int(1, 24), days: int(1, 7) }, { dow: dows }],
+  // row: the days must be in a row (a streak), not just that many this week
+  window: [{ from: int(0, 23), to: int(1, 24), days: int(1, 7) }, { dow: dows, row: bool }],
   minute: [{ hm }, {}],
   sittings: [{ n: int(2, 8), gap: int(15, 240) }, {}],
-  parts: [{ parts, days: int(1, 7) }, {}],
-  focus: [{ minutes: int(5, 180), gap: int(1, 30) }, {}],
+  parts: [{ parts, days: int(1, 7) }, { row: bool }],
+  focus: [{ minutes: int(5, 180), gap: int(1, 30) }, { days: int(1, 7), row: bool }],
   beat: [{ run: int(1, 7) }, {}],
   rel: [{ x: ratio }, {}],
   best: [{ days: int(7, 90) }, {}],
-  newdays: [{ days: int(1, 7) }, {}],
-  newdone: [{ days: int(1, 7) }, {}],
-  days: [{ days: int(1, 7) }, { dow: dows }],
-  zero: [{ days: int(1, 7) }, {}],
+  newdays: [{ days: int(1, 7) }, { row: bool }],
+  newdone: [{ days: int(1, 7) }, { row: bool }],
+  days: [{ days: int(1, 7) }, { dow: dows, row: bool }],
+  zero: [{ days: int(1, 7) }, { row: bool }],
   samehour: [{ run: int(2, 7) }, {}],
 };
 const MIDDLE_TYPES: typeof SQUARE_TYPES = {
@@ -101,7 +107,7 @@ export function entry(kind: unknown, v: unknown): Obj {
     const known = ["group", "icon", "name", "rule", "detail", "type", "params", "goal", "unit", "season"];
     for (const k of Object.keys(v)) if (!known.includes(k)) throw V.bad("entry");
     if (!(GROUPS as readonly unknown[]).includes(v.group)) throw V.bad("entry");
-    if (!(V.isInt(v.goal, 1, 500) || v.goal === "all" || v.goal === "half")) throw V.bad("goal");
+    if (!(V.isInt(v.goal, 1, 500) || v.goal === "all" || (typeof v.goal === "string" && v.goal in SHARES))) throw V.bad("goal");
     const out: Obj = { group: v.group, icon: icon(v.icon), name: words(v.name, 28, "name"), rule: words(v.rule, 48, "rule"),
                        detail: words(v.detail, 160, "detail"), type: v.type, params: checkParams(MIDDLE_TYPES, v.type, v.params),
                        goal: v.goal, unit: V.isStr(v.unit, 20) ? V.oneLine(v.unit, 20) : "" };
@@ -191,13 +197,13 @@ export function draw(wk: string, squares: Square[], middles: Middle[]): Card {
     picks.push({ ...from[Math.floor(r() * from.length)] });
   });
   const card = shuffle(picks, r);
-  // team squares: easy ones take the most people; hard ones stay one person's
-  const easy = shuffle(card.map((_, i) => i).filter((i) => card[i].diff === "e" && card[i].team), r);
-  const med = shuffle(card.map((_, i) => i).filter((i) => card[i].diff === "m" && card[i].team), r);
-  card.forEach((s) => { s.need = 1; });
-  if (easy[0] !== undefined) card[easy[0]].need = "half";
-  if (easy[1] !== undefined) card[easy[1]].need = 3;
-  med.slice(0, 2).forEach((i) => { card[i].need = 2; });
+  // team squares: all but one. The easier the square, the more of you it
+  // takes (easy: half, medium: a third); one hard square takes a quarter,
+  // and the other stays one person's
+  const hard = shuffle(card.map((_, i) => i).filter((i) => card[i].diff === "h" && card[i].team), r);
+  card.forEach((s, i) => {
+    s.need = !s.team ? 1 : s.diff === "e" ? "half" : s.diff === "m" ? "third" : hard[0] === i && card.filter((q) => q.diff === "h").length > 1 ? "quarter" : 1;
+  });
   // the middle: a season's first; every sixth week free; else study and crew weeks take turns
   const n = Number(wk.slice(6));
   const season = middles.filter((m) => m.group === "season" && m.season && inSeason(m.season, mondayOf(wk)));
@@ -245,18 +251,28 @@ export const CELLS = [0, 1, 2, 3, 5, 6, 7, 8];  // the squares' places around th
 export const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
 
 /** Whose play counts this week, who's active, and what each square and
- *  the middle stand at. Active: played this week, or studied since last
- *  week's Monday. "half" is half the active (at most 6); a need is never
- *  more than the active count, so a small squad can still fill its card. */
+ *  the middle stand at. Active: an add-on that plays (it has sent play;
+ *  an older one never does, and can't be counted on), which played this
+ *  week or studied since last week's Monday. A share (half, a third, a
+ *  quarter) is of the active, at least 2 (howMany); a need is never more
+ *  than the active count, so a small squad, or one still updating, can
+ *  fill its card. */
+/** How many of you a need or a goal means, with this many active. Numbers
+ *  from before 3.6.1's cards are taken as they are, never more than there are. */
+export function howMany(need: number | Share | "all", count: number): number {
+  if (need === "all") return count;
+  if (typeof need === "string") return count <= 1 ? 1 : Math.min(count, Math.max(2, Math.ceil(SHARES[need] * count)));
+  return Math.min(need, count);
+}
+
 export function evaluate(card: Card, rows: Row[]) {
   const n = wkNum(card.wk);
   const monday = mondayOf(card.wk).toISOString().slice(0, 10);
   const since = new Date(mondayOf(card.wk).getTime() - 7 * 86400000).toISOString().slice(0, 10);
   const play = (r: Row) => (r.play && r.play.wk === n ? r.play : null);
-  const active = rows.filter((r) => play(r) || (r.day && r.day >= since));
+  const active = rows.filter((r) => play(r) || (r.play && r.day && r.day >= since));
   const count = Math.max(1, active.length);
-  const cap = (need: number | "half" | "all") =>
-    need === "half" ? Math.min(HALF_CAP, Math.max(1, Math.ceil(count / 2))) : need === "all" ? count : Math.min(need, count);
+  const cap = (need: number | Share | "all") => howMany(need, count);
   const squares = card.squares.map((s, i) => {
     const who = rows.filter((r) => ((play(r)?.s as number) ?? 0) & (1 << i)).map((r) => r.uid);
     const need = cap(s.need ?? 1);
@@ -277,7 +293,8 @@ export function evaluate(card: Card, rows: Row[]) {
   const middle = { have: Math.min(have, goal), goal, done: have >= goal };
   const cell = (c: number) => (c === 4 ? middle.done : squares[CELLS.indexOf(c)]?.done ?? false);
   const lines = LINES.filter((l) => l.every(cell)).length;
-  return { active: active.length, players: rows.filter(play).length, squares, middle, lines };
+  const older = rows.filter((r) => !r.play && r.day && r.day >= since).length;  // studying, on an add-on that can't play
+  return { active: active.length, players: rows.filter(play).length, older, squares, middle, lines };
 }
 
 // ---- the daily counts, for tuning the pool ----

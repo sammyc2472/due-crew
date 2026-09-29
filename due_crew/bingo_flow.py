@@ -169,9 +169,9 @@ def for_row(c):
         counts["dk"] = 1 if c.get("shared_decks") else 0
         counts["st"] = 1 if str(c.get("status") or "").strip() else 0
         play = B.play(cd, f, show_up=bool(c.get("show_up")), counts=counts, hide=B.withheld(c))
-        if cd:
-            _state["bingo_mine"] = {"wk": wk, "progress": [B.progress(sq, f) if B.known(sq) else (False, "")
-                                                          for sq in cd["squares"]]}
+        _state["bingo_mine"] = {"wk": wk, "play": play,
+                                "progress": [B.progress(sq, f) if B.known(sq) else (False, "")
+                                             for sq in cd["squares"]] if cd else None}
         _save()
         return play
     except Exception:
@@ -188,10 +188,14 @@ def view(squad_view, c):
     lb, wk = _today_wk()
     if not cd or rows is None or cd.get("wk") != wk:
         return None
-    ev = B.evaluate(cd, rows)
-    mine = _state.get("bingo_mine") or {}
-    progress = mine.get("progress") if mine.get("wk") == wk else None
     me = client().user_id
+    mine = _state.get("bingo_mine") or {}
+    if mine.get("wk") == wk and mine.get("play"):
+        # my own row as this computer worked it out at the sync, not as the
+        # squad was last fetched (up to a few minutes old)
+        rows = [dict(r, play=mine["play"]) if r["user_id"] == me else r for r in rows]
+    ev = B.evaluate(cd, rows)
+    progress = mine.get("progress") if mine.get("wk") == wk else None
     names = {r["user_id"]: (r.get("name") or "?", r.get("emoji") or "") for r in rows}
     d = _week(wk)
     return {"card": cd, "ev": ev, "progress": progress, "me": me, "names": names,
