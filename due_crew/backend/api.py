@@ -31,6 +31,7 @@ from .shapes import (
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
 )
 
+FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
 API_BASE = "https://api.duecrew.com"
 # session.json keys that belong to one account on this computer, and go
 # when a different account signs in
@@ -749,6 +750,20 @@ class ApiClient:
         status, _ = self._call("POST", "/reports", body)
         return status == 200
 
+    def send_feedback(self, text, ver=""):
+        """3.6.5, P6: feedback for Sam's admin page. A POST that adds a row,
+        so it's sent once. Returns the status (201 sent, 429 five today)."""
+        body = {"text": str(text or "").strip()[:FEEDBACK_MAX]}
+        if ver:
+            body["ver"] = " ".join(str(ver).split())[:120]
+        try:
+            status, _ = self._call("POST", "/feedback", body)
+        except TransportError as e:
+            if e.status:
+                return e.status  # 429: five today; 400: too long
+            raise
+        return status
+
     # ---- squads ----
 
     def create_squad(self, name):
@@ -927,13 +942,15 @@ class ApiClient:
         self._save_session()
         return True
 
-    def put_ids(self, plan_id, units, counts=None):
+    def put_ids(self, plan_id, units, counts=None, refs=None):
         """3.3, C5: the note ids behind a plan's tags, from my copy, and
         (3.4, D1) how many cards its searches find here. One request, only
         when they changed. True when it took."""
         body = {"units": units}
         if counts:
             body["counts"] = counts
+        if refs:
+            body["refs"] = refs  # 3.6.5: pasted ids as guid + card number
         status, _ = self._call("PUT", f"/plans/{plan_id}/ids", body)
         return status == 200
 

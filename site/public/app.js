@@ -163,6 +163,10 @@ async function whoami() {
 
 function renderNav() {
   const nav = document.getElementById("nav");
+  // 3.6.5, P6: Feedback in the footer of every signed-in page, carrying the page it came from
+  const foot = document.getElementById("foot");
+  if (foot) foot.replaceChildren(...(me ? [h("a", { href: "/feedback", onclick: (e) => {
+    e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback")] : []));
   if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
   // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
   const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
@@ -1639,6 +1643,7 @@ async function adminPage() {
   page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
     h("p", { class: "muted" }, "Counts, and one account at a time when you look one up. Never how anyone studies."),
     peoplePanel(),
+    feedbackPanel(),
     tilesBox,
     h("div", { class: "agrid3" }, codes, cutover, bridge),
     h("div", { class: "agrid2" }, library, notices),
@@ -1646,6 +1651,73 @@ async function adminPage() {
     versions);
   $app().classList.add("wide");
   await drawTiles();
+}
+
+/** 3.6.5, P6: Send feedback to Sam. The page it came from rides along;
+ *  Sam sees the name and can write back by mail, never the address. */
+function feedbackPage() {
+  const from = (new URLSearchParams(location.search).get("from") || "").replace(/[^A-Za-z0-9/_-]/g, "").slice(0, 80);
+  const box = h("textarea", { rows: 7, maxlength: 2000, "aria-label": "Your feedback", placeholder: "What's working, what isn't, what you'd add…", style: "font-family:inherit;font-size:15px" });
+  const status = h("p", { class: "status", role: "status" });
+  const send = h("button", { onclick: async () => {
+    const text = box.value.trim();
+    if (!text) { status.className = "status bad"; status.textContent = "Write something first."; return; }
+    send.disabled = true; status.className = "status"; status.textContent = "Sending…";
+    try {
+      await api("POST", "/feedback", { text, ver: `duecrew.com${from ? ` ${from}` : ""}` });
+      box.value = ""; status.textContent = "Thanks! Sam reads every one.";
+    } catch (err) {
+      status.className = "status bad";
+      status.textContent = err.status === 429 ? "That's five today. Send more tomorrow." : "That didn't send. Try again.";
+    }
+    send.disabled = false;
+  } }, "Send");
+  page(h("h1", {}, "Send feedback to Sam"),
+    h("p", { class: "muted" }, "What's working, what isn't, what you'd add. Sam sees your name with it and can write back to your email. Nobody else sees it."),
+    h("div", { class: "stack", style: "max-width:640px" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status));
+  $app().classList.remove("wide");
+  box.focus();
+}
+
+/** 3.6.5, P6: the admin's Feedback: newest first, Reply by mail from Due
+ *  Crew (the address is never shown), Done, and the sender's account. */
+function feedbackPanel() {
+  let state = "new";
+  const list = h("div", { class: "fb" });
+  const seg = h("span", { class: "seg" });
+  const ago = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  async function draw() {
+    let r;
+    try { r = await api("GET", `/admin/feedback?state=${state}`); } catch { list.replaceChildren(h("p", { class: "status bad" }, "Couldn't load feedback.")); return; }
+    seg.replaceChildren(...[["new", `New · ${r.open}`], ["done", "Done"], ["all", "All"]].map(([k, t]) =>
+      h("button", { class: state === k ? "on" : "", "aria-pressed": String(state === k), onclick: () => { state = k; draw(); } }, t)));
+    if (!r.feedback.length) { list.replaceChildren(h("p", { class: "muted small" }, state === "new" ? "Nothing new." : "None.")); return; }
+    list.replaceChildren(...r.feedback.map((f) => {
+      const replyBox = h("div", { class: "stack", hidden: true });
+      const ta = h("textarea", { rows: 3, maxlength: 2000, "aria-label": `Reply to ${f.name}` });
+      const st = h("span", { class: "muted small", role: "status" });
+      replyBox.append(ta, h("div", { class: "row" }, h("button", { onclick: async (e) => {
+        if (!ta.value.trim()) return;
+        e.target.disabled = true; st.textContent = "Sending…";
+        try { await api("POST", `/admin/feedback/${f.id}/reply`, { text: ta.value }); st.textContent = "Sent."; setTimeout(draw, 800); }
+        catch { st.textContent = "That didn't send."; e.target.disabled = false; }
+      } }, "Send reply"), st), h("small", { class: "muted" }, "It goes from Due Crew to their email, with what they wrote quoted."));
+      return h("div", { class: `item${f.done ? "" : " new"}` },
+        h("span", { style: "white-space:pre-wrap" }, f.text),
+        h("div", { class: "meta" }, h("span", {}, f.emoji ? `${f.emoji} ` : "", h("b", {}, f.name)), f.ver ? h("span", {}, f.ver) : null,
+          h("span", {}, ago(f.at)), f.replied ? h("span", {}, "replied") : null),
+        h("div", { class: "acts" },
+          h("button", { class: "linkish", onclick: () => { replyBox.hidden = !replyBox.hidden; if (!replyBox.hidden) ta.focus(); } }, "Reply…"),
+          h("button", { class: "linkish", onclick: async () => { await api("PATCH", `/admin/feedback/${f.id}`, { done: !f.done }).catch(() => null); draw(); } }, f.done ? "Mark new" : "Mark done"),
+          h("button", { class: "linkish", onclick: () => {
+            const q = document.querySelector(".people input"); if (!q) return;
+            q.value = f.uid; q.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); q.scrollIntoView({ behavior: "smooth", block: "center" });
+          } }, "Account")),
+        replyBox);
+    }));
+  }
+  draw();
+  return h("section", { class: "panel" }, h("h4", {}, "Feedback", seg), list);
 }
 
 async function route() {
@@ -1665,6 +1737,7 @@ async function route() {
     if (path === "/log") return await logPage();
     if (path === "/admin") return await adminPage();
     if (path === "/account") return account();
+    if (path === "/feedback") return feedbackPage();
     if ((m = /^\/plans\/([a-z0-9]{16})\/edit$/.exec(path))) return await builder(m[1]);
     if ((m = /^\/plans\/([a-z0-9]{16})$/.exec(path))) return await builder(m[1]);
     page(h("h1", {}, "Not here"), link("/plans", "Your plans"));

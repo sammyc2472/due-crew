@@ -2,7 +2,7 @@
 
 A deck's fingerprint is its 20 lexicographically smallest note GUIDs. GUIDs
 survive deck sharing, so two people's copies of the same imported deck
-(AnKing/AnkiHub included) produce overlapping fingerprints; independently
+(big shared decks included) produce overlapping fingerprints; independently
 made decks don't — by design. Two decks match when fingerprints overlap on
 at least MATCH_MIN entries, which tolerates version drift and partial copies.
 
@@ -42,7 +42,7 @@ def all_deck_counts(col):
     """{did: [total, seen, mature, open]} over ALL cards, suspended included.
     `open` = unsuspended, or already seen: what this person has unlocked.
     People who work through a big shared deck by unsuspending it a topic at
-    a time (the usual way with AnKing) read as "12% seen" forever without
+    a time (the usual way with big shared decks) read as "12% seen" forever without
     it; with it the bar says how much is in play and how much of THAT is
     done. Cards sitting in filtered decks are credited to their home deck."""
     cols = ("COUNT(*), COUNT(CASE WHEN type != 0 THEN 1 END), "

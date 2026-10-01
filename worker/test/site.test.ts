@@ -25,8 +25,8 @@ async function get(path: string) {
 
 async function plan(name = 'Cardio "block" <1>', uid = "priya") {
   const priya = await person(uid);
-  const made = await priya.call("POST", "/plans", { name, deck: "AnKing Step 1", line: "One lecture a day" });
-  const put = await priya.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "AnKing Step 1",
+  const made = await priya.call("POST", "/plans", { name, deck: "Big Step 1", line: "One lecture a day" });
+  const put = await priya.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "Big Step 1",
     events: [{ id: "q", day: "2026-10-16", name: "Quiz" }],
     units: [{ id: "a", name: "L1", opens: "2026-10-05", tags: ["C::1"], n: 80 }, { id: "b", name: "L2", opens: "2026-10-13", tags: ["C::2"], n: 40 }] } });
   return { priya, p: put.body };
@@ -91,7 +91,7 @@ describe("og.ts", () => {
     expect(p.length).toBeGreaterThan(1000);
     const { FACES } = await import("../../site/src/og_assets");
     const f = { ascent: FACES.title.ascent, glyphs: new Map(FACES.title.glyphs.map(([c, adv, l, t, w, h, off]) => [c, { adv: adv / 16, l, t, w, h, off }])) };
-    const lines = wrap(f, "Step 1 in 8 weeks, a system a week, B&B then Pathoma, with review weeks before the NBME forms", 1040, 2);
+    const lines = wrap(f, "Step 1 in 8 weeks, a system a week, V&B then Path Book, with review weeks before the NBME forms", 1040, 2);
     expect(lines).toHaveLength(2);
     expect(lines[1].endsWith("…")).toBe(true);
     expect(wrap(f, "Short", 1040, 2)).toEqual(["Short"]);

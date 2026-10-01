@@ -19,6 +19,7 @@ import bisect
 import weakref
 import datetime
 import hashlib
+import html
 import json
 import re
 
@@ -75,6 +76,8 @@ def unit_sources(unit, deck_id=None, swap=None):
         out.append(list(unit["search"]))  # 3.3, C3
     if unit.get("nids") or unit.get("cids"):
         out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
+    if unit.get("notes") or unit.get("idr"):
+        out.append({"notes": list(unit.get("notes") or []), "idr": [list(r) for r in unit.get("idr") or []]})  # 3.6.5
     return out
 
 
@@ -86,6 +89,8 @@ def unit_sig(unit, deck_id=None, swap=None):
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
                        sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
+                      + ([sorted(unit.get("notes") or []), sorted(f"{g}:{o}" for g, o in unit.get("idr") or [])]
+                         if unit.get("notes") or unit.get("idr") else [])
                       + ([sorted(unit["search"])] if unit.get("search") else [])
                       + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
                          if unit.get("nids") or unit.get("cids") else []))
@@ -278,7 +283,7 @@ class DeckIndex:
             missing = missing or not got
             out |= got
         if missing and unit.get("ids"):
-            # 3.3, C5: a tag this copy names differently (a newer AnKing):
+            # 3.3, C5: a tag this copy names differently (a newer version of the deck):
             # the author's note ids behind the date find its cards
             by_id = {c for g in unit["ids"] for c in self.by_guid.get(g, ())}
             if by_id - out:
@@ -293,8 +298,9 @@ class DeckIndex:
         out |= self.id_cards(unit)
         return out
 
-    def id_cards(self, unit):
-        """E1: the cards of a date's pasted note ids and card ids, in this deck."""
+    def pasted_cards(self, unit):
+        """E1: the cards of a date's pasted note ids and card ids, in this deck.
+        The same in copies of one import; a copy made otherwise has its own."""
         out = set()
         for n in unit.get("nids") or []:
             out.update(c for c in self.by_nid.get(int(n), ()) if c in self.cards)
@@ -302,6 +308,27 @@ class DeckIndex:
             if int(c) in self.cards:
                 out.add(int(c))
         return out
+
+    def id_cards(self, unit):
+        """Every exact pick but single cards: pasted ids, the cards the author's
+        Anki found them to be (3.6.5, `idr`: guid + card number, so a copy
+        whose ids differ still finds them), and notes by guid (`notes`)."""
+        out = self.pasted_cards(unit)
+        for g, o in unit.get("idr") or []:
+            cid = self.by_ref.get((str(g), int(o)))
+            if cid is not None:
+                out.add(cid)
+        for g in unit.get("notes") or []:
+            out.update(self.by_guid.get(str(g), ()))
+        return out
+
+    def exact_missing(self, unit):
+        """3.6.5: (missing, of) for a date's exact picks by guid (single cards
+        and notes): the ones this copy doesn't have, for the plan card's note."""
+        refs = [(str(g), int(o)) for g, o in unit.get("cards") or []]
+        notes = [str(g) for g in unit.get("notes") or []]
+        missing = sum(1 for r in refs if r not in self.by_ref) + sum(1 for g in notes if g not in self.by_guid)
+        return missing, len(refs) + len(notes)
 
     def single_found(self, unit):
         return sum(1 for g, o in unit.get("cards") or [] if (str(g), int(o)) in self.by_ref)
@@ -376,7 +403,7 @@ TREE_BUDGET = 1_400_000  # bytes of JSON: under the server's 1.5 MB for a tree, 
 
 
 def _qid(path):
-    """A question-bank id (UWorld's, AMBOSS's…): a leaf that's only digits.
+    """A question bank's id: a leaf that's only digits.
     Thousands of them, one card or two each; they go last."""
     return path.rsplit(_SEP, 1)[-1].strip().isdigit()
 
@@ -497,11 +524,11 @@ def match_rows(idx, doc, swap=None, shown=5):
             continue
         name = u.get("name") or "?"
         if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[], nids=[], cids=[]), swap, doc.get("deck", "")))
+            n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc.get("deck", "")))
             of = u.get("n")  # the author's count, when the builder saved one
             text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
             rows.append((name, text, not n))
-        if u.get("nids") or u.get("cids"):
+        if u.get("nids") or u.get("cids") or u.get("notes"):
             found = len(idx.id_cards(u))
             label = f"{name} · by ID" if (u.get("tags") or u.get("decks") or u.get("cards")) else name
             rows.append((label, _cards(found) if found else "not in your copy", not found))
@@ -727,14 +754,35 @@ def note_ids(idx, unit, plan_deck=""):
 
 def search_counts(idx, lean_doc):
     """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write;
-    E1: "#ids" is how many cards its pasted ids find."""
+    E1: "#ids" is how many cards its pasted ids find; 3.6.5, P1: "#pn",
+    what the date opens here (date_counts)."""
     out = {}
+    pn = date_counts(idx, lean_doc)
     for u in lean_doc.get("units") or []:
         c = {q: len(idx.search_cards(q)) for q in u.get("search") or []}
-        if u.get("nids") or u.get("cids"):
+        if u.get("nids") or u.get("cids") or u.get("notes"):
             c["#ids"] = len(idx.id_cards(u))
+        if u["id"] in pn:
+            c["#pn"] = pn[u["id"]]
         if c:
             out[u["id"]] = c
+    return out
+
+
+def date_counts(idx, lean_doc):
+    """3.6.5, P1: {unit id: [new, repeat, missing]} for a plan I write, in
+    date order: the cards a date finds here that no earlier date has, the
+    ones an earlier date already opens, and its picked notes this copy
+    doesn't have. Single cards aren't in the lean doc and count apart."""
+    seen, out = set(), {}
+    deck = str(lean_doc.get("deck") or "")
+    units = sorted(lean_doc.get("units") or [], key=lambda u: str(u.get("opens") or ""))
+    for u in units:
+        cids = idx.match(dict(u, cards=[], ids=[]), None, deck)
+        new = len(cids - seen)
+        seen |= cids
+        miss = sum(1 for g in u.get("notes") or [] if str(g) not in idx.by_guid)
+        out[u["id"]] = [new, len(cids) - new, miss]
     return out
 
 
@@ -748,6 +796,20 @@ def ids_snapshot(idx, lean_doc, cap=50000):
         ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
         n += len(ids)
         out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]
+    return out
+
+
+def id_refs(idx, col, lean_doc, cap=50000):
+    """3.6.5: {unit id: [nids, cids, [[guid, ord]]]} for a plan I write: the
+    cards its pasted ids are in my copy, as references that work in anyone's.
+    At most `cap` in all; the ids sent back say what they were worked out from."""
+    out, n = {}, 0
+    for u in lean_doc.get("units") or []:
+        if not (u.get("nids") or u.get("cids")):
+            continue
+        refs = card_refs(col, idx.pasted_cards(u))[:max(0, min(20000, cap - n))]
+        n += len(refs)
+        out[u["id"]] = [list(u.get("nids") or []), list(u.get("cids") or []), refs]
     return out
 
 
@@ -835,7 +897,9 @@ def change_note(owner, old, doc):
 # searches whose answer is this person's own Anki, not the deck: another
 # follower's would find something else (deck:current is the browser's default)
 _PERSONAL = re.compile(r"(?i)(?:^|[\s(\"-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|"
-                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:)")
+                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:|nid:|cid:)")
+# 3.6.5: nid:/cid: name notes by this copy's ids, which another copy may not
+# share: picked cards go up as These cards (guid + card number) instead
 
 
 def shareable_search(q):
@@ -852,6 +916,102 @@ def card_refs(col, cids):
         out += [[str(g), int(o)] for g, o in col.db.all(
             f"SELECT n.guid, c.ord FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({chunk})")]
     return out
+
+
+def selector(col, cids=(), nids=()):
+    """3.6.5: the browser's pick as plan text anyone's copy can read: notes
+    by guid ("notes:G G", every card of each), or cards as guid and card
+    number from 1 ("cards:G:1 G:3"). A note's guid is the same in every
+    copy of a deck; its ids may not be. ("", 0) for nothing."""
+    if nids:
+        nl = sorted({int(n) for n in nids})
+        gs = []
+        for i in range(0, len(nl), 500):
+            gs += [str(g) for (g,) in col.db.all(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, nl[i:i + 500]))})")]
+        gs = sorted(set(g for g in gs if g and " " not in g))
+        return ("notes:" + " ".join(gs), len(gs)) if gs else ("", 0)
+    refs = sorted({(g, o) for g, o in card_refs(col, cids) if g and " " not in g})
+    return ("cards:" + " ".join(f"{g}:{o + 1}" for g, o in refs), len(refs)) if refs else ("", 0)
+
+
+# ---- my cards, for my own AI (3.6.5, P3) ----
+
+_TAG_RE = re.compile(r"<[^>]*>")
+_MEDIA_RE = re.compile(r"\[sound:[^\]]*\]")
+
+
+def _plain(text):
+    """A field without its formatting or media: what an AI needs to read it."""
+    t = _MEDIA_RE.sub(" ", str(text or ""))
+    t = re.sub(r"(?i)<br\s*/?>|</div>|</p>|</li>", " ", t)
+    t = html.unescape(_TAG_RE.sub("", t))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _cell(text):
+    """One tab-separated cell: no tabs or line breaks inside; a quote quoted."""
+    t = re.sub(r"[\t\r\n]+", " ", str(text or ""))
+    return '"' + t.replace('"', '""') + '"' if '"' in t else t
+
+
+def export_scope(idx, doc, scope, swap=None):
+    """{note id} a plan's export takes from this deck: "dates" (what its dates
+    open here), "cover" (the tags and subdecks the builder ticked), or
+    "deck" (all of it)."""
+    if scope == "deck":
+        cids = set(idx.cards)
+    elif scope == "cover":
+        keys = list(((doc or {}).get("pace") or {}).get("cover") or [])
+        unit = {"tags": [k[4:] for k in keys if str(k).startswith("tag:")],
+                "decks": [k[5:] for k in keys if str(k).startswith("deck:")]}
+        cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
+    else:
+        cids = set()
+        for u in units(doc or {}):
+            cids |= idx.match(u, swap, (doc or {}).get("deck", ""))
+    return {n for n, cs in idx.by_nid.items() if any(c in cids for c in cs)}
+
+
+def export_notes(col, nids, plain=True):
+    """(text, notes): the notes in Anki's own plain-text export format, with
+    the unique identifier (a note's guid, the same in every copy of a deck)
+    first, so an AI can answer with notes: lines. Written to a file on this
+    computer only; nothing here is sent anywhere."""
+    nl = sorted({int(n) for n in nids})
+    rows = []
+    names = {}
+    for i in range(0, len(nl), 500):
+        chunk = ",".join(str(n) for n in nl[i:i + 500])
+        rows += col.db.all(
+            f"SELECT n.id, n.guid, n.mid, n.flds, n.tags, (SELECT c.did FROM cards c WHERE c.nid = n.id "
+            f"ORDER BY c.ord LIMIT 1) FROM notes n WHERE n.id IN ({chunk})")
+    out = ["#separator:tab", f"#html:{'false' if plain else 'true'}", "#guid column:1",
+           "#notetype column:2", "#deck column:3", "#tags column:4"]
+    for _nid, guid, mid, flds, tags, did in rows:
+        if mid not in names:
+            try:
+                names[mid] = str((col.models.get(mid) or {}).get("name") or "")
+            except Exception:
+                names[mid] = ""
+        try:
+            deck = col.decks.name(did) if did else ""
+        except Exception:
+            deck = ""
+        fields = str(flds or "").split("\x1f")
+        fields = [_plain(f) if plain else f for f in fields]
+        out.append("\t".join(_cell(x) for x in [guid, names[mid], deck, str(tags or "").strip()] + fields))
+    return "\n".join(out) + "\n", len(rows)
+
+
+def export_size(col, nids):
+    """About how many bytes export_notes writes for these notes, from the
+    fields' length (formatting counted, so it errs high)."""
+    nl = sorted({int(n) for n in nids})
+    total = 0
+    for i in range(0, len(nl), 500):
+        chunk = ",".join(str(n) for n in nl[i:i + 500])
+        total += col.db.scalar(f"SELECT COALESCE(SUM(LENGTH(flds) + LENGTH(tags) + 40), 0) FROM notes WHERE id IN ({chunk})") or 0
+    return int(total)
 
 
 # ---- which of my decks ----

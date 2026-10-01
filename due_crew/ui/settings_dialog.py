@@ -48,10 +48,11 @@ NUMBERS, SHOW_UP, PAUSED = 0, 1, 2   # the three Privacy choices
 class SettingsDialog(QDialog):
     def __init__(self, parent, client, config, on_saved, open_auth,
                  open_friends, on_signed_out, open_decks, open_squads=None,
-                 edit_emoji=None, edit_status=None, tab=None):
+                 edit_emoji=None, edit_status=None, tab=None, open_feedback=None):
         """edit_emoji / edit_status: the card's editors (they save on their
         own and return the new value, or None). tab: "you", "board", or
         "privacy", the tab to open on (your card's Privacy… opens Privacy)."""
+        self.open_feedback = open_feedback
         super().__init__(parent)
         self.client = client
         self.config = dict(config)
@@ -192,7 +193,8 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         for label, opener in (("Friends…", self.open_friends),
                               ("Squads…", self.open_squads),
-                              ("Shared Decks…", self.open_decks)):
+                              ("Shared Decks…", self.open_decks),
+                              ("Send Feedback…", self.open_feedback)):  # 3.6.5, P6
             if opener is None:
                 continue
             btn = QPushButton(label)

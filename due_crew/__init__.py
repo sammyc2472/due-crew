@@ -956,7 +956,7 @@ def _on_decks_saved(changed):
 
 SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy", "setexam",
                  "setaway", "setreset", "setname", "setemoji", "setstatus", "setsquads",
-                 "setsignout", "setdelete", "setsignin")
+                 "setsignout", "setdelete", "setsignin", "setfeedback")
 _share_push = {"n": 0}
 
 
@@ -1025,6 +1025,8 @@ def _settings_cmd(cmd, parts):
             _on_signed_out()
     elif cmd == "setdelete":
         _delete_account()
+    elif cmd == "setfeedback":
+        open_feedback()  # 3.6.5, P6
     else:
         changed = change([cmd] + parts, c)
         if changed:
@@ -1099,6 +1101,15 @@ def _delete_account():
     _bg(lambda: cl.delete_account() or True, done)
 
 
+def open_feedback():
+    """3.6.5, P6: Send feedback to Sam (Tools › Due Crew, and Settings)."""
+    if not client().signed_in:
+        tooltip("Sign in to send feedback.")
+        return
+    from .ui.feedback_dialog import FeedbackDialog
+    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks! Sam reads every one.")).exec()
+
+
 def open_settings(tab=None):
     """tab: "you", "board", or "privacy" (your card's Privacy… opens that
     one; until 2.9 it landed on Account). 3.5.0: in the board when it's on
@@ -1113,7 +1124,7 @@ def open_settings(tab=None):
     dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
                          open_auth, open_friends, _on_signed_out, open_decks,
                          open_squads, edit_emoji=_edit_emoji, edit_status=_edit_status,
-                         tab=tab)
+                         tab=tab, open_feedback=open_feedback if client().signed_in else None)
     dlg.exec()
 
 
@@ -1178,8 +1189,10 @@ def _tools_menu():
     for item in (("Friends…", open_friends),
                  ("Squads…", open_squads), None,
                  ("Make a plan from a deck…", plan_flow.open_make),
-                 ("Follow a plan…", plan_flow.open_follow), None,
-                 ("Settings…", open_settings)):
+                 ("Follow a plan…", plan_flow.open_follow),
+                 ("Export cards for my AI…", plan_flow.open_export), None,
+                 ("Settings…", open_settings),
+                 ("Send feedback…", open_feedback)):
         if item is None:
             menu.addSeparator()
             continue

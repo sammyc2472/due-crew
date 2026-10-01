@@ -91,6 +91,49 @@ describe("E1: note and card ids pasted onto a date", () => {
   });
 });
 
+describe("3.6.5: picks that work in anyone's copy", () => {
+  it("notes by guid; the author's Anki turns pasted ids into card refs, kept only while those ids hold", async () => {
+    const { priya, p } = await plan();
+    const base = p.doc.units;
+    const put = (units: unknown[], version: number) => priya.call("PUT", `/plans/${p.id}`, { version, doc: { deck: "Step 1", units } });
+    const ok = await put([{ ...base[0], nids: [11, 12], notes: ["gA", "gA", "gB"], idr: [["forged", 0]] }, base[1]], p.version);
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.units[0].notes).toEqual(["gA", "gB"]);
+    expect(ok.body.doc.units[0].idr).toBeUndefined();  // only the author's Anki sets them
+    for (const bad of [[""], [5], ["x".repeat(41)], Array.from({ length: 5001 }, (_, i) => `g${i}`)]) {
+      expect((await put([{ ...base[0], notes: bad }, base[1]], ok.body.version)).status).toBe(400);
+    }
+    const uid = base[0].id;
+    const refs = [["gN", 0], ["gN", 1]];
+    expect((await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, refs: { [uid]: [[11, 12], [], refs] } })).status).toBe(200);
+    let doc = (await priya.call("GET", `/plans/${p.id}`)).body;
+    expect(doc.doc.units[0].idr).toEqual(refs);
+    // refs worked out from other ids than the date has now: ignored
+    await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, refs: { [uid]: [[99], [], [["gZ", 0]]] } });
+    doc = (await priya.call("GET", `/plans/${p.id}`)).body;
+    expect(doc.doc.units[0].idr).toEqual(refs);
+    expect((await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, refs: { [uid]: "x" } })).status).toBe(400);
+    // a site save keeps them while the ids hold, and drops them when they change
+    const kept = await put([{ ...doc.doc.units[0], idr: [["forged", 0]] }, base[1]], doc.version);
+    expect(kept.body.doc.units[0].idr).toEqual(refs);
+    const { idr: _drop, ...without } = kept.body.doc.units[0];  // the builder leaves them out of a save
+    const bare = await put([without, base[1]], kept.body.version);
+    expect(bare.body.doc.units[0].idr).toEqual(refs);
+    // P1: what each date opens, from the author's Anki, kept like idr
+    expect((await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { [uid]: { "#pn": [80, 3, 1] } } })).status).toBe(200);
+    const counted = (await priya.call("GET", `/plans/${p.id}`)).body;
+    expect(counted.doc.units[0].pn).toEqual([80, 3, 1]);
+    const keptPn = await put([{ ...counted.doc.units[0], pn: [9, 9, 9] }, base[1]], counted.version);
+    expect(keptPn.body.doc.units[0].pn).toEqual([80, 3, 1]);
+    const moved = await put([{ ...keptPn.body.doc.units[0], nids: [11] }, base[1]], keptPn.body.version);
+    expect(moved.body.doc.units[0].idr).toBeUndefined();
+    expect(moved.body.doc.units[0].pn).toBeUndefined();
+    // the lean copy carries the notes, so the author's Anki can count them
+    const board = await priya.call("GET", "/board?decks=1");
+    expect(board.body.authored[0].doc.units.find((u: { id: string }) => u.id === uid).notes).toEqual(["gA", "gB"]);
+  });
+});
+
 describe("F1: events, and the dates that prep for them", () => {
   it("named days a date can be for; a for whose event went is dropped; the calendar feed shows them", async () => {
     const { priya, p } = await plan();

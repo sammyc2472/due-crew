@@ -32,15 +32,15 @@ tags = [["Step1", 1960], ["Step1::Cardio", 312], ["Step1::Cardio::Heart_failure"
         ["Step1::Cardio::Valves", 39], ["Step1::Cardio::Pharm", 164], ["Step1::Renal", 402], ["Step1::Renal::Physiology", 212],
         ["Step1::Renal::Pharm", 190], ["Step1::Pulm", 288], ["Step1::Pulm::Asthma", 74], ["Step1::Pulm::COPD", 58],
         ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177],
-        # 3.3: AnKing-style tags, for readable names and the resource / system views
-        ["#AK_Step1_v12", 5200], ["#AK_Step1_v12::#Pathoma", 2408], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury", 283],
-        ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::01_Growth", 90], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::02_Cell_Injury", 150],
-        ["#AK_Step1_v12::#Pathoma::02_Inflammation", 210], ["#AK_Step1_v12::#Pathoma::03_Neoplasia", 176],
-        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells", 380], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::01_Microcytic", 96],
-        ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::02_Macrocytic", 64], ["#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic", 142],
-        ["#AK_Step1_v12::#B&B", 1900], ["#AK_Step1_v12::#B&B::01_Biochem", 640], ["#AK_Step1_v12::#B&B::01_Biochem::01_Enzymes", 96],
-        ["#AK_Step1_v12::#B&B::01_Biochem::02_Metabolism1", 188], ["#AK_Step1_v12::#B&B::01_Biochem::03_Metabolism2", 120],
-        ["#AK_Step1_v12::^Systems", 3000], ["#AK_Step1_v12::^Systems::Hematology", 700], ["#AK_Step1_v12::^Systems::Cardio", 900],
+        # 3.3: resource-style tags, for readable names and the resource / system views
+        ["#Big_Step1_v12", 5200], ["#Big_Step1_v12::#Path_Book", 2408], ["#Big_Step1_v12::#Path_Book::01_Growth_Adaptations_Cell_Injury", 283],
+        ["#Big_Step1_v12::#Path_Book::01_Growth_Adaptations_Cell_Injury::01_Growth", 90], ["#Big_Step1_v12::#Path_Book::01_Growth_Adaptations_Cell_Injury::02_Cell_Injury", 150],
+        ["#Big_Step1_v12::#Path_Book::02_Inflammation", 210], ["#Big_Step1_v12::#Path_Book::03_Neoplasia", 176],
+        ["#Big_Step1_v12::#Path_Book::04_Red_Blood_Cells", 380], ["#Big_Step1_v12::#Path_Book::04_Red_Blood_Cells::01_Microcytic", 96],
+        ["#Big_Step1_v12::#Path_Book::04_Red_Blood_Cells::02_Macrocytic", 64], ["#Big_Step1_v12::#Path_Book::04_Red_Blood_Cells::03_Hemolytic", 142],
+        ["#Big_Step1_v12::#V&B", 1900], ["#Big_Step1_v12::#V&B::01_Biochem", 640], ["#Big_Step1_v12::#V&B::01_Biochem::01_Enzymes", 96],
+        ["#Big_Step1_v12::#V&B::01_Biochem::02_Metabolism1", 188], ["#Big_Step1_v12::#V&B::01_Biochem::03_Metabolism2", 120],
+        ["#Big_Step1_v12::^Systems", 3000], ["#Big_Step1_v12::^Systems::Hematology", 700], ["#Big_Step1_v12::^Systems::Cardio", 900],
         ["lecture04_glycolysis", 64]]
 decks = [["Step 1::Extras", 96], ["Step 1::Extras::Images", 41]]
 units = [
@@ -119,7 +119,7 @@ out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc
 for pid, code, who, name, line, deck, unit_list in [
     ("niaplanpreview01", "N4APULM2", "nia", "Pulm in two weeks", "Physiology first, then pharm.", "Step 1",
      [("p1", "Pulm physiology", 0, 6, 156), ("p2", "Asthma and COPD", 7, 10, 132)]),
-    ("kaiplanpreview01", "KA7MICRZ", "kai", "Sketchy Micro, bugs first", "Every Sketchy Micro video, in watch order.", "Sketchy Micro",
+    ("kaiplanpreview01", "KA7MICRZ", "kai", "Picture Videos Micro, bugs first", "Every Picture Videos Micro video, in watch order.", "Picture Videos Micro",
      [(f"s{i}", f"Micro {i + 1}", i * 2, i * 2 + 1, 30 + i * 3) for i in range(15)])]:
     ud = {"deck": deck, "units": [{"id": i, "name": nm, "opens": (real + datetime.timedelta(days=a)).isoformat(), "due": (real + datetime.timedelta(days=b)).isoformat(),
                                    "tags": [f"T::{i}"], "decks": [], "cards": [], "n": n} for i, nm, a, b, n in unit_list]}

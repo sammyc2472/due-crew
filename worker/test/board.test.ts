@@ -51,11 +51,11 @@ describe("GET /board", () => {
   });
 
   it("decks come along when asked, mine and my crew's only", async () => {
-    const deck = { name: "AnKing", sig: ["a", "b"], total: 100, seen: 40, mature: 10 };
+    const deck = { name: "Big Deck", sig: ["a", "b"], total: 100, seen: 40, mature: 10 };
     for (const p of [sam, dre, nia]) await p.call("POST", "/sync", { decks: [deck] });
     const b = (await sam.call("GET", "/board?decks=1")).body;
     expect(Object.keys(b.decks).sort()).toEqual(["dre", "sam"]);
-    expect((await sam.call("GET", "/decks")).body.decks.dre[0]).toMatchObject({ name: "AnKing", seen: 40 });
+    expect((await sam.call("GET", "/decks")).body.decks.dre[0]).toMatchObject({ name: "Big Deck", seen: 40 });
   });
 
   it("knocks ride the board", async () => {

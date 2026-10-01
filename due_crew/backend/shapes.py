@@ -512,6 +512,14 @@ def _clean_unit(u):
         got = [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
         if got:
             out[k] = got
+    notes = [g for g in u.get("notes") or [] if isinstance(g, str) and g][:5000]
+    if notes:
+        out["notes"] = notes  # 3.6.5: notes by guid, every card of each
+    idr = [[c[0], c[1]] for c in u.get("idr") or []
+           if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str)
+           and isinstance(c[1], int) and not isinstance(c[1], bool)][:20000]
+    if idr:
+        out["idr"] = idr  # 3.6.5: the pasted ids' cards as guid + card number, from the author's Anki
     if isinstance(u.get("n"), int) and not isinstance(u.get("n"), bool) and u["n"] >= 0:
         out["n"] = u["n"]
     if isinstance(u.get("for"), str) and u["for"]:
@@ -558,6 +566,11 @@ def clean_plan_doc(doc):
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
+    cover = (doc.get("pace") or {}).get("cover") if isinstance(doc.get("pace"), dict) else None
+    if isinstance(cover, list):  # 3.6.5, P3: what the builder ticked, for Export cards for my AI
+        cover = [k for k in cover if isinstance(k, str) and k.startswith(("tag:", "deck:")) and len(k) <= 300][:500]
+        if cover:
+            out.setdefault("pace", {})["cover"] = cover
     ph = doc.get("phases") if isinstance(doc.get("phases"), dict) else {}
     catchup, taper = ph.get("catchup"), ph.get("taper")
     ok = lambda v, hi: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi
@@ -581,7 +594,10 @@ def clean_authored(a):
               "decks": [x for x in u.get("decks") or [] if isinstance(x, str)],
               "search": [q for q in u.get("search") or [] if isinstance(q, str) and q][:10],  # 3.4, D1
               **{k: [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
-                 for k in ("nids", "cids") if u.get(k)}}  # E1
+                 for k in ("nids", "cids") if u.get(k)},  # E1
+              **({"notes": [g for g in u["notes"] if isinstance(g, str) and g][:5000]}
+                 if isinstance(u.get("notes"), list) else {}),  # 3.6.5
+              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 

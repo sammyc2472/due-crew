@@ -11,7 +11,7 @@ interface Env {
   API: { fetch(req: Request): Promise<Response> };
 }
 
-const APP = /^\/(sign-in|account|home|log|admin|library|plans|plans\/[A-Za-z0-9-]+(\/edit)?|plans\/new|p\/[A-Za-z0-9]{1,16}|i\/[A-Za-z0-9]{1,12})\/?$/;
+const APP = /^\/(sign-in|account|home|log|admin|library|feedback|plans|plans\/[A-Za-z0-9-]+(\/edit)?|plans\/new|p\/[A-Za-z0-9]{1,16}|i\/[A-Za-z0-9]{1,12})\/?$/;
 const PLAN_PAGE = /^\/p\/([A-Za-z0-9]{8})\/?$/;
 const PLAN_PNG = /^\/p\/([A-Za-z0-9]{8})\.png$/;
 const INVITE_PAGE = /^\/i\/([A-Za-z0-9]{6}|[A-Za-z0-9]{10})\/?$/;

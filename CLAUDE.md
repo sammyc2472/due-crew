@@ -404,6 +404,43 @@ add-on.
   account's settings. And `GET /board?decks=1` returns my squads
   (membership): one missing from the config comes back (`heal_squads`,
   no code on this computer), never one I left this session.
+- 3.6.5 picks that work in anyone's copy: a date's `notes` (note guids,
+  every card of each) and `cards` read the same in every copy of a deck;
+  pasted `nids`/`cids` are one collection's numbers, so the author's Anki
+  sends what they are as guid + card number (`refs` on `PUT
+  /plans/{id}/ids`, kept as `idr` only while those ids are unchanged; a
+  site save never sets it) and followers union them (`DeckIndex.id_cards`).
+  A unit's sig and sources take `notes` and `idr`, so refs arriving later
+  open what they add. `nid:`/`cid:` aren't shareable searches. Text has
+  `notes:G G` and `cards:G:N` (N from 1), read before the line is split,
+  since a guid can hold `|` and backticks (`Picks` in builder.js); Anki's
+  browser copies them (Due Crew: copy as plan selector,
+  `plans.selector`). The morning counts what a date leaves shut
+  (`plan_flow._tally`: leeches, exact picks this copy lacks) and the plan
+  card says it once (`planasideok`). Adding to an opened date says
+  followers get it tomorrow morning; Text's Add is the first button and
+  Replace asks twice. The AI prompt can take the person's own cards (Anki's
+  Notes in Plain Text export, with the unique identifier: `#guid column`)
+  to pick by resource and add `notes:` the tags miss; their cards go only
+  to their AI. It stays deck-neutral (any video, lecture or book), and its
+  `#` lines come back as the AI's notes in the preview, never imported.
+- 3.6.5 also (mock "Picks and Previews", P1–P6): P1 the author's Anki
+  counts what each date opens (`plans.date_counts`: new, repeat, notes
+  not here, in date order) on the ids request (`#pn`), kept as `pn` like
+  `idr`; shown under a day, in the Text preview and in the prompt. P2
+  Text opens on Add dates (an empty box that only adds; a line with a
+  date's day and name adds to it) or Edit the whole plan (Replace lists
+  what it takes off). P4 the prompt checks its own answer (`# Problem:`,
+  `# Tradeoff:`, `# Question:`). P3 Tools › Due Crew › Export cards for my
+  AI (`plans.export_notes`, Anki's own plain-text format with the guid
+  first) and the browser's "export for my AI": to a file only. P5 the
+  Plans tab's Today sits between ‹ ›, the box marks the open day, today
+  keeps a filled date. P6 Send feedback (Tools, the board's Settings ›
+  You, the Settings dialog, the site's footer) to /admin › Feedback
+  (migration 0014; 2,000 characters, 5 a day, kept a year, deleted with
+  the account); Reply mails from Due Crew, the address never shown. No
+  plan surface guesses minutes any more (we can't know a person's pace
+  per deck).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
@@ -447,6 +484,8 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   queries. D1 writes cost more than reads: the server compares before it
   writes, and `last_used`/`last_seen` are written at most daily/hourly.
 - Never store or return card text. No ranking anywhere new.
+- Code, comments and test data name no third-party deck, question bank
+  or video series (trademarks): "a big shared deck", "Big Step 1".
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - Anything meant as an update must never create (a row is not a join), and

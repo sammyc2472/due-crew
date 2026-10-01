@@ -207,7 +207,7 @@ class ScheduleDialog(QDialog):
             self.summary.setText("None of this plan's cards are in the deck it runs on here yet.")
             return
         text = (f"About {view['new_a_day']:,} new cards a study day. Reviews peak near "
-                f"{view['peak']:,} a day, about {view['minutes_peak']} min.")
+                f"{view['peak']:,} a day.")
         if view["over"]:
             n = len(view["over"])
             fix = "add a study day, or give it more time" if any(k == 0 for k in self.days) else "give it more time a day"

@@ -76,7 +76,7 @@ def _collection():
             fakes.add_card(conn, cid, did=did, ctype=2 if i < seen else 0,
                            queue=2 if i < seen else 0, ivl=30 if i % 2 == 0 else 3)
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date.today()))
-    col.decks = fakes.FakeDecks({1: "AnKing Step 1", 3: "AnKing Step 1::Cardio",
+    col.decks = fakes.FakeDecks({1: "Big Step 1", 3: "Big Step 1::Cardio",
                                  2: "Pharm::Antibiotics"})
     return col
 
@@ -125,11 +125,11 @@ CONFIG = {
     "squad": SQUAD["id"],
 }
 aqt.mw.addonManager.getConfig = lambda name: CONFIG  # the accent reaches dialogs
-# fingerprints are note guids; these overlap the AnKing subtree built in
+# fingerprints are note guids; these overlap the Step 1 subtree built in
 # _collection(), so the Shared Decks dialog has a real match to show
 _SIG = [f"guid{n:06d}" for n in range(1, 13)]
-CREW = [{"user_id": "sam", "name": "Sammy", "you": True, "decks": [{"name": "AnKing Step 1", "sig": _SIG}]},
-        {"user_id": "igk", "name": "igk", "you": False, "decks": [{"name": "AnKing Step 1", "sig": _SIG[:10]}]}]
+CREW = [{"user_id": "sam", "name": "Sammy", "you": True, "decks": [{"name": "Big Step 1", "sig": _SIG}]},
+        {"user_id": "igk", "name": "igk", "you": False, "decks": [{"name": "Big Step 1", "sig": _SIG[:10]}]}]
 
 
 def settle(ms=400):
@@ -296,9 +296,9 @@ def main(out):
         dlg.show()
         dlg._open()
         settle()
-        if not opened or "#" not in opened[0] or "/plans/new?deck=AnKing%20Step%201" not in opened[0]:
+        if not opened or "#" not in opened[0] or "/plans/new?deck=Big%20Step%201" not in opened[0]:
             raise RuntimeError(f"make: opened {opened!r} {dlg.status.text()!r} {STORE.log[-3:]}")
-        if ("sam", "AnKing Step 1") not in STORE.plan_trees:
+        if ("sam", "Big Step 1") not in STORE.plan_trees:
             raise RuntimeError("make: the tree didn't go")
 
         today = datetime.date.today()
@@ -316,7 +316,7 @@ def main(out):
             {"id": "x2", "name": "Review", "opens": day(20), "tags": ["Step1::Cardio"]},
         ]
         _pid, code = STORE.add_plan("igk", "Step 1", "Step 1", units)
-        STORE.add_plan("sam", "My plan", "AnKing Step 1", units[:3])
+        STORE.add_plan("sam", "My plan", "Big Step 1", units[:3])
         asked = []
         dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(),
                            swap_prompt=lambda sw, n: asked.append((sw, n)) or True)
@@ -339,14 +339,38 @@ def main(out):
         if dlg.plan.count() != 1:
             raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
         shoot(dlg, os.path.join(out, "plan-add-cards.png"))
+        # 3.6.5: a date that has opened says when followers get what's added
+        dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat())
+        settle()
+        dlg.date.setDate(QtCore.QDate(today.year, today.month, today.day))
+        if dlg.opened.isHidden():
+            raise RuntimeError("add: an opened date doesn't say so")
+        shoot(dlg, os.path.join(out, "plan-add-opened.png"))
+        # 3.6.5, P3: Export cards for my AI, a followed plan picked
+        from due_crew.ui.export_dialog import ExportDialog
+        fplan = {"id": "p1abcdefghij", "name": "Cardio block", "ownerName": "Dre", "doc": {"deck": "Big Step 1", "units": [
+            {"id": "u1", "name": "Cardio", "opens": today.isoformat(), "tags": [], "decks": ["Big Step 1::Cardio"], "cards": []}]}}
+        dlg = ExportDialog(None, aqt.mw.col, None, [fplan], {})
+        settle()
+        if "notes" not in dlg.size.text() or dlg.scope.count() != 2:
+            raise RuntimeError(f"export: {dlg.size.text()!r} {dlg.scope.count()}")
+        shoot(dlg, os.path.join(out, "export-for-ai.png"))
+        # 3.6.5, P6: Send feedback to Sam
+        from due_crew.ui.feedback_dialog import FeedbackDialog
+        dlg = FeedbackDialog(None, CLIENT, "3.6.5")
+        dlg.box.setPlainText("The Plans tab is great but I wish I could see next week without the arrows.")
+        settle()
+        if not dlg.send_btn.isEnabled():
+            raise RuntimeError("feedback: Send stays off with text in the box")
+        shoot(dlg, os.path.join(out, "feedback.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
-                             search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
+                             search="tag:*Cardio* tag:*#V&B* -tag:*Pharm*", search_n=212)
         settle()
         shoot(dlg, os.path.join(out, "plan-add-search.png"))
         # Change deck's question carries the plan's name: plain text, as the tip prompts
         from due_crew.ui import _plain_input
         dlg = _plain_input(None, "Change deck", "Run Arrhythmia <b> on")
-        dlg.setComboBoxItems(["AnKing Step 1", "Other"])
+        dlg.setComboBoxItems(["Big Step 1", "Other"])
         dlg.setComboBoxEditable(False)
         labels = [w for w in dlg.findChildren(QtWidgets.QLabel) if "Arrhythmia" in w.text()]
         if not labels or labels[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
@@ -404,7 +428,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "—", "Settings…"]
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
 

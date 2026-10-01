@@ -17,6 +17,7 @@ const CARDS_MAX = 50000;  // 3.3: a class lead's own lecture tags, for a year
 const IDS_MAX = 50000;    // 3.3, C5: note ids kept behind a plan's tags and subdecks
 const SEARCH_MAX = 10;
 const IDLIST_MAX = 5000;  // E1: note or card ids pasted onto one date
+const IDR_MAX = 20000;   // 3.6.5: the cards those ids are, as note guid + card number, from the author's Anki
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
 export const PLAN_BODY_MAX = 1600 * 1024;
@@ -63,7 +64,8 @@ function path(v: unknown): string {
 export function unitCount(u: Obj): number {
   return ((u.n as number) || 0) + ((u.cards as unknown[]) || []).length
     + Object.values((u.sn as Record<string, number>) || {}).reduce((a, x) => a + x, 0)
-    + ((u.idn as number | undefined) ?? (((u.nids as unknown[]) || []).length + ((u.cids as unknown[]) || []).length));
+    + ((u.idn as number | undefined) ?? (((u.nids as unknown[]) || []).length + ((u.cids as unknown[]) || []).length
+      + ((u.notes as unknown[]) || []).length));
 }
 
 function cardRef(v: unknown): [string, number] {
@@ -73,7 +75,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -135,6 +137,19 @@ function unit(v: unknown): Obj {
     if (!Array.isArray(a) || a.length > IDLIST_MAX || !a.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) throw V.bad("plan");
     if (a.length) out[k] = [...new Set(a as number[])];
   }
+  // 3.6.5: notes by their guid (`notes:` in Text): every card of each, in
+  // anyone's copy, where a note id is only the same in copies of one import
+  if (v.notes !== undefined && v.notes !== null) {
+    if (!Array.isArray(v.notes) || v.notes.length > IDLIST_MAX || !v.notes.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
+    if (v.notes.length) out.notes = [...new Set(v.notes as string[])];
+  }
+  // 3.6.5: the cards the pasted ids are in the author's Anki, as guid + card
+  // number (PUT /plans/{id}/ids), so a follower whose ids differ still gets them
+  if (v.idr !== undefined && v.idr !== null) {
+    if (!Array.isArray(v.idr) || v.idr.length > IDR_MAX) throw V.bad("plan");
+    const refs = v.idr.map(cardRef);
+    if (refs.length && (out.nids || out.cids)) out.idr = refs;
+  }
   // F1: the event this date preps for, by its id
   if (v.for !== undefined && v.for !== null) {
     if (!V.isStr(v.for, 12) || !UNIT_ID.test(v.for)) throw V.bad("plan");
@@ -142,7 +157,12 @@ function unit(v: unknown): Obj {
   }
   if (v.idn !== undefined && v.idn !== null) {
     if (!V.isInt(v.idn, 0, 1_000_000)) throw V.bad("plan");
-    if (out.nids || out.cids) out.idn = v.idn;
+    if (out.nids || out.cids || out.notes) out.idn = v.idn;
+  }
+  // 3.6.5, P1: [new, repeat, missing] as the author's Anki counted the date
+  if (v.pn !== undefined && v.pn !== null) {
+    if (!Array.isArray(v.pn) || v.pn.length !== 3 || !v.pn.every((n) => V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
+    out.pn = v.pn;
   }
   return out;
 }
@@ -208,9 +228,11 @@ export function planDoc(v: unknown): Obj {
   if (!Array.isArray(v.units) || v.units.length > UNITS_MAX) throw V.bad("plan");
   const units = v.units.map(unit);
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
-  const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0);
+  const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0)
+    + ((u.notes as unknown[] | undefined)?.length ?? 0);
   if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) > CARDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
+  if (units.reduce((n, u) => n + ((u.idr as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (v.reviews !== undefined && v.reviews !== null) {
     // 3.3, C4: a review day: that morning, a filtered deck of the dates from `from` to `to`
     const ids = new Set(units.map((u) => u.id));
@@ -505,6 +527,24 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 
 /** PUT /plans/{id} {version, name?, line?, audience?, squad?, doc?}: the
  *  author's save. A stale version is refused with the current one. */
+/** 3.6.5: `idr` and `pn` come only from the author's Anki (PUT
+ *  /plans/{id}/ids): a save keeps a date's as stored while what they were
+ *  worked out from is unchanged, and drops them when it changes (the next
+ *  morning works them out again). */
+export function keepIdr(doc: Obj, was: string | null): Obj {
+  const old = new Map(((was ? JSON.parse(was).units : []) as Obj[]).map((u) => [u.id, u]));
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+  const picks = (u: Obj) => [u.opens, u.tags, u.decks, u.search, u.nids, u.cids, u.notes];
+  for (const u of doc.units as Obj[]) {
+    const o = old.get(u.id);
+    delete u.idr;
+    delete u.pn;
+    if (o?.idr && same(o.nids, u.nids) && same(o.cids, u.cids)) u.idr = o.idr;
+    if (o?.pn && same(picks(o), picks(u))) u.pn = o.pn;
+  }
+  return doc;
+}
+
 export async function put(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
   const body = await readJson(req, PLAN_BODY_MAX);
@@ -518,7 +558,7 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     line: body.line !== undefined ? planLine(body.line) : p.line,
     audience: p.audience,
     squad: p.squad,
-    doc: body.doc !== undefined ? JSON.stringify(planDoc(body.doc)) : p.doc,
+    doc: body.doc !== undefined ? JSON.stringify(keepIdr(planDoc(body.doc), p.doc)) : p.doc,
   };
   if (body.audience !== undefined) {
     if (body.audience !== "code" && body.audience !== "squad") throw V.bad("audience");
@@ -557,14 +597,15 @@ export async function logSave(env: Env, plan: string, version: number, uid: stri
 
 /** PUT /plans/{id}/ids {units: {unitId: [tags, decks, [guid]]}}: 3.3, C5.
  *  An author's Anki keeps the note ids behind each date's tags and
- *  subdecks, so a follower whose AnKing renamed a tag still gets the date.
+ *  subdecks, so a follower whose copy of the deck renamed a tag still gets the date.
  *  A unit's ids are taken only while its tags and subdecks are still the
  *  ones they were read from. Never a history entry; a new version. */
 export async function putIds(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
   const body = await readJson(req, PLAN_BODY_MAX);
-  if (!V.isObj(body.units) || Object.keys(body).some((k) => k !== "units" && k !== "counts")) throw V.bad("ids");
+  if (!V.isObj(body.units) || Object.keys(body).some((k) => !["units", "counts", "refs"].includes(k))) throw V.bad("ids");
   if (body.counts !== undefined && !V.isObj(body.counts)) throw V.bad("ids");
+  if (body.refs !== undefined && !V.isObj(body.refs)) throw V.bad("ids");
   const doc = JSON.parse(p.doc) as Obj & { units: Obj[] };
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   for (const [uid, v] of Object.entries(body.units)) {
@@ -572,6 +613,14 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     const u = doc.units.find((x) => x.id === uid);
     if (!u || !same(u.tags, v[0]) || !same(u.decks, v[1])) continue;  // changed since: the next refresh sends it again
     if (v[2].length) u.ids = v[2]; else delete u.ids;
+  }
+  // 3.6.5: the cards a date's pasted ids are here, as guid + card number,
+  // kept only while its ids are still the ones they were worked out from
+  for (const [uid, v] of Object.entries((body.refs as Obj) || {})) {
+    if (!Array.isArray(v) || v.length !== 3 || !Array.isArray(v[2])) throw V.bad("ids");
+    const u = doc.units.find((x) => x.id === uid);
+    if (!u || !same(u.nids, v[0]) || !same(u.cids, v[1])) continue;
+    if (v[2].length) u.idr = v[2]; else delete u.idr;
   }
   // 3.4, D1: how many cards each of a date's searches finds in my copy
   for (const [uid, v] of Object.entries((body.counts as Obj) || {})) {
@@ -581,7 +630,9 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     const sn: Obj = { ...((u.sn as Obj) || {}) };
     for (const [q, n] of Object.entries(v)) {
       // E1: "#ids" is how many cards the date's pasted ids found
-      if (q === "#ids") { if ((u.nids || u.cids) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
+      if (q === "#ids") { if ((u.nids || u.cids || u.notes) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
+      // 3.6.5, P1: new to this date, already on an earlier one, picked notes not in the deck
+      if (q === "#pn") { if (Array.isArray(n) && n.length === 3 && n.every((x) => V.isInt(x, 0, 1_000_000))) u.pn = n; continue; }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -1048,15 +1099,16 @@ export async function forBoard(env: Env, uid: string) {
     `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
-                      'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids')))
+                      'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
+                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
-                    + coalesce(json_array_length(x.value, '$.cids'), 0) > 0) AS units
+                    + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
   ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
   const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks })) });
+    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",

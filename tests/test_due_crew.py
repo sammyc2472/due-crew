@@ -1059,9 +1059,9 @@ def test_remove_sticks():
 
 
 def _deck_col():
-    """AnKing (1) with a Cardio subdeck (2), an unrelated deck (3), and one
+    """Big Deck (1) with a Cardio subdeck (2), an unrelated deck (3), and one
     card sitting in a filtered deck (99) whose home is Cardio. By hand, for
-    the AnKing subtree: 6 cards, 4 seen, 2 mature, 5 unlocked."""
+    the Big Deck subtree: 6 cards, 4 seen, 2 mature, 5 unlocked."""
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     fakes.add_card(conn, 1, did=1, ctype=2, queue=2, ivl=30)     # seen, mature
@@ -1082,7 +1082,7 @@ def _deck_col():
     fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=3)), ease=3, rtype=1, cid=1)
     fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=10)), ease=1, rtype=1, cid=1)  # too old
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
-    col.decks = fakes.FakeDecks({1: "AnKing", 2: "AnKing::Cardio", 3: "Other"})
+    col.decks = fakes.FakeDecks({1: "Big Deck", 2: "Big Deck::Cardio", 3: "Other"})
     return col
 
 
@@ -1104,7 +1104,7 @@ def test_decks():
     d = payload[0]
     check("decks: the upload carries unlocked, today, retention, and its day",
           (d["name"], d["total"], d["seen"], d["mature"], d["open"], d["today"], d["ret"], d["day"])
-          == ("AnKing", 6, 4, 2, 5, 4, 75.0, TODAY.isoformat()), str(d))
+          == ("Big Deck", 6, 4, 2, 5, 4, 75.0, TODAY.isoformat()), str(d))
     private = dk.gather_shared_decks(col, {"shared_decks": [1], "share_reviews": False,
                                            "share_retention": False})[0]
     check("decks: the privacy switches cover the new fields",
@@ -1554,12 +1554,12 @@ def test_settings_follow_account_v213():
     cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
-    doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
+    doc = account.pick(cfg_a, {11: "Big Deck", 12: "Path Book"}.get)
     check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.5.0)",
           doc["accent"] == "rose" and "sort" not in doc
-          and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
-    here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
-    resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
+          and doc["shared_decks"] == [{"id": 11, "name": "Big Deck"}, {"id": 12, "name": "Path Book"}])
+    here = {11: 11, 99: 99}                      # this computer: 11 by id, Path Book by name as 99
+    resolve = lambda did, name: here.get(did) or {"Path Book": 99}.get(name)
     got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
     check("apply: the account's settings land, the accent too; the deck matches by id, else by name",
           got["share_retention"] is False and got["exam_date"] == "2026-10-02"
@@ -1576,7 +1576,7 @@ def test_settings_follow_account_v213():
     ok = sam.put_settings("2026-09-24T10:00:00.000000Z", doc)
     back, status = sam.get_settings()
     check("settings doc: I write it and read it back", ok and status == 200
-          and back["settings"]["shared_decks"][1]["name"] == "Pathoma")
+          and back["settings"]["shared_decks"][1]["name"] == "Path Book")
     dre = new_client(store, "dre", "Dre")
     check("settings doc: not even my crew can read it (GET /settings is only ever mine)",
           dre.get_settings()[1] == 404)
@@ -1609,14 +1609,14 @@ def test_settings_follow_account_v213():
     appmod.swap = None
     store.settings.pop("sam", None)
     try:
-        a = computer("a", dict(cfg_a), {11: "AnKing", 12: "Pathoma"})
+        a = computer("a", dict(cfg_a), {11: "Big Deck", 12: "Path Book"})
         use(a)
         synced = []
         account.ensure(lambda: synced.append("a"))
         check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
               synced == ["a"] and "sam" in store.settings and account.ready())
         b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
-                     {11: "AnKing", 77: "Pathoma"})
+                     {11: "Big Deck", 77: "Path Book"})
         use(b)
         order = []
         real_pulled = account._pulled
@@ -2792,7 +2792,7 @@ def test_settings_in_board_v341():
           and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
     view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
             "sync": "sam@x.edu · Synced 2m ago · v3.5.0", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
-            "decks": ["AnKing"]}
+            "decks": ["Big Deck"]}
     you = board.settings_html(view, {"crew_label": "Crew"})
     check("settings: You, escaped; three squads read as two and 1 more",
           'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;BUSM&lt;/i&gt;, Block 3 and 1 more" in you
@@ -2973,7 +2973,7 @@ def test_room_commands_from_the_card_page_need_the_key():
 
 def test_room_chip_side_v301():
     """3.0.1: the room chip goes left or right in the top bar (a setting
-    on this computer; AMBOSS puts a chip on the right too)."""
+    on this computer; a question bank puts a chip on the right too)."""
     from due_crew import account, room_model as rm
     t0 = datetime.datetime(2026, 9, 24, 18, 0, tzinfo=datetime.timezone.utc)
     room = rm.make_room("dre", t0, 4, 25, 5)
@@ -3077,12 +3077,142 @@ def test_plans_ids_e1():
     check("ids: new ids give the date a new sig (so they open)",
           P.unit_sig(base) != P.unit_sig(dict(base, nids=[50])) != P.unit_sig(dict(base, nids=[50], cids=[3])))
     counts = P.search_counts(idx, {"units": [dict(base, nids=[50, 999999], cids=[1])]})
-    check("ids: the author's Anki counts what they find", counts == {"u1": {"#ids": 3}}, str(counts))
+    check("ids: the author's Anki counts what they find", counts["u1"]["#ids"] == 3, str(counts))
     u = shapes._clean_unit({"id": "u1", "name": "x", "opens": "2026-10-06", "nids": [50, "x", True, -1, 7], "cids": []})
     check("ids: cleaned on arrival to positive whole numbers", u.get("nids") == [50, 7] and "cids" not in u, str(u))
     rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
                                                           "tags": [], "decks": [], "cards": [], "nids": [50]}]})
     check("ids: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
+
+
+def test_plans_portable_picks_365():
+    """3.6.5: a date's pasted ids also travel as the cards the author's Anki
+    found (`idr`, guid + card number), so a copy whose ids differ still finds
+    them; `notes` picks every card of a note by its guid; ids that only mean
+    something in one collection can't be a search."""
+    from due_crew import plans as P
+    from due_crew.backend import shapes
+    col = _plan_col()
+    idx = P.DeckIndex(col, 10)
+    g50 = "guid000050"
+    check("notes: a note's guid brings every card of it", idx.match({"notes": [g50]}) == {5, 6})
+    check("notes: a guid this copy lacks finds nothing", idx.match({"notes": ["nope"]}) == set())
+    # the author's copy: note 50 is a cloze; the refs are what its ids found
+    unit = {"id": "u1", "nids": [50], "cids": [3]}
+    refs = P.id_refs(idx, col, {"units": [dict(unit, tags=[]), {"id": "u2", "tags": ["x"]}]})
+    check("refs: one entry a date with ids, the ids it was worked out from",
+          list(refs) == ["u1"] and refs["u1"][:2] == [[50], [3]], str(refs))
+    check("refs: the cards as guid and card number",
+          sorted(map(tuple, refs["u1"][2])) == [("guid000003", 0), (g50, 0), (g50, 1)], str(refs))
+    check("refs: capped", len(P.id_refs(idx, col, {"units": [unit]}, cap=2)["u1"][2]) == 2)
+    # a classmate whose copy gave the same notes other ids
+    other = sqlite3.connect(":memory:")
+    fakes.make_collection(other)
+    fakes.add_card(other, 103, did=10, queue=-1, nid=903)
+    fakes.add_card(other, 105, did=10, queue=-1, nid=950, ord_=0)
+    fakes.add_card(other, 106, did=10, queue=-1, nid=950, ord_=1)
+    other.execute("UPDATE notes SET guid = 'guid000003' WHERE id = 903")
+    other.execute("UPDATE notes SET guid = ? WHERE id = 950", (g50,))
+    ocol = fakes.FakeCol(other, fakes.day_cutoff_for(TODAY))
+    ocol.decks = fakes.FakeDecks({10: "Step 1"})
+    oidx = P.DeckIndex(ocol, 10)
+    check("refs: without them, other ids find nothing", oidx.match(unit) == set())
+    check("refs: with them, the same cards", oidx.match(dict(unit, idr=refs["u1"][2])) == {103, 105, 106})
+    check("notes: by guid in any copy", oidx.match({"notes": [g50]}) == {105, 106})
+    check("missing: single cards and notes this copy lacks, of all of them",
+          oidx.exact_missing({"cards": [[g50, 1], ["gone", 0]], "notes": [g50, "gone2"]}) == (2, 4))
+    base = {"id": "u1", "tags": [], "decks": [], "cards": [], "nids": [50]}
+    check("sig: notes, or refs arriving, give the date a new sig (so what they add opens)",
+          len({P.unit_sig(base), P.unit_sig(dict(base, notes=[g50])), P.unit_sig(dict(base, idr=[[g50, 0]]))}) == 3)
+    check("sig: a date with neither keeps the sig it had", P.unit_sig(base) == P.unit_sig(dict(base, notes=[], idr=[])))
+    counts = P.search_counts(idx, {"units": [{"id": "n", "notes": [g50, "gone"]}]})
+    check("notes: counted by the author's Anki", counts["n"]["#ids"] == 2 and counts["n"]["#pn"] == [2, 0, 1], str(counts))
+    pn = P.date_counts(idx, {"deck": "Step 1", "units": [
+        {"id": "b", "opens": "2026-10-06", "tags": ["Step1::Cardio"], "decks": []},
+        {"id": "a", "opens": "2026-10-05", "tags": ["Step1::Cardio::Heart_failure"], "decks": [], "notes": [g50, "gone"]}]})
+    check("counts (P1): in date order, what's new to a date, what an earlier one opens, notes not here",
+          pn == {"a": [4, 0, 1], "b": [1, 2, 0]}, str(pn))
+    rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
+                                                          "tags": [], "decks": [], "cards": [], "notes": [g50]}]})
+    check("notes: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
+    u = shapes._clean_unit({"id": "u1", "name": "x", "opens": "2026-10-06", "notes": [g50, 5, ""],
+                            "idr": [[g50, 0], ["x"], [g50, "1"], [3, 0]]})
+    check("clean: notes are guids, refs [guid, number]",
+          u.get("notes") == [g50] and u.get("idr") == [[g50, 0]], str(u))
+    for q in ("nid:50", "cid:3,4", "deck:x nid:1"):
+        check(f"search: {q} means nothing in someone else's Anki", not P.shareable_search(q))
+    check("search: a plain one still goes", P.shareable_search("tag:x nidus"))
+
+
+def test_plans_selector_365():
+    """3.6.5: Anki's browser copies picked notes or cards as plan text that
+    reads the same in anyone's copy: guids, card numbers from 1."""
+    from due_crew import plans as P
+    col = _plan_col()
+    check("selector: notes by guid", P.selector(col, nids=[50, 3, 50]) == ("notes:guid000003 guid000050", 2))
+    check("selector: cards as guid:number", P.selector(col, cids=[6, 5]) == ("cards:guid000050:1 guid000050:2", 2))
+    check("selector: nothing picked", P.selector(col) == ("", 0))
+    idx = P.DeckIndex(col, 10)
+    text, _n = P.selector(col, cids=[6])
+    g, n = text[len("cards:"):].rsplit(":", 1)
+    check("selector: reads back to that card", idx.match({"cards": [[g, int(n) - 1]]}) == {6})
+
+
+def test_export_for_my_ai_365():
+    """3.6.5, P3: a plan's notes, or a deck's, in Anki's own plain-text
+    format with the unique identifier first, for the person's own AI. To
+    a file only; formatting and media out unless asked."""
+    from due_crew import plans as P
+    col = _plan_col()
+    col.db.conn.execute("UPDATE notes SET flds = ? WHERE id = 1", ("<b>Heart</b> failure\x1f{{c1::BNP}} rises<br>[sound:x.mp3]\tand \"so\"",))
+    idx = P.DeckIndex(col, 10)
+    doc = {"deck": "Step 1", "units": [{"id": "hf", "opens": "2026-10-05", "tags": ["Step1::Cardio::Heart_failure"], "decks": []}],
+           "pace": {"cover": ["tag:Step1::Cardio", "deck:Step 1::Extras"]}}
+    check("export: what the plan's dates open, as notes", P.export_scope(idx, doc, "dates") == {1, 2})
+    check("export: what the plan covers (the builder's ticks)", P.export_scope(idx, doc, "cover") == {1, 2, 3, 4})
+    check("export: the whole deck", P.export_scope(idx, doc, "deck") == {1, 2, 3, 4, 50, 8, 9})
+    text, n = P.export_notes(col, {1, 50})
+    lines = text.splitlines()
+    check("export: Anki's header, the guid column first", lines[:6] == ["#separator:tab", "#html:false", "#guid column:1",
+          "#notetype column:2", "#deck column:3", "#tags column:4"] and n == 2, str(lines[:6]))
+    row = next(x for x in lines if x.startswith("guid000001"))
+    cells = row.split("\t")
+    check("export: a row is guid, notetype, deck, tags, then the fields, as plain text",
+          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "Heart failure"
+          and cells[5] == '"{{c1::BNP}} rises and ""so"""', str(cells))
+    check("export: one line a note, no tabs inside a field", len(lines) == 8 and all(x.count("\t") >= 4 for x in lines[6:]))
+    raw, _ = P.export_notes(col, {1}, plain=False)
+    check("export: formatting kept when asked", "#html:true" in raw and "<b>Heart</b>" in raw)
+    check("export: a size estimate errs high", P.export_size(col, {1, 50}) >= len(text) - 200)
+
+
+def test_feedback_365():
+    """3.6.5, P6: Send feedback to Sam, from Tools › Due Crew and Settings
+    (the board's You tab, and the dialog), with the versions if ticked."""
+    from due_crew import app as appmod
+    store = world({"maya": "Maya"})
+    maya = new_client(store, "maya", "Maya")
+    check("feedback: sent with the versions, once", maya.send_feedback("  Plans tab is great  ", "add-on 3.6.5 ·\nAnki 24.11") == 201
+          and store.feedback == [{"uid": "maya", "text": "Plans tab is great", "ver": "add-on 3.6.5 · Anki 24.11"}])
+    for i in range(4):
+        maya.send_feedback(f"more {i}")
+    check("feedback: five a day", maya.send_feedback("one too many") == 429 and len(store.feedback) == 5)
+    v = appmod.feedback_versions("3.6.5")
+    check("feedback: the versions line", v.startswith("add-on 3.6.5 · Anki ") and v.count(" · ") == 2, v)
+    html = board.settings_html({"tab": "you", "signed_in": True, "name": "Maya"}, {})
+    check("feedback: a row on Settings › You, sent as setfeedback", "duecrew:setfeedback" in html and "Feedback" in html)
+    check("feedback: not on the signed-out You tab", "setfeedback" not in board.settings_html({"tab": "you", "signed_in": False}, {}))
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    opened, saved = [], dc.open_feedback
+    dc.open_feedback = lambda: opened.append(1)
+    try:
+        dc._on_js(False, "duecrew:setfeedback", DeckBrowser())
+    finally:
+        dc.open_feedback = saved
+    check("feedback: the board's click reaches it", opened == [1])
 
 
 def test_plans_matching_v31():
@@ -3108,7 +3238,7 @@ def test_plans_matching_v31():
           oidx.match(u["hf"], swap, "Step 1") == {1, 2} and oidx.match(u["hf"], None, "Step 1") == set())
     check("swap: none when the tags already line up", P.detect_swap(idx, doc) is None)
     check("best deck: the one named like the plan's", P.best_deck(col, doc) == (10, None))
-    col.decks = fakes.FakeDecks({10: "AnKing v11", 11: "AnKing v11::Extras", 20: "Other"})
+    col.decks = fakes.FakeDecks({10: "Big Deck v11", 11: "Big Deck v11::Extras", 20: "Other"})
     check("best deck: else the one where most of it is found", P.best_deck(col, doc)[0] == 10)
     prog = P.progress(idx, doc)
     check("progress: [opened, seen, total] per unit",
@@ -3545,6 +3675,28 @@ def test_plans_changed_unit_v311():
     check("open cards: never a leech, even asked directly", P.open_cards(col, {12, 13}, "x") == 0)
     F.run(col, [changed], state, _day(1), everything=True)
     check("open everything: still no leech", 12 not in _open(col) and 13 not in _open(col) and 1 in _open(col))
+    # 3.6.5: the plan card says what it left shut, once
+    check("aside: the leeches a date leaves shut, counted when it opens",
+          F.aside(changed, state[pid]) == [2, 0, 0], str(state[pid].get("leeches")))
+    from due_crew import board
+    card = {"id": pid, "aside": F.aside(changed, state[pid]), "aside_ok": [0, 0]}
+    html = board._plan_notes(card, pid)
+    check("aside: the card says so, with OK", any("2 leeches stay suspended" in x and f"planasideok:{pid}" in x for x in html), str(html))
+    check("aside: said once, until it grows", not any("leech" in x for x in board._plan_notes(dict(card, aside_ok=[2, 0]), pid))
+          and any("leech" in x for x in board._plan_notes(dict(card, aside=[3, 0, 0], aside_ok=[2, 0]), pid)))
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    pc = {}
+    saved = (F._state_cfg, F.followed, F._pcfg, F._psave, F.app.swap)
+    F._state_cfg, F.followed, F._pcfg = (lambda c=None: state), (lambda: [changed]), (lambda: pc)
+    F._psave, F.app.swap = (lambda d: None), (lambda c: None)
+    try:
+        dc._on_js(False, f"duecrew:planasideok:{pid}", DeckBrowser())
+    finally:
+        F._state_cfg, F.followed, F._pcfg, F._psave, F.app.swap = saved
+    check("aside: OK, sent as the board sends it, remembers what was said", pc.get("aside_ok", {}).get(pid) == [2, 0], str(pc))
 
 
 def test_plans_changed_unit_with_search_and_ids():
@@ -4066,11 +4218,11 @@ def test_tree_nested_v33():
     most useful first (question ids last), a kept tag keeps its parents,
     and it stays under the server's body limit."""
     from due_crew import plans as P
-    rows = [["#AK", 9000], ["#AK::#Bootcamp", 3000], ["#AK::#Bootcamp::Cardiology", 900],
-            ["#AK::#Bootcamp::Cardiology::02_Anatomy", 120],
-            ["#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
-            ["#AK::#UWorld", 5000]]
-    rows += [[f"#AK::#UWorld::{10000 + i}", 2] for i in range(40000)]
+    rows = [["#Big", 9000], ["#Big::#Lectures", 3000], ["#Big::#Lectures::Cardiology", 900],
+            ["#Big::#Lectures::Cardiology::02_Anatomy", 120],
+            ["#Big::#Lectures::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
+            ["#Big::#QBank", 5000]]
+    rows += [[f"#Big::#QBank::{10000 + i}", 2] for i in range(40000)]
     tree, kept, left = P.nest(rows, budget=60_000)
     flat = []
 
@@ -4081,7 +4233,7 @@ def test_tree_nested_v33():
             if len(x) == 3:
                 walk(x[2], p)
     walk(tree)
-    check("tree: a tag five levels down goes up", "#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
+    check("tree: a tag five levels down goes up", "#Big::#Lectures::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
     check("tree: question ids fill what's left, and some are left out", left > 0 and kept == len(flat))
     check("tree: every kept tag has its parents", all("::" not in p or p.rsplit("::", 1)[0] in set(flat) for p in flat))
     check("tree: it fits the budget", len(json.dumps(tree)) <= 60_000, str(len(json.dumps(tree))))
@@ -4189,9 +4341,41 @@ def test_class_through_step_v33():
     scol = _spread_col()
     scol.find_cards = lambda q: [101, 102, 103] if q == "tag:L14" else []
     counts = P.search_counts(P.DeckIndex(scol, 10), lean)
-    check("search count: from my copy", counts == {"rn": {"tag:L14": 3}}, str(counts))
+    check("search count: from my copy", counts["rn"]["tag:L14"] == 3, str(counts))
     check("search count: rides the ids request", dre.put_ids(pid, {}, counts)
           and store.plans[pid]["doc"]["units"][0].get("sn") == {"tag:L14": 3})
+    # 3.6.5: pasted ids go up as the cards they are, kept while the ids hold
+    store.plans[pid]["doc"]["units"][0].update(nids=[50], notes=["guid000003"])
+    dre.fetch_board([_day(0)], with_decks=True)
+    lean = dre.session["plans_authored"][0]["doc"]
+    check("authored: carries its ids and notes", lean["units"][0].get("nids") == [50]
+          and lean["units"][0].get("notes") == ["guid000003"], str(lean))
+    acol = _plan_col()
+    refs = P.id_refs(P.DeckIndex(acol, 10), acol, lean)
+    check("refs: ride the ids request, kept on the date", dre.put_ids(pid, {}, None, refs)
+          and sorted(map(tuple, store.plans[pid]["doc"]["units"][0].get("idr") or [])) == [("guid000050", 0), ("guid000050", 1)])
+    stale = {"rn": [[51], [], [["guid000051", 0]]]}
+    check("refs: worked out from ids the date no longer has: dropped", dre.put_ids(pid, {}, None, stale)
+          and len(store.plans[pid]["doc"]["units"][0]["idr"]) == 2)
+    doc = json.loads(json.dumps(store.plans[pid]["doc"]))
+    doc["units"][0]["idr"] = [["forged", 0]]
+    store.edit_plan(pid, doc["units"])
+    check("refs: a site save can't set them, and keeps them while the ids hold",
+          len(store.plans[pid]["doc"]["units"][0]["idr"]) == 2, str(store.plans[pid]["doc"]["units"][0].get("idr")))
+    doc["units"][0]["nids"] = [51]
+    store.edit_plan(pid, doc["units"])
+    check("refs: new ids drop them until the author's Anki sends the new ones",
+          "idr" not in store.plans[pid]["doc"]["units"][0])
+    # 3.6.5, P1: what each date opens, counted here, kept while its picks are
+    check("counts (P1): ride the ids request", dre.put_ids(pid, {}, {"rn": {"#pn": [80, 3, 1]}})
+          and store.plans[pid]["doc"]["units"][0].get("pn") == [80, 3, 1])
+    doc = json.loads(json.dumps(store.plans[pid]["doc"]))
+    doc["units"][0]["pn"] = [1, 1, 1]
+    store.edit_plan(pid, doc["units"])
+    check("counts (P1): a site save keeps the stored ones while the picks hold", store.plans[pid]["doc"]["units"][0].get("pn") == [80, 3, 1])
+    doc["units"][0]["tags"] = ["Step1::Cardio"]
+    store.edit_plan(pid, doc["units"])
+    check("counts (P1): and drops them when they change", "pn" not in store.plans[pid]["doc"]["units"][0])
 
 
 def test_plans_tab_v33():
@@ -4247,8 +4431,8 @@ def test_even_split_v33():
           _open(col) == set(range(101, 110)) and "rn" in state[pid]["applied"])
     doc = shapes.clean_plan_doc({"deck": "x", "pace": {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 90, "cover": ["tag:a"]},
                                  "units": [dict(unit), dict(unit, id="b", even="yes")]})
-    check("shapes: even and the plan's days come through, nothing else of the pace",
-          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
+    check("shapes: even, the plan's days and what it covers (3.6.5, for the export) come through, nothing else of the pace",
+          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0], "cover": ["tag:a"]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
 
 
 def _knows_col():
@@ -4537,9 +4721,9 @@ def test_plans_tab_v341():
     check("week: starts on Monday, and moves by weeks", mon == "2026-10-05" and P.week_start("2026-10-07", 1) == "2026-10-12"
           and P.week_start("2026-10-05") == "2026-10-05")
     doc = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
-           "units": [{"id": "a", "name": "Pathoma 1", "opens": "2026-10-05", "n": 40},
-                     {"id": "b", "name": "B&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
-                     {"id": "c", "name": "Pathoma 2", "opens": "2026-10-07", "n": 42, "for": "q"},
+           "units": [{"id": "a", "name": "Path Book 1", "opens": "2026-10-05", "n": 40},
+                     {"id": "b", "name": "V&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
+                     {"id": "c", "name": "Path Book 2", "opens": "2026-10-07", "n": 42, "for": "q"},
                      {"id": "d", "name": "Metab", "opens": "2026-10-08", "idn": 38}],
            "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
     w = P.week_view(doc, {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon,
@@ -4557,25 +4741,29 @@ def test_plans_tab_v341():
           and by["2026-10-09"]["events"] == ["Cardio quiz"] and by["2026-10-09"]["units"][0]["state"] == "skip"
           and by["2026-10-09"]["new"] == 0)
     week = w
-    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Pathoma 1", "state": "open", "crew": [5, 6]}],
+    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Path Book 1", "state": "open", "crew": [5, 6]}],
             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
-            "today_names": ["Pathoma 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
-            "week_offset": 0, "opened": {"names": ["Pathoma 2"], "n": 42, "undo": True},
+            "today_names": ["Path Book 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
+            "week_offset": 0, "opened": {"names": ["Path Book 2"], "n": 42, "undo": True},
             "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0}}
     h = board._plan_card_html(base)
-    check("today: the topic, reviews, new and minutes, one bar, Study now and Put off to tomorrow",
-          'class="ptoday"' in h and "<b>Pathoma 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
-          and "~48" in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
-    check("week: the site's calendar look; names escaped; today outlined; a day opens its details",
-          'class="pwk"' in h and "B&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
-          and 'class="pc now"' in h and "dc-pd-p1-" in h and "Cardio quiz" in h and "plansite:p1" in h
-          and "planweek:p1:next" in h and "planweek:p1:prev" in h and "planweek:p1:0" not in h)
+    check("today: the topic, reviews, new, one bar, Study now and Put off to tomorrow; no time guess (3.6.5)",
+          'class="ptoday"' in h and "<b>Path Book 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
+          and "~48" not in h and "</b> min" not in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
+    tidx = next(i for i, d in enumerate(week) if d["today"])
+    check("week: the site's calendar look; names escaped; today open with the box, its date filled; a day opens its details",
+          'class="pwk"' in h and "V&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
+          and 'class="pc now sel"' in h and h.count(" sel\"") == 1 and '<b class="td">' in h
+          and f'id="dc-pd-p1-{tidx}">' in h and "Cardio quiz" in h and "plansite:p1" in h
+          and "planweek:p1:next" in h and "planweek:p1:prev" in h and 'class="tb here"' in h)
     check("week: a later day offers Open now, Skip it and Move my days back",
           "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Undo skip" in h)
-    check("crew: in words", "Crew: 5 done with Pathoma 1" in h)
-    check("week: moved, it says which, with a way back", "Week of 5 Oct" in board._plan_card_html(dict(base, week_offset=1))
-          and "planweek:p1:0" in board._plan_card_html(dict(base, week_offset=1)))
-    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, minutes=0)))
+    check("crew: in words", "Crew: 5 done with Path Book 1" in h)
+    moved = board._plan_card_html(dict(base, week_offset=1))
+    check("week: moved, it says which, Today between the arrows, the box on its first day with plans",
+          "Week of 5 Oct" in moved and 'class="tb" onclick' in moved and "planweek:p1:0" in moved
+          and moved.count(" sel\"") == 1 and moved.count('class="pday"') - moved.count('" hidden>') == 1)
+    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, due=0)))
     check("today: done, and what's next with Open now", "ptoday done" in done and "<b>Done</b>" in done
           and "Next: <b>Metab</b>" in done and "plannow:p1:d" in done)
     rest = board._plan_card_html(dict(base, session={"kind": "rest", "due": 212}))
@@ -4587,7 +4775,7 @@ def test_plans_tab_v341():
           and "planshift:p1" in behind and "on track" not in behind)
     paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
     check("today: paused, with Resume now", "Paused until Mon 12 Oct" in paused and "planresume:p1" in paused)
-    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Pathoma 2"], change=[("Dre moved a date", False)]))
+    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Path Book 2"], change=[("Dre moved a date", False)]))
     check("notes: one at a time, the most pressing first", notes.count('class="pn') == 1 and "planok:p1" in notes)
     css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "plans"}, 0,
                        plans={"cards": [base], "offers": []})

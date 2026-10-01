@@ -431,3 +431,44 @@ In Anki (as a follower):
 - [ ] /admin › Squad bingo: this week's card; edit a square's numbers
       (a wrong one says so), turn one off, add one; the counts appear the
       day after the cron runs.
+
+### 3.6.5: picks that work in anyone's copy
+
+- [ ] Browser, Notes mode: select three notes, right-click › Due Crew:
+      copy as plan selector: "Copied 3 notes". Paste into a day's Add
+      cards on the site: "3 notes · all their cards", Add. Cards mode
+      does the same as cards: (card numbers from 1).
+- [ ] Text: a line with notes:… and cards:… reads back as written (a
+      guid with | or ` in it survives Read it). A line with nids: says
+      to open Anki after saving. A name over 60 characters says it's cut.
+- [ ] Text: Add to the plan is the first button; Replace asks again,
+      naming how many dates it takes off.
+- [ ] Paste note IDs onto a date and save; open Anki (the day's first
+      refresh): a second profile whose copy has other note ids, following
+      the plan, opens those cards the next morning.
+- [ ] Add cards to a date that has opened (site and Anki's Add to a
+      plan): both say followers get them tomorrow morning.
+- [ ] A date with a leech, and one with a note your copy lacks: the
+      plan card says "1 leech stays suspended…" and "1 of 2 exact cards
+      aren't in your deck", with OK; OK hides it until the count grows.
+- [ ] Plans tab: Today sits between ‹ and ›, greyed on this week. Opening
+      the tab, today is open with the box on it and its date filled.
+      Click another day: the box moves there with its details; click it
+      again: both close. Move two weeks ahead, then Today: back, today
+      open. No "~N min" anywhere on the plan card.
+- [ ] Site, Text: opens on Add dates (an empty box). Paste a line with a
+      date's own day and name: "adds to this date"; Add keeps every
+      other date. Edit the whole plan: Read it lists what Replace takes
+      off. Copy the prompt: it asks the AI to check its answer and gives
+      each planned date's counts.
+- [ ] Write a plan, open Anki (the day's first refresh), back on the
+      site: a day says "N new here · M already on an earlier date", and
+      a picked note your deck lacks says so.
+- [ ] Tools › Due Crew › Export cards for my AI…: pick a plan, see the
+      notes and size, Export to the Desktop. The file's first lines
+      include "#guid column:1". Browser › Due Crew: export for my AI…
+      does the selected notes.
+- [ ] Send feedback from Tools › Due Crew, from the board's Settings ›
+      You › Feedback, and from the site's footer. /admin › Feedback
+      shows all three with name and version; Reply mails the sender
+      (check the inbox), Mark done moves it to Done, Account looks them up.

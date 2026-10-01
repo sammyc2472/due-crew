@@ -84,7 +84,7 @@ dre.session["room"] = {"host": dre.user_id, "start": now.strftime("%Y-%m-%dT%H:%
 cfg = {"status": "coffee, then 400", "exam_date": (today + datetime.timedelta(days=9)).isoformat(),
        "away_from": (today + datetime.timedelta(days=2)).isoformat(), "away_to": (today + datetime.timedelta(days=4)).isoformat(),
        "emoji": "🐢"}
-decks = [{"name": "AnKing", "sig": ["g1", "g2"], "total": 100, "seen": 40, "mature": 10, "open": 60, "today": 5, "day": labels[0], "ret": 90.1}]
+decks = [{"name": "Big Deck", "sig": ["g1", "g2"], "total": 100, "seen": 40, "mature": 10, "open": 60, "today": 5, "day": labels[0], "ret": 90.1}]
 ok, gone = dre.push(labels, cfg, stats=stats, backfill=backfill, shared_decks=decks, heatmap={labels[0]: 205, labels[2]: 50},
                     version="3.0.0", clock={"tz": -240, "rollover": 4})
 check("sync: accepted", ok and gone == [], str((ok, gone)))
@@ -99,7 +99,7 @@ check("board: away flags tomorrow+1..", (d["days"].get(tomorrow) or {}).get("awa
       and d["exam_date"] == cfg["exam_date"] and d["emoji"] == "🐢")
 check("board: flag without text; live; room", d["tricky"] == [{"guid": "Ab3$kQ9+zX", "deck": "Geo", "at": labels[0]}]
       and shapes.live_now(d["live_until"]) and d["room"]["rounds"] == 4, str(d["tricky"]))
-check("board: decks", d["decks"][0]["name"] == "AnKing" and d["decks"][0]["ret"] == 90.1)
+check("board: decks", d["decks"][0]["name"] == "Big Deck" and d["decks"][0]["ret"] == 90.1)
 check("heatmap", sam.fetch_heatmap(dre.user_id) == {labels[0]: 205, labels[2]: 50})
 check("cheer", dre.send_cheer(sam.user_id, "🍀", "Go get it", luck=True) is True)
 c = sam.fetch_board(labels, tomorrow)["cheers"]
