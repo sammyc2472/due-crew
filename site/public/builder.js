@@ -1648,7 +1648,9 @@ async function builder(id) {
       if (doc.phases && doc.phases.taper && !doc.end) doc.phases.taper = 0;
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
-      const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc, summary };
+      // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
+      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, ...u }) => u) });
+      const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;
       let merged = false;
@@ -1659,7 +1661,7 @@ async function builder(id) {
         // someone else saved first: theirs, with mine on top
         const theirs = await api("GET", `/plans/${id}`);
         body.version = theirs.version;
-        body.doc = merge(doc, base, theirs.doc);
+        body.doc = lean(merge(doc, base, theirs.doc));
         plan = await api("PUT", `/plans/${id}`, body);
         merged = true;
       }

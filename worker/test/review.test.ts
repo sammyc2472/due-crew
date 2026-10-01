@@ -116,7 +116,10 @@ describe("3.6.5: picks that work in anyone's copy", () => {
     // a site save keeps them while the ids hold, and drops them when they change
     const kept = await put([{ ...doc.doc.units[0], idr: [["forged", 0]] }, base[1]], doc.version);
     expect(kept.body.doc.units[0].idr).toEqual(refs);
-    const moved = await put([{ ...kept.body.doc.units[0], nids: [11] }, base[1]], kept.body.version);
+    const { idr: _drop, ...without } = kept.body.doc.units[0];  // the builder leaves them out of a save
+    const bare = await put([without, base[1]], kept.body.version);
+    expect(bare.body.doc.units[0].idr).toEqual(refs);
+    const moved = await put([{ ...bare.body.doc.units[0], nids: [11] }, base[1]], bare.body.version);
     expect(moved.body.doc.units[0].idr).toBeUndefined();
     // the lean copy carries the notes, so the author's Anki can count them
     const board = await priya.call("GET", "/board?decks=1");
