@@ -170,11 +170,9 @@ async function builder(id) {
   // E1: note ids and card ids pasted onto a date; `idn` is what they found in an author's Anki
   const hasIds = (u) => (u.nids || []).length + (u.cids || []).length > 0;
   const idsN = (u) => (hasIds(u) ? u.idn ?? (u.nids || []).length + (u.cids || []).length : 0);
-  const idsText = (u) => {
-    const a = (u.nids || []).length, b = (u.cids || []).length;
-    const w = (n, one) => `${n.toLocaleString()} ${one}${n === 1 ? "" : "s"}`;
-    return `${[a ? w(a, "note") : "", b ? w(b, "card") : ""].filter(Boolean).join(" + ")} by ID`;
-  };
+  // one number, never notes vs cards (a novice doesn't know the difference);
+  // what they come to in cards shows once an author's Anki has counted them
+  const idsText = (u) => `${((u.nids || []).length + (u.cids || []).length).toLocaleString()} added by ID`;
   function takeIds(u) { delete u.nids; delete u.cids; delete u.idn; }
   // F1: events: named days (a lecture, a quiz, the exam) that dates prep for
   const events = () => doc.events || [];
@@ -627,7 +625,9 @@ async function builder(id) {
     const spans = doc.units.filter((u) => u.even && u.due && u.opens <= d && d <= u.due);
     const rows = [];
     // 3.4, D1: a pasted search is counted by an author's Anki at its next refresh
-    const count = (c) => ((c.search || c.ids) && c.n == null ? h("small", {}, "counted in your Anki soon")
+    const count = (c) => (c.ids && c.n == null ? null
+      : c.ids && c.n > 0 ? h("small", {}, `${c.n.toLocaleString()} card${c.n === 1 ? "" : "s"}`)
+      : c.search && c.n == null ? h("small", {}, "counted in your Anki soon")
       : (c.search || c.ids) && c.n === 0 ? h("small", { class: "w" }, "finds nothing") : c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
       h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), count(c),
@@ -875,7 +875,7 @@ async function builder(id) {
           u.sn?.[q] != null ? h("small", {}, u.sn[q].toLocaleString()) : null,
           h("button", { class: "x", "aria-label": `Remove the search ${q}`, onclick: () => { takeSearch(u, q); cleanup(); renameAll(); mark(); draw(); } }, "×"))),
         (u.cards || []).length ? h("span", { class: "ch2 single" }, `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`) : null,
-        hasIds(u) ? h("span", { class: "ch2 single" }, idsText(u), u.idn != null ? h("small", {}, u.idn.toLocaleString()) : null,
+        hasIds(u) ? h("span", { class: "ch2 single" }, idsText(u), u.idn ? h("small", {}, `${u.idn.toLocaleString()} card${u.idn === 1 ? "" : "s"}`) : null,
           h("button", { class: "x", "aria-label": "Remove the IDs", onclick: () => { takeIds(u); cleanup(); renameAll(); mark(); draw(); } }, "×")) : null);
       return h("div", { class: "unit" }, h("span"), h("div", {}, name, chips),
         h("div", { class: "dates" }, h("span", {}, "Opens ", opens), h("span", {}, "Due ", due), h("label", { class: "inline" }, even, " evenly over its days"),
