@@ -536,7 +536,8 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
     if prep:
         prep["when"] = _short_day(prep["day"], today)
     # 3.5.0, the Plans tab: today's topics, the next one, and a week of the calendar
-    today_names = [str(u.get("name") or "?") for u in P.units(doc) if u.get("opens") == today]
+    today_units = [u for u in P.units(doc) if u.get("opens") == today]
+    today_names = [str(u.get("name") or "?") for u in today_units]
     if not today_names and now_id and any(u["id"] == now_id and u.get("due") and u["due"] >= today for u in open_units):
         today_names = [str(u.get("name") or "?") for u in open_units if u["id"] == now_id]
     skipped_units = [dict(u, opens=P._later(u["opens"], shift)) if shift else u
@@ -559,7 +560,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
             "aside": aside(plan, st), "aside_ok": list(((_pcfg().get("aside_ok") or {}) if mw else {}).get(plan["id"]) or [0, 0]),
             "put_off": put_off, "waiting": waiting,
-            "today_names": today_names, "next": nxt_view, "week": week, "week_offset": int(week_offset),
+            "today_names": today_names, "today_what": P.topics_line(today_units), "next": nxt_view, "week": week, "week_offset": int(week_offset),
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -1088,6 +1089,8 @@ def on_message(cmd, parts):
         undo_morning(put_off_too=True)
     elif cmd == "plannow" and arg and len(parts) > 3:
         open_date(arg, parts[3])
+    elif cmd == "planbrowse" and arg and len(parts) > 3:
+        browse_date(arg, parts[3])
     elif cmd == "planputback" and arg:
         open_put_off(arg)
     elif cmd == "planskip" and arg and len(parts) > 3:
@@ -1213,6 +1216,30 @@ def undo_morning(put_off_too=False):
 def _raw(pid):
     """The plan as the session keeps it (not my view of it)."""
     return next((p for p in client().session.get("plans") or [] if p.get("id") == pid), None)
+
+
+def browse_date(pid, uid):
+    """3.6.5, P7: Anki's browser on one date's cards in this copy (a search
+    run here; nothing is sent)."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    st = _state_cfg().get(pid)
+    if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return
+    pm = mine(p)
+    u = next((x for x in P.units(pm["doc"]) if x["id"] == uid), None)
+    if u is None:
+        return
+    try:
+        cids = P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"].get("deck", ""))
+    except Exception:
+        traceback.print_exc()
+        return
+    if not cids:
+        tooltip("None of its cards are in your deck.")
+        return
+    import aqt
+    browser = aqt.dialogs.open("Browser", mw)
+    browser.search_for("cid:" + ",".join(str(c) for c in sorted(cids)))
 
 
 def open_date(pid, uid):

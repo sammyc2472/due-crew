@@ -749,6 +749,12 @@ def _css(cfg):
     #due-crew .pday .r .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     #due-crew .pday .r .acts, #due-crew .pday > .acts {{ display: flex; gap: 12px; justify-content: flex-end; }}
     #due-crew .pday a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .pday .wi {{ display: grid; gap: 2px; margin: 1px 0 5px; padding-left: 9px; border-left: 2px solid var(--dc-line);
+                           font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
+    #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
+    #due-crew .ptoday .tw {{ display: block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
     #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
     #due-crew .dc-pways .t {{ font-size: 14px; }}
@@ -1174,6 +1180,9 @@ def _today_box(card, pid):
     head = f'Today &middot; {e(str(card.get("today") or ""))}'
     names = [str(n) for n in card.get("today_names") or []]
     what = " &middot; ".join(f"<b>{e(n)}</b>" for n in names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
+    # 3.6.5, P7: one line of what today's dates cover
+    if card.get("today_what"):
+        what += f'<span class="tw" title="{e(str(card["today_what"]))}">{e(str(card["today_what"]))}</span>'
     nxt = card.get("next")
     nxt_line = (f'<span class="next">Next: <b>{e(nxt["name"])}</b> &middot; {e(str(nxt["day"]))}'
                 + (f' &middot; {int(nxt["n"]):,} new' if int(nxt.get("n") or 0) else "")
@@ -1292,6 +1301,13 @@ def _week_html(card, pid):
                     acts = (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
                     num = f'{int(u["seen"]):,} / {int(u["total"]):,}' if int(u["total"]) else ""
                 rows += f'<div class="r"><span class="u">{e(u["name"])}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
+                # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
+                what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}{" &middot; ".join(e(str(x)) for x in xs)}</span>'
+                               for g, xs in (u.get("what") or []))
+                browse = (f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {int(u["total"]):,} card{"s" if int(u["total"]) != 1 else ""}</a>'
+                          if int(u["total"]) and u["state"] != "skip" else "")
+                if what or browse:
+                    rows += f'<div class="wi">{what}{f"<span class=acts>{browse}</span>" if browse else ""}</div>'
             for n in d["events"]:
                 rows += f'<div class="r"><span class="u"><b>{e(n)}</b></span><span class="n"></span><span></span></div>'
             later = (not d["past"] and not d["today"] and any(u["state"] == "later" for u in d["units"]))

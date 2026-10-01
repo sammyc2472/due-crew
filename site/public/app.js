@@ -176,6 +176,13 @@ function renderNav() {
       h("div", { class: "calpop" }, rest())));
 }
 
+/** "5 days (7 blocks)": the calendar days a plan opens on, and its named
+ *  blocks only when some day holds more than one. */
+function daysText(days, blocks) {
+  return `${days} day${days === 1 ? "" : "s"}${blocks > days ? ` (${blocks} blocks)` : ""}`;
+}
+const planDays = (doc) => daysText(new Set((doc.units || []).map((u) => u.opens)).size, (doc.units || []).length);
+
 function needSignIn() {
   go(`/sign-in?next=${encodeURIComponent(location.pathname + location.search)}`);
 }
@@ -274,7 +281,7 @@ async function plansList() {
   const row = (p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
     h("b", {}, p.name), h("small", { class: "fol" }, `${p.followers} following`),
     h("small", {}, [writes(p) ? (p.role === "editor" ? `with ${p.ownerName}` : null) : `${p.ownerName}'s plan`,
-      p.doc.deck !== p.name ? p.doc.deck : null, `${p.doc.units.length} date${p.doc.units.length === 1 ? "" : "s"}`, span(p)].filter(Boolean).join(" · ")));
+      p.doc.deck !== p.name ? p.doc.deck : null, planDays(p.doc), span(p)].filter(Boolean).join(" · ")));
   const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
   page(
     h("h1", {}, "Plans"),
@@ -337,7 +344,7 @@ async function libraryPage() {
   const filters = h("div", { class: "filters" });
   const search = h("input", { type: "search", value: f.q, placeholder: "Search plans", "aria-label": "Search plans", style: "flex:1 1 200px" });
   const empty = h("p", { class: "muted", hidden: true });
-  const tags = (p) => [`${p.dates} date${p.dates === 1 ? "" : "s"}`, p.perDay ? `~${p.perDay.toLocaleString()} new a study day` : null,
+  const tags = (p) => [daysText(p.daysOn ?? p.dates, p.dates), p.perDay ? `~${p.perDay.toLocaleString()} new a study day` : null,
     p.days ? `${Math.max(1, Math.round(p.days / 7))} week${Math.round(p.days / 7) > 1 ? "s" : ""}` : null,
     p.reviews ? `${p.reviews} review day${p.reviews === 1 ? "" : "s"}` : null, p.events ? `${p.events} event${p.events === 1 ? "" : "s"}` : null].filter(Boolean);
   function card(p) {
@@ -416,7 +423,7 @@ async function newPlan() {
   page(
     h("h1", {}, deck),
     h("div", { class: "plans" }, same.map((p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
-      h("b", {}, p.name), h("small", {}, `${p.doc.units.length} dates`)))),
+      h("b", {}, p.name), h("small", {}, planDays(p.doc))))),
     h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: make }, "New plan")), status,
   );
 }
@@ -470,7 +477,7 @@ function codeBox() {
       try { plan = await api("GET", `/plans/peek?code=${c}`); } catch (err) { if (err.status === 429) throw err; }
       if (plan) {
         if (plan.following) return say("", h("b", {}, plan.name), h("span", { class: "muted" }, "you follow it"), link(`/plans/${plan.id}`, "Open"));
-        return say("", h("b", {}, plan.name), h("span", { class: "muted" }, `${plan.ownerName}'s plan · ${plan.doc.units.length} dates`), h("button", { onclick: async () => {
+        return say("", h("b", {}, plan.name), h("span", { class: "muted" }, `${plan.ownerName}'s plan · ${planDays(plan.doc)}`), h("button", { onclick: async () => {
           try { await api("POST", "/plans/follow", { code: c }); done("Following. Each date's cards open in Anki on their day; the first time, Anki asks about holding later ones back."); }
           catch { say("bad", h("span", {}, "That didn't work. Try again.")); }
         } }, "Follow"));

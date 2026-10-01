@@ -3215,6 +3215,52 @@ def test_feedback_365():
     check("feedback: the board's click reaches it", opened == [1])
 
 
+def test_plans_what_in_a_day_p7():
+    """3.6.5, P7: a date's topics on the Plans tab, as the site's print list
+    groups them, with Browse; and one line of today's in the Today box."""
+    from due_crew import plans as P
+    u = {"id": "a", "name": "SLGs 1-3", "opens": "2026-10-03",
+         "tags": ["#Big_Step1_v12::#V&B::02_Basic_Pharmacology::01_General::05_Pharmacokinetics",
+                  "#Big_Step1_v12::#Lectures::Pharmacology::02_Pharmacokinetics::02_Drug_Elimination",
+                  "#Big_Step1_v12::#Lectures::Pharmacology::02_Pharmacokinetics::05_Effect_of_Urine_pH",
+                  "Step1::Renal"],
+         "decks": ["Big Step 1::03_Extras"], "search": ["tag:x"], "notes": ["g1", "g2"], "nids": [5], "cards": [["g", 0]]}
+    got = P.topics(u)
+    check("topics: grouped by the resource part after the root, readable, order numbers off",
+          got[:2] == [["V&B", ["Pharmacokinetics"]], ["Lectures", ["Drug Elimination", "Effect of Urine pH"]]], str(got))
+    check("topics: tags with no resource part, and subdecks, under no heading",
+          ["", ["Renal", "Extras"]] in got, str(got))
+    check("topics: searches, notes picked by ID, single cards",
+          ["Search", ["tag:x"]] in got and ["Picked by ID", ["3 notes"]] in got and ["Picked", ["1 single card"]] in got, str(got))
+    line = P.topics_line([u, {"id": "b", "tags": ["#Big::#V&B::05_Biostats::07_Clinical_Trials"]}])
+    check("today's line: one line, the same resource's topics together",
+          line.startswith("V&B: Pharmacokinetics, Clinical Trials · Lectures: Drug Elimination"), line)
+    from due_crew import board
+    week = [{"day": "2026-10-03", "dow": "Sat", "num": 3, "today": True, "past": False, "rest": False, "prep": False, "events": [],
+             "new": 109, "seen": 0, "units": [{"uid": "a", "name": "SLGs <1-3>", "total": 85, "seen": 0, "state": "open",
+                                               "prep": False, "what": [["V&B", ["Pharma<b>"]]]}]}]
+    card = {"id": "p1", "title": "Plan", "sub": "", "rows": [], "lines": [], "change": None, "no_deck": False, "paused": False,
+            "today": "Sat 3 Oct", "sched": False, "today_names": ["SLGs <1-3>"], "today_what": "V&B: Pharma<b>",
+            "week": week, "week_offset": 0, "session": {"kind": "study", "target": 109, "done": 0, "due": 0, "behind": 0}}
+    h = board._plan_card_html(card)
+    check("day: what's in a block, escaped, with Browse sent as planbrowse",
+          '<span class="g"><b>V&amp;B</b> &middot; Pharma&lt;b&gt;</span>' in h and "duecrew:planbrowse:p1:a" in h
+          and "Browse 85 cards" in h and "<b>Pharma" not in h)
+    check("today: one line of what it covers, escaped", 'class="tw"' in h and "V&amp;B: Pharma&lt;b&gt;" in h)
+    import due_crew as dc
+    from due_crew import plan_flow as F
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    asked, saved = [], F.browse_date
+    F.browse_date = lambda pid, uid: asked.append((pid, uid))
+    try:
+        dc._on_js(False, "duecrew:planbrowse:p1:a", DeckBrowser())
+    finally:
+        F.browse_date = saved
+    check("browse: the board's click reaches it", asked == [("p1", "a")], str(asked))
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""
@@ -4733,7 +4779,8 @@ def test_plans_tab_v341():
           and by["2026-10-05"]["past"] and not by["2026-10-08"]["past"])
     check("week: a unit's state, done, open or later, with its counts",
           [u["state"] for u in by["2026-10-05"]["units"]] == ["done"] and by["2026-10-06"]["units"][0]["state"] == "open"
-          and by["2026-10-08"]["units"][0] == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False})
+          and {k: v for k, v in by["2026-10-08"]["units"][0].items() if k != "what"}
+          == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False})
     check("week: a date's count before it opens (author's n, cards, searches, ids)",
           P.unit_total(doc["units"][1]) == 8 and P.unit_total(doc["units"][3]) == 38)
     check("week: rest days are the plan's off days with nothing opening; prep and events marked",

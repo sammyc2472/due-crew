@@ -626,7 +626,8 @@ def week_view(doc, prog, today, start, skipped=()):
             state = ("skip" if skip else "later" if d > today
                      else "done" if int(t) and int(s) >= int(t) else "open")
             rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
-                         "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for"))})
+                         "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
+                         "what": topics(u)})  # P7
         live = [r for r in rows if r["state"] != "skip"]
         dd = first + datetime.timedelta(days=i)
         out.append({"day": d, "dow": f"{dd:%a}", "num": dd.day, "today": d == today, "past": d < today,
@@ -750,6 +751,55 @@ def note_ids(idx, unit, plan_deck=""):
     for d in unit.get("decks") or []:
         got |= idx.deck_cards(d, plan_deck)
     return sorted({idx.guid_of[c] for c in got if c in idx.guid_of})
+
+
+def _word(seg):
+    """A tag part, readable: "05_Elimination_Kinetics" reads "Elimination
+    Kinetics", "#B&B" reads "B&B" (builder.js Tags.word, the order number off)."""
+    s = re.sub(r"^[#^$!]+", "", str(seg))
+    s = re.sub(r"(?i)^AK_", "", s)
+    s = re.sub(r"(?i)_v\d+$", "", s)
+    s = re.sub(r"\s+", " ", s.replace("_", " ")).strip()
+    m = re.match(r"^0*\d+\s*[.)-]?\s+(\S.*)$", s)
+    return (m.group(1) if m else s) or str(seg)
+
+
+def topics(unit):
+    """3.6.5, P7: [[group, [topic]]] for a date, as the site's print list
+    groups them: each tag under the first #/^ part after its root (a video
+    series, a book), named readably; subdecks by name; searches, picked
+    notes and single cards as counts. Names and counts only."""
+    groups = {}
+
+    def put(g, x):
+        items = groups.setdefault(g, [])
+        if x not in items:
+            items.append(x)
+    for t in unit.get("tags") or []:
+        segs = str(t).split(_SEP)
+        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+        put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]))
+    for d in unit.get("decks") or []:
+        put("", _word(str(d).split(_SEP)[-1]))
+    for q in unit.get("search") or []:
+        put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""))
+    notes = len(unit.get("notes") or []) + len(unit.get("nids") or [])
+    if notes:
+        put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}")
+    singles = len(unit.get("cids") or []) + len(unit.get("cards") or [])
+    if singles:
+        put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}")
+    return [[g, xs] for g, xs in groups.items()]
+
+
+def topics_line(us):
+    """P7: one line for the Today box, today's dates' topics together."""
+    merged = {}
+    for u in us:
+        for g, xs in topics(u):
+            items = merged.setdefault(g, [])
+            items += [x for x in xs if x not in items]
+    return " · ".join((f"{g}: " if g else "") + ", ".join(xs) for g, xs in merged.items())
 
 
 def search_counts(idx, lean_doc):
