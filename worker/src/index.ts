@@ -2,6 +2,7 @@
 // rules used to hold lives in this code now. JSON in, JSON out.
 
 import * as Ad from "./admin";
+import * as Fb from "./feedback";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
@@ -79,6 +80,12 @@ authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signO
 authed("DELETE", r(`/admin/people/${ID}`), People.remove);
 // 3.6: squad bingo's pool, the admin's to edit
 authed("GET", r("/admin/bingo"), (_q, s, env) => Bingo.adminGet(s, env));
+// 3.6.5, P6: feedback, from anyone signed in, to the admin's page
+authed("POST", r("/feedback"), Fb.send);
+authed("GET", r("/admin/feedback"), Fb.list);
+authed("PATCH", r("/admin/feedback/([0-9A-Z]{26})"), Fb.mark);
+authed("DELETE", r("/admin/feedback/([0-9A-Z]{26})"), (_q, s, env, p) => Fb.remove(s, env, p));
+authed("POST", r("/admin/feedback/([0-9A-Z]{26})/reply"), Fb.reply);
 authed("PUT", r("/admin/bingo/([a-z0-9]{1,12})"), Bingo.adminPut);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
@@ -137,6 +144,8 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM login_links WHERE expires_at <= ?").bind(now),
     // 3.5.0: an invite keeps working as an add (then Add back) for a year
     env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
+    // 3.6.5, P6: feedback is kept a year
+    env.DB.prepare("DELETE FROM feedback WHERE at <= ?").bind(now - 365 * 86400),
   ]);
 }
 

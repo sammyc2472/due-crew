@@ -451,3 +451,24 @@ In Anki (as a follower):
 - [ ] A date with a leech, and one with a note your copy lacks: the
       plan card says "1 leech stays suspended…" and "1 of 2 exact cards
       aren't in your deck", with OK; OK hides it until the count grows.
+- [ ] Plans tab: Today sits between ‹ and ›, greyed on this week. Opening
+      the tab, today is open with the box on it and its date filled.
+      Click another day: the box moves there with its details; click it
+      again: both close. Move two weeks ahead, then Today: back, today
+      open. No "~N min" anywhere on the plan card.
+- [ ] Site, Text: opens on Add dates (an empty box). Paste a line with a
+      date's own day and name: "adds to this date"; Add keeps every
+      other date. Edit the whole plan: Read it lists what Replace takes
+      off. Copy the prompt: it asks the AI to check its answer and gives
+      each planned date's counts.
+- [ ] Write a plan, open Anki (the day's first refresh), back on the
+      site: a day says "N new here · M already on an earlier date", and
+      a picked note your deck lacks says so.
+- [ ] Tools › Due Crew › Export cards for my AI…: pick a plan, see the
+      notes and size, Export to the Desktop. The file's first lines
+      include "#guid column:1". Browser › Due Crew: export for my AI…
+      does the selected notes.
+- [ ] Send feedback from Tools › Due Crew, from the board's Settings ›
+      You › Feedback, and from the site's footer. /admin › Feedback
+      shows all three with name and version; Reply mails the sender
+      (check the inbox), Mark done moves it to Done, Account looks them up.

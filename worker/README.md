@@ -86,6 +86,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |
 | `POST /knocks/{to} {squad}` | Only between two members of that squad. |
 | `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
+| `POST /feedback {text, ver?}` | 3.6.5, P6: feedback for the admin's page. `text` 1–2,000 characters, `ver` one line of at most 120 (the add-on's and Anki's versions, or the site page it came from). 5 a day a person (429 `too_many`). Kept a year (housekeeping) and deleted with the account. `GET /admin/feedback?state=new\|done\|all` (newest first, 100, with each sender's name and emoji, never an email, and `open`, the count not done), `PATCH /admin/feedback/{id} {done}`, `DELETE /admin/feedback/{id}`, `POST /admin/feedback/{id}/reply {text}` (mailed from Due Crew to the sender with what they wrote quoted; marks it replied and done). 404 for everyone else. |
 
 ### Plans (3.1)
 
@@ -135,7 +136,11 @@ takes `refs: {unitId: [nids, cids, [[guid, ord]]]}`: the cards a date's
 pasted ids are in the author's copy, kept as the date's `idr` (20,000 a
 date, 50,000 a plan) only while its `nids` and `cids` are still the ones
 sent. A site save never sets `idr`: it keeps the stored one while the ids
-are unchanged and drops it when they change.
+are unchanged and drops it when they change. P1: `counts` may carry
+`{"#pn": [new, repeat, missing]}` per date (what it opens in the author's
+copy, in date order); kept as `pn` the same way as `idr`, while the date's
+`opens`, tags, subdecks, searches, ids and notes are unchanged. The lean
+`authored` docs carry each date's `opens` for it.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

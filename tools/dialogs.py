@@ -355,6 +355,14 @@ def main(out):
         if "notes" not in dlg.size.text() or dlg.scope.count() != 2:
             raise RuntimeError(f"export: {dlg.size.text()!r} {dlg.scope.count()}")
         shoot(dlg, os.path.join(out, "export-for-ai.png"))
+        # 3.6.5, P6: Send feedback to Sam
+        from due_crew.ui.feedback_dialog import FeedbackDialog
+        dlg = FeedbackDialog(None, CLIENT, "3.6.5")
+        dlg.box.setPlainText("The Plans tab is great but I wish I could see next week without the arrows.")
+        settle()
+        if not dlg.send_btn.isEnabled():
+            raise RuntimeError("feedback: Send stays off with text in the box")
+        shoot(dlg, os.path.join(out, "feedback.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
                              search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
         settle()
@@ -420,7 +428,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…"]
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
 

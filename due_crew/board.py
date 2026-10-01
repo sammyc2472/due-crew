@@ -2134,6 +2134,11 @@ def _settings_you(view):
             + _st_row("Squads", f'<a class="st-lk" href="#" {_st_click("setsquads")}>Open</a>', names(squads, "None yet"))
             + _st_row("Shared decks", f'<a class="st-lk" href="#" {_st_click("decks")}>Open</a>', names(decks, "None yet"))
             + '</div>')
+    # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
+    out += ('<div class="st-box">'
+            + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>',
+                      "Tell Sam what's working and what isn't")
+            + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>')
     return out

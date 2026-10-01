@@ -424,6 +424,23 @@ add-on.
   to pick by resource and add `notes:` the tags miss; their cards go only
   to their AI. It stays deck-neutral (any video, lecture or book), and its
   `#` lines come back as the AI's notes in the preview, never imported.
+- 3.6.5 also (mock "Picks and Previews", P1–P6): P1 the author's Anki
+  counts what each date opens (`plans.date_counts`: new, repeat, notes
+  not here, in date order) on the ids request (`#pn`), kept as `pn` like
+  `idr`; shown under a day, in the Text preview and in the prompt. P2
+  Text opens on Add dates (an empty box that only adds; a line with a
+  date's day and name adds to it) or Edit the whole plan (Replace lists
+  what it takes off). P4 the prompt checks its own answer (`# Problem:`,
+  `# Tradeoff:`, `# Question:`). P3 Tools › Due Crew › Export cards for my
+  AI (`plans.export_notes`, Anki's own plain-text format with the guid
+  first) and the browser's "export for my AI": to a file only. P5 the
+  Plans tab's Today sits between ‹ ›, the box marks the open day, today
+  keeps a filled date. P6 Send feedback (Tools, the board's Settings ›
+  You, the Settings dialog, the site's footer) to /admin › Feedback
+  (migration 0014; 2,000 characters, 5 a day, kept a year, deleted with
+  the account); Reply mails from Due Crew, the address never shown. No
+  plan surface guesses minutes any more (we can't know a person's pace
+  per deck).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

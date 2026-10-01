@@ -196,3 +196,15 @@ swap = None       # swap(cfg): re-render the board in place from cache
 rerender = None   # rerender(): rebuild the deck screen
 refresh = None    # refresh(**kw): refresh_board
 sync = None       # sync(**kw): _on_sync_done (upload + fetch)
+
+
+def feedback_versions(addon_version=None):
+    """3.6.5, P6: 'add-on 3.6.5 · Anki 24.11 · Mac', what Sam sees beside
+    feedback when the box is ticked."""
+    import platform
+    try:
+        from anki.buildinfo import version as anki_version
+    except Exception:
+        anki_version = "?"
+    osname = {"Darwin": "Mac", "Windows": "Windows", "Linux": "Linux"}.get(platform.system(), platform.system() or "?")
+    return f"add-on {addon_version or ADDON_VERSION} · Anki {anki_version} · {osname}"

@@ -3186,6 +3186,35 @@ def test_export_for_my_ai_365():
     check("export: a size estimate errs high", P.export_size(col, {1, 50}) >= len(text) - 200)
 
 
+def test_feedback_365():
+    """3.6.5, P6: Send feedback to Sam, from Tools › Due Crew and Settings
+    (the board's You tab, and the dialog), with the versions if ticked."""
+    from due_crew import app as appmod
+    store = world({"maya": "Maya"})
+    maya = new_client(store, "maya", "Maya")
+    check("feedback: sent with the versions, once", maya.send_feedback("  Plans tab is great  ", "add-on 3.6.5 ·\nAnki 24.11") == 201
+          and store.feedback == [{"uid": "maya", "text": "Plans tab is great", "ver": "add-on 3.6.5 · Anki 24.11"}])
+    for i in range(4):
+        maya.send_feedback(f"more {i}")
+    check("feedback: five a day", maya.send_feedback("one too many") == 429 and len(store.feedback) == 5)
+    v = appmod.feedback_versions("3.6.5")
+    check("feedback: the versions line", v.startswith("add-on 3.6.5 · Anki ") and v.count(" · ") == 2, v)
+    html = board.settings_html({"tab": "you", "signed_in": True, "name": "Maya"}, {})
+    check("feedback: a row on Settings › You, sent as setfeedback", "duecrew:setfeedback" in html and "Feedback" in html)
+    check("feedback: not on the signed-out You tab", "setfeedback" not in board.settings_html({"tab": "you", "signed_in": False}, {}))
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    opened, saved = [], dc.open_feedback
+    dc.open_feedback = lambda: opened.append(1)
+    try:
+        dc._on_js(False, "duecrew:setfeedback", DeckBrowser())
+    finally:
+        dc.open_feedback = saved
+    check("feedback: the board's click reaches it", opened == [1])
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""

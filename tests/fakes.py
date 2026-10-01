@@ -227,6 +227,7 @@ class FakeWorker:
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
         self.reports = []    # what POST /reports mailed (the Worker stores none)
+        self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
@@ -348,6 +349,16 @@ class FakeWorker:
             return self._knock(method, me, parts[1:], body or {})
         if m == ("POST", "reports") and len(parts) == 1:
             return self._report(me, body)
+        if m == ("POST", "feedback") and len(parts) == 1:  # 3.6.5, P6
+            b = body or {}
+            text = str(b.get("text") or "").strip() if isinstance(b.get("text"), str) else ""
+            if not set(b) <= {"text", "ver"} or not text or len(text) > 2000:
+                raise Bad(400, "bad_feedback")
+            mine = [f for f in self.feedback if f["uid"] == me]
+            if len(mine) >= 5:
+                raise Bad(429, "too_many")
+            self.feedback.append({"uid": me, "text": text, "ver": " ".join(str(b.get("ver") or "").split())[:120]})
+            return 201, {"ok": True}
         if parts[:1] == ["squads"]:
             return self._squad(method, me, parts[1:], query, body or {})
         if parts[:1] == ["plans"]:
