@@ -675,6 +675,7 @@ async function builder(id) {
       // a count is for the date as it was loaded; one changed here is counted again after Save
       const was = (base.units || []).find((x) => x.id === u.id);
       if (u.pn && was && picksOf(was) !== picksOf(u)) return author ? h("small", { class: "muted" }, "Changed: your Anki counts it again after you save.") : null;
+      if (author && ((u.nids || []).length || (u.cids || []).length) && !u.idr && !u.pn) return h("small", { class: "warn" }, "Pasted numbers work only in copies like yours until your Anki opens after you save.");
       if (!u.pn) return author && (srcs(u).length || (u.search || []).length || hasIds(u)) ? h("small", { class: "muted" }, "Your Anki counts what this opens at its next refresh.") : null;
       const [n, rep, miss] = u.pn;
       const single = (u.cards || []).length;
@@ -984,6 +985,7 @@ async function builder(id) {
     const evs = [];     // F1: "2026-10-15 | event | Micro quiz"
     const forName = new Map();  // unit id -> the event name it's for
     const warns = [];
+    let localIds = 0;  // dates with pasted numbers not yet turned into note IDs by the author's Anki
     const why = [];  // 3.6.5: the AI's own notes (which video, and why), shown, never imported
     text.split("\n").forEach((raw, i) => {
       let line = raw.trim().replace(/^[-*•]\s+/, "").replace(/^`([^`].*)`$/, "$1");
@@ -1029,7 +1031,9 @@ async function builder(id) {
       if (ids.nids.length > 5000 || ids.cids.length > 5000 || picks.notes.length > 5000) { errors.push(`Line ${i + 1}: a date takes up to 5,000 IDs.`); return; }
       if (due && due < opens) { errors.push(`Line ${i + 1}: due is before it opens.`); return; }
       if (even && !(due && due > opens)) { errors.push(`Line ${i + 1}: "even" needs a due date after it opens.`); return; }
-      const old = doc.units.find((u) => u.opens === opens && u.name === (name || leaf(tags[0] || decks[0])));
+      // 3.6.5: names compared as they're kept (60 at most, trimmed), so a long one still finds its date
+      const key = (name || leaf(tags[0] || decks[0]) || "").slice(0, 60).trim();
+      const old = doc.units.find((u) => u.opens === opens && String(u.name || "").trim() === key);
       if (name.length > 60) warns.push(`Line ${i + 1}: the name is cut to 60 characters.`);
       // single cards: as written (cards:), plus the ones a count stands for; neither keeps what it had
       const had = picks.cards.length && !keepCards ? [] : old?.cards || [];
@@ -1046,6 +1050,7 @@ async function builder(id) {
       for (const k of ["nids", "cids"]) if (ids[k].length) u[k] = [...new Set(ids[k])];
       if (picks.notes.length) u.notes = picks.notes;
       if (hasIds(u) && old && JSON.stringify([old.nids, old.cids, old.notes]) === JSON.stringify([u.nids, u.cids, u.notes]) && old.idn != null) u.idn = old.idn;
+      if ((u.nids || u.cids) && !(old?.idr && JSON.stringify([old.nids, old.cids]) === JSON.stringify([u.nids, u.cids]))) localIds++;
       if (forN) forName.set(u.id, forN);
       if (!u.due) delete u.due;
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
@@ -1058,7 +1063,7 @@ async function builder(id) {
       if (ev) u.for = ev.id; else errors.push(`"for ${n}": no event by that name. Add a line like 2026-10-15 | event | ${n}`);
     }
     // 3.6.5: pasted ids are this Anki's own numbers until the author's Anki sends what they are
-    if (units.some((u) => (u.nids || []).length || (u.cids || []).length)) warns.push("nids: and cids: are your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.");
+    if (localIds) warns.push(`${localIds} date${localIds === 1 ? " uses" : "s use"} nids: or cids:, your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.`);
     return { units, errors, missing, notes, events: evs, warns, why: why.filter(Boolean).slice(0, 60) };
   }
 
@@ -1066,32 +1071,44 @@ async function builder(id) {
   function aiPrompt() {
     const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].filter((_, i) => pace.days[i]).join(", ");
     const ph = doc.phases || {};
-    // the tags: what's ticked, whole; else the top three levels; at most 600 lines
+    // the tags: what's ticked, whole; else the top levels, and resources
+    // (a # part, a video or a book) five levels down; at most 600 lines.
+    // 3.6.5: a tag whose last part has no readable name (a number, a hash)
+    // isn't listed; a branch of mostly those is one line.
     const keys = [];
-    const want = cover.size ? coverItems() : kidsOf("root:tag").concat(kidsOf("root:deck"));
+    const segs = (k) => pathOf(k).split("::");
+    const unreadable = (k) => { const w = segs(k).pop().replace(/^[#^$!]+/, ""); return /^\d+$/.test(w) || /^[0-9a-f-]{12,}$/i.test(w) || (/^[A-Za-z0-9_-]{24,}$/.test(w) && /\d/.test(w)); };
+    const inRes = (k) => segs(k).slice(1).some((x) => x.startsWith("#"));
+    const rank = (k) => { const last = segs(k).pop(); return last.startsWith("#") ? 0 : last.startsWith("^") ? 1 : 2; };
+    const order = (ks) => ks.slice().sort((a, b) => rank(a) - rank(b));
+    const collapsed = new Map();  // key -> how many unreadable tags it stands for
     const walk2 = (k, depth) => {
-      if (keys.length >= 600) return;
+      if (keys.length >= 600 || unreadable(k)) return;
       keys.push(k);
-      if (cover.size || depth < 2) for (const c of kidsOf(k)) walk2(c, depth + 1);
+      const ks = kidsOf(k);
+      const odd = ks.filter(unreadable).length;
+      if (ks.length >= 10 && odd >= ks.length * 0.8) { collapsed.set(k, odd); return; }
+      if (cover.size || depth < 2 || (inRes(k) && depth < 5)) for (const c of order(ks)) walk2(c, depth + 1);
     };
-    for (const k of want) walk2(k, 0);
+    for (const k of order(cover.size ? coverItems() : kidsOf("root:tag").concat(kidsOf("root:deck")))) walk2(k, 0);
     const more = count.size - keys.length;
-    const lines = keys.map((k) => `${kindOf(k)}:${pathOf(k)}  (${n(k).toLocaleString()} cards) ${Tags.name(pathOf(k))}`);
+    const lines = keys.map((k) => `${kindOf(k)}:${pathOf(k)}  (${n(k).toLocaleString()} cards) ${Tags.name(pathOf(k))}`
+      + (collapsed.has(k) ? ` [${collapsed.get(k).toLocaleString()} numbered tags under it, not listed]` : ""));
     return [
       `I'm planning what to study in Anki, day by day, for "${meta.name || plan.name}" on the deck "${doc.deck}". Due Crew opens each day's cards (unsuspends them) on the morning of that day, for me and everyone following the plan.`,
       "",
       "The plan so far:",
       `- Starts ${start}${doc.end ? `, ends ${doc.end}` : ", no end date yet"}.`,
       `- Study days: ${dayNames}.`,
-      pace.mode === "daily" && pace.daily ? `- About ${pace.daily} new cards a study day.` : pace.mode === "end" && doc.end ? "- Finish everything by the end date, at an even pace." : "- Each day is exactly what's on it (a class's schedule).",
+      pace.mode === "daily" && pace.daily ? `- About ${pace.daily} new cards a study day.` : pace.mode === "end" && doc.end ? "- Finish everything by the end date, at an even pace." : "- Each date's cards are for that date; nothing spreads over days unless its line says even.",
       ph.catchup ? `- Every ${ph.catchup}th week is a catch-up week: nothing new opens.` : null,
       ph.taper ? `- The last ${ph.taper} days before the end open nothing new.` : null,
       doc.units.length ? `- ${doc.units.length} dates are already planned (as text below the tags); keep or change them.` : null,
       "",
       "Write the plan in exactly this format, one line per date, and nothing else (no table; anything you want to explain goes on a line starting with #):",
       "",
-      "YYYY-MM-DD | a short name | tag:FULL::TAG::PATH, tag:ANOTHER::PATH | due YYYY-MM-DD | even | for EVENT NAME",
-      "YYYY-MM-DD | a short name | notes:ID ID ID | cards:ID:2 ID:1",
+      "YYYY-MM-DD | a short name (60 characters at most) | tag:FULL::TAG::PATH, tag:ANOTHER::PATH | due YYYY-MM-DD | even | for EVENT NAME",
+      "YYYY-MM-DD | a short name (60 characters at most) | notes:ID ID ID | cards:ID:2 ID:1",
       "",
       "Rules:",
       "- The first part is the date those cards open: YYYY-MM-DD, or \"week 3\" for the Monday of the plan's third week.",
@@ -1099,8 +1116,8 @@ async function builder(id) {
       "- A subdeck works the same way: deck:FULL::DECK::PATH.",
       "- When a lecture is only part of a tag (two tags at once, or one without another), use an Anki search instead: search:tag:A tag:B -tag:C.",
       "- Several tags can open the same day: separate them with commas on one line.",
-      "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. Numeric IDs work too (nids:ID,ID for notes, cids:ID,ID for cards). Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
-      "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched: or flag: (they find different cards for each person), and stays under 500 characters.",
+      "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. For a plan others follow, use notes: and cards:; numeric nids: and cids: only work in my own Anki. Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
+      "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched:, flag:, nid: or cid: (they find different cards for each person), and stays under 500 characters.",
       "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line.",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
       "- Without a due date, a date's cards are meant to be done before the next date opens.",
@@ -1141,7 +1158,7 @@ async function builder(id) {
       doc.units.length ? ["", "Already planned:", toText()] : [],
       // 3.6.5, P1: what each planned date opens, as the author's Anki counted it
       doc.units.some((u) => u.pn) ? ["", "What each planned date opens, as my Anki counted it (new to that date, already on an earlier date, picked notes not in my deck):",
-        ...doc.units.filter((u) => u.pn).map((u) => `${u.opens} ${u.name}: ${u.pn[0] + (u.cards || []).length} new, ${u.pn[1]} repeat${u.pn[2] ? `, ${u.pn[2]} missing` : ""}`)] : [],
+        ...doc.units.filter((u) => u.pn).map((u) => `${u.opens} ${u.name}: ${u.pn[0] + (u.cards || []).length} new, ${u.pn[1]} repeat, ${u.pn[2]} not in my deck`)] : [],
     ].flat().filter((x) => x !== null).join("\n");
   }
 
@@ -1168,7 +1185,7 @@ async function builder(id) {
       const counted = (u) => {
         const was = doc.units.find((x) => x.id === u.id);
         if (!was?.pn || adding || JSON.stringify([srcs(was), was.search, was.nids, was.cids, was.notes, was.opens]) !== JSON.stringify([srcs(u), u.search, u.nids, u.cids, u.notes, u.opens])) return "";
-        return `${(was.pn[0] + (u.cards || []).length).toLocaleString()} new${was.pn[1] ? ` · ${was.pn[1].toLocaleString()} repeat` : ""}${was.pn[2] ? ` · ${was.pn[2]} not in your deck` : ""}`;
+        return `${(was.pn[0] + (u.cards || []).length).toLocaleString()} new · ${was.pn[1].toLocaleString()} repeat · ${was.pn[2].toLocaleString()} not in your deck`;
       };
       const rows = r.units.slice().sort((a, b) => a.opens.localeCompare(b.opens)).map((u) => h("div", { class: "pvrow" },
         h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), joins(u) ? h("span", { class: "muted small" }, " · adds to this date") : null, " ",
@@ -1199,9 +1216,17 @@ async function builder(id) {
         ta.value = replace ? toText() : "";
       };
       const gone = adding ? [] : doc.units.filter((x) => !r.units.some((u) => u.id === x.id));
+      // 3.6.5: a day over the pace, as it would be after this
+      const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
+      const after = adding ? [...doc.units.filter((x) => !r.units.some((u) => u.id === x.id)), ...r.units] : r.units;
+      const byDay = new Map();
+      for (const u of after) if (!u.even) byDay.set(u.opens, (byDay.get(u.opens) || 0) + unitTotal(u, placed));
+      const heavy = cap ? [...byDay].filter(([, n]) => n > cap * 1.25).sort() : [];
       const goneText = gone.slice(0, 6).map((u) => `${pretty(u.opens)}, ${u.name}`).join(" · ") + (gone.length > 6 ? ` and ${gone.length - 6} more` : "");
       preview.append(h("div", { class: "pv" }, rows,
         gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} date${gone.length === 1 ? "" : "s"}: `), goneText) : null,
+        heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map(([d, n]) => `${pretty(d)}, ${n.toLocaleString()} new`).join(" · "),
+          ` (pace ${cap.toLocaleString()} a day)`) : null,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
         r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.join(" · "))) : null,
         r.why.length ? h("details", { class: "small", open: !r.units.length }, h("summary", {}, `The AI's notes (${r.why.length})`),
