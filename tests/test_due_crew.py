@@ -3077,7 +3077,7 @@ def test_plans_ids_e1():
     check("ids: new ids give the date a new sig (so they open)",
           P.unit_sig(base) != P.unit_sig(dict(base, nids=[50])) != P.unit_sig(dict(base, nids=[50], cids=[3])))
     counts = P.search_counts(idx, {"units": [dict(base, nids=[50, 999999], cids=[1])]})
-    check("ids: the author's Anki counts what they find", counts == {"u1": {"#ids": 3}}, str(counts))
+    check("ids: the author's Anki counts what they find", counts["u1"]["#ids"] == 3, str(counts))
     u = shapes._clean_unit({"id": "u1", "name": "x", "opens": "2026-10-06", "nids": [50, "x", True, -1, 7], "cids": []})
     check("ids: cleaned on arrival to positive whole numbers", u.get("nids") == [50, 7] and "cids" not in u, str(u))
     rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
@@ -3126,7 +3126,12 @@ def test_plans_portable_picks_365():
           len({P.unit_sig(base), P.unit_sig(dict(base, notes=[g50])), P.unit_sig(dict(base, idr=[[g50, 0]]))}) == 3)
     check("sig: a date with neither keeps the sig it had", P.unit_sig(base) == P.unit_sig(dict(base, notes=[], idr=[])))
     counts = P.search_counts(idx, {"units": [{"id": "n", "notes": [g50, "gone"]}]})
-    check("notes: counted by the author's Anki", counts == {"n": {"#ids": 2}}, str(counts))
+    check("notes: counted by the author's Anki", counts["n"]["#ids"] == 2 and counts["n"]["#pn"] == [2, 0, 1], str(counts))
+    pn = P.date_counts(idx, {"deck": "Step 1", "units": [
+        {"id": "b", "opens": "2026-10-06", "tags": ["Step1::Cardio"], "decks": []},
+        {"id": "a", "opens": "2026-10-05", "tags": ["Step1::Cardio::Heart_failure"], "decks": [], "notes": [g50, "gone"]}]})
+    check("counts (P1): in date order, what's new to a date, what an earlier one opens, notes not here",
+          pn == {"a": [4, 0, 1], "b": [1, 2, 0]}, str(pn))
     rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
                                                           "tags": [], "decks": [], "cards": [], "notes": [g50]}]})
     check("notes: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
@@ -4279,7 +4284,7 @@ def test_class_through_step_v33():
     scol = _spread_col()
     scol.find_cards = lambda q: [101, 102, 103] if q == "tag:L14" else []
     counts = P.search_counts(P.DeckIndex(scol, 10), lean)
-    check("search count: from my copy", counts == {"rn": {"tag:L14": 3}}, str(counts))
+    check("search count: from my copy", counts["rn"]["tag:L14"] == 3, str(counts))
     check("search count: rides the ids request", dre.put_ids(pid, {}, counts)
           and store.plans[pid]["doc"]["units"][0].get("sn") == {"tag:L14": 3})
     # 3.6.5: pasted ids go up as the cards they are, kept while the ids hold
@@ -4304,6 +4309,16 @@ def test_class_through_step_v33():
     store.edit_plan(pid, doc["units"])
     check("refs: new ids drop them until the author's Anki sends the new ones",
           "idr" not in store.plans[pid]["doc"]["units"][0])
+    # 3.6.5, P1: what each date opens, counted here, kept while its picks are
+    check("counts (P1): ride the ids request", dre.put_ids(pid, {}, {"rn": {"#pn": [80, 3, 1]}})
+          and store.plans[pid]["doc"]["units"][0].get("pn") == [80, 3, 1])
+    doc = json.loads(json.dumps(store.plans[pid]["doc"]))
+    doc["units"][0]["pn"] = [1, 1, 1]
+    store.edit_plan(pid, doc["units"])
+    check("counts (P1): a site save keeps the stored ones while the picks hold", store.plans[pid]["doc"]["units"][0].get("pn") == [80, 3, 1])
+    doc["units"][0]["tags"] = ["Step1::Cardio"]
+    store.edit_plan(pid, doc["units"])
+    check("counts (P1): and drops them when they change", "pn" not in store.plans[pid]["doc"]["units"][0])
 
 
 def test_plans_tab_v33():
@@ -4675,19 +4690,23 @@ def test_plans_tab_v341():
             "week_offset": 0, "opened": {"names": ["Pathoma 2"], "n": 42, "undo": True},
             "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0}}
     h = board._plan_card_html(base)
-    check("today: the topic, reviews, new and minutes, one bar, Study now and Put off to tomorrow",
+    check("today: the topic, reviews, new, one bar, Study now and Put off to tomorrow; no time guess (3.6.5)",
           'class="ptoday"' in h and "<b>Pathoma 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
-          and "~48" in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
-    check("week: the site's calendar look; names escaped; today outlined; a day opens its details",
+          and "~48" not in h and "</b> min" not in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
+    tidx = next(i for i, d in enumerate(week) if d["today"])
+    check("week: the site's calendar look; names escaped; today open with the box, its date filled; a day opens its details",
           'class="pwk"' in h and "B&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
-          and 'class="pc now"' in h and "dc-pd-p1-" in h and "Cardio quiz" in h and "plansite:p1" in h
-          and "planweek:p1:next" in h and "planweek:p1:prev" in h and "planweek:p1:0" not in h)
+          and 'class="pc now sel"' in h and h.count(" sel\"") == 1 and '<b class="td">' in h
+          and f'id="dc-pd-p1-{tidx}">' in h and "Cardio quiz" in h and "plansite:p1" in h
+          and "planweek:p1:next" in h and "planweek:p1:prev" in h and 'class="tb here"' in h)
     check("week: a later day offers Open now, Skip it and Move my days back",
           "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Undo skip" in h)
     check("crew: in words", "Crew: 5 done with Pathoma 1" in h)
-    check("week: moved, it says which, with a way back", "Week of 5 Oct" in board._plan_card_html(dict(base, week_offset=1))
-          and "planweek:p1:0" in board._plan_card_html(dict(base, week_offset=1)))
-    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, minutes=0)))
+    moved = board._plan_card_html(dict(base, week_offset=1))
+    check("week: moved, it says which, Today between the arrows, the box on its first day with plans",
+          "Week of 5 Oct" in moved and 'class="tb" onclick' in moved and "planweek:p1:0" in moved
+          and moved.count(" sel\"") == 1 and moved.count('class="pday"') - moved.count('" hidden>') == 1)
+    done = board._plan_card_html(dict(base, session=dict(base["session"], done=42, due=0)))
     check("today: done, and what's next with Open now", "ptoday done" in done and "<b>Done</b>" in done
           and "Next: <b>Metab</b>" in done and "plannow:p1:d" in done)
     rest = board._plan_card_html(dict(base, session={"kind": "rest", "due": 212}))

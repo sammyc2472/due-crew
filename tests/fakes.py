@@ -963,7 +963,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -982,8 +982,12 @@ class FakeWorker:
         for u in doc["units"]:  # 3.6.5: idr only from the author's Anki, kept while the ids are
             o = old.get(u["id"]) or {}
             u.pop("idr", None)
+            u.pop("pn", None)
             if o.get("idr") and o.get("nids") == u.get("nids") and o.get("cids") == u.get("cids"):
                 u["idr"] = o["idr"]
+            picks = lambda x: [x.get(k) or ([] if k != "opens" else None) for k in ("opens", "tags", "decks", "search", "nids", "cids", "notes")]
+            if o.get("pn") and picks(o) == picks(u):
+                u["pn"] = o["pn"]
         p["doc"] = doc
         p["version"] += 1
 
@@ -1042,6 +1046,11 @@ class FakeWorker:
                     nu["idr"] = [[c[0], c[1]] for c in idr]
             if u.get("idn") is not None and (nu.get("nids") or nu.get("cids") or nu.get("notes")):
                 nu["idn"] = u["idn"]
+            pn = u.get("pn")  # 3.6.5, P1
+            if pn is not None:
+                if not isinstance(pn, list) or len(pn) != 3 or not all(_is_int(x, 0, 1_000_000) for x in pn):
+                    raise Bad(400, "plan")
+                nu["pn"] = list(pn)
             if u.get("for"):
                 nu["for"] = u["for"]  # F1
             if u.get("even"):
@@ -1224,6 +1233,9 @@ class FakeWorker:
                         u["sn"] = dict(u.get("sn") or {}, **sn)
                     if "#ids" in v and (u.get("nids") or u.get("cids") or u.get("notes")):
                         u["idn"] = v["#ids"]  # E1
+                    pn = v.get("#pn")  # 3.6.5, P1
+                    if isinstance(pn, list) and len(pn) == 3 and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 1_000_000 for x in pn):
+                        u["pn"] = list(pn)
             for uid, (nids, cids, refs) in (body.get("refs") or {}).items():  # 3.6.5
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and (u.get("nids") or []) == nids and (u.get("cids") or []) == cids:
@@ -1337,7 +1349,7 @@ class FakeWorker:
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
-                 **{k: u[k] for k in ("nids", "cids", "notes") if u.get(k)})
+                 **{k: u[k] for k in ("nids", "cids", "notes", "opens") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
             or u.get("notes")]}}
             for pid, p in sorted(self.plans.items()) if p["owner"] == me]

@@ -753,14 +753,35 @@ def note_ids(idx, unit, plan_deck=""):
 
 def search_counts(idx, lean_doc):
     """3.4, D1: {unit id: {search: cards it finds here}} for a plan I write;
-    E1: "#ids" is how many cards its pasted ids find."""
+    E1: "#ids" is how many cards its pasted ids find; 3.6.5, P1: "#pn",
+    what the date opens here (date_counts)."""
     out = {}
+    pn = date_counts(idx, lean_doc)
     for u in lean_doc.get("units") or []:
         c = {q: len(idx.search_cards(q)) for q in u.get("search") or []}
         if u.get("nids") or u.get("cids") or u.get("notes"):
             c["#ids"] = len(idx.id_cards(u))
+        if u["id"] in pn:
+            c["#pn"] = pn[u["id"]]
         if c:
             out[u["id"]] = c
+    return out
+
+
+def date_counts(idx, lean_doc):
+    """3.6.5, P1: {unit id: [new, repeat, missing]} for a plan I write, in
+    date order: the cards a date finds here that no earlier date has, the
+    ones an earlier date already opens, and its picked notes this copy
+    doesn't have. Single cards aren't in the lean doc and count apart."""
+    seen, out = set(), {}
+    deck = str(lean_doc.get("deck") or "")
+    units = sorted(lean_doc.get("units") or [], key=lambda u: str(u.get("opens") or ""))
+    for u in units:
+        cids = idx.match(dict(u, cards=[], ids=[]), None, deck)
+        new = len(cids - seen)
+        seen |= cids
+        miss = sum(1 for g in u.get("notes") or [] if str(g) not in idx.by_guid)
+        out[u["id"]] = [new, len(cids) - new, miss]
     return out
 
 

@@ -161,7 +161,7 @@ describe("3.3: a class through Step (C1–C5)", () => {
     const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: [UNITS[0], { ...UNITS[1], search: [q] }] } });
     const b = await dre.call("GET", "/board?decks=1");
     expect(b.body.authored[0].doc).toEqual({ deck: "Step 1", units: [
-      { id: "hf", tags: UNITS[0].tags, decks: [] }, { id: "arr", tags: UNITS[1].tags, decks: [], search: [q] }] });
+      { id: "hf", tags: UNITS[0].tags, decks: [], opens: "2026-10-05" }, { id: "arr", tags: UNITS[1].tags, decks: [], search: [q], opens: "2026-10-06" }] });
     const r = await dre.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { arr: { [q]: 212, "tag:gone": 5 }, nope: { x: 1 } } });
     expect(r.body.version).toBe(put.body.version + 1);
     const got = await dre.call("GET", `/plans/${p.id}`);

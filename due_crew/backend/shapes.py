@@ -591,7 +591,8 @@ def clean_authored(a):
               **{k: [x for x in u.get(k) or [] if isinstance(x, int) and not isinstance(x, bool) and x > 0][:5000]
                  for k in ("nids", "cids") if u.get(k)},  # E1
               **({"notes": [g for g in u["notes"] if isinstance(g, str) and g][:5000]}
-                 if isinstance(u.get("notes"), list) else {})}  # 3.6.5
+                 if isinstance(u.get("notes"), list) else {}),  # 3.6.5
+              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
 

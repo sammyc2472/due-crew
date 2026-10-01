@@ -669,12 +669,21 @@ async function builder(id) {
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
         if (c.cards) u.cards = []; else if (c.ids) takeIds(u); else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);
         cleanup(); renameAll(); mark(); draw(); } }, "×") : null);
+    // 3.6.5, P1: what the date opens, as the author's Anki counted it
+    const opensLine = (u) => {
+      if (!u.pn) return author && (srcs(u).length || (u.search || []).length || hasIds(u)) ? h("small", { class: "muted" }, "Your Anki counts what this opens at its next refresh.") : null;
+      const [n, rep, miss] = u.pn;
+      const single = (u.cards || []).length;
+      return h("small", { class: "opens" }, h("b", {}, `${(n + single).toLocaleString()} new here`),
+        rep ? h("span", { class: "muted" }, ` · ${rep.toLocaleString()} already on an earlier date`) : null,
+        miss ? h("span", { class: "warn" }, ` · ${miss.toLocaleString()} picked note${miss === 1 ? "" : "s"} not in your deck`) : null);
+    };
     for (const u of own) {
       const chips = e.chips.filter((c) => c.u === u).map((c) => chipEl(u, c));
-      if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips))); continue; }
+      if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips), opensLine(u))); continue; }
       const name = h("input", { class: "uname", value: u.name, maxlength: 60, placeholder: "Name this day",
         oninput: (ev) => { u.name = ev.target.value; auto.delete(u.id); mark(); } });
-      rows.push(h("div", { class: "du" }, h("label", { class: "dl" }, h("span", { class: "lbl" }, "Name"), name), h("div", { class: "chips2" }, chips)));
+      rows.push(h("div", { class: "du" }, h("label", { class: "dl" }, h("span", { class: "lbl" }, "Name"), name), h("div", { class: "chips2" }, chips), opensLine(u)));
     }
     for (const u of spans) {
       const total = unitTotal(u);
@@ -1101,6 +1110,14 @@ async function builder(id) {
       "- To add cards the chosen tags miss, use notes: with IDs from the #guid column, copied exactly (they can hold any character but a space). Never quote or copy card text into the plan.",
       "- If my course needs something no card covers, say so on a # line; don't invent cards.",
       "- After the plan, one # line per date at most: what you chose for it, and why.",
+      "",
+      "Before you answer, check the plan (yours and what's already planned):",
+      "- Every topic or objective I gave is on a date, or named on a # Missing: line. Look through all the deck's tags before saying the deck doesn't have it.",
+      "- No date mostly repeats an earlier one, and none brings many cards my course doesn't need. A good video's whole set can bring a few extra; keep it and say so.",
+      "- A date that's for an event opens before that event, with time to study it.",
+      "- Name each problem on its own line: # Problem: (something that's wrong), # Tradeoff: (a choice I might make differently), # Question: (something you can't tell from what I gave). Name the date. Skip what's fine.",
+      "- If I only ask you to check the plan, answer with # lines only.",
+      doc.units.length ? "- Write only new dates, or what to add to a date already planned: a line with the same date and name as one below adds to it. Dates below stay as they are unless I ask to change them; then give the whole plan." : null,
       doc.units.length ? "- Keep every notes:, cards:, nids: and cids: in the plan below on its line, exactly as written, unless I ask to move or drop it." : null,
       "",
       "Example:",
@@ -1118,24 +1135,53 @@ async function builder(id) {
       `The deck's tags${cover.size ? " for what the plan covers" : ""} (tag or subdeck, card count, readable name)${more > 0 ? `; ${more.toLocaleString()} more aren't listed, ask me for a branch` : ""}:`,
       ...lines,
       doc.units.length ? ["", "Already planned:", toText()] : [],
+      // 3.6.5, P1: what each planned date opens, as the author's Anki counted it
+      doc.units.some((u) => u.pn) ? ["", "What each planned date opens, as my Anki counted it (new to that date, already on an earlier date, picked notes not in my deck):",
+        ...doc.units.filter((u) => u.pn).map((u) => `${u.opens} ${u.name}: ${u.pn[0] + (u.cards || []).length} new, ${u.pn[1]} repeat${u.pn[2] ? `, ${u.pn[2]} missing` : ""}`)] : [],
     ].flat().filter((x) => x !== null).join("\n");
   }
 
+  // 3.6.5: Text opens on Add dates (pasting can't take anything off); Edit
+  // the whole plan is the box with every date in it
+  let textMode = "add";
   function textTab() {
-    const ta = h("textarea", { rows: Math.max(10, doc.units.length + 3), "aria-label": "The plan as text" });
-    ta.value = toText();
+    const adding = textMode === "add";
+    const ta = h("textarea", { rows: adding ? 8 : Math.max(10, doc.units.length + 3), "aria-label": adding ? "New dates as text" : "The plan as text",
+      placeholder: adding ? "Paste new lines here: an AI's answer, or your own.\n2026-10-07 | Adrenergics | tag:… | for Quiz 2" : "" });
+    ta.value = adding ? "" : toText();
     const out = h("div", { class: "status", role: "status" });
     const preview = h("div");
     const read = () => {
       const r = fromText(ta.value);
       preview.replaceChildren();
       if (r.errors.length) { out.className = "status bad"; out.textContent = r.errors.slice(0, 6).join(" "); return; }
+      if (!r.units.length && !r.events.length && !r.why.length && !r.notes.length) { out.className = "status"; out.textContent = "Nothing to read yet."; return; }
       out.className = r.missing.length ? "status bad" : "status";
-      out.textContent = `${r.units.length} dates${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
+      out.textContent = `${r.units.length} date${r.units.length === 1 ? "" : "s"}${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
       const placed = new Set(r.units.flatMap(srcs));
+      const joins = (u) => adding && doc.units.some((x) => x.id === u.id);
+      // P1: a date as it was keeps its count from the author's Anki
+      const counted = (u) => {
+        const was = doc.units.find((x) => x.id === u.id);
+        if (!was?.pn || adding || JSON.stringify([srcs(was), was.search, was.nids, was.cids, was.notes, was.opens]) !== JSON.stringify([srcs(u), u.search, u.nids, u.cids, u.notes, u.opens])) return "";
+        return `${(was.pn[0] + (u.cards || []).length).toLocaleString()} new${was.pn[1] ? ` · ${was.pn[1].toLocaleString()} repeat` : ""}${was.pn[2] ? ` · ${was.pn[2]} not in your deck` : ""}`;
+      };
       const rows = r.units.slice().sort((a, b) => a.opens.localeCompare(b.opens)).map((u) => h("div", { class: "pvrow" },
-        h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), " ", h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
-        h("span", { class: "muted small" }, `${u.due ? `to ${pretty(u.due)}${u.even ? ", evenly" : ""} · ` : ""}${unitTotal(u, placed).toLocaleString()} cards`)));
+        h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), joins(u) ? h("span", { class: "muted small" }, " · adds to this date") : null, " ",
+          h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
+        h("span", { class: "muted small" }, `${u.due ? `to ${pretty(u.due)}${u.even ? ", evenly" : ""} · ` : ""}${counted(u) || `${unitTotal(u, placed).toLocaleString()} cards`}`)));
+      // Add: new dates go on; a line with a date's own day and name adds its picks to it
+      const merge = (into, u) => {
+        for (const k of ["tags", "decks", "search", "nids", "cids", "notes"]) {
+          if (!(u[k] || []).length) continue;
+          const was = JSON.stringify(into[k] || []);
+          into[k] = [...new Set([...(into[k] || []), ...u[k]])];
+          if (JSON.stringify(into[k]) !== was && (k === "nids" || k === "cids" || k === "notes")) delete into.idn;
+        }
+        const have = new Set((into.cards || []).map(([g, o]) => `${g}:${o}`));
+        into.cards = [...(into.cards || []), ...(u.cards || []).filter(([g, o]) => !have.has(`${g}:${o}`))];
+        for (const k of ["due", "even", "for"]) if (u[k]) into[k] = u[k];
+      };
       const use = (replace) => {
         if (r.events.length || replace) {
           const keep = replace ? [] : events().filter((x) => !r.events.some((y) => y.id === x.id));
@@ -1143,39 +1189,38 @@ async function builder(id) {
           if (!doc.events.length) delete doc.events;
         }
         if (replace) doc.units = r.units;
-        else for (const u of r.units) { if (!doc.units.some((x) => x.id === u.id)) doc.units.push(u); }
-        byOpens(); mark(); preview.replaceChildren(); out.className = "status"; out.textContent = replace ? `Now ${doc.units.length} dates. Save to keep them.` : `Added. Now ${doc.units.length} dates. Save to keep them.`;
-        ta.value = toText();
+        else for (const u of r.units) { const x = doc.units.find((y) => y.id === u.id); if (x) merge(x, u); else doc.units.push(u); }
+        byOpens(); mark(); preview.replaceChildren(); out.className = "status";
+        out.textContent = replace ? `Now ${doc.units.length} dates. Save to keep them.` : `Added. Now ${doc.units.length} dates. Save to keep them.`;
+        ta.value = replace ? toText() : "";
       };
-      // 3.6.5: Add is the safe one; Replace says what it would take off, and asks twice
-      const gone = doc.units.filter((x) => !r.units.some((u) => u.id === x.id)).length;
-      const replaceBtn = h("button", { class: "ghost", onclick: (ev) => {
-        if (!gone || ev.target.dataset.sure) return use(true);
-        ev.target.dataset.sure = "1";
-        ev.target.textContent = `Replace: takes off ${gone} date${gone === 1 ? "" : "s"} not in the text`;
-        ev.target.className = "danger";
-      } }, "Replace the plan's dates");
+      const gone = adding ? [] : doc.units.filter((x) => !r.units.some((u) => u.id === x.id));
+      const goneText = gone.slice(0, 6).map((u) => `${pretty(u.opens)}, ${u.name}`).join(" · ") + (gone.length > 6 ? ` and ${gone.length - 6} more` : "");
       preview.append(h("div", { class: "pv" }, rows,
+        gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} date${gone.length === 1 ? "" : "s"}: `), goneText) : null,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
         r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.join(" · "))) : null,
-        r.why.length ? h("details", { class: "small" }, h("summary", {}, `The AI's notes (${r.why.length})`),
+        r.why.length ? h("details", { class: "small", open: !r.units.length }, h("summary", {}, `The AI's notes (${r.why.length})`),
           h("ul", { class: "muted", style: "margin:4px 0 0;padding-left:20px;text-align:left" }, r.why.map((x) => h("li", {}, x.slice(0, 300))))) : null,
-        h("div", { class: "row" }, h("button", { onclick: () => use(false) }, "Add to the plan"), replaceBtn,
+        h("div", { class: "row" },
+          adding ? (r.units.length || r.events.length ? h("button", { onclick: () => use(false) }, "Add to the plan") : null)
+            : h("button", { class: gone.length ? "danger" : "", onclick: () => use(true) }, "Replace the plan's dates"),
           h("button", { class: "quiet", onclick: () => { preview.replaceChildren(); out.textContent = ""; } }, "Cancel"))));
     };
     // N6: Read it turns solid once the text is new
     const readBtn = h("button", { class: "ghost", onclick: read }, "Read it");
     ta.addEventListener("input", () => readBtn.classList.remove("ghost"));
+    const modes = h("span", { class: "seg", role: "group", "aria-label": "Text" }, [["add", "Add dates"], ["all", "Edit the whole plan"]].map(([k, t]) =>
+      h("button", { class: textMode === k ? "on" : "", "aria-pressed": String(textMode === k), onclick: () => { textMode = k; draw(); } }, t)));
     const aiBox = h("div", { class: "aibox" },
       h("b", {}, "Draft it with your own AI"),
-      h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into the box below. The prompt carries the plan's dates and your deck's tag names with counts; never a card."),
-      // 3.6.5: to pick by video, the AI reads the cards themselves: the person's own export, to their own AI
+      h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into Add dates. It can also check the plan you have. The prompt carries the plan's dates and your deck's tag names with counts; never a card."),
+      // 3.6.5: to pick card by card, the AI reads the cards themselves: the person's own export, to their own AI
       h("details", { class: "small" }, h("summary", {}, "Pick card by card: attach your cards"),
         h("ol", { class: "muted", style: "margin:6px 0 0;padding-left:20px;text-align:left" },
-          h("li", {}, "In Anki's browser, search the deck or tags this plan covers and select them all."),
-          h("li", {}, "Notes › Export Notes: Notes in Plain Text. Tick Include unique identifier, Include tags and Selected notes only; untick Include HTML and media references."),
+          h("li", {}, "In Anki: Tools › Due Crew › Export cards for my AI, and pick this plan."),
           h("li", {}, "Attach the .txt file to the chat with the prompt. A big course works better a block at a time.")),
-        h("p", { class: "muted" }, "Your cards go only to your AI. Due Crew never sees them.")),
+        h("p", { class: "muted" }, "On an older Due Crew: in Anki's browser, select the notes, then Notes › Export Notes as Notes in Plain Text, with Include unique identifier ticked. Your cards go only to your AI. Due Crew never sees them.")),
       h("div", { class: "row" }, h("button", { class: "ghost", onclick: (e) => copy(aiPrompt(), e.target) }, "Copy the prompt"),
         h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, aiPrompt()))));
     return h("div", { class: "stack" },
@@ -1183,8 +1228,12 @@ async function builder(id) {
       h("details", { class: "fmt" }, h("summary", { class: "small" }, "Format"),
         h("p", { class: "muted small" }, "One line per date: when it opens, a name, the tags and subdecks (or notes: with note IDs: in Anki's browser, Due Crew › Copy as plan selector), and an optional due date, separated by |. Add even to split a date evenly up to its due date. For example:"),
         h("pre", { class: "mono small muted", style: "margin:0;white-space:pre-wrap" }, "2026-10-05 | Heart failure | tag:Step1::Cardio::Heart_failure | due 2026-10-09 | even\nweek 2 | Arrhythmia | tag:Step1::Cardio::Arrhythmia\n2026-10-19 | Lecture 12 | notes:Ab3$kL9qZ1 p&x8Hk!eQ2")),
+      h("div", { class: "row" }, modes, h("span", { class: "muted small" }, adding
+        ? `Adds to the plan's ${doc.units.length} date${doc.units.length === 1 ? "" : "s"}. Changes nothing already there.`
+        : "Saving replaces the plan's dates with this text.")),
       ta, h("div", { class: "row" }, readBtn), out, preview);
   }
+
 
   // ---- settings ----
   function settingsTab() {
@@ -1649,7 +1698,7 @@ async function builder(id) {
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
       // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
-      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, ...u }) => u) });
+      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, ...u }) => u) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;

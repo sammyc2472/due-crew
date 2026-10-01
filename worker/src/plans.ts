@@ -75,7 +75,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -158,6 +158,11 @@ function unit(v: unknown): Obj {
   if (v.idn !== undefined && v.idn !== null) {
     if (!V.isInt(v.idn, 0, 1_000_000)) throw V.bad("plan");
     if (out.nids || out.cids || out.notes) out.idn = v.idn;
+  }
+  // 3.6.5, P1: [new, repeat, missing] as the author's Anki counted the date
+  if (v.pn !== undefined && v.pn !== null) {
+    if (!Array.isArray(v.pn) || v.pn.length !== 3 || !v.pn.every((n) => V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
+    out.pn = v.pn;
   }
   return out;
 }
@@ -522,16 +527,20 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 
 /** PUT /plans/{id} {version, name?, line?, audience?, squad?, doc?}: the
  *  author's save. A stale version is refused with the current one. */
-/** 3.6.5: `idr` comes only from the author's Anki (PUT /plans/{id}/ids):
- *  a save keeps a date's as stored while its pasted ids are unchanged, and
- *  drops it when they change (the next morning works them out again). */
+/** 3.6.5: `idr` and `pn` come only from the author's Anki (PUT
+ *  /plans/{id}/ids): a save keeps a date's as stored while what they were
+ *  worked out from is unchanged, and drops them when it changes (the next
+ *  morning works them out again). */
 export function keepIdr(doc: Obj, was: string | null): Obj {
   const old = new Map(((was ? JSON.parse(was).units : []) as Obj[]).map((u) => [u.id, u]));
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+  const picks = (u: Obj) => [u.opens, u.tags, u.decks, u.search, u.nids, u.cids, u.notes];
   for (const u of doc.units as Obj[]) {
     const o = old.get(u.id);
     delete u.idr;
+    delete u.pn;
     if (o?.idr && same(o.nids, u.nids) && same(o.cids, u.cids)) u.idr = o.idr;
+    if (o?.pn && same(picks(o), picks(u))) u.pn = o.pn;
   }
   return doc;
 }
@@ -622,6 +631,8 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
     for (const [q, n] of Object.entries(v)) {
       // E1: "#ids" is how many cards the date's pasted ids found
       if (q === "#ids") { if ((u.nids || u.cids || u.notes) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
+      // 3.6.5, P1: new to this date, already on an earlier one, picked notes not in the deck
+      if (q === "#pn") { if (Array.isArray(n) && n.length === 3 && n.every((x) => V.isInt(x, 0, 1_000_000))) u.pn = n; continue; }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -1089,7 +1100,7 @@ export async function forBoard(env: Env, uid: string) {
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
-                      'notes', json_extract(x.value, '$.notes')))
+                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
@@ -1097,7 +1108,7 @@ export async function forBoard(env: Env, uid: string) {
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
   ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
   const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks })) });
+    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",

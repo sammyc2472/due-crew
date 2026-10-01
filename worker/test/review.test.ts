@@ -119,8 +119,15 @@ describe("3.6.5: picks that work in anyone's copy", () => {
     const { idr: _drop, ...without } = kept.body.doc.units[0];  // the builder leaves them out of a save
     const bare = await put([without, base[1]], kept.body.version);
     expect(bare.body.doc.units[0].idr).toEqual(refs);
-    const moved = await put([{ ...bare.body.doc.units[0], nids: [11] }, base[1]], bare.body.version);
+    // P1: what each date opens, from the author's Anki, kept like idr
+    expect((await priya.call("PUT", `/plans/${p.id}/ids`, { units: {}, counts: { [uid]: { "#pn": [80, 3, 1] } } })).status).toBe(200);
+    const counted = (await priya.call("GET", `/plans/${p.id}`)).body;
+    expect(counted.doc.units[0].pn).toEqual([80, 3, 1]);
+    const keptPn = await put([{ ...counted.doc.units[0], pn: [9, 9, 9] }, base[1]], counted.version);
+    expect(keptPn.body.doc.units[0].pn).toEqual([80, 3, 1]);
+    const moved = await put([{ ...keptPn.body.doc.units[0], nids: [11] }, base[1]], keptPn.body.version);
     expect(moved.body.doc.units[0].idr).toBeUndefined();
+    expect(moved.body.doc.units[0].pn).toBeUndefined();
     // the lean copy carries the notes, so the author's Anki can count them
     const board = await priya.call("GET", "/board?decks=1");
     expect(board.body.authored[0].doc.units.find((u: { id: string }) => u.id === uid).notes).toEqual(["gA", "gB"]);
