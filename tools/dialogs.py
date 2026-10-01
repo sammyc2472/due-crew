@@ -346,6 +346,15 @@ def main(out):
         if dlg.opened.isHidden():
             raise RuntimeError("add: an opened date doesn't say so")
         shoot(dlg, os.path.join(out, "plan-add-opened.png"))
+        # 3.6.5, P3: Export cards for my AI, a followed plan picked
+        from due_crew.ui.export_dialog import ExportDialog
+        fplan = {"id": "p1abcdefghij", "name": "Cardio block", "ownerName": "Dre", "doc": {"deck": "Big Step 1", "units": [
+            {"id": "u1", "name": "Cardio", "opens": today.isoformat(), "tags": [], "decks": ["Big Step 1::Cardio"], "cards": []}]}}
+        dlg = ExportDialog(None, aqt.mw.col, None, [fplan], {})
+        settle()
+        if "notes" not in dlg.size.text() or dlg.scope.count() != 2:
+            raise RuntimeError(f"export: {dlg.size.text()!r} {dlg.scope.count()}")
+        shoot(dlg, os.path.join(out, "export-for-ai.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
                              search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
         settle()
@@ -411,7 +420,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "—", "Settings…"]
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
 

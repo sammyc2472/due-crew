@@ -566,6 +566,11 @@ def clean_plan_doc(doc):
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
+    cover = (doc.get("pace") or {}).get("cover") if isinstance(doc.get("pace"), dict) else None
+    if isinstance(cover, list):  # 3.6.5, P3: what the builder ticked, for Export cards for my AI
+        cover = [k for k in cover if isinstance(k, str) and k.startswith(("tag:", "deck:")) and len(k) <= 300][:500]
+        if cover:
+            out.setdefault("pace", {})["cover"] = cover
     ph = doc.get("phases") if isinstance(doc.get("phases"), dict) else {}
     catchup, taper = ph.get("catchup"), ph.get("taper")
     ok = lambda v, hi: isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi

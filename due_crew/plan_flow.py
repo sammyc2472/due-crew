@@ -1818,6 +1818,44 @@ def browser_menu(browser, menu):
     action.triggered.connect(lambda: add_to_plan(browser))
     copy = menu.addAction("Due Crew: copy as plan selector")
     copy.triggered.connect(lambda: copy_selector(browser))
+    out = menu.addAction("Due Crew: export for my AI…")
+    out.triggered.connect(lambda: export_selected(browser))
+
+
+def open_export():
+    """3.6.5, P3: Tools › Due Crew › Export cards for my AI…"""
+    if not mw.col:
+        return
+    from .ui.export_dialog import ExportDialog
+    cl = client()
+    ExportDialog(mw, mw.col, cl if cl.signed_in else None, followed(), _state_cfg(), on_saved=_saved).exec()
+
+
+def _saved(n, path):
+    tooltip(f"Saved {n:,} note{'s' if n != 1 else ''} to {html.escape(os.path.basename(path))}. "
+            "Attach it to your AI chat with the prompt.")
+
+
+def export_selected(browser):
+    """3.6.5, P3: the notes selected in the browser (their notes, in Cards
+    mode), to a file for my AI."""
+    if not mw.col:
+        return
+    try:
+        nids = browser.selected_notes() if hasattr(browser, "selected_notes") else browser.selectedNotes()
+    except Exception:
+        traceback.print_exc()
+        return
+    if not nids:
+        tooltip("Select some notes first.")
+        return
+    from aqt.qt import QFileDialog
+    from .ui.export_dialog import save
+    desk = os.path.join(os.path.expanduser("~"), "Desktop")
+    start = os.path.join(desk if os.path.isdir(desk) else os.path.expanduser("~"), "cards-for-my-ai.txt")
+    path, _ = QFileDialog.getSaveFileName(browser, "Export for my AI", start, "Text (*.txt)")
+    if path:
+        save(mw.col, nids, path, True, _saved)
 
 
 def copy_selector(browser):

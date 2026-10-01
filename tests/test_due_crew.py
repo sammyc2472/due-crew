@@ -3158,6 +3158,34 @@ def test_plans_selector_365():
     check("selector: reads back to that card", idx.match({"cards": [[g, int(n) - 1]]}) == {6})
 
 
+def test_export_for_my_ai_365():
+    """3.6.5, P3: a plan's notes, or a deck's, in Anki's own plain-text
+    format with the unique identifier first, for the person's own AI. To
+    a file only; formatting and media out unless asked."""
+    from due_crew import plans as P
+    col = _plan_col()
+    col.db.conn.execute("UPDATE notes SET flds = ? WHERE id = 1", ("<b>Heart</b> failure\x1f{{c1::BNP}} rises<br>[sound:x.mp3]\tand \"so\"",))
+    idx = P.DeckIndex(col, 10)
+    doc = {"deck": "Step 1", "units": [{"id": "hf", "opens": "2026-10-05", "tags": ["Step1::Cardio::Heart_failure"], "decks": []}],
+           "pace": {"cover": ["tag:Step1::Cardio", "deck:Step 1::Extras"]}}
+    check("export: what the plan's dates open, as notes", P.export_scope(idx, doc, "dates") == {1, 2})
+    check("export: what the plan covers (the builder's ticks)", P.export_scope(idx, doc, "cover") == {1, 2, 3, 4})
+    check("export: the whole deck", P.export_scope(idx, doc, "deck") == {1, 2, 3, 4, 50, 8, 9})
+    text, n = P.export_notes(col, {1, 50})
+    lines = text.splitlines()
+    check("export: Anki's header, the guid column first", lines[:6] == ["#separator:tab", "#html:false", "#guid column:1",
+          "#notetype column:2", "#deck column:3", "#tags column:4"] and n == 2, str(lines[:6]))
+    row = next(x for x in lines if x.startswith("guid000001"))
+    cells = row.split("\t")
+    check("export: a row is guid, notetype, deck, tags, then the fields, as plain text",
+          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "Heart failure"
+          and cells[5] == '"{{c1::BNP}} rises and ""so"""', str(cells))
+    check("export: one line a note, no tabs inside a field", len(lines) == 8 and all(x.count("\t") >= 4 for x in lines[6:]))
+    raw, _ = P.export_notes(col, {1}, plain=False)
+    check("export: formatting kept when asked", "#html:true" in raw and "<b>Heart</b>" in raw)
+    check("export: a size estimate errs high", P.export_size(col, {1, 50}) >= len(text) - 200)
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""
@@ -4374,8 +4402,8 @@ def test_even_split_v33():
           _open(col) == set(range(101, 110)) and "rn" in state[pid]["applied"])
     doc = shapes.clean_plan_doc({"deck": "x", "pace": {"mode": "end", "days": [1, 1, 1, 1, 1, 0, 0], "daily": 90, "cover": ["tag:a"]},
                                  "units": [dict(unit), dict(unit, id="b", even="yes")]})
-    check("shapes: even and the plan's days come through, nothing else of the pace",
-          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
+    check("shapes: even, the plan's days and what it covers (3.6.5, for the export) come through, nothing else of the pace",
+          doc["pace"] == {"days": [1, 1, 1, 1, 1, 0, 0], "cover": ["tag:a"]} and doc["units"][0]["even"] is True and "even" not in doc["units"][1])
 
 
 def _knows_col():

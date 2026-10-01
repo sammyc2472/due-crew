@@ -19,6 +19,7 @@ import bisect
 import weakref
 import datetime
 import hashlib
+import html
 import json
 import re
 
@@ -931,6 +932,86 @@ def selector(col, cids=(), nids=()):
         return ("notes:" + " ".join(gs), len(gs)) if gs else ("", 0)
     refs = sorted({(g, o) for g, o in card_refs(col, cids) if g and " " not in g})
     return ("cards:" + " ".join(f"{g}:{o + 1}" for g, o in refs), len(refs)) if refs else ("", 0)
+
+
+# ---- my cards, for my own AI (3.6.5, P3) ----
+
+_TAG_RE = re.compile(r"<[^>]*>")
+_MEDIA_RE = re.compile(r"\[sound:[^\]]*\]")
+
+
+def _plain(text):
+    """A field without its formatting or media: what an AI needs to read it."""
+    t = _MEDIA_RE.sub(" ", str(text or ""))
+    t = re.sub(r"(?i)<br\s*/?>|</div>|</p>|</li>", " ", t)
+    t = html.unescape(_TAG_RE.sub("", t))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _cell(text):
+    """One tab-separated cell: no tabs or line breaks inside; a quote quoted."""
+    t = re.sub(r"[\t\r\n]+", " ", str(text or ""))
+    return '"' + t.replace('"', '""') + '"' if '"' in t else t
+
+
+def export_scope(idx, doc, scope, swap=None):
+    """{note id} a plan's export takes from this deck: "dates" (what its dates
+    open here), "cover" (the tags and subdecks the builder ticked), or
+    "deck" (all of it)."""
+    if scope == "deck":
+        cids = set(idx.cards)
+    elif scope == "cover":
+        keys = list(((doc or {}).get("pace") or {}).get("cover") or [])
+        unit = {"tags": [k[4:] for k in keys if str(k).startswith("tag:")],
+                "decks": [k[5:] for k in keys if str(k).startswith("deck:")]}
+        cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
+    else:
+        cids = set()
+        for u in units(doc or {}):
+            cids |= idx.match(u, swap, (doc or {}).get("deck", ""))
+    return {n for n, cs in idx.by_nid.items() if any(c in cids for c in cs)}
+
+
+def export_notes(col, nids, plain=True):
+    """(text, notes): the notes in Anki's own plain-text export format, with
+    the unique identifier (a note's guid, the same in every copy of a deck)
+    first, so an AI can answer with notes: lines. Written to a file on this
+    computer only; nothing here is sent anywhere."""
+    nl = sorted({int(n) for n in nids})
+    rows = []
+    names = {}
+    for i in range(0, len(nl), 500):
+        chunk = ",".join(str(n) for n in nl[i:i + 500])
+        rows += col.db.all(
+            f"SELECT n.id, n.guid, n.mid, n.flds, n.tags, (SELECT c.did FROM cards c WHERE c.nid = n.id "
+            f"ORDER BY c.ord LIMIT 1) FROM notes n WHERE n.id IN ({chunk})")
+    out = ["#separator:tab", f"#html:{'false' if plain else 'true'}", "#guid column:1",
+           "#notetype column:2", "#deck column:3", "#tags column:4"]
+    for _nid, guid, mid, flds, tags, did in rows:
+        if mid not in names:
+            try:
+                names[mid] = str((col.models.get(mid) or {}).get("name") or "")
+            except Exception:
+                names[mid] = ""
+        try:
+            deck = col.decks.name(did) if did else ""
+        except Exception:
+            deck = ""
+        fields = str(flds or "").split("\x1f")
+        fields = [_plain(f) if plain else f for f in fields]
+        out.append("\t".join(_cell(x) for x in [guid, names[mid], deck, str(tags or "").strip()] + fields))
+    return "\n".join(out) + "\n", len(rows)
+
+
+def export_size(col, nids):
+    """About how many bytes export_notes writes for these notes, from the
+    fields' length (formatting counted, so it errs high)."""
+    nl = sorted({int(n) for n in nids})
+    total = 0
+    for i in range(0, len(nl), 500):
+        chunk = ",".join(str(n) for n in nl[i:i + 500])
+        total += col.db.scalar(f"SELECT COALESCE(SUM(LENGTH(flds) + LENGTH(tags) + 40), 0) FROM notes WHERE id IN ({chunk})") or 0
+    return int(total)
 
 
 # ---- which of my decks ----

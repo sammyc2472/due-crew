@@ -1178,7 +1178,8 @@ def _tools_menu():
     for item in (("Friends…", open_friends),
                  ("Squads…", open_squads), None,
                  ("Make a plan from a deck…", plan_flow.open_make),
-                 ("Follow a plan…", plan_flow.open_follow), None,
+                 ("Follow a plan…", plan_flow.open_follow),
+                 ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings)):
         if item is None:
             menu.addSeparator()
