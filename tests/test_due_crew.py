@@ -3085,6 +3085,60 @@ def test_plans_ids_e1():
     check("ids: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
 
 
+def test_plans_portable_picks_365():
+    """3.6.5: a date's pasted ids also travel as the cards the author's Anki
+    found (`idr`, guid + card number), so a copy whose ids differ still finds
+    them; `notes` picks every card of a note by its guid; ids that only mean
+    something in one collection can't be a search."""
+    from due_crew import plans as P
+    from due_crew.backend import shapes
+    col = _plan_col()
+    idx = P.DeckIndex(col, 10)
+    g50 = "guid000050"
+    check("notes: a note's guid brings every card of it", idx.match({"notes": [g50]}) == {5, 6})
+    check("notes: a guid this copy lacks finds nothing", idx.match({"notes": ["nope"]}) == set())
+    # the author's copy: note 50 is a cloze; the refs are what its ids found
+    unit = {"id": "u1", "nids": [50], "cids": [3]}
+    refs = P.id_refs(idx, col, {"units": [dict(unit, tags=[]), {"id": "u2", "tags": ["x"]}]})
+    check("refs: one entry a date with ids, the ids it was worked out from",
+          list(refs) == ["u1"] and refs["u1"][:2] == [[50], [3]], str(refs))
+    check("refs: the cards as guid and card number",
+          sorted(map(tuple, refs["u1"][2])) == [("guid000003", 0), (g50, 0), (g50, 1)], str(refs))
+    check("refs: capped", len(P.id_refs(idx, col, {"units": [unit]}, cap=2)["u1"][2]) == 2)
+    # a classmate whose copy gave the same notes other ids
+    other = sqlite3.connect(":memory:")
+    fakes.make_collection(other)
+    fakes.add_card(other, 103, did=10, queue=-1, nid=903)
+    fakes.add_card(other, 105, did=10, queue=-1, nid=950, ord_=0)
+    fakes.add_card(other, 106, did=10, queue=-1, nid=950, ord_=1)
+    other.execute("UPDATE notes SET guid = 'guid000003' WHERE id = 903")
+    other.execute("UPDATE notes SET guid = ? WHERE id = 950", (g50,))
+    ocol = fakes.FakeCol(other, fakes.day_cutoff_for(TODAY))
+    ocol.decks = fakes.FakeDecks({10: "Step 1"})
+    oidx = P.DeckIndex(ocol, 10)
+    check("refs: without them, other ids find nothing", oidx.match(unit) == set())
+    check("refs: with them, the same cards", oidx.match(dict(unit, idr=refs["u1"][2])) == {103, 105, 106})
+    check("notes: by guid in any copy", oidx.match({"notes": [g50]}) == {105, 106})
+    check("missing: single cards and notes this copy lacks, of all of them",
+          oidx.exact_missing({"cards": [[g50, 1], ["gone", 0]], "notes": [g50, "gone2"]}) == (2, 4))
+    base = {"id": "u1", "tags": [], "decks": [], "cards": [], "nids": [50]}
+    check("sig: notes, or refs arriving, give the date a new sig (so what they add opens)",
+          len({P.unit_sig(base), P.unit_sig(dict(base, notes=[g50])), P.unit_sig(dict(base, idr=[[g50, 0]]))}) == 3)
+    check("sig: a date with neither keeps the sig it had", P.unit_sig(base) == P.unit_sig(dict(base, notes=[], idr=[])))
+    counts = P.search_counts(idx, {"units": [{"id": "n", "notes": [g50, "gone"]}]})
+    check("notes: counted by the author's Anki", counts == {"n": {"#ids": 2}}, str(counts))
+    rows = P.match_rows(idx, {"deck": "Step 1", "units": [{"id": "a", "name": "Staph", "opens": "2026-10-06",
+                                                          "tags": [], "decks": [], "cards": [], "notes": [g50]}]})
+    check("notes: the follow dialog's row says what they found", rows == [("Staph", "2 cards", False)], str(rows))
+    u = shapes._clean_unit({"id": "u1", "name": "x", "opens": "2026-10-06", "notes": [g50, 5, ""],
+                            "idr": [[g50, 0], ["x"], [g50, "1"], [3, 0]]})
+    check("clean: notes are guids, refs [guid, number]",
+          u.get("notes") == [g50] and u.get("idr") == [[g50, 0]], str(u))
+    for q in ("nid:50", "cid:3,4", "deck:x nid:1"):
+        check(f"search: {q} means nothing in someone else's Anki", not P.shareable_search(q))
+    check("search: a plain one still goes", P.shareable_search("tag:x nidus"))
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""
@@ -4192,6 +4246,28 @@ def test_class_through_step_v33():
     check("search count: from my copy", counts == {"rn": {"tag:L14": 3}}, str(counts))
     check("search count: rides the ids request", dre.put_ids(pid, {}, counts)
           and store.plans[pid]["doc"]["units"][0].get("sn") == {"tag:L14": 3})
+    # 3.6.5: pasted ids go up as the cards they are, kept while the ids hold
+    store.plans[pid]["doc"]["units"][0].update(nids=[50], notes=["guid000003"])
+    dre.fetch_board([_day(0)], with_decks=True)
+    lean = dre.session["plans_authored"][0]["doc"]
+    check("authored: carries its ids and notes", lean["units"][0].get("nids") == [50]
+          and lean["units"][0].get("notes") == ["guid000003"], str(lean))
+    acol = _plan_col()
+    refs = P.id_refs(P.DeckIndex(acol, 10), acol, lean)
+    check("refs: ride the ids request, kept on the date", dre.put_ids(pid, {}, None, refs)
+          and sorted(map(tuple, store.plans[pid]["doc"]["units"][0].get("idr") or [])) == [("guid000050", 0), ("guid000050", 1)])
+    stale = {"rn": [[51], [], [["guid000051", 0]]]}
+    check("refs: worked out from ids the date no longer has: dropped", dre.put_ids(pid, {}, None, stale)
+          and len(store.plans[pid]["doc"]["units"][0]["idr"]) == 2)
+    doc = json.loads(json.dumps(store.plans[pid]["doc"]))
+    doc["units"][0]["idr"] = [["forged", 0]]
+    store.edit_plan(pid, doc["units"])
+    check("refs: a site save can't set them, and keeps them while the ids hold",
+          len(store.plans[pid]["doc"]["units"][0]["idr"]) == 2, str(store.plans[pid]["doc"]["units"][0].get("idr")))
+    doc["units"][0]["nids"] = [51]
+    store.edit_plan(pid, doc["units"])
+    check("refs: new ids drop them until the author's Anki sends the new ones",
+          "idr" not in store.plans[pid]["doc"]["units"][0])
 
 
 def test_plans_tab_v33():

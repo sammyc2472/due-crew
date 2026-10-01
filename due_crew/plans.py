@@ -75,6 +75,8 @@ def unit_sources(unit, deck_id=None, swap=None):
         out.append(list(unit["search"]))  # 3.3, C3
     if unit.get("nids") or unit.get("cids"):
         out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
+    if unit.get("notes") or unit.get("idr"):
+        out.append({"notes": list(unit.get("notes") or []), "idr": [list(r) for r in unit.get("idr") or []]})  # 3.6.5
     return out
 
 
@@ -86,6 +88,8 @@ def unit_sig(unit, deck_id=None, swap=None):
     blob = json.dumps([deck_id, list(swap or []), sorted(str(t).lower() for t in unit.get("tags") or []),
                        sorted(str(d).lower() for d in unit.get("decks") or []),
                        sorted(f"{g}:{o}" for g, o in unit.get("cards") or [])]
+                      + ([sorted(unit.get("notes") or []), sorted(f"{g}:{o}" for g, o in unit.get("idr") or [])]
+                         if unit.get("notes") or unit.get("idr") else [])
                       + ([sorted(unit["search"])] if unit.get("search") else [])
                       + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
                          if unit.get("nids") or unit.get("cids") else []))
@@ -293,8 +297,9 @@ class DeckIndex:
         out |= self.id_cards(unit)
         return out
 
-    def id_cards(self, unit):
-        """E1: the cards of a date's pasted note ids and card ids, in this deck."""
+    def pasted_cards(self, unit):
+        """E1: the cards of a date's pasted note ids and card ids, in this deck.
+        The same in copies of one import; a copy made otherwise has its own."""
         out = set()
         for n in unit.get("nids") or []:
             out.update(c for c in self.by_nid.get(int(n), ()) if c in self.cards)
@@ -302,6 +307,27 @@ class DeckIndex:
             if int(c) in self.cards:
                 out.add(int(c))
         return out
+
+    def id_cards(self, unit):
+        """Every exact pick but single cards: pasted ids, the cards the author's
+        Anki found them to be (3.6.5, `idr`: guid + card number, so a copy
+        whose ids differ still finds them), and notes by guid (`notes`)."""
+        out = self.pasted_cards(unit)
+        for g, o in unit.get("idr") or []:
+            cid = self.by_ref.get((str(g), int(o)))
+            if cid is not None:
+                out.add(cid)
+        for g in unit.get("notes") or []:
+            out.update(self.by_guid.get(str(g), ()))
+        return out
+
+    def exact_missing(self, unit):
+        """3.6.5: (missing, of) for a date's exact picks by guid (single cards
+        and notes): the ones this copy doesn't have, for the plan card's note."""
+        refs = [(str(g), int(o)) for g, o in unit.get("cards") or []]
+        notes = [str(g) for g in unit.get("notes") or []]
+        missing = sum(1 for r in refs if r not in self.by_ref) + sum(1 for g in notes if g not in self.by_guid)
+        return missing, len(refs) + len(notes)
 
     def single_found(self, unit):
         return sum(1 for g, o in unit.get("cards") or [] if (str(g), int(o)) in self.by_ref)
@@ -497,11 +523,11 @@ def match_rows(idx, doc, swap=None, shown=5):
             continue
         name = u.get("name") or "?"
         if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[], nids=[], cids=[]), swap, doc.get("deck", "")))
+            n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc.get("deck", "")))
             of = u.get("n")  # the author's count, when the builder saved one
             text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
             rows.append((name, text, not n))
-        if u.get("nids") or u.get("cids"):
+        if u.get("nids") or u.get("cids") or u.get("notes"):
             found = len(idx.id_cards(u))
             label = f"{name} · by ID" if (u.get("tags") or u.get("decks") or u.get("cards")) else name
             rows.append((label, _cards(found) if found else "not in your copy", not found))
@@ -731,7 +757,7 @@ def search_counts(idx, lean_doc):
     out = {}
     for u in lean_doc.get("units") or []:
         c = {q: len(idx.search_cards(q)) for q in u.get("search") or []}
-        if u.get("nids") or u.get("cids"):
+        if u.get("nids") or u.get("cids") or u.get("notes"):
             c["#ids"] = len(idx.id_cards(u))
         if c:
             out[u["id"]] = c
@@ -748,6 +774,20 @@ def ids_snapshot(idx, lean_doc, cap=50000):
         ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
         n += len(ids)
         out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]
+    return out
+
+
+def id_refs(idx, col, lean_doc, cap=50000):
+    """3.6.5: {unit id: [nids, cids, [[guid, ord]]]} for a plan I write: the
+    cards its pasted ids are in my copy, as references that work in anyone's.
+    At most `cap` in all; the ids sent back say what they were worked out from."""
+    out, n = {}, 0
+    for u in lean_doc.get("units") or []:
+        if not (u.get("nids") or u.get("cids")):
+            continue
+        refs = card_refs(col, idx.pasted_cards(u))[:max(0, min(20000, cap - n))]
+        n += len(refs)
+        out[u["id"]] = [list(u.get("nids") or []), list(u.get("cids") or []), refs]
     return out
 
 
@@ -835,7 +875,9 @@ def change_note(owner, old, doc):
 # searches whose answer is this person's own Anki, not the deck: another
 # follower's would find something else (deck:current is the browser's default)
 _PERSONAL = re.compile(r"(?i)(?:^|[\s(\"-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|"
-                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:)")
+                       r"rated:|prop:|introduced:|added:|edited:|resched:|flag:|nid:|cid:)")
+# 3.6.5: nid:/cid: name notes by this copy's ids, which another copy may not
+# share: picked cards go up as These cards (guid + card number) instead
 
 
 def shareable_search(q):

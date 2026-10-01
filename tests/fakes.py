@@ -963,7 +963,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -977,7 +977,14 @@ class FakeWorker:
     def edit_plan(self, pid, units):
         """The author saves new dates on the site: version + 1."""
         p = self.plans[pid]
-        p["doc"] = self._plan_doc(dict(p["doc"], units=units))
+        old = {u["id"]: u for u in p["doc"]["units"]}
+        doc = self._plan_doc(dict(p["doc"], units=units))
+        for u in doc["units"]:  # 3.6.5: idr only from the author's Anki, kept while the ids are
+            o = old.get(u["id"]) or {}
+            u.pop("idr", None)
+            if o.get("idr") and o.get("nids") == u.get("nids") and o.get("cids") == u.get("cids"):
+                u["idr"] = o["idr"]
+        p["doc"] = doc
         p["version"] += 1
 
     def _plan_doc(self, v):
@@ -1020,7 +1027,20 @@ class FakeWorker:
                     raise Bad(400, "plan")
                 if got:
                     nu[k] = list(dict.fromkeys(got))
-            if u.get("idn") is not None and (nu.get("nids") or nu.get("cids")):
+            notes = u.get("notes")  # 3.6.5: notes by guid
+            if notes is not None:
+                if not isinstance(notes, list) or len(notes) > 5000 or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in notes):
+                    raise Bad(400, "plan")
+                if notes:
+                    nu["notes"] = list(dict.fromkeys(notes))
+            idr = u.get("idr")  # 3.6.5: the pasted ids as guid + card number, from the author's Anki
+            if idr is not None:
+                if not isinstance(idr, list) or len(idr) > 20000 or not all(
+                        isinstance(c, (list, tuple)) and len(c) == 2 and isinstance(c[0], str) and _is_int(c[1], 0, 1000) for c in idr):
+                    raise Bad(400, "plan")
+                if idr and (nu.get("nids") or nu.get("cids")):
+                    nu["idr"] = [[c[0], c[1]] for c in idr]
+            if u.get("idn") is not None and (nu.get("nids") or nu.get("cids") or nu.get("notes")):
                 nu["idn"] = u["idn"]
             if u.get("for"):
                 nu["for"] = u["for"]  # F1
@@ -1202,8 +1222,15 @@ class FakeWorker:
                     sn = {q: n for q, n in v.items() if q in (u.get("search") or [])}
                     if sn:
                         u["sn"] = dict(u.get("sn") or {}, **sn)
-                    if "#ids" in v and (u.get("nids") or u.get("cids")):
+                    if "#ids" in v and (u.get("nids") or u.get("cids") or u.get("notes")):
                         u["idn"] = v["#ids"]  # E1
+            for uid, (nids, cids, refs) in (body.get("refs") or {}).items():  # 3.6.5
+                u = next((x for x in doc["units"] if x["id"] == uid), None)
+                if u and (u.get("nids") or []) == nids and (u.get("cids") or []) == cids:
+                    if refs:
+                        u["idr"] = [list(r) for r in refs]
+                    else:
+                        u.pop("idr", None)
             for uid, (tags, decks, ids) in (body.get("units") or {}).items():
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and u["tags"] == tags and u["decks"] == decks:
@@ -1310,8 +1337,9 @@ class FakeWorker:
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
-                 **{k: u[k] for k in ("nids", "cids") if u.get(k)})
-            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")]}}
+                 **{k: u[k] for k in ("nids", "cids", "notes") if u.get(k)})
+            for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
+            or u.get("notes")]}}
             for pid, p in sorted(self.plans.items()) if p["owner"] == me]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 

@@ -197,9 +197,12 @@ def _unit_cids(idx, st, u, deck, whole=False):
         return cids  # another deck now: what had opened opens there too
     before = {"tags": tags, "decks": decks, "cards": cards}
     # what came after the first five (P.unit_sources): a date's searches
-    # (3.3, C3: a list of strings), its pasted ids (E1: [nids, cids])
+    # (3.3, C3: a list of strings), its pasted ids (E1: [nids, cids]), its
+    # notes and the refs behind its ids (3.6.5: a dict)
     for extra in was[5:]:
-        if extra and all(isinstance(x, str) for x in extra):
+        if isinstance(extra, dict):
+            before["notes"], before["idr"] = extra.get("notes") or [], extra.get("idr") or []
+        elif extra and all(isinstance(x, str) for x in extra):
             before["search"] = extra
         elif isinstance(extra, list) and len(extra) == 2 and all(isinstance(x, list) for x in extra):
             before["nids"], before["cids"] = extra
@@ -721,9 +724,10 @@ def send_ids():
             idx = P.DeckIndex(mw.col, did)
             units = P.ids_snapshot(idx, a["doc"])
             counts = P.search_counts(idx, a["doc"])  # 3.4, D1: a pasted search's count
-            h = hashlib.sha1(json.dumps([units, counts], sort_keys=True).encode()).hexdigest()[:16]
+            refs = P.id_refs(idx, mw.col, a["doc"])  # 3.6.5: pasted ids as cards anyone's copy can find
+            h = hashlib.sha1(json.dumps([units, counts, refs], sort_keys=True).encode()).hexdigest()[:16]
             if sent.get(a["id"]) != h:
-                jobs.append((a["id"], units, counts, h))
+                jobs.append((a["id"], units, counts, refs, h))
     except Exception:
         traceback.print_exc()
         return
@@ -731,7 +735,7 @@ def send_ids():
         return
 
     def job():
-        return [(pid, h) for pid, units, counts, h in jobs if cl.put_ids(pid, units, counts)]
+        return [(pid, h) for pid, units, counts, refs, h in jobs if cl.put_ids(pid, units, counts, refs)]
 
     def done(ok):
         if ok:
