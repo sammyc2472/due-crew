@@ -3,8 +3,9 @@
 // runs. Names and counts only: the site never sees a card. See
 // docs/plans-design.md, "3.3".
 
-/** Readable tag names: "#AK_Step1_v12::#Pathoma::01_Growth" reads
- *  "Step 1 › Pathoma › 1 · Growth". The raw tag is always shown too. */
+/** Readable tag names: "#Step1_v12::#Videos::01_Growth" reads
+ *  "Step 1 › Videos › 1 · Growth" (a leading AK_ goes too). The raw tag is
+ *  always shown too. */
 const Tags = (() => {
   function word(seg) {
     let s = String(seg).replace(/^[#^$!]+/, "").replace(/^AK_/i, "").replace(/_v\d+$/i, "");
@@ -447,7 +448,7 @@ async function builder(id) {
     const placed = placedKeys();
     const covered = (k) => cover.has(k) || [...cover].some((c) => under(c, k));
     const partly = (k) => [...cover].some((c) => under(k, c));
-    // a tag holding more than one view (AnKing's top tag holds resources and
+    // a tag holding more than one view (a big shared deck's top tag holds resources and
     // systems, the same cards twice) covers only what this view shows of it
     const inView = (k) => (treeView === "deck" || kindOf(k) === "deck" ? [k]
       : kindsBelow(k).size > 1 ? kidsOf(k).filter((c) => kindsBelow(c).has(treeView)).flatMap(inView) : [k]);
@@ -970,6 +971,7 @@ async function builder(id) {
     const evs = [];     // F1: "2026-10-15 | event | Micro quiz"
     const forName = new Map();  // unit id -> the event name it's for
     const warns = [];
+    const why = [];  // 3.6.5: the AI's own notes (which video, and why), shown, never imported
     text.split("\n").forEach((raw, i) => {
       let line = raw.trim().replace(/^[-*•]\s+/, "").replace(/^`([^`].*)`$/, "$1");
       if (!line || /^```/.test(raw.trim())) return;
@@ -977,7 +979,7 @@ async function builder(id) {
       const picks = line.startsWith("#") ? null : Picks.take(line);
       if (picks) line = picks.line;
       line = line.replace(/`/g, "");
-      if (line.startsWith("#")) { if (/\bpick\b|single|anki/i.test(line)) notes.push(line.replace(/^#+\s*/, "")); return; }
+      if (line.startsWith("#")) { (/\bpick\b|\bsingle\b/i.test(line) ? notes : why).push(line.replace(/^#+\s*/, "")); return; }
       const parts = line.split(/\s*\|\s*|\s{2,}/).filter(Boolean);
       if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^event$/i.test(parts[1])) {
         const full = parts.slice(2).join(" ");
@@ -1044,7 +1046,7 @@ async function builder(id) {
     }
     // 3.6.5: pasted ids are this Anki's own numbers until the author's Anki sends what they are
     if (units.some((u) => (u.nids || []).length || (u.cids || []).length)) warns.push("nids: and cids: are your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.");
-    return { units, errors, missing, notes, events: evs, warns };
+    return { units, errors, missing, notes, events: evs, warns, why: why.filter(Boolean).slice(0, 60) };
   }
 
   /** The prompt for your own AI: the plan so far, the format, the deck's tags. */
@@ -1073,7 +1075,7 @@ async function builder(id) {
       ph.taper ? `- The last ${ph.taper} days before the end open nothing new.` : null,
       doc.units.length ? `- ${doc.units.length} dates are already planned (as text below the tags); keep or change them.` : null,
       "",
-      "Write the plan in exactly this format, one line per date, and nothing else (no commentary, no table):",
+      "Write the plan in exactly this format, one line per date, and nothing else (no table; anything you want to explain goes on a line starting with #):",
       "",
       "YYYY-MM-DD | a short name | tag:FULL::TAG::PATH, tag:ANOTHER::PATH | due YYYY-MM-DD | even | for EVENT NAME",
       "YYYY-MM-DD | a short name | notes:ID ID ID | cards:ID:2 ID:1",
@@ -1091,15 +1093,23 @@ async function builder(id) {
       "- Without a due date, a date's cards are meant to be done before the next date opens.",
       "- If a day needs specific cards and I gave you no IDs for them, don't guess: add a line starting with # that says which (\"# Pick in Anki for 2026-10-06: the iron-study cards from Lecture 17\"); I'll pick them in Anki.",
       "- Leave out days off and catch-up weeks.",
+      "",
+      "Resources, and my cards if I attached them:",
+      "- Many decks file cards under a resource: a video, a lecture, a book's chapter. If tags below look like that, a resource's tag brings every card filed under it. For each topic, pick the resource that best matches what my course needs, and keep its cards together on one date; a few extra cards from a good match are fine, and so is opening something a little before it's taught.",
+      "- What my course needs to know decides what goes in, not which resource it's filed under: look beyond the chosen tags for other cards it needs.",
+      "- If I attached a text file exported from Anki, it's my cards: one note per line, tab-separated. Its first lines say which column is which (#guid column:N is the note's ID, #tags column:N its tags). Use the card text to judge what each resource and tag actually covers; a tag doesn't prove every card under it is taught.",
+      "- To add cards the chosen tags miss, use notes: with IDs from the #guid column, copied exactly (they can hold any character but a space). Never quote or copy card text into the plan.",
+      "- If my course needs something no card covers, say so on a # line; don't invent cards.",
+      "- After the plan, one # line per date at most: what you chose for it, and why.",
       doc.units.length ? "- Keep every notes:, cards:, nids: and cids: in the plan below on its line, exactly as written, unless I ask to move or drop it." : null,
       "",
       "Example:",
-      "2026-10-05 | Microcytic anemias | tag:#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::01_Microcytic",
-      "2026-10-06 | Hemolysis | tag:#AK_Step1_v12::#Pathoma::04_Red_Blood_Cells::03_Hemolytic | due 2026-10-08 | even | for Heme quiz",
+      "2026-10-05 | Microcytic anemias | tag:Heme::Red_cells::Microcytic",
+      "2026-10-06 | Hemolysis | tag:Heme::Red_cells::Hemolytic | due 2026-10-08 | even | for Heme quiz",
       "2026-10-07 | Lecture 12 cards | notes:Ab3$kL9qZ1 p&x8Hk!eQ2 | for Heme quiz",
       "2026-10-09 | event | Heme quiz",
       "",
-      "My syllabus, or what I want (edit this part):",
+      "My syllabus, learning objectives and exam dates, or what I want (edit this part):",
       "",
       "",
       "Note IDs or card IDs I have, and what each list is for (in Anki's browser: select them, right-click, Due Crew: copy as plan selector; paste here, or leave this empty):",
@@ -1148,6 +1158,8 @@ async function builder(id) {
       preview.append(h("div", { class: "pv" }, rows,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
         r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.join(" · "))) : null,
+        r.why.length ? h("details", { class: "small" }, h("summary", {}, `The AI's notes (${r.why.length})`),
+          h("ul", { class: "muted", style: "margin:4px 0 0;padding-left:20px;text-align:left" }, r.why.map((x) => h("li", {}, x.slice(0, 300))))) : null,
         h("div", { class: "row" }, h("button", { onclick: () => use(false) }, "Add to the plan"), replaceBtn,
           h("button", { class: "quiet", onclick: () => { preview.replaceChildren(); out.textContent = ""; } }, "Cancel"))));
     };
@@ -1157,6 +1169,13 @@ async function builder(id) {
     const aiBox = h("div", { class: "aibox" },
       h("b", {}, "Draft it with your own AI"),
       h("p", { class: "muted small" }, "Copy this prompt into any AI chat, add your syllabus or what you want where it says, and paste its answer into the box below. The prompt carries the plan's dates and your deck's tag names with counts; never a card."),
+      // 3.6.5: to pick by video, the AI reads the cards themselves: the person's own export, to their own AI
+      h("details", { class: "small" }, h("summary", {}, "Pick card by card: attach your cards"),
+        h("ol", { class: "muted", style: "margin:6px 0 0;padding-left:20px;text-align:left" },
+          h("li", {}, "In Anki's browser, search the deck or tags this plan covers and select them all."),
+          h("li", {}, "Notes › Export Notes: Notes in Plain Text. Tick Include unique identifier, Include tags and Selected notes only; untick Include HTML and media references."),
+          h("li", {}, "Attach the .txt file to the chat with the prompt. A big course works better a block at a time.")),
+        h("p", { class: "muted" }, "Your cards go only to your AI. Due Crew never sees them.")),
       h("div", { class: "row" }, h("button", { class: "ghost", onclick: (e) => copy(aiPrompt(), e.target) }, "Copy the prompt"),
         h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, aiPrompt()))));
     return h("div", { class: "stack" },
@@ -1342,7 +1361,7 @@ async function builder(id) {
 
   // ---- E2: print: a list to study from, a line per study day ----
   const printOpt = { counts: true, notes: true, off: false, from: null, to: null, poster: false };
-  /** A day's topics by where they come from: "B&B: Heart failure · Pathoma: Ch 8". */
+  /** A day's topics by where they come from: "Videos: Heart failure · Book: Ch 8". */
   function topics(u) {
     const groups = new Map();
     const put = (g, x) => { if (!groups.has(g)) groups.set(g, []); if (!groups.get(g).includes(x)) groups.get(g).push(x); };

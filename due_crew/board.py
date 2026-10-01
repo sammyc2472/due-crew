@@ -1304,7 +1304,7 @@ def _mon(iso):
 
 
 def _crew_line(card):
-    """"Crew: 5 done with Pathoma 1", for the latest open date anyone in my
+    """"Crew: 5 done with Chapter 1", for the latest open date anyone in my
     crew finished."""
     e = _html.escape
     for r in reversed(card.get("rows") or []):

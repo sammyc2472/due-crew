@@ -419,7 +419,11 @@ add-on.
   (`plan_flow._tally`: leeches, exact picks this copy lacks) and the plan
   card says it once (`planasideok`). Adding to an opened date says
   followers get it tomorrow morning; Text's Add is the first button and
-  Replace asks twice.
+  Replace asks twice. The AI prompt can take the person's own cards (Anki's
+  Notes in Plain Text export, with the unique identifier: `#guid column`)
+  to pick by resource and add `notes:` the tags miss; their cards go only
+  to their AI. It stays deck-neutral (any video, lecture or book), and its
+  `#` lines come back as the AI's notes in the preview, never imported.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
@@ -463,6 +467,8 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   queries. D1 writes cost more than reads: the server compares before it
   writes, and `last_used`/`last_seen` are written at most daily/hourly.
 - Never store or return card text. No ranking anywhere new.
+- Code, comments and test data name no third-party deck, question bank
+  or video series (trademarks): "a big shared deck", "Big Step 1".
 - Threading: collection access, config writes, and cache commits on the main
   thread only; all HTTP in background threads with timeouts.
 - Anything meant as an update must never create (a row is not a join), and

@@ -9,7 +9,7 @@ const UNITS = [
 ];
 const EVENTS = [{ id: "quiz", day: "2026-10-16", name: "Cardio quiz" }];
 
-async function plan(who: Awaited<ReturnType<typeof person>>, name = "Cardio block", deck = "AnKing Step 1", units: unknown[] = UNITS) {
+async function plan(who: Awaited<ReturnType<typeof person>>, name = "Cardio block", deck = "Big Step 1", units: unknown[] = UNITS) {
   const made = await who.call("POST", "/plans", { name, deck });
   const extra = units === UNITS ? { events: EVENTS, reviews: [{ day: "2026-10-15", from: "hf", to: "arr" }] } : {};
   const put = await who.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck, units, ...extra } });
@@ -36,8 +36,8 @@ describe("the library (3.5, B)", () => {
     expect(lib.status).toBe(200);
     expect(lib.body.plans).toHaveLength(1);
     expect(lib.body.plans[0]).toMatchObject({ id: p.id, code: p.code, name: "Cardio block", ownerName: "Dre", followers: 0, mine: false,
-      deck: "AnKing Step 1", dates: 2, from: "2026-10-05", to: "2026-10-12", days: 8, n: 200, perDay: 25, reviews: 1, events: 1, ids: 0 });
-    expect(lib.body.decks).toEqual([["AnKing Step 1", 1]]);
+      deck: "Big Step 1", dates: 2, from: "2026-10-05", to: "2026-10-12", days: 8, n: 200, perDay: 25, reviews: 1, events: 1, ids: 0 });
+    expect(lib.body.decks).toEqual([["Big Step 1", 1]]);
     // a listed plan reads like one shared by code, without the code in hand
     const read = await maya.call("GET", `/plans/${p.id}`);
     expect(read.status).toBe(200);
@@ -105,7 +105,7 @@ describe("the library (3.5, B)", () => {
     const p = await plan(dre);
     await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true });
     const more = [...UNITS, { id: "vd", name: "Valves", opens: "2026-11-02", tags: ["Step1::Cardio::Valves"], n: 40 }];
-    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "AnKing Step 1", units: more } });
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Big Step 1", units: more } });
     expect(put.status).toBe(200);
     const card = (await dre.call("GET", "/library")).body.plans[0];
     expect(card).toMatchObject({ dates: 3, to: "2026-11-02", n: 240, events: 0, reviews: 0 });
@@ -117,10 +117,10 @@ describe("the library (3.5, B)", () => {
   it("filters by deck, length and words; newest first, never by followers", async () => {
     const dre = await person("dre");
     const jo = await person("jo", "Jordan");
-    const a = await plan(dre, "Cardio block", "AnKing Step 1");
+    const a = await plan(dre, "Cardio block", "Big Step 1");
     const long = Array.from({ length: 12 }, (_, i) => ({ id: `w${i}`, name: `Week ${i + 1}`, opens: `2026-${String(10 + Math.floor(i / 4)).padStart(2, "0")}-${String(1 + (i % 4) * 7).padStart(2, "0")}`, tags: [`T::${i}`], n: 10 }));
-    const b = await plan(jo, "Step 1 in 12 weeks", "AnKing Step 1", long);
-    const c = await plan(jo, "Bugs first", "Sketchy Micro", [{ id: "m1", name: "Staph", opens: "2026-10-05", tags: ["Micro::Staph"], n: 30 }]);
+    const b = await plan(jo, "Step 1 in 12 weeks", "Big Step 1", long);
+    const c = await plan(jo, "Bugs first", "Micro Videos", [{ id: "m1", name: "Staph", opens: "2026-10-05", tags: ["Micro::Staph"], n: 30 }]);
     for (const [who, p] of [[dre, a], [jo, b], [jo, c]] as const) {
       await (who as any).call("PUT", `/plans/${(p as any).id}/listed`, { listed: true });
       await db().prepare("UPDATE plans SET listed_at = ? WHERE id = ?").bind({ [a.id]: 100, [b.id]: 200, [c.id]: 300 }[(p as any).id], (p as any).id).run();
@@ -130,12 +130,12 @@ describe("the library (3.5, B)", () => {
     const maya = await person("maya");
     const names = async (q: string) => (await maya.call("GET", `/library${q}`)).body.plans.map((x: any) => x.name);
     expect(await names("")).toEqual(["Bugs first", "Step 1 in 12 weeks", "Cardio block"]);
-    expect(await names("?deck=AnKing%20Step%201")).toEqual(["Step 1 in 12 weeks", "Cardio block"]);
+    expect(await names("?deck=Big%20Step%201")).toEqual(["Step 1 in 12 weeks", "Cardio block"]);
     expect(await names("?len=short")).toEqual(["Bugs first", "Cardio block"]);
     expect(await names("?len=mid")).toEqual(["Step 1 in 12 weeks"]);
     expect(await names("?q=step")).toEqual(["Step 1 in 12 weeks", "Cardio block"]);  // a name match first, then the deck's
     expect(await names("?q=100%25")).toEqual([]);  // % is a letter here, not a wildcard
-    expect((await maya.call("GET", "/library")).body.decks).toEqual([["AnKing Step 1", 2], ["Sketchy Micro", 1]]);
+    expect((await maya.call("GET", "/library")).body.decks).toEqual([["Big Step 1", 2], ["Micro Videos", 1]]);
     expect((await maya.call("GET", "/library")).body.plans[2].followers).toBe(3);
   });
 

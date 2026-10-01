@@ -588,7 +588,7 @@ export async function logSave(env: Env, plan: string, version: number, uid: stri
 
 /** PUT /plans/{id}/ids {units: {unitId: [tags, decks, [guid]]}}: 3.3, C5.
  *  An author's Anki keeps the note ids behind each date's tags and
- *  subdecks, so a follower whose AnKing renamed a tag still gets the date.
+ *  subdecks, so a follower whose copy of the deck renamed a tag still gets the date.
  *  A unit's ids are taken only while its tags and subdecks are still the
  *  ones they were read from. Never a history entry; a new version. */
 export async function putIds(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {

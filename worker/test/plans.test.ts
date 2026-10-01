@@ -197,12 +197,12 @@ describe("plans: the deck's tree and the site's sign-in", () => {
   it("3.3: a nested tree, each name once, deep tags and a big deck", async () => {
     const dre = await person("dre");
     const deep = ["#AK", 9000, [["#Bootcamp", 3000, [["Cardiology", 900, [["02_Anatomy", 120, [["04_Penetrating_Cardiac_Trauma", 7]]]]]]]]];
-    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [deep], decks: [] })).toBe(200);
-    const got = await dre.call("GET", "/plans/trees?deck=AnKing");
+    expect(await dre.status("PUT", "/plans/trees", { deck: "Big Deck", v: 2, tags: [deep], decks: [] })).toBe(200);
+    const got = await dre.call("GET", "/plans/trees?deck=Big Deck");
     expect(got.body.trees[0].v).toBe(2);
     expect(got.body.trees[0].tags).toEqual([deep]);
-    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["A::B", 1]] })).toBe(400);  // a name, not a path
-    expect(await dre.status("PUT", "/plans/trees", { deck: "AnKing", v: 2, tags: [["x".repeat(150), 1, [["y".repeat(60), 1]]]] })).toBe(400);  // path over 200
+    expect(await dre.status("PUT", "/plans/trees", { deck: "Big Deck", v: 2, tags: [["A::B", 1]] })).toBe(400);  // a name, not a path
+    expect(await dre.status("PUT", "/plans/trees", { deck: "Big Deck", v: 2, tags: [["x".repeat(150), 1, [["y".repeat(60), 1]]]] })).toBe(400);  // path over 200
     // past the usual 512 KB body: a big deck's tags still fit
     const many = Array.from({ length: 30000 }, (_, i) => [`Lecture_${String(i).padStart(5, "0")}_Some_Topic`, 3]);
     expect(await dre.status("PUT", "/plans/trees", { deck: "Big", v: 2, tags: [["Big", 90000, many]] })).toBe(200);

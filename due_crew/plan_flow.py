@@ -734,7 +734,7 @@ def send_ids():
     """3.3, C5: main thread, on the day's first refresh. For each plan I
     write whose deck I have (by its name), the note ids behind each date's
     tags and subdecks go up, one request a plan, only when they changed:
-    a follower whose AnKing renamed a tag still gets the date. 3.4, D1:
+    a follower whose copy of the deck renamed a tag still gets the date. 3.4, D1:
     with how many cards each of its searches finds here."""
     cl = client()
     auth = cl.session.get("plans_authored") or []

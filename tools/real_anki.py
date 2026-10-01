@@ -1,5 +1,5 @@
-"""The add-on's plan code against the real Anki engine, on an AnKing-sized
-collection (35,000 notes, ~22,000 tags in AnKing's shapes, UWorld ids).
+"""The add-on's plan code against the real Anki engine, on a collection the size of
+a big shared deck (35,000 notes, ~22,000 tags in its shapes, question-bank ids).
 Not in CI (it needs Anki's own package); run it before a release:
 
     python3 -m venv /tmp/ankienv && /tmp/ankienv/bin/pip install anki
@@ -22,7 +22,7 @@ def make(path):
         os.remove(path)
     col = Collection(path)
     random.seed(1)
-    did = col.decks.id("AnKing Step Deck")
+    did = col.decks.id("Step Deck")
     model = col.models.by_name("Basic")
     R = "#AK_Step1_v12"
     systems = ["Cardio", "Renal", "Pulm", "Neuro", "GI", "Heme", "Endo", "Repro", "MSK", "Derm", "Psych", "Immuno"]
@@ -34,7 +34,7 @@ def make(path):
     fam += [f"{R}::#Sketchy::{g}::{j:02d}_Video_{j}" for g in ("Micro", "Pharm", "Path") for j in range(1, 250)]
     fam += [f"{R}::^Systems::{s}::{t}" for s in systems for t in ("Anatomy", "Physiology", "Pathology", "Pharmacology", "Micro")]
     fam += [f"{R}::#AMBOSS::Article_{j:04d}_Some_Clinical_Topic" for j in range(1, 5000)]
-    qids = [f"{R}::#UWorld::Step::{100000 + j}" for j in range(12000)]
+    qids = [f"{R}::#QBank::Step::{100000 + j}" for j in range(12000)]
     print("tag families", len(fam), "qids", len(qids))
     t = time.time()
     reqs = []
@@ -46,8 +46,8 @@ def make(path):
         reqs.append(AddNoteRequest(n, did))
     col.add_notes(reqs)
     print("added", col.card_count(), "cards in", round(time.time() - t, 1), "s")
-    # AnKing ships suspended; a third already unsuspended and some studied
-    cids = col.find_cards("deck:\"AnKing Step Deck\"")
+    # a big shared deck ships suspended; a third already unsuspended and some studied
+    cids = col.find_cards("deck:\"Step Deck\"")
     col.sched.suspend_cards(cids[12000:])
     col.close()
 
@@ -64,7 +64,7 @@ def check(path):
     from due_crew import plan_flow as F
 
     col = Collection(path)
-    did = col.decks.id_for_name("AnKing Step Deck")
+    did = col.decks.id_for_name("Step Deck")
     ok = lambda name, cond, extra="": print(("PASS " if cond else "FAIL ") + name, extra)
     tm = lambda: time.perf_counter()
 
@@ -72,7 +72,7 @@ def check(path):
     ok("deck read", len(idx.cards) == 35000, f"{t_idx*1000:.0f} ms for {len(idx.cards):,} cards")
     t = tm(); tags, decks = idx.tree(); t_tree = tm() - t
     nt, kept, left = P.nest(tags); nd, _, _ = P.nest(decks, budget=40000)
-    size = len(json.dumps({"deck": "AnKing Step Deck", "v": 2, "tags": nt, "decks": nd}))
+    size = len(json.dumps({"deck": "Step Deck", "v": 2, "tags": nt, "decks": nd}))
     ok("tag tree fits the server's 1.5 MB", size <= 1536 * 1024, f"{len(tags):,} tags, kept {kept:,}, left out {left:,}, {size/1024:.0f} KB, tree {t_tree*1000:.0f} ms")
     deep = [p for p, _ in tags if p.count("::") >= 4]
     ok("the deepest lecture tags go up", all(p in {x for x in []} or True for p in deep) and left < len(tags), f"{len(deep):,} tags five levels down")
@@ -83,11 +83,11 @@ def check(path):
              for i, p in enumerate(lect)]
     units.append({"id": "s1", "name": "Search", "opens": "2026-10-02", "tags": [], "decks": [], "cards": [],
                   "search": ['tag:"#AK_Step1_v12::^Systems::Cardio*" tag:#AK_Step1_v12::#Pathoma* -tag:*Pharmacology*']})
-    doc = {"deck": "AnKing Step Deck", "units": units}
+    doc = {"deck": "Step Deck", "units": units}
     t = tm(); prog = P.progress(idx, doc); t_prog = tm() - t
     ok("progress over 31 dates", len(prog) == 31, f"{t_prog*1000:.0f} ms")
     n_search = len(idx.search_cards(units[-1]["search"][0]))
-    ok("a real AnKing search with # and ^ and wildcards finds cards", n_search > 0, f"{n_search:,} cards")
+    ok("a real search with # and ^ and wildcards finds cards", n_search > 0, f"{n_search:,} cards")
     bad = idx.search_cards("tag:(((")
     ok("a search Anki can't read finds nothing, no error", bad == set())
 
@@ -166,7 +166,7 @@ def check(path):
     from due_crew import cards as C
     random.seed(2)
     cut = int(col.sched.day_cutoff)
-    studied = col.find_cards('deck:"AnKing Step Deck"')[:12000]
+    studied = col.find_cards('deck:"Step Deck"')[:12000]
     col.db.execute("UPDATE cards SET type = 2, queue = 2, ivl = abs(random()) % 90 + 1, lapses = abs(random()) % 4 "
                    f"WHERE id IN ({','.join(map(str, studied))})")
     rid, rows = (cut - 730 * 86400) * 1000, []
@@ -189,6 +189,6 @@ def check(path):
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
-        p = os.path.join(tmp, "anking.anki2")
+        p = os.path.join(tmp, "big.anki2")
         make(p)
         check(p)

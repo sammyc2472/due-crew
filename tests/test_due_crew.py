@@ -1059,9 +1059,9 @@ def test_remove_sticks():
 
 
 def _deck_col():
-    """AnKing (1) with a Cardio subdeck (2), an unrelated deck (3), and one
+    """Big Deck (1) with a Cardio subdeck (2), an unrelated deck (3), and one
     card sitting in a filtered deck (99) whose home is Cardio. By hand, for
-    the AnKing subtree: 6 cards, 4 seen, 2 mature, 5 unlocked."""
+    the Big Deck subtree: 6 cards, 4 seen, 2 mature, 5 unlocked."""
     conn = sqlite3.connect(":memory:")
     fakes.make_collection(conn)
     fakes.add_card(conn, 1, did=1, ctype=2, queue=2, ivl=30)     # seen, mature
@@ -1082,7 +1082,7 @@ def _deck_col():
     fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=3)), ease=3, rtype=1, cid=1)
     fakes.add_review(conn, noon(TODAY - datetime.timedelta(days=10)), ease=1, rtype=1, cid=1)  # too old
     col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
-    col.decks = fakes.FakeDecks({1: "AnKing", 2: "AnKing::Cardio", 3: "Other"})
+    col.decks = fakes.FakeDecks({1: "Big Deck", 2: "Big Deck::Cardio", 3: "Other"})
     return col
 
 
@@ -1104,7 +1104,7 @@ def test_decks():
     d = payload[0]
     check("decks: the upload carries unlocked, today, retention, and its day",
           (d["name"], d["total"], d["seen"], d["mature"], d["open"], d["today"], d["ret"], d["day"])
-          == ("AnKing", 6, 4, 2, 5, 4, 75.0, TODAY.isoformat()), str(d))
+          == ("Big Deck", 6, 4, 2, 5, 4, 75.0, TODAY.isoformat()), str(d))
     private = dk.gather_shared_decks(col, {"shared_decks": [1], "share_reviews": False,
                                            "share_retention": False})[0]
     check("decks: the privacy switches cover the new fields",
@@ -1554,10 +1554,10 @@ def test_settings_follow_account_v213():
     cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
-    doc = account.pick(cfg_a, {11: "AnKing", 12: "Pathoma"}.get)
+    doc = account.pick(cfg_a, {11: "Big Deck", 12: "Pathoma"}.get)
     check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.5.0)",
           doc["accent"] == "rose" and "sort" not in doc
-          and doc["shared_decks"] == [{"id": 11, "name": "AnKing"}, {"id": 12, "name": "Pathoma"}])
+          and doc["shared_decks"] == [{"id": 11, "name": "Big Deck"}, {"id": 12, "name": "Pathoma"}])
     here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
     resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
     got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
@@ -1609,14 +1609,14 @@ def test_settings_follow_account_v213():
     appmod.swap = None
     store.settings.pop("sam", None)
     try:
-        a = computer("a", dict(cfg_a), {11: "AnKing", 12: "Pathoma"})
+        a = computer("a", dict(cfg_a), {11: "Big Deck", 12: "Pathoma"})
         use(a)
         synced = []
         account.ensure(lambda: synced.append("a"))
         check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
               synced == ["a"] and "sam" in store.settings and account.ready())
         b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
-                     {11: "AnKing", 77: "Pathoma"})
+                     {11: "Big Deck", 77: "Pathoma"})
         use(b)
         order = []
         real_pulled = account._pulled
@@ -2792,7 +2792,7 @@ def test_settings_in_board_v341():
           and not any(k.startswith("share_") or k in ("show_up", "paused", "exam_date") for k in reset))
     view = {"tab": "you", "signed_in": True, "name": "Sam <b>", "emoji": "🦊", "status": 'coffee "&" cards',
             "sync": "sam@x.edu · Synced 2m ago · v3.5.0", "crew": 3, "squads": ["<i>BUSM</i>", "Block 3", "Lab"],
-            "decks": ["AnKing"]}
+            "decks": ["Big Deck"]}
     you = board.settings_html(view, {"crew_label": "Crew"})
     check("settings: You, escaped; three squads read as two and 1 more",
           'id="due-crew"' in you and "Sam &lt;b&gt;" in you and "&lt;i&gt;BUSM&lt;/i&gt;, Block 3 and 1 more" in you
@@ -3176,7 +3176,7 @@ def test_plans_matching_v31():
           oidx.match(u["hf"], swap, "Step 1") == {1, 2} and oidx.match(u["hf"], None, "Step 1") == set())
     check("swap: none when the tags already line up", P.detect_swap(idx, doc) is None)
     check("best deck: the one named like the plan's", P.best_deck(col, doc) == (10, None))
-    col.decks = fakes.FakeDecks({10: "AnKing v11", 11: "AnKing v11::Extras", 20: "Other"})
+    col.decks = fakes.FakeDecks({10: "Big Deck v11", 11: "Big Deck v11::Extras", 20: "Other"})
     check("best deck: else the one where most of it is found", P.best_deck(col, doc)[0] == 10)
     prog = P.progress(idx, doc)
     check("progress: [opened, seen, total] per unit",
@@ -4159,8 +4159,8 @@ def test_tree_nested_v33():
     rows = [["#AK", 9000], ["#AK::#Bootcamp", 3000], ["#AK::#Bootcamp::Cardiology", 900],
             ["#AK::#Bootcamp::Cardiology::02_Anatomy", 120],
             ["#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
-            ["#AK::#UWorld", 5000]]
-    rows += [[f"#AK::#UWorld::{10000 + i}", 2] for i in range(40000)]
+            ["#AK::#QBank", 5000]]
+    rows += [[f"#AK::#QBank::{10000 + i}", 2] for i in range(40000)]
     tree, kept, left = P.nest(rows, budget=60_000)
     flat = []
 

@@ -7,7 +7,7 @@ import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
 export const KNOWS_PER_SYNC = 2000;
-export const KNOWS_MAX = 100000;  // a person's cards "down": AnKing has ~35,000 notes
+export const KNOWS_MAX = 100000;  // a person's cards "down": a big shared deck has ~35,000 notes
 export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
 export const TIP_MAX = V.NOTE_MAX;

@@ -43,12 +43,12 @@ ENTRIES = [
      "days": {L[0]: day(512, 4320000, 91.6, 12), L[1]: day(430, 3900000, 90.2, 11),
               L[2]: day(388, 3300000, 88.9, 10), L[4]: day(510, 4000000, 92.0, 8),
               L[5]: day(220, 2000000, 85.5, 7), L[6]: day(240, 2100000, 86.5, 6)},
-     "decks": [{"name": "AnKing Step 1", "sig": SIG, "total": 32104, "seen": 4012, "mature": 2100, "open": 9800, "today": 212, "day": L[0], "ret": 91.2},
+     "decks": [{"name": "Big Step 1", "sig": SIG, "total": 32104, "seen": 4012, "mature": 2100, "open": 9800, "today": 212, "day": L[0], "ret": 91.2},
                {"name": "Japanese Core 2k", "sig": SIG2, "total": 2000, "seen": 1820, "mature": 1540}]},
     {"user_id": "dre", "name": "Dre", "you": False, "paused": False,
      "last_updated": ago(minutes=12), "exam_date": "",
      "days": {lb: day(700 + i * 30, 7440000, 93.1, 41 - i) for i, lb in enumerate(L)},
-     "decks": [{"name": "AnKing Step 1", "sig": SIG, "total": 32104, "seen": 11240, "mature": 8020, "open": 12900, "today": 640, "day": L[0], "ret": 88.4}]},
+     "decks": [{"name": "Big Step 1", "sig": SIG, "total": 32104, "seen": 11240, "mature": 8020, "open": 12900, "today": 640, "day": L[0], "ret": 88.4}]},
     {"user_id": "marisa", "name": "Marisa K.", "you": False, "paused": False,
      "last_updated": ago(hours=1),
      "exam_date": (TODAY + datetime.timedelta(days=3)).isoformat(),
@@ -84,7 +84,7 @@ MANY = ENTRIES + [
     {"user_id": f"m{i}", "name": n, "you": False, "paused": False,
      "last_updated": ago(minutes=5 + i), "exam_date": "",
      "days": {L[0]: day(980 - i * 41, 3000000 - i * 90000, 85.0 + i * 0.4, 20 - i)},
-     "decks": [{"name": "AnKing Step 1", "sig": SIG, "total": 32104,
+     "decks": [{"name": "Big Step 1", "sig": SIG, "total": 32104,
                 "seen": 900 * (i + 1), "mature": 400 * (i + 1), "open": 1200 * (i + 1)}]}
     for i, n in enumerate(["Riley", "Sasha", "Jun", "Tomás", "Nia", "Owen", "Zara",
                            "Kai", "Lena", "Mateo", "Inés", "Yara", "Bo", "Eli"])
@@ -100,7 +100,7 @@ SHOWUP = [
 ]
 DATA_SHOWUP = {"entries": ENTRIES + SHOWUP, "labels": L, "tomorrow": TOMORROW, "pending": []}
 WRAP = {"reviews": 21430, "time_ms": 148320000, "best_name": "Marisa K.", "full_days": 5}
-DELTAS = {("sam", "AnKing Step 1"): 124}
+DELTAS = {("sam", "Big Step 1"): 124}
 
 now_ts = datetime.datetime.now().timestamp()
 sections = []
@@ -181,13 +181,13 @@ sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.rende
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
 SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status": "coffee, then 400 cards",
             "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["BUSM 2028", "Block 3"],
-            "decks": ["AnKing Step 1"]}
+            "decks": ["Big Step 1"]}
 SET_CFG = {"accent": "green", "hidden_tabs": ["squads"], "crew_label": "busm", "exam_date": "2026-10-14"}
 for tab in ("you", "board", "privacy"):
     sections.append(f"<h3>3.5.0: Settings, {tab}</h3>" + board.settings_html(dict(SET_VIEW, tab=tab), SET_CFG))
 sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.render(
     DATA, {"period": "decks"}, now_ts - 60,
-    tricky=[{"name": "Maya", "text": "Which nerve innervates the deltoid?", "deck": "AnKing", "q": "why axillary?",
+    tricky=[{"name": "Maya", "text": "Which nerve innervates the deltoid?", "deck": "Big Deck", "q": "why axillary?",
              "uid": "m", "index": 0, "known": True}],
     asks=[{"text": "The external iliac artery becomes the femoral artery as it c", "who": [], "state": "open", "index": 0},
           {"text": "Warfarin inhibits vitamin K epoxide reductase", "who": ["Dre"], "state": "answered"}]))
@@ -296,7 +296,7 @@ profile_js = board.profile_overlay_js({
     # until 2.9 this was `[...][i * 7 % 7]`, always 0: the preview never lit a cell
     "cells": [([0, 1, 3, 12, 30, 70, 160][(i * 3) % 7] if (i % 9) else 0) for i in range(182)],
     "start": (TODAY - datetime.timedelta(days=181)).isoformat(),
-    "same_days": 118, "decks_line": "AnKing Step 1", "uid": "dre",
+    "same_days": 118, "decks_line": "Big Step 1", "uid": "dre",
     "you": False, "paused": False, "exam": "",
     "duet": {"run": 5, "best": 23,
              "mine_week": [True, True, False, True, True, True, True],

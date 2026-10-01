@@ -25,8 +25,8 @@ async function get(path: string) {
 
 async function plan(name = 'Cardio "block" <1>', uid = "priya") {
   const priya = await person(uid);
-  const made = await priya.call("POST", "/plans", { name, deck: "AnKing Step 1", line: "One lecture a day" });
-  const put = await priya.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "AnKing Step 1",
+  const made = await priya.call("POST", "/plans", { name, deck: "Big Step 1", line: "One lecture a day" });
+  const put = await priya.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "Big Step 1",
     events: [{ id: "q", day: "2026-10-16", name: "Quiz" }],
     units: [{ id: "a", name: "L1", opens: "2026-10-05", tags: ["C::1"], n: 80 }, { id: "b", name: "L2", opens: "2026-10-13", tags: ["C::2"], n: 40 }] } });
   return { priya, p: put.body };

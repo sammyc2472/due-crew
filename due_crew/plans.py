@@ -282,7 +282,7 @@ class DeckIndex:
             missing = missing or not got
             out |= got
         if missing and unit.get("ids"):
-            # 3.3, C5: a tag this copy names differently (a newer AnKing):
+            # 3.3, C5: a tag this copy names differently (a newer version of the deck):
             # the author's note ids behind the date find its cards
             by_id = {c for g in unit["ids"] for c in self.by_guid.get(g, ())}
             if by_id - out:
@@ -402,7 +402,7 @@ TREE_BUDGET = 1_400_000  # bytes of JSON: under the server's 1.5 MB for a tree, 
 
 
 def _qid(path):
-    """A question-bank id (UWorld's, AMBOSS's…): a leaf that's only digits.
+    """A question bank's id: a leaf that's only digits.
     Thousands of them, one card or two each; they go last."""
     return path.rsplit(_SEP, 1)[-1].strip().isdigit()
 

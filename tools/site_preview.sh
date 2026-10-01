@@ -32,7 +32,7 @@ tags = [["Step1", 1960], ["Step1::Cardio", 312], ["Step1::Cardio::Heart_failure"
         ["Step1::Cardio::Valves", 39], ["Step1::Cardio::Pharm", 164], ["Step1::Renal", 402], ["Step1::Renal::Physiology", 212],
         ["Step1::Renal::Pharm", 190], ["Step1::Pulm", 288], ["Step1::Pulm::Asthma", 74], ["Step1::Pulm::COPD", 58],
         ["Step1::Pulm::Physiology", 156], ["Step1::Neuro", 398], ["Step1::Neuro::Anatomy", 221], ["Step1::Neuro::Pharm", 177],
-        # 3.3: AnKing-style tags, for readable names and the resource / system views
+        # 3.3: resource-style tags, for readable names and the resource / system views
         ["#AK_Step1_v12", 5200], ["#AK_Step1_v12::#Pathoma", 2408], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury", 283],
         ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::01_Growth", 90], ["#AK_Step1_v12::#Pathoma::01_Growth_Adaptations_Cell_Injury::02_Cell_Injury", 150],
         ["#AK_Step1_v12::#Pathoma::02_Inflammation", 210], ["#AK_Step1_v12::#Pathoma::03_Neoplasia", 176],
