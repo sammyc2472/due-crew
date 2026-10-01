@@ -1554,12 +1554,12 @@ def test_settings_follow_account_v213():
     cfg_a = {"share_retention": False, "show_up": False, "exam_date": "2026-10-02",
              "shared_decks": [11, 12], "squads": [{"id": "sq1", "code": "ABCD2345", "name": "busm", "founder": "x"}],
              "status": "coffee", "accent": "rose", "sort": "time"}
-    doc = account.pick(cfg_a, {11: "Big Deck", 12: "Pathoma"}.get)
+    doc = account.pick(cfg_a, {11: "Big Deck", 12: "Path Book"}.get)
     check("pick: only what follows the account; decks with names; sort stays, the accent goes (3.5.0)",
           doc["accent"] == "rose" and "sort" not in doc
-          and doc["shared_decks"] == [{"id": 11, "name": "Big Deck"}, {"id": 12, "name": "Pathoma"}])
-    here = {11: 11, 99: 99}                      # this computer: 11 by id, Pathoma by name as 99
-    resolve = lambda did, name: here.get(did) or {"Pathoma": 99}.get(name)
+          and doc["shared_decks"] == [{"id": 11, "name": "Big Deck"}, {"id": 12, "name": "Path Book"}])
+    here = {11: 11, 99: 99}                      # this computer: 11 by id, Path Book by name as 99
+    resolve = lambda did, name: here.get(did) or {"Path Book": 99}.get(name)
     got = account.apply({"accent": "green", "share_retention": True}, doc, resolve)
     check("apply: the account's settings land, the accent too; the deck matches by id, else by name",
           got["share_retention"] is False and got["exam_date"] == "2026-10-02"
@@ -1576,7 +1576,7 @@ def test_settings_follow_account_v213():
     ok = sam.put_settings("2026-09-24T10:00:00.000000Z", doc)
     back, status = sam.get_settings()
     check("settings doc: I write it and read it back", ok and status == 200
-          and back["settings"]["shared_decks"][1]["name"] == "Pathoma")
+          and back["settings"]["shared_decks"][1]["name"] == "Path Book")
     dre = new_client(store, "dre", "Dre")
     check("settings doc: not even my crew can read it (GET /settings is only ever mine)",
           dre.get_settings()[1] == 404)
@@ -1609,14 +1609,14 @@ def test_settings_follow_account_v213():
     appmod.swap = None
     store.settings.pop("sam", None)
     try:
-        a = computer("a", dict(cfg_a), {11: "Big Deck", 12: "Pathoma"})
+        a = computer("a", dict(cfg_a), {11: "Big Deck", 12: "Path Book"})
         use(a)
         synced = []
         account.ensure(lambda: synced.append("a"))
         check("first computer: nothing on the account yet, so its settings go up, then its sync runs",
               synced == ["a"] and "sam" in store.settings and account.ready())
         b = computer("b", {"share_retention": True, "shared_decks": [], "accent": "blue"},
-                     {11: "Big Deck", 77: "Pathoma"})
+                     {11: "Big Deck", 77: "Path Book"})
         use(b)
         order = []
         real_pulled = account._pulled
@@ -2973,7 +2973,7 @@ def test_room_commands_from_the_card_page_need_the_key():
 
 def test_room_chip_side_v301():
     """3.0.1: the room chip goes left or right in the top bar (a setting
-    on this computer; AMBOSS puts a chip on the right too)."""
+    on this computer; a question bank puts a chip on the right too)."""
     from due_crew import account, room_model as rm
     t0 = datetime.datetime(2026, 9, 24, 18, 0, tzinfo=datetime.timezone.utc)
     room = rm.make_room("dre", t0, 4, 25, 5)
@@ -4218,11 +4218,11 @@ def test_tree_nested_v33():
     most useful first (question ids last), a kept tag keeps its parents,
     and it stays under the server's body limit."""
     from due_crew import plans as P
-    rows = [["#AK", 9000], ["#AK::#Bootcamp", 3000], ["#AK::#Bootcamp::Cardiology", 900],
-            ["#AK::#Bootcamp::Cardiology::02_Anatomy", 120],
-            ["#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
-            ["#AK::#QBank", 5000]]
-    rows += [[f"#AK::#QBank::{10000 + i}", 2] for i in range(40000)]
+    rows = [["#Big", 9000], ["#Big::#Lectures", 3000], ["#Big::#Lectures::Cardiology", 900],
+            ["#Big::#Lectures::Cardiology::02_Anatomy", 120],
+            ["#Big::#Lectures::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma", 7],
+            ["#Big::#QBank", 5000]]
+    rows += [[f"#Big::#QBank::{10000 + i}", 2] for i in range(40000)]
     tree, kept, left = P.nest(rows, budget=60_000)
     flat = []
 
@@ -4233,7 +4233,7 @@ def test_tree_nested_v33():
             if len(x) == 3:
                 walk(x[2], p)
     walk(tree)
-    check("tree: a tag five levels down goes up", "#AK::#Bootcamp::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
+    check("tree: a tag five levels down goes up", "#Big::#Lectures::Cardiology::02_Anatomy::04_Penetrating_Cardiac_Trauma" in flat)
     check("tree: question ids fill what's left, and some are left out", left > 0 and kept == len(flat))
     check("tree: every kept tag has its parents", all("::" not in p or p.rsplit("::", 1)[0] in set(flat) for p in flat))
     check("tree: it fits the budget", len(json.dumps(tree)) <= 60_000, str(len(json.dumps(tree))))
@@ -4721,9 +4721,9 @@ def test_plans_tab_v341():
     check("week: starts on Monday, and moves by weeks", mon == "2026-10-05" and P.week_start("2026-10-07", 1) == "2026-10-12"
           and P.week_start("2026-10-05") == "2026-10-05")
     doc = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
-           "units": [{"id": "a", "name": "Pathoma 1", "opens": "2026-10-05", "n": 40},
-                     {"id": "b", "name": "B&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
-                     {"id": "c", "name": "Pathoma 2", "opens": "2026-10-07", "n": 42, "for": "q"},
+           "units": [{"id": "a", "name": "Path Book 1", "opens": "2026-10-05", "n": 40},
+                     {"id": "b", "name": "V&B <i>", "opens": "2026-10-06", "cards": [["g", 0]] * 3, "sn": {"x": 5}},
+                     {"id": "c", "name": "Path Book 2", "opens": "2026-10-07", "n": 42, "for": "q"},
                      {"id": "d", "name": "Metab", "opens": "2026-10-08", "idn": 38}],
            "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
     w = P.week_view(doc, {"a": [40, 40, 40], "b": [8, 6, 8], "c": [42, 18, 42]}, "2026-10-07", mon,
@@ -4741,24 +4741,24 @@ def test_plans_tab_v341():
           and by["2026-10-09"]["events"] == ["Cardio quiz"] and by["2026-10-09"]["units"][0]["state"] == "skip"
           and by["2026-10-09"]["new"] == 0)
     week = w
-    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Pathoma 1", "state": "open", "crew": [5, 6]}],
+    base = {"id": "p1", "title": "MS2 <b>Block</b>", "sub": "week 3 of 9", "rows": [{"name": "Path Book 1", "state": "open", "crew": [5, 6]}],
             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
-            "today_names": ["Pathoma 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
-            "week_offset": 0, "opened": {"names": ["Pathoma 2"], "n": 42, "undo": True},
+            "today_names": ["Path Book 2"], "next": {"name": "Metab", "uid": "d", "day": "Thursday", "n": 38}, "week": week,
+            "week_offset": 0, "opened": {"names": ["Path Book 2"], "n": 42, "undo": True},
             "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0}}
     h = board._plan_card_html(base)
     check("today: the topic, reviews, new, one bar, Study now and Put off to tomorrow; no time guess (3.6.5)",
-          'class="ptoday"' in h and "<b>Pathoma 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
+          'class="ptoday"' in h and "<b>Path Book 2</b>" in h and "<b>311</b> reviews" in h and "<b>18</b> / 42 new" in h
           and "~48" not in h and "</b> min" not in h and "planstudy:p1" in h and "Put off to tomorrow" in h and "on track" in h)
     tidx = next(i for i, d in enumerate(week) if d["today"])
     check("week: the site's calendar look; names escaped; today open with the box, its date filled; a day opens its details",
-          'class="pwk"' in h and "B&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
+          'class="pwk"' in h and "V&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
           and 'class="pc now sel"' in h and h.count(" sel\"") == 1 and '<b class="td">' in h
           and f'id="dc-pd-p1-{tidx}">' in h and "Cardio quiz" in h and "plansite:p1" in h
           and "planweek:p1:next" in h and "planweek:p1:prev" in h and 'class="tb here"' in h)
     check("week: a later day offers Open now, Skip it and Move my days back",
           "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Undo skip" in h)
-    check("crew: in words", "Crew: 5 done with Pathoma 1" in h)
+    check("crew: in words", "Crew: 5 done with Path Book 1" in h)
     moved = board._plan_card_html(dict(base, week_offset=1))
     check("week: moved, it says which, Today between the arrows, the box on its first day with plans",
           "Week of 5 Oct" in moved and 'class="tb" onclick' in moved and "planweek:p1:0" in moved
@@ -4775,7 +4775,7 @@ def test_plans_tab_v341():
           and "planshift:p1" in behind and "on track" not in behind)
     paused = board._plan_card_html(dict(base, paused=True, sub="paused until Mon 12 Oct", session=None))
     check("today: paused, with Resume now", "Paused until Mon 12 Oct" in paused and "planresume:p1" in paused)
-    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Pathoma 2"], change=[("Dre moved a date", False)]))
+    notes = board._plan_card_html(dict(base, waiting=16, put_off=["Path Book 2"], change=[("Dre moved a date", False)]))
     check("notes: one at a time, the most pressing first", notes.count('class="pn') == 1 and "planok:p1" in notes)
     css = board.render({"entries": [], "labels": ["2026-10-07"], "tomorrow": "", "pending": []}, {"period": "plans"}, 0,
                        plans={"cards": [base], "offers": []})

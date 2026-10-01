@@ -196,7 +196,7 @@ describe("plans: the deck's tree and the site's sign-in", () => {
 
   it("3.3: a nested tree, each name once, deep tags and a big deck", async () => {
     const dre = await person("dre");
-    const deep = ["#AK", 9000, [["#Bootcamp", 3000, [["Cardiology", 900, [["02_Anatomy", 120, [["04_Penetrating_Cardiac_Trauma", 7]]]]]]]]];
+    const deep = ["#Big", 9000, [["#Lectures", 3000, [["Cardiology", 900, [["02_Anatomy", 120, [["04_Penetrating_Cardiac_Trauma", 7]]]]]]]]];
     expect(await dre.status("PUT", "/plans/trees", { deck: "Big Deck", v: 2, tags: [deep], decks: [] })).toBe(200);
     const got = await dre.call("GET", "/plans/trees?deck=Big Deck");
     expect(got.body.trees[0].v).toBe(2);

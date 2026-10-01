@@ -105,7 +105,7 @@ describe("3.3: a class through Step (C1–C5)", () => {
 
   it("C3: a date can hold Anki searches; Anki adds one with its count", async () => {
     const { dre, p } = await plan();
-    const q = "tag:*Cardio* tag:*#B&B* -tag:*Pharm*";
+    const q = "tag:*Cardio* tag:*#V&B* -tag:*Pharm*";
     const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version,
       doc: { deck: "Step 1", units: [{ ...UNITS[0], search: [q, q] }, UNITS[1]] } });
     expect(put.body.doc.units[0].search).toEqual([q]);

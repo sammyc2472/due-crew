@@ -364,7 +364,7 @@ def main(out):
             raise RuntimeError("feedback: Send stays off with text in the box")
         shoot(dlg, os.path.join(out, "feedback.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
-                             search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
+                             search="tag:*Cardio* tag:*#V&B* -tag:*Pharm*", search_n=212)
         settle()
         shoot(dlg, os.path.join(out, "plan-add-search.png"))
         # Change deck's question carries the plan's name: plain text, as the tip prompts

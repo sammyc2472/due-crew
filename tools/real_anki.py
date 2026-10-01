@@ -24,16 +24,16 @@ def make(path):
     random.seed(1)
     did = col.decks.id("Step Deck")
     model = col.models.by_name("Basic")
-    R = "#AK_Step1_v12"
+    R = "#Big_Step1_v12"
     systems = ["Cardio", "Renal", "Pulm", "Neuro", "GI", "Heme", "Endo", "Repro", "MSK", "Derm", "Psych", "Immuno"]
     fam = []
-    fam += [f"{R}::#B&B::{i:02d}_{s}::{j:02d}_Topic_{j}" for i, s in enumerate(systems, 1) for j in range(1, 60)]
-    fam += [f"{R}::#Bootcamp::{s}::{k:02d}_Section_{k}::{j:02d}_Lecture_Name_{j}" for s in systems for k in range(1, 8) for j in range(1, 16)]
-    fam += [f"{R}::#FirstAid::{s}::{k:02d}_Chapter::{j:02d}_Page_{j}" for s in systems for k in range(1, 12) for j in range(1, 20)]
-    fam += [f"{R}::#Pathoma::{c:02d}_Chapter_{c}::{j:02d}_Section" for c in range(1, 20) for j in range(1, 12)]
-    fam += [f"{R}::#Sketchy::{g}::{j:02d}_Video_{j}" for g in ("Micro", "Pharm", "Path") for j in range(1, 250)]
+    fam += [f"{R}::#V&B::{i:02d}_{s}::{j:02d}_Topic_{j}" for i, s in enumerate(systems, 1) for j in range(1, 60)]
+    fam += [f"{R}::#Lectures::{s}::{k:02d}_Section_{k}::{j:02d}_Lecture_Name_{j}" for s in systems for k in range(1, 8) for j in range(1, 16)]
+    fam += [f"{R}::#Review_Book::{s}::{k:02d}_Chapter::{j:02d}_Page_{j}" for s in systems for k in range(1, 12) for j in range(1, 20)]
+    fam += [f"{R}::#Path_Book::{c:02d}_Chapter_{c}::{j:02d}_Section" for c in range(1, 20) for j in range(1, 12)]
+    fam += [f"{R}::#Picture_Videos::{g}::{j:02d}_Video_{j}" for g in ("Micro", "Pharm", "Path") for j in range(1, 250)]
     fam += [f"{R}::^Systems::{s}::{t}" for s in systems for t in ("Anatomy", "Physiology", "Pathology", "Pharmacology", "Micro")]
-    fam += [f"{R}::#AMBOSS::Article_{j:04d}_Some_Clinical_Topic" for j in range(1, 5000)]
+    fam += [f"{R}::#Library::Article_{j:04d}_Some_Clinical_Topic" for j in range(1, 5000)]
     qids = [f"{R}::#QBank::Step::{100000 + j}" for j in range(12000)]
     print("tag families", len(fam), "qids", len(qids))
     t = time.time()
@@ -77,12 +77,12 @@ def check(path):
     deep = [p for p, _ in tags if p.count("::") >= 4]
     ok("the deepest lecture tags go up", all(p in {x for x in []} or True for p in deep) and left < len(tags), f"{len(deep):,} tags five levels down")
 
-    # a plan: 30 dates of Bootcamp Cardio lectures, a search date, a renamed-tag date
-    lect = sorted({p for p, _ in tags if "#Bootcamp::Cardio::" in p and p.count("::") == 4})[:30]
+    # a plan: 30 dates of Lectures Cardio lectures, a search date, a renamed-tag date
+    lect = sorted({p for p, _ in tags if "#Lectures::Cardio::" in p and p.count("::") == 4})[:30]
     units = [{"id": f"u{i}", "name": p.rsplit("::", 1)[-1], "opens": f"2026-10-{(i % 28) + 1:02d}", "tags": [p], "decks": [], "cards": []}
              for i, p in enumerate(lect)]
     units.append({"id": "s1", "name": "Search", "opens": "2026-10-02", "tags": [], "decks": [], "cards": [],
-                  "search": ['tag:"#AK_Step1_v12::^Systems::Cardio*" tag:#AK_Step1_v12::#Pathoma* -tag:*Pharmacology*']})
+                  "search": ['tag:"#Big_Step1_v12::^Systems::Cardio*" tag:#Big_Step1_v12::#Path_Book* -tag:*Pharmacology*']})
     doc = {"deck": "Step Deck", "units": units}
     t = tm(); prog = P.progress(idx, doc); t_prog = tm() - t
     ok("progress over 31 dates", len(prog) == 31, f"{t_prog*1000:.0f} ms")
@@ -160,6 +160,35 @@ def check(path):
     ok("a date's search is run once, then kept while the notes are the same",
        units[-1]["search"][0] in i5._searches and not i6._searches)
     ok("…and after an edit it finds what the edit changed", len(i6.search_cards("tag:NewTag::Here")) == 1)
+
+    # 3.6.5: notes by guid, pasted ids as card refs, each date's counts, the export
+    import re
+    pasted = sorted({col.get_card(c).nid for c in list(idx2.match(units[2], None, doc["deck"]))})[:5000]
+    lean_ids = {"deck": doc["deck"], "units": [{"id": "x", "nids": pasted, "cids": []}]}
+    t = tm(); refs = P.id_refs(idx2, col, lean_ids); t_refs = tm() - t
+    body = len(json.dumps({"units": {}, "refs": refs}))
+    ok("pasted ids as guid + card number", len(refs["x"][2]) >= len(pasted) and body < 1600 * 1024,
+       f"{len(pasted):,} notes, {body/1024:.0f} KB, {t_refs*1000:.0f} ms")
+    guids = [g for g, _o in refs["x"][2]][:200]
+    ok("notes by guid find every card of each", idx2.match({"notes": guids}) == idx2.match({"nids": pasted[:200]})
+       or len(idx2.match({"notes": guids})) >= len(set(guids)), f"{len(idx2.match({'notes': guids})):,} cards")
+    t = tm(); pn = P.date_counts(idx2, {"deck": doc["deck"], "units": [dict(u, cards=[]) for u in units]}); t_pn = tm() - t
+    ok("each date's new, repeat and missing, in date order", len(pn) == 31 and all(len(v) == 3 for v in pn.values()), f"{t_pn*1000:.0f} ms")
+    t = tm(); sel, n_sel = P.selector(col, nids=pasted[:500]); t_sel = tm() - t
+    ok("copy as plan selector reads back", n_sel == len(set(pasted[:500])) and idx2.match({"notes": sel[6:].split(" ")}) ==
+       idx2.match({"nids": pasted[:500]}), f"{len(sel)/1024:.0f} KB, {t_sel*1000:.0f} ms")
+    ok("nid: and cid: aren't shareable searches", not P.shareable_search("nid:123") and not P.shareable_search("deck:x cid:1"))
+    t = tm(); nids_all = P.export_scope(idx2, doc, "deck"); text, n_out = P.export_notes(col, nids_all); t_exp = tm() - t
+    head = text.splitlines()[:6]
+    ok("export: the whole deck in Anki's own format, guid first", n_out == 35000 and head[2] == "#guid column:1",
+       f"{len(text)/1024/1024:.1f} MB, {t_exp*1000:.0f} ms")
+    row = text.splitlines()[6].split("\t")
+    ok("export: notetype and deck names from Anki", row[1] == "Basic" and row[2] == "Step Deck", str(row[:3]))
+    est = P.export_size(col, nids_all)
+    ok("export: the size estimate errs high, not wildly", len(text) <= est <= 3 * len(text), f"{est/1024/1024:.1f} MB est")
+    t = tm(); dates = P.export_scope(idx2, doc, "dates"); t_scope = tm() - t
+    ok("export: what the plan's dates open", 0 < len(dates) < 35000, f"{len(dates):,} notes, {t_scope*1000:.0f} ms")
+    del re
 
     # 3.2's who-knows-it, on two years of answers (400,000): every sync reads it
     import random

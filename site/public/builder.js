@@ -670,7 +670,11 @@ async function builder(id) {
         if (c.cards) u.cards = []; else if (c.ids) takeIds(u); else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);
         cleanup(); renameAll(); mark(); draw(); } }, "×") : null);
     // 3.6.5, P1: what the date opens, as the author's Anki counted it
+    const picksOf = (x) => JSON.stringify([x.opens, srcs(x), x.search || [], x.nids || [], x.cids || [], x.notes || []]);
     const opensLine = (u) => {
+      // a count is for the date as it was loaded; one changed here is counted again after Save
+      const was = (base.units || []).find((x) => x.id === u.id);
+      if (u.pn && was && picksOf(was) !== picksOf(u)) return author ? h("small", { class: "muted" }, "Changed: your Anki counts it again after you save.") : null;
       if (!u.pn) return author && (srcs(u).length || (u.search || []).length || hasIds(u)) ? h("small", { class: "muted" }, "Your Anki counts what this opens at its next refresh.") : null;
       const [n, rep, miss] = u.pn;
       const single = (u.cards || []).length;
