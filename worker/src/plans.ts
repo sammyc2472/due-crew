@@ -279,7 +279,7 @@ export function libCard(doc: Obj): Obj {
   let study = 0;
   for (let i = 0; i < days; i++) if (week[(new Date(Date.parse(`${from}T00:00:00Z`) + i * 86400000).getUTCDay() + 6) % 7]) study++;
   const n = units.reduce((a, u) => a + unitCount(u), 0);
-  return { deck: doc.deck, dates: units.length, from, to, days, n, perDay: study ? Math.round(n / study) : 0,
+  return { deck: doc.deck, dates: units.length, daysOn: new Set(units.map((u) => u.opens)).size, from, to, days, n, perDay: study ? Math.round(n / study) : 0,
     reviews: ((doc.reviews as unknown[]) || []).length, events: ((doc.events as unknown[]) || []).length,
     ids: units.some((u) => u.nids || u.cids) ? 1 : 0 };
 }
