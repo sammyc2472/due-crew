@@ -62,6 +62,15 @@ class AddCardsDialog(QDialog):
         self.date.dateChanged.connect(lambda *_: self.own.setChecked(True))
         form.addRow("Date", opens)
         root.addLayout(form)
+        # 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
+        self.opened = QLabel("This date has opened. Followers who opened it get these tomorrow morning.")
+        self.opened.setWordWrap(True)
+        self.opened.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
+        self.opened.setVisible(False)
+        root.addWidget(self.opened)
+        self.unit.currentIndexChanged.connect(self._opened)
+        self.date.dateChanged.connect(self._opened)
+        self.with_unit.toggled.connect(self._opened)
 
         # 3.3, C3: the browser's search itself (it keeps up with cards added
         # later, and runs in each classmate's Anki), or exactly these cards
@@ -111,6 +120,17 @@ class AddCardsDialog(QDialog):
             self.plan.addItem(P.plan_title(p), p["id"])  # a combo shows plain text
         self._plan_changed()
 
+    def _opened(self, *_):
+        p = self._current() if self.plans else None
+        if self.with_unit.isChecked():
+            uid = self.unit.currentData()
+            u = next((x for x in P.units(p["doc"]) if x["id"] == uid), None) if p else None
+            day = u["opens"] if u else None
+        else:
+            d = self.date.date()
+            day = f"{d.year():04d}-{d.month():02d}-{d.day():02d}"
+        self.opened.setVisible(bool(day) and day <= self.today)
+
     def _current(self):
         pid = self.plan.currentData()
         return next((p for p in self.plans if p["id"] == pid), None)
@@ -129,6 +149,7 @@ class AddCardsDialog(QDialog):
         self.unit.setEnabled(bool(units))
         (self.with_unit if units else self.own).setChecked(True)
         self.add_btn.setEnabled(bool(p) and (bool(self.refs) or bool(self.search)))
+        self._opened()
 
     def _add(self):
         p = self._current()

@@ -896,6 +896,22 @@ def card_refs(col, cids):
     return out
 
 
+def selector(col, cids=(), nids=()):
+    """3.6.5: the browser's pick as plan text anyone's copy can read: notes
+    by guid ("notes:G G", every card of each), or cards as guid and card
+    number from 1 ("cards:G:1 G:3"). A note's guid is the same in every
+    copy of a deck; its ids may not be. ("", 0) for nothing."""
+    if nids:
+        nl = sorted({int(n) for n in nids})
+        gs = []
+        for i in range(0, len(nl), 500):
+            gs += [str(g) for (g,) in col.db.all(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, nl[i:i + 500]))})")]
+        gs = sorted(set(g for g in gs if g and " " not in g))
+        return ("notes:" + " ".join(gs), len(gs)) if gs else ("", 0)
+    refs = sorted({(g, o) for g, o in card_refs(col, cids) if g and " " not in g})
+    return ("cards:" + " ".join(f"{g}:{o + 1}" for g, o in refs), len(refs)) if refs else ("", 0)
+
+
 # ---- which of my decks ----
 
 def deck_choices(col):

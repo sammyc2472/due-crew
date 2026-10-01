@@ -210,6 +210,29 @@ def _unit_cids(idx, st, u, deck, whole=False):
     return cids - old
 
 
+def _tally(idx, st, u, deck):
+    """3.6.5: what a date leaves shut here, for the plan card: leeches (Anki
+    suspended them; a plan never opens one) and exact picks (single cards,
+    notes) this copy doesn't have. Counted when the date opens."""
+    cids = idx.match(u, _swap(st), deck)
+    lee = sum(1 for c in cids if c in idx.leech and idx.cards[c][0] == -1)
+    miss, of = idx.exact_missing(u)
+    for key, val in (("leeches", lee), ("missing", [miss, of] if miss else None)):
+        d = st.setdefault(key, {})
+        if val:
+            d[u["id"]] = val
+        else:
+            d.pop(u["id"], None)
+
+
+def aside(plan, st):
+    """3.6.5: [leeches, missing, of] over the plan's dates still on it."""
+    ids = {u["id"] for u in P.units(plan.get("doc") or {})}
+    lee = sum(int(n) for k, n in ((st or {}).get("leeches") or {}).items() if k in ids)
+    ms = [v for k, v in ((st or {}).get("missing") or {}).items() if k in ids]
+    return [lee, sum(int(m) for m, _o in ms), sum(int(o) for _m, o in ms)]
+
+
 def run(col, plan_list, state, today, mode=None, everything=False):
     """Open what's due (or, with `everything`, every unit) for these plans,
     in one undo step. mode "skip" marks due units applied without opening
@@ -251,6 +274,7 @@ def run(col, plan_list, state, today, mode=None, everything=False):
         for u, how in items:
             if how == "open" and mode != "skip":
                 cids = idx.openable(_unit_cids(idx, st, u, doc.get("deck", ""), whole=everything))
+                _tally(idx, st, u, doc.get("deck", ""))
                 applied[u["id"]] = sig(u)
                 src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
                 if cids:
@@ -277,6 +301,7 @@ def open_one(col, plan, st, uid, today):
         return {"n": 0, "names": [], "label": ""}
     idx = P.DeckIndex(col, st["deck_id"])
     cids = idx.openable(_unit_cids(idx, st, u, p["doc"].get("deck", "")))
+    _tally(idx, st, u, p["doc"].get("deck", ""))
     st.setdefault("applied", {})[uid] = _sig(st)(u)
     st.setdefault("src", {})[uid] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
     (st.get("later") or {}).pop(uid, None)
@@ -329,6 +354,7 @@ def _spread(col, p, st, today):
         if done:
             applied[u["id"]] = s
             src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+            _tally(idx, st, u, doc.get("deck", ""))
         if chosen:
             names.append(u.get("name") or "?")
             cids_out |= set(chosen)
@@ -531,6 +557,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
             "early": int(plan.get("early") or 0),
             "prep": prep,
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
+            "aside": aside(plan, st), "aside_ok": list(((_pcfg().get("aside_ok") or {}) if mw else {}).get(plan["id"]) or [0, 0]),
             "put_off": put_off, "waiting": waiting,
             "today_names": today_names, "next": nxt_view, "week": week, "week_offset": int(week_offset),
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
@@ -1107,6 +1134,14 @@ def on_message(cmd, parts):
         raise_limit(arg)
     elif cmd == "planstudydate" and arg and len(parts) > 3:
         study_date(arg, parts[3])
+    elif cmd == "planasideok" and arg:
+        st = _state_cfg().get(arg)
+        p = next((x for x in followed() if x.get("id") == arg), None)
+        if st and p:
+            pc = _pcfg()
+            pc.setdefault("aside_ok", {})[arg] = aside(p, st)[:2]
+            _psave(pc)
+            app.swap(cfg())
     elif cmd == "planidsok" and arg:
         pc = _pcfg()
         pc.setdefault("fallback_ok", {})[arg] = True
@@ -1781,6 +1816,37 @@ def browser_menu(browser, menu):
     menu.addSeparator()
     action = menu.addAction("Due Crew: add to a plan…")
     action.triggered.connect(lambda: add_to_plan(browser))
+    copy = menu.addAction("Due Crew: copy as plan selector")
+    copy.triggered.connect(lambda: copy_selector(browser))
+
+
+def copy_selector(browser):
+    """3.6.5: the selected notes (Notes mode) or cards (Cards mode) as
+    notes:… or cards:…, for a date in the builder's Text or Add cards box."""
+    if not mw.col:
+        return
+    table = getattr(browser, "table", None)
+    try:
+        notes_mode = bool(table is not None and hasattr(table, "is_notes_mode") and table.is_notes_mode())
+    except Exception:
+        notes_mode = False
+    try:
+        if notes_mode:
+            picked = browser.selected_notes() if hasattr(browser, "selected_notes") else browser.selectedNotes()
+            text, n = P.selector(mw.col, nids=picked)
+        else:
+            picked = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
+            text, n = P.selector(mw.col, cids=picked)
+    except Exception:
+        traceback.print_exc()
+        return
+    if not n:
+        tooltip("Select some notes or cards first.")
+        return
+    from aqt.qt import QApplication
+    QApplication.clipboard().setText(text)
+    what = f"{n:,} note{'s' if n != 1 else ''}" if notes_mode else f"{n:,} card{'s' if n != 1 else ''}"
+    tooltip(f"Copied {what}. Paste into a date on duecrew.com." + (" A date takes up to 5,000." if n > 5000 else ""))
 
 
 def add_to_plan(browser):

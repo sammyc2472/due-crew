@@ -404,6 +404,22 @@ add-on.
   account's settings. And `GET /board?decks=1` returns my squads
   (membership): one missing from the config comes back (`heal_squads`,
   no code on this computer), never one I left this session.
+- 3.6.5 picks that work in anyone's copy: a date's `notes` (note guids,
+  every card of each) and `cards` read the same in every copy of a deck;
+  pasted `nids`/`cids` are one collection's numbers, so the author's Anki
+  sends what they are as guid + card number (`refs` on `PUT
+  /plans/{id}/ids`, kept as `idr` only while those ids are unchanged; a
+  site save never sets it) and followers union them (`DeckIndex.id_cards`).
+  A unit's sig and sources take `notes` and `idr`, so refs arriving later
+  open what they add. `nid:`/`cid:` aren't shareable searches. Text has
+  `notes:G G` and `cards:G:N` (N from 1), read before the line is split,
+  since a guid can hold `|` and backticks (`Picks` in builder.js); Anki's
+  browser copies them (Due Crew: copy as plan selector,
+  `plans.selector`). The morning counts what a date leaves shut
+  (`plan_flow._tally`: leeches, exact picks this copy lacks) and the plan
+  card says it once (`planasideok`). Adding to an opened date says
+  followers get it tomorrow morning; Text's Add is the first button and
+  Replace asks twice.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

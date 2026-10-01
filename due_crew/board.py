@@ -1342,6 +1342,18 @@ def _plan_notes(card, pid, skip_waiting=False):
     if fb and not card.get("fallback_ok"):
         out.append(f'<div class="pn"><span>{fb} date{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
                    f'matched by their cards.</span><span class="acts"><a href="#" onclick="{_pycmd("planidsok:" + pid)}">OK</a></span></div>')
+    # 3.6.5: what the plan left shut here, said once (OK until it grows)
+    lee, miss, of = (list(card.get("aside") or []) + [0, 0, 0])[:3]
+    ok = (list(card.get("aside_ok") or []) + [0, 0])[:2]
+    if (lee and int(lee) > int(ok[0])) or (miss and int(miss) > int(ok[1])):
+        said = []
+        if lee:
+            said.append(f'{int(lee):,} leech{"es stay" if int(lee) != 1 else " stays"} suspended: Anki set '
+                        f'{"them" if int(lee) != 1 else "it"} aside, and a plan never opens one.')
+        if miss:
+            said.append(f'{int(miss):,} of {int(of):,} exact cards aren\u2019t in your deck.')
+        out.append(f'<div class="pn"><span>{" ".join(said)}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planasideok:" + pid)}">OK</a></span></div>')
     if card.get("catch"):
         c = card["catch"]
         out.append(f'<div class="pn"><span>Catching up: +{int(c.get("extra") or 0):,} new a day to {e(str(c.get("until") or ""))}</span>'

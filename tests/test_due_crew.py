@@ -3139,6 +3139,20 @@ def test_plans_portable_picks_365():
     check("search: a plain one still goes", P.shareable_search("tag:x nidus"))
 
 
+def test_plans_selector_365():
+    """3.6.5: Anki's browser copies picked notes or cards as plan text that
+    reads the same in anyone's copy: guids, card numbers from 1."""
+    from due_crew import plans as P
+    col = _plan_col()
+    check("selector: notes by guid", P.selector(col, nids=[50, 3, 50]) == ("notes:guid000003 guid000050", 2))
+    check("selector: cards as guid:number", P.selector(col, cids=[6, 5]) == ("cards:guid000050:1 guid000050:2", 2))
+    check("selector: nothing picked", P.selector(col) == ("", 0))
+    idx = P.DeckIndex(col, 10)
+    text, _n = P.selector(col, cids=[6])
+    g, n = text[len("cards:"):].rsplit(":", 1)
+    check("selector: reads back to that card", idx.match({"cards": [[g, int(n) - 1]]}) == {6})
+
+
 def test_plans_matching_v31():
     """3.1: a unit's tags (children too, any case), subdecks, and single
     cards (that card, never its sibling), inside the chosen deck only."""
@@ -3599,6 +3613,28 @@ def test_plans_changed_unit_v311():
     check("open cards: never a leech, even asked directly", P.open_cards(col, {12, 13}, "x") == 0)
     F.run(col, [changed], state, _day(1), everything=True)
     check("open everything: still no leech", 12 not in _open(col) and 13 not in _open(col) and 1 in _open(col))
+    # 3.6.5: the plan card says what it left shut, once
+    check("aside: the leeches a date leaves shut, counted when it opens",
+          F.aside(changed, state[pid]) == [2, 0, 0], str(state[pid].get("leeches")))
+    from due_crew import board
+    card = {"id": pid, "aside": F.aside(changed, state[pid]), "aside_ok": [0, 0]}
+    html = board._plan_notes(card, pid)
+    check("aside: the card says so, with OK", any("2 leeches stay suspended" in x and f"planasideok:{pid}" in x for x in html), str(html))
+    check("aside: said once, until it grows", not any("leech" in x for x in board._plan_notes(dict(card, aside_ok=[2, 0]), pid))
+          and any("leech" in x for x in board._plan_notes(dict(card, aside=[3, 0, 0], aside_ok=[2, 0]), pid)))
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    pc = {}
+    saved = (F._state_cfg, F.followed, F._pcfg, F._psave, F.app.swap)
+    F._state_cfg, F.followed, F._pcfg = (lambda c=None: state), (lambda: [changed]), (lambda: pc)
+    F._psave, F.app.swap = (lambda d: None), (lambda c: None)
+    try:
+        dc._on_js(False, f"duecrew:planasideok:{pid}", DeckBrowser())
+    finally:
+        F._state_cfg, F.followed, F._pcfg, F._psave, F.app.swap = saved
+    check("aside: OK, sent as the board sends it, remembers what was said", pc.get("aside_ok", {}).get(pid) == [2, 0], str(pc))
 
 
 def test_plans_changed_unit_with_search_and_ids():

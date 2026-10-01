@@ -339,6 +339,13 @@ def main(out):
         if dlg.plan.count() != 1:
             raise RuntimeError(f"add: {dlg.plan.count()} plans of mine listed")
         shoot(dlg, os.path.join(out, "plan-add-cards.png"))
+        # 3.6.5: a date that has opened says when followers get what's added
+        dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat())
+        settle()
+        dlg.date.setDate(QtCore.QDate(today.year, today.month, today.day))
+        if dlg.opened.isHidden():
+            raise RuntimeError("add: an opened date doesn't say so")
+        shoot(dlg, os.path.join(out, "plan-add-opened.png"))
         dlg = AddCardsDialog(None, CLIENT, P.card_refs(aqt.mw.col, [4, 5, 6]), today.isoformat(),
                              search="tag:*Cardio* tag:*#B&B* -tag:*Pharm*", search_n=212)
         settle()

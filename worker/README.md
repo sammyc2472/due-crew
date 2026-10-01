@@ -129,6 +129,13 @@ E1: a date may carry `nids` and `cids` (positive whole numbers, up to 5,000
 each), counted into the plan's 50,000 single cards; `PUT /plans/{id}/ids`
 takes `counts: {unitId: {"#ids": n}}`, kept as the date's `idn`, and the
 lean `authored` docs carry them.
+3.6.5: a date may carry `notes` (note guids, up to 5,000, every card of
+each; they count into the 50,000 and `#ids`). `PUT /plans/{id}/ids` also
+takes `refs: {unitId: [nids, cids, [[guid, ord]]]}`: the cards a date's
+pasted ids are in the author's copy, kept as the date's `idr` (20,000 a
+date, 50,000 a plan) only while its `nids` and `cids` are still the ones
+sent. A site save never sets `idr`: it keeps the stored one while the ids
+are unchanged and drops it when they change.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
