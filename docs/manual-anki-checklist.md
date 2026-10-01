@@ -472,3 +472,8 @@ In Anki (as a follower):
       You › Feedback, and from the site's footer. /admin › Feedback
       shows all three with name and version; Reply mails the sender
       (check the inbox), Mark done moves it to Done, Account looks them up.
+- [ ] Plans tab, a day's details: under each date, what's in it grouped
+      by resource (the tag's video series or book in bold, its topics
+      after), searches and picked cards as one line each, and Browse N
+      cards opens Anki's browser on exactly those cards. The Today box
+      has one line of today's topics, cut with … when long.

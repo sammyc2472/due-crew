@@ -441,6 +441,13 @@ add-on.
   the account); Reply mails from Due Crew, the address never shown. No
   plan surface guesses minutes any more (we can't know a person's pace
   per deck).
+- P7 what's in a day (mock "Picks and Previews"): the Plans tab's day
+  details list each date's topics as the site's print does
+  (`plans.topics`: a tag under the first `#`/`^` part after its root,
+  read as words; searches and picked cards as counts), Browse N cards
+  opens Anki's browser on what the date matches here
+  (`plan_flow.browse_date`, `planbrowse`), and the Today box has one
+  line of them (`today_what`). Names and counts only, from the plan.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

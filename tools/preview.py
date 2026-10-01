@@ -162,7 +162,9 @@ _PT = "2026-10-07"
 _PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
          "units": [{"id": "a", "name": "Path Book 1 · Cell injury", "opens": "2026-10-05", "n": 283},
                    {"id": "b", "name": "V&B Biochem · Enzymes", "opens": "2026-10-06", "n": 96},
-                   {"id": "c", "name": "Path Book 2 · Inflammation", "opens": "2026-10-07", "n": 42},
+                   {"id": "c", "name": "Path Book 2 · Inflammation", "opens": "2026-10-07", "n": 42,
+                    "tags": ["#Deck::#Path_Book::02_Inflammation::Acute", "#Deck::#Path_Book::02_Inflammation::Chronic",
+                             "#Deck::#Video_Series::Immunology::Complement"], "search": ["tag:extra::mediators"]},
                    {"id": "d", "name": "V&B Metabolism 1", "opens": "2026-10-08", "n": 38, "for": "q"},
                    {"id": "e", "name": "Path Book 3 · Neoplasia", "opens": "2026-10-09", "n": 55, "for": "q"}],
          "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
@@ -171,6 +173,7 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "today_names": ["Path Book 2 · Inflammation"], "next": {"name": "V&B Metabolism 1", "uid": "d", "day": "Thursday", "n": 38},
              "week": PL.week_view(_PDOC, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT)),
              "week_offset": 0, "opened": {"names": ["Path Book 2 · Inflammation"], "n": 42, "undo": True},
+             "today_what": PL.topics_line([_PDOC["units"][2]]),
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
              "waiting": 16}
