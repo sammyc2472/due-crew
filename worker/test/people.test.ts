@@ -51,7 +51,7 @@ describe("the admin's account lookup", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ uid: "maya", name: "Maya Chen", email: "maya@example.com", version: "3.4.0", tz: -300,
       signedIn: { computers: 1, browsers: 0 }, crew: { mutual: 1, addedNotBack: 1, addedThem: 0, muted: 1 } });
-    expect(r.body.squads).toEqual([{ name: "MS2 Squad", members: 1, founder: true }]);
+    expect(r.body.squads).toEqual([{ id: sq.body.id, name: "MS2 Squad", members: 1, founder: true }]);
     expect(r.body.made).toEqual([{ name: "Renal block", audience: "code", listed: false, followers: 0 }]);
     const text = JSON.stringify(r.body);
     for (const never of ["dre", "kai", "zed", "days", "week", "heatmap", "settings", "progress"]) expect(text).not.toContain(never);

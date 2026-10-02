@@ -5,7 +5,7 @@
 
 import type { Session } from "./auth";
 import { isAdmin } from "./notices";
-import { Env, HttpError, json, nowSec } from "./util";
+import { Env, HttpError, json, nowSec, ulid } from "./util";
 
 const day = (t = nowSec()) => new Date(t * 1000).toISOString().slice(0, 10);
 const RANGES = [30, 90, 365];
@@ -17,6 +17,48 @@ export async function bump(env: Env, key: string, by = 1): Promise<void> {
       "INSERT INTO admin_days (day, key, n) VALUES (?, ?, ?) ON CONFLICT(day, key) DO UPDATE SET n = n + excluded.n",
     ).bind(day(), key, by).run();
   } catch { /* a count, not the sign-in */ }
+}
+
+/** One line in the admin's audit log (mock "Admin, grown up", A5): what,
+ *  to whose account or which squad, and a detail that never holds an
+ *  email, a code or a token. Kept a year. */
+export async function logAction(env: Env, action: string, at: { uid?: string; squad?: string; detail?: string } = {}): Promise<void> {
+  try {
+    await env.DB.prepare("INSERT INTO admin_actions (id, at, action, uid, squad, detail) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(ulid(), nowSec(), action, at.uid ?? null, at.squad ?? null, (at.detail ?? "").slice(0, 200)).run();
+  } catch {
+    // what was done is done: a lost log line mustn't send a code or an email twice on a retry
+    console.log(`due crew: couldn't log an admin action (${action})`);
+  }
+}
+
+const ACTION_ROWS = `SELECT a.id, a.at, a.action, a.uid, a.squad, a.detail, u.uid AS uhere, u.name AS uname, q.name AS qname
+  FROM admin_actions a LEFT JOIN users u ON u.uid = a.uid LEFT JOIN squads q ON q.id = a.squad`;
+
+/** The log's rows as the page shows them: names looked up now, so a
+ *  deleted account reads as one. */
+export function actionRows(rows: any[]) {
+  return rows.map((r) => ({
+    id: r.id, at: r.at, action: r.action, detail: r.detail,
+    uid: r.uid || "", who: r.uid ? (r.uhere ? r.uname || "?" : "a deleted account") : "",
+    squad: r.squad || "", squadName: r.squad ? (r.qname ?? "a deleted squad") : "",
+  }));
+}
+
+export async function actionsFor(env: Env, where: "uid" | "squad", id: string, limit = 20) {
+  const rows = await env.DB.prepare(`${ACTION_ROWS} WHERE a.${where} = ? ORDER BY a.at DESC, a.id DESC LIMIT ?`).bind(id, limit).all();
+  return actionRows(rows.results as any[]);
+}
+
+/** GET /admin/actions[?before=id]: the audit log, newest first, 100 a page. */
+export async function actions(req: Request, s: Session, env: Env): Promise<Response> {
+  if (!isAdmin(env, s.uid)) throw new HttpError(404, "not_found");
+  const before = new URL(req.url).searchParams.get("before") || "";
+  const rows = /^[0-9A-Z]{26}$/.test(before)
+    ? await env.DB.prepare(`${ACTION_ROWS} WHERE a.id < ? ORDER BY a.id DESC LIMIT 100`).bind(before).all()
+    : await env.DB.prepare(`${ACTION_ROWS} ORDER BY a.id DESC LIMIT 100`).all();
+  const out = actionRows(rows.results as any[]);
+  return json({ actions: out, more: out.length === 100 ? out[out.length - 1].id : null });
 }
 
 /** The counts the page shows and the cron keeps. */
@@ -79,10 +121,14 @@ export async function stats(s: Session, env: Env): Promise<Response> {
   adminOnly(env, s);
   const c = await counts(env);
   const since = day(nowSec() - 6 * 86400);
-  const [codes, bridge, versions] = await env.DB.batch<any>([
+  const [codes, bridge, versions, fbOpen, moving] = await env.DB.batch<any>([
     env.DB.prepare("SELECT key, SUM(n) AS n FROM admin_days WHERE day >= ? AND key LIKE 'codes.%' GROUP BY key").bind(since),
     env.DB.prepare("SELECT at, ms, pulled, pushed, error FROM bridge_last WHERE id = 1"),
     env.DB.prepare("SELECT client_version AS v, COUNT(*) AS n FROM users GROUP BY client_version ORDER BY n DESC LIMIT 12"),
+    // what's waiting on the admin (A2's Needs you): new feedback, email changes not yet finished
+    env.DB.prepare("SELECT COUNT(*) AS n FROM feedback WHERE done = 0"),
+    env.DB.prepare(`SELECT c.uid, u.name, c.at FROM email_changes c JOIN users u ON u.uid = c.uid
+                      WHERE c.at > ? ORDER BY c.at DESC LIMIT 10`).bind(nowSec() - 7 * 86400),
   ]);
   const code = Object.fromEntries((codes.results as { key: string; n: number }[]).map((r) => [r.key.slice(6), r.n]));
   const today = await env.DB.prepare("SELECT key, n FROM admin_days WHERE day = ? AND key LIKE 'bridge.%'").bind(day()).all<{ key: string; n: number }>();
@@ -94,6 +140,8 @@ export async function stats(s: Session, env: Env): Promise<Response> {
     bridge: b ? { ...b, runsToday: today.results.find((r) => r.key === "bridge.runs")?.n ?? 0,
                   failedToday: today.results.find((r) => r.key === "bridge.failed")?.n ?? 0 } : null,
     versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "2.x", r.n]),
+    feedbackOpen: (fbOpen.results[0] as { n: number }).n,
+    emailChanges: (moving.results as { uid: string; name: string | null; at: number }[]).map((r) => ({ uid: r.uid, name: r.name || "?", at: r.at })),
   });
 }
 

@@ -621,3 +621,44 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .fb .acts { display: flex; gap: 14px; flex-wrap: wrap; }
 .fb textarea { font-family: inherit; }
 .fb [hidden] { display: none; }
+
+/* mock "Admin, grown up", A2: a sidebar of pages and one set of gaps
+   (16px between boxes, 12px inside them) */
+.ashell { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 8px; }
+.aside { position: sticky; top: 12px; display: grid; gap: 2px; }
+.aside button { background: transparent; border: 0; border-radius: 8px; color: var(--ink); font-weight: 500; text-align: left; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.aside button:hover { background: var(--well); }
+.aside button.on { background: var(--you); color: var(--accent); font-weight: 700; }
+.aside .ct { font-style: normal; background: var(--warn); color: var(--card); border-radius: 99px; padding: 0 7px; font-size: 11px; font-weight: 700; }
+.amain { min-width: 0; }
+.apage { display: grid; gap: 16px; align-content: start; }
+.apage[hidden] { display: none; }
+.apage h2 { margin: 0; }
+.apage > .panel, .apage .agrid2 .panel, .apage .agrid3 .panel { padding: 14px 16px; gap: 12px; }
+.apage .agrid2, .apage .agrid3 { gap: 16px; margin-bottom: 0; }
+.apage .people .person { gap: 16px; padding-top: 16px; }
+.people .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 12px; align-content: start; }
+.people .box h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.people .box .stack { display: grid; gap: 6px; }
+.people .box .stack > button { justify-self: start; }
+.people .box .sep { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+.people .box .sep > button { justify-self: start; }
+.people .box textarea { font-family: inherit; font-size: 14px; }
+.people [hidden] { display: none !important; }
+.alog { display: grid; font-size: 13.5px; }
+.alog > div { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
+.people .mrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; border-top: 1px solid var(--line); padding: 6px 0; }
+.people .mrow .confirm { grid-column: 1 / -1; }
+.people .mrow .acts { display: flex; gap: 14px; }
+.linkish.warn { color: var(--warn); }
+.bigcode { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; letter-spacing: .08em; background: var(--you); color: var(--accent); border-radius: 8px; padding: 6px 14px; justify-self: start; }
+.nrow2 { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.pill { font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 2px 8px; background: var(--well); justify-self: start; }
+.pill.w { background: var(--warn-tint); color: var(--warn); }
+@media (max-width: 760px) {
+  .ashell { grid-template-columns: 1fr; gap: 12px; }
+  .aside { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
+  .aside button { padding: 6px 10px; }
+}
+body:has(main.wide) .appfoot { max-width: 1320px; }
+.apage .linkish { font-size: inherit; }

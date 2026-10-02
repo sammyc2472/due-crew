@@ -456,6 +456,23 @@ add-on.
   their crew are, or their settings. Sign out everywhere, and Delete with
   their email typed out. README's privacy section says Sam can find an
   account when someone writes in.
+- Admin, grown up (mock "Admin, grown up", migration 0015): /admin is a
+  sidebar of pages (Today with Needs you, People, Squads, Plans & library,
+  Inbox, Notices, Bingo, System, Audit log), one gap scale. Sign-in help
+  on an account: Email them a fresh code (past the limits; the add-on
+  signs in by a code typed into Anki, so never a link), clear the
+  per-address limits, Change their email (`email_changes`: it moves at
+  the new address's first code sign-in, within a week, so a typo hands
+  nothing over). The admin's note per account (`admin_notes`). A squad
+  by its code or from an account (`adminsquads.ts`): members by name,
+  Remove (block), New code, Open/Close, Rename, Make founder, Delete,
+  the founder emailed each time. A new code is a row in `squad_codes`
+  and `squads.code_id` marks the live one (`squads.idForCode`): the id
+  never changes, so add-ons and the bridge are untouched, and the old
+  code opens nothing (peek, join, restore). Everything done there goes
+  in `admin_actions` (the audit log, a year; names looked up on read,
+  never an email or a code). README's privacy line says Sam can look up
+  an account and its squads when someone writes in.
 
 ## Releasing
 

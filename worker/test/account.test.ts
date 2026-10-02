@@ -51,7 +51,7 @@ describe("delete account", () => {
     const dre = await signIn("dre@example.com", box);
     const nia = await signIn("nia@example.com", box);
     await db().batch([
-      db().prepare("INSERT INTO squads VALUES ('busm', 'busm', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
+      db().prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busm', 'busm', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
       db().prepare("INSERT INTO members (squad, uid, name, joined_at) VALUES ('busm', ?, 'Sam', 1), ('busm', ?, 'Nia', 3), ('busm', ?, 'Dre', 2), ('solo', ?, 'Sam', 1)")
         .bind(sam.uid, nia.uid, dre.uid, sam.uid),
       db().prepare("INSERT INTO bans VALUES ('solo', 'someone')"),

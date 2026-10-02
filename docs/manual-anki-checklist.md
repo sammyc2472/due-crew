@@ -477,3 +477,19 @@ In Anki (as a follower):
       after), searches and picked cards as one line each, and Browse N
       cards opens Anki's browser on exactly those cards. The Today box
       has one line of today's topics, cut with … when long.
+
+### The admin page, grown up (duecrew.com/admin)
+
+- [ ] The sidebar switches pages and the address follows (/admin?p=people);
+      a reload opens the same page. Narrow, the sidebar wraps above.
+- [ ] An account: Delete account… stays shut until clicked; Cancel shuts it.
+- [ ] Email them a fresh code: at Anki's code box, the code that arrives
+      signs in. Clear their sign-in limits after ten asks lets them ask again.
+- [ ] Change their email: both inboxes get a line; the old address still
+      signs in; signing in at the new one lands on the same account.
+- [ ] A squad by its code from the search box: Remove… (with a why) emails
+      the founder and they can't rejoin; New code… shows the code once,
+      the old code fails in Anki's Join, the new one works; Close joins;
+      Rename; Make founder; Delete squad… with the name typed.
+- [ ] The audit log lists each of the above; nothing in it shows an
+      email or a code.

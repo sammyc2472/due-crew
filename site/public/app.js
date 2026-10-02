@@ -1335,12 +1335,13 @@ function hbars(rows, grey) {
 const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 
 /** The admin's account lookup: one person at a time (never a list of
- *  everyone, never how anyone studies). */
-function peoplePanel() {
+ *  everyone, never how anyone studies), with sign-in help, a note of mine
+ *  and what I've done there (mock "Admin, grown up", A3, A5). */
+function peoplePanel(nav) {
   const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
   const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
   const offset = (m) => (m === null || m === undefined ? "" : ` · UTC${m < 0 ? "−" : "+"}${Math.floor(Math.abs(m) / 60)}${Math.abs(m) % 60 ? `:${String(Math.abs(m) % 60).padStart(2, "0")}` : ""}`);
-  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code or a uid", "aria-label": "Look up an account", style: "flex:1 1 220px" });
+  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code, a squad code or a uid", "aria-label": "Look up an account or a squad", style: "flex:1 1 220px" });
   const hits = h("div", { class: "hits" });
   const one = h("div");
   const status = h("p", { class: "muted small", role: "status" });
@@ -1349,19 +1350,74 @@ function peoplePanel() {
     one.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
     let p;
     try { p = await api("GET", `/admin/people/${encodeURIComponent(uid)}`); } catch { one.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that account.")); return; }
-    const copyBtn = h("button", { class: "ghost", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
+    const base = `/admin/people/${encodeURIComponent(p.uid)}`;
+    const copyBtn = h("button", { class: "quiet", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
     const outStatus = h("span", { class: "muted small", role: "status" });
+    const act = (label, method, path, done, cls = "quiet") => {
+      const b = h("button", { class: cls, onclick: async () => {
+        b.disabled = true; outStatus.textContent = "…";
+        try { const r = await api(method, path); outStatus.textContent = done(r); setTimeout(() => open(p.uid), 1200); }
+        catch (e) { outStatus.textContent = e.status === 502 ? "The mail didn't go. Try again." : "That didn't work."; b.disabled = false; }
+      } }, label);
+      return b;
+    };
+
+    // sign-in help: Due Crew has no passwords; these are its resets
+    const lim = p.limits;
+    const limLine = lim.codesHour || lim.codesDay || lim.failsDay
+      ? `${lim.codesHour} code${lim.codesHour === 1 ? "" : "s"} this hour, ${lim.codesDay} today, ${lim.failsDay} wrong today`
+      : "No codes asked for today.";
+    const newEmail = h("input", { type: "email", placeholder: "their new address", "aria-label": "New email", style: "flex:1 1 200px" });
+    const emailStatus = h("span", { class: "muted small", role: "status" });
+    const emailBox = h("div", { class: "stack", hidden: true },
+      h("div", { class: "row" }, newEmail, h("button", { onclick: async (e) => {
+        e.target.disabled = true; emailStatus.textContent = "…";
+        try { await api("PUT", `${base}/email`, { email: newEmail.value }); open(p.uid); }
+        catch (err) {
+          e.target.disabled = false;
+          emailStatus.textContent = err.body?.error === "taken" ? "Another account has that address." : err.body?.error === "same" ? "That's their address now."
+            : err.body?.error === "bad_email" ? "That isn't an email address." : "That didn't work.";
+        }
+      } }, "Move it"), emailStatus),
+      h("small", { class: "muted" }, "Both addresses get a line. It moves the first time they sign in with the new one, within a week; until then nothing changes."));
+    const help = h("section", { class: "box" }, h("h4", {}, "Sign-in help", h("small", { class: "muted" }, "no passwords: these are the resets")),
+      h("div", { class: "stack" }, act("Email them a fresh code", "POST", `${base}/code`, () => "Sent. It works for 10 minutes.", ""),
+        h("small", { class: "muted" }, "For someone at the code box whose code never came: a new one, past the limits. You never see it.")),
+      h("div", { class: "sep" }, h("div", { class: "row", style: "justify-content:space-between" }, h("span", {}, "Limits"), h("span", { class: lim.codesHour >= 10 || lim.failsDay >= 20 ? "warn" : "muted" }, limLine)),
+        act("Clear their sign-in limits", "POST", `${base}/limits`, () => "Cleared. They can ask for a code again.")),
+      h("div", { class: "sep" },
+        p.emailChange
+          ? h("div", { class: "row", style: "justify-content:space-between" }, h("span", {}, "Moving to ", h("b", {}, p.emailChange.email), h("small", { class: "muted" }, ` · started ${when(p.emailChange.at)}`)),
+            act("Stop", "DELETE", `${base}/email`, () => "Stopped."))
+          : h("button", { class: "quiet", style: "justify-self:start", onclick: () => { emailBox.hidden = !emailBox.hidden; if (!emailBox.hidden) newEmail.focus(); } }, "Change their email…"),
+        emailBox));
+
+    // my note, and what's been done here
+    const note = h("textarea", { rows: 4, maxlength: 2000, "aria-label": "Your note on this account", placeholder: "What you told them, what to check next time…" });
+    note.value = p.note?.text || "";
+    const noteStatus = h("small", { class: "muted", role: "status" }, p.note ? `Saved ${seen(p.note.at)}` : "Only you see it. It goes with the account.");
+    let saved = note.value;
+    note.addEventListener("blur", async () => {
+      if (note.value === saved) return;
+      try { await api("PUT", `${base}/note`, { text: note.value }); saved = note.value; noteStatus.textContent = "Saved."; }
+      catch { noteStatus.textContent = "Couldn't save the note."; }
+    });
+    const notes = h("section", { class: "box" }, h("h4", {}, "Your note"), note, noteStatus);
+    const done = h("section", { class: "box" }, h("h4", {}, "What's been done here"),
+      p.actions.length ? h("div", { class: "alog" }, p.actions.map((a) => h("div", {}, h("span", {}, a.action, a.squadName ? h("span", { class: "muted" }, ` · ${a.squadName}`) : null), h("small", { class: "muted" }, seen(a.at)))))
+        : h("p", { class: "muted small" }, "Nothing yet."));
+
     const confirmBox = h("div", { class: "confirm", hidden: true });
     const typed = h("input", { type: "email", placeholder: p.email, "aria-label": "Type their email to confirm", style: "width:100%" });
     const delBtn = h("button", { class: "danger", onclick: async () => {
       delBtn.disabled = true;
-      try { await api("DELETE", `/admin/people/${encodeURIComponent(p.uid)}`, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
+      try { await api("DELETE", base, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
       catch (e) { delBtn.disabled = false; outStatus.textContent = e.body?.error === "confirm" ? "That isn't their email." : "That didn't work."; }
     } }, "Delete");
     confirmBox.append(h("b", {}, `Delete ${p.name}'s account?`),
       h("span", {}, "Everything of theirs goes, as when they delete it themselves. It can't be undone, and they aren't told."),
       h("label", {}, h("span", {}, "Type ", h("b", {}, p.email), " to confirm"), typed),
-      h("div", { class: "row" }, h("button", { class: "ghost", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
     const list = (title, rows) => h("div", { class: "plist" }, h("span", { class: "lbl" }, title),
       rows.length ? rows : h("span", { class: "muted small" }, "None"));
     one.replaceChildren(h("div", { class: "person" },
@@ -1378,17 +1434,17 @@ function peoplePanel() {
         h("div", { class: "tiles" }, tile(p.crew.mutual, "crew, mutual"), tile(p.crew.addedNotBack, "added, not back"),
           tile(p.crew.addedThem, "added them, not back"), tile(p.squads.length, "squads"), tile(p.following.length, "plans followed"),
           tile(p.made.length, "plans made"), tile(p.crew.muted, "muted"))),
+      h("div", { class: "agrid3" }, help, notes, done),
       h("div", { class: "agrid2" },
-        list("Squads", p.squads.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
+        list("Squads", p.squads.map((x) => h("div", {}, h("button", { class: "linkish", onclick: () => nav.squad(x.id) }, x.name),
+          h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
         list("Plans", [...p.made.map((x) => h("div", {}, h("span", {}, x.name, " ", h("span", { class: "madetag" }, "made")),
           h("small", { class: "muted" }, `${x.audience === "squad" ? "squad" : "code"} · ${x.followers} following${x.listed ? " · in the library" : ""}`))),
           ...p.following.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `following · ${x.owner}'s${x.paused ? " · paused" : ""}${x.listed ? " · in the library" : ""}`)))])),
       h("div", { class: "row" },
-        h("button", { class: "ghost", onclick: async () => {
-          try { const r = await api("POST", `/admin/people/${encodeURIComponent(p.uid)}/signout`); outStatus.textContent = `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`; }
-          catch { outStatus.textContent = "That didn't work."; }
-        } }, "Sign out everywhere"), copyBtn, h("span", { style: "flex:1" }),
-        h("button", { class: "danger ghost", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
+        act("Sign out everywhere", "POST", `${base}/signout`, (r) => `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`),
+        copyBtn, h("span", { style: "flex:1" }),
+        h("button", { class: "danger", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
       outStatus, confirmBox));
   }
   async function look() {
@@ -1398,16 +1454,156 @@ function peoplePanel() {
     status.textContent = "Looking…";
     let r;
     try { r = await api("GET", `/admin/people?q=${encodeURIComponent(text)}`); } catch { status.textContent = "That didn't work."; return; }
-    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}` : "No one found.";
-    hits.replaceChildren(...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
+    const n = r.people.length + (r.squad ? 1 : 0);
+    status.textContent = n ? `${n} match${n === 1 ? "" : "es"}` : "No one found.";
+    const sq = r.squad ? [h("button", { class: "hit", onclick: () => nav.squad(r.squad.id) },
+      h("span", {}, h("b", {}, r.squad.name), h("small", { class: "muted" }, ` · squad · ${r.squad.members} member${r.squad.members === 1 ? "" : "s"}`)), h("small", { class: "muted" }, "Open ›"))] : [];
+    hits.replaceChildren(...sq, ...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
       for (const b of hits.children) b.classList.toggle("on", b === e.currentTarget); open(x.uid);
     } }, h("span", {}, `${x.emoji ? x.emoji + " " : ""}`, h("b", {}, x.name), h("small", { class: "muted" }, ` · ${x.email} · joined ${when(x.joined)}`)),
       h("small", { class: "muted" }, x.version || ""))));
-    if (r.people.length === 1) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+    if (r.people.length === 1 && !r.squad) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+    else if (r.squad && !r.people.length) nav.squad(r.squad.id);
   }
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
-  return h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
+  const el = h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
     h("div", { class: "row" }, q, h("button", { onclick: look }, "Look up")), status, hits, one);
+  return { el, open: (uid) => { q.value = uid; hits.replaceChildren(); status.textContent = ""; open(uid); } };
+}
+
+/** One squad at a time, by its code or from an account (mock "Admin,
+ *  grown up", A4): its members by name, and the founder's tools done from
+ *  here. The founder gets an email for each. */
+function squadPanel(nav) {
+  const el = h("section", { class: "panel people" });
+  const when = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const seen = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  const q = h("input", { type: "search", placeholder: "A squad's code", "aria-label": "A squad's code", style: "flex:1 1 200px" });
+  const status = h("p", { class: "muted small", role: "status" });
+  const body = h("div");
+  async function find() {
+    status.textContent = "Looking…";
+    try {
+      const r = await api("GET", `/admin/people?q=${encodeURIComponent(q.value.trim())}`);
+      if (r.squad) { status.textContent = ""; open(r.squad.id); } else status.textContent = "No squad has that code.";
+    } catch { status.textContent = q.value.trim().length < 3 ? "That's not a squad code." : "That didn't work."; }
+  }
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") find(); });
+  async function open(id) {
+    body.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+    let s;
+    try { s = await api("GET", `/admin/squads/${encodeURIComponent(id)}`); } catch { body.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that squad.")); return; }
+    const base = `/admin/squads/${encodeURIComponent(s.id)}`;
+    const out = h("span", { class: "muted small", role: "status" });
+    const fail = (e) => (e.body?.error === "not_member" ? "They aren't in the squad." : e.body?.error === "confirm" ? "That isn't its name." : e.body?.error === "bad_name" ? "Give it a name, up to 24 characters." : "That didn't work.");
+    const patch = async (b, btn) => {
+      btn.disabled = true;
+      try { await api("PATCH", base, b); open(s.id); } catch (e) { btn.disabled = false; out.textContent = fail(e); }
+    };
+
+    // a new code: asks once, shows the code once
+    const codeBox = h("div", { class: "confirm", hidden: true },
+      h("b", {}, `New code for ${s.name}?`),
+      h("span", {}, "The old code stops working. Everyone in it stays; anyone with the old code can't join. The founder gets the new one by email."),
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { codeBox.hidden = true; } }, "Cancel"),
+        h("button", { onclick: async (e) => {
+          e.target.disabled = true;
+          try {
+            const r = await api("POST", `${base}/code`);
+            codeBox.replaceChildren(h("span", { class: "bigcode" }, `${r.code.slice(0, 4)} ${r.code.slice(4)}`),
+              h("small", { class: "muted" }, r.told ? `Shown once. ${s.founderName} has it by email too.` : "Shown once, and the email to the founder didn't go: send it yourself."));
+          } catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+        } }, "Make a new code")));
+    const nameIn = h("input", { value: s.name, maxlength: 24, "aria-label": "Squad name", style: "flex:1 1 200px" });
+    const renameBox = h("div", { class: "row", hidden: true }, nameIn, h("button", { onclick: (e) => patch({ name: nameIn.value }, e.target) }, "Rename"));
+    const founderSel = h("select", { "aria-label": "New founder" }, s.members.filter((m) => m.uid !== s.founder).map((m) => h("option", { value: m.uid }, m.name)));
+    const founderBox = h("div", { class: "row", hidden: true }, founderSel, h("button", { onclick: (e) => patch({ founder: founderSel.value }, e.target) }, "Make founder"));
+    const typed = h("input", { placeholder: s.name, "aria-label": "Type the squad's name to confirm", style: "width:100%" });
+    const delBox = h("div", { class: "confirm", hidden: true }, h("b", {}, `Delete ${s.name}?`),
+      h("span", {}, "The squad goes for everyone. Friendships stay. The founder is told. It can't be undone."),
+      h("label", {}, h("span", {}, "Type ", h("b", {}, s.name), " to confirm"), typed),
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { delBox.hidden = true; } }, "Cancel"),
+        h("button", { class: "danger", onclick: async (e) => {
+          e.target.disabled = true;
+          try { await api("DELETE", base, { name: typed.value }); body.replaceChildren(h("p", { class: "status" }, `${s.name} is deleted.`)); }
+          catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+        } }, "Delete")));
+    const shut = () => { for (const b of [codeBox, renameBox, founderBox, delBox]) b.hidden = true; };
+    const toggle = (box, focus) => () => { const was = box.hidden; shut(); box.hidden = !was; if (!box.hidden && focus) focus.focus(); };
+
+    const member = (m) => {
+      const why = h("input", { placeholder: "Why (only the founder sees it; optional)", maxlength: 300, "aria-label": `Why remove ${m.name}`, style: "flex:1 1 200px" });
+      const rm = h("div", { class: "confirm", hidden: true }, h("b", {}, `Remove ${m.name}?`),
+        h("span", {}, "They leave the squad and can't rejoin with its code. The founder is told."), why,
+        h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { rm.hidden = true; } }, "Cancel"),
+          h("button", { class: "danger", onclick: async (e) => {
+            e.target.disabled = true;
+            try { await api("POST", `${base}/remove/${encodeURIComponent(m.uid)}`, { why: why.value }); open(s.id); }
+            catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+          } }, "Remove")));
+      return h("div", { class: "mrow" },
+        h("span", {}, m.emoji ? `${m.emoji} ` : "", h("b", {}, m.name), h("small", { class: "muted" }, m.uid === s.founder ? " · founder" : ` · joined ${when(m.joined)}`)),
+        h("span", { class: "acts" }, h("button", { class: "linkish", onclick: () => nav.person(m.uid) }, "Open"),
+          m.uid === s.founder ? null : h("button", { class: "linkish warn", onclick: () => { rm.hidden = !rm.hidden; } }, "Remove…")),
+        rm);
+    };
+    body.replaceChildren(h("div", { class: "person" },
+      h("div", { class: "who" }, h("div", {}, h("b", {}, s.name), h("small", { class: "muted" }, ` · ${s.open ? "open to join" : "closed to new members"}${s.newCode ? " · has a new code" : ""}`))),
+      h("dl", { class: "kv" },
+        h("dt", {}, "Founder"), h("dd", {}, h("button", { class: "linkish", onclick: () => nav.person(s.founder) }, s.founderName)),
+        h("dt", {}, "Made"), h("dd", {}, `${when(s.created)} · ${s.members.length} member${s.members.length === 1 ? "" : "s"}${s.removed ? ` · ${s.removed} removed` : ""}`)),
+      h("div", { class: "row" },
+        h("button", { class: "quiet", onclick: toggle(codeBox) }, "New code…"),
+        h("button", { class: "quiet", onclick: (e) => patch({ open: !s.open }, e.target) }, s.open ? "Close joins" : "Open joins"),
+        h("button", { class: "quiet", onclick: toggle(renameBox, nameIn) }, "Rename…"),
+        s.members.length > 1 ? h("button", { class: "quiet", onclick: toggle(founderBox, founderSel) }, "Make founder…") : null,
+        h("span", { style: "flex:1" }),
+        h("button", { class: "danger", onclick: toggle(delBox, typed) }, "Delete squad…")),
+      codeBox, renameBox, founderBox, delBox, out,
+      h("div", { class: "agrid2" },
+        h("div", { class: "plist" }, h("span", { class: "lbl" }, `Members · ${s.members.length}`), s.members.map(member)),
+        h("div", { class: "plist" }, h("span", { class: "lbl" }, "What's been done here"),
+          s.actions.length ? s.actions.map((a) => h("div", {}, h("span", {}, a.action, a.who ? h("span", { class: "muted" }, ` · ${a.who}`) : null), h("small", { class: "muted" }, seen(a.at))))
+            : h("span", { class: "muted small" }, "Nothing yet.")))));
+  }
+  el.append(h("h4", {}, "A squad", h("span", { class: "muted" }, "by its code, or from an account")),
+    h("div", { class: "row" }, q, h("button", { onclick: find }, "Find")), status, body);
+  return { el, open };
+}
+
+/** Today's one list of what's waiting (A2): new feedback, email changes
+ *  not yet finished, a bridge run that failed. */
+function needsYou(s, show) {
+  const row = (tag, text, label, go, warn) => h("div", { class: "nrow2" }, h("span", { class: `pill${warn ? " w" : ""}` }, tag), h("span", {}, text),
+    h("button", { class: "linkish", onclick: go }, label));
+  const rows = [];
+  if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
+  for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
+  if (s.bridge?.error) rows.push(row("System", "The 2.x bridge's last run failed", "Look", () => show("system"), true));
+  return h("section", { class: "panel" }, h("h4", {}, "Needs you", h("span", { class: "muted" }, "everything waiting, in one list")),
+    rows.length ? h("div", { class: "nlist" }, rows) : h("p", { class: "muted small" }, "Nothing waiting."));
+}
+
+/** Everything done from this page, newest first, kept a year (A5). */
+function auditPanel(nav) {
+  const list = h("div", { class: "alog" });
+  const more = h("button", { class: "quiet", hidden: true }, "Older");
+  const seen = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  async function load(before) {
+    let r;
+    try { r = await api("GET", `/admin/actions${before ? `?before=${before}` : ""}`); } catch { list.append(h("p", { class: "status bad" }, "Couldn't load the log.")); return; }
+    if (!before && !r.actions.length) list.replaceChildren(h("p", { class: "muted small" }, "Nothing yet. Everything you do from this page shows here."));
+    for (const a of r.actions) {
+      list.append(h("div", {}, h("span", {}, a.action,
+        a.uid ? [" · ", a.who === "a deleted account" ? h("span", { class: "muted" }, a.who) : h("button", { class: "linkish", onclick: () => nav.person(a.uid) }, a.who)] : null,
+        a.squad ? [" · ", a.squadName === "a deleted squad" ? h("span", { class: "muted" }, a.squadName) : h("button", { class: "linkish", onclick: () => nav.squad(a.squad) }, a.squadName)] : null,
+        a.detail ? h("span", { class: "muted" }, ` · ${a.detail}`) : null), h("small", { class: "muted" }, seen(a.at))));
+    }
+    more.hidden = !r.more;
+    more.onclick = () => load(r.more);
+  }
+  load("");
+  return h("section", { class: "panel" }, h("h4", {}, "Audit log", h("span", { class: "muted" }, "everything done from this page · kept a year")), list, more);
 }
 
 /** 3.6: squad bingo's pool, the admin's to tune. This week's card with how
@@ -1647,15 +1843,40 @@ async function adminPage() {
   const versions = h("section", { class: "panel" }, h("h4", {}, "Versions", h("span", { class: "muted" }, "accounts by the add-on they last used")),
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
-  page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
-    h("p", { class: "muted" }, "Counts, and one account at a time when you look one up. Never how anyone studies."),
-    peoplePanel(),
-    feedbackPanel(),
-    tilesBox,
-    h("div", { class: "agrid3" }, codes, cutover, bridge),
-    h("div", { class: "agrid2" }, library, notices),
-    bingoPanel(),
-    versions);
+  // mock "Admin, grown up", A2: a sidebar of pages, one set of gaps
+  const nav = {};
+  const people = peoplePanel(nav);
+  const squads = squadPanel(nav);
+  const today = h("div", { class: "apage" },
+    h("div", { class: "row", style: "justify-content:space-between" }, h("h2", {}, "Today"), rangeSeg),
+    tilesBox, needsYou(s, (p, uid) => (uid ? nav.person(uid) : show(p))), versions);
+  const pages = {
+    today: ["Today", today],
+    people: ["People", h("div", { class: "apage" }, people.el)],
+    squads: ["Squads", h("div", { class: "apage" }, squads.el)],
+    plans: ["Plans & library", h("div", { class: "apage" }, library)],
+    inbox: ["Inbox", h("div", { class: "apage" }, feedbackPanel(nav))],
+    notices: ["Notices", h("div", { class: "apage" }, notices)],
+    bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
+    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes, cutover, bridge))],
+    log: ["Audit log", h("div", { class: "apage" }, auditPanel(nav))],
+  };
+  const side = h("nav", { class: "aside", "aria-label": "Admin" });
+  function show(key) {
+    if (!pages[key]) key = "today";
+    for (const [k, [, el]] of Object.entries(pages)) el.hidden = k !== key;
+    side.replaceChildren(...Object.entries(pages).map(([k, [label]]) =>
+      h("button", { class: k === key ? "on" : "", "aria-current": k === key ? "page" : null, onclick: () => show(k) },
+        label, k === "inbox" && s.feedbackOpen ? h("i", { class: "ct" }, String(s.feedbackOpen)) : null)));
+    history.replaceState(null, "", key === "today" ? "/admin" : `/admin?p=${key}`);
+    window.scrollTo(0, 0);
+  }
+  nav.person = (uid) => { show("people"); people.open(uid); };
+  nav.squad = (id) => { show("squads"); squads.open(id); };
+  page(h("h1", {}, "Admin"),
+    h("p", { class: "muted" }, "Counts, and one account or squad at a time when you look one up. Never how anyone studies."),
+    h("div", { class: "ashell" }, side, h("div", { class: "amain" }, ...Object.values(pages).map(([, el]) => el))));
+  show(new URLSearchParams(location.search).get("p") || "today");
   $app().classList.add("wide");
   await drawTiles();
 }
@@ -1688,7 +1909,7 @@ function feedbackPage() {
 
 /** 3.6.5, P6: the admin's Feedback: newest first, Reply by mail from Due
  *  Crew (the address is never shown), Done, and the sender's account. */
-function feedbackPanel() {
+function feedbackPanel(nav) {
   let state = "new";
   const list = h("div", { class: "fb" });
   const seg = h("span", { class: "seg" });
@@ -1716,10 +1937,7 @@ function feedbackPanel() {
         h("div", { class: "acts" },
           h("button", { class: "linkish", onclick: () => { replyBox.hidden = !replyBox.hidden; if (!replyBox.hidden) ta.focus(); } }, "Reply…"),
           h("button", { class: "linkish", onclick: async () => { await api("PATCH", `/admin/feedback/${f.id}`, { done: !f.done }).catch(() => null); draw(); } }, f.done ? "Mark new" : "Mark done"),
-          h("button", { class: "linkish", onclick: () => {
-            const q = document.querySelector(".people input"); if (!q) return;
-            q.value = f.uid; q.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); q.scrollIntoView({ behavior: "smooth", block: "center" });
-          } }, "Account")),
+          h("button", { class: "linkish", onclick: () => nav.person(f.uid) }, "Account")),
         replyBox);
     }));
   }
