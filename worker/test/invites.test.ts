@@ -87,7 +87,7 @@ describe("3.5.0: one-time invites", () => {
     let last = 0;
     for (let i = 0; i < 301; i++) last = (await api("GET", "/invites/AAAAAAAAAA", { ip: "198.51.100.9" })).status;
     expect(last).toBe(429);
-  }, 30_000);  // 321 requests in a row: about a second here, past vitest's 5s default on a slow CI runner
+  });
 
   it("the phone can email itself an invite link", async () => {
     const box = mailbox();
