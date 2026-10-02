@@ -279,7 +279,7 @@ def _day_flags(doc, today_lb):
 def build_rows(entries, labels, tomorrow, period, cfg):
     today_lb = labels[0] if labels else ""
     yest_lb = labels[1] if len(labels) > 1 else ""
-    fresh, stale, quiet, paused = [], [], [], []
+    fresh, notyet, stale, quiet, paused = [], [], [], [], []
     for e in entries:
         row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
                "emoji": e.get("emoji") or "",
@@ -315,6 +315,11 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                     row["quiet"] = True
                     quiet.append(row)
                 continue
+            if not row["days_wk"]:
+                # this week's days are all zero so far: nothing to rank
+                row["notyet"] = True
+                notyet.append(row)
+                continue
             row.update(agg)
             row["showup"] = bool(row["days7"]) and all(
                 row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
@@ -324,7 +329,14 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             # "tomorrow" label — that's their live today
             today = days.get(tomorrow) or days.get(today_lb)
             yesterday = days.get(yest_lb)
-            if today:
+            if today and not _showed(today):
+                # synced, but nothing studied yet (or away): no numbers to
+                # rank, so dashes and no rank, under everyone who studied;
+                # their status still shows, and a cheer still lands
+                row.update(_day_flags(today, today_lb))
+                row["notyet"] = not row["away"]
+                notyet.append(row)
+            elif today:
                 row.update(_day_metrics(today))
                 row.update(_day_flags(today, today_lb))
                 row["showup"] = _showed(today) and all(
@@ -348,7 +360,8 @@ def build_rows(entries, labels, tomorrow, period, cfg):
     fresh.sort(key=order, reverse=True)
     stale.sort(key=order, reverse=True)
     quiet.sort(key=lambda r: r["last_updated"] or "", reverse=True)
-    return fresh, stale + quiet + paused  # dormant rows last
+    notyet.sort(key=lambda r: r["last_updated"] or "", reverse=True)
+    return fresh, notyet + stale + quiet + paused  # dormant rows last
 
 
 def build_deck_groups(entries):
@@ -839,6 +852,11 @@ def _row_html(row, rank, cfg, period="today"):
     if row["paused"]:
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+    elif row.get("notyet"):
+        cls += " dim"
+        extra = (' <span class="la faded">&middot; not yet '
+                 f'{"this week" if period == "week" else "today"}</span>')
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
@@ -1527,9 +1545,13 @@ def _squads_html(view, cfg):
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
     sort = sort_key(cfg)  # the crew table's sort, same headers, same links
     field = SQUAD_FIELDS[sort]
-    live = sorted([r for r in rows if r.get("day") == day],
+    # synced today with nothing studied yet: no numbers to rank, so these
+    # sit under the ranked rows with dashes (as on Today)
+    zero = lambda r: r.get("reviews") == 0 and not r.get("time_ms")
+    live = sorted([r for r in rows if r.get("day") == day and not zero(r)],
                   key=lambda r: r.get(field) if r.get(field) is not None else -1,
                   reverse=True)
+    waiting_today = [r for r in rows if r.get("day") == day and zero(r)]
     rest = sorted([r for r in rows if r.get("day") != day],
                   key=lambda r: r.get("day") or "", reverse=True)
     people = int(view.get("people") or len(rows))
@@ -1558,7 +1580,7 @@ def _squads_html(view, cfg):
                  '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
     n = 0
-    for r in live + rest:
+    for r in live + waiting_today + rest:
         pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
         cls, note = "", ""
@@ -1580,6 +1602,10 @@ def _squads_html(view, cfg):
             when = "yesterday" if r.get("day") == yesterday else "quiet"
             note += f' <span class="la faded">&middot; {when}</span>'
             rank = ""
+        elif zero(r):
+            cls += " dim"
+            note += ' <span class="la faded">&middot; not yet today</span>'
+            rank = "&mdash;"
         elif show_up or numberless(r):
             rank = "&#10003;"  # showed up: counted, not ranked
         else:
@@ -1588,6 +1614,12 @@ def _squads_html(view, cfg):
         if show_up:
             body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                      f'<td class="nm">{link}{note}</td>'
+                     f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+            continue
+        if r.get("day") == day and zero(r):
+            body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
+                     f'<td class="nm">{link}{note}</td>'
+                     f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3 +
                      f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
             continue
         body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'

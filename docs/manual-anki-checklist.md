@@ -493,3 +493,15 @@ In Anki (as a follower):
       Rename; Make founder; Delete squad… with the name typed.
 - [ ] The audit log lists each of the above; nothing in it shows an
       email or a code.
+
+### Not yet today, and the site's board (3.6.7)
+
+- [ ] A crewmate syncs before studying: in Anki and on duecrew.com/home
+      their row has dashes, no rank or medal, "· not yet today", and sits
+      under everyone who studied; their status still shows; 🎉 works.
+- [ ] Week tab: someone with only zero days this week reads "not yet this
+      week". A squad board: a 0-review row today sits under the ranked
+      rows with dashes, and "N studying today" doesn't count it.
+- [ ] duecrew.com/home beside Anki's board, the same day: Today, Week,
+      Decks, Squads and Plans show the same people in the same order with
+      the same chips and notes; the footer has Crew ▾ and "N waiting".

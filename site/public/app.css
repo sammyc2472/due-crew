@@ -90,7 +90,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt th.on button { color: var(--accent); }
 .brdt th button { color: var(--muted); font-weight: 700; font-size: 12.5px; }
 .brdt th.sqh { text-align: center; width: 22px; padding: 4px 2px 8px; } .brdt th.sqh.on { color: var(--accent); }
-.brdt td { padding: 9px 8px; white-space: nowrap; vertical-align: middle; border-top: 1px solid transparent; }
+.brdt td { padding: 6px 8px; white-space: nowrap; vertical-align: middle; border-top: 1px solid transparent; }
 .brdt td.rk { width: 28px; text-align: center; color: var(--muted); }
 .brdt td.nm { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .brdt td.nm .who { font-size: 15px; }
@@ -100,7 +100,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt tr.you td { background: var(--you); }
 .brdt tr.you td.nm .who { font-weight: 700; }
 .brdt tr.dim td { color: var(--faint); }
-.brdt tr.dim td.nm .who { text-decoration: underline dotted; }
 .brdt .ago { font-size: 12px; font-weight: 700; }
 .brdt .ago.fresh { color: var(--accent); } .brdt .ago.hours { color: var(--warn); } .brdt .ago.faded { color: var(--faint); font-weight: 400; }
 .brdt .badge, .brdt .note { font-size: 12px; color: var(--muted); }
@@ -662,3 +661,27 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 }
 body:has(main.wide) .appfoot { max-width: 1320px; }
 .apage .linkish { font-size: inherit; }
+
+/* the board, closer to the add-on's (board.py) */
+.brdt .ago.it { font-style: italic; }
+.brdt .bub .plan { display: inline-block; width: 34px; height: 5px; border-radius: 3px; background: var(--line); vertical-align: 1px; margin-right: 5px; overflow: hidden; }
+.brdt .bub .plan i { display: block; height: 100%; background: var(--accent); }
+.brd .foot .fl { display: flex; gap: 12px; align-items: center; position: relative; }
+.brd .foot .ico { font-size: 15px; color: var(--muted); font-weight: 400; }
+.pillw { font: inherit; font-size: 12px; font-weight: 700; color: var(--warn); background: transparent; border: 1.5px solid var(--warn); border-radius: 99px; padding: 1px 9px; }
+.crew-pop { left: 0; right: auto; bottom: 26px; flex-direction: column; align-items: stretch; min-width: 150px; }
+.crew-pop button { font-size: 13px !important; text-align: left; padding: 5px 9px !important; }
+.solo { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 6px; }
+.solo .codepill { background: var(--well); border-radius: 6px; padding: 3px 9px; font-weight: 700; }
+.ptab { display: grid; gap: 10px; } .pcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
+.sqsw .linkish { color: var(--muted); font-weight: 600; } .sqsw .linkish.on { color: var(--ink); text-decoration: underline; } .sqsw .linkish.add { color: var(--accent); }
+.sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
+.bgstrip { border: 1.5px solid var(--accent); border-radius: 10px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 10px; }
+.bgstrip .bgic { font-size: 18px; } .bgstrip > span:nth-child(2) { flex: 1 1 200px; }
+.dgh { text-align: center; font-size: 14px; }
+.dr { grid-template-columns: 110px minmax(0, 1fr) 150px; }
+.dr .dn { text-align: right; }
+.dr .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); display: grid; }
+.dr .n .dd { color: var(--accent); font-weight: 700; font-size: 11.5px; }
+.dleg { text-align: center; }

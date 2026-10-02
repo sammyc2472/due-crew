@@ -448,6 +448,21 @@ add-on.
   opens Anki's browser on what the date matches here
   (`plan_flow.browse_date`, `planbrowse`), and the Today box has one
   line of them (`today_what`). Names and counts only, from the plan.
+- Not yet today (3.6.7): a crewmate who synced but hasn't studied (a day
+  doc with `studied` false, or a day inside an away spell) is no row of
+  zeros with a rank: dashes, no rank, "· not yet today" (Week: "this
+  week"), under everyone who studied, status and cheers kept
+  (`build_rows`' `notyet`). A squad row synced today with 0 reviews and
+  no time is the same. Ranks are only for rows with something to rank.
+- The site's home board is board.py, restated in `Board` in app.js: the
+  same rows (`rows` = `build_rows`, away days flagged from the week's
+  spell as `shapes._week_days` does, the week's streak from its newest
+  day), one chip (room > studying now > exam > away > week done), the
+  notes, plan statuses, the show-up view, Decks (`+N today`, retention),
+  Squads one at a time behind a switcher with Lock/Open and Leave, a
+  Plans tab, and the footer's Crew ▾ and "N waiting". Change one, change
+  both. The site can't show "back today" (the add-on's own history) or
+  Copy invite for a squad (its code lives only in Anki).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

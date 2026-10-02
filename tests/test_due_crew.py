@@ -2659,6 +2659,43 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+def test_not_yet_today_is_unranked():
+    """A crewmate who synced but hasn't studied yet isn't a row of zeros
+    with a rank: dashes, no rank, under everyone who studied, "not yet
+    today"; their status still shows. The same on Week and a squad board."""
+    labels = ["2026-09-27", "2026-09-26", "2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22", "2026-09-21"]
+    def ent(uid, name, days, you=False):
+        return {"user_id": uid, "name": name, "you": you, "paused": False, "last_updated": "2026-09-27T10:00:00Z",
+                "exam_date": "", "days": days, "decks": []}
+    zero = {"studied": False, "reviews": 0, "studyTimeMs": 0, "accuracy": 0.0, "streak": 0, "status": "coffee first"}
+    data = {"entries": [ent("sam", "Sammy", {labels[0]: {"studied": True, "reviews": 50, "studyTimeMs": 600000}}, you=True),
+                        ent("dre", "Dre", {labels[0]: dict(zero)}),
+                        ent("kai", "Kai", {labels[0]: {"studied": True, "reviews": 10, "studyTimeMs": 60000}})],
+            "labels": labels, "tomorrow": "2026-09-28", "pending": []}
+    fresh, dormant = board.build_rows(data["entries"], labels, data["tomorrow"], "today", {})
+    check("not yet: the studied are ranked, the zero isn't", [r["name"] for r in fresh] == ["Sammy", "Kai"]
+          and [r["name"] for r in dormant] == ["Dre"] and dormant[0]["notyet"])
+    page = board.render(data, {"period": "today"}, 0)
+    row = page[page.index(">Dre<"):]
+    row = row[:row.index("</tr>")]
+    check("not yet: dashes, a note, the status, still cheerable; no zeros", "not yet today" in row and "coffee first" in row
+          and ">0<" not in row and "0.0%" not in row and "cheerpick:dre" in row)
+    kai = page[:page.index(">Kai<")]
+    check("not yet: Kai keeps silver, and Dre's rank is a dash", kai.rfind("&#129352;") > kai.rfind("<tr")
+          and '<td class="rk">&mdash;</td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")])
+    week = dict(data, entries=[data["entries"][0], ent("dre", "Dre", {lb: dict(zero) for lb in labels[:3]})])
+    wf, wd = board.build_rows(week["entries"], labels, week["tomorrow"], "week", {})
+    check("not yet: a week of zeros is unranked on Week", [r["name"] for r in wd] == ["Dre"] and wd[0]["notyet"]
+          and "not yet this week" in board.render(week, {"period": "week"}, 0))
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": [{"user_id": "a", "name": "Ann", "day": labels[0], "reviews": 0, "time_ms": 0, "week": 3},
+                     {"user_id": "b", "name": "Bo", "day": labels[0], "reviews": 9, "time_ms": 60000, "week": 4}],
+            "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
+    sq = board._squads_html(view, {})
+    check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
+          and "#1" in sq and "#2" not in sq and "not yet today" in sq and "1 studying today" in sq)
+
+
 def test_ui_review_board():
     """3.4 review: one chip beside a name (T1), a colour means one thing
     (T2), one banner at a time (H6), one way in (C4), day one is the
