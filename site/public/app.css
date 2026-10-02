@@ -590,6 +590,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .people .madetag { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 1px 6px; background: var(--well); color: var(--accent); }
 .people .confirm { border: 1.5px solid var(--warn); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; font-size: 14px; }
 .people .confirm label { display: grid; gap: 4px; }
+.people .confirm[hidden] { display: none; }
 .people .row { flex-wrap: wrap; }
 
 /* 3.6: squad bingo's pool on /admin */
