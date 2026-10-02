@@ -187,8 +187,18 @@ export async function fetchSquad(req: Request, s: Session, env: Env, [id]: strin
       week: m.week, newCards: m.new_cards,
       joined: new Date(m.joined_at * 1000).toISOString().slice(0, 10), play: m.play ? JSON.parse(m.play) : null,
     })),
-    ...(B.askable(wk) ? { bingo: await B.cardFor(env, wk) } : {}),
+    ...(B.askable(wk) ? await bingoFor(env, wk, rows.results as any[]) : {}),
   });
+}
+
+/** The week's card, and (for the site, which doesn't work squares out)
+ *  where this squad stands on it: the same evaluate the add-on runs. */
+async function bingoFor(env: Env, wk: string, rows: any[]) {
+  const card = await B.cardFor(env, wk);
+  const ev = B.evaluate(card, rows.map((m) => ({ uid: m.uid, emoji: m.emoji, day: m.day,
+    joined: new Date(m.joined_at * 1000).toISOString().slice(0, 10), play: m.play ? JSON.parse(m.play) : null })));
+  return { bingo: card, bingoEv: { squares: ev.squares.map((q) => ({ done: q.done })), middle: { done: ev.middle.done, have: ev.middle.have, goal: ev.middle.goal },
+    lines: ev.lines, closest: B.closest(card, ev) } };
 }
 
 /** PUT /squads/{id}/row: my numbers, as an update. Never a join. */

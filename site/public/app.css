@@ -677,8 +677,11 @@ body:has(main.wide) .appfoot { max-width: 1320px; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
 .sqsw .linkish { color: var(--muted); font-weight: 600; } .sqsw .linkish.on { color: var(--ink); text-decoration: underline; } .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
-.bgstrip { border: 1.5px solid var(--accent); border-radius: 10px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 10px; }
-.bgstrip .bgic { font-size: 18px; } .bgstrip > span:nth-child(2) { flex: 1 1 200px; }
+.bgcard { border: 1.5px solid var(--accent); border-radius: 10px; padding: 9px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 10px; }
+.bgcard .bgt { display: grid; gap: 1px; flex: 1 1 180px; min-width: 0; }
+.bgmini { display: grid; grid-template-columns: repeat(3, 9px); gap: 2px; flex: none; }
+.bgmini i { width: 9px; height: 9px; border-radius: 2px; background: var(--line); }
+.bgmini i.on { background: var(--accent); } .bgmini i.m { background: var(--warn); }
 .dgh { text-align: center; font-size: 14px; }
 .dr { grid-template-columns: 110px minmax(0, 1fr) 150px; }
 .dr .dn { text-align: right; }

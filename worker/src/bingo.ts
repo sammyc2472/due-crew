@@ -304,6 +304,14 @@ export function evaluate(card: Card, rows: Row[]) {
   return { active: active.length, players: rows.filter(play).length, older, squares, middle, lines };
 }
 
+/** The fewest cells left for a line: their names, closest first (bingo.py closest). */
+export function closest(card: Card, ev: ReturnType<typeof evaluate>): string[] {
+  const done = (c: number) => (c === 4 ? ev.middle.done : ev.squares[CELLS.indexOf(c)].done);
+  let best = LINES[0];
+  for (const l of LINES) if (l.filter((c) => !done(c)).length < best.filter((c) => !done(c)).length) best = l;
+  return best.filter((c) => !done(c)).map((c) => (c === 4 ? card.middle.name : card.squares[CELLS.indexOf(c)].title));
+}
+
 // ---- the daily counts, for tuning the pool ----
 
 /** For this week's and last week's cards: how many people played, and per

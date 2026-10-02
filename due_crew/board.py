@@ -855,8 +855,12 @@ def _row_html(row, rank, cfg, period="today"):
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row.get("notyet"):
         cls += " dim"
-        extra = (' <span class="la faded">&middot; not yet '
-                 f'{"this week" if period == "week" else "today"}</span>')
+        # a phone's reviews reach us only once their computer's Anki syncs,
+        # so say when we last heard, not that they haven't studied
+        txt, _tone = _ago(row["last_updated"])
+        when = f" as of {txt}" if txt and txt != "just now" else ""
+        extra = (' <span class="la faded">&middot; nothing '
+                 f'{"this week" if period == "week" else "yet"}{when}</span>')
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
@@ -1604,7 +1608,7 @@ def _squads_html(view, cfg):
             rank = ""
         elif zero(r):
             cls += " dim"
-            note += ' <span class="la faded">&middot; not yet today</span>'
+            note += ' <span class="la faded">&middot; nothing yet today</span>'
             rank = "&mdash;"
         elif show_up or numberless(r):
             rank = "&#10003;"  # showed up: counted, not ranked

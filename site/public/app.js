@@ -819,7 +819,12 @@ const Board = (() => {
     }
     if (r.paused) cell.append(h("span", { class: "ago faded it" }, " · on a break"));
     else if (r.quiet) { const [t] = ago(r.last); if (t) cell.append(h("span", { class: "ago faded" }, ` (${t})`)); }
-    else if (r.notyet) cell.append(h("span", { class: "ago faded" }, ` · not yet ${period === "week" ? "this week" : "today"}`));
+    else if (r.notyet) {
+      // a phone's reviews reach us only once their computer's Anki syncs:
+      // say when we last heard, not that they haven't studied
+      const [t] = ago(r.last);
+      cell.append(h("span", { class: "ago faded" }, ` · nothing ${period === "week" ? "this week" : "yet"}${t && t !== "just now" ? ` as of ${t}` : ""}`));
+    }
     else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
     else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
     if (r.status) {
@@ -945,7 +950,7 @@ const Board = (() => {
         else if (pendingUids.has(r.uid)) notes.push(h("span", { class: "ago faded" }, " · waiting"));
       }
       if (!today) notes.push(h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`));
-      else if (nyet) notes.push(h("span", { class: "ago faded" }, " · not yet today"));
+      else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
       const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
       const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
       const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
@@ -956,10 +961,20 @@ const Board = (() => {
       return h("tr", { class: [you ? "you" : "", today && !nyet ? "" : "dim"].join(" ").trim() },
         h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), notes), cells);
     });
-    // 3.6: this week's bingo card; the squares are worked out in Anki
-    const bingo = sq.bingo ? h("div", { class: "bgstrip" }, h("span", { class: "bgic" }, sq.bingo.middle?.icon || "🎯"),
-      h("span", {}, h("b", {}, "Squad bingo"), h("span", { class: "muted" }, ` · this week’s middle: ${sq.bingo.middle?.name || "?"}`)),
-      h("span", { class: "muted small" }, "Open the card in Anki")) : null;
+    // 3.6: the Squads tab's bingo card, as board.py bingo_card_html: the
+    // grid small, how many stamped, what's closest to a line. The Worker
+    // works it out with the add-on's own evaluate; never who stamped what.
+    let bingo = null;
+    if (sq.bingo && sq.bingoEv) {
+      const ev = sq.bingoEv, CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
+      const cells = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("i", { class: c === 4 ? (ev.middle.done ? "on" : "m") : (ev.squares[CELLS.indexOf(c)]?.done ? "on" : "") }));
+      const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
+      const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
+        : (ev.closest || []).length === 1 ? "one away from bingo" : `${(ev.closest || []).length} away from bingo`;
+      bingo = h("div", { class: "bgcard" }, h("span", { class: "bgmini" }, cells),
+        h("span", { class: "bgt" }, h("b", {}, "Squad bingo"), h("span", { class: "muted" }, `${stamps} of 9 · ${state}`)),
+        h("span", { class: "muted small", title: ev.closest?.length ? `Closest line: ${ev.closest.join(", ")}` : "" }, "The whole card is in Anki"));
+    }
     // the squad's own line, as the add-on's (its code lives only in Anki)
     const acts = [];
     if (sq.founder === me.uid) acts.push(h("button", { class: "linkish", onclick: async (e) => {

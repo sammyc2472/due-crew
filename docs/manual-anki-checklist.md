@@ -497,9 +497,9 @@ In Anki (as a follower):
 ### Not yet today, and the site's board (3.6.7)
 
 - [ ] A crewmate syncs before studying: in Anki and on duecrew.com/home
-      their row has dashes, no rank or medal, "· not yet today", and sits
+      their row has dashes, no rank or medal, "· nothing yet as of …", and sits
       under everyone who studied; their status still shows; 🎉 works.
-- [ ] Week tab: someone with only zero days this week reads "not yet this
+- [ ] Week tab: someone with only zero days this week reads "nothing this
       week". A squad board: a 0-review row today sits under the ranked
       rows with dashes, and "N studying today" doesn't count it.
 - [ ] duecrew.com/home beside Anki's board, the same day: Today, Week,
