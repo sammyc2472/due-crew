@@ -1201,7 +1201,7 @@ async function home() {
         h("div", { class: "foot" }, footLeft,
           h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻")))),
       h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
-        yearHeat(logR.days || {}), h("small", { class: "muted" }, "One square a day, by minutes. Point at a day for its numbers."))),
+        yearHeat(logR.days || {}))),
     h("aside", { class: "rail" },
       yearNudge(logR.days || {}, t),
       h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
@@ -1440,8 +1440,7 @@ function yearHeat(days) {
       const d = addDays(wd, k);
       if (d > t) { cells.push(h("i", { class: "fut" })); continue; }
       const r = days[d];
-      const title = r ? `${pretty(d)}: ${r[0]} min, ${r[1].toLocaleString()} reviews` : `${pretty(d)}${d < start ? ", before your log" : ""}`;
-      cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, title }));
+      cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, "data-d": d, tabindex: "-1" }));
     }
   }
   const wrap = h("div", { class: "heatwrap" }, h("div", { class: "heat" },
@@ -1449,7 +1448,26 @@ function yearHeat(days) {
     h("div", { class: "hg" }, cells)),
     h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
   setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
-  return wrap;
+  // a day's numbers under the squares: on hover with a mouse, on a tap with a finger
+  const read = h("div", { class: "hread", "aria-live": "polite" });
+  const say = (d) => {
+    const r = days[d];
+    const bits = !r ? [d < start ? "before your log" : "no study"]
+      : [`${r[0]} min`, `${r[1].toLocaleString()} reviews`, r[2] ? `${r[2].toLocaleString()} new` : "", r[3] != null ? `${r[3]}% right` : ""].filter(Boolean);
+    read.replaceChildren(h("b", {}, d === t ? "Today" : pretty(d)), ` · ${bits.join(" · ")}`);
+  };
+  let picked = null;
+  const grid = wrap.querySelector(".hg");
+  const pick = (el, keep) => {
+    if (!el || !el.dataset.d) return;
+    if (keep) { if (picked) picked.classList.remove("sel"); picked = el; el.classList.add("sel"); }
+    say(el.dataset.d);
+  };
+  grid.addEventListener("mouseover", (e) => pick(e.target, false));
+  grid.addEventListener("mouseleave", () => { if (picked) say(picked.dataset.d); else say(t); });
+  grid.addEventListener("click", (e) => pick(e.target, true));
+  say(t);
+  return h("div", { class: "heatbox" }, wrap, read);
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */

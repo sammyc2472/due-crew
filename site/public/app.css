@@ -754,3 +754,10 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .panel.due .dbx { box-sizing: border-box; width: 12px; height: 12px; border: 1.5px solid var(--faint, #a8a8a0); border-radius: 3px; margin-top: 3px; flex: none; }
 .panel.due .dbx.auto { border-style: dashed; }
 .panel.due .dbx.on { background: var(--accent); border: 1.5px solid var(--accent); }
+
+/* the year's squares: the day under the pointer (or the one tapped) says its numbers */
+.heatbox { display: grid; gap: 6px; }
+.heat .hg i { cursor: pointer; }
+.heat .hg i.sel, .heat .hg i:hover { outline: 2px solid var(--ink); outline-offset: 0; }
+.hread { font-size: 12.5px; color: var(--muted); min-height: 1.4em; }
+.hread b { color: var(--ink); font-weight: 600; }
