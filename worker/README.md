@@ -27,6 +27,9 @@ import takes `Authorization: Bearer <token>`.
 | `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.5.0: the accent from my settings, else green; the site wears it). |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
 | `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
+| `GET /account/data` | 3.7.1, D2: everything kept about me as one JSON file (profile, settings, week, decks, heatmap, log, cheers counted, crew by name, squad rows, plans made and followed, notes, tips, cards I have down, feedback, sign-ins; never a token or anyone else's email). 10 a day. |
+| `DELETE /account/todos` | 3.7.1, D2: my Due to-dos and ticks, under a fresh save time; each add-on takes it at its next refresh (`settingsAt`). |
+| `DELETE /log` | 3.7.1, D2: my log and my cheers counted. Days older than 8 days before the delete are never taken again (`cut`, first in the log's JSON), and every sync reply says `logCut` so the add-on's history import stops. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
 | `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
@@ -50,10 +53,10 @@ import takes `Authorization: Bearer <token>`.
 
 | | |
 |---|---|
-| `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?}`. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
-| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each, 100,000 kept a person), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 400 days kept, mine only). |
+| `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?, settingsAt}`. `settingsAt` (3.7.1) is when my settings were last saved: an add-on pulls a save it hasn't seen. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
+| `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each, 100,000 kept a person), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 15 years kept since 3.7.1, mine only; the reply's `logAll` lets the add-on's history import move on). |
 | `POST /tips/helped {guid, from, helped?}` | 3.2: "This helped" on a mutual friend's tip. It orders tips (the most helpful first); nobody sees a count. |
-| `GET /log` | 3.2: my log, for the site. Mine only. |
+| `GET /log` | 3.2: my log, for the site, and since 3.7.1 `cheers: {year: n}` (cheers my crew sent me, a sender once a day, tips not counted). Mine only. |
 | `GET` / `POST /admin/notices {text, link?, below?, days?}`, `DELETE /admin/notices/{id}` | 3.2.1: the admin's notice (at most 200 characters, an https link, only to add-ons older than `below`, 14 days unless said). `GET /board` carries the newest live one for the asking add-on's version as `notice: {id, text, link}`. |
 | `GET /admin/stats` | 3.2: counts only (accounts, on 3.x, seen, friendships, squads, plans, tips, versions), for the admin (`ADMINS` in wrangler.toml, and the `ADMIN_UIDS` secret); 404 for everyone else. `GET /auth/me` says `admin: true` for them. |
 | `GET /admin/people?q=` | The admin's account lookup: an exact email, uid or friend code, or up to 10 whose name starts with `q` (3+ characters), emails partly hidden; a squad's code gives `squad`. `GET /admin/people/{uid}`: one account (name, emoji, email, code, joined, last seen, version, tz, how many places signed in, squads with ids, plans made and followed, counts of crew, added-not-back and muted, the per-address sign-in limits, a pending email change, the admin's note and what the admin did there). Never their week, days, heatmap, decks, log, plan progress, settings, or who their crew are. `POST /admin/people/{uid}/signout` ends their sessions; `DELETE /admin/people/{uid} {email}` deletes the account as their own Delete does, with their email typed as confirmation (never the admin's own). 404 for everyone else. |
@@ -78,7 +81,7 @@ import takes `Authorization: Bearer <token>`.
 
 | | |
 |---|---|
-| `GET /users/{uid}` | `{uid, name, emoji}`, and nothing more, for anyone signed in. |
+| `GET /users/{uid}` | `{uid, name, emoji}`, and nothing more, and since 3.7.1 (D5) only to someone connected: a crew edge or a knock either way, or a squad or a plan in common. Anyone else gets `404 no_user`, as for no such account. |
 | `PUT /friends/{uid}` | Add someone (an add-back, a knock's Add). Clears their knock. `{uid, name, emoji, mutual}`. |
 | `DELETE /friends/{uid}` | Their reads of my numbers end with this request. |
 | `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
@@ -193,7 +196,7 @@ keeps its row.
 | | |
 |---|---|
 | `POST /squads {name}` | `{id, code, name, founder, open}`; I'm the founder and a member. |
-| `GET /squads/peek?code=` | The join preview. 60 an hour. |
+| `GET /squads/peek?code=` | The join preview, with `founderName` since 3.7.1. 60 an hour. |
 | `POST /squads/{id}/join {code}` | The only way in: the squad's code (since 3.6.2 always; an id alone is not a join), the door open, I mustn't be blocked, and it holds at most 500. |
 | `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
 | `GET /squads/{id}[?wk=2026-W40]` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. 3.6: each row has `joined` (a date) and `play`; with `wk`, `bingo` is that week's card. |

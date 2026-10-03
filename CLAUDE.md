@@ -78,8 +78,10 @@ add-on.
 - Friendship is two edges, one per person (`friends(owner, friend)`).
   Mutual = both exist. Only mutual friends read my week, decks and heatmap;
   a cheer lands only if its recipient added the sender; a knock needs a
-  squad in common or comes from adding the recipient's code. Anyone signed
-  in gets a name and an emoji for a uid, nothing more.
+  squad in common or comes from adding the recipient's code. Someone
+  connected to me (a crew edge or a knock either way, a squad or a plan in
+  common) gets a name and an emoji for my uid, nothing more (3.7.1, D5);
+  codes and invites carry their own names.
 - A squad row is an UPDATE on the server, never an insert; the join
   (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
   `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
@@ -563,6 +565,22 @@ add-on.
   leech, suspended or 8+ lapses, gets its tag off and Anki's Forget, one
   undo step) are in Settings › Board. No new requests: items ride the
   settings push.
+- 3.7.1 (mocks "History", "Due fold", "What Due Crew Keeps", "Insights"):
+  the history import (`cards.history_part`: a year of my log per full
+  sync once the first 120 days went, up to 15 years, advanced only when
+  the reply says `logAll`; the server keeps 15 years). Share cards for
+  any year and all time (`/home?card=year|alltime`). Crew ▾ is people
+  (`board.crew_menu_items`), Share ▾ is what you post, as text then as a
+  picture (`share_menu_items`), in Anki and on the site. Due folds itself
+  once the day is done (`due.fold_state`); Hide/Show holds for the day.
+  Cheers received are counted (`cheer_counts`, migration 0017), shown
+  only on my own cards. Privacy: `site/public/privacy.html` is the table
+  of what's kept (change it in the same commit as what it describes);
+  Account › Your data downloads it all (`GET /account/data`), deletes my
+  log (`DELETE /log`: `cut`, and `logCut` ends the import) or my to-dos
+  (`DELETE /account/todos`; the board's `settingsAt` makes Anki pull a
+  save it hasn't seen, `account.saved_elsewhere`). Log has four insights
+  (`logInsights`). Copy: say what isn't on screen; never narrate what is.
 
 ## Releasing
 
