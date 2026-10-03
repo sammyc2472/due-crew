@@ -736,8 +736,7 @@ def _css(cfg):
     #due-crew .pwk .pc {{ border: 1px solid var(--dc-line); border-radius: 8px; padding: 4px 5px 5px; min-height: 64px;
       display: flex; flex-direction: column; gap: 3px; cursor: default; min-width: 0; text-align: left; }}
     #due-crew .pwk .pc[onclick] {{ cursor: pointer; }}
-    #due-crew .pwh .nav .tb {{ border: 1px solid var(--dc-line); border-radius: 99px; display: inline-block; box-sizing: border-box; height: 20px;
-      line-height: 18px; padding: 0 10px; font-size: 11.5px; font-weight: 600; }}
+    #due-crew .pwh .nav .tb {{ padding: 0 2px; font-size: 12px; font-weight: 700; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
     #due-crew .pwk .d b.td {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 99px; padding: 0 6px; white-space: nowrap; }}
     #due-crew .pwk .d b.td .dow {{ color: inherit; }}
