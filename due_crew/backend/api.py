@@ -35,7 +35,7 @@ FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
 API_BASE = "https://api.duecrew.com"
 # session.json keys that belong to one account on this computer, and go
 # when a different account signs in
-_LEGACY_AUTH = ("id_token", "refresh_token", "auth_dead", "rules_check", "rules_stale_hint")
+_LEGACY_AUTH = ("id_token", "refresh_token", "auth_dead", "auth_gone", "rules_check", "rules_stale_hint")
 
 
 def _version_tuple(text):
@@ -92,6 +92,24 @@ class ApiClient:
     def session_dead(self):
         """The server refused my token outright (401). Cleared by signing in."""
         return bool(self.session.get("auth_dead"))
+
+    @property
+    def deleted_quiet(self):
+        """Q4: the server deleted this account after 12 months without
+        activity (it keeps a hash of the uid a year to say so)."""
+        return bool(self.session.get("auth_gone"))
+
+    def _ask_gone(self):
+        """Q4: after a 401, whether it's because the account went quiet and
+        was deleted. A yes or no; failure is a no."""
+        uid = self.session.get("user_id") or ""
+        if not uid:
+            return False
+        try:
+            r = self.http.request("GET", f"{self.base}/auth/gone", params={"uid": uid}, timeout=TIMEOUT)
+            return bool(r.status_code == 200 and (r.json() or {}).get("gone"))
+        except Exception:
+            return False
 
     @property
     def was_on_2x(self):
@@ -159,6 +177,8 @@ class ApiClient:
         except ValueError:
             data = {}
         if r.status_code == 401 and auth:
+            if not self.session.get("auth_dead"):
+                self.session["auth_gone"] = self._ask_gone()  # once, the first time it's refused
             self.session["auth_dead"] = True
             self._save_session()
             raise TransportError("signed out", 401)

@@ -919,6 +919,11 @@ def refresh_progress():
         _note_recap(_state["plan_session"])
     except Exception:
         traceback.print_exc()
+    try:
+        from . import due_flow
+        due_flow.parts(mw.col, idxs, _state["labels"][0] if _state["labels"] else _today())  # Due: each date's resources
+    except Exception:
+        traceback.print_exc()
     return prog
 
 

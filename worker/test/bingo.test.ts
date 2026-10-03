@@ -95,6 +95,21 @@ describe("the draw", () => {
     expect((await sam.call("GET", `/squads/${sq.id}`)).body.bingo).toBeUndefined();
     expect((await sam.call("GET", `/squads/${sq.id}?wk=2020-W01`)).body.bingo).toBeUndefined();
   });
+
+  it("the site gets where the squad stands (the same evaluate), never who stamped what", async () => {
+    const sam = await person("sam");
+    const sq = (await sam.call("POST", "/squads", { name: "busm" })).body;
+    const wk = thisWeek();
+    const n = Number(wk.replace("-W", ""));
+    await sam.call("PUT", `/squads/${sq.id}/row`, { day: new Date().toISOString().slice(0, 10), reviews: 5, play: { v: 1, wk: n, s: 1 } });
+    const r = (await sam.call("GET", `/squads/${sq.id}?wk=${wk}`)).body;
+    expect(r.bingoEv.squares).toHaveLength(8);
+    expect(r.bingoEv.squares[0].done).toBe(true);  // one of one stamped square 0
+    expect(typeof r.bingoEv.lines).toBe("number");
+    expect(r.bingoEv.closest.length).toBeGreaterThan(0);
+    expect(JSON.stringify(r.bingoEv)).not.toContain("sam");
+    expect((await sam.call("GET", `/squads/${sq.id}`)).body.bingoEv).toBeUndefined();
+  });
 });
 
 describe("the board and my row", () => {

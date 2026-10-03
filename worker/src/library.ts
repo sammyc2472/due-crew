@@ -56,7 +56,7 @@ export async function list(req: Request, s: Session, env: Env): Promise<Response
   ).all<{ deck: string; n: number }>();
   return json({
     plans: rows.results.slice(0, PAGE).map((r) => ({
-      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || "?", followers: r.followers ?? 0,
+      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || (r.owner ? "?" : "a former member"), followers: r.followers ?? 0,
       listedAt: r.listed_at, mine: r.owner === s.uid, ...(JSON.parse(r.lib || "{}") as Obj), ...(r.based_on ? { basedOn: JSON.parse(r.based_on) } : {}),
     })),
     more: rows.results.length > PAGE,

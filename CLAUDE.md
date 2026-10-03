@@ -448,14 +448,121 @@ add-on.
   opens Anki's browser on what the date matches here
   (`plan_flow.browse_date`, `planbrowse`), and the Today box has one
   line of them (`today_what`). Names and counts only, from the plan.
+- Not yet today (3.6.7): a crewmate who synced but hasn't studied (a day
+  doc with `studied` false, or a day inside an away spell) is no row of
+  zeros with a rank: dashes, no rank, "· nothing yet as of 2h ago" (when
+  we last heard: a phone's reviews reach us only at their computer's next
+  AnkiWeb sync; Week: "nothing this week"), under everyone who studied,
+  status and cheers kept
+  (`build_rows`' `notyet`). A squad row synced today with 0 reviews and
+  no time is the same. Ranks are only for rows with something to rank.
+- The site's home board is board.py, restated in `Board` in app.js: the
+  same rows (`rows` = `build_rows`, away days flagged from the week's
+  spell as `shapes._week_days` does, the week's streak from its newest
+  day), one chip (room > studying now > exam > away > week done), the
+  notes, plan statuses, the show-up view, Decks (`+N today`, retention),
+  Squads one at a time behind a switcher with Lock/Open and Leave, a
+  Plans tab, and the footer's Crew ▾ and "N waiting". The bingo mini card
+  too: the site never works squares out, so `GET /squads/{id}?wk=` carries
+  `bingoEv` (the Worker's evaluate, done or not per square, never who).
+  Change one, change both. The site can't show "back today" (the add-on's own history) or
+  Copy invite for a squad (its code lives only in Anki).
+- The site, together ("Site, together" S1–S7, built with "The next
+  round"): every page in one 1180px frame (`main.wide` the same); pages to
+  read (sign-in, account, feedback, a plan's or an invite's link) use a
+  narrower column inside it (`reading()`), left-aligned with the logo. One
+  footer on every page (`renderFoot`; `index.html` and `classes.html`
+  match it by hand). A page opens with `phead(title, line, button)`: at
+  most one filled button, on the title's line. Buttons climb one ladder:
+  filled for the main thing, `ghost` (outlined), `quiet`, `linkish`, and
+  the warm `danger`/`warn` only for removing; a library card is Look
+  (filled), Copy (outlined), and ⋯ for Report and Take out. Account shows
+  my code, where I'm signed in (`GET /auth/places`, counts only) and my
+  data.
+- Share cards (mock "Share Cards", K1–K5): my week (story or link
+  size, the crew count a number only), my year in Anki (from my log), a
+  squad's bingo (never who stamped what), a plan finished (its code only
+  on a code plan). Drawn in the browser on a canvas (`site/public/cards.js`)
+  from what the page already has; nothing is sent or kept, no link: the
+  phone's share sheet, or a download. A number my Privacy switches keep
+  home isn't in my week, so its switch is off. The cards keep their own
+  green, light or dark, and the one-line logo from its file
+  (`site/public/logo-line*.svg`, copies of `docs/logo`).
+  K6–K8 ("The next round"): today's card is the week card with today's
+  numbers (`one`); Anki's Crew ▾ "as a picture…" opens
+  `/home?card=today|week` signed in (`plan_flow.open_site`) with the
+  sheet open, so cards are drawn in one place; on a computer the sheet
+  copies the picture (Copy picture); from 1 Dec to 7 Jan Home's rail opens
+  with the year's card once a season per browser (`yearNudge`).
+- Quiet accounts ("The next round", Q1–Q6, migration 0016,
+  `worker/src/quiet.ts`). Activity is the newest of a sync or a board read
+  (`last_seen`), a week the 2.x bridge brought in, and creation. After 90
+  days crewmates' boards fold them into one "N quiet" line (add-on
+  `_quiet_fold`, squads too, and the site's `Board.table`, from when they
+  last synced: no request); after 6 months the daily job drops what a sync
+  rebuilds (decks, heatmap, plan trees, knows); after 12 months (24 when
+  paused) it deletes the account as Delete my account does, 50 a day,
+  never an admin, except that a plan someone follows passes to its first
+  co-author or stays ownerless ("a former member": followable, never
+  edited). A hash of the uid is kept a year (`gone`), so an add-on refused
+  by the server asks once (`GET /auth/gone?uid=`) and says "deleted after
+  12 months" (`signed_out_card(gone=)`). The sentence is in the README
+  (AnkiWeb), Settings (`board.KEEP_LINE`, the dialog too), the Pause choice
+  and the site's Account. Admin Today has the housekeeping counts; each
+  deletion is in the audit log.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
   emails partly hidden; one account shows who they are, where they are
-  (squads, plans) and counts of their crew, never how they study, who
-  their crew are, or their settings. Sign out everywhere, and Delete with
-  their email typed out. README's privacy section says Sam can find an
-  account when someone writes in.
+  (squads, plans) and counts of their crew, never how they study or
+  their settings. Sign out everywhere, and Delete with their email typed
+  out. Who their crew are only behind a click ("The next round", F1–F3,
+  `People.crew`), each look in the audit log; one side of a friendship
+  can go on their request (`removeEdge`, they're emailed), and admin
+  never makes anyone crew. README's privacy section says so.
+- Admin, grown up (mock "Admin, grown up", migration 0015): /admin is a
+  sidebar of pages (Today with Needs you, People, Squads, Plans & library,
+  Inbox, Notices, Bingo, System, Audit log), one gap scale. Sign-in help
+  on an account: Email them a fresh code (past the limits; the add-on
+  signs in by a code typed into Anki, so never a link), clear the
+  per-address limits, Change their email (`email_changes`: it moves at
+  the new address's first code sign-in, within a week, so a typo hands
+  nothing over). The admin's note per account (`admin_notes`). A squad
+  by its code or from an account (`adminsquads.ts`): members by name,
+  Remove (block), New code, Open/Close, Rename, Make founder, Delete,
+  the founder emailed each time. A new code is a row in `squad_codes`
+  and `squads.code_id` marks the live one (`squads.idForCode`): the id
+  never changes, so add-ons and the bridge are untouched, and the old
+  code opens nothing (peek, join, restore). Everything done there goes
+  in `admin_actions` (the audit log, a year; names looked up on read,
+  never an email or a code). README's privacy line says Sam can look up
+  an account and its squads when someone writes in.
+- Due (mock "My List", L1–L15): the day's to-do in a box above the
+  board on every tab (`due.py` pure, `due_flow.py` the glue,
+  `board._due_html`; the name is `due.NAME`). Three tabs: Today (the day
+  in full), Upcoming (today in short, then 14 days, empty days folded)
+  and Later (my own items with no day). No going back a day: whatever
+  isn't done sits under Behind on Today and Upcoming (my items one by
+  one, a plan's past dates as one line with Catch up). A plan's date is
+  on its day (my shifted, unskipped days; past ones only if they opened
+  here) and ticks itself when its cards are seen and its author's lines
+  are ticked; each resource's numbers come from the refresh's deck reads
+  (`plans.parts`, kept in `_state["plan_parts"]`). An author's lines are
+  `todo: [{k, t, url?}]` on a unit (watch/read/do, 8 at most, an https
+  link opened by Anki, `duelink`), written in the builder's day panel or
+  Text (`watch: Lecture 14 https://…`). My own items (`due_items`: 60
+  open, 140 characters, ticked ones go after a week) and my ticks
+  (`due_ticks`) are account keys, so the settings doc's cap is 64 KB; the
+  site's home rail shows them read-only (ticking and adding are Anki's,
+  which counts the cards and pulls settings once a day). Adding: the day
+  button starts on the tab's day, a day said at the end of the text wins
+  (`due.parse`, restated for the preview in `board.DUE_JS`: change one,
+  change both), and an item added out of sight says where it went.
+  Suggestions (`due_suggest`, at most two: today's misses, new leeches)
+  and Recover leeches (`due_leeches`, per computer, off: each morning a
+  leech, suspended or 8+ lapses, gets its tag off and Anki's Forget, one
+  undo step) are in Settings › Board. No new requests: items ride the
+  settings push.
 
 ## Releasing
 

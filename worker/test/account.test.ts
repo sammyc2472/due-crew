@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, db, mailbox, signIn } from "./helpers";
+import { api, db, mailbox, person, signIn } from "./helpers";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -51,7 +51,7 @@ describe("delete account", () => {
     const dre = await signIn("dre@example.com", box);
     const nia = await signIn("nia@example.com", box);
     await db().batch([
-      db().prepare("INSERT INTO squads VALUES ('busm', 'busm', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
+      db().prepare("INSERT INTO squads (id, name, founder, open, created_at) VALUES ('busm', 'busm', ?, 1, 1), ('solo', 'solo', ?, 1, 1)").bind(sam.uid, sam.uid),
       db().prepare("INSERT INTO members (squad, uid, name, joined_at) VALUES ('busm', ?, 'Sam', 1), ('busm', ?, 'Nia', 3), ('busm', ?, 'Dre', 2), ('solo', ?, 'Sam', 1)")
         .bind(sam.uid, nia.uid, dre.uid, sam.uid),
       db().prepare("INSERT INTO bans VALUES ('solo', 'someone')"),
@@ -163,3 +163,15 @@ describe("3.5.0: my accent on the site", () => {
     expect((await sam.call("GET", "/auth/me")).body.accent).toBe("green");
   });
 });
+
+describe("where I'm signed in (S6)", () => {
+  it("counts computers and browsers, mine only", async () => {
+    const maya = await person("maya");
+    await person("dre");
+    const r = await maya.call("GET", "/auth/places");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ computers: 1, browsers: 0 });
+    expect((await api("GET", "/auth/places")).status).toBe(401);
+  });
+});
+

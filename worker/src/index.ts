@@ -12,9 +12,11 @@ import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as People from "./people";
+import * as AS from "./adminsquads";
 import * as Q from "./squads";
 import * as Bingo from "./bingo";
 import * as S from "./social";
+import * as Quiet from "./quiet";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
@@ -36,11 +38,13 @@ open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
 open("GET", r("/plans/public"), (q, env) => P.publicPeek(q, env));  // a plan's link, before signing in
+open("GET", r("/auth/gone"), (q, env) => Quiet.gone(q, env));  // Q4: signed out, the add-on asks why
 open("POST", r("/links/email"), (q, env) => A.emailLink(q, env));  // a phone sends itself the link
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
 authed("POST", r("/auth/signout"), (q, s, env) => A.signOut(s, env, q));
 authed("POST", r("/auth/signout-all"), (q, s, env) => A.signOutAll(s, env, q));
+authed("GET", r("/auth/places"), (_q, s, env) => A.places(s, env));
 authed("DELETE", r("/account"), (_q, s, env) => A.deleteAccount(s, env));
 
 authed("GET", r("/board"), B.board);
@@ -78,6 +82,20 @@ authed("GET", r("/admin/people"), People.search);
 authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
 authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
 authed("DELETE", r(`/admin/people/${ID}`), People.remove);
+// mock "Admin, grown up": sign-in help, a note, the audit log, squads
+authed("POST", r(`/admin/people/${ID}/code`), (_q, s, env, p) => People.sendFreshCode(s, env, p));
+authed("POST", r(`/admin/people/${ID}/limits`), (_q, s, env, p) => People.clearLimits(s, env, p));
+authed("PUT", r(`/admin/people/${ID}/email`), People.changeEmail);
+authed("DELETE", r(`/admin/people/${ID}/email`), (_q, s, env, p) => People.cancelEmail(s, env, p));
+authed("PUT", r(`/admin/people/${ID}/note`), People.putNote);
+authed("GET", r(`/admin/people/${ID}/crew`), (_q, s, env, p) => People.crew(s, env, p));
+authed("DELETE", r(`/admin/people/${ID}/crew/${ID}`), People.removeEdge);
+authed("GET", r("/admin/actions"), Ad.actions);
+authed("GET", r(`/admin/squads/${ID}`), (_q, s, env, p) => AS.get(s, env, p));
+authed("PATCH", r(`/admin/squads/${ID}`), AS.patch);
+authed("POST", r(`/admin/squads/${ID}/code`), (_q, s, env, p) => AS.newCode(s, env, p));
+authed("POST", r(`/admin/squads/${ID}/remove/${ID}`), AS.remove);
+authed("DELETE", r(`/admin/squads/${ID}`), AS.del);
 // 3.6: squad bingo's pool, the admin's to edit
 authed("GET", r("/admin/bingo"), (_q, s, env) => Bingo.adminGet(s, env));
 // 3.6.5, P6: feedback, from anyone signed in, to the admin's page
@@ -146,7 +164,17 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
     // 3.6.5, P6: feedback is kept a year
     env.DB.prepare("DELETE FROM feedback WHERE at <= ?").bind(now - 365 * 86400),
+    // the admin's audit log is kept a year; an email change lapses after a week
+    env.DB.prepare("DELETE FROM admin_actions WHERE at <= ?").bind(now - 365 * 86400),
+    env.DB.prepare("DELETE FROM email_changes WHERE at <= ?").bind(now - 7 * 86400),
   ]);
+  // Q1-Q6: quiet accounts trimmed, then deleted, a few a day
+  try {
+    const q = await Quiet.run(env, now);
+    if (q.trimmed || q.deleted) console.log(`quiet: trimmed ${q.trimmed}, deleted ${q.deleted}`);
+  } catch (e) {
+    console.log(`quiet failed: ${String((e as Error)?.message || e).slice(0, 120)}`);
+  }
 }
 
 /** No Origin (the add-on, a calendar app), or a page of ours: duecrew.com,

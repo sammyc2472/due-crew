@@ -12,7 +12,8 @@ from urllib.parse import unquote
 TABS = ("you", "board", "privacy")
 SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "highlight_me", "share_reviews", "share_time", "share_retention",
-            "share_streak", "share_heatmap")
+            "share_streak", "share_heatmap",
+            "due_show", "due_suggest", "due_leeches")  # Due
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right")}

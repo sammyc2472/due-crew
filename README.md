@@ -52,6 +52,11 @@ day's cards each morning. Behind? **Catch up** or **Move my days back**.
 Plans can have co-authors and notes, go in your calendar app, and be
 shared in the library.
 
+**Due**, above the board, is your day: what your plans open, ticking
+itself as you review, the lecture or chapter that goes with it, and your
+own to-dos for any day. Upcoming shows the next two weeks; anything left
+undone waits under Behind.
+
 <img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=2" width="600">
 
 ## Install
@@ -73,9 +78,14 @@ Your stats go only to people you've added and squads you join. Choose
 what you share in Settings → Privacy, or pause at any time. Anyone else
 sees your name and emoji, nothing more. Card text never leaves your
 computer: a crewmate sees a card's text only if they have the same card.
-Your email is used to sign you in, and so Sam, who runs Due Crew, can find
-your account if you write in. Feedback you send goes to Sam with your
-name. Deleting your account deletes your data.
+Your email is used to sign you in. Your own to-dos in Due are kept with
+your settings, so every computer has them; only you see them. If you write in, Sam, who runs Due
+Crew, can look up your account, your squads and who's on your crew list
+to fix problems; never how you study, and each look is logged. Feedback
+you send goes to Sam with your name. Deleting your account deletes your
+data. Accounts with no activity for 12 months (24 when paused) are
+deleted with everything in them; opening Anki with Due Crew on, or
+signing in at duecrew.com, counts.
 The add-on and server are on
 [GitHub](https://github.com/sammyc2472/due-crew).
 

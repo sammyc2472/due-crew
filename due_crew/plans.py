@@ -792,6 +792,30 @@ def topics(unit):
     return [[g, xs] for g, xs in groups.items()]
 
 
+def parts(idx, unit, swap=None, plan_deck=""):
+    """Due: [[group, seen, total]] for a date's resources here, grouped as
+    `topics` groups its tags (a video series, a book); what else it opens
+    (subdecks, searches, picks) is "Other". [] when there's one group or
+    none: then the date's own numbers say it all."""
+    groups = {}
+    for t in unit.get("tags") or []:
+        segs = str(t).split(_SEP)
+        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+        g = _word(segs[ri]) if 0 <= ri < len(segs) - 1 else ""
+        groups.setdefault(g, set()).update(idx.tag_cards(swapped(t, swap)))
+    rest = idx.match(unit, swap, plan_deck) - set().union(*groups.values()) if groups else set()
+    if rest:
+        groups.setdefault("", set()).update(rest)
+    named = [(g, c) for g, c in groups.items() if c]
+    if len(named) < 2:
+        return []
+    out = []
+    for g, cids in named:
+        _o, seen, total = idx.counts(cids)
+        out.append([g or "Other", seen, total])
+    return out
+
+
 def topics_line(us):
     """P7: one line for the Today box, today's dates' topics together."""
     merged = {}

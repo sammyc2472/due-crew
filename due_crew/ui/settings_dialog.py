@@ -31,6 +31,7 @@ DEFAULTS = {
     "paused": False, "exam_date": "",
     "crew_label": "Crew", "accent": "green",
     "away_from": "", "away_to": "", "room_chip_side": "right",
+    "due_show": True, "due_suggest": True, "due_leeches": False,
 }
 # what Reset Board puts back: the Board tab, and never anything on Privacy
 BOARD_KEYS = ("show_leaderboard", "show_stale", "sync_notifications",
@@ -216,6 +217,11 @@ class SettingsDialog(QDialog):
         delete.clicked.connect(self._delete)
         bottom.addWidget(delete)
         lay.addLayout(bottom)
+        from ..board import KEEP_LINE  # Q2: the same sentence as the board's Settings
+        keep = QLabel(KEEP_LINE)
+        keep.setWordWrap(True)
+        keep.setStyleSheet("font-size: 11px;")
+        lay.addWidget(keep)
 
     def _who_text(self):
         name = html.escape(self.client.display_name or "?")
@@ -388,6 +394,12 @@ class SettingsDialog(QDialog):
         self._combo(lay, "room_chip_side", "Room chip", CHIP_SIDES)
         lay.addSpacing(6)
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
+        lay.addSpacing(6)
+        lay.addWidget(QLabel("<b>Due</b>"))
+        self._check(lay, "due_show", "Due above the board")
+        self._check(lay, "due_suggest", "Suggestions from my own Anki")
+        lee = self._check(lay, "due_leeches", "Recover leeches each morning")
+        lee.setToolTip("On this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
         # two short lines, unwrapped: a wrapped note got clipped by _shrink
         hint = QLabel("Refreshes when Anki opens or syncs, and with Refresh.<br>"
                       "Sort by clicking the board's headers.")

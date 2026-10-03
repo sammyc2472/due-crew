@@ -161,12 +161,34 @@ async function whoami() {
   return me;
 }
 
+const ANKIWEB = "https://ankiweb.net/shared/info/2035408484";
+const SOURCE = "https://github.com/sammyc2472/due-crew";
+
+/** S2: one footer on every page, signed in or not: what this is, and where
+ *  a visitor looks. Feedback (signed in) carries the page it came from. */
+function renderFoot() {
+  const foot = document.getElementById("foot");
+  if (!foot) return;
+  const a = (href, text) => h("a", { href }, text);
+  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a(`${SOURCE}#privacy`, "Privacy"), a(SOURCE, "Source"),
+    me ? link("/log", "Log") : null, me?.admin ? link("/admin", "Admin") : null,
+    me ? h("a", { href: "/feedback", onclick: (e) => { e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback") : null].filter(Boolean);
+  foot.replaceChildren(h("div", { class: "footin" }, h("span", { class: "fbrand" }, h("b", {}, "due crew"), h("span", { class: "muted" }, " · free for Anki")),
+    h("span", { class: "flinks" }, links.flatMap((x, i) => (i ? [h("span", { class: "dot", "aria-hidden": "true" }, "·"), x] : [x])))));
+}
+
+/** S3: every page opens the same way: a title, one line, at most one main button on the title's line. */
+function phead(title, line, button) {
+  return h("div", { class: "phead" }, h("div", {}, h("h1", {}, title), line ? h("p", { class: "muted" }, line) : null), button || null);
+}
+
+/** S1/S5: pages to read (sign-in, account, feedback, a plan's or an invite's link) keep
+ *  the frame and use a narrower column inside it, left-aligned with the logo. */
+function reading() { $app().classList.add("narrow"); }
+
 function renderNav() {
   const nav = document.getElementById("nav");
-  // 3.6.5, P6: Feedback in the footer of every signed-in page, carrying the page it came from
-  const foot = document.getElementById("foot");
-  if (foot) foot.replaceChildren(...(me ? [h("a", { href: "/feedback", onclick: (e) => {
-    e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback")] : []));
+  renderFoot();
   if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
   // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
   const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
@@ -205,7 +227,7 @@ function signIn() {
   }
   const form = h("form", { class: "stack", novalidate: true },
     title,
-    h("p", { class: "muted" }, "The same email you use in Anki. New here? The same code makes your account."),
+    h("p", { class: "muted" }, "The same email you use in Anki. We'll email you a 6-digit code, good for 10 minutes. New here? The same code makes your account."),
     h("label", { for: "email" }, "Email"), email,
     h("div", {}, h("button", { type: "submit" }, "Send code")), status);
   form.addEventListener("submit", async (e) => {
@@ -284,16 +306,18 @@ async function plansList() {
       p.doc.deck !== p.name ? p.doc.deck : null, planDays(p.doc), span(p)].filter(Boolean).join(" · ")));
   const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
   page(
-    h("h1", {}, "Plans"),
-    codeBox(),
-    h("div", { class: "row", style: "justify-content:space-between;margin-top:18px" }, h("h2", { style: "margin:0" }, "Yours"),
-      h("button", { class: "ghost", onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
+    phead("Plans", "Dates for a deck; your Anki opens each one on its day.",
+      h("button", { onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
+    h("h2", {}, "Yours"),
     mineP.length ? h("div", { class: "plans" }, mineP.map(row))
       : h("p", { class: "muted" }, "None yet."),
     h("h2", {}, "Following"),
     followed.length ? h("div", { class: "plans" }, followed.map(row))
-      : h("p", { class: "muted" }, "None yet. A plan's code goes in the box above."),
-    h("p", { class: "muted small", style: "margin-top:12px" }, "Or find one to follow or copy in the ", link("/library", "library"), "."),
+      : h("p", { class: "muted" }, "None yet. A plan's code goes in the box below."),
+    h("div", { class: "agrid2", style: "margin-top:20px" },
+      h("section", { class: "panel" }, codeBox()),
+      h("section", { class: "panel" }, h("h4", {}, "Find one to follow"),
+        h("p", { class: "muted small" }, "Plans people share for anyone to follow or copy."), link("/library", "Open the library ›"))),
   );
 }
 
@@ -356,14 +380,18 @@ async function libraryPage() {
       h("div", { class: "lctags" }, tags(p).map((t) => h("span", {}, t))),
       h("span", { class: "muted small" }, `${p.followers.toLocaleString()} following`),
       h("div", { class: "row" },
-        link(`/plans/${p.id}`, "Look", "btn ghost"),
-        h("button", { onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
-        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : h("button", { class: "linkish", style: "margin-left:auto", onclick: () => extra.replaceChildren(reportForm(p, () => extra.replaceChildren())) }, "Report"),
-        me.admin ? h("button", { class: "linkish", onclick: async () => {
-          const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
-          if (!note) return;
-          try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
-        } }, "Take out") : null),
+        link(`/plans/${p.id}`, "Look", "btn"),
+        h("button", { class: "ghost", onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
+        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : null,
+        p.mine && !me.admin ? null : h("details", { class: "calmenu lcmore", style: p.mine ? "" : "margin-left:auto" },
+          h("summary", { "aria-label": "More" }, "⋯"),
+          h("div", { class: "calpop" },
+            p.mine ? null : h("button", { class: "linkish", onclick: (e) => { e.target.closest("details").open = false; extra.replaceChildren(reportForm(p, () => extra.replaceChildren())); } }, "Report…"),
+            me.admin ? h("button", { class: "linkish warn", onclick: async () => {
+              const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
+              if (!note) return;
+              try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
+            } }, "Take out…") : null))),
       extra);
     return el;
   }
@@ -391,8 +419,7 @@ async function libraryPage() {
   more.addEventListener("click", () => { pg++; load(false); });
   let t = null;
   search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = search.value.trim(); load(true); }, 300); });
-  page(h("h1", {}, "Library"),
-    h("p", { class: "muted" }, "Plans people list for anyone to follow or copy. Newest first."),
+  page(phead("Library", "Plans people list for anyone to follow or copy. Newest first."),
     h("div", { class: "row" }, search), filters, grid, empty, more);
   await load(true);
 }
@@ -542,7 +569,7 @@ function planIntro(p) {
   return [h("h1", {}, p.name),
     h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} date${u.length === 1 ? "" : "s"}${u.length ? `, ${pretty(u[0].opens)} to ${pretty(last.due || last.opens)}` : ""} · ${p.followers} following`),
     p.line ? h("p", {}, p.line) : null,
-    u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? x.n.toLocaleString() : ""))),
+    u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? `${x.n.toLocaleString()} card${x.n === 1 ? "" : "s"}` : ""))),
       u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
 }
 
@@ -566,15 +593,18 @@ async function codePage(code) {
   if (!p) {
     page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."),
       me ? null : h("p", { class: "muted small" }, link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " if it's your squad's."));
+    reading();
     return;
   }
   const cal = p.audience === "squad" ? null : calMenu(code);
   page(...planIntro(p),
     cal ? h("div", { class: "phone-only" }, cal) : null,
     emailMe(`/p/${code}`),
-    h("h2", {}, "Follow it in Anki"), steps(p.deck),
+    h("section", { class: "panel stepcard" }, h("h4", {}, "Follow it in Anki"), steps(p.deck),
+      me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck.")),
     cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
-    me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
+    me ? null : h("p", { class: "muted small" }, "Due Crew opens a plan's cards in your Anki on their days, and puts friends' studying next to yours. Free. ", h("a", { href: "/" }, "What's Due Crew?")));
+  reading();
 }
 
 /** 3.5.0: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
@@ -586,6 +616,7 @@ async function invitePage(code) {
     page(h("h1", {}, inv ? "Too many tries" : "No invite with that code"),
       h("p", { class: "muted" }, inv ? "Try again in an hour." : "Check the link with whoever sent it."),
       h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
+    reading();
     return;
   }
   // a one-time invite, first use within 14 days: crew at once. Used or old,
@@ -609,21 +640,24 @@ async function invitePage(code) {
           : "That didn't work. Try again.";
       }
     } }, `Add ${inv.name}`);
-    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "quiet")), out);
+    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "btn quiet")), out);
+    reading();
     return;
   }
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
   const shown = code.length === 10 ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
   page(head,
+    h("p", { class: "muted" }, "Due Crew puts friends' studying next to yours on Anki's Decks screen. Free."),
     emailMe(`/i/${code}`),
-    h("ol", { class: "steps wide-only" },
+    h("section", { class: "panel stepcard wide-only" }, h("ol", { class: "steps" },
       h("li", {}, h("b", {}, "Add Due Crew to Anki. "), "Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ",
         copyBtn("2035408484"), ", then restart Anki.", h("br"),
         h("span", { class: "muted small" }, "No Anki yet? ", h("a", { href: "https://apps.ankiweb.net" }, "Get it free"))),
       h("li", {}, h("b", {}, "Start with your email. "), "On Anki's Decks screen. We'll email you a code."),
       h("li", {}, h("b", {}, `Paste ${inv.name}'s code `), h("b", { class: "mono" }, shown), " ", copyBtn(code),
-        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`)),
-    h("p", { class: "muted small" }, "Free · your studying goes only to people you add · ", h("a", { href: "/" }, "What's Due Crew?")));
+        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`))),
+    h("p", { class: "muted small" }, "Only people you add see your studying. ", h("a", { href: "/" }, "What's Due Crew?")));
+  reading();
 }
 
 async function account() {
@@ -631,10 +665,25 @@ async function account() {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
     me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
-  page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
-    h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
-      h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere")),
-    h("p", { class: "muted small", style: "margin-top:16px" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account."));
+  const [fr, pl] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null)]);
+  const code = fr.code || "";
+  const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
+  const sec = (title, ...kids) => h("section", { class: "panel acc" }, h("h4", {}, title), ...kids);
+  page(
+    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
+      h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
+    sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
+      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null),
+      h("p", { class: "muted small" }, "A friend adds you with it; Copy invite makes a link that makes you crew at once.")),
+    sec("Signed in", where ? h("p", {}, where) : null,
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out here"),
+        h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere"))),
+    sec("Your data", h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: `${SOURCE}#privacy` }, "Privacy ›")),
+      h("p", { class: "muted small" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account. It takes everything with it."),
+      // Q2: the same sentence as Anki's Settings and the README
+      h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts.")));
+  reading();
 }
 
 // ---- routing ----
@@ -712,7 +761,7 @@ const Board = (() => {
     const accs = found.filter((d) => "accuracy" in d);
     let ret = null;
     if (accs.length) { const w = accs.reduce((n, d) => n + Math.max(d.reviews || 1, 1), 0); ret = accs.reduce((n, d) => n + d.accuracy * Math.max(d.reviews || 1, 1), 0) / w; }
-    return { reviews: sum("reviews"), time: sum("studyTimeMs"), retention: ret, streak: (found.find((d) => "streak" in d) || {}).streak ?? null, new: sum("newCards") };
+    return { reviews: sum("reviews"), time: sum("studyTimeMs"), retention: ret, streak: ([...found].reverse().find((d) => "streak" in d) || {}).streak ?? null, new: sum("newCards") };
   }
   function examText(iso, today) {
     if (!iso) return "";
@@ -723,44 +772,72 @@ const Board = (() => {
     const x = parseIso(iso);
     return d < 7 ? `exam ${DAYS[x.getUTCDay()]}` : `exam ${MONTHS[x.getUTCMonth()]} ${x.getUTCDate()}`;
   }
-  function awayText(week, today) {
-    if (!week?.awayFrom || !(week.awayFrom <= today && today <= week.awayTo)) return "";
-    const back = addDays(week.awayTo, 1);
-    return back === addDays(today, 1) ? "back tomorrow" : `back ${MONTHS[parseIso(back).getUTCMonth()]} ${parseIso(back).getUTCDate()}`;
+  /** board.py _away_text: when they're back, from a day flagged away. */
+  function awayText(awayTo, today) {
+    if (!awayTo) return "away";
+    const back = addDays(awayTo, 1);
+    if (back <= today) return "away";
+    if (back === addDays(today, 1)) return "back tomorrow";
+    const d = parseIso(back);
+    return `back ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
   }
-  /** rows for Today or Week, sorted as the add-on sorts them: [fresh, dormant]. */
+  /** A day's doc, with the away spell flagged on the days inside it, as the
+   *  add-on reads a week (shapes._week_days). */
+  function dayOf(w, l) {
+    const d = (w.days || {})[l];
+    if (w.awayFrom && w.awayTo && w.awayFrom <= l && l <= w.awayTo) return { ...(d || {}), away: true, awayTo: w.awayTo };
+    return d;
+  }
+  /** room_model: a room counts until its last round ends. */
+  function roomLive(room) {
+    if (!room?.start) return false;
+    const end = Date.parse(room.start) + (room.rounds * room.round + Math.max(0, room.rounds - 1) * (room.brk || 0)) * 60000;
+    return end > Date.now();
+  }
+  /** rows for Today or Week, as board.build_rows: [ranked and show-up, the rest]. */
   function rows(people, period, sort, today) {
     const yest = addDays(today, -1), tomorrow = addDays(today, 1);
     const mon = Sched.monday(today);
     const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
-    const fresh = [], dormant = [];
+    const last7 = []; for (let i = 0; i < 7; i++) last7.push(addDays(today, -i));
+    const fresh = [], notyet = [], stale = [], quiet = [], paused = [];
     for (const p of people) {
-      const w = p.week || {}; const days = w.days || {};
+      const w = p.week || {};
+      const host = w.room && roomLive(w.room) ? people.find((x) => x.uid === w.room.host) : null;
       const r = { p, you: p.you, paused: !!w.paused, last: p.updatedAt || "", reviews: null, time: null, retention: null, streak: null, new: null,
-        stale: false, quiet: false, status: "", exam: examText(w.examDate, today), away: awayText(w, today),
-        live: !!(w.liveUntil && Date.parse(w.liveUntil) > Date.now()), recap: w.recap && w.recap.day === today ? w.recap : null,
-        daysWk: wk.filter((l) => showed(days[l])).length };
-      if (r.paused) { dormant.push(r); continue; }
+        stale: false, quiet: false, notyet: false, status: "", away: "", exam: w.paused ? "" : examText(w.examDate, today),
+        live: !w.paused && !!(w.liveUntil && Date.parse(w.liveUntil) > Date.now()),
+        room: !w.paused && w.room && roomLive(w.room) ? (host ? `${(host.name || "?").split(" ")[0]}’s room` : "A study room") : "",
+        recap: !w.paused && w.recap && w.recap.day === today ? w.recap : null,
+        days7: last7.filter((l) => showed(dayOf(w, l))).length, daysWk: wk.filter((l) => showed(dayOf(w, l))).length, showup: false };
+      if (r.paused) { paused.push(r); continue; }
+      const flags = (d) => { r.status = d.status || ""; r.away = d.away ? awayText(d.awayTo, today) : ""; };
       if (period === "week") {
-        const agg = weekAgg(days, wk);
-        if (!agg) { if (r.you) fresh.push(r); else { r.quiet = true; dormant.push(r); } continue; }
+        const agg = weekAgg(w.days || {}, wk);
+        if (!agg) {
+          if (r.you || r.days7) { r.showup = !!r.days7; fresh.push(r); } else { r.quiet = true; quiet.push(r); }
+          continue;
+        }
+        if (!r.daysWk) { r.notyet = true; notyet.push(r); continue; }  // a week of zeros: nothing to rank
         Object.assign(r, agg);
+        r.showup = !!r.days7 && [r.reviews, r.time, r.retention, r.streak].every((v) => v === null);
         fresh.push(r);
       } else {
-        const t = days[tomorrow] || days[today]; const y = days[yest];
-        if (t) { Object.assign(r, metrics(t)); r.status = t.status || ""; r.showup = showed(t) && [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
-        else if (y && !r.you) { Object.assign(r, metrics(y)); r.status = y.status || ""; r.stale = true; dormant.push(r); }
+        // a friend whose day rolled over ahead of mine writes my "tomorrow"
+        const t = dayOf(w, tomorrow) || dayOf(w, today), y = dayOf(w, yest);
+        if (t && !showed(t)) { flags(t); r.notyet = !r.away; notyet.push(r); }  // synced, nothing studied yet
+        else if (t) { Object.assign(r, metrics(t)); flags(t); r.showup = [r.reviews, r.time, r.retention, r.streak].every((v) => v === null); fresh.push(r); }
+        else if (y && !r.you) { Object.assign(r, metrics(y)); flags(y); r.stale = true; stale.push(r); }
         else if (r.you) fresh.push(r);
-        else { r.quiet = true; dormant.push(r); }
+        else { r.quiet = true; quiet.push(r); }
       }
     }
     const key = { reviews: "reviews", time: "time", retention: "retention", streak: "streak" }[sort] || "reviews";
     const val = (r) => (r[key] ?? -1);
+    const byLast = (a, b) => (b.last || "").localeCompare(a.last || "");
     fresh.sort((a, b) => val(b) - val(a));
-    const stale = dormant.filter((r) => r.stale).sort((a, b) => val(b) - val(a));
-    const quiet = dormant.filter((r) => r.quiet).sort((a, b) => (b.last || "").localeCompare(a.last || ""));
-    const paused = dormant.filter((r) => r.paused);
-    return [fresh, [...stale, ...quiet, ...paused]];
+    stale.sort((a, b) => val(b) - val(a));
+    return [fresh, [...notyet.sort(byLast), ...stale, ...quiet.sort(byLast), ...paused]];
   }
 
   function cheerMenu(uid, anchor) {
@@ -774,21 +851,39 @@ const Board = (() => {
     setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { pop.remove(); document.removeEventListener("click", off); } }), 0);
   }
 
-  function nameCell(r) {
+  /** board.plan_target: a status that starts with a number is a plan. */
+  const planTarget = (st) => { const m = /^\s*(\d{1,5})(?!\d)/.exec(st || ""); const n = m ? Number(m[1]) : 0; return n > 0 && n <= 20000 ? n : null; };
+
+  function nameCell(r, period) {
     const p = r.p;
     const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}`));
-    // 3.4 review, T1/T2 (board.py _chip): one chip, the most time-bound;
-    // green only for studying now, amber only for an exam
-    if (r.paused) cell.append(h("span", { class: "note" }, " · on a break"));
-    else if (r.quiet) { const [t] = ago(r.last); if (t) cell.append(h("span", { class: "ago faded" }, ` (${t})`)); }
-    else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
-    if (!r.quiet && !r.paused) {
-      if (r.live) cell.append(h("span", { class: "chip live" }, "studying now"));
+    // board.py _chip: one chip, the most time-bound; green only for studying
+    // now or a room, amber only for an exam
+    if (!r.quiet) {
+      if (r.room) cell.append(h("span", { class: "chip live" }, `in ${r.room}`));
+      else if (r.live) cell.append(h("span", { class: "chip live" }, "studying now"));
       else if (r.exam) cell.append(h("span", { class: "chip exam" }, r.exam));
       else if (r.away) cell.append(h("span", { class: "chip" }, r.away === "away" ? "away" : `away · ${r.away}`));
       else if (r.recap) cell.append(h("span", { class: "chip", title: r.recap.name }, `week ${r.recap.n} done`));
     }
-    if (r.status) cell.append(h("div", {}, h("span", { class: "bub", title: r.status }, r.status)));
+    if (r.paused) cell.append(h("span", { class: "ago faded it" }, " · on a break"));
+    else if (r.quiet) { const [t] = ago(r.last); if (t) cell.append(h("span", { class: "ago faded" }, ` (${t})`)); }
+    else if (r.notyet) {
+      // a phone's reviews reach us only once their computer's Anki syncs:
+      // say when we last heard, not that they haven't studied
+      const [t] = ago(r.last);
+      cell.append(h("span", { class: "ago faded" }, ` · nothing ${period === "week" ? "this week" : "yet"}${t && t !== "just now" ? ` as of ${t}` : ""}`));
+    }
+    else if (r.stale) cell.append(h("span", { class: "ago faded" }, " · yesterday"));
+    else if (r.showup && r.daysWk) cell.append(h("span", { class: "ago faded" }, ` · ${r.daysWk} day${r.daysWk === 1 ? "" : "s"} this week`));
+    if (r.status) {
+      // 2.10: a status that starts with a number is a plan, ticked by the day's reviews
+      const target = planTarget(r.status), done = r.reviews;
+      const lead = target && Number.isInteger(done) && !r.stale
+        ? (done >= target ? "✓ " : h("span", {}, "📝 ", h("span", { class: "plan" }, h("i", { style: `width:${Math.min(100, Math.round((100 * done) / target))}%` })), `${done.toLocaleString()} · `))
+        : null;
+      cell.append(h("div", {}, h("span", { class: "bub", title: r.status }, lead, r.status)));
+    }
     return cell;
   }
 
@@ -802,91 +897,174 @@ const Board = (() => {
     const tr = (r, rank) => {
       // T5: how many were new, on the Week tab
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
-      const dash = r.paused || r.quiet;
+      const dash = r.paused || r.quiet || r.notyet;
       const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
-      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused ? "dim" : ""].join(" ").trim() },
-        h("td", { class: "rk" }, rank), nameCell(r),
+      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim() },
+        h("td", { class: "rk" }, rank), nameCell(r, period),
         h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n" }, dash || r.time === null ? "—" : fmtTime(r.time)),
         h("td", { class: "n" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
         h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
     };
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }), ...dormant.map((r) => tr(r, "—"))];
-    return h("div", { class: "scrollx" }, h("table", { class: "brdt" }, h("thead", {}, head), h("tbody", {}, body)));
+    // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
+    const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
+    const tbl = h("table", { class: "brdt" });
+    const fold = [];
+    if (longQ.length) {
+      const names = longQ.map((r) => r.p.name);
+      const who = names.length === 1 ? names[0] : names.length <= 3 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+      const since = MONTHS[new Date(Math.max(...longQ.map((r) => Date.parse(r.last)))).getMonth()];
+      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 2 },
+        h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
+        h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
+      for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
+    }
+    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
+      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
+    tbl.append(h("thead", {}, head), h("tbody", {}, body));
+    return h("div", { class: "scrollx" }, tbl);
   }
 
-  /** show-up mode: a square a day, Monday to today, nothing ranked. */
+  /** show-up mode, as _presence_html: a square a day, Monday to today,
+   *  nothing ranked; sorted by squares lit, then name. */
   function presence(people, today) {
     const mon = Sched.monday(today); const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
-    const lit = (p) => wk.filter((l) => showed((p.week?.days || {})[l])).length;
-    const sorted = [...people].sort((a, b) => lit(b) - lit(a) || (a.name || "").localeCompare(b.name || ""));
-    const todayN = people.filter((p) => showed((p.week?.days || {})[today])).length;
+    const [fresh, dormant] = rows(people, "today", "reviews", today);
+    const lit = (r) => wk.filter((l) => showed(dayOf(r.p.week || {}, l))).length;
+    fresh.sort((a, b) => lit(b) - lit(a) || (a.p.name || "").toLowerCase().localeCompare((b.p.name || "").toLowerCase()));
+    const todayN = fresh.filter((r) => showed(dayOf(r.p.week || {}, today) || dayOf(r.p.week || {}, addDays(today, 1)))).length;
+    const note = (r) => r.paused ? h("span", { class: "ago faded it" }, " · on a break")
+      : r.quiet ? (ago(r.last)[0] ? h("span", { class: "ago faded" }, ` (${ago(r.last)[0]})`) : null)
+      : r.stale ? h("span", { class: "ago faded" }, " · yesterday")
+      : r.away ? h("span", { class: "ago faded" }, ` ✈️ ${r.away}`) : null;
     return h("div", { class: "scrollx" }, h("table", { class: "brdt" },
       h("thead", {}, h("tr", {}, h("th", { class: "lt", colspan: 2 }, `${todayN} showed up today`), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
-      h("tbody", {}, sorted.map((p) => h("tr", { class: p.you ? "you" : "" }, h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name}`)),
-        wk.map((l) => h("td", { class: "sqc" }, h("i", { class: `sq${showed((p.week?.days || {})[l]) ? " on" : ""}` }))))))));
+      h("tbody", {}, [...fresh, ...dormant].map((r) => h("tr", { class: [r.you ? "you" : "", r.paused || r.quiet || r.stale ? "dim" : ""].join(" ").trim() },
+        h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name}`), note(r)),
+        wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); }))))));
   }
 
-  function decks(me, crew, decksBy) {
+  /** The Decks tab, as _decks_body: a group per deck I share, my bar and
+   *  each crewmate's with the same deck. */
+  function decks(me, crew, decksBy, today) {
     const mine = decksBy[me.uid] || [];
-    if (!mine.length) return h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks.");
+    if (!mine.length) return h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own.");
     const match = (a, b) => { const x = new Set(a.sig || []); return (b.sig || []).some((g) => x.has(g)); };
+    const days = [today, addDays(today, 1)];
     const bar = (name, d, isMe) => {
       const total = Math.max(d.total || 0, 1); const pct = (v) => Math.min(100, Math.round((100 * (v || 0)) / total));
-      return h("div", { class: `dr${isMe ? " me" : ""}`, title: `${(d.seen || 0).toLocaleString()} seen · ${(d.mature || 0).toLocaleString()} mature · ${(d.total || 0).toLocaleString()} total` },
-        h("span", { class: "dn" }, name), h("span", { class: "dtrack" }, h("i", { class: "fo", style: `left:${pct(d.seen)}%;width:${Math.max(0, pct(d.open) - pct(d.seen))}%` }),
+      const counts = `${(d.seen || 0).toLocaleString()} / ${(d.total || 0).toLocaleString()}${d.ret != null ? ` · ${Math.round(d.ret)}%` : ""}`;
+      const tip = [`${(d.seen || 0).toLocaleString()} seen`, `${(d.mature || 0).toLocaleString()} mature`, d.open != null ? `${Number(d.open).toLocaleString()} unlocked` : null,
+        `${(d.total || 0).toLocaleString()} total`, d.ret != null ? `${Number(d.ret).toFixed(1)}% retention, last 7 days` : null].filter(Boolean).join(" · ");
+      return h("div", { class: `dr${isMe ? " me" : ""}`, title: tip },
+        h("span", { class: "dn" }, name), h("span", { class: "dtrack" }, d.open != null ? h("i", { class: "fo", style: `left:${pct(d.seen)}%;width:${Math.max(0, pct(d.open) - pct(d.seen))}%` }) : null,
           h("i", { class: "fs", style: `width:${pct(d.seen)}%` }), h("i", { class: "fm", style: `width:${pct(d.mature)}%` })),
-        h("span", { class: "n" }, `${(d.seen || 0).toLocaleString()} / ${(d.total || 0).toLocaleString()}`));
+        h("span", { class: "n" }, h("span", {}, counts), d.today && days.includes(d.day) ? h("small", { class: "dd" }, `+${Number(d.today).toLocaleString()} today`) : null));
     };
     return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
       bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
-      h("p", { class: "muted small" }, "solid = mature · faded = seen · hatched = unlocked · % of each person's own copy"));
+      h("p", { class: "muted small dleg" }, "solid = mature · faded = seen · hatched = unlocked · % of each person’s own copy · hover for numbers"));
   }
 
-  /** A squad board, as _squads_html: plain ranks, no medals, no cheers;
-   *  these aren't necessarily people you know. */
+  /** A squad board, as _squads_html: one squad at a time behind a
+   *  switcher, plain ranks, no medals, no cheers; these aren't necessarily
+   *  people you know. Synced today with nothing studied yet sits under the
+   *  ranked, with dashes. */
   let squadsGot = null;  // {at, list, boards}: a sort redraws from these, not the network
-  async function squads(showUp, crewUids, onSort) {
+  const isoWeek = (iso) => {
+    const d = parseIso(iso); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow + 3);
+    const y = d.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
+    return `${y}-W${String(1 + Math.round(((d - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
+  };
+  async function squads(showUp, crewUids, pendingUids, onSort, refresh) {
+    const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
-      squadsGot = { at: Date.now(), list: got, boards: await Promise.all(got.map((q) => api("GET", `/squads/${q.id}`))) };
+      squadsGot = { at: Date.now(), list: got, boards: await Promise.all(got.map((q) => api("GET", `/squads/${q.id}?wk=${isoWeek(day)}`).catch(() => null))) };
     }
     const list = squadsGot.list;
-    if (!list.length) return h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads.");
+    const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
+    if (!list.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
+      h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads."));
+    let cur = store("dc-squad");
+    if (!list.some((q) => q.id === cur)) cur = list[0].id;
+    const sq = squadsGot.boards[list.findIndex((q) => q.id === cur)];
+    const sw = h("div", { class: "sqsw" }, list.map((q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name)), joinOrCreate);
+    if (!sq) return h("div", {}, sw, h("p", { class: "muted small" }, "Couldn’t load. Check your connection and Refresh."));
     const sort = store("dc-sort") || "reviews";
     const field = { reviews: "reviews", time: "studyTimeMs", retention: "accuracy", streak: "streak", week: "week" }[sort] || "reviews";
-    const day = todayLocal(), yday = addDays(day, -1);
-    const out = [];
-    for (const sq of squadsGot.boards) {
-      const rows = sq.rows || [];
-      const live = rows.filter((r) => r.day === day);
-      const rest = rows.filter((r) => r.day !== day).sort((x, y) => (y.day || "").localeCompare(x.day || ""));
-      if (showUp) live.sort((x, y) => (y.week || 0) - (x.week || 0) || x.name.localeCompare(y.name));
-      else live.sort((x, y) => (y[field] ?? -1) - (x[field] ?? -1));
-      const together = live.reduce((n, r) => n + (r.reviews || 0), 0);
-      let line = `${rows.length.toLocaleString()} in ${sq.name}` + (sq.open === false ? " · locked" : "");
-      if (live.length) line += showUp ? ` · ${live.length.toLocaleString()} showed up today` : ` · ${live.length.toLocaleString()} studying today · ${together.toLocaleString()} reviews together`;
-      const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
-        h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
-      const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
-      let n = 0;
-      const body = [...live, ...rest].map((r) => {
-        const you = r.uid === me.uid, today = r.day === day;
-        const note = you ? null : crewUids.has(r.uid) ? h("span", { class: "ago faded" }, " · crew") : null;
-        const when = today ? null : h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`);
-        const rank = !today ? "" : showUp || numberless(r) ? "✓" : `#${++n}`;
-        const cells = showUp ? [h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—")] : [
-          h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
-          h("td", { class: "n" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
-          h("td", { class: "n" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
-          h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"),
-          h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—")];
-        return h("tr", { class: [you ? "you" : "", today ? "" : "dim"].join(" ").trim() },
-          h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), note, when), cells);
-      });
-      out.push(h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
-        h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))));
+    const rows = sq.rows || [];
+    const zero = (r) => r.reviews === 0 && !r.studyTimeMs;
+    const live = rows.filter((r) => r.day === day && !zero(r));
+    const waitingToday = rows.filter((r) => r.day === day && zero(r));
+    const rest = rows.filter((r) => r.day !== day).sort((x, y) => (y.day || "").localeCompare(x.day || ""));
+    if (showUp) live.sort((x, y) => (y.week || 0) - (x.week || 0) || x.name.localeCompare(y.name));
+    else live.sort((x, y) => (y[field] ?? -1) - (x[field] ?? -1));
+    const together = live.reduce((n, r) => n + (r.reviews || 0), 0);
+    let line = `${rows.length.toLocaleString()} in ${sq.name}` + (sq.open === false ? " · locked" : "");
+    if (live.length) line += showUp ? ` · ${live.length.toLocaleString()} showed up today` : ` · ${live.length.toLocaleString()} studying today · ${together.toLocaleString()} reviews together`;
+    const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+      h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
+    const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
+    let n = 0;
+    const body = [...live, ...waitingToday, ...rest].map((r) => {
+      const you = r.uid === me.uid, today = r.day === day, nyet = today && zero(r);
+      const notes = [];
+      if (!you) {
+        if (crewUids.has(r.uid)) notes.push(h("span", { class: "ago faded" }, " · crew"));
+        else if (pendingUids.has(r.uid)) notes.push(h("span", { class: "ago faded" }, " · waiting"));
+      }
+      if (!today) notes.push(h("span", { class: "ago faded" }, ` · ${r.day === yday ? "yesterday" : "quiet"}`));
+      else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
+      const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
+      const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
+      const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
+        h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
+        h("td", { class: "n" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
+        h("td", { class: "n" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
+        h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"), wk7];
+      return h("tr", { class: [you ? "you" : "", today && !nyet ? "" : "dim"].join(" ").trim() },
+        h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), notes), cells);
+    });
+    // 3.6: the Squads tab's bingo card, as board.py bingo_card_html: the
+    // grid small, how many stamped, what's closest to a line. The Worker
+    // works it out with the add-on's own evaluate; never who stamped what.
+    let bingo = null;
+    if (sq.bingo && sq.bingoEv) {
+      const ev = sq.bingoEv, CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
+      const cells = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("i", { class: c === 4 ? (ev.middle.done ? "on" : "m") : (ev.squares[CELLS.indexOf(c)]?.done ? "on" : "") }));
+      const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
+      const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
+        : (ev.closest || []).length === 1 ? "one away from bingo" : `${(ev.closest || []).length} away from bingo`;
+      // K3: the card as a picture, for the group chat; never who stamped what
+      const at = (c) => (c === 4 ? { icon: sq.bingo.middle?.icon, done: !!ev.middle.done } : { icon: sq.bingo.squares?.[CELLS.indexOf(c)]?.icon, done: !!ev.squares[CELLS.indexOf(c)]?.done });
+      const card = () => {
+        const done = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => at(c).done);
+        const inLine = Array(9).fill(false);
+        for (const l of [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]) if (l.every((c) => done[c])) l.forEach((c) => { inLine[c] = true; });
+        Cards.open({ kind: "bingo", title: "Share our bingo", file: `due-crew-bingo-${String(sq.bingo.wk || isoWeek(day)).toLowerCase()}`, sizes: ["square"], switches: [],
+          data: { name: sq.name || "Our squad", week: String(Number(String(sq.bingo.wk || isoWeek(day)).split("W")[1]) || ""), icons: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => at(c).icon || ""),
+            done, inLine, stamps, state, shout: ev.lines ? "BINGO" : "Squad bingo" } });
+      };
+      bingo = h("div", { class: "bgcard" }, h("span", { class: "bgmini" }, cells),
+        h("span", { class: "bgt" }, h("b", {}, "Squad bingo"), h("span", { class: "muted" }, `${stamps} of 9 · ${state}`)),
+        h("span", { class: "muted small", title: ev.closest?.length ? `Closest line: ${ev.closest.join(", ")}` : "" }, "The whole card is in Anki · ",
+          h("button", { class: "linkish", onclick: card }, "Share ›")));
     }
-    return h("div", {}, out);
+    // the squad's own line, as the add-on's (its code lives only in Anki)
+    const acts = [];
+    if (sq.founder === me.uid) acts.push(h("button", { class: "linkish", onclick: async (e) => {
+      e.target.disabled = true;
+      try { await api("PATCH", `/squads/${sq.id}`, { open: sq.open === false }); squadsGot = null; refresh(); } catch { e.target.disabled = false; }
+    } }, sq.open === false ? "Open" : "Lock"));
+    const leave = h("button", { class: "linkish", onclick: async (e) => {
+      if (e.target.dataset.sure !== "1") { e.target.dataset.sure = "1"; e.target.textContent = `Leave ${sq.name}? Click again`; return; }
+      try { await api("DELETE", `/squads/${sq.id}/members/${me.uid}`); store("dc-squad", ""); squadsGot = null; refresh(); } catch { e.target.textContent = "Couldn’t leave. Try again."; }
+    } }, "Leave");
+    acts.push(leave);
+    const foot = h("div", { class: "sqline" }, acts.flatMap((a, i) => (i ? [" · ", a] : [a])));
+    if (!body.length) return h("div", {}, sw, bingo, h("p", { class: "muted small" }, "No one’s synced yet."), foot);
+    return h("div", {}, sw, bingo, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))), foot);
   }
 
   function shareText(people, today) {
@@ -895,8 +1073,16 @@ const Board = (() => {
     return `Due Crew · ${pretty(today)}: ${bits.join(" · ") || "showed up"}`;
   }
 
+  function shareWeek(people, today) {
+    const me = people.find((p) => p.you); const mon = Sched.monday(today);
+    const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
+    const a = weekAgg(me?.week?.days || {}, wk) || {};
+    const n = wk.filter((l) => showed((me?.week?.days || {})[l])).length;
+    const bits = [a.reviews != null ? `${a.reviews.toLocaleString()} reviews` : null, a.time ? fmtTime(a.time) : null, `${n} of ${wk.length} days`].filter(Boolean);
+    return `Due Crew · week of ${pretty(mon)}: ${bits.join(" · ")}`;
+  }
   const forget = () => { squadsGot = null; };  // a page load or Refresh reads them again
-  return { table, presence, decks, squads, shareText, ago, store, forget };
+  return { table, presence, decks, squads, shareText, shareWeek, ago, store, forget, showed, weekAgg };
 })();
 
 const todayLocal = () => today();
@@ -911,7 +1097,8 @@ async function home() {
   const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
-  const tabs = showUp ? [["today", "Crew"], ["decks", "Decks"], ["squads", "Squads"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"], ["squads", "Squads"]];
+  // board.py _head: the add-on's tabs, Plans included
+  const tabs = showUp ? [["today", "Crew"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]];
   let tab = Board.store("dc-tab") || "today";
   if (!tabs.some(([k]) => k === tab)) tab = "today";
   const pills = h("span", { class: "pills" });
@@ -919,24 +1106,88 @@ async function home() {
   const fetched = Date.now();
   const updated = h("span", { class: "muted" });
   async function draw() {
+    if (typeof drawFoot === "function") drawFoot();
     pills.replaceChildren(...tabs.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; Board.store("dc-tab", k); draw(); } }, l)));
     const mins = Math.floor((Date.now() - fetched) / 60000);
     updated.textContent = mins < 1 ? "Updated just now" : `Updated ${mins}m ago`;
-    if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}));
-    if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), draw)); }
-    panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw),
-      crew.length ? null : h("p", { class: "muted small" }, "Just you so far. Your crew shows up here once they add you back."),
-      waiting.length ? h("p", { class: "muted small" }, `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back.`) : null].filter(Boolean));
+    if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t));
+    if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw)); }
+    if (tab === "plans") return panel.replaceChildren(plansTab());
+    panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw), crew.length ? null : solo()].filter(Boolean));
   }
-  const shareBtn = h("button", { class: "linkish", onclick: async () => {
-    try { await navigator.clipboard.writeText(Board.shareText(people, t)); shareBtn.textContent = "Copied"; } catch { shareBtn.textContent = Board.shareText(people, t); }
-    setTimeout(() => { shareBtn.textContent = "Share today"; }, 1800);
-  } }, "Share today");
+  // board.py C5: until a friend adds me back, the invite is the board
+  function solo() {
+    const wait = !waiting.length ? "They show up here once they add you back." : waiting.length <= 2
+      ? `Waiting for ${waiting.map((f) => f.name).join(" and ")} to add you back.` : `Waiting for ${waiting.length} people to add you back.`;
+    return h("div", { class: "solo" }, h("b", {}, "Bring your crew"), h("span", { class: "muted" }, wait),
+      h("div", { class: "row" }, b.me.code ? h("span", { class: "mono codepill" }, spaced(b.me.code)) : null,
+        b.me.code ? h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null,
+        h("button", { class: "linkish", onclick: () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } } }, "Got a code?")));
+  }
+  // 3.5.0's Plans tab, as far as the site can show it: each plan I follow,
+  // on track or behind; the day-by-day lives on its page and in Anki
+  function plansTab() {
+    if (!followed.length) return h("div", { class: "solo" }, h("b", {}, "Following no plans"),
+      h("span", { class: "muted" }, "A plan opens a deck's cards on their days. Paste a plan's code in Got a code?, find one in the library, or make one in Anki: Tools › Due Crew › Make a plan from a deck."),
+      h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
+    return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
+      h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true))),
+      h("p", { class: "muted small" }, "Today’s cards open in Anki each morning. ", link("/plans", "All plans ›")));
+  }
+  // board.py's footer: Crew ▾ and who I'm waiting on; Refresh as a quiet icon
+  const footLeft = h("span", { class: "fl" });
+  function drawFoot() {
+    const items = [["Friends…", () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } }]];
+    if (tab === "today" && !showUp) items.push(["Share today", () => share(Board.shareText(people, t))]);
+    if (tab === "week" || (showUp && tab === "today")) items.push(["Share the week", () => share(Board.shareWeek(people, t))]);
+    if (!showUp) items.push(["Picture of today…", () => weekCard(true)]);
+    items.push(["Picture of my week…", () => weekCard()]);
+    if (tab === "decks") items.push(["Shared decks…", () => { crewBtn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { crewBtn.textContent = "Crew ▾"; }, 2400); }]);
+    const crewBtn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
+      document.querySelectorAll(".crew-pop").forEach((x) => x.remove());
+      const pop = h("div", { class: "cheer-pop crew-pop", role: "menu" }, items.map(([l, go]) => h("button", { class: "linkish", role: "menuitem", onclick: () => { pop.remove(); go(); } }, l)));
+      e.currentTarget.after(pop);
+      setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
+    } }, "Crew ▾");
+    footLeft.replaceChildren(crewBtn, waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
+      onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null);
+  }
+  const share = async (text) => {
+    try { await navigator.clipboard.writeText(text); updated.textContent = "Copied"; } catch { updated.textContent = text; }
+    setTimeout(() => { updated.textContent = "Updated just now"; }, 1800);
+  };
+  const followed = plansR.plans.filter((p) => p.following);
   await draw();
   const my = b.me.week?.days || {};
+  // K1: my week as a picture; a number my Privacy switches keep home isn't in my week to draw.
+  // K7: today's is the same card with today's numbers.
+  function weekCard(oneDay) {
+    const lv = heatLevel(logR.days || {});
+    const sofar = [];
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const l = addDays(mon, i), d = my[l], fut = l > t;
+      if (!fut) sofar.push(l);
+      const on = !fut && Board.showed(d);
+      return { label: "MTWTFSS"[i], future: fut, today: l === t, studied: on,
+        lvl: !on ? 0 : d.studyTimeMs != null ? Math.max(1, lv(d.studyTimeMs / 60000)) : 3 };
+    });
+    const span = oneDay ? [t] : sofar;
+    const a = Board.weekAgg(my, span) || {};
+    const withMe = crew.filter((f) => span.some((l) => Board.showed((f.week?.days || {})[l]))).length;
+    const hidden = "kept home in Privacy";
+    const dd = parseIso(t);
+    Cards.open({ kind: oneDay ? "today" : "week", title: oneDay ? "Share today" : "Share my week", file: oneDay ? `due-crew-${t}` : `due-crew-week-${mon}`, sizes: ["story", "link"],
+      data: { one: !!oneDay, range: oneDay ? `${DAYS[dd.getUTCDay()]} ${Cards.short(t)}` : `${Cards.short(mon)} – ${Cards.short(addDays(mon, 6))}`, days,
+        studied: oneDay ? (days.find((x) => x.today)?.studied ? 1 : 0) : days.filter((x) => x.studied).length, elapsed: sofar.length,
+        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe },
+      switches: [
+        { k: "time", label: "Time studied", off: a.time == null ? hidden : "" },
+        { k: "reviews", label: "Reviews and new cards", off: a.reviews == null ? hidden : "" },
+        { k: "streak", label: "Streak", off: a.streak == null ? hidden : !a.streak ? "none yet" : "" },
+        { k: "crew", label: "How many crew studied too", off: withMe ? "" : oneDay ? "none yet today" : "none yet this week" }] });
+  }
   const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
   const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
-  const followed = plansR.plans.filter((p) => p.following);
   // 3.4 review, H1 / 3.5, H: my code to give, and any code I was sent, in the rail
   const friends = h("section", { class: "panel" }, h("h4", {}, "Friends"),
     h("div", { class: "row" }, h("span", { class: "small" }, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
@@ -947,17 +1198,89 @@ async function home() {
       h("section", { class: "brd" },
         h("div", { class: "top2" }, pills),
         panel,
-        h("div", { class: "foot" },
-          h("span", {}, shareBtn),
-          h("span", {}, updated, " · ", h("button", { class: "linkish", onclick: () => route() }, "Refresh")))),
+        h("div", { class: "foot" }, footLeft,
+          h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻")))),
       h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
         yearHeat(logR.days || {}), h("small", { class: "muted" }, "One square a day, by minutes. Point at a day for its numbers."))),
     h("aside", { class: "rail" },
-      h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
+      yearNudge(logR.days || {}, t),
+      h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
+      duePanel(followed, sett?.settings || {}, t),
       sinceYouWereHere(b, crew, t),
       followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
       friends)));
+  // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
+  const want = new URLSearchParams(location.search).get("card");
+  if (want === "today" || want === "week") {
+    history.replaceState(history.state, "", "/home");
+    here = "/home";
+    weekCard(want === "today");
+  }
+}
+
+/** Due (mock "My List"), as the site can show it: today's dates from the
+ *  plans I follow (my own numbers when I share them), their authors' lines,
+ *  and my own to-dos from my settings. Ticking and adding happen in Anki,
+ *  which counts the cards; this is the look from a phone. */
+function duePanel(followed, set, t) {
+  if (set.due_show === false) return null;
+  const tm = addDays(t, 1);
+  const items = Array.isArray(set.due_items) ? set.due_items.filter((x) => x && typeof x.t === "string") : [];
+  const ticks = set.due_ticks && typeof set.due_ticks === "object" ? set.due_ticks : {};
+  const rows = [];
+  const tomorrow = [];
+  for (const p of followed.filter((x) => !x.following?.paused)) {
+    const prog = p.following?.progress || {};
+    const shift = p.following?.shift || 0;
+    const skipped = new Set(p.following?.skipped || []);
+    for (const u of Sched.units(p.doc)) {
+      if (skipped.has(u.id)) continue;
+      const day = shift ? addDays(u.opens, shift) : u.opens;
+      if (day === tm) tomorrow.push(u.name);
+      if (day !== t) continue;
+      const pr = prog[u.id];
+      const lines = (u.todo || []).map((x, i) => h("span", { class: "small duel" },
+        h("i", { class: `dbx${ticks[`${p.id}:${u.id}:${i}`] ? " on" : ""}`, "aria-hidden": "true" }),
+        h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[x.k] || "Do"), " · ",
+        x.url && /^https:\/\//.test(x.url) ? h("a", { href: x.url, target: "_blank", rel: "noopener" }, x.t) : x.t));
+      const done = pr && pr[2] && pr[1] >= pr[2];
+      rows.push(h("div", { class: "duer" }, h("i", { class: `dbx auto${done ? " on" : ""}`, "aria-hidden": "true" }),
+        h("span", {}, h("b", {}, u.name), h("small", { class: "muted" }, p.name), lines),
+        h("small", { class: "muted" }, pr && pr[2] ? `${pr[1].toLocaleString()} / ${pr[2].toLocaleString()}` : "")));
+    }
+  }
+  for (const x of items.filter((x) => x.d === t)) {
+    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${x.done ? " on" : ""}`, "aria-hidden": "true" }),
+      h("span", { class: x.done ? "muted" : "" }, x.t), h("small", {}, "")));
+  }
+  for (const x of items.filter((x) => x.d === tm && !x.done)) tomorrow.push(x.t);
+  const behind = items.filter((x) => x.d && x.d < t && !x.done).length;
+  if (!rows.length && !behind && !tomorrow.length) return null;
+  return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
+    behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
+    rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
+    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null,
+    h("small", { class: "muted" }, "Tick and add in Anki, which counts your cards."));
+}
+
+/** K6: 1 December – 7 January, the year's card opens the rail, once a
+ *  season per browser ("Not now" hides it). In January it's last year's. */
+function yearNudge(days, t) {
+  const [y, m, d] = t.split("-").map(Number);
+  const yr = m === 12 ? y : m === 1 && d <= 7 ? y - 1 : 0;
+  if (!yr || !Object.keys(days).some((k) => k.startsWith(`${yr}-`))) return null;
+  const key = `dc-year-nudge-${yr}`;
+  try { if (localStorage.getItem(key)) return null; } catch { /* no storage: show it */ }
+  const data = yearData(days, String(yr));
+  if (!data.studied) return null;
+  const box = h("section", { class: "panel ynudge" },
+    h("h4", {}, `Your ${yr} in Anki`, h("button", { class: "linkish muted", onclick: () => { try { localStorage.setItem(key, "1"); } catch { /* fine */ } box.remove(); } }, "✕ Not now")),
+    h("div", { class: "ymini", "aria-hidden": "true" }, data.cells.map((c) => h("i", { class: c.out ? "out" : c.pre || c.fut ? "" : `l${c.lvl}` }))),
+    h("span", { class: "small" }, h("b", {}, `${data.studied.toLocaleString()} day${data.studied === 1 ? "" : "s"}`),
+      h("span", { class: "muted" }, ` · ${Math.round(data.minutes / 60).toLocaleString()} hours${data.streak ? ` · longest streak ${data.streak}` : ""}`)),
+    h("div", {}, h("button", { onclick: () => openYearCard(days, String(yr)) }, "Make the card")));
+  return box;
 }
 
 /** 3.5, H: what today holds, from the plans I follow and my week so far. */
@@ -1052,15 +1375,48 @@ function luckForm(f, done) {
 
 /** A year of my log, a square a day (Monday at the top), darker with more
  *  minutes; days before my log began are dashed. */
+/** K2: my year in Anki, from my log: the calendar year, Monday-first
+ *  columns, days before the log dashed. */
+function yearData(days, y) {
+  const t = today(), jan1 = `${y}-01-01`, dec31 = `${y}-12-31`;
+  const logged = Object.keys(days).sort();
+  const lv = heatLevel(days);
+  const did = (d) => !!days[d] && !!(days[d][0] || days[d][1]);
+  const cells = [];
+  for (let d = Sched.monday(jan1); d <= addDays(Sched.monday(dec31), 6); d = addDays(d, 1)) {
+    cells.push(d < jan1 || d > dec31 ? { out: true } : d < (logged[0] || t) ? { pre: true } : d > t ? { fut: true } : { lvl: did(d) ? Math.max(1, lv(days[d][0])) : 0 });
+  }
+  const mine = Object.keys(days).filter((d) => d >= jan1 && d <= dec31 && d <= t).sort();
+  let streak = 0, run = 0, prev = null, best = null;
+  for (const d of mine) {
+    if (!did(d)) { run = 0; prev = d; continue; }
+    run = prev && addDays(prev, 1) === d && run ? run + 1 : 1; prev = d;
+    streak = Math.max(streak, run);
+    if (!best || days[d][1] > best.n) best = { n: days[d][1], day: Cards.short(d) };
+  }
+  const yr = mine.map((d) => days[d]);
+  return { year: y, studied: mine.filter(did).length, since: logged[0] > jan1 ? Cards.short(logged[0]) : "",
+    cols: cells.length / 7, cells, minutes: yr.reduce((a, r) => a + r[0], 0), reviews: yr.reduce((a, r) => a + r[1], 0), streak, best: best && best.n ? best : null };
+}
+function openYearCard(days, y) {
+  Cards.open({ kind: "year", title: "Share my year", file: `due-crew-${y}`, sizes: ["story"], data: yearData(days, y),
+    switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" }, { k: "best", label: "Biggest day" }] });
+}
+
+/** A day's shade by minutes (0–4), against my own log's quarters. */
+function heatLevel(days) {
+  const mins = Object.values(days).map((r) => r[0]).filter((m) => m > 0).sort((a, c) => a - c);
+  const cut = [0.25, 0.5, 0.75].map((q) => mins[Math.floor(q * (mins.length - 1))] || 0);
+  return (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
+}
+
 function yearHeat(days) {
   const t = today();
   const lastMon = Sched.monday(t);
   const first = addDays(lastMon, -52 * 7);
   const logged = Object.keys(days).sort();
   const start = logged[0] || t;
-  const mins = Object.values(days).map((r) => r[0]).filter((m) => m > 0).sort((a, c) => a - c);
-  const cut = [0.25, 0.5, 0.75].map((q) => mins[Math.floor(q * (mins.length - 1))] || 0);
-  const level = (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
+  const level = heatLevel(days);
   const cells = [];
   const months = [];
   let lastLabel = -9;
@@ -1272,11 +1628,11 @@ async function logPage() {
   const logged = Object.keys(days).sort();
   const followed = plansR.plans.filter((p) => p.following);
   const wret = ret(week);
+  const yearCard = () => openYearCard(days, t.slice(0, 4));
+
   const r30 = ret(studied30);
   page(
-    h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Your log"),
-      logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
-    h("p", { class: "muted" }, "Only you see this. It fills in from Anki's syncs."),
+    phead("Your log", "Only you see this. It fills in from Anki's syncs.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
     h("div", { class: "tiles" },
       tile(`${week.filter(([, r]) => r[0] || r[1]).length} of 7`, "days this week"),
       tile(hm(sum(week, 0)), "studied", `last week by ${byDay}: ${hm(sum(lastSoFar, 0))}`),
@@ -1284,7 +1640,8 @@ async function logPage() {
       tile(sum(week, 2).toLocaleString(), "new cards", `by ${byDay}: ${sum(lastSoFar, 2).toLocaleString()}`),
       tile(wret === null ? "—" : `${wret.toFixed(1)}%`, "retention"),
       tile(`${studied30.length} of 30`, "days studied, last 30")),
-    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`)),
+    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`,
+      logged.length ? [" · ", h("button", { class: "linkish", onclick: yearCard }, `Share my ${t.slice(0, 4)} ›`)] : null)),
       yearHeat(days), logged.length ? h("small", { class: "muted" }, `Your log starts ${pretty(logged[0])}, when Anki first sent it.`) : h("small", { class: "muted" }, "Nothing yet: Anki sends it with a full sync.")),
     h("div", { class: "agrid2", style: "margin-top:12px" },
       h("section", { class: "panel" }, h("h4", {}, "This week and last", pills), pairsBox),
@@ -1335,12 +1692,13 @@ function hbars(rows, grey) {
 const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 
 /** The admin's account lookup: one person at a time (never a list of
- *  everyone, never how anyone studies). */
-function peoplePanel() {
+ *  everyone, never how anyone studies), with sign-in help, a note of mine
+ *  and what I've done there (mock "Admin, grown up", A3, A5). */
+function peoplePanel(nav) {
   const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
   const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
   const offset = (m) => (m === null || m === undefined ? "" : ` · UTC${m < 0 ? "−" : "+"}${Math.floor(Math.abs(m) / 60)}${Math.abs(m) % 60 ? `:${String(Math.abs(m) % 60).padStart(2, "0")}` : ""}`);
-  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code or a uid", "aria-label": "Look up an account", style: "flex:1 1 220px" });
+  const q = h("input", { type: "search", placeholder: "An email, a name, a friend code, a squad code or a uid", "aria-label": "Look up an account or a squad", style: "flex:1 1 220px" });
   const hits = h("div", { class: "hits" });
   const one = h("div");
   const status = h("p", { class: "muted small", role: "status" });
@@ -1349,19 +1707,110 @@ function peoplePanel() {
     one.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
     let p;
     try { p = await api("GET", `/admin/people/${encodeURIComponent(uid)}`); } catch { one.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that account.")); return; }
-    const copyBtn = h("button", { class: "ghost", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
+    const base = `/admin/people/${encodeURIComponent(p.uid)}`;
+    const copyBtn = h("button", { class: "quiet", onclick: () => copy(p.uid, copyBtn) }, "Copy uid");
     const outStatus = h("span", { class: "muted small", role: "status" });
+    const act = (label, method, path, done, cls = "quiet") => {
+      const b = h("button", { class: cls, onclick: async () => {
+        b.disabled = true; outStatus.textContent = "…";
+        try { const r = await api(method, path); outStatus.textContent = done(r); setTimeout(() => open(p.uid), 1200); }
+        catch (e) { outStatus.textContent = e.status === 502 ? "The mail didn't go. Try again." : "That didn't work."; b.disabled = false; }
+      } }, label);
+      return b;
+    };
+
+    // sign-in help: Due Crew has no passwords; these are its resets
+    const lim = p.limits;
+    const limLine = lim.codesHour || lim.codesDay || lim.failsDay
+      ? `${lim.codesHour} code${lim.codesHour === 1 ? "" : "s"} this hour, ${lim.codesDay} today, ${lim.failsDay} wrong today`
+      : "No codes asked for today.";
+    const newEmail = h("input", { type: "email", placeholder: "their new address", "aria-label": "New email", style: "flex:1 1 200px" });
+    const emailStatus = h("span", { class: "muted small", role: "status" });
+    const emailBox = h("div", { class: "stack", hidden: true },
+      h("div", { class: "row" }, newEmail, h("button", { onclick: async (e) => {
+        e.target.disabled = true; emailStatus.textContent = "…";
+        try { await api("PUT", `${base}/email`, { email: newEmail.value }); open(p.uid); }
+        catch (err) {
+          e.target.disabled = false;
+          emailStatus.textContent = err.body?.error === "taken" ? "Another account has that address." : err.body?.error === "same" ? "That's their address now."
+            : err.body?.error === "bad_email" ? "That isn't an email address." : "That didn't work.";
+        }
+      } }, "Move it"), emailStatus),
+      h("small", { class: "muted" }, "Both addresses get a line. It moves the first time they sign in with the new one, within a week; until then nothing changes."));
+    const help = h("section", { class: "box" }, h("h4", {}, "Sign-in help", h("small", { class: "muted" }, "no passwords: these are the resets")),
+      h("div", { class: "stack" }, act("Email them a fresh code", "POST", `${base}/code`, () => "Sent. It works for 10 minutes.", ""),
+        h("small", { class: "muted" }, "For someone at the code box whose code never came: a new one, past the limits. You never see it.")),
+      h("div", { class: "sep" }, h("div", { class: "row", style: "justify-content:space-between" }, h("span", {}, "Limits"), h("span", { class: lim.codesHour >= 10 || lim.failsDay >= 20 ? "warn" : "muted" }, limLine)),
+        act("Clear their sign-in limits", "POST", `${base}/limits`, () => "Cleared. They can ask for a code again.")),
+      h("div", { class: "sep" },
+        p.emailChange
+          ? h("div", { class: "row", style: "justify-content:space-between" }, h("span", {}, "Moving to ", h("b", {}, p.emailChange.email), h("small", { class: "muted" }, ` · started ${when(p.emailChange.at)}`)),
+            act("Stop", "DELETE", `${base}/email`, () => "Stopped."))
+          : h("button", { class: "quiet", style: "justify-self:start", onclick: () => { emailBox.hidden = !emailBox.hidden; if (!emailBox.hidden) newEmail.focus(); } }, "Change their email…"),
+        emailBox));
+
+    // my note, and what's been done here
+    const note = h("textarea", { rows: 4, maxlength: 2000, "aria-label": "Your note on this account", placeholder: "What you told them, what to check next time…" });
+    note.value = p.note?.text || "";
+    const noteStatus = h("small", { class: "muted", role: "status" }, p.note ? `Saved ${seen(p.note.at)}` : "Only you see it. It goes with the account.");
+    let saved = note.value;
+    note.addEventListener("blur", async () => {
+      if (note.value === saved) return;
+      try { await api("PUT", `${base}/note`, { text: note.value }); saved = note.value; noteStatus.textContent = "Saved."; }
+      catch { noteStatus.textContent = "Couldn't save the note."; }
+    });
+    const notes = h("section", { class: "box" }, h("h4", {}, "Your note"), note, noteStatus);
+    const done = h("section", { class: "box" }, h("h4", {}, "What's been done here"),
+      p.actions.length ? h("div", { class: "alog" }, p.actions.map((a) => h("div", {}, h("span", {}, a.action, a.squadName ? h("span", { class: "muted" }, ` · ${a.squadName}`) : null), h("small", { class: "muted" }, seen(a.at)))))
+        : h("p", { class: "muted small" }, "Nothing yet."));
+
+    // F1-F3: who's on their crew, shut until asked for (each look is in the audit log);
+    // one side of a friendship can go on their request, never one be made
+    const crewList = h("div", { class: "alog" });
+    const crewSay = h("small", { class: "muted", role: "status" }, "Names only, never how anyone studies. Opening it is logged.");
+    const month = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
+    async function showCrew(btn) {
+      btn.disabled = true;
+      let r;
+      try { r = await api("GET", `${base}/crew`); } catch { btn.disabled = false; crewSay.textContent = "That didn't load."; return; }
+      btn.remove();
+      crewSay.textContent = r.crew.length ? `${r.crew.length} ${r.crew.length === 1 ? "person" : "people"} · looked at now, in the audit log` : "No one on either side.";
+      crewList.replaceChildren(...r.crew.map((c) => {
+        const what = c.mine && c.theirs ? `crew since ${month(Math.max(c.mine, c.theirs))}`
+          : c.mine ? `${p.name} added them ${month(c.mine)}; not added back` : `added ${p.name} ${month(c.theirs)}; ${p.name} hasn't added back`;
+        const conf = h("div", { class: "confirm", hidden: true });
+        const ask = (side, label, says) => h("button", { class: "linkish warn", onclick: () => {
+          conf.replaceChildren(h("b", {}, `${label}?`), h("span", {}, says),
+            h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { conf.hidden = true; } }, "Cancel"),
+              h("button", { class: "danger", onclick: async (e) => {
+                e.target.disabled = true;
+                try { await api("DELETE", `${base}/crew/${c.uid}?side=${side}`); crewSay.textContent = `Done. ${p.name} got one email saying so.`; conf.hidden = true; showCrew(h("button")); }
+                catch { e.target.disabled = false; crewSay.textContent = "That didn't work."; }
+              } }, "Remove")));
+          conf.hidden = false;
+        } }, `${label}…`);
+        return h("div", { class: "crow" },
+          h("span", {}, c.emoji ? `${c.emoji} ` : "", h("b", {}, c.name), h("small", { class: "muted" }, ` · ${what}`)),
+          h("span", { class: "row" }, h("button", { class: "linkish", onclick: () => nav.person(c.uid) }, "Open"),
+            c.mine ? ask("mine", `Take ${c.name} off ${p.name}'s list`, `What ${p.name}'s own Remove does: ${c.name} stops showing up for them. ${p.name} gets one email saying so.`) : null,
+            c.theirs ? ask("theirs", `Take ${p.name} off ${c.name}'s list`, `For someone who added ${p.name} and shouldn't have: ${p.name} drops off ${c.name}'s list. ${c.name} isn't emailed; ${p.name} gets one email saying so.`) : null),
+          conf);
+      }));
+    }
+    const crewBox = h("section", { class: "box" }, h("h4", {}, "Crew", h("button", { class: "quiet", onclick: (e) => showCrew(e.currentTarget) }, "Show who's on their crew")),
+      crewList, crewSay);
+
     const confirmBox = h("div", { class: "confirm", hidden: true });
     const typed = h("input", { type: "email", placeholder: p.email, "aria-label": "Type their email to confirm", style: "width:100%" });
     const delBtn = h("button", { class: "danger", onclick: async () => {
       delBtn.disabled = true;
-      try { await api("DELETE", `/admin/people/${encodeURIComponent(p.uid)}`, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
+      try { await api("DELETE", base, { email: typed.value }); one.replaceChildren(h("p", { class: "status" }, `${p.name}'s account is deleted.`)); hits.replaceChildren(); }
       catch (e) { delBtn.disabled = false; outStatus.textContent = e.body?.error === "confirm" ? "That isn't their email." : "That didn't work."; }
     } }, "Delete");
     confirmBox.append(h("b", {}, `Delete ${p.name}'s account?`),
       h("span", {}, "Everything of theirs goes, as when they delete it themselves. It can't be undone, and they aren't told."),
       h("label", {}, h("span", {}, "Type ", h("b", {}, p.email), " to confirm"), typed),
-      h("div", { class: "row" }, h("button", { class: "ghost", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { confirmBox.hidden = true; } }, "Cancel"), delBtn));
     const list = (title, rows) => h("div", { class: "plist" }, h("span", { class: "lbl" }, title),
       rows.length ? rows : h("span", { class: "muted small" }, "None"));
     one.replaceChildren(h("div", { class: "person" },
@@ -1378,17 +1827,18 @@ function peoplePanel() {
         h("div", { class: "tiles" }, tile(p.crew.mutual, "crew, mutual"), tile(p.crew.addedNotBack, "added, not back"),
           tile(p.crew.addedThem, "added them, not back"), tile(p.squads.length, "squads"), tile(p.following.length, "plans followed"),
           tile(p.made.length, "plans made"), tile(p.crew.muted, "muted"))),
+      crewBox,
+      h("div", { class: "agrid3" }, help, notes, done),
       h("div", { class: "agrid2" },
-        list("Squads", p.squads.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
+        list("Squads", p.squads.map((x) => h("div", {}, h("button", { class: "linkish", onclick: () => nav.squad(x.id) }, x.name),
+          h("small", { class: "muted" }, `${x.members} member${x.members === 1 ? "" : "s"}${x.founder ? " · founder" : ""}`)))),
         list("Plans", [...p.made.map((x) => h("div", {}, h("span", {}, x.name, " ", h("span", { class: "madetag" }, "made")),
           h("small", { class: "muted" }, `${x.audience === "squad" ? "squad" : "code"} · ${x.followers} following${x.listed ? " · in the library" : ""}`))),
           ...p.following.map((x) => h("div", {}, h("span", {}, x.name), h("small", { class: "muted" }, `following · ${x.owner}'s${x.paused ? " · paused" : ""}${x.listed ? " · in the library" : ""}`)))])),
       h("div", { class: "row" },
-        h("button", { class: "ghost", onclick: async () => {
-          try { const r = await api("POST", `/admin/people/${encodeURIComponent(p.uid)}/signout`); outStatus.textContent = `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`; }
-          catch { outStatus.textContent = "That didn't work."; }
-        } }, "Sign out everywhere"), copyBtn, h("span", { style: "flex:1" }),
-        h("button", { class: "danger ghost", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
+        act("Sign out everywhere", "POST", `${base}/signout`, (r) => `Signed out of ${r.ended} place${r.ended === 1 ? "" : "s"}.`),
+        copyBtn, h("span", { style: "flex:1" }),
+        h("button", { class: "danger", onclick: () => { confirmBox.hidden = false; typed.focus(); } }, "Delete account…")),
       outStatus, confirmBox));
   }
   async function look() {
@@ -1398,16 +1848,161 @@ function peoplePanel() {
     status.textContent = "Looking…";
     let r;
     try { r = await api("GET", `/admin/people?q=${encodeURIComponent(text)}`); } catch { status.textContent = "That didn't work."; return; }
-    status.textContent = r.people.length ? `${r.people.length} match${r.people.length === 1 ? "" : "es"}` : "No one found.";
-    hits.replaceChildren(...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
+    const n = r.people.length + (r.squad ? 1 : 0);
+    status.textContent = n ? `${n} match${n === 1 ? "" : "es"}` : "No one found.";
+    const sq = r.squad ? [h("button", { class: "hit", onclick: () => nav.squad(r.squad.id) },
+      h("span", {}, h("b", {}, r.squad.name), h("small", { class: "muted" }, ` · squad · ${r.squad.members} member${r.squad.members === 1 ? "" : "s"}`)), h("small", { class: "muted" }, "Open ›"))] : [];
+    hits.replaceChildren(...sq, ...r.people.map((x) => h("button", { class: "hit", onclick: (e) => {
       for (const b of hits.children) b.classList.toggle("on", b === e.currentTarget); open(x.uid);
     } }, h("span", {}, `${x.emoji ? x.emoji + " " : ""}`, h("b", {}, x.name), h("small", { class: "muted" }, ` · ${x.email} · joined ${when(x.joined)}`)),
       h("small", { class: "muted" }, x.version || ""))));
-    if (r.people.length === 1) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+    if (r.people.length === 1 && !r.squad) { hits.firstChild.classList.add("on"); open(r.people[0].uid); }
+    else if (r.squad && !r.people.length) nav.squad(r.squad.id);
   }
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
-  return h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
+  const el = h("section", { class: "panel people" }, h("h4", {}, "Look up an account", h("span", { class: "muted" }, "one at a time")),
     h("div", { class: "row" }, q, h("button", { onclick: look }, "Look up")), status, hits, one);
+  return { el, open: (uid) => { q.value = uid; hits.replaceChildren(); status.textContent = ""; open(uid); } };
+}
+
+/** One squad at a time, by its code or from an account (mock "Admin,
+ *  grown up", A4): its members by name, and the founder's tools done from
+ *  here. The founder gets an email for each. */
+function squadPanel(nav) {
+  const el = h("section", { class: "panel people" });
+  const when = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const seen = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  const q = h("input", { type: "search", placeholder: "A squad's code", "aria-label": "A squad's code", style: "flex:1 1 200px" });
+  const status = h("p", { class: "muted small", role: "status" });
+  const body = h("div");
+  async function find() {
+    status.textContent = "Looking…";
+    try {
+      const r = await api("GET", `/admin/people?q=${encodeURIComponent(q.value.trim())}`);
+      if (r.squad) { status.textContent = ""; open(r.squad.id); } else status.textContent = "No squad has that code.";
+    } catch { status.textContent = q.value.trim().length < 3 ? "That's not a squad code." : "That didn't work."; }
+  }
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") find(); });
+  async function open(id) {
+    body.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+    let s;
+    try { s = await api("GET", `/admin/squads/${encodeURIComponent(id)}`); } catch { body.replaceChildren(h("p", { class: "status bad" }, "Couldn't open that squad.")); return; }
+    const base = `/admin/squads/${encodeURIComponent(s.id)}`;
+    const out = h("span", { class: "muted small", role: "status" });
+    const fail = (e) => (e.body?.error === "not_member" ? "They aren't in the squad." : e.body?.error === "confirm" ? "That isn't its name." : e.body?.error === "bad_name" ? "Give it a name, up to 24 characters." : "That didn't work.");
+    const patch = async (b, btn) => {
+      btn.disabled = true;
+      try { await api("PATCH", base, b); open(s.id); } catch (e) { btn.disabled = false; out.textContent = fail(e); }
+    };
+
+    // a new code: asks once, shows the code once
+    const codeBox = h("div", { class: "confirm", hidden: true },
+      h("b", {}, `New code for ${s.name}?`),
+      h("span", {}, "The old code stops working. Everyone in it stays; anyone with the old code can't join. The founder gets the new one by email."),
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { codeBox.hidden = true; } }, "Cancel"),
+        h("button", { onclick: async (e) => {
+          e.target.disabled = true;
+          try {
+            const r = await api("POST", `${base}/code`);
+            codeBox.replaceChildren(h("span", { class: "bigcode" }, `${r.code.slice(0, 4)} ${r.code.slice(4)}`),
+              h("small", { class: "muted" }, r.told ? `Shown once. ${s.founderName} has it by email too.` : "Shown once, and the email to the founder didn't go: send it yourself."));
+          } catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+        } }, "Make a new code")));
+    const nameIn = h("input", { value: s.name, maxlength: 24, "aria-label": "Squad name", style: "flex:1 1 200px" });
+    const renameBox = h("div", { class: "row", hidden: true }, nameIn, h("button", { onclick: (e) => patch({ name: nameIn.value }, e.target) }, "Rename"));
+    const founderSel = h("select", { "aria-label": "New founder" }, s.members.filter((m) => m.uid !== s.founder).map((m) => h("option", { value: m.uid }, m.name)));
+    const founderBox = h("div", { class: "row", hidden: true }, founderSel, h("button", { onclick: (e) => patch({ founder: founderSel.value }, e.target) }, "Make founder"));
+    const typed = h("input", { placeholder: s.name, "aria-label": "Type the squad's name to confirm", style: "width:100%" });
+    const delBox = h("div", { class: "confirm", hidden: true }, h("b", {}, `Delete ${s.name}?`),
+      h("span", {}, "The squad goes for everyone. Friendships stay. The founder is told. It can't be undone."),
+      h("label", {}, h("span", {}, "Type ", h("b", {}, s.name), " to confirm"), typed),
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { delBox.hidden = true; } }, "Cancel"),
+        h("button", { class: "danger", onclick: async (e) => {
+          e.target.disabled = true;
+          try { await api("DELETE", base, { name: typed.value }); body.replaceChildren(h("p", { class: "status" }, `${s.name} is deleted.`)); }
+          catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+        } }, "Delete")));
+    const shut = () => { for (const b of [codeBox, renameBox, founderBox, delBox]) b.hidden = true; };
+    const toggle = (box, focus) => () => { const was = box.hidden; shut(); box.hidden = !was; if (!box.hidden && focus) focus.focus(); };
+
+    const member = (m) => {
+      const why = h("input", { placeholder: "Why (only the founder sees it; optional)", maxlength: 300, "aria-label": `Why remove ${m.name}`, style: "flex:1 1 200px" });
+      const rm = h("div", { class: "confirm", hidden: true }, h("b", {}, `Remove ${m.name}?`),
+        h("span", {}, "They leave the squad and can't rejoin with its code. The founder is told."), why,
+        h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { rm.hidden = true; } }, "Cancel"),
+          h("button", { class: "danger", onclick: async (e) => {
+            e.target.disabled = true;
+            try { await api("POST", `${base}/remove/${encodeURIComponent(m.uid)}`, { why: why.value }); open(s.id); }
+            catch (err) { e.target.disabled = false; out.textContent = fail(err); }
+          } }, "Remove")));
+      return h("div", { class: "mrow" },
+        h("span", {}, m.emoji ? `${m.emoji} ` : "", h("b", {}, m.name), h("small", { class: "muted" }, m.uid === s.founder ? " · founder" : ` · joined ${when(m.joined)}`)),
+        h("span", { class: "acts" }, h("button", { class: "linkish", onclick: () => nav.person(m.uid) }, "Open"),
+          m.uid === s.founder ? null : h("button", { class: "linkish warn", onclick: () => { rm.hidden = !rm.hidden; } }, "Remove…")),
+        rm);
+    };
+    body.replaceChildren(h("div", { class: "person" },
+      h("div", { class: "who" }, h("div", {}, h("b", {}, s.name), h("small", { class: "muted" }, ` · ${s.open ? "open to join" : "closed to new members"}${s.newCode ? " · has a new code" : ""}`))),
+      h("dl", { class: "kv" },
+        h("dt", {}, "Founder"), h("dd", {}, h("button", { class: "linkish", onclick: () => nav.person(s.founder) }, s.founderName)),
+        h("dt", {}, "Made"), h("dd", {}, `${when(s.created)} · ${s.members.length} member${s.members.length === 1 ? "" : "s"}${s.removed ? ` · ${s.removed} removed` : ""}`)),
+      h("div", { class: "row" },
+        h("button", { class: "quiet", onclick: toggle(codeBox) }, "New code…"),
+        h("button", { class: "quiet", onclick: (e) => patch({ open: !s.open }, e.target) }, s.open ? "Close joins" : "Open joins"),
+        h("button", { class: "quiet", onclick: toggle(renameBox, nameIn) }, "Rename…"),
+        s.members.length > 1 ? h("button", { class: "quiet", onclick: toggle(founderBox, founderSel) }, "Make founder…") : null,
+        h("span", { style: "flex:1" }),
+        h("button", { class: "danger", onclick: toggle(delBox, typed) }, "Delete squad…")),
+      codeBox, renameBox, founderBox, delBox, out,
+      h("div", { class: "agrid2" },
+        h("div", { class: "plist" }, h("span", { class: "lbl" }, `Members · ${s.members.length}`), s.members.map(member)),
+        h("div", { class: "plist" }, h("span", { class: "lbl" }, "What's been done here"),
+          s.actions.length ? s.actions.map((a) => h("div", {}, h("span", {}, a.action, a.who ? h("span", { class: "muted" }, ` · ${a.who}`) : null), h("small", { class: "muted" }, seen(a.at))))
+            : h("span", { class: "muted small" }, "Nothing yet.")))));
+  }
+  el.append(h("h4", {}, "A squad", h("span", { class: "muted" }, "by its code, or from an account")),
+    h("div", { class: "row" }, q, h("button", { onclick: find }, "Find")), status, body);
+  return { el, open };
+}
+
+/** Today's one list of what's waiting (A2): new feedback, email changes
+ *  not yet finished, a bridge run that failed. */
+function needsYou(s, show) {
+  const row = (tag, text, label, go, warn) => h("div", { class: "nrow2" }, h("span", { class: `pill${warn ? " w" : ""}` }, tag), h("span", {}, text),
+    h("button", { class: "linkish", onclick: go }, label));
+  const rows = [];
+  if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
+  for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
+  if (s.bridge?.error) rows.push(row("System", "The 2.x bridge's last run failed", "Look", () => show("system"), true));
+  // Q6: quiet accounts, as the daily job sees them (each deletion is in the audit log)
+  const hk = s.housekeeping;
+  const house = hk ? h("p", { class: "muted small" }, h("b", {}, "Housekeeping "),
+    `${hk.folded.toLocaleString()} folded (90 days quiet) · ${hk.quiet.toLocaleString()} trimmed (6 months) · ${hk.dueSoon.toLocaleString()} due to be deleted in 30 days`,
+    hk.dueSoon ? [" · ", h("button", { class: "linkish", onclick: () => show("log") }, "Audit log ›")] : null) : null;
+  return h("section", { class: "panel" }, h("h4", {}, "Needs you", h("span", { class: "muted" }, "everything waiting, in one list")),
+    rows.length ? h("div", { class: "nlist" }, rows) : h("p", { class: "muted small" }, "Nothing waiting."), house);
+}
+
+/** Everything done from this page, newest first, kept a year (A5). */
+function auditPanel(nav) {
+  const list = h("div", { class: "alog" });
+  const more = h("button", { class: "quiet", hidden: true }, "Older");
+  const seen = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  async function load(before) {
+    let r;
+    try { r = await api("GET", `/admin/actions${before ? `?before=${before}` : ""}`); } catch { list.append(h("p", { class: "status bad" }, "Couldn't load the log.")); return; }
+    if (!before && !r.actions.length) list.replaceChildren(h("p", { class: "muted small" }, "Nothing yet. Everything you do from this page shows here."));
+    for (const a of r.actions) {
+      list.append(h("div", {}, h("span", {}, a.action,
+        a.uid ? [" · ", a.who === "a deleted account" ? h("span", { class: "muted" }, a.who) : h("button", { class: "linkish", onclick: () => nav.person(a.uid) }, a.who)] : null,
+        a.squad ? [" · ", a.squadName === "a deleted squad" ? h("span", { class: "muted" }, a.squadName) : h("button", { class: "linkish", onclick: () => nav.squad(a.squad) }, a.squadName)] : null,
+        a.detail ? h("span", { class: "muted" }, ` · ${a.detail}`) : null), h("small", { class: "muted" }, seen(a.at))));
+    }
+    more.hidden = !r.more;
+    more.onclick = () => load(r.more);
+  }
+  load("");
+  return h("section", { class: "panel" }, h("h4", {}, "Audit log", h("span", { class: "muted" }, "everything done from this page · kept a year")), list, more);
 }
 
 /** 3.6: squad bingo's pool, the admin's to tune. This week's card with how
@@ -1647,15 +2242,40 @@ async function adminPage() {
   const versions = h("section", { class: "panel" }, h("h4", {}, "Versions", h("span", { class: "muted" }, "accounts by the add-on they last used")),
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
-  page(h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Admin"), rangeSeg),
-    h("p", { class: "muted" }, "Counts, and one account at a time when you look one up. Never how anyone studies."),
-    peoplePanel(),
-    feedbackPanel(),
-    tilesBox,
-    h("div", { class: "agrid3" }, codes, cutover, bridge),
-    h("div", { class: "agrid2" }, library, notices),
-    bingoPanel(),
-    versions);
+  // mock "Admin, grown up", A2: a sidebar of pages, one set of gaps
+  const nav = {};
+  const people = peoplePanel(nav);
+  const squads = squadPanel(nav);
+  const today = h("div", { class: "apage" },
+    h("div", { class: "row", style: "justify-content:space-between" }, h("h2", {}, "Today"), rangeSeg),
+    tilesBox, needsYou(s, (p, uid) => (uid ? nav.person(uid) : show(p))), versions);
+  const pages = {
+    today: ["Today", today],
+    people: ["People", h("div", { class: "apage" }, people.el)],
+    squads: ["Squads", h("div", { class: "apage" }, squads.el)],
+    plans: ["Plans & library", h("div", { class: "apage" }, library)],
+    inbox: ["Inbox", h("div", { class: "apage" }, feedbackPanel(nav))],
+    notices: ["Notices", h("div", { class: "apage" }, notices)],
+    bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
+    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes, cutover, bridge))],
+    log: ["Audit log", h("div", { class: "apage" }, auditPanel(nav))],
+  };
+  const side = h("nav", { class: "aside", "aria-label": "Admin" });
+  function show(key) {
+    if (!pages[key]) key = "today";
+    for (const [k, [, el]] of Object.entries(pages)) el.hidden = k !== key;
+    side.replaceChildren(...Object.entries(pages).map(([k, [label]]) =>
+      h("button", { class: k === key ? "on" : "", "aria-current": k === key ? "page" : null, onclick: () => show(k) },
+        label, k === "inbox" && s.feedbackOpen ? h("i", { class: "ct" }, String(s.feedbackOpen)) : null)));
+    history.replaceState(null, "", key === "today" ? "/admin" : `/admin?p=${key}`);
+    window.scrollTo(0, 0);
+  }
+  nav.person = (uid) => { show("people"); people.open(uid); };
+  nav.squad = (id) => { show("squads"); squads.open(id); };
+  page(h("h1", {}, "Admin"),
+    h("p", { class: "muted" }, "Counts, and one account or squad at a time when you look one up. Never how anyone studies."),
+    h("div", { class: "ashell" }, side, h("div", { class: "amain" }, ...Object.values(pages).map(([, el]) => el))));
+  show(new URLSearchParams(location.search).get("p") || "today");
   $app().classList.add("wide");
   await drawTiles();
 }
@@ -1672,23 +2292,22 @@ function feedbackPage() {
     send.disabled = true; status.className = "status"; status.textContent = "Sending…";
     try {
       await api("POST", "/feedback", { text, ver: `duecrew.com${from ? ` ${from}` : ""}` });
-      box.value = ""; status.textContent = "Thanks! Sam reads every one.";
+      form.replaceChildren(h("p", { class: "status" }, "Sent. Thanks!"), h("button", { class: "ghost", onclick: () => go(`/feedback${from ? `?from=${encodeURIComponent(from)}` : ""}`) }, "Send another"));
+      return;
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 429 ? "That's five today. Send more tomorrow." : "That didn't send. Try again.";
     }
     send.disabled = false;
   } }, "Send");
-  page(h("h1", {}, "Send feedback to Sam"),
-    h("p", { class: "muted" }, "What's working, what isn't, what you'd add. Sam sees your name with it and can write back to your email. Nobody else sees it."),
-    h("div", { class: "stack", style: "max-width:640px" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status));
-  $app().classList.remove("wide");
-  box.focus();
+  const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
+  page(phead("Send feedback", "What's working, what isn't, what you'd add. Sam reads every one, sees your name with it, and can write back to your email. Nobody else sees it."), form);
+  reading();
 }
 
 /** 3.6.5, P6: the admin's Feedback: newest first, Reply by mail from Due
  *  Crew (the address is never shown), Done, and the sender's account. */
-function feedbackPanel() {
+function feedbackPanel(nav) {
   let state = "new";
   const list = h("div", { class: "fb" });
   const seg = h("span", { class: "seg" });
@@ -1716,10 +2335,7 @@ function feedbackPanel() {
         h("div", { class: "acts" },
           h("button", { class: "linkish", onclick: () => { replyBox.hidden = !replyBox.hidden; if (!replyBox.hidden) ta.focus(); } }, "Reply…"),
           h("button", { class: "linkish", onclick: async () => { await api("PATCH", `/admin/feedback/${f.id}`, { done: !f.done }).catch(() => null); draw(); } }, f.done ? "Mark new" : "Mark done"),
-          h("button", { class: "linkish", onclick: () => {
-            const q = document.querySelector(".people input"); if (!q) return;
-            q.value = f.uid; q.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); q.scrollIntoView({ behavior: "smooth", block: "center" });
-          } }, "Account")),
+          h("button", { class: "linkish", onclick: () => nav.person(f.uid) }, "Account")),
         replyBox);
     }));
   }

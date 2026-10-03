@@ -986,9 +986,25 @@ def test_sync_reliability_v251():
     store.tokens.clear()  # signed out everywhere, or idle 180 days
     check("session: a refused token marks the session dead",
           _denied(lambda: cl.fetch_board([TODAY.isoformat()])) and cl.session_dead and cl.signed_in)
+    check("session: a plain refusal isn't 'deleted for being quiet'", not cl.deleted_quiet)
     store.otp["sam@example.com"] = "123456"
     cl.verify_code("sam@example.com", "123456")
     check("session: signing in again clears it", not cl.session_dead and cl.signed_in)
+    # Q4: an account deleted after 12 months quiet says so, once asked
+    store.gone = {cl.user_id}
+    store.tokens.clear()
+    asked = len([r for r in store.log if r[1] == "/auth/gone"])
+    _denied(lambda: cl.fetch_board([TODAY.isoformat()]))
+    card = board.signed_out_card({}, expired=cl.session_dead, gone=cl.deleted_quiet)
+    check("session: deleted for being quiet: the card says why, and how to start again",
+          cl.deleted_quiet and "Welcome back" in card and "12 months without activity" in card and "duecrew:setup" in card
+          and len([r for r in store.log if r[1] == "/auth/gone"]) == asked + 1)
+    _denied(lambda: cl.fetch_board([TODAY.isoformat()]))
+    check("session: asked once, not at every refusal", len([r for r in store.log if r[1] == "/auth/gone"]) == asked + 1)
+    store.gone = set()
+    store.otp["sam@example.com"] = "123456"
+    cl.verify_code("sam@example.com", "123456")
+    check("session: signing in again clears 'deleted'", not cl.deleted_quiet and not cl.session_dead)
 
     col = make_user_col([TODAY])
     cl.push([TODAY.isoformat()], {}, stats=gather_stats(col, tempfile.mkdtemp()), version="3.0.0",
@@ -2252,7 +2268,7 @@ def test_show_up():
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
           and "Last week" not in mode
-          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek"]
+          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek", "pictureweek"]
           and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
@@ -2659,6 +2675,43 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+def test_not_yet_today_is_unranked():
+    """A crewmate who synced but hasn't studied yet isn't a row of zeros
+    with a rank: dashes, no rank, under everyone who studied, "not yet
+    today"; their status still shows. The same on Week and a squad board."""
+    labels = ["2026-09-27", "2026-09-26", "2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22", "2026-09-21"]
+    def ent(uid, name, days, you=False):
+        return {"user_id": uid, "name": name, "you": you, "paused": False, "last_updated": "2026-09-27T10:00:00Z",
+                "exam_date": "", "days": days, "decks": []}
+    zero = {"studied": False, "reviews": 0, "studyTimeMs": 0, "accuracy": 0.0, "streak": 0, "status": "coffee first"}
+    data = {"entries": [ent("sam", "Sammy", {labels[0]: {"studied": True, "reviews": 50, "studyTimeMs": 600000}}, you=True),
+                        ent("dre", "Dre", {labels[0]: dict(zero)}),
+                        ent("kai", "Kai", {labels[0]: {"studied": True, "reviews": 10, "studyTimeMs": 60000}})],
+            "labels": labels, "tomorrow": "2026-09-28", "pending": []}
+    fresh, dormant = board.build_rows(data["entries"], labels, data["tomorrow"], "today", {})
+    check("not yet: the studied are ranked, the zero isn't", [r["name"] for r in fresh] == ["Sammy", "Kai"]
+          and [r["name"] for r in dormant] == ["Dre"] and dormant[0]["notyet"])
+    page = board.render(data, {"period": "today"}, 0)
+    row = page[page.index(">Dre<"):]
+    row = row[:row.index("</tr>")]
+    check("not yet: dashes, a note with when we last heard, the status, still cheerable; no zeros", "nothing yet as of" in row and "coffee first" in row
+          and ">0<" not in row and "0.0%" not in row and "cheerpick:dre" in row)
+    kai = page[:page.index(">Kai<")]
+    check("not yet: Kai keeps silver, and Dre's rank is a dash", kai.rfind("&#129352;") > kai.rfind("<tr")
+          and '<td class="rk">&mdash;</td>' in page[page.rfind("<tr", 0, page.index(">Dre<")):page.index(">Dre<")])
+    week = dict(data, entries=[data["entries"][0], ent("dre", "Dre", {lb: dict(zero) for lb in labels[:3]})])
+    wf, wd = board.build_rows(week["entries"], labels, week["tomorrow"], "week", {})
+    check("not yet: a week of zeros is unranked on Week", [r["name"] for r in wd] == ["Dre"] and wd[0]["notyet"]
+          and "nothing this week" in board.render(week, {"period": "week"}, 0))
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": [{"user_id": "a", "name": "Ann", "day": labels[0], "reviews": 0, "time_ms": 0, "week": 3},
+                     {"user_id": "b", "name": "Bo", "day": labels[0], "reviews": 9, "time_ms": 60000, "week": 4}],
+            "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
+    sq = board._squads_html(view, {})
+    check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
+          and "#1" in sq and "#2" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
+
+
 def test_ui_review_board():
     """3.4 review: one chip beside a name (T1), a colour means one thing
     (T2), one banner at a time (H6), one way in (C4), day one is the
@@ -2859,7 +2912,7 @@ def test_every_board_command_has_a_handler():
                    r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
             emitted |= set(re.findall(rx, text))
     handled = set()
-    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py"):
+    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
         handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
         for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
@@ -5280,6 +5333,231 @@ def test_account_survives_a_reset_config():
         _state["squads_left"] = set()
 
 
+def test_crew_menu_pictures():
+    """K7: the Crew menu's picture lines, and a handler for every key it can offer."""
+    keys = set()
+    for period in ("today", "week", "decks", "squads", "plans"):
+        for show_up in (False, True):
+            keys |= {k for _l, k in board.crew_menu_items(period, show_up, True)}
+    text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    run = text[text.index("def _crew_menu"):text.index("def open_friends")]
+    handled = set(re.findall(r'"([a-z]+)": lambda', run))
+    check("crew menu: a picture of today and of the week, each handled",
+          ("Share today as a picture…", "picturetoday") in board.crew_menu_items("today", False)
+          and "pictureweek" in [k for _l, k in board.crew_menu_items("week", False)]
+          and "picturetoday" not in [k for _l, k in board.crew_menu_items("today", True)]
+          and keys <= handled and '"/home?card=today"' in run, sorted(keys - handled))
+
+
+def test_long_quiet_friends_fold():
+    """Q3: friends with no sync in 90+ days fold into one line under
+    everyone, opened in the page; a friend quiet for a week doesn't."""
+    from datetime import datetime, timedelta, timezone
+    labels = [(datetime.now() - timedelta(days=i)).date().isoformat() for i in range(7)]
+    ago = lambda d: (datetime.now(timezone.utc) - timedelta(days=d)).isoformat().replace("+00:00", "Z")
+    def ent(uid, name, last, days=None, you=False):
+        return {"user_id": uid, "name": name, "you": you, "paused": False, "last_updated": last,
+                "exam_date": "", "days": days or {}, "decks": []}
+    data = {"entries": [ent("me", "Sammy", ago(0), {labels[0]: {"studied": True, "reviews": 5}}, you=True),
+                        ent("w", "Wren", ago(8)), ent("p", "Priya", ago(120)), ent("t", "Theo<", ago(200))],
+            "labels": labels, "tomorrow": "", "pending": []}
+    page = board.render(data, {"period": "today"}, 0)
+    fold = page[page.index('class="qfold"'):]
+    fold = fold[:fold.index("</tr>")]
+    check("quiet fold: two long-quiet friends fold into one line, names escaped; a week-quiet one stays a row",
+          "2 quiet" in fold and "Priya and Theo&lt; haven't been here since" in fold
+          and page.count('<tr class="qh ') == 2 and page.index(">Wren<") < page.index('class="qfold"')
+          and "qopen" in fold and "pycmd" not in fold, fold)
+    one = dict(data, entries=data["entries"][:3])
+    check("quiet fold: one person reads 'hasn't'", "Priya hasn't been here" in board.render(one, {"period": "today"}, 0))
+    near = dict(data, entries=data["entries"][:2])
+    check("quiet fold: none when no one's been away 90 days", 'class="qfold"' not in board.render(near, {"period": "today"}, 0))
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": [{"user_id": "a", "name": "Ann", "day": labels[0], "reviews": 9, "time_ms": 60000, "week": 3},
+                     {"user_id": "b", "name": "Bo", "day": labels[3], "reviews": 4, "week": 1},
+                     {"user_id": "c", "name": "Cy", "day": "2026-01-02", "reviews": 4, "week": 0}],
+            "day": labels[0], "yesterday": labels[1], "people": 3, "reviews": 9}
+    sq = board._squads_html(view, {})
+    check("quiet fold: on a squad board too, after the recent ones", "1 quiet" in sq and "Cy hasn't been here since Jan" in sq
+          and sq.count('<tr class="qh') == 1 and sq.index(">Bo<") < sq.index("qfold"), sq[sq.find("qfold") - 20:sq.find("qfold") + 300])
+
+
+def test_due_model():
+    """Due (mock "My List"): day words, own items, Behind, the three tabs."""
+    from due_crew import due as D
+    T = "2026-10-03"  # a Saturday
+    check("due: a day at the end comes off", D.parse("Book the room fri", T) == ("Book the room", "2026-10-09"))
+    check("due: a name is never a day", D.parse("Call tom", T) == ("Call tom", None))
+    check("due: today, tomorrow, later", [D.parse(x, T)[1] for x in ("a today", "a tomorrow", "a later")]
+          == [T, "2026-10-04", ""])
+    check("due: next week is Monday", D.parse("Pay rent next week", T)[1] == "2026-10-05")
+    check("due: a date in words, this year or next",
+          D.parse("Read 12 oct", T)[1] == "2026-10-12" and D.parse("x sept 30", T)[1] == "2027-09-30")
+    check("due: a day alone stays text", D.parse("fri", T) == ("fri", None))
+    check("due: a weekday on that weekday is next week's", D.when_word("sat", T) == "2026-10-10")
+    check("due: nothing behind today", not D.day_ok("2026-10-02", T) and D.day_ok("", T) and D.day_ok(T, T))
+    items, it = D.add([], "  Email   the director ", T, T, ident="aaaa1")
+    check("due: add tidies text", it and it["t"] == "Email the director" and it["d"] == T)
+    items, _ = D.add(items, "Practice exam 3", "2026-10-04", T, ident="aaaa2")
+    items, _ = D.add(items, "Old thing", "", T, ident="aaaa3")
+    full = [{"id": f"x{i:04d}", "t": "x", "d": "", "done": "", "at": T} for i in range(D.MAX_OPEN)]
+    check("due: 60 open at most", D.add(full, "one more", "", T)[1] is None)
+    check("due: clean drops bad items", D.clean_items([{"id": "!!", "t": "x"}, {"id": "abcd", "t": ""},
+                                                       {"id": "abcd", "t": "ok", "d": "nope"}])
+          == [{"id": "abcd", "t": "ok", "d": "", "done": "", "at": ""}])
+    moved = D.change(items, "aaaa3", T, d="2026-10-08")
+    check("due: move to a day", next(i for i in moved if i["id"] == "aaaa3")["d"] == "2026-10-08")
+    check("due: never moved behind today",
+          next(i for i in D.change(items, "aaaa3", T, d="2026-01-01") if i["id"] == "aaaa3")["d"] == "")
+    ticked = D.change(items, "aaaa1", T, done=True)
+    check("due: ticked items go after a week",
+          len(D.prune(ticked, "2026-10-09")) == 3 and len(D.prune(ticked, "2026-10-10")) == 2)
+    # a plan: one date behind (opened Thu, not done), one today, one tomorrow, an exam Wed
+    dates = [
+        {"pid": "p1", "uid": "u0", "plan": "Big Step 1", "name": "Done date", "opens": "2026-09-30", "seen": 9, "total": 9},
+        {"pid": "p1", "uid": "u1", "plan": "Big Step 1", "name": "Cardio", "opens": "2026-10-01", "seen": 3, "total": 10},
+        {"pid": "p1", "uid": "u2", "plan": "Big Step 1", "name": "Pharm", "opens": T, "seen": 4, "total": 8,
+         "parts": [["Video Series", 4, 4], ["Path Book", 0, 4]],
+         "todo": [{"k": "watch", "t": "lecture 14"}]},
+        {"pid": "p1", "uid": "u3", "plan": "Big Step 1", "name": "Renal", "opens": "2026-10-04", "seen": 0, "total": 12},
+        {"pid": "p1", "uid": "u4", "plan": "Big Step 1", "name": "Far", "opens": "2026-11-30", "seen": 0, "total": 5},
+    ]
+    old = [{"id": "bbbb1", "t": "Left from Thu", "d": "2026-10-01", "done": "", "at": "2026-10-01"}]
+    v = D.view(T, dates, items + old, {}, events=[{"day": "2026-10-07", "name": "KSA", "plan": "Big Step 1"}],
+               reviews={"due": 40, "done": 0})
+    check("due: Behind has the undone date as its plan's line", v["behind_plans"] == [
+        {"kind": "behind", "pid": "p1", "plan": "Big Step 1", "dates": 1, "left": 7, "first": "2026-10-01", "uid": "u1"}])
+    check("due: Behind has my item from Thu", [r["text"] for r in v["behind_mine"]] == ["Left from Thu"]
+          and v["behind_mine"][0]["tag"] == "since Thu" and v["behind_n"] == 2)
+    kinds = [r["kind"] for r in v["rows"]]
+    check("due: Today is reviews, the date, my item", kinds == ["reviews", "plan", "mine"], kinds)
+    pr = v["rows"][1]
+    check("due: a date's parts and author line", [ln["kind"] for ln in pr["lines"]] == ["part", "part", "todo"]
+          and pr["lines"][0]["done"] and not pr["lines"][1]["done"] and pr["part"] and not pr["done"])
+    v2 = D.view(T, [dict(dates[2], seen=8)], [], {"p1:u2:0": T})
+    check("due: a date ticks itself when seen and its lines are ticked", v2["rows"][0]["done"] and v2["done_n"] == 1)
+    v3 = D.view(T, [dict(dates[2], seen=8)], [], {})
+    check("due: ...and not while an author line is open", not v3["rows"][0]["done"])
+    ups = v["days"]
+    check("due: Upcoming starts with today", ups[0]["today"] and ups[0]["head"].startswith("Today"))
+    check("due: tomorrow's date and my item", [r.get("name") or r.get("text") for r in ups[1]["rows"]]
+          == ["Renal", "Practice exam 3"] and ups[1]["head"].startswith("Tomorrow"))
+    check("due: quiet days fold to one line, the event has its day",
+          ups[2].get("quiet") and ups[3]["day"] == "2026-10-07" and ups[3]["events"] == ["KSA"])
+    check("due: two weeks only", all((x.get("day") or x["quiet"][1]) <= "2026-10-17" for x in ups))
+    check("due: Later holds the undated", [r["text"] for r in v["later"]] == ["Old thing"] and v["later_n"] == 1)
+    check("due: tomorrow's line", v["tomorrow"] == ["Renal", "Practice exam 3"])
+    check("due: the next exam", v["event"]["name"] == "KSA" and v["event"]["when"] == "Wed")
+    check("due: done counts today only", (v["done_n"], v["total_n"]) == (0, 3))
+    check("due: a date with nothing to see never sits behind as done",
+          not D.date_state({"pid": "p", "uid": "u", "opens": T, "seen": 0, "total": 0}, {})[0])
+    check("due: suggestions at most two", len(D.view(T, [], [], {}, suggestions=[{"key": str(i)} for i in range(4)])
+                                                ["suggestions"]) == 2)
+    check("due: empty when nothing", D.empty(D.view(T, [], [], {})))
+
+
+def test_due_author_lines_arrive_clean():
+    """Due: a date's author lines, as a plan arrives: words, a kind, an https link only, 8 at most."""
+    from due_crew.backend import shapes
+    doc = shapes.clean_plan_doc({"deck": "D", "units": [{"id": "a", "name": "A", "opens": "2026-10-03", "todo": [
+        {"k": "watch", "t": "  Lecture\n14 ", "url": "https://example.com/x"}, {"k": "watch", "t": "x", "url": "javascript:alert(1)"},
+        {"k": "sing", "t": "y"}, {"k": "read", "t": ""}] + [{"k": "do", "t": str(i)} for i in range(10)]}]})
+    todo = doc["units"][0]["todo"]
+    check("due lines: tidy, https only, unknown kinds and empty ones dropped, 8 at most",
+          todo[0] == {"k": "watch", "t": "Lecture 14", "url": "https://example.com/x"} and todo[1] == {"k": "watch", "t": "x"}
+          and len(todo) == 8, todo)
+
+
+def test_due_board_and_clicks():
+    """Due on the board: the three tabs, escaped, every click sent as the
+    board sends it; adding with a day said at the end; Behind; recover leeches."""
+    from due_crew import due as D, due_flow as F, app as appmod
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    T = "2026-10-03"
+    dates = [{"pid": "p1", "uid": "u2", "plan": "Big <Step>", "name": "Pharm <b>", "opens": T, "seen": 4, "total": 8,
+              "parts": [["Video Series", 4, 4], ["Path Book", 0, 4]], "todo": [{"k": "watch", "t": "lecture <14>",
+                                                                                  "url": "javascript:alert(1)"}]},
+             {"pid": "p1", "uid": "u1", "plan": "Big <Step>", "name": "Cardio", "opens": "2026-10-01", "seen": 3, "total": 10}]
+    items = [{"id": "aaaa1", "t": "Email <the> director", "d": T, "done": "", "at": T},
+             {"id": "aaaa2", "t": "Someday", "d": "", "done": "", "at": T}]
+    v = D.view(T, dates, items, {}, reviews={"due": 12, "done": 3}, suggestions=[{"key": "again", "text": "Go <over>", "go": "Study"}])
+    h = board._due_html(v)
+    check("due board: escaped, no raw markup from names or lines",
+          "<b>Pharm &lt;b&gt;</b>" in h and "Email &lt;the&gt; director" in h and "lecture &lt;14&gt;" in h
+          and "Big &lt;Step&gt;" in h and "Go &lt;over&gt;" in h and "<the>" not in h)
+    check("due board: a link only when it's a web address", "javascript:" not in h)
+    check("due board: Behind on top, then Today", h.index("Behind") < h.index("Pharm") and "Catch up" in h
+          and "duecrew:plancatch:p1" in h)
+    check("due board: tabs, fold, tick, item menu, add line", all(x in h for x in (
+        "duecrew:duetab:upcoming", "duecrew:duetab:later", "duecrew:duefold", "duecrew:duetick:aaaa1",
+        "duecrew:dueitem:aaaa1", 'id="du-in"', "duecrew:duego:again", "duecrew:duex:again", "Reviews", "12 due")))
+    up = board._due_html(dict(v, tab="upcoming"))
+    check("due board: Upcoming has today, + per day", "Today · Sat 3 Oct" in up and "dcDue.plus('2026-10-03')" in up)
+    lt = board._due_html(dict(v, tab="later"))
+    check("due board: Later has Do today", "duecrew:duedo:aaaa2" in lt and '<option value="later" selected>' in lt)
+    one = board._due_html(dict(v, folded=True))
+    check("due board: folded is one line", 'class="du du-one"' in one and "1 behind" in one and "du-tabs" not in one)
+    check("due board: off is nothing", board._due_html(None) == "")
+    js = board.keep_me_in_view_js()
+    check("due board: the add line's script rides every draw", "window.dcDue" in js and "dueadd" in js)
+    st = board.settings_html({"tab": "board", "signed_in": True}, {})
+    check("due settings: three switches on Board", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
+    from due_crew import settings_model as SM
+    check("due settings: the switches are whitelisted", SM.change(["set", "due_leeches", "1"], {}) == {"due_leeches": True})
+    # clicks, through the add-on's own handler
+    conf = {"due_items": [], "due_tab": "today"}
+    saved = (F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_dates)
+    F.cfg = lambda: conf
+    F.save_cfg = lambda c, **k: conf.update(c)
+    appmod.swap = lambda c, focus=None: None
+    F._today = lambda: T
+    F.plan_dates = lambda today: ([], [], [])
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("dueadd:today:0:" + "Book%20the%20room%3A%20B12%20fri")
+        it = conf["due_items"][-1] if conf["due_items"] else {}
+        check("due add: a day said at the end, text kept with its colon", it.get("t") == "Book the room: B12"
+              and it.get("d") == "2026-10-09", conf)
+        check("due add: it says where it went", (F._toast() or {}).get("text") == "Added to Fri 9 Oct")
+        send("dueadd:later:1:" + "Call%20mom%20fri")
+        check("due add: x keeps the words", conf["due_items"][-1]["t"] == "Call mom fri" and conf["due_items"][-1]["d"] == "")
+        send("dueadd:2026-01-01:0:Old")
+        check("due add: never behind today", conf["due_items"][-1]["d"] == T)
+        ident = conf["due_items"][0]["id"]
+        send("duetick:" + ident)
+        check("due tick", conf["due_items"][0]["done"] == T)
+        send("duetick:" + ident)
+        check("due untick", conf["due_items"][0]["done"] == "")
+        send("duedo:" + conf["due_items"][1]["id"])
+        check("due: Do today", conf["due_items"][1]["d"] == T)
+        send("duetab:upcoming")
+        check("due tab", conf["due_tab"] == "upcoming")
+        send("duefold")
+        check("due fold", conf["due_fold"] is True)
+        send("dueshow:later")
+        check("due show", conf["due_tab"] == "later")
+    finally:
+        F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_dates = saved
+    # recover leeches: tag off, unsuspended, new again, one undo step; the note's other card untouched
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, ctype=2, queue=-1, tags="leech Cardio", lapses=8)
+    fakes.add_card(conn, 2, did=10, ctype=2, queue=2, nid=1, ord_=1, lapses=1)
+    fakes.add_card(conn, 3, did=10, ctype=2, queue=2, tags="Cardio", lapses=9)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    got = F.recover_leeches(col)
+    rows = {cid: (t, q, lp) for cid, t, q, lp in conn.execute("SELECT id, type, queue, lapses FROM cards")}
+    tags = conn.execute("SELECT tags FROM notes WHERE id = 1").fetchone()[0].split()
+    check("leeches: the leech back as new, its tag off, counts reset", got == [1] and rows[1] == (0, 0, 0)
+          and tags == ["Cardio"], (got, rows, tags))
+    check("leeches: its sibling and a non-leech left alone", rows[2] == (2, 2, 1) and rows[3] == (2, 2, 9))
+    check("leeches: one undo step", len(col.undo_steps) == 1 and col.undo_steps[0][0].startswith("Due Crew"))
+    check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
@@ -5291,3 +5569,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

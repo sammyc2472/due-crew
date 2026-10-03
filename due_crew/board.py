@@ -121,6 +121,40 @@ def _ago(ts_str):
     return _ago_secs(secs)
 
 
+QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number
+# Q2: said where people read it (here, the Settings dialog, the site's Account, the README)
+KEEP_LINE = ("Kept while you use it: after 12 months with no activity (24 when paused), "
+             "your account is deleted with everything in it. Opening Anki counts.")
+
+
+def _long_quiet(ts_str, now=None):
+    """Q3: no sync in QUIET_FOLD_DAYS. An unknown time isn't long quiet."""
+    if not ts_str:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return ((now or datetime.now(timezone.utc)) - dt).total_seconds() > QUIET_FOLD_DAYS * 86400
+
+
+def _quiet_fold(rows):
+    """Q3: the fold's line for long-quiet friends: how many, their names,
+    and the month they were last here. Opened in the page, no command."""
+    names = [_html.escape(str(r["name"])) for r in rows]
+    who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if len(names) <= 3 else f"{', '.join(names[:2])} and {len(names) - 2} more"
+    newest = max((str(r.get("last_updated") or "") for r in rows), default="")
+    try:
+        since = datetime.fromisoformat(newest.replace("Z", "+00:00")).strftime("%b")
+    except Exception:
+        since = ""
+    verb = "hasn't" if len(rows) == 1 else "haven't"
+    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 2}">'
+            f'<a href="#" onclick="this.closest(\'table\').classList.toggle(\'qopen\');return false;">'
+            f'&#9656; {len(rows)} quiet</a> <span class="dc-note">&middot; {who} {verb} been here'
+            f'{" since " + since if since else " in months"}</span></td></tr>')
+
+
 def _day_metrics(doc):
     return {"reviews": doc.get("reviews"),
             "time_ms": doc.get("studyTimeMs"),
@@ -279,7 +313,7 @@ def _day_flags(doc, today_lb):
 def build_rows(entries, labels, tomorrow, period, cfg):
     today_lb = labels[0] if labels else ""
     yest_lb = labels[1] if len(labels) > 1 else ""
-    fresh, stale, quiet, paused = [], [], [], []
+    fresh, notyet, stale, quiet, paused = [], [], [], [], []
     for e in entries:
         row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
                "emoji": e.get("emoji") or "",
@@ -315,6 +349,11 @@ def build_rows(entries, labels, tomorrow, period, cfg):
                     row["quiet"] = True
                     quiet.append(row)
                 continue
+            if not row["days_wk"]:
+                # this week's days are all zero so far: nothing to rank
+                row["notyet"] = True
+                notyet.append(row)
+                continue
             row.update(agg)
             row["showup"] = bool(row["days7"]) and all(
                 row[k] is None for k in ("reviews", "time_ms", "retention", "streak"))
@@ -324,7 +363,14 @@ def build_rows(entries, labels, tomorrow, period, cfg):
             # "tomorrow" label — that's their live today
             today = days.get(tomorrow) or days.get(today_lb)
             yesterday = days.get(yest_lb)
-            if today:
+            if today and not _showed(today):
+                # synced, but nothing studied yet (or away): no numbers to
+                # rank, so dashes and no rank, under everyone who studied;
+                # their status still shows, and a cheer still lands
+                row.update(_day_flags(today, today_lb))
+                row["notyet"] = not row["away"]
+                notyet.append(row)
+            elif today:
                 row.update(_day_metrics(today))
                 row.update(_day_flags(today, today_lb))
                 row["showup"] = _showed(today) and all(
@@ -348,7 +394,8 @@ def build_rows(entries, labels, tomorrow, period, cfg):
     fresh.sort(key=order, reverse=True)
     stale.sort(key=order, reverse=True)
     quiet.sort(key=lambda r: r["last_updated"] or "", reverse=True)
-    return fresh, stale + quiet + paused  # dormant rows last
+    notyet.sort(key=lambda r: r["last_updated"] or "", reverse=True)
+    return fresh, notyet + stale + quiet + paused  # dormant rows last
 
 
 def build_deck_groups(entries):
@@ -505,6 +552,11 @@ def _css(cfg):
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
+    /* Q3: long-quiet friends, folded into one line until it's clicked */
+    #due-crew tr.qh {{ display: none; }}
+    #due-crew table.qopen tr.qh {{ display: table-row; }}
+    #due-crew tr.qfold td {{ text-align: left; }}
+    #due-crew tr.qfold a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
     #due-crew small.nwh {{ display: block; height: 5.5px; }}
     #due-crew small.nw {{ display: block; font-size: 10px; line-height: 1.1;
@@ -692,7 +744,8 @@ def _css(cfg):
        screen's text; the tab reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
-      display: grid; gap: 6px; margin: 2px 0 10px; }}
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 2px 0 10px; }}
+    #due-crew .ptoday > * {{ min-width: 0; }}
     #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-accent); }}
     #due-crew .ptoday.rest {{ border-color: var(--dc-line); }}
@@ -714,14 +767,15 @@ def _css(cfg):
     #due-crew .ptoday .btns a.q {{ color: var(--dc-muted); font-weight: 500; }}
     #due-crew .ptoday .btns a.bt.on {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
     #due-crew .pwh {{ display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 2px 0 6px; }}
-    #due-crew .pwh .nav {{ display: flex; gap: 10px; }}
+    #due-crew .pwh .nav {{ display: flex; align-items: center; gap: 8px; }}
+    #due-crew .pwh .nav a {{ font-size: 15px; line-height: 20px; }}
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pwh .site {{ margin-left: auto; font-weight: 600; }}
     #due-crew .pwk {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }}
     #due-crew .pwk .pc {{ border: 1px solid var(--dc-line); border-radius: 8px; padding: 4px 5px 5px; min-height: 64px;
       display: flex; flex-direction: column; gap: 3px; cursor: default; min-width: 0; text-align: left; }}
     #due-crew .pwk .pc[onclick] {{ cursor: pointer; }}
-    #due-crew .pwh .nav .tb {{ border: 1px solid var(--dc-line); border-radius: 99px; padding: 0 9px; font-weight: 600; }}
+    #due-crew .pwh .nav .tb {{ padding: 0 2px; font-size: 12px; font-weight: 700; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
     #due-crew .pwk .d b.td {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 99px; padding: 0 6px; white-space: nowrap; }}
     #due-crew .pwk .d b.td .dow {{ color: inherit; }}
@@ -840,6 +894,15 @@ def _row_html(row, rank, cfg, period="today"):
         cls += " dim"
         extra = ' <span class="dc-note">&middot; on a break</span>'
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
+    elif row.get("notyet"):
+        cls += " dim"
+        # a phone's reviews reach us only once their computer's Anki syncs,
+        # so say when we last heard, not that they haven't studied
+        txt, _tone = _ago(row["last_updated"])
+        when = f" as of {txt}" if txt and txt != "just now" else ""
+        extra = (' <span class="la faded">&middot; nothing '
+                 f'{"this week" if period == "week" else "yet"}{when}</span>')
+        cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
     elif row["quiet"]:
         cls += " dim"
         cells = f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3
@@ -918,8 +981,15 @@ def _table_html(data, cfg, period):
             n += 1
             rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
         body += _row_html(row, rank, cfg, period)
+    # Q3: friends quiet for 90+ days fold into one line under everyone
+    long_q = [r for r in dormant if r["quiet"] and not r["you"] and _long_quiet(r["last_updated"])]
     for row in dormant:
-        body += _row_html(row, "&mdash;", cfg, period)
+        if row not in long_q:
+            body += _row_html(row, "&mdash;", cfg, period)
+    if long_q:
+        body += _quiet_fold(long_q)
+        for row in long_q:
+            body += _row_html(row, "&mdash;", cfg, period).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
     solo = ""
     if len(data["entries"]) == 1:
@@ -973,7 +1043,7 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """
+    """ + DUE_JS
 
 
 # a deck row without a "+N today" line holds its place, filled when another
@@ -1527,11 +1597,23 @@ def _squads_html(view, cfg):
     day, yesterday = view.get("day", ""), view.get("yesterday", "")
     sort = sort_key(cfg)  # the crew table's sort, same headers, same links
     field = SQUAD_FIELDS[sort]
-    live = sorted([r for r in rows if r.get("day") == day],
+    # synced today with nothing studied yet: no numbers to rank, so these
+    # sit under the ranked rows with dashes (as on Today)
+    zero = lambda r: r.get("reviews") == 0 and not r.get("time_ms")
+    live = sorted([r for r in rows if r.get("day") == day and not zero(r)],
                   key=lambda r: r.get(field) if r.get(field) is not None else -1,
                   reverse=True)
+    waiting_today = [r for r in rows if r.get("day") == day and zero(r)]
     rest = sorted([r for r in rows if r.get("day") != day],
                   key=lambda r: r.get("day") or "", reverse=True)
+    # Q3: members with no sync in 90+ days fold into one line, as on Today
+    try:
+        cut = (datetime.fromisoformat(day) - _dt.timedelta(days=QUIET_FOLD_DAYS)).date().isoformat()
+    except Exception:
+        cut = ""
+    long_q = [r for r in rest if cut and not r.get("you") and str(r.get("day") or "") < cut]
+    rest = [r for r in rest if r not in long_q] + long_q
+    long_ids = {id(r) for r in long_q}
     people = int(view.get("people") or len(rows))
     headline = f'{people:,} in {name}'
     if view.get("open") is False:
@@ -1558,10 +1640,17 @@ def _squads_html(view, cfg):
                  '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
     n = 0
-    for r in live + rest:
+    folded = False
+    for r in live + waiting_today + rest:
         pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
         cls, note = "", ""
+        if id(r) in long_ids:
+            if not folded:
+                body += _quiet_fold([{"name": x["name"], "last_updated": x.get("day")} for x in long_q]).replace(
+                    f'colspan="{len(HEADERS) + 2}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
+                folded = True
+            cls = "qh"
         if r.get("you"):
             cls = "you"
             link = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
@@ -1580,6 +1669,10 @@ def _squads_html(view, cfg):
             when = "yesterday" if r.get("day") == yesterday else "quiet"
             note += f' <span class="la faded">&middot; {when}</span>'
             rank = ""
+        elif zero(r):
+            cls += " dim"
+            note += ' <span class="la faded">&middot; nothing yet today</span>'
+            rank = "&mdash;"
         elif show_up or numberless(r):
             rank = "&#10003;"  # showed up: counted, not ranked
         else:
@@ -1588,6 +1681,12 @@ def _squads_html(view, cfg):
         if show_up:
             body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
                      f'<td class="nm">{link}{note}</td>'
+                     f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
+            continue
+        if r.get("day") == day and zero(r):
+            body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
+                     f'<td class="nm">{link}{note}</td>'
+                     f'<td class="n">{_NW_ROOM}&mdash;{_NW_ROOM}</td>' + '<td class="n">&mdash;</td>' * 3 +
                      f'<td class="n">{_cell(r.get("week"), lambda v: f"{v}/7")}</td></tr>')
             continue
         body += (f'<tr class="{cls.strip()}"><td class="rk">{rank}</td>'
@@ -1851,8 +1950,10 @@ def crew_menu_items(period, show_up, squad_ok=False):
     items = [("Friends…", "friends")]
     if period == "today" and not show_up:
         items.append(("Share today", "sharetoday"))
+        items.append(("Share today as a picture…", "picturetoday"))
     if period == "week" or (show_up and period == "today"):
         items.append(("Share the week", "sharecrewweek"))
+        items.append(("Share the week as a picture…", "pictureweek"))
     if period == "squads" and not show_up and squad_ok:
         items.append(("Share the squad's day", "squadshare"))
     if period == "decks":
@@ -1898,8 +1999,9 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None):
-    """live: I'm studying now (the footer offers to stop). tricky: flagged
+           notice=None, asks=None, due=None):
+    """due: Due's view (due_flow.view), above the board on every tab.
+    live: I'm studying now (the footer offers to stop). tricky: flagged
     cards I share with a crewmate (Decks tab). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
     room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
@@ -2023,7 +2125,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
-            f'{_css(cfg)}{_head(period, show_up, hidden)}{body}{foot}</div>')
+            f'{_css(cfg)}<style>{DUE_CSS}</style>{_due_html(due)}{_head(period, show_up, hidden)}{body}{foot}</div>')
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -2156,7 +2258,8 @@ def _settings_you(view):
                       "Tell Sam what's working and what isn't")
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
-            f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>')
+            f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
+            f'<div class="st-foot"><span>{KEEP_LINE}</span></div>')
     return out
 
 
@@ -2188,6 +2291,13 @@ def _settings_board(cfg):
             + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
+            + '</div><div class="st-h">Due</div><div class="st-box">'
+            + _st_row("Due above the board", _st_switch("due_show", g("due_show", True), "Due above the board"),
+                      "Your plans' dates and your own to-dos")
+            + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
+                      "From your own Anki: today's misses, new leeches")
+            + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
+                      "Each morning on this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
@@ -2222,7 +2332,8 @@ def _settings_privacy(cfg):
     return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
             + radio("numbers", "My numbers") + nums
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
-            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting.")
+            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting. "
+                    "A paused account is kept 24 months without activity; opening Anki counts.")
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
@@ -2296,9 +2407,16 @@ def _card(cfg, title, body_html):
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False, moved=False):
+def signed_out_card(cfg, expired=False, moved=False, gone=False):
     """moved: signed in on 2.x, which used passwords. 3.0 signs in with an
-    emailed code, so everyone signs in once more, and nothing is lost."""
+    emailed code, so everyone signs in once more, and nothing is lost.
+    gone (Q4): the account was deleted after 12 months without activity."""
+    if gone:
+        return _card(cfg, "Welcome back",
+                     f'Your Due Crew account was deleted after 12 months without activity, '
+                     f'as the listing says. Your Anki and its cards are untouched. '
+                     f'<a href="#" onclick="{_pycmd("setup")}">Start again with your email</a>; '
+                     f'your crew can add you with your new code.')
     if moved:
         return _card(cfg, "Due Crew",
                      f'Due Crew now signs in with a code by email, no password. '
@@ -2851,3 +2969,384 @@ def profile_overlay_js(profile):
         document.body.appendChild(back);
     })();
     """ % (inner, act_label, act_primary, act_cmd)
+
+
+# ---- Due (mock "My List"): the day's to-do, above the board ----
+
+DUE_CSS = """
+    #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
+      padding: 9px 12px 10px; margin: 0 0 14px; display: grid; gap: 6px; }
+    #due-crew .du > * { min-width: 0; }
+    #due-crew .du a { text-decoration: none; }
+    #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #due-crew .du-h .sp { flex: 1; }
+    #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
+    #due-crew .du-fold { color: var(--dc-muted); font-size: 11px; padding: 0 2px; }
+    #due-crew .du-tabs { display: inline-flex; white-space: nowrap; }
+    #due-crew .du-tabs a { font-size: 11px; font-weight: 700; padding: 1px 10px; border: 1px solid var(--dc-line);
+      color: var(--dc-muted); }
+    #due-crew .du-tabs a + a { border-left: 0; }
+    #due-crew .du-tabs a:first-child { border-radius: 99px 0 0 99px; }
+    #due-crew .du-tabs a:last-child { border-radius: 0 99px 99px 0; }
+    #due-crew .du-tabs a.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+    #due-crew .du-r { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; align-items: start;
+      padding: 5px 0 4px; border-top: 1px solid var(--dc-line); }
+    #due-crew .du-r .t { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+    #due-crew .du-r .t small, #due-crew .du-m { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .du-r.done .t > b, #due-crew .du-r.done .t > span.x { color: var(--dc-muted); text-decoration: line-through; }
+    #due-crew .du-r .end { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 11.5px; }
+    #due-crew .du-r .end .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
+    #due-crew .du-go { color: var(--dc-accent); font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+    #due-crew .du-tag { color: var(--dc-muted); font-size: 11px; border: 1px solid var(--dc-line); border-radius: 6px;
+      padding: 0 6px; white-space: nowrap; }
+    #due-crew .du-bx { box-sizing: border-box; width: 14px; height: 14px; border: 1.5px solid var(--dc-faded);
+      border-radius: 4px; margin-top: 2px; display: block; position: relative; }
+    #due-crew a.du-bx { cursor: pointer; }
+    #due-crew .du-bx.auto { border-style: dashed; }
+    #due-crew .du-bx.part { background: linear-gradient(90deg, var(--dc-you-bg) 50%, transparent 50%); border-color: var(--dc-accent); }
+    #due-crew .du-bx.on { background: var(--dc-accent); border: 1.5px solid var(--dc-accent); }
+    #due-crew .du-bx.on::after { content: ""; position: absolute; left: 3.5px; top: 0.5px; width: 3px; height: 7px;
+      border: solid var(--dc-accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    #due-crew .du-sub { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 7px; align-items: center;
+      font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .du-sub b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .du-sub .du-bx { width: 11px; height: 11px; margin: 0; border-radius: 3px; }
+    #due-crew .du-sub .du-bx.on::after { left: 2.5px; top: -0.5px; width: 2.5px; height: 6px; }
+    #due-crew .du-sub .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .du .wbar { margin-top: 3px; }
+    #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); padding-top: 4px; }
+    #due-crew .du-sec.warn { color: #c77700; }
+    #due-crew .du-bh { display: grid; gap: 0; }
+    #due-crew .du-line { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font-size: 12px;
+      border-radius: 8px; padding: 5px 9px; background: var(--dc-you-bg); }
+    #due-crew .du-line.ev { color: #c77700; font-weight: 700; background: transparent; padding: 0; }
+    #due-crew .du-line .acts { display: flex; gap: 12px; }
+    #due-crew .du-line a, #due-crew .du-sg a { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
+      padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
+    #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
+    #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
+    #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
+      background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
+    #due-crew .du-add select, #due-crew .du-add input[type=date] { font: inherit; font-size: 12px; color: var(--dc-ink);
+      background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 3px 4px; color-scheme: light dark; }
+    #due-crew .du-said { font-size: 11.5px; color: var(--dc-accent); font-weight: 700; white-space: nowrap; }
+    #due-crew .du-said a { color: var(--dc-muted); font-weight: 400; margin-left: 4px; }
+    #due-crew .du-dh { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; font-weight: 700;
+      padding-top: 6px; border-top: 1px solid var(--dc-line); }
+    #due-crew .du-dh.today { color: var(--dc-accent); }
+    #due-crew .du-dh small { color: var(--dc-muted); font-weight: 400; }
+    #due-crew .du-dh .plus { color: var(--dc-accent); font-weight: 700; margin-left: 8px; }
+    #due-crew .du-ln { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
+      padding: 2px 0; align-items: start; }
+    #due-crew .du-ln .n { color: var(--dc-muted); font-size: 11px; white-space: nowrap; }
+    #due-crew .du-ln.done > span:nth-child(2) { color: var(--dc-muted); text-decoration: line-through; }
+    #due-crew .du-q { color: var(--dc-faded); font-size: 11.5px; padding: 3px 0 3px 25px; }
+    #due-crew .du-evl { color: #c77700; font-weight: 700; font-size: 12px; padding-left: 25px; }
+    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 7px 12px; white-space: nowrap; }
+    #due-crew .du-one > * { flex: none; }
+    #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; }
+    #due-crew .du-one .sp { flex: 1 1 0; }
+    #due-crew .du-one .sp { flex: 1; }
+    #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }
+    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    #due-crew .du-sub a { color: var(--dc-accent); }
+    #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
+"""
+
+DUE_JS = r"""
+(function () {
+  if (window.dcDue) { return; }
+  var DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var LONG = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  var MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+    'september', 'october', 'november', 'december'];
+  function day(iso) { var p = iso.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function plus(iso0, n) { var d = day(iso0); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
+  function month(w) {
+    w = w.replace(/\.$/, '');
+    for (var i = 0; i < 12; i++) { if (w.length >= 3 && MONTHS[i].indexOf(w) === 0) { return i + 1; } }
+    return 0;
+  }
+  function onOrAfter(today, m, dd) {
+    var y = +today.slice(0, 4);
+    for (var k = 0; k < 2; k++) {
+      var d = new Date(Date.UTC(y + k, m - 1, dd));
+      if (d.getUTCMonth() !== m - 1) { return null; }
+      if (iso(d) >= today) { return iso(d); }
+    }
+    return null;
+  }
+  // due.when_word, restated for the add line's preview: change one, change both
+  function when(w, today) {
+    w = w.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (w === 'today' || w === 'tonight') { return today; }
+    if (w === 'tomorrow' || w === 'tmrw' || w === 'tmr') { return plus(today, 1); }
+    if (w === 'later' || w === 'someday' || w === 'sometime') { return ''; }
+    var wd = (day(today).getUTCDay() + 6) % 7;
+    if (w === 'next week') { return plus(today, 7 - wd); }
+    var pre = ['next ', 'on ', ''];
+    for (var i = 0; i < pre.length; i++) {
+      if (w.indexOf(pre[i]) === 0) {
+        var name = w.slice(pre[i].length);
+        for (var j = 0; j < 7; j++) {
+          if (name.length >= 3 && LONG[j].indexOf(name) === 0) {
+            var ahead = ((j + 6) % 7 - wd + 7) % 7 || 7;
+            return plus(today, ahead);
+          }
+        }
+      }
+    }
+    var m = w.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)$/);
+    if (m && month(m[2])) { return onOrAfter(today, month(m[2]), +m[1]); }
+    m = w.match(/^([a-z]{3,9}\.?) (\d{1,2})(?:st|nd|rd|th)?$/);
+    if (m && month(m[1])) { return onOrAfter(today, month(m[1]), +m[2]); }
+    return null;
+  }
+  function parse(text, today) {
+    var words = text.replace(/\s+/g, ' ').trim().split(' ');
+    for (var n = 3; n >= 1; n--) {
+      if (words.length > n) {
+        var d = when(words.slice(-n).join(' '), today);
+        if (d !== null) {
+          var rest = words.slice(0, -n).join(' ').replace(/[ ,\-·]+$/, '');
+          if (rest) { return { text: rest, day: d }; }
+        }
+      }
+    }
+    return { text: words.join(' '), day: null };
+  }
+  function label(d, today) {
+    if (d === '') { return 'Later'; }
+    if (d === today) { return 'Today'; }
+    if (d === plus(today, 1)) { return 'Tomorrow'; }
+    var x = day(d);
+    return DAYS[x.getUTCDay()].charAt(0).toUpperCase() + DAYS[x.getUTCDay()].slice(1) + ' ' + x.getUTCDate() + ' ' +
+      MONTHS[x.getUTCMonth()].charAt(0).toUpperCase() + MONTHS[x.getUTCMonth()].slice(1, 3);
+  }
+  function el(id) { return document.getElementById(id); }
+  window.dcDue = {
+    raw: false,
+    preview: function () {
+      var box = document.querySelector('#due-crew .du'), inp = el('du-in'), said = el('du-said');
+      if (!box || !inp || !said) { return; }
+      var p = parse(inp.value, box.getAttribute('data-today'));
+      if (p.day === null || this.raw) { said.innerHTML = ''; return; }
+      said.innerHTML = '&rarr; ' + label(p.day, box.getAttribute('data-today')) +
+        '<a href="#" title="Keep the words as text" onclick="dcDue.raw=true;dcDue.preview();return false;">&times;</a>';
+    },
+    pick: function () {
+      var sel = el('du-when'), dt = el('du-date');
+      if (sel && dt) { dt.style.display = sel.value === 'pick' ? '' : 'none'; if (sel.value === 'pick') { dt.focus(); } }
+    },
+    key: function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); this.send(); return; }
+      if (e.key === 'Escape') { e.target.value = ''; this.raw = false; this.preview(); }
+    },
+    send: function () {
+      var inp = el('du-in'), sel = el('du-when'), dt = el('du-date');
+      if (!inp || !inp.value.trim()) { return; }
+      var w = sel ? sel.value : 'today';
+      if (w === 'pick') { w = (dt && dt.value) ? dt.value : 'today'; }
+      pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
+      this.raw = false;
+    },
+    plus: function (d) {
+      var sel = el('du-when'), dt = el('du-date'), inp = el('du-in');
+      if (!sel || !inp) { return; }
+      var found = false;
+      for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === d) { found = true; } }
+      if (found) { sel.value = d; if (dt) { dt.style.display = 'none'; } }
+      else { sel.value = 'pick'; if (dt) { dt.value = d; dt.style.display = ''; } }
+      inp.focus();
+    }
+  };
+})();
+"""
+
+
+def _due_box(state, auto=True):
+    cls = "du-bx" + (" auto" if auto else "") + (" on" if state == "on" else " part" if state == "part" else "")
+    return f'<span class="{cls}"></span>'
+
+
+def _due_tick(cmd, on, label):
+    return (f'<a href="#" class="du-bx{" on" if on else ""}" role="checkbox" aria-checked="{"true" if on else "false"}" '
+            f'title="{_html.escape(label)}" aria-label="{_html.escape(label)}" onclick="{_pycmd(cmd)}"></a>')
+
+
+def _due_mine(r, short=False):
+    e = _html.escape
+    tick = _due_tick("duetick:" + r["id"], r["done"], "Done" if not r["done"] else "Not done")
+    tag = f'<a href="#" class="du-tag" title="Move, edit or delete" onclick="{_pycmd("dueitem:" + r["id"])}">{e(r["tag"])} &#9662;</a>'
+    if short:
+        return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span>{e(r["text"])}</span>'
+                f'<span class="n">{tag}</span></div>')
+    do = (f'<a href="#" class="du-go" onclick="{_pycmd("duedo:" + r["id"])}">Do today</a>'
+          if not r["day"] and not r["done"] else "")
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{tick}<span class="t"><span class="x">{e(r["text"])}</span></span>'
+            f'<span class="end">{do}{tag}</span></div>')
+
+
+def _due_plan(r):
+    """A plan's date on Today, in full: its resources, the author's lines, its bar."""
+    e = _html.escape
+    box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
+    subs = ""
+    for ln in r["lines"]:
+        if ln["kind"] == "part":
+            subs += (f'<span class="du-sub"><span class="du-bx auto{" on" if ln["done"] else ""}"></span>'
+                     f'<span><b>{e(ln["label"])}</b></span><span class="n">{int(ln["seen"]):,} / {int(ln["total"]):,}</span></span>')
+        else:
+            text = e(ln["text"])
+            if ln.get("url", "").startswith("https://"):
+                # opened by Anki in the browser, never inside the Decks screen
+                text = f'<a href="#" title="{e(ln["url"])}" onclick="{_pycmd("duelink:" + ln["key"])}">{text}</a>'
+            tick = (_due_tick(f'duetodo:{ln["key"]}', ln["done"], "Done") if ln["can"]
+                    else '<span class="du-bx"></span>')
+            subs += (f'<span class="du-sub">{tick}<span><b>{e(ln["label"])}</b> &middot; {text}</span>'
+                     f'<span class="n">by hand</span></span>')
+    extra = []
+    if r.get("prep"):
+        extra.append(f'for {e(r["prep"])}')
+    if r.get("crew") and int(r["crew"][1]) > 1:
+        extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
+    meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
+    what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
+    bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""
+    go = (f'<a href="#" class="du-go" onclick="{_pycmd("planstudy:" + r["pid"])}">Study &rsaquo;</a>'
+          if not r["done"] and r["total"] and r["seen"] < r["total"] else "")
+    n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{e(r["name"])}</b>'
+            f'<small>{meta}</small>{what}{subs}{bar}</span><span class="end">{n}{go}</span></div>')
+
+
+def _due_short(r):
+    e = _html.escape
+    if r["kind"] == "mine":
+        return _due_mine(r, short=True)
+    box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
+    return (f'<div class="du-ln{" done" if r["done"] else ""}">{box}<span><b>{e(r["name"])}</b>'
+            f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["n"])}</span></div>')
+
+
+def _due_behind(v):
+    e = _html.escape
+    if not v["behind_n"]:
+        return ""
+    out = '<div class="du-bh"><div class="du-sec warn">Behind</div>'
+    for p in v["behind_plans"]:
+        left = int(p["left"])
+        what = f'{int(p["dates"])} date{"s" if p["dates"] != 1 else ""}' + (f' &middot; {left:,} cards to see' if left else "")
+        out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'
+                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("planstudy:" + p["pid"])}">Study &rsaquo;</a>'
+                f'<a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
+    out += "".join(_due_mine(r) for r in v["behind_mine"])
+    if v["behind_more"]:
+        out += f'<div class="du-q">and {int(v["behind_more"])} more</div>'
+    return out + '<div class="du-sec">Today</div></div>' if v["tab"] == "today" else out + "</div>"
+
+
+def _due_add(v, default):
+    """The add line: a day button beside it, a day said at the end shown before Enter."""
+    today = v["today"]
+    t = _dt.date.fromisoformat(today)
+    opts = [("today", "Today"), ((t + _dt.timedelta(days=1)).isoformat(), "Tomorrow")]
+    opts += [((t + _dt.timedelta(days=i)).isoformat(), f"{t + _dt.timedelta(days=i):%a}") for i in range(2, 7)]
+    opts += [("later", "Later"), ("pick", "Pick a day…")]
+    sel = "".join(f'<option value="{k}"{" selected" if k == default else ""}>{lb}</option>' for k, lb in opts)
+    maxd = (t + _dt.timedelta(days=730)).isoformat()
+    full = ' disabled placeholder="60 open: tick or delete some first"' if v.get("full") else ' placeholder="Add a to-do…"'
+    return (f'<div class="du-add"><input type="text" id="du-in" maxlength="140" aria-label="Add a to-do"{full} '
+            f'onkeydown="dcDue.key(event)" oninput="dcDue.preview()">'
+            f'<span class="du-said" id="du-said"></span>'
+            f'<select id="du-when" aria-label="Its day" onchange="dcDue.pick()">{sel}</select>'
+            f'<input type="date" id="du-date" min="{today}" max="{maxd}" style="display:none" aria-label="Pick a day">'
+            f'<a href="#" class="du-go" onclick="dcDue.send();return false;">Add</a></div>')
+
+
+def _due_html(v):
+    """Due, above the board on every tab (mock "My List"). v: due.view, from
+    due_flow.view; every string in it is escaped here."""
+    if not v:
+        return ""
+    e = _html.escape
+    today = e(v["today"])
+    done_n, total_n = int(v["done_n"]), int(v["total_n"])
+    count = f"{done_n} of {total_n} done" if total_n else ""
+    if v["folded"]:
+        bar = _wbar(done_n, total_n) if total_n else ""
+        st = v.get("start")
+        go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
+              f'Study &rsaquo; {e(st["name"])}</a>' if st else "")
+        behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
+        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Open">'
+                f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
+                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Open" onclick="{_pycmd("duefold")}">&#9662;</a></div>')
+    tab = v["tab"]
+    tabs = "".join(
+        f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+        for k, lb in (("today", "Today"), ("upcoming", "Upcoming"),
+                      ("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}')))
+    head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
+            f'<span class="sp"></span><span class="du-n">{count if tab != "later" else ""}</span>'
+            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">&#9652;</a></div>')
+    toast = ""
+    if v.get("toast"):
+        toast = (f'<div class="du-line"><span>{e(v["toast"]["text"])}</span>'
+                 f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
+    body = ""
+    if tab == "today":
+        body += _due_behind(v)
+        for r in v["rows"]:
+            if r["kind"] == "reviews":
+                if not r["due"] and not r["done"]:
+                    continue
+                n = "all done" if r["done"] else f'{int(r["due"]):,} due'
+                body += (f'<div class="du-r{" done" if r["done"] else ""}">{_due_box("on" if r["done"] else "")}'
+                         f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
+            elif r["kind"] == "plan":
+                body += _due_plan(r)
+            else:
+                body += _due_mine(r)
+        for sg in v["suggestions"] + v["notes"]:
+            body += (f'<div class="du-sg"><span>&#10022;</span><span>{e(sg["text"])}</span><span>'
+                     f'<a href="#" onclick="{_pycmd("duego:" + sg["key"])}">{e(sg["go"])}</a>'
+                     f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:" + sg["key"])}">&times;</a></span></div>')
+        if not v["rows"] and not v["suggestions"] and not v["notes"]:
+            body += '<div class="du-empty">Nothing due today.</div>'
+        body += _due_add(v, "today")
+        if v["event"]:
+            ev = v["event"]
+            body += f'<div class="du-line ev"><span>&#9733; {e(ev["name"])} {"today" if ev["when"] == "Today" else "on " + e(ev["when"])}</span></div>'
+        nxt = ", ".join(e(x) for x in v["tomorrow"][:3]) + (f" and {len(v['tomorrow']) - 3} more" if len(v["tomorrow"]) > 3 else "")
+        lead = "Done for today &middot; tomorrow" if total_n and done_n == total_n else "Tomorrow"
+        if nxt:
+            body += (f'<div class="du-line"><span><b>{lead}:</b> {nxt}</span>'
+                     f'<a href="#" onclick="{_pycmd("duetab:upcoming")}">Upcoming &rsaquo;</a></div>')
+        elif v["next"]:
+            body += (f'<div class="du-line"><span><b>Next:</b> {", ".join(e(x) for x in v["next"]["names"][:2])} &middot; '
+                     f'{e(v["next"]["day"])}</span><a href="#" onclick="{_pycmd("duetab:upcoming")}">Upcoming &rsaquo;</a></div>')
+    elif tab == "upcoming":
+        body += _due_behind(v)
+        for dd in v["days"]:
+            if dd.get("quiet"):
+                body += f'<div class="du-q">{e(dd["label"])} &middot; nothing due</div>'
+                continue
+            what = "review day" if dd["review"] and not dd["n"] else (f'{dd["n"]} thing{"s" if dd["n"] != 1 else ""}' if dd["n"] else "")
+            plus = (f'<a href="#" class="plus" title="Add a to-do for this day" '
+                    f'onclick="dcDue.plus(\'{e(dd["day"])}\');return false;">+</a>')
+            body += (f'<div class="du-dh{" today" if dd["today"] else ""}"><span>{e(dd["head"])}</span>'
+                     f'<small>{what}{plus}</small></div>')
+            body += "".join(_due_short(r) for r in dd["rows"])
+            body += "".join(f'<div class="du-evl">&#9733; {e(n)}</div>' for n in dd["events"])
+        body += _due_add(v, "today")
+    else:
+        if v["later"]:
+            body += "".join(_due_mine(r) for r in v["later"])
+        else:
+            body += '<div class="du-empty">Nothing here. A to-do with no day waits here until you give it one.</div>'
+        body += _due_add(v, "later")
+    return f'<div class="du" data-today="{today}">{head}{toast}{body}</div>'

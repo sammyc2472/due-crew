@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person } from "./helpers";
+import { api, db, mailbox, person } from "./helpers";
 
 // The admin's account lookup: one person at a time, never how they study.
 
@@ -51,7 +51,7 @@ describe("the admin's account lookup", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ uid: "maya", name: "Maya Chen", email: "maya@example.com", version: "3.4.0", tz: -300,
       signedIn: { computers: 1, browsers: 0 }, crew: { mutual: 1, addedNotBack: 1, addedThem: 0, muted: 1 } });
-    expect(r.body.squads).toEqual([{ name: "MS2 Squad", members: 1, founder: true }]);
+    expect(r.body.squads).toEqual([{ id: sq.body.id, name: "MS2 Squad", members: 1, founder: true }]);
     expect(r.body.made).toEqual([{ name: "Renal block", audience: "code", listed: false, followers: 0 }]);
     const text = JSON.stringify(r.body);
     for (const never of ["dre", "kai", "zed", "days", "week", "heatmap", "settings", "progress"]) expect(text).not.toContain(never);
@@ -69,5 +69,48 @@ describe("the admin's account lookup", () => {
     expect((await admin(sam, "/admin/people/sam", "DELETE", { email: "sam@example.com" })).body.error).toBe("self");
     expect((await admin(sam, "/admin/people/maya", "DELETE", { email: " Maya@Example.com " })).status).toBe(200);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM users WHERE uid = 'maya'").first<number>("n")).toBe(0);
+  });
+
+  it("an account's crew (F1): by name and which side added whom, behind its own request, each look logged; never how anyone studies", async () => {
+    const sam = await person("sam");
+    const maya = await person("maya", "Maya Chen");
+    const dre = await person("dre");
+    const kai = await person("kai");
+    await person("zed");
+    await maya.call("PUT", "/friends/dre"); await dre.call("PUT", "/friends/maya");
+    await maya.call("PUT", "/friends/kai");
+    await kai.call("PUT", "/friends/zed");
+    await (await person("theo")).call("PUT", "/friends/maya");
+    await dre.call("POST", "/sync", { week: { v: 1, days: { "2026-10-01": { reviews: 412 } } } });
+    expect((await api("GET", "/admin/people/maya/crew", { token: maya.token, env })).status).toBe(404);  // admin only
+    const r = await admin(sam, "/admin/people/maya/crew");
+    expect(r.status).toBe(200);
+    expect(r.body.crew.map((c: any) => [c.uid, !!c.mine, !!c.theirs])).toEqual([["dre", true, true], ["kai", true, false], ["theo", false, true]]);
+    expect(r.body.crew[0]).toMatchObject({ name: "Dre" });
+    expect(JSON.stringify(r.body)).not.toMatch(/412|reviews|zed|email/);
+    const log = await db().prepare("SELECT action FROM admin_actions WHERE uid = 'maya'").all<{ action: string }>();
+    expect(log.results.map((a) => a.action)).toContain("looked at their crew");
+  });
+
+  it("one side of a friendship, on request (F3): never adds anyone; the asker gets one email; logged", async () => {
+    const sam = await person("sam");
+    const maya = await person("maya", "Maya Chen");
+    const theo = await person("theo");
+    const kai = await person("kai");
+    await theo.call("PUT", "/friends/maya");   // someone Maya doesn't know added her
+    await maya.call("PUT", "/friends/kai");
+    const box = mailbox();
+    expect((await admin(sam, "/admin/people/maya/crew/theo?side=sideways", "DELETE")).status).toBe(400);
+    expect((await admin(sam, "/admin/people/maya/crew/kai?side=theirs", "DELETE")).status).toBe(404);  // kai never added her: nothing made
+    expect((await admin(sam, "/admin/people/maya/crew/theo?side=theirs", "DELETE")).status).toBe(200);
+    expect((await admin(sam, "/admin/people/maya/crew/kai?side=mine", "DELETE")).status).toBe(200);
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM friends").first<number>("n")).toBe(0);
+    expect(box.sent.map((m) => [m.to, m.text.split("\n")[0]])).toEqual([
+      ["maya@example.com", "As you asked, Sam took you off Theo's Due Crew list."],
+      ["maya@example.com", "As you asked, Sam took Kai off your Due Crew list."]]);
+    const log = await db().prepare("SELECT action, detail FROM admin_actions WHERE uid = 'maya' ORDER BY at").all<{ action: string; detail: string }>();
+    expect(log.results.map((a) => a.action)).toEqual(["took them off someone's list", "took someone off their list"]);
+    expect(JSON.stringify(log.results)).not.toContain("@");
+    expect((await api("DELETE", "/admin/people/maya/crew/kai?side=mine", { token: maya.token, env })).status).toBe(404);
   });
 });

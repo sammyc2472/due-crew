@@ -24,7 +24,24 @@ export async function squadId(code: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
 }
 
-function drawCode(): string {
+/** The squad a code opens, or null: a new code (the admin's, in
+ *  squad_codes) first, else the squad whose id came from this code, unless
+ *  it has had a new code since. */
+export async function idForCode(env: Env, code: string): Promise<string | null> {
+  const h = await squadId(code);
+  const alias = await env.DB.prepare("SELECT squad FROM squad_codes WHERE code_id = ?").bind(h).first<string>("squad");
+  if (alias) return alias;
+  const sq = await env.DB.prepare("SELECT code_id FROM squads WHERE id = ?").bind(h).first<{ code_id: string | null }>();
+  return sq && !sq.code_id ? h : null;
+}
+
+/** Whether a code is this squad's live one. */
+async function codeIsLive(env: Env, id: string, code: string): Promise<boolean> {
+  const sq = await env.DB.prepare("SELECT code_id FROM squads WHERE id = ?").bind(id).first<{ code_id: string | null }>();
+  return !!sq && (await squadId(code)) === (sq.code_id || id);
+}
+
+export function drawCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(SQUAD_CODE_LEN));
   return [...bytes].map((b) => SQUAD_ALPHABET[b % 32]).join("");  // 256 = 8 x 32: even
 }
@@ -86,7 +103,9 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
   await limitOrThrow(env, `peek:${s.uid}`, 60, 3600);
   const code = normalizeCode(new URL(req.url).searchParams.get("code") || "");
   if (code.length !== SQUAD_CODE_LEN) throw new HttpError(404, "no_squad");
-  return json(info(await getSquad(env, await squadId(code)), code));
+  const id = await idForCode(env, code);
+  if (!id) throw new HttpError(404, "no_squad");
+  return json(info(await getSquad(env, id), code));
 }
 
 /** POST /squads/{id}/join: the only way in. The door must be open and I
@@ -97,7 +116,7 @@ export async function join(req: Request, s: Session, env: Env, [id]: string[]): 
   // which members and past members know, let anyone back in).
   const body = await readJson(req);
   const code = typeof body.code === "string" ? body.code : null;
-  if (code === null || (await squadId(code)) !== id) throw new HttpError(403, "wrong_code");
+  if (code === null || !(await codeIsLive(env, id, code))) throw new HttpError(403, "wrong_code");
   return joinById(s, env, id);
 }
 
@@ -125,8 +144,13 @@ export async function restore(req: Request, s: Session, env: Env): Promise<Respo
   if (code.length !== SQUAD_CODE_LEN) throw V.bad("code");
   const name = V.squadName(body.name);
   await limitOrThrow(env, `squadrestore:${s.uid}`, 30, 86400);  // a 2.x computer's squads, once; not a way round create's limit
-  const id = await squadId(code);
-  const exists = await env.DB.prepare("SELECT 1 FROM squads WHERE id = ?").bind(id).first();
+  // a code the admin replaced opens nothing, and isn't made again
+  let id = await idForCode(env, code);
+  const exists = !!id;
+  if (!id) {
+    id = await squadId(code);
+    if (await env.DB.prepare("SELECT 1 FROM squads WHERE id = ?").bind(id).first()) throw new HttpError(403, "wrong_code");
+  }
   if (!exists) {
     let founder = s.uid;
     if (typeof body.founder === "string" && body.founder !== s.uid
@@ -163,8 +187,18 @@ export async function fetchSquad(req: Request, s: Session, env: Env, [id]: strin
       week: m.week, newCards: m.new_cards,
       joined: new Date(m.joined_at * 1000).toISOString().slice(0, 10), play: m.play ? JSON.parse(m.play) : null,
     })),
-    ...(B.askable(wk) ? { bingo: await B.cardFor(env, wk) } : {}),
+    ...(B.askable(wk) ? await bingoFor(env, wk, rows.results as any[]) : {}),
   });
+}
+
+/** The week's card, and (for the site, which doesn't work squares out)
+ *  where this squad stands on it: the same evaluate the add-on runs. */
+async function bingoFor(env: Env, wk: string, rows: any[]) {
+  const card = await B.cardFor(env, wk);
+  const ev = B.evaluate(card, rows.map((m) => ({ uid: m.uid, emoji: m.emoji, day: m.day,
+    joined: new Date(m.joined_at * 1000).toISOString().slice(0, 10), play: m.play ? JSON.parse(m.play) : null })));
+  return { bingo: card, bingoEv: { squares: ev.squares.map((q) => ({ done: q.done })), middle: { done: ev.middle.done, have: ev.middle.have, goal: ev.middle.goal },
+    lines: ev.lines, closest: B.closest(card, ev) } };
 }
 
 /** PUT /squads/{id}/row: my numbers, as an update. Never a join. */

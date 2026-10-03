@@ -477,3 +477,63 @@ In Anki (as a follower):
       after), searches and picked cards as one line each, and Browse N
       cards opens Anki's browser on exactly those cards. The Today box
       has one line of today's topics, cut with … when long.
+
+### The admin page, grown up (duecrew.com/admin)
+
+- [ ] The sidebar switches pages and the address follows (/admin?p=people);
+      a reload opens the same page. Narrow, the sidebar wraps above.
+- [ ] An account: Delete account… stays shut until clicked; Cancel shuts it.
+- [ ] Email them a fresh code: at Anki's code box, the code that arrives
+      signs in. Clear their sign-in limits after ten asks lets them ask again.
+- [ ] Change their email: both inboxes get a line; the old address still
+      signs in; signing in at the new one lands on the same account.
+- [ ] A squad by its code from the search box: Remove… (with a why) emails
+      the founder and they can't rejoin; New code… shows the code once,
+      the old code fails in Anki's Join, the new one works; Close joins;
+      Rename; Make founder; Delete squad… with the name typed.
+- [ ] The audit log lists each of the above; nothing in it shows an
+      email or a code.
+
+### Not yet today, and the site's board (3.6.7)
+
+- [ ] A crewmate syncs before studying: in Anki and on duecrew.com/home
+      their row has dashes, no rank or medal, "· nothing yet as of …", and sits
+      under everyone who studied; their status still shows; 🎉 works.
+- [ ] Week tab: someone with only zero days this week reads "nothing this
+      week". A squad board: a 0-review row today sits under the ranked
+      rows with dashes, and "N studying today" doesn't count it.
+- [ ] duecrew.com/home beside Anki's board, the same day: Today, Week,
+      Decks, Squads and Plans show the same people in the same order with
+      the same chips and notes; the footer has Crew ▾ and "N waiting".
+
+## Share cards (site)
+
+- [ ] Home › This week › Share ›: the week card; each switch redraws it; Link size; Dark.
+- [ ] On a phone, Share… opens the phone's share sheet with the picture; on a computer, Download saves a PNG.
+- [ ] With Time studied off in Anki's Privacy, its switch is off and says so.
+- [ ] Log › Share my 2026 ›: the year card, the days before the log dashed.
+- [ ] Squads › a squad with bingo › Share ›: the card, a line ringed.
+- [ ] A plan with every card seen: "Finished" on its page, Share a card ›; the code only on a code plan.
+- [ ] Anki › Crew ▾ › Share today as a picture…: the browser opens duecrew.com signed in, the today card's sheet open, the address back to /home.
+- [ ] On a computer, Copy picture, then paste into a chat.
+- [ ] In December (or with the clock set), Home's rail opens with "Your 2026 in Anki"; Not now hides it after a reload.
+
+## Quiet accounts (3.7)
+
+- [ ] A crewmate with no sync in 90+ days: one "▸ N quiet" line under everyone; a click opens their rows. The same on a squad board and on duecrew.com.
+- [ ] Settings › You ends with the 12-months sentence; Privacy's "Nothing for now" mentions 24 months; the Settings dialog has the sentence too.
+- [ ] After deploying 0016: an account deleted by the job (or a test one with its uid hashed into `gone`), opened in Anki: "Welcome back… deleted after 12 months", and Start again signs up fresh.
+- [ ] Admin › Today: the Housekeeping line under Needs you.
+
+
+## Due (above the board)
+
+- [ ] Due sits above the board on every tab; ▴ folds it to one line (and it stays folded after Anki restarts); the line's Study › opens the plan's deck.
+- [ ] Today: Behind (a plan date from an earlier day not yet seen, an item of yours from yesterday), then Reviews, today's dates with each resource's numbers, your items. Review a date's cards: its box ticks itself at the next refresh.
+- [ ] An author's line (add one in the builder's day panel under To do, with a link): tick it by hand; its link opens in the browser, not in the Decks screen.
+- [ ] Type "Book the room fri": "→ Fri …" shows before Enter; Enter adds it to Friday and says "Added to Fri … · Show"; Show opens Upcoming. "×" on the preview keeps the words as text.
+- [ ] Upcoming: today first, then two weeks; empty days fold into one line; + on a day adds to that day; the exam shows on its day.
+- [ ] Later: an item with no day; Do today moves it; its day button moves it, Pick a day… opens a calendar, Edit… and Delete work.
+- [ ] Settings › Board › Due: turning off Due, Suggestions, and Recover leeches (on: the next refresh brings leeches back as new, the tag off; Edit › Undo puts them back; "Recovered N leeches · See them" opens the browser).
+- [ ] With 10+ misses today, "Go over today's N misses" builds a filtered deck and opens it; × hides it for the day.
+- [ ] A second computer, after its morning pull, shows the same own items.

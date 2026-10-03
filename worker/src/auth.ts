@@ -31,8 +31,8 @@ export const VERIFIES_PER_IP = 60;
 export const SESSION_IDLE = 180 * 86400;    // idle sessions end after 180 days
 const TOUCH_EVERY = 86400;                  // last_used is written at most daily
 
-const codeHash = (email: string, code: string) => sha256Hex(`otp:${email}:${code}`);
-const emailKey = async (kind: string, email: string) => `${kind}:e:${(await sha256Hex(email)).slice(0, 32)}`;
+export const codeHash = (email: string, code: string) => sha256Hex(`otp:${email}:${code}`);
+export const emailKey = async (kind: string, email: string) => `${kind}:e:${(await sha256Hex(email)).slice(0, 32)}`;
 const ipKey = (kind: string, req: Request) => `${kind}:ip:${clientIp(req)}`;
 // an address from one IP: hashed together, so no row pairs an address with where it was typed
 const emailIpKey = async (kind: string, email: string, req: Request) =>
@@ -117,6 +117,16 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   let user = await env.DB.prepare("SELECT uid, name FROM users WHERE email = ?")
     .bind(email).first<{ uid: string; name: string | null }>();
   let isNew = false;
+  if (!user) {
+    // an email change the admin started finishes here: this address just
+    // proved itself, so the account moves to it (mock "Admin, grown up", A3)
+    const moving = await env.DB.prepare("DELETE FROM email_changes WHERE email = ? AND at > ? RETURNING uid")
+      .bind(email, now - 7 * DAY).first<{ uid: string }>();
+    if (moving) {
+      await env.DB.prepare("UPDATE users SET email = ? WHERE uid = ?").bind(email, moving.uid).run();
+      user = await env.DB.prepare("SELECT uid, name FROM users WHERE uid = ?").bind(moving.uid).first<{ uid: string; name: string | null }>();
+    }
+  }
   if (!user) {
     const uid = ulid();
     await env.DB.prepare("INSERT INTO users (uid, email, created_at) VALUES (?, ?, ?)").bind(uid, email, now).run();
@@ -203,6 +213,14 @@ export async function signOut(s: Session, env: Env, req?: Request): Promise<Resp
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
+/** GET /auth/places (S6): where I'm signed in, as counts: computers (the
+ *  add-on) and browsers (duecrew.com). Nothing about which, or where. */
+export async function places(s: Session, env: Env): Promise<Response> {
+  const rows = await env.DB.prepare("SELECT device FROM sessions WHERE uid = ?").bind(s.uid).all<{ device: string }>();
+  const browsers = rows.results.filter((r) => r.device === "duecrew.com").length;
+  return json({ computers: rows.results.length - browsers, browsers });
+}
+
 export async function signOutAll(s: Session, env: Env, req?: Request): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE uid = ?").bind(s.uid).run();
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
@@ -227,6 +245,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
          (SELECT 1 FROM members WHERE squad = ?1 AND uid != ?2)`).bind(id, uid));
     stmts.push(db.prepare(
       "DELETE FROM bans WHERE squad = ?1 AND NOT EXISTS (SELECT 1 FROM squads WHERE id = ?1)").bind(id));
+    stmts.push(db.prepare(
+      "DELETE FROM squad_codes WHERE squad = ?1 AND NOT EXISTS (SELECT 1 FROM squads WHERE id = ?1)").bind(id));
   }
   for (const sql of [
     "DELETE FROM members WHERE uid = ?1",
@@ -258,6 +278,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM tip_helped WHERE tip_uid = ?1 OR by_uid = ?1",
     "DELETE FROM logs WHERE uid = ?1",
     "DELETE FROM feedback WHERE uid = ?1",  // 3.6.5, P6
+    "DELETE FROM admin_notes WHERE uid = ?1",
+    "DELETE FROM email_changes WHERE uid = ?1",
     "DELETE FROM codes WHERE uid = ?1",
     "DELETE FROM sessions WHERE uid = ?1",
     "DELETE FROM users WHERE uid = ?1",

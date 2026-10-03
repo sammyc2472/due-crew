@@ -281,6 +281,6 @@ export function settingsDoc(v: unknown) {
   if (!isObj(v) || !isInt(v.v, 0, 1000) || !isStr(v.at, 40, 1) || !isObj(v.settings)) throw bad("settings");
   for (const k of Object.keys(v)) if (!["v", "at", "settings"].includes(k)) throw bad("settings");
   const json = JSON.stringify(v.settings);
-  if (json.length > 32 * 1024) throw bad("settings");
+  if (json.length > 64 * 1024) throw bad("settings"); // Due: my own to-dos ride it
   return { v: v.v, at: v.at, json };
 }

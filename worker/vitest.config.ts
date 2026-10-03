@@ -11,6 +11,9 @@ export default defineConfig(async () => {
         miniflare: { bindings: { TEST_MIGRATIONS: migrations, ADMIN_TOKEN: "test-admin", RESEND_API_KEY: "test-resend" } },
       }),
     ],
-    test: { setupFiles: ["./test/setup.ts"] },
+    // A test here is a run of real requests through workerd and D1 (some
+    // send hundreds): about a second on a laptop, but a busy CI runner has
+    // taken several times longer, past vitest's 5s default.
+    test: { setupFiles: ["./test/setup.ts"], testTimeout: 30_000 },
   };
 });
