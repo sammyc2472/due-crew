@@ -57,6 +57,15 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Unsuspend", ids))
 
+    def schedule_cards_as_new(self, ids, restore_position=False, reset_counts=False):
+        """Anki's Forget: new again (type and queue 0), lapses and reps reset when asked."""
+        ids = [int(i) for i in ids]
+        for cid in ids:
+            self.db.conn.execute("UPDATE cards SET type = 0, queue = 0, ivl = 0"
+                                 + (", lapses = 0" if reset_counts else "") + " WHERE id = ?", (cid,))
+        if self.col is not None:
+            self.col.undo_steps.append(("Forget", ids))
+
     def suspend_cards(self, ids):
         """Anki's: queue -1, whatever it was. An undoable op."""
         ids = [int(i) for i in ids]
@@ -64,6 +73,19 @@ class FakeSched:
             self.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = ?", (cid,))
         if self.col is not None:
             self.col.undo_steps.append(("Suspend", ids))
+
+
+class FakeTags:
+    def __init__(self, db):
+        self.db = db
+
+    def bulk_remove(self, nids, tags):
+        """Anki's: those tags off those notes (any case)."""
+        for nid in nids:
+            row = self.db.conn.execute("SELECT tags FROM notes WHERE id = ?", (int(nid),)).fetchone()
+            if row:
+                kept = [t for t in str(row[0]).split() if t.lower() not in str(tags).lower().split()]
+                self.db.conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (" " + " ".join(kept) + " ", int(nid)))
 
 
 class FakeCol:
@@ -76,6 +98,7 @@ class FakeCol:
         self.sched = FakeSched(day_cutoff, self.db)
         self.sched.col = self
         self.undo_steps = []
+        self.tags = FakeTags(self.db)
 
     def add_custom_undo_entry(self, name):
         self.undo_steps.append((name, []))

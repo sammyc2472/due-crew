@@ -28,10 +28,11 @@ from .app import _state, cfg, client
 ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak",
                 "share_heatmap", "show_up", "paused", "exam_date", "away_from", "away_to",
                 "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
-                "accent")  # 3.5.0: the site wears it too
+                "accent",  # 3.5.0: the site wears it too
+                "due_items", "due_ticks", "due_show", "due_suggest")  # Due: my own to-dos, on every computer
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
-          "share_heatmap", "show_up", "paused")
+          "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
 _TEXT = {"exam_date": 10, "away_from": 10, "away_to": 10, "status": 80, "emoji": 16,
          "crew_label": 40}
 MAX_SQUADS = 20
@@ -97,6 +98,12 @@ def clean(s):
         out["shared_decks"] = decks
     if s.get("accent") in ACCENT_NAMES:
         out["accent"] = s["accent"]
+    if isinstance(s.get("due_items"), list):
+        from .due import clean_items
+        out["due_items"] = clean_items(s["due_items"])
+    if isinstance(s.get("due_ticks"), dict):
+        from .due import clean_ticks
+        out["due_ticks"] = clean_ticks(s["due_ticks"])
     if isinstance(s.get("muted"), list):
         # 3.0.1: the people whose cheers and knocks I don't get, by uid
         out["muted"] = list(dict.fromkeys(

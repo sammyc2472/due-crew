@@ -2912,7 +2912,7 @@ def test_every_board_command_has_a_handler():
                    r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
             emitted |= set(re.findall(rx, text))
     handled = set()
-    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py"):
+    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
         handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
         for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
@@ -5380,6 +5380,170 @@ def test_long_quiet_friends_fold():
     sq = board._squads_html(view, {})
     check("quiet fold: on a squad board too, after the recent ones", "1 quiet" in sq and "Cy hasn't been here since Jan" in sq
           and sq.count('<tr class="qh') == 1 and sq.index(">Bo<") < sq.index("qfold"), sq[sq.find("qfold") - 20:sq.find("qfold") + 300])
+
+
+def test_due_model():
+    """Due (mock "My List"): day words, own items, Behind, the three tabs."""
+    from due_crew import due as D
+    T = "2026-10-03"  # a Saturday
+    check("due: a day at the end comes off", D.parse("Book the room fri", T) == ("Book the room", "2026-10-09"))
+    check("due: a name is never a day", D.parse("Call tom", T) == ("Call tom", None))
+    check("due: today, tomorrow, later", [D.parse(x, T)[1] for x in ("a today", "a tomorrow", "a later")]
+          == [T, "2026-10-04", ""])
+    check("due: next week is Monday", D.parse("Pay rent next week", T)[1] == "2026-10-05")
+    check("due: a date in words, this year or next",
+          D.parse("Read 12 oct", T)[1] == "2026-10-12" and D.parse("x sept 30", T)[1] == "2027-09-30")
+    check("due: a day alone stays text", D.parse("fri", T) == ("fri", None))
+    check("due: a weekday on that weekday is next week's", D.when_word("sat", T) == "2026-10-10")
+    check("due: nothing behind today", not D.day_ok("2026-10-02", T) and D.day_ok("", T) and D.day_ok(T, T))
+    items, it = D.add([], "  Email   the director ", T, T, ident="aaaa1")
+    check("due: add tidies text", it and it["t"] == "Email the director" and it["d"] == T)
+    items, _ = D.add(items, "Practice exam 3", "2026-10-04", T, ident="aaaa2")
+    items, _ = D.add(items, "Old thing", "", T, ident="aaaa3")
+    full = [{"id": f"x{i:04d}", "t": "x", "d": "", "done": "", "at": T} for i in range(D.MAX_OPEN)]
+    check("due: 60 open at most", D.add(full, "one more", "", T)[1] is None)
+    check("due: clean drops bad items", D.clean_items([{"id": "!!", "t": "x"}, {"id": "abcd", "t": ""},
+                                                       {"id": "abcd", "t": "ok", "d": "nope"}])
+          == [{"id": "abcd", "t": "ok", "d": "", "done": "", "at": ""}])
+    moved = D.change(items, "aaaa3", T, d="2026-10-08")
+    check("due: move to a day", next(i for i in moved if i["id"] == "aaaa3")["d"] == "2026-10-08")
+    check("due: never moved behind today",
+          next(i for i in D.change(items, "aaaa3", T, d="2026-01-01") if i["id"] == "aaaa3")["d"] == "")
+    ticked = D.change(items, "aaaa1", T, done=True)
+    check("due: ticked items go after a week",
+          len(D.prune(ticked, "2026-10-09")) == 3 and len(D.prune(ticked, "2026-10-10")) == 2)
+    # a plan: one date behind (opened Thu, not done), one today, one tomorrow, an exam Wed
+    dates = [
+        {"pid": "p1", "uid": "u0", "plan": "Big Step 1", "name": "Done date", "opens": "2026-09-30", "seen": 9, "total": 9},
+        {"pid": "p1", "uid": "u1", "plan": "Big Step 1", "name": "Cardio", "opens": "2026-10-01", "seen": 3, "total": 10},
+        {"pid": "p1", "uid": "u2", "plan": "Big Step 1", "name": "Pharm", "opens": T, "seen": 4, "total": 8,
+         "parts": [["Video Series", 4, 4], ["Path Book", 0, 4]],
+         "todo": [{"k": "watch", "t": "lecture 14"}]},
+        {"pid": "p1", "uid": "u3", "plan": "Big Step 1", "name": "Renal", "opens": "2026-10-04", "seen": 0, "total": 12},
+        {"pid": "p1", "uid": "u4", "plan": "Big Step 1", "name": "Far", "opens": "2026-11-30", "seen": 0, "total": 5},
+    ]
+    old = [{"id": "bbbb1", "t": "Left from Thu", "d": "2026-10-01", "done": "", "at": "2026-10-01"}]
+    v = D.view(T, dates, items + old, {}, events=[{"day": "2026-10-07", "name": "KSA", "plan": "Big Step 1"}],
+               reviews={"due": 40, "done": 0})
+    check("due: Behind has the undone date as its plan's line", v["behind_plans"] == [
+        {"kind": "behind", "pid": "p1", "plan": "Big Step 1", "dates": 1, "left": 7, "first": "2026-10-01", "uid": "u1"}])
+    check("due: Behind has my item from Thu", [r["text"] for r in v["behind_mine"]] == ["Left from Thu"]
+          and v["behind_mine"][0]["tag"] == "since Thu" and v["behind_n"] == 2)
+    kinds = [r["kind"] for r in v["rows"]]
+    check("due: Today is reviews, the date, my item", kinds == ["reviews", "plan", "mine"], kinds)
+    pr = v["rows"][1]
+    check("due: a date's parts and author line", [ln["kind"] for ln in pr["lines"]] == ["part", "part", "todo"]
+          and pr["lines"][0]["done"] and not pr["lines"][1]["done"] and pr["part"] and not pr["done"])
+    v2 = D.view(T, [dict(dates[2], seen=8)], [], {"p1:u2:0": T})
+    check("due: a date ticks itself when seen and its lines are ticked", v2["rows"][0]["done"] and v2["done_n"] == 1)
+    v3 = D.view(T, [dict(dates[2], seen=8)], [], {})
+    check("due: ...and not while an author line is open", not v3["rows"][0]["done"])
+    ups = v["days"]
+    check("due: Upcoming starts with today", ups[0]["today"] and ups[0]["head"].startswith("Today"))
+    check("due: tomorrow's date and my item", [r.get("name") or r.get("text") for r in ups[1]["rows"]]
+          == ["Renal", "Practice exam 3"] and ups[1]["head"].startswith("Tomorrow"))
+    check("due: quiet days fold to one line, the event has its day",
+          ups[2].get("quiet") and ups[3]["day"] == "2026-10-07" and ups[3]["events"] == ["KSA"])
+    check("due: two weeks only", all((x.get("day") or x["quiet"][1]) <= "2026-10-17" for x in ups))
+    check("due: Later holds the undated", [r["text"] for r in v["later"]] == ["Old thing"] and v["later_n"] == 1)
+    check("due: tomorrow's line", v["tomorrow"] == ["Renal", "Practice exam 3"])
+    check("due: the next exam", v["event"]["name"] == "KSA" and v["event"]["when"] == "Wed")
+    check("due: done counts today only", (v["done_n"], v["total_n"]) == (0, 3))
+    check("due: a date with nothing to see never sits behind as done",
+          not D.date_state({"pid": "p", "uid": "u", "opens": T, "seen": 0, "total": 0}, {})[0])
+    check("due: suggestions at most two", len(D.view(T, [], [], {}, suggestions=[{"key": str(i)} for i in range(4)])
+                                                ["suggestions"]) == 2)
+    check("due: empty when nothing", D.empty(D.view(T, [], [], {})))
+
+
+def test_due_board_and_clicks():
+    """Due on the board: the three tabs, escaped, every click sent as the
+    board sends it; adding with a day said at the end; Behind; recover leeches."""
+    from due_crew import due as D, due_flow as F, app as appmod
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    T = "2026-10-03"
+    dates = [{"pid": "p1", "uid": "u2", "plan": "Big <Step>", "name": "Pharm <b>", "opens": T, "seen": 4, "total": 8,
+              "parts": [["Video Series", 4, 4], ["Path Book", 0, 4]], "todo": [{"k": "watch", "t": "lecture <14>",
+                                                                                  "url": "javascript:alert(1)"}]},
+             {"pid": "p1", "uid": "u1", "plan": "Big <Step>", "name": "Cardio", "opens": "2026-10-01", "seen": 3, "total": 10}]
+    items = [{"id": "aaaa1", "t": "Email <the> director", "d": T, "done": "", "at": T},
+             {"id": "aaaa2", "t": "Someday", "d": "", "done": "", "at": T}]
+    v = D.view(T, dates, items, {}, reviews={"due": 12, "done": 3}, suggestions=[{"key": "again", "text": "Go <over>", "go": "Study"}])
+    h = board._due_html(v)
+    check("due board: escaped, no raw markup from names or lines",
+          "<b>Pharm &lt;b&gt;</b>" in h and "Email &lt;the&gt; director" in h and "lecture &lt;14&gt;" in h
+          and "Big &lt;Step&gt;" in h and "Go &lt;over&gt;" in h and "<the>" not in h)
+    check("due board: a link only when it's a web address", "javascript:" not in h)
+    check("due board: Behind on top, then Today", h.index("Behind") < h.index("Pharm") and "Catch up" in h
+          and "duecrew:plancatch:p1" in h)
+    check("due board: tabs, fold, tick, item menu, add line", all(x in h for x in (
+        "duecrew:duetab:upcoming", "duecrew:duetab:later", "duecrew:duefold", "duecrew:duetick:aaaa1",
+        "duecrew:dueitem:aaaa1", 'id="du-in"', "duecrew:duego:again", "duecrew:duex:again", "Reviews", "12 due")))
+    up = board._due_html(dict(v, tab="upcoming"))
+    check("due board: Upcoming has today, + per day", "Today · Sat 3 Oct" in up and "dcDue.plus('2026-10-03')" in up)
+    lt = board._due_html(dict(v, tab="later"))
+    check("due board: Later has Do today", "duecrew:duedo:aaaa2" in lt and '<option value="later" selected>' in lt)
+    one = board._due_html(dict(v, folded=True))
+    check("due board: folded is one line", 'class="du du-one"' in one and "1 behind" in one and "du-tabs" not in one)
+    check("due board: off is nothing", board._due_html(None) == "")
+    js = board.keep_me_in_view_js()
+    check("due board: the add line's script rides every draw", "window.dcDue" in js and "dueadd" in js)
+    st = board.settings_html({"tab": "board", "signed_in": True}, {})
+    check("due settings: three switches on Board", all(f"duecrew:set:{k}:" in st for k in ("due_show", "due_suggest", "due_leeches")))
+    from due_crew import settings_model as SM
+    check("due settings: the switches are whitelisted", SM.change(["set", "due_leeches", "1"], {}) == {"due_leeches": True})
+    # clicks, through the add-on's own handler
+    conf = {"due_items": [], "due_tab": "today"}
+    saved = (F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_dates)
+    F.cfg = lambda: conf
+    F.save_cfg = lambda c, **k: conf.update(c)
+    appmod.swap = lambda c, focus=None: None
+    F._today = lambda: T
+    F.plan_dates = lambda today: ([], [], [])
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("dueadd:today:0:" + "Book%20the%20room%3A%20B12%20fri")
+        it = conf["due_items"][-1] if conf["due_items"] else {}
+        check("due add: a day said at the end, text kept with its colon", it.get("t") == "Book the room: B12"
+              and it.get("d") == "2026-10-09", conf)
+        check("due add: it says where it went", (F._toast() or {}).get("text") == "Added to Fri 9 Oct")
+        send("dueadd:later:1:" + "Call%20mom%20fri")
+        check("due add: x keeps the words", conf["due_items"][-1]["t"] == "Call mom fri" and conf["due_items"][-1]["d"] == "")
+        send("dueadd:2026-01-01:0:Old")
+        check("due add: never behind today", conf["due_items"][-1]["d"] == T)
+        ident = conf["due_items"][0]["id"]
+        send("duetick:" + ident)
+        check("due tick", conf["due_items"][0]["done"] == T)
+        send("duetick:" + ident)
+        check("due untick", conf["due_items"][0]["done"] == "")
+        send("duedo:" + conf["due_items"][1]["id"])
+        check("due: Do today", conf["due_items"][1]["d"] == T)
+        send("duetab:upcoming")
+        check("due tab", conf["due_tab"] == "upcoming")
+        send("duefold")
+        check("due fold", conf["due_fold"] is True)
+        send("dueshow:later")
+        check("due show", conf["due_tab"] == "later")
+    finally:
+        F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_dates = saved
+    # recover leeches: tag off, unsuspended, new again, one undo step; the note's other card untouched
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    fakes.add_card(conn, 1, did=10, ctype=2, queue=-1, tags="leech Cardio", lapses=8)
+    fakes.add_card(conn, 2, did=10, ctype=2, queue=2, nid=1, ord_=1, lapses=1)
+    fakes.add_card(conn, 3, did=10, ctype=2, queue=2, tags="Cardio", lapses=9)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    got = F.recover_leeches(col)
+    rows = {cid: (t, q, lp) for cid, t, q, lp in conn.execute("SELECT id, type, queue, lapses FROM cards")}
+    tags = conn.execute("SELECT tags FROM notes WHERE id = 1").fetchone()[0].split()
+    check("leeches: the leech back as new, its tag off, counts reset", got == [1] and rows[1] == (0, 0, 0)
+          and tags == ["Cardio"], (got, rows, tags))
+    check("leeches: its sibling and a non-leech left alone", rows[2] == (2, 2, 1) and rows[3] == (2, 2, 9))
+    check("leeches: one undo step", len(col.undo_steps) == 1 and col.undo_steps[0][0].startswith("Due Crew"))
+    check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
 
 
 def main():

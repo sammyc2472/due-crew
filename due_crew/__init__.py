@@ -45,7 +45,7 @@ from .stats import heatmap as cached_heatmap
 from .stats.decks import gather_shared_decks
 from .stats.queries import StatsQueries
 from .ui import copy_text
-from . import account, bingo_flow, plan_flow, rooms, together
+from . import account, bingo_flow, due_flow, plan_flow, rooms, together
 from . import cards as crew_cards
 from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
@@ -399,6 +399,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
         toasts.append(opened)
     elif data.get("plans"):
         plan_flow.refresh_progress()
+    due_flow.after_refresh()  # Due: a fresh reviews count, and the morning's leeches when asked
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -499,7 +500,8 @@ def _board_html(c):
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
                         room=rooms.board_view(),
-                        plans=plan_flow.board_view(c))  # 3.3: the Plans tab shows while I follow one
+                        plans=plan_flow.board_view(c),  # 3.3: the Plans tab shows while I follow one
+                        due=due_flow.view(c))  # Due: the day's to-do above the board
 
 
 def _on_did_render(deck_browser):
@@ -644,6 +646,8 @@ def _on_js(handled, message, context):
     c = cfg()
     if cmd.startswith("plan"):
         plan_flow.on_message(cmd, parts)  # 3.1
+    elif cmd.startswith("due"):
+        due_flow.on_message(cmd, parts)  # Due
     elif cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
         c["sort"] = parts[2]
         save_cfg(c)

@@ -194,6 +194,39 @@ sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.rend
              "uid": "m", "index": 0, "known": True}],
     asks=[{"text": "The external iliac artery becomes the femoral artery as it c", "who": [], "state": "open", "index": 0},
           {"text": "Warfarin inhibits vitamin K epoxide reductase", "who": ["Dre"], "state": "answered"}]))
+# Due (mock "My List"): above the board on every tab, each of its tabs and folded
+from due_crew import due as _D
+_T = L[0]
+_d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
+_DATES = [
+    {"pid": "p1", "uid": "u0", "plan": "Big Step 1 · F3", "name": "F2-4 SLGs 6–8", "opens": _d(-2), "seen": 40, "total": 96},
+    {"pid": "p1", "uid": "u1", "plan": "Big Step 1 · F3", "name": "F3-1 SLGs 1-3 · Absorption, distribution, elimination",
+     "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
+     "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
+     "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2"},
+    {"pid": "p1", "uid": "u2", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 5 · Clinical trial phases", "opens": _T, "seen": 24, "total": 24},
+    {"pid": "p1", "uid": "u3", "plan": "Big Step 1 · F3", "name": "F3-2 SLGs 6a–6b · Drug interactions", "opens": _d(1), "seen": 0, "total": 129},
+    {"pid": "p1", "uid": "u4", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 7 · Autonomic drugs", "opens": _d(2), "seen": 0, "total": 96,
+     "todo": [{"k": "watch", "t": "lecture 15"}]},
+    {"pid": "p1", "uid": "u5", "plan": "Big Step 1 · F3", "name": "F4-1 SLGs 1–2 · Cardio phys", "opens": _d(9), "seen": 0, "total": 110},
+]
+_ITEMS = [
+    {"id": "i0001", "t": "Email the course director about the retake", "d": _d(-2), "done": "", "at": _d(-3)},
+    {"id": "i0002", "t": "Book the practice exam room", "d": _T, "done": "", "at": _T},
+    {"id": "i0003", "t": "Practice exam 3", "d": _d(1), "done": "", "at": _T},
+    {"id": "i0004", "t": "Return library books", "d": "", "done": "", "at": _T},
+    {"id": "i0005", "t": "Ask Dre about the renal deck", "d": "", "done": "", "at": _T},
+]
+_DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
+              review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
+              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}])
+for _tab in ("today", "upcoming", "later"):
+    sections.append(f"<h3>Due: {_tab}</h3>" + board.render(DATA, {"period": "today"}, now_ts - 60,
+                                                            due=dict(_DV, tab=_tab)).replace('id="du-', f'id="du{_tab}-'))
+sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True)))
+sections.append("<h3>Due: added somewhere else</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, due=dict(_DV, toast={"text": "Added to Fri 9 Oct", "tab": "upcoming"},
+                                                     rows=[], behind_n=0, behind_plans=[], behind_mine=[], suggestions=[])))
 # the preview holds many boards; the add-on runs this once, for its one
 sections.append("<script>" + board.keep_me_in_view_js().replace(
     "var box = document.querySelector('#due-crew .dc-scroll');\n        if (!box) { return; }",
