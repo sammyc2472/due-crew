@@ -78,3 +78,7 @@ export async function befriend(a: { call: Function }, b: { uid: string }) {
 
 export const WEEK = (label: string, reviews = 10) =>
   ({ v: 1, paused: false, days: { [label]: { studied: true, reviews, studyTimeMs: 1000, accuracy: 90.5, streak: 3 } } });
+
+/** An account as the 2.x import made it (3.7.1 review: only these restore). */
+export const from2x = (...uids: string[]) =>
+  Promise.all(uids.map((u) => db().prepare("UPDATE users SET from2x = 1 WHERE uid = ?").bind(u).run()));

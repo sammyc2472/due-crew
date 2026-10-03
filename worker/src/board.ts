@@ -32,7 +32,7 @@ const FEED_MAX = 20;
  *  exams come with the board already. */
 async function feed(env: Env, uid: string) {
   const since = nowSec() - FEED_DAYS * 86400;
-  const mine = "SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1";
+  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION SELECT plan FROM plan_editors WHERE uid = ?1`;
   const [back, notes, saves, sett] = await env.DB.batch<any>([
     env.DB.prepare(
       `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
@@ -225,6 +225,10 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     }
     wrote.profile = sets.length > 0;
     if (sets.length) writes.push(db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE uid = ?`).bind(...vals, s.uid));
+    // a 3.x add-on has synced: the one-time 2.x restore is spent
+    if (typeof profile.client_version === "string" && /^3\./.test(profile.client_version)) {
+      writes.push(db.prepare("UPDATE users SET from2x = 0 WHERE uid = ? AND from2x = 1").bind(s.uid));
+    }
   }
   if (week !== null) {
     wrote.week = week !== have.week;

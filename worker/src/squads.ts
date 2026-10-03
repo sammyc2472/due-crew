@@ -6,7 +6,7 @@
 import type { Session } from "./auth";
 import * as B from "./bingo";
 import { limitOrThrow } from "./limits";
-import { checkUid, nameOf } from "./social";
+import { checkUid, from2x, nameOf } from "./social";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -150,6 +150,10 @@ export async function restore(req: Request, s: Session, env: Env): Promise<Respo
   // a code the admin replaced opens nothing, and isn't made again
   let id = await idForCode(env, code);
   const exists = !!id;
+  // 3.7.1 review: only a 2.x account brings a squad back; anyone else joins
+  // what exists (a restore was a way to make a squad with a chosen code
+  // and anyone as its founder)
+  if (!id && !(await from2x(env, s.uid))) throw new HttpError(404, "no_squad");
   if (!id) {
     id = await squadId(code);
     if (await env.DB.prepare("SELECT 1 FROM squads WHERE id = ?").bind(id).first()) throw new HttpError(403, "wrong_code");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, mailbox, person } from "./helpers";
+import { api, db, mailbox, person, from2x } from "./helpers";
 
 // Mock "Admin, grown up": sign-in help, the note, the audit log (A3, A5)
 // and the squad tools (A4). Admin only; the founder is told; nothing logged
@@ -160,6 +160,7 @@ describe("the admin's squad tools", () => {
     // the old code: no peek, no join, no restore that makes the squad again
     expect((await zed.call("GET", `/squads/peek?code=${sq.code}`)).status).toBe(404);
     expect((await zed.call("POST", `/squads/${sq.id}/join`, { code: sq.code })).body.error).toBe("wrong_code");
+    await from2x("zed");  // even an account from 2.x, which may bring a squad back
     expect((await zed.call("POST", "/squads/restore", { code: sq.code, name: "MS2 Squad" })).body.error).toBe("wrong_code");
     expect(await db().prepare("SELECT COUNT(*) AS n FROM squads").first<number>("n")).toBe(1);
     // the new one: peek gives the same id, and the join works

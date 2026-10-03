@@ -156,7 +156,7 @@ PY
 (cd worker && npx wrangler d1 execute due-crew --local --env="" --persist-to "../$STATE" --file "$SEED" >/dev/null)
 
 # 3.2: Dre may open /admin here (the real one reads the ADMIN_UIDS secret)
-printf 'ADMIN_UIDS=dre\n' > ../worker/.dev.vars 2>/dev/null || printf 'ADMIN_UIDS=dre\n' > worker/.dev.vars
+printf 'ADMIN_UIDS=dre\nDEV_MAIL_LOG=1\n' > ../worker/.dev.vars 2>/dev/null || printf 'ADMIN_UIDS=dre\nDEV_MAIL_LOG=1\n' > worker/.dev.vars
 echo "Starting duecrew.com and its API on http://localhost:$PORT …"
 cd site
 npx wrangler dev -c wrangler.toml -c ../worker/wrangler.toml --port "$PORT" --ip 127.0.0.1 &

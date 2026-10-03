@@ -252,6 +252,8 @@ describe("the log", () => {
     await befriend(sam, dre);
     await befriend(sam, maya);
     for (const p of [dre, dre, maya]) expect((await p.call("POST", "/cheers/sam", { emoji: "🎉" })).status).toBe(200);
+    await sam.call("GET", "/board");  // read, so the cheers go
+    expect((await dre.call("POST", "/cheers/sam", { emoji: "🎉" })).status).toBe(200);  // a sender still counts once a day
     await dre.call("POST", "/cheers/sam", { emoji: "🎉", note: "a tip", guid: "g1" });  // a tip isn't a cheer
     const year = String(new Date().getUTCFullYear());
     expect((await sam.call("GET", "/log")).body.cheers).toEqual({ [year]: 2 });

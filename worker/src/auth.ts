@@ -327,7 +327,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
   for (let i = 0; i < rows.length; i += 50) {
     const chunk = rows.slice(i, i + 50);
     const results = await env.DB.batch(chunk.map((r) => env.DB.prepare(
-      `INSERT INTO users (uid, email, name, created_at) VALUES (?, ?, ?, ?)
+      `INSERT INTO users (uid, email, name, created_at, from2x) VALUES (?, ?, ?, ?, 1)
        ON CONFLICT DO NOTHING`).bind(r.uid, r.email, r.name, now)));
     const coded = chunk.filter((r, j) => results[j].meta.changes && r.code);
     if (coded.length) {

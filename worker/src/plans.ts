@@ -379,7 +379,8 @@ async function authorOnly(env: Env, id: string, s: Session): Promise<Plan> {
 async function role(env: Env, p: Plan, uid: string): Promise<"owner" | "editor" | "follower" | "reader"> {
   if (p.owner === uid) return "owner";
   if (await isEditor(env, p.id, uid)) return "editor";
-  if (await following(env, p.id, uid)) return "follower";
+  // a squad plan's follower is a member still (mayRead): leaving ends it
+  if (await following(env, p.id, uid) && (p.audience !== "squad" || await isMember(env, p.squad, uid))) return "follower";
   return "reader";
 }
 
@@ -565,6 +566,8 @@ export function keepIdr(doc: Obj, was: string | null): Obj {
 
 export async function put(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  // 3.7.1 review: what one account can make the server keep has a ceiling
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
   const body = await readJson(req, PLAN_BODY_MAX);
   for (const k of Object.keys(body)) if (!["version", "name", "line", "audience", "squad", "doc", "summary"].includes(k)) throw V.bad("plan");
   if (p.owner !== s.uid && ((body.audience !== undefined && body.audience !== p.audience)
@@ -605,11 +608,16 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
 
 /** One row of the plan's history: who saved, what they said it did, and
  *  the doc it replaced (for Undo). The last LOG_KEEP stay. */
+const PREV_KEEP = 10;
+
 export async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
   await env.DB.batch([
     env.DB.prepare("INSERT OR REPLACE INTO plan_log (plan, version, uid, at, summary, prev) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(plan, version, uid, nowSec(), summary, prev),
     env.DB.prepare("DELETE FROM plan_log WHERE plan = ? AND version <= ?").bind(plan, version - LOG_KEEP),
+    // Undo only ever puts back the latest save's; the older rows keep who and
+    // what, not a whole doc each (up to 1.5 MB), so a plan's history stays small
+    env.DB.prepare("UPDATE plan_log SET prev = NULL WHERE plan = ? AND version <= ? AND prev IS NOT NULL").bind(plan, version - PREV_KEEP),
   ]);
 }
 
@@ -977,6 +985,11 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
 /** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
  *  single cards and note ids (a list never needs them; they're most of a
  *  big plan), and everything else in five queries, however many plans. */
+/** The plans I follow that I may still read: a squad plan only while I'm
+ *  in its squad (mayRead). ?1 is my uid. */
+export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.uid = ?1
+  AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = ?1))`;
+
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
@@ -984,7 +997,7 @@ export async function mine(s: Session, env: Env): Promise<Response> {
             json_remove(p.doc, '$.units') AS rest,
             (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
-      WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1
+      WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${FOLLOWED}
                      UNION SELECT plan FROM plan_editors WHERE uid = ?1)
       ORDER BY p.updated_at DESC`,  // each part by index, not a scan of every plan
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();

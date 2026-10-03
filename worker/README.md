@@ -9,7 +9,7 @@ carry `retryAfter` (seconds) and a `retry-after` header.
 npm ci
 npx vitest run      # real workerd, local D1, migrations applied per test
 npx tsc --noEmit
-npx wrangler dev    # local; no RESEND_API_KEY, so codes are logged, not sent
+npx wrangler dev    # local; with DEV_MAIL_LOG=1 in .dev.vars and no mail, codes are logged, not sent
 ```
 
 ## Endpoints
