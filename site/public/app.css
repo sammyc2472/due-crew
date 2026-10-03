@@ -38,6 +38,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 input, select, textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
 textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+/* hidden means hidden: a class that sets display (.stack, .row) would
+   otherwise beat the browser's own [hidden] rule and keep it on screen */
+[hidden] { display: none !important; }
 .row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
 .stack { display: grid; gap: 10px; }
 .otp { letter-spacing: 0.3em; font-size: 22px; width: 11ch; text-align: center; font-family: ui-monospace, Menlo, monospace; }
