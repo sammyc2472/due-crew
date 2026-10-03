@@ -108,6 +108,8 @@ def for_sync(c, light=False):
         log = log_days(mw.col, days)
         if log:
             out["log"] = log
+        if days == LOG_FULL:
+            out["log_window"] = "full"  # however few days it held
         back = history_part(mw.col, cl)
         if back:
             out["log_back"] = back
@@ -400,13 +402,23 @@ def on_message(cmd, parts=()):
 
 # ---- the knower's side: asks on the board ----
 
+_KNOW = {"key": None, "out": set()}
+
+
 def i_know(col, guids):
     """The guids among these whose card I have down (as above)."""
     guids = sorted({str(g) for g in guids})
     if not guids:
         return set()
     cutoff = int(col.sched.day_cutoff)
-    return set(col.db.list(
+    # no index on notes.guid: kept until the collection changes (a redraw
+    # of the Decks tab asks again with nothing new)
+    key = (id(col), getattr(col, "mod", None), cutoff, tuple(guids))
+    if key[1] is not None and _KNOW["key"] == key:
+        return set(_KNOW["out"])
+    _KNOW["out"] = out = set(col.db.list(
         f"SELECT DISTINCT n.guid FROM cards c JOIN notes n ON n.id = c.nid WHERE n.guid IN ({','.join('?' * len(guids))}) "
         f"AND c.type = 2 AND c.ivl >= {KNOWN_IVL} AND c.id NOT IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)",
         *guids, (cutoff - CLEAN_DAYS * 86400) * 1000))
+    _KNOW["key"] = key
+    return set(out)

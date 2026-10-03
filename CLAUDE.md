@@ -92,6 +92,9 @@ add-on.
   (`ApiClient.restore_from_2x`): its code (when `session.friend_code` has
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
+  Only an imported account restores (`users.from2x`, migration 0018: the
+  import sets it, the first 3.x sync clears it); the client version alone
+  was anyone's to set.
 - The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
   `FIREBASE_SA` secret): for people still on 2.x, Firestore is the truth
   and their week, name and emoji, shared decks, heatmap and squad rows
@@ -637,7 +640,9 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   that sends it through `_on_js` as the board does (3.5.0's Settings went
   out with its clicks reaching nothing). Anything a click adds has its way
   back on the same screen.
-- The reviewer's page runs the card's own script too: from there only the
+- A card's own script runs on the review screen, in the browser's preview
+  and in Cards…: from any page but the ones Due Crew draws on (Decks,
+  Overview, the top bar, the reviewer's bottom bar: `_our_page`) only the
   room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
   the board, the bars or a dialog.

@@ -146,6 +146,11 @@ def suggestions(c, today):
         return []
     _pc, st = _day_state()
     gone = set(st.get("dismissed") or [])
+    # every render asks; the answer changes only when the collection does
+    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")))
+    hit = _state.get("due_suggest")
+    if key[0] is not None and hit and hit[0] == key:
+        return list(hit[1])
     out = []
     try:
         start = (mw.col.sched.day_cutoff - 86400) * 1000
@@ -162,6 +167,7 @@ def suggestions(c, today):
                 out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them"})
     except Exception:
         traceback.print_exc()
+    _state["due_suggest"] = (key, out[:2])
     return out[:2]
 
 

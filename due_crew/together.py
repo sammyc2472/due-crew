@@ -300,6 +300,24 @@ def reviewer_menu(reviewer, menu):
         action.triggered.connect(lambda: crew_cards.ask(card))
 
 
+_NOTES = {"key": None, "rows": {}}
+
+
+def notes_by_guid(col, guids):
+    """{guid: flds} for these guids. Anki has no index on notes.guid, so
+    this is a scan of every note: kept until the collection changes, so a
+    sort click or a redraw of the Decks tab doesn't scan again. Main thread."""
+    guids = sorted({str(g) for g in guids})
+    if not guids:
+        return {}
+    key = (id(col), getattr(col, "mod", None), tuple(guids))
+    if key[1] is None or _NOTES["key"] != key:
+        _NOTES["rows"] = dict(col.db.all(
+            f"SELECT guid, flds FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids))
+        _NOTES["key"] = key
+    return dict(_NOTES["rows"])
+
+
 def tricky_view():
     """Flags from my crew on notes I also have: [{uid, name, index, text,
     deck}]. One local query over their guids; a flag on a card I don't
@@ -311,11 +329,10 @@ def tricky_view():
         return []
     guids = sorted({t["guid"] for _e, _i, t in flags})
     try:
-        rows = mw.col.db.all(
-            f"SELECT guid, flds FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids)
+        rows = notes_by_guid(mw.col, guids)
     except Exception:
         return []
-    text = {g: _plain(str(flds).split("\x1f", 1)[0]) for g, flds in rows}
+    text = {g: _plain(str(flds).split("\x1f", 1)[0]) for g, flds in rows.items()}
     try:
         from .cards import i_know
         known = i_know(mw.col, [t["guid"] for _e, _i, t in flags if t.get("q")])  # 3.2: an ask
@@ -350,8 +367,7 @@ def my_asks_view():
     if answered and mw.col:
         guids = [g for g, _ts in answered]
         try:
-            rows = dict(mw.col.db.all(
-                f"SELECT guid, flds FROM notes WHERE guid IN ({','.join('?' * len(guids))})", *guids))
+            rows = notes_by_guid(mw.col, guids)
         except Exception:
             rows = {}
         for g, ts in answered:

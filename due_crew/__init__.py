@@ -611,15 +611,30 @@ def _on_sync_done(full=False, light=False, fetch=None):
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
 
 
+def _our_page(context):
+    """3.7.1 review: the pages Due Crew draws on, where a card's own script
+    never runs: the Decks screen, Overview, the top bar and the reviewer's
+    bottom bar. Everything else (the review screen, the browser's preview,
+    Cards…, another add-on's page) gets the card page's rules: the room
+    widget's keyed commands only."""
+    ours = [DeckBrowser]
+    for mod, name in (("aqt.overview", "Overview"), ("aqt.toolbar", "Toolbar"),
+                      ("aqt.reviewer", "ReviewerBottomBar")):
+        try:
+            ours.append(getattr(__import__(mod, fromlist=[name]), name))
+        except (ImportError, AttributeError):
+            pass
+    return isinstance(context, tuple(ours))
+
+
 def _on_js(handled, message, context):
     if rooms.swallow(message):
         return (True, None)  # 2.12: no answering under the break
     if message.startswith("duecrew:"):
         # the reviewer's page runs the card's own script too: from there only
         # the room widget's keyed buttons count, never a bare command
-        from aqt.reviewer import Reviewer
         from .room_model import trusted
-        message, ok = trusted(message, isinstance(context, Reviewer))
+        message, ok = trusted(message, not _our_page(context))
         if not ok:
             return (True, None)
     if message.startswith("duecrew:knows"):

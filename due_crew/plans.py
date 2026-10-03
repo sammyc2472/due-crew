@@ -185,6 +185,7 @@ class DeckIndex:
                 self.cards[cid] = (int(queue), int(ctype))
                 self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
+        self._fresh = {}  # a search about my own reviews: this refresh only
 
     def _read_static(self, col, tree, where):
         rows = col.db.all(
@@ -261,14 +262,18 @@ class DeckIndex:
         return out
 
     def search_cards(self, q):
-        """3.3, C3: an Anki search, run by this collection, kept to this deck."""
-        if q not in self._searches:
+        """3.3, C3: an Anki search, run by this collection, kept to this deck.
+        One about the deck is kept while the notes are; one about my own
+        reviews (is:due, rated:, prop:…, typed into a plan's Text) changes
+        as I study, so it's run again each refresh."""
+        kept = self._fresh if _PERSONAL.search(str(q)) else self._searches
+        if q not in kept:
             try:
                 found = {int(c) for c in self.col.find_cards(str(q))}
             except Exception:
                 found = set()  # a search this Anki can't read finds nothing
-            self._searches[q] = {c for c in found if c in self.cards}
-        return self._searches[q]
+            kept[q] = {c for c in found if c in self.cards}
+        return kept[q]
 
     def match(self, unit, swap=None, plan_deck=""):
         """{cid} for one unit on this deck."""

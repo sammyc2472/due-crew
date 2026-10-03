@@ -77,9 +77,11 @@ class ApiClient:
             try:
                 os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
                 tmp = self.session_file + ".tmp"
-                with open(tmp, "w") as f:
+                # holds the session token: mine alone from the first byte
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
                     json.dump(dict(self.session), f)
-                os.chmod(tmp, 0o600)  # holds the session token
+                os.chmod(tmp, 0o600)  # an older .tmp kept its own mode
                 os.replace(tmp, self.session_file)
             except OSError:
                 pass
@@ -171,7 +173,9 @@ class ApiClient:
                      or isinstance(e, requests.exceptions.ConnectTimeout))
             if retry and again:
                 return self._call(method, path, body, auth, retry=False)
-            raise TransportError(f"{method} {_said(path)} failed")
+            # from None: requests' own message carries the whole URL (a
+            # friend, plan or squad code), and a chained traceback prints it
+            raise TransportError(f"{method} {_said(path)} failed") from None
         try:
             data = r.json() if r.content else {}
         except ValueError:
@@ -473,7 +477,7 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None, log_back=None):
+             known=None, stuck=None, log=None, log_back=None, log_window=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -556,8 +560,10 @@ class ApiClient:
             self.session["log_back"] = {"uid": self.user_id, "skip": 0, "done": True}
         if "log" in body and log:
             self.session["log_hash"] = _digest(log)
-            if len(log) > 8:
-                self.session["log_full"] = self.user_id  # the long first upload went: 8 days from now on
+        if log_window == "full":
+            # the long first window went (or had nothing to send: a break of
+            # months): 8 days from now on, and the history import may start
+            self.session["log_full"] = self.user_id
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]

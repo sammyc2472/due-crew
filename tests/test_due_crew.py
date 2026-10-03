@@ -3046,6 +3046,31 @@ def test_room_commands_from_the_card_page_need_the_key():
           and rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True)[1] is False)
 
 
+def test_only_our_pages_act_bare():
+    """3.7.1 review: a card's own script runs in the browser's preview and
+    in Cards… too, not only on the review screen. Only the pages Due Crew
+    draws on (Decks, Overview, the top bar, the reviewer's bottom bar) send
+    bare commands; from anywhere else a room or card command needs the key."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    from due_crew import rooms as R, cards as CC, room_model as rm
+    got, saved = [], (R.on_message, CC.on_message)
+    R.on_message = lambda cmd, parts: (got.append(cmd), True)[1]
+    CC.on_message = lambda cmd, parts: got.append(cmd)
+    Previewer = type("Previewer", (), {})
+    try:
+        dc._on_js(False, "duecrew:roomcheer", Previewer())
+        dc._on_js(False, "duecrew:knowshelped:sam", Previewer())
+        dc._on_js(False, f"duecrew:roomcheer|{rm.CMD_KEY}", Previewer())  # the widget's own, keyed
+        dc._on_js(False, "duecrew:roomcheer", DeckBrowser())
+    finally:
+        R.on_message, CC.on_message = saved
+    check("a preview's card script can't cheer the room or mark a tip; the widget's keyed button and the board can",
+          got == ["roomcheer", "roomcheer"], got)
+
+
 def test_room_chip_side_v301():
     """3.0.1: the room chip goes left or right in the top bar (a setting
     on this computer; a question bank puts a chip on the right too)."""
@@ -4659,8 +4684,12 @@ def test_who_knows_v32():
     log = K.log_days(col, 8)
     check("log: minutes, reviews, new cards and retention, studied days only",
           log == {_day(-1): [0, 1, 1, 0.0], _day(0): [2, 2, 1, 50.0]}, str(log))
-    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)})
+    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)}, log_window="full")
     check("log: the long first upload marks it sent", sam.session["log_full"] == "sam" and len(store.logs["sam"]) == 18)
+    dre.session.pop("log_full", None)
+    dre.push(labels, {}, log={}, log_window="full")
+    check("log: a first window with nothing in it (months away) still counts as sent, so the history import can start",
+          dre.session.get("log_full") == "dre")
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     check("log: unchanged, not sent again", "log" not in store.bodies[-1][2])
@@ -5659,6 +5688,30 @@ def test_history_import():
     cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
     check("history: after Delete my log (logCut) the import is done: the old years stay home (3.7.1, D2)",
           (cl2.session.get("log_back") or {}).get("done") is True)
+
+
+def test_offline_error_names_no_code():
+    """3.7.1 review: requests' own error carries the whole URL (a friend,
+    plan or squad code); the add-on's error is raised without it, so a
+    traceback printed by _bg can't show it either."""
+    import traceback as tb
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "s.json"))
+    cl.session.update(token="t", uid="u1")
+
+    class Down:
+        def request(self, method, url, **kw):
+            raise api.requests.RequestException(f"Max retries exceeded with url: {url}")
+    cl.http = Down()
+    path = "/codes/" + "ABCD" + "1234" + "/add"  # (a traceback quotes this line, not the code)
+    try:
+        cl._call("POST", path)
+        text = ""
+    except Exception as e:
+        text = "".join(tb.format_exception(type(e), e, e.__traceback__))
+    check("offline: the error and its traceback name no code", text and "ABCD1234" not in text, text[-300:])
+    p = cl.session_file
+    cl._save_session()
+    check("session file: mine alone", (os.stat(p).st_mode & 0o077) == 0)
 
 
 def main():
