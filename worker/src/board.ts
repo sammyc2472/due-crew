@@ -308,7 +308,8 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   // 3.2: the cards I'm stuck on: who has them down, and their tips
   const cards = stuck ? await C.forStuck(env, s.uid, stuck) : undefined;
   await touchSeen(env, s.uid);
-  return json({ ok: true, gone, wrote, ...(cards ? { cards } : {}) });
+  // logAll: this server keeps the whole log, so the add-on's history import moves on
+  return json({ ok: true, gone, wrote, logAll: true, ...(cards ? { cards } : {}) });
 }
 
 // ---- settings (2.13): mine only ----

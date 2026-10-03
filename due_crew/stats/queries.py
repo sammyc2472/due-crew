@@ -65,34 +65,35 @@ class StatsQueries:
             cutoff - 1, start_ms, cutoff * 1000)
         return set(rows or [])
 
-    def daily_totals(self, days):
+    def daily_totals(self, days, skip=0):
         """{day_label: (answers, time_ms, correct, graded)} for the last
-        `days` days. One query; graded = learn/review/relearn answers, the
-        ones retention is measured on."""
+        `days` days (the `skip` newest left out: the history import reads a
+        year further back each time). One query; graded = learn/review/
+        relearn answers, the ones retention is measured on."""
         cutoff = self._cutoff_s()
-        start_ms = (cutoff - days * 86400) * 1000
+        start_ms = (cutoff - (days + skip) * 86400) * 1000
         rows = self.col.db.all(
             "SELECT CAST((? - id / 1000) / 86400 AS INTEGER), COUNT(*), SUM(time), "
             "COUNT(CASE WHEN ease > 1 AND type IN (0, 1, 2) THEN 1 END), "
             "COUNT(CASE WHEN type IN (0, 1, 2) THEN 1 END) "
             "FROM revlog WHERE ease > 0 AND id >= ? AND id < ? GROUP BY 1",
-            cutoff - 1, start_ms, cutoff * 1000)
+            cutoff - 1, start_ms, (cutoff - skip * 86400) * 1000)
         return {self.day_label(int(ago)): (int(n), int(t or 0), int(c or 0), int(g or 0))
                 for ago, n, t, c, g in rows or []}
 
-    def new_cards_by_day(self, days):
+    def new_cards_by_day(self, days, skip=0):
         """{day_label: n} for the last `days` days: cards whose first answer
         ever fell on that day. Each card counts once, on its first day; a
         card seen before is a review, even relearned. One pass over the
         window's answers, each checking revlog's card index for an earlier
         one (2.13)."""
         cutoff = self._cutoff_s()
-        start_ms = (cutoff - days * 86400) * 1000
+        start_ms = (cutoff - (days + skip) * 86400) * 1000
         rows = self.col.db.all(
             "SELECT CAST((? - r.id / 1000) / 86400 AS INTEGER), COUNT(DISTINCT r.cid) "
             "FROM revlog r WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND NOT EXISTS "
             "(SELECT 1 FROM revlog p WHERE p.cid = r.cid AND p.ease > 0 AND p.id < r.id) "
-            "GROUP BY 1", cutoff - 1, start_ms, cutoff * 1000)
+            "GROUP BY 1", cutoff - 1, start_ms, (cutoff - skip * 86400) * 1000)
         return {self.day_label(int(ago)): int(n) for ago, n in rows or []}
 
     def first_seen(self, days):

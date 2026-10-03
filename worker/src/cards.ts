@@ -12,7 +12,8 @@ export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
 export const TIP_MAX = V.NOTE_MAX;
 const CHUNK = 90;           // D1: at most 100 bound parameters a statement
-const LOG_DAYS = 400;
+const LOG_DAYS = 400;      // days one sync carries
+const LOG_KEEP = 15 * 366;  // 3.7.1: days kept, so a year card reaches back (the history import)
 const KNOWERS_SHOWN = 5;
 const TIPS_SHOWN = 3;
 
@@ -142,11 +143,11 @@ export function logPart(v: unknown): Record<string, (number | null)[]> {
   return out;
 }
 
-/** Merged into what the server has, newest LOG_DAYS kept; written only when changed. */
+/** Merged into what the server has, newest LOG_KEEP kept; written only when changed. */
 export function logMerge(have: string | null, part: Record<string, (number | null)[]>): string | null {
   const cur = have ? (JSON.parse(have).days as Record<string, unknown>) : {};
   const all = { ...cur, ...part };
-  const keep = Object.keys(all).sort().slice(-LOG_DAYS);
+  const keep = Object.keys(all).sort().slice(-LOG_KEEP);
   const next = JSON.stringify({ days: Object.fromEntries(keep.map((d) => [d, all[d]])) });
   return next === have ? null : next;
 }

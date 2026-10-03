@@ -31,6 +31,8 @@ STUCK_LAPSES = 2
 STUCK_MAX = 300
 LOG_FULL = 120
 LOG_RECENT = 8
+LOG_BACK_STEP = 366  # 3.7.1: the history import, a year a sync
+LOG_BACK_MAX = 15 * 366  # and no further back than the server keeps
 
 
 def _tree(col, dids):
@@ -70,13 +72,14 @@ def known_and_stuck(col, dids, day_cutoff, with_known=True):
     return {str(g) for g in known} - set(stuck), stuck
 
 
-def log_days(col, days):
+def log_days(col, days, skip=0):
     """{day: [minutes, reviews, new, retention|None]} for the studied days
-    among the last `days`: my log, which only I read (on the site)."""
+    among the last `days` (the `skip` newest left out): my log, which only
+    I read (on the site)."""
     from .stats.queries import StatsQueries
     q = StatsQueries(col)
-    totals = q.daily_totals(days)
-    fresh = q.new_cards_by_day(days)
+    totals = q.daily_totals(days, skip)
+    fresh = q.new_cards_by_day(days, skip)
     out = {}
     for label, (n, time_ms, correct, graded) in totals.items():
         if not n:
@@ -105,7 +108,44 @@ def for_sync(c, light=False):
         log = log_days(mw.col, days)
         if log:
             out["log"] = log
+        back = history_part(mw.col, cl)
+        if back:
+            out["log_back"] = back
     return out
+
+
+def history_part(col, cl):
+    """3.7.1, the history import: once the first 120 days have gone, each
+    full sync carries one more year of my log, oldest last, until it
+    reaches my first review (or LOG_BACK_MAX days). Years with nothing in
+    them are passed over here. Returns (days, skip after) or None when
+    there's nothing left to bring in. Main thread."""
+    if cl.session.get("log_full") != cl.user_id:
+        return None
+    st = cl.session.get("log_back") if isinstance(cl.session.get("log_back"), dict) else {}
+    if st.get("uid") != cl.user_id:
+        st = {"uid": cl.user_id, "skip": LOG_FULL}
+    if st.get("done"):
+        return None
+    try:
+        first = col.db.scalar("SELECT MIN(id) FROM revlog WHERE ease > 0")
+    except Exception:
+        return None
+    from .stats.queries import StatsQueries
+    oldest = 0 if not first else max(0, (StatsQueries(col)._cutoff_s() - int(first) // 1000) // 86400 + 1)
+    skip = int(st.get("skip") or LOG_FULL)
+    for _ in range(4):  # an empty year costs one query; a few at most per sync
+        if skip >= min(oldest, LOG_BACK_MAX):
+            cl.session["log_back"] = dict(st, skip=skip, done=True)
+            cl._save_session()
+            return None
+        days = log_days(col, LOG_BACK_STEP, skip)
+        skip += LOG_BACK_STEP
+        if days:
+            return days, skip
+        cl.session["log_back"] = dict(st, skip=skip)
+    cl._save_session()
+    return None
 
 
 # ---- the reviewer ----

@@ -470,7 +470,7 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None):
+             known=None, stuck=None, log=None, log_back=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -519,6 +519,9 @@ class ApiClient:
             body["stuck"] = list(stuck)[:300]
         if log and _digest(log) != self.session.get("log_hash"):
             body["log"] = {"days": log}
+        if log_back and log_back[0]:
+            # 3.7.1: a year of my history, riding this sync (the server merges it)
+            body["log"] = {"days": {**log_back[0], **(log or {})}}
         status, data = self._call("POST", "/sync", body)
         if status == 400 and data.get("error") in ("bad_sync", "bad_week"):
             # 3.2 against a server that doesn't know 3.2's parts yet (a Worker
@@ -541,7 +544,11 @@ class ApiClient:
             self._save_known(sent_known)
         if "stuck" in body:
             self.session["cards"] = clean_cards(data.get("cards"))
-        if "log" in body:
+        if log_back and "log" in body and data.get("logAll"):
+            # only a server that keeps the whole log moves the import on (one
+            # still trimming to 400 days would drop the year this carried)
+            self.session["log_back"] = {"uid": self.user_id, "skip": int(log_back[1])}
+        if "log" in body and log:
             self.session["log_hash"] = _digest(log)
             if len(log) > 8:
                 self.session["log_full"] = self.user_id  # the long first upload went: 8 days from now on
