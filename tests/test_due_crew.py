@@ -5456,6 +5456,18 @@ def test_due_model():
     check("due: empty when nothing", D.empty(D.view(T, [], [], {})))
 
 
+def test_due_author_lines_arrive_clean():
+    """Due: a date's author lines, as a plan arrives: words, a kind, an https link only, 8 at most."""
+    from due_crew.backend import shapes
+    doc = shapes.clean_plan_doc({"deck": "D", "units": [{"id": "a", "name": "A", "opens": "2026-10-03", "todo": [
+        {"k": "watch", "t": "  Lecture\n14 ", "url": "https://example.com/x"}, {"k": "watch", "t": "x", "url": "javascript:alert(1)"},
+        {"k": "sing", "t": "y"}, {"k": "read", "t": ""}] + [{"k": "do", "t": str(i)} for i in range(10)]}]})
+    todo = doc["units"][0]["todo"]
+    check("due lines: tidy, https only, unknown kinds and empty ones dropped, 8 at most",
+          todo[0] == {"k": "watch", "t": "Lecture 14", "url": "https://example.com/x"} and todo[1] == {"k": "watch", "t": "x"}
+          and len(todo) == 8, todo)
+
+
 def test_due_board_and_clicks():
     """Due on the board: the three tabs, escaped, every click sent as the
     board sends it; adding with a day said at the end; Behind; recover leeches."""

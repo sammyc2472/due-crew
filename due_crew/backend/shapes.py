@@ -524,6 +524,15 @@ def _clean_unit(u):
         out["n"] = u["n"]
     if isinstance(u.get("for"), str) and u["for"]:
         out["for"] = u["for"][:12]  # F1: the event it preps for
+    todo = []
+    for x in u.get("todo") or []:  # Due: the author's lines to tick by hand
+        if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and clean_note(x.get("t"), 140):
+            one = {"k": x["k"], "t": clean_note(x["t"], 140)}
+            if isinstance(x.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,500}", x["url"]):
+                one["url"] = x["url"]
+            todo.append(one)
+    if todo:
+        out["todo"] = todo[:8]
     return out
 
 

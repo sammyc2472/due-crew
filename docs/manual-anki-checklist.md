@@ -525,3 +525,15 @@ In Anki (as a follower):
 - [ ] After deploying 0016: an account deleted by the job (or a test one with its uid hashed into `gone`), opened in Anki: "Welcome back… deleted after 12 months", and Start again signs up fresh.
 - [ ] Admin › Today: the Housekeeping line under Needs you.
 
+
+## Due (above the board)
+
+- [ ] Due sits above the board on every tab; ▴ folds it to one line (and it stays folded after Anki restarts); the line's Study › opens the plan's deck.
+- [ ] Today: Behind (a plan date from an earlier day not yet seen, an item of yours from yesterday), then Reviews, today's dates with each resource's numbers, your items. Review a date's cards: its box ticks itself at the next refresh.
+- [ ] An author's line (add one in the builder's day panel under To do, with a link): tick it by hand; its link opens in the browser, not in the Decks screen.
+- [ ] Type "Book the room fri": "→ Fri …" shows before Enter; Enter adds it to Friday and says "Added to Fri … · Show"; Show opens Upcoming. "×" on the preview keeps the words as text.
+- [ ] Upcoming: today first, then two weeks; empty days fold into one line; + on a day adds to that day; the exam shows on its day.
+- [ ] Later: an item with no day; Do today moves it; its day button moves it, Pick a day… opens a calendar, Edit… and Delete work.
+- [ ] Settings › Board › Due: turning off Due, Suggestions, and Recover leeches (on: the next refresh brings leeches back as new, the tag off; Edit › Undo puts them back; "Recovered N leeches · See them" opens the browser).
+- [ ] With 10+ misses today, "Go over today's N misses" builds a filtered deck and opens it; × hides it for the day.
+- [ ] A second computer, after its morning pull, shows the same own items.

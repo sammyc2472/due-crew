@@ -65,7 +65,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /admin/squads/{id}` | One squad (A4): name, founder, open, made, members by name and emoji (never their numbers), how many removed, and what the admin did there. `PATCH {open?, name?, founder?}` as its founder would (a founder must already be in it); `POST .../code` a new code, in the answer once and the founder's email, the old one opening nothing (`squad_codes`, the id unchanged); `POST .../remove/{uid} {why?}` removes and blocks (never the founder); `DELETE {name}` the squad, its name typed out. The founder is emailed for each. |
 | `GET /decks` | Shared-deck progress: mine and my mutual friends'. |
 | `GET /heatmap/{uid}` | Mine or a mutual friend's; `{counts: null}` when they don't share one. |
-| `GET` / `PUT /settings` | `{v, at, settings}`, mine only. |
+| `GET` / `PUT /settings` | `{v, at, settings}`, mine only, up to 64 KB (Due's own to-dos ride it). |
 
 **The week doc** is 2.9's `shared/week`:
 - `{v, days: {label: {studied, reviews, studyTimeMs, accuracy, streak, newCards, status}}, paused, examDate, awayFrom, awayTo, liveUntil, tricky, room}`.
@@ -147,6 +147,9 @@ are unchanged and drops it when they change. P1: `counts` may carry
 copy, in date order); kept as `pn` the same way as `idr`, while the date's
 `opens`, tags, subdecks, searches, ids and notes are unchanged. The lean
 `authored` docs carry each date's `opens` for it.
+Due: a date may carry `todo: [{k, t, url?}]` (up to 8): `k` watch, read
+or do, `t` up to 140 characters, `url` an https link. Followers tick them
+by hand in the add-on; the ticks are theirs (`due_ticks` in their settings).
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

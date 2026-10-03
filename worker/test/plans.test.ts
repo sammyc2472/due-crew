@@ -56,6 +56,20 @@ describe("plans: authoring", () => {
     expect(counted.body.doc.units[0].n).toBe(212);
   });
 
+  it("Due: a date's lines to tick by hand are words and an https link, 8 at most", async () => {
+    const { dre, plan } = await authored();
+    const put = (todo: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], todo }] } });
+    expect((await put([{ k: "listen", t: "x" }])).status).toBe(400);
+    expect((await put([{ k: "watch", t: "" }])).status).toBe(400);
+    expect((await put([{ k: "watch", t: "x", url: "javascript:alert(1)" }])).status).toBe(400);
+    expect((await put([{ k: "watch", t: "x", url: "http://plain.example" }])).status).toBe(400);
+    expect((await put([{ k: "watch", t: "x", card: "text" }])).status).toBe(400);
+    expect((await put(Array.from({ length: 9 }, () => ({ k: "do", t: "x" })))).status).toBe(400);
+    const ok = await put([{ k: "watch", t: " Lecture 14 ", url: "https://example.com/l14" }, { k: "read", t: "Chapter 6", url: "" }]);
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.units[0].todo).toEqual([{ k: "watch", t: "Lecture 14", url: "https://example.com/l14" }, { k: "read", t: "Chapter 6" }]);
+  });
+
   it("3.3: an even split needs a window; the pace is the builder's, shaped", async () => {
     const { dre, plan } = await authored();
     const put = (doc: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc });

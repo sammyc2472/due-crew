@@ -20,6 +20,7 @@ const IDLIST_MAX = 5000;  // E1: note or card ids pasted onto one date
 const IDR_MAX = 20000;   // 3.6.5: the cards those ids are, as note guid + card number, from the author's Anki
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
+const TODO_MAX = 8;  // Due: a date's lines to tick by hand
 export const PLAN_BODY_MAX = 1600 * 1024;
 const SOURCES_MAX = 50;
 const PATH_MAX = 200;
@@ -75,7 +76,7 @@ function cardRef(v: unknown): [string, number] {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
@@ -123,6 +124,23 @@ function unit(v: unknown): Obj {
     // 3.3, C5: the note ids behind its tags and subdecks in the author's Anki
     if (!Array.isArray(v.ids) || v.ids.length > IDS_MAX || !v.ids.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
     if (v.ids.length) out.ids = [...new Set(v.ids as string[])];
+  }
+  if (v.todo !== undefined && v.todo !== null) {
+    // Due: what a date asks that cards can't measure (a lecture to watch, a
+    // chapter to read), each follower ticking it by hand; words and a link
+    if (!Array.isArray(v.todo) || v.todo.length > TODO_MAX) throw V.bad("plan");
+    const todo = v.todo.map((x) => {
+      if (!V.isObj(x) || Object.keys(x).some((k) => !["k", "t", "url"].includes(k))) throw V.bad("plan");
+      if (!["watch", "read", "do"].includes(x.k as string) || !V.isStr(x.t, 140, 1) || /[\u0000-\u001f]/.test(x.t as string)) throw V.bad("plan");
+      const one: Obj = { k: x.k, t: (x.t as string).trim() };
+      if (x.url !== undefined && x.url !== null && x.url !== "") {
+        if (!V.isStr(x.url, 500, 1) || !/^https:\/\/[^\s"'<>]+$/.test(x.url as string)) throw V.bad("plan");
+        one.url = x.url;
+      }
+      if (!one.t) throw V.bad("plan");
+      return one;
+    });
+    if (todo.length) out.todo = todo;
   }
   const cards = v.cards ?? [];
   if (!Array.isArray(cards)) throw V.bad("plan");

@@ -404,6 +404,9 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 }
 .dl { display: grid; gap: 3px; margin: 0; }
 .addc { display: grid; gap: 4px; }
+.addc .todo { display: grid; grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.addc .todo input, .addc .todo select { min-width: 0; }
+@media (max-width: 560px) { .addc .todo { grid-template-columns: auto minmax(0, 1fr) auto; } .addc .todo input + input { grid-column: 2 / 3; } }
 .dayp .acts { display: flex; gap: 16px; flex-wrap: wrap; }
 .notesw { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .notesw .notes { border-top: 0; padding-top: 0; }
@@ -738,3 +741,13 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .lcmore summary::-webkit-details-marker { display: none; }
 .lcmore .calpop { right: 0; left: auto; display: grid; gap: 4px; }
 .linkish.warn { color: var(--warn); }
+
+/* Due, in the home rail: today's dates and my own to-dos, read here, ticked in Anki */
+.panel.due { display: grid; gap: 6px; }
+.panel.due .duer { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: start; font-size: 13px; }
+.panel.due .duer > span { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.panel.due .duel { display: block; color: var(--muted); }
+.panel.due .duel .dbx { display: inline-block; vertical-align: -1px; margin: 0 5px 0 0; }
+.panel.due .dbx { box-sizing: border-box; width: 12px; height: 12px; border: 1.5px solid var(--faint, #a8a8a0); border-radius: 3px; margin-top: 3px; flex: none; }
+.panel.due .dbx.auto { border-style: dashed; }
+.panel.due .dbx.on { background: var(--accent); border: 1.5px solid var(--accent); }

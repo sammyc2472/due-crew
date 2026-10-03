@@ -24,6 +24,24 @@ const Tags = (() => {
   return { word, name, kind, natural };
 })();
 
+/** Due: a date's lines to tick by hand ({k, t, url}), as the Worker keeps
+ *  them (worker/src/plans.ts, TODO_MAX) and the add-on shows them. */
+const Todo = (() => {
+  const MAX = 8;
+  const LABEL = { watch: "Watch", read: "Read", do: "Do" };
+  const okUrl = (v) => /^https:\/\/[^\s"'<>]{1,492}$/.test(v);
+  /** "watch: lecture 14 https://…" -> {k, t, url} */
+  const parse = (k, rest) => {
+    const m = /^(.*?)\s+(https:\/\/\S+)$/.exec(rest.trim());
+    const t = (m && okUrl(m[2]) ? m[1] : rest).trim().slice(0, 140);
+    return m && okUrl(m[2]) ? { k: k.toLowerCase(), t, url: m[2] } : { k: k.toLowerCase(), t };
+  };
+  /** what a save sends: lines with words, at most MAX */
+  const clean = (lines) => (lines || []).filter((x) => x && LABEL[x.k] && String(x.t || "").trim())
+    .slice(0, MAX).map((x) => (x.url && okUrl(x.url) ? { k: x.k, t: x.t.trim().slice(0, 140), url: x.url } : { k: x.k, t: x.t.trim().slice(0, 140) }));
+  return { MAX, LABEL, okUrl, parse, clean };
+})();
+
 /** Searches about one person's own Anki (due_crew/plans.py, _PERSONAL). */
 const PERSONAL = /(?:^|[\s("-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|rated:|prop:|introduced:|added:|edited:|resched:|flag:|nid:|cid:)/i;
 
@@ -730,6 +748,7 @@ async function builder(id) {
       evBoxes,
       rows.length ? rows : evBoxes.length ? null : h("p", { class: "muted small" }, author ? "Nothing yet. Drag a tag here, or use + in What to cover." : "Nothing new this day."),
       prep,
+      own.length ? todoBox(own[0]) : null,
       author ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "Add cards"), searchBox(d),
         // 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
         d <= today() && rows.length ? h("small", { class: "muted" }, "This date has opened. Followers who opened it get what you add tomorrow morning.") : null) : null,
@@ -737,6 +756,30 @@ async function builder(id) {
       moveLink || rvLink || makeEv ? h("div", { class: "acts" }, moveLink, rvLink, makeEv) : null,
       rv && !rvLink ? rv : null,
       inPlan ? h("div", { class: "notesw" }, author ? h("span", { class: "lbl" }, "Notes for followers") : null, notesBox(d)) : null);
+  }
+
+  /** Due: what a date asks that cards can't measure (a lecture to watch,
+   *  a chapter to read). Each follower ticks it by hand in Due. */
+  function todoBox(u) {
+    const lines = u.todo || [];
+    if (!author) {
+      return lines.length ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
+        lines.map((x) => h("span", { class: "small" }, h("b", {}, Todo.LABEL[x.k]), ` · ${x.t}`,
+          x.url ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
+    }
+    const set = () => { if (lines.length) u.todo = lines; else delete u.todo; mark(); };
+    const rows = lines.map((x, i) => h("div", { class: "todo" },
+      h("select", { "aria-label": "Kind", onchange: (e) => { x.k = e.target.value; set(); } },
+        Object.entries(Todo.LABEL).map(([k, lb]) => h("option", { value: k, selected: x.k === k }, lb))),
+      h("input", { value: x.t, maxlength: 140, placeholder: "Lecture 14, renal clearance", "aria-label": "What to do",
+        oninput: (e) => { x.t = e.target.value; set(); } }),
+      h("input", { value: x.url || "", maxlength: 500, placeholder: "https:// (optional)", "aria-label": "A link",
+        onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
+      h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
+    return h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
+      h("small", { class: "muted" }, "Things cards can't measure. Followers tick them in Due."), rows,
+      lines.length < Todo.MAX ? h("button", { class: "linkish", onclick: () => {
+        u.todo = [...lines, { k: "watch", t: "" }]; mark(); draw(); } }, "+ Add a line") : null);
   }
 
   /** F1: "Prep for": the event this day's dates lead up to. */
@@ -983,7 +1026,9 @@ async function builder(id) {
     u.due ? `due ${u.due}` : "", u.even ? "even" : "",
     // 3.6.5: single cards as cards: (a long list stays a count, kept as it is)
     (u.cards || []).length > CARDS_TEXT ? `${u.cards.length} single cards` : (u.cards || []).length ? Picks.cardsText(u.cards) : "",
-    u.for && evById(u.for) ? `for ${evById(u.for).name}` : ""].filter(Boolean).join(" | "))].sort().join("\n"); };
+    u.for && evById(u.for) ? `for ${evById(u.for).name}` : "",
+    // Due: the author's lines, each one part ("watch: lecture 14 https://…")
+    ...(u.todo || []).map((x) => `${x.k}: ${x.t}${x.url ? ` ${x.url}` : ""}`)].filter(Boolean).join(" | "))].sort().join("\n"); };
 
   // what an AI (or a person) might write for a tag: the exact path, any
   // case, or its readable name
@@ -1019,6 +1064,7 @@ async function builder(id) {
       }
       let forN = null; let keepCards = false;
       let opens = null; let due; let even = false; let name = ""; const tags = []; const decks = []; const searches = []; const ids = { nids: [], cids: [] };
+      const todo = [];  // Due: "watch: lecture 14 https://…", "read: …", "do: …"
       for (const part of parts) {
         let m;
         if (!opens && (m = /^(\d{4}-\d{2}-\d{2})$/.exec(part))) opens = m[1];
@@ -1028,6 +1074,7 @@ async function builder(id) {
         else if ((m = /^for\s+(.+)$/i.exec(part))) forN = m[1].trim();
         else if (/^\d+ single cards?$/.test(part)) keepCards = true;
         else if (/^search:/i.test(part)) searches.push(part.slice(7).trim());
+        else if ((m = /^(watch|read|do):\s*(.+)$/i.exec(part))) todo.push(Todo.parse(m[1], m[2]));
         else if ((m = /^(nids|cids|ids):\s*([\d\s,;]+)$/i.exec(part))) ids[m[1].toLowerCase() === "cids" ? "cids" : "nids"].push(...m[2].split(/[\s,;]+/).filter(Boolean).map(Number).filter((x) => Number.isSafeInteger(x) && x > 0));
         else if (/^(tag|deck):/i.test(part)) {
           for (const x of part.split(/\s*[,;]\s*(?=(?:tag|deck):)/i)) {
@@ -1064,6 +1111,8 @@ async function builder(id) {
       if (picks.notes.length) u.notes = picks.notes;
       if (hasIds(u) && old && JSON.stringify([old.nids, old.cids, old.notes]) === JSON.stringify([u.nids, u.cids, u.notes]) && old.idn != null) u.idn = old.idn;
       if ((u.nids || u.cids) && !(old?.idr && JSON.stringify([old.nids, old.cids]) === JSON.stringify([u.nids, u.cids]))) localIds++;
+      if (todo.length > Todo.MAX) warns.push(`Line ${i + 1}: a date keeps ${Todo.MAX} lines to tick; the rest are left off.`);
+      if (todo.length) u.todo = todo.slice(0, Todo.MAX);
       if (forN) forName.set(u.id, forN);
       if (!u.due) delete u.due;
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
@@ -1132,6 +1181,7 @@ async function builder(id) {
       "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. For a plan others follow, use notes: and cards:; numeric nids: and cids: only work in my own Anki. Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
       "- An Anki search never uses deck:current, is:due, is:new, is:learn, is:review, is:suspended, is:buried, rated:, prop:, introduced:, added:, edited:, resched:, flag:, nid: or cid: (they find different cards for each person), and stays under 500 characters.",
       "- Events are named days with no cards (a lecture, a quiz, an exam): YYYY-MM-DD | event | Micro quiz. A date that preps for one ends with | for Micro quiz, the name exactly as on its event line.",
+      "- A date can ask for things cards can't measure, ticked by hand (up to 8): | watch: Lecture 14, renal clearance | read: chapter 6 | do: practice block 3. A link may follow the words: | watch: Lecture 14 https://example.com/l14",
       "- A chapter too big for one day: put its deeper tags on different days, or give it a due date and the word even to spread it evenly from its date to its due date (\"| due 2026-10-09 | even\").",
       "- Without a due date, a date's cards are meant to be done before the next date opens.",
       "- If a day needs specific cards and I gave you no IDs for them, don't guess: add a line starting with # that says which (\"# Pick in Anki for 2026-10-06: the iron-study cards from Lecture 17\"); I'll pick them in Anki.",
@@ -1215,6 +1265,10 @@ async function builder(id) {
         const have = new Set((into.cards || []).map(([g, o]) => `${g}:${o}`));
         into.cards = [...(into.cards || []), ...(u.cards || []).filter(([g, o]) => !have.has(`${g}:${o}`))];
         for (const k of ["due", "even", "for"]) if (u[k]) into[k] = u[k];
+        if ((u.todo || []).length) {  // Due: its lines, each once
+          const had = new Set((into.todo || []).map((x) => `${x.k}:${x.t.toLowerCase()}`));
+          into.todo = [...(into.todo || []), ...u.todo.filter((x) => !had.has(`${x.k}:${x.t.toLowerCase()}`))].slice(0, Todo.MAX);
+        }
       };
       const use = (replace) => {
         if (r.events.length || replace) {
@@ -1741,7 +1795,10 @@ async function builder(id) {
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
       // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
-      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, ...u }) => u) });
+      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, todo, ...u }) => {
+        const t = Todo.clean(todo);  // Due: a line with no words yet isn't sent
+        return t.length ? { ...u, todo: t } : u;
+      }) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;

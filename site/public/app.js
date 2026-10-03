@@ -1206,6 +1206,7 @@ async function home() {
       yearNudge(logR.days || {}, t),
       h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
+      duePanel(followed, sett?.settings || {}, t),
       sinceYouWereHere(b, crew, t),
       followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
       friends)));
@@ -1216,6 +1217,51 @@ async function home() {
     here = "/home";
     weekCard(want === "today");
   }
+}
+
+/** Due (mock "My List"), as the site can show it: today's dates from the
+ *  plans I follow (my own numbers when I share them), their authors' lines,
+ *  and my own to-dos from my settings. Ticking and adding happen in Anki,
+ *  which counts the cards; this is the look from a phone. */
+function duePanel(followed, set, t) {
+  if (set.due_show === false) return null;
+  const tm = addDays(t, 1);
+  const items = Array.isArray(set.due_items) ? set.due_items.filter((x) => x && typeof x.t === "string") : [];
+  const ticks = set.due_ticks && typeof set.due_ticks === "object" ? set.due_ticks : {};
+  const rows = [];
+  const tomorrow = [];
+  for (const p of followed.filter((x) => !x.following?.paused)) {
+    const prog = p.following?.progress || {};
+    const shift = p.following?.shift || 0;
+    const skipped = new Set(p.following?.skipped || []);
+    for (const u of Sched.units(p.doc)) {
+      if (skipped.has(u.id)) continue;
+      const day = shift ? addDays(u.opens, shift) : u.opens;
+      if (day === tm) tomorrow.push(u.name);
+      if (day !== t) continue;
+      const pr = prog[u.id];
+      const lines = (u.todo || []).map((x, i) => h("span", { class: "small duel" },
+        h("i", { class: `dbx${ticks[`${p.id}:${u.id}:${i}`] ? " on" : ""}`, "aria-hidden": "true" }),
+        h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[x.k] || "Do"), " · ",
+        x.url && /^https:\/\//.test(x.url) ? h("a", { href: x.url, target: "_blank", rel: "noopener" }, x.t) : x.t));
+      const done = pr && pr[2] && pr[1] >= pr[2];
+      rows.push(h("div", { class: "duer" }, h("i", { class: `dbx auto${done ? " on" : ""}`, "aria-hidden": "true" }),
+        h("span", {}, h("b", {}, u.name), h("small", { class: "muted" }, p.name), lines),
+        h("small", { class: "muted" }, pr && pr[2] ? `${pr[1].toLocaleString()} / ${pr[2].toLocaleString()}` : "")));
+    }
+  }
+  for (const x of items.filter((x) => x.d === t)) {
+    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${x.done ? " on" : ""}`, "aria-hidden": "true" }),
+      h("span", { class: x.done ? "muted" : "" }, x.t), h("small", {}, "")));
+  }
+  for (const x of items.filter((x) => x.d === tm && !x.done)) tomorrow.push(x.t);
+  const behind = items.filter((x) => x.d && x.d < t && !x.done).length;
+  if (!rows.length && !behind && !tomorrow.length) return null;
+  return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
+    behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
+    rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
+    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null,
+    h("small", { class: "muted" }, "Tick and add in Anki, which counts your cards."));
 }
 
 /** K6: 1 December – 7 January, the year's card opens the rail, once a

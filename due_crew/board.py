@@ -3201,8 +3201,9 @@ def _due_plan(r):
                      f'<span><b>{e(ln["label"])}</b></span><span class="n">{int(ln["seen"]):,} / {int(ln["total"]):,}</span></span>')
         else:
             text = e(ln["text"])
-            if ln.get("url", "").startswith(("https://", "http://")):
-                text = f'<a href="{e(ln["url"])}" title="{e(ln["url"])}">{text}</a>'
+            if ln.get("url", "").startswith("https://"):
+                # opened by Anki in the browser, never inside the Decks screen
+                text = f'<a href="#" title="{e(ln["url"])}" onclick="{_pycmd("duelink:" + ln["key"])}">{text}</a>'
             tick = (_due_tick(f'duetodo:{ln["key"]}', ln["done"], "Done") if ln["can"]
                     else '<span class="du-bx"></span>')
             subs += (f'<span class="du-sub">{tick}<span><b>{e(ln["label"])}</b> &middot; {text}</span>'

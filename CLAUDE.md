@@ -537,6 +537,32 @@ add-on.
   in `admin_actions` (the audit log, a year; names looked up on read,
   never an email or a code). README's privacy line says Sam can look up
   an account and its squads when someone writes in.
+- Due (mock "My List", L1–L15): the day's to-do in a box above the
+  board on every tab (`due.py` pure, `due_flow.py` the glue,
+  `board._due_html`; the name is `due.NAME`). Three tabs: Today (the day
+  in full), Upcoming (today in short, then 14 days, empty days folded)
+  and Later (my own items with no day). No going back a day: whatever
+  isn't done sits under Behind on Today and Upcoming (my items one by
+  one, a plan's past dates as one line with Catch up). A plan's date is
+  on its day (my shifted, unskipped days; past ones only if they opened
+  here) and ticks itself when its cards are seen and its author's lines
+  are ticked; each resource's numbers come from the refresh's deck reads
+  (`plans.parts`, kept in `_state["plan_parts"]`). An author's lines are
+  `todo: [{k, t, url?}]` on a unit (watch/read/do, 8 at most, an https
+  link opened by Anki, `duelink`), written in the builder's day panel or
+  Text (`watch: Lecture 14 https://…`). My own items (`due_items`: 60
+  open, 140 characters, ticked ones go after a week) and my ticks
+  (`due_ticks`) are account keys, so the settings doc's cap is 64 KB; the
+  site's home rail shows them read-only (ticking and adding are Anki's,
+  which counts the cards and pulls settings once a day). Adding: the day
+  button starts on the tab's day, a day said at the end of the text wins
+  (`due.parse`, restated for the preview in `board.DUE_JS`: change one,
+  change both), and an item added out of sight says where it went.
+  Suggestions (`due_suggest`, at most two: today's misses, new leeches)
+  and Recover leeches (`due_leeches`, per computer, off: each morning a
+  leech, suspended or 8+ lapses, gets its tag off and Anki's Forget, one
+  undo step) are in Settings › Board. No new requests: items ride the
+  settings push.
 
 ## Releasing
 

@@ -413,6 +413,17 @@ def todo_tick(c, key):
     _swap(c)
 
 
+def open_link(key):
+    """An author's line's link, in the browser: only an https one on a date I follow."""
+    pid, uid, n = (key.split(":") + ["", "", ""])[:3]
+    dates, _e, _r = plan_dates(_today())
+    x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
+    todo = (x or {}).get("todo") or []
+    if n.isdigit() and int(n) < len(todo) and str(todo[int(n)].get("url") or "").startswith("https://"):
+        from aqt.utils import openLink
+        openLink(todo[int(n)]["url"])
+
+
 def go(key):
     """A suggestion's or a note's button."""
     if not mw.col:
@@ -473,6 +484,8 @@ def on_message(cmd, parts):
         _swap(c)
     elif cmd == "duetodo" and len(parts) > 4:
         todo_tick(c, ":".join(parts[2:5]))
+    elif cmd == "duelink" and len(parts) > 4:
+        open_link(":".join(parts[2:5]))
     elif cmd == "duego" and arg:
         go(arg)
     elif cmd == "duex" and arg:
