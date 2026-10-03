@@ -85,6 +85,8 @@ authed("POST", r(`/admin/people/${ID}/limits`), (_q, s, env, p) => People.clearL
 authed("PUT", r(`/admin/people/${ID}/email`), People.changeEmail);
 authed("DELETE", r(`/admin/people/${ID}/email`), (_q, s, env, p) => People.cancelEmail(s, env, p));
 authed("PUT", r(`/admin/people/${ID}/note`), People.putNote);
+authed("GET", r(`/admin/people/${ID}/crew`), (_q, s, env, p) => People.crew(s, env, p));
+authed("DELETE", r(`/admin/people/${ID}/crew/${ID}`), People.removeEdge);
 authed("GET", r("/admin/actions"), Ad.actions);
 authed("GET", r(`/admin/squads/${ID}`), (_q, s, env, p) => AS.get(s, env, p));
 authed("PATCH", r(`/admin/squads/${ID}`), AS.patch);

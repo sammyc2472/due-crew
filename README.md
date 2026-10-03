@@ -74,8 +74,9 @@ what you share in Settings → Privacy, or pause at any time. Anyone else
 sees your name and emoji, nothing more. Card text never leaves your
 computer: a crewmate sees a card's text only if they have the same card.
 Your email is used to sign you in. If you write in, Sam, who runs Due
-Crew, can look up your account and your squads to fix problems. Feedback you send goes to Sam with your
-name. Deleting your account deletes your data.
+Crew, can look up your account, your squads and who's on your crew list
+to fix problems; never how you study, and each look is logged. Feedback
+you send goes to Sam with your name. Deleting your account deletes your data.
 The add-on and server are on
 [GitHub](https://github.com/sammyc2472/due-crew).
 

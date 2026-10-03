@@ -486,10 +486,12 @@ add-on.
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,
   emails partly hidden; one account shows who they are, where they are
-  (squads, plans) and counts of their crew, never how they study, who
-  their crew are, or their settings. Sign out everywhere, and Delete with
-  their email typed out. README's privacy section says Sam can find an
-  account when someone writes in.
+  (squads, plans) and counts of their crew, never how they study or
+  their settings. Sign out everywhere, and Delete with their email typed
+  out. Who their crew are only behind a click ("The next round", F1–F3,
+  `People.crew`), each look in the audit log; one side of a friendship
+  can go on their request (`removeEdge`, they're emailed), and admin
+  never makes anyone crew. README's privacy section says so.
 - Admin, grown up (mock "Admin, grown up", migration 0015): /admin is a
   sidebar of pages (Today with Needs you, People, Squads, Plans & library,
   Inbox, Notices, Bingo, System, Audit log), one gap scale. Sign-in help

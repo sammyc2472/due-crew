@@ -2,10 +2,11 @@
 // time, to answer a support email or check a report. A search gives at most
 // ten, emails partly hidden, and a squad code gives that squad; one account
 // gives who they are, where they are (squads, plans), counts of their crew,
-// the admin's note and what the admin has done there. Never how they study
-// (their week, days, heatmap, decks, log or plan progress), never who their
-// crew are or whom they muted, never their settings, never a list of
-// everyone. Sign-in help (mock "Admin, grown up", A3): a fresh code past
+// the admin's note and what the admin has done there. Who their crew are
+// only behind a click, and each look goes in the audit log ("The next
+// round", F1-F3). Never how they study (their week, days, heatmap, decks,
+// log or plan progress), never whom they muted, never their settings,
+// never a list of everyone. Sign-in help (mock "Admin, grown up", A3): a fresh code past
 // the limits, the limits cleared, an email change that finishes at the new
 // address's first sign-in. Every action goes in the audit log. Nothing here
 // logs an email, a name, a code or what was searched.
@@ -236,3 +237,49 @@ export async function putNote(req: Request, s: Session, env: Env, [uid]: string[
     .bind(uid, text, nowSec()).run();
   return json({ ok: true });
 }
+
+// ---- an account's crew (F1-F3): by name, behind a click, every look logged ----
+
+const CREW_MAX = 500;
+
+/** GET /admin/people/{uid}/crew: everyone on either side of a friendship
+ *  with them, by name and emoji, with which side added whom and when.
+ *  Nothing about how anyone studies. The look itself goes in the audit log. */
+export async function crew(s: Session, env: Env, [uid]: string[]): Promise<Response> {
+  adminOnly(env, s);
+  await account(env, uid);
+  const rows = await env.DB.prepare(
+    `SELECT o.other AS uid, u.name, u.emoji, MAX(o.mine) AS mine, MAX(o.theirs) AS theirs FROM (
+       SELECT friend AS other, at AS mine, NULL AS theirs FROM friends WHERE owner = ?1
+       UNION ALL
+       SELECT owner AS other, NULL AS mine, at AS theirs FROM friends WHERE friend = ?1
+     ) o LEFT JOIN users u ON u.uid = o.other
+     GROUP BY o.other ORDER BY (MAX(o.mine) IS NOT NULL AND MAX(o.theirs) IS NOT NULL) DESC, u.name COLLATE NOCASE LIMIT ?2`,
+  ).bind(uid, CREW_MAX).all<{ uid: string; name: string | null; emoji: string | null; mine: number | null; theirs: number | null }>();
+  await logAction(env, "looked at their crew", { uid });
+  return json({ crew: rows.results.map((r) => ({ uid: r.uid, name: r.name || "a deleted account", emoji: r.emoji || "", mine: r.mine, theirs: r.theirs })) });
+}
+
+/** DELETE /admin/people/{uid}/crew/{other}?side=mine|theirs: one side of a
+ *  friendship, on their request. "mine" takes the other person off their
+ *  list (what their own Remove does); "theirs" takes them off the other
+ *  person's list (someone they don't know added them). Never adds anyone:
+ *  a friendship is two people's yes. They get one email saying what was done. */
+export async function removeEdge(req: Request, s: Session, env: Env, [uid, other]: string[]): Promise<Response> {
+  adminOnly(env, s);
+  const side = new URL(req.url).searchParams.get("side");
+  if (side !== "mine" && side !== "theirs") throw new HttpError(400, "side");
+  const u = await account(env, uid);
+  const [owner, friend] = side === "mine" ? [uid, other] : [other, uid];
+  const r = await env.DB.prepare("DELETE FROM friends WHERE owner = ? AND friend = ?").bind(owner, friend).run();
+  if (!r.meta.changes) throw new HttpError(404, "no_edge");
+  const them = (await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(other).first<string>("name")) || "someone";
+  try {
+    await sendMail(env, u.email, "Your Due Crew list",
+      (side === "mine" ? `As you asked, Sam took ${them} off your Due Crew list.` : `As you asked, Sam took you off ${them}'s Due Crew list.`) +
+      "\n\nQuestions? Reply in Due Crew with Send feedback.\n\n— Sam, Due Crew (duecrew.com)\n");
+  } catch { /* what was done stays done */ }
+  await logAction(env, side === "mine" ? "took someone off their list" : "took them off someone's list", { uid });
+  return json({ ok: true });
+}
+

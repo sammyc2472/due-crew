@@ -709,3 +709,7 @@ body:has(main.wide) .appfoot { max-width: 1320px; }
 .ymini i { background: var(--well); border-radius: 1px; } .ymini i.out { background: transparent; }
 .ymini i.l1 { background: color-mix(in srgb, var(--accent) 28%, var(--well)); } .ymini i.l2 { background: color-mix(in srgb, var(--accent) 52%, var(--well)); }
 .ymini i.l3 { background: color-mix(in srgb, var(--accent) 76%, var(--well)); } .ymini i.l4 { background: var(--accent); }
+/* F1: an account's crew in admin */
+.people .crow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.people .crow .confirm { grid-column: 1 / -1; }
+.people .linkish.warn { color: var(--warn); }

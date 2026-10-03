@@ -1656,6 +1656,42 @@ function peoplePanel(nav) {
       p.actions.length ? h("div", { class: "alog" }, p.actions.map((a) => h("div", {}, h("span", {}, a.action, a.squadName ? h("span", { class: "muted" }, ` · ${a.squadName}`) : null), h("small", { class: "muted" }, seen(a.at)))))
         : h("p", { class: "muted small" }, "Nothing yet."));
 
+    // F1-F3: who's on their crew, shut until asked for (each look is in the audit log);
+    // one side of a friendship can go on their request, never one be made
+    const crewList = h("div", { class: "alog" });
+    const crewSay = h("small", { class: "muted", role: "status" }, "Names only, never how anyone studies. Opening it is logged.");
+    const month = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
+    async function showCrew(btn) {
+      btn.disabled = true;
+      let r;
+      try { r = await api("GET", `${base}/crew`); } catch { btn.disabled = false; crewSay.textContent = "That didn't load."; return; }
+      btn.remove();
+      crewSay.textContent = r.crew.length ? `${r.crew.length} ${r.crew.length === 1 ? "person" : "people"} · looked at now, in the audit log` : "No one on either side.";
+      crewList.replaceChildren(...r.crew.map((c) => {
+        const what = c.mine && c.theirs ? `crew since ${month(Math.max(c.mine, c.theirs))}`
+          : c.mine ? `${p.name} added them ${month(c.mine)}; not added back` : `added ${p.name} ${month(c.theirs)}; ${p.name} hasn't added back`;
+        const conf = h("div", { class: "confirm", hidden: true });
+        const ask = (side, label, says) => h("button", { class: "linkish warn", onclick: () => {
+          conf.replaceChildren(h("b", {}, `${label}?`), h("span", {}, says),
+            h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => { conf.hidden = true; } }, "Cancel"),
+              h("button", { class: "danger", onclick: async (e) => {
+                e.target.disabled = true;
+                try { await api("DELETE", `${base}/crew/${c.uid}?side=${side}`); crewSay.textContent = `Done. ${p.name} got one email saying so.`; conf.hidden = true; showCrew(h("button")); }
+                catch { e.target.disabled = false; crewSay.textContent = "That didn't work."; }
+              } }, "Remove")));
+          conf.hidden = false;
+        } }, `${label}…`);
+        return h("div", { class: "crow" },
+          h("span", {}, c.emoji ? `${c.emoji} ` : "", h("b", {}, c.name), h("small", { class: "muted" }, ` · ${what}`)),
+          h("span", { class: "row" }, h("button", { class: "linkish", onclick: () => nav.person(c.uid) }, "Open"),
+            c.mine ? ask("mine", `Take ${c.name} off ${p.name}'s list`, `What ${p.name}'s own Remove does: ${c.name} stops showing up for them. ${p.name} gets one email saying so.`) : null,
+            c.theirs ? ask("theirs", `Take ${p.name} off ${c.name}'s list`, `For someone who added ${p.name} and shouldn't have: ${p.name} drops off ${c.name}'s list. ${c.name} isn't emailed; ${p.name} gets one email saying so.`) : null),
+          conf);
+      }));
+    }
+    const crewBox = h("section", { class: "box" }, h("h4", {}, "Crew", h("button", { class: "quiet", onclick: (e) => showCrew(e.currentTarget) }, "Show who's on their crew")),
+      crewList, crewSay);
+
     const confirmBox = h("div", { class: "confirm", hidden: true });
     const typed = h("input", { type: "email", placeholder: p.email, "aria-label": "Type their email to confirm", style: "width:100%" });
     const delBtn = h("button", { class: "danger", onclick: async () => {
@@ -1683,6 +1719,7 @@ function peoplePanel(nav) {
         h("div", { class: "tiles" }, tile(p.crew.mutual, "crew, mutual"), tile(p.crew.addedNotBack, "added, not back"),
           tile(p.crew.addedThem, "added them, not back"), tile(p.squads.length, "squads"), tile(p.following.length, "plans followed"),
           tile(p.made.length, "plans made"), tile(p.crew.muted, "muted"))),
+      crewBox,
       h("div", { class: "agrid3" }, help, notes, done),
       h("div", { class: "agrid2" },
         list("Squads", p.squads.map((x) => h("div", {}, h("button", { class: "linkish", onclick: () => nav.squad(x.id) }, x.name),
