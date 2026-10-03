@@ -1175,9 +1175,9 @@ def test_decks():
     # backwards in dark mode, where the mature fill is the bright one
     legend = board._decks_html({"labels": [today], "entries": [
         {"user_id": "me", "name": "Sam", "you": True, "decks": clean(payload)}]})
-    check("decks legend: names the fills by texture, which holds in both themes",
-          "solid = mature" in legend and "faded = seen" in legend and "hatched = unlocked" in legend
-          and "light =" not in legend and "dark =" not in legend)
+    check("decks legend: a key drawn with the bars' own fills, which holds in both themes (3.7.1, I6)",
+          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked' in legend
+          and "light =" not in legend and "dark =" not in legend and "hover" not in legend)
 
 
 def test_calendar_weeks_and_ledger():

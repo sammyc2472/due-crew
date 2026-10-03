@@ -777,7 +777,7 @@ async function builder(id) {
         onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
       h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
     return h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
-      h("small", { class: "muted" }, "Things cards can't measure. Followers tick them in Due."), rows,
+      rows,
       lines.length < Todo.MAX ? h("button", { class: "linkish", onclick: () => {
         u.todo = [...lines, { k: "watch", t: "" }]; mark(); draw(); } }, "+ Add a line") : null);
   }

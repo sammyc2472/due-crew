@@ -650,10 +650,12 @@ def _css(cfg):
     #due-crew .dtrack {{ position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
       border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
     #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
-    #due-crew .dtrack .fo {{ opacity: 0.5; background: repeating-linear-gradient(
+    #due-crew .dtrack .fo, #due-crew .dkey .fo {{ opacity: 0.5; background: repeating-linear-gradient(
       135deg, var(--dc-accent) 0 1.5px, transparent 1.5px 5px); }}
-    #due-crew .dtrack .fs {{ background: var(--dc-accent); opacity: 0.35; }}
-    #due-crew .dtrack .fm {{ background: var(--dc-accent); }}
+    #due-crew .dtrack .fs, #due-crew .dkey .fs {{ background: var(--dc-accent); opacity: 0.35; }}
+    #due-crew .dtrack .fm, #due-crew .dkey .fm {{ background: var(--dc-accent); }}
+    #due-crew .dkey i {{ display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: 0; }}
+    #due-crew .dkey i:first-child {{ margin-left: 0; }}
     #due-crew .dc-count {{ min-width: 118px; flex-shrink: 0; display: flex;
       flex-direction: column; align-items: flex-end; line-height: 1.25;
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
@@ -1548,10 +1550,8 @@ def _decks_body(data, deltas=None):
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     html += ('<div class="dc-line" style="padding-top: 2px;">'
-             # named by texture, not by light/dark: in dark mode the mature fill
-             # is the bright one, and "dark = mature" read backwards there
-             'solid = mature &middot; faded = seen &middot; hatched = unlocked &middot; '
-             '% of each person&rsquo;s own copy &middot; hover for numbers</div>')
+             # 3.7.1, I6: a key drawn like the bars, no words about hovering
+             '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span></div>')
     return html
 
 
@@ -2307,7 +2307,7 @@ def _settings_board(cfg):
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "From your own Anki: today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
-                      "Each morning on this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
+                      "Each morning, as new cards")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')

@@ -227,7 +227,7 @@ function signIn() {
   }
   const form = h("form", { class: "stack", novalidate: true },
     title,
-    h("p", { class: "muted" }, "The same email you use in Anki. We'll email you a 6-digit code, good for 10 minutes. New here? The same code makes your account."),
+    h("p", { class: "muted" }, "We'll email you a code."),
     h("label", { for: "email" }, "Email"), email,
     h("div", {}, h("button", { type: "submit" }, "Send code")), status);
   form.addEventListener("submit", async (e) => {
@@ -317,7 +317,7 @@ async function plansList() {
     h("div", { class: "agrid2", style: "margin-top:20px" },
       h("section", { class: "panel" }, codeBox()),
       h("section", { class: "panel" }, h("h4", {}, "Find one to follow"),
-        h("p", { class: "muted small" }, "Plans people share for anyone to follow or copy."), link("/library", "Open the library ›"))),
+        link("/library", "Open the library ›"))),
   );
 }
 
@@ -675,8 +675,7 @@ async function account() {
     h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
       h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
     sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
-      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null),
-      h("p", { class: "muted small" }, "A friend adds you with it; Copy invite makes a link that makes you crew at once.")),
+      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null)),
     sec("Signed in", where ? h("p", {}, where) : null,
       h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out here"),
         h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere"))),
@@ -728,7 +727,7 @@ function yourData(lg, set) {
     days.length ? ask("Your log", `${days.length.toLocaleString()} day${days.length === 1 ? "" : "s"}, from ${when(days[0])}.`,
       ["Delete your log?", "Your year, your all-time card and the Log page start again from this past week. Your crew sees nothing different. Anki keeps your reviews; it won't send the old years again."],
       "Delete my log", "/log", "Deleted. It starts again from this past week.")
-      : row("Your log", "Nothing yet. Anki sends it with its syncs."),
+      : row("Your log", "Nothing yet."),
     items.length || ticks ? ask("Your to-dos", `${open} open, ${items.length - open} ticked.`,
       ["Delete your to-dos?", "Your own to-dos and ticks, on every computer at its next refresh. A plan's dates stay on your list."],
       "Delete my to-dos", "/account/todos", "Deleted. Anki takes it at its next refresh.")
@@ -1011,7 +1010,7 @@ const Board = (() => {
     };
     return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
       bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
-      h("p", { class: "muted small dleg" }, "solid = mature · faded = seen · hatched = unlocked · % of each person’s own copy · hover for numbers"));
+      h("p", { class: "muted small dleg dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked"));
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
@@ -1033,7 +1032,7 @@ const Board = (() => {
     const list = squadsGot.list;
     const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
     if (!list.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
-      h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads."));
+      h("p", { class: "muted small" }, "Join with a code, or make one in Anki."));
     let cur = store("dc-squad");
     if (!list.some((q) => q.id === cur)) cur = list[0].id;
     const sq = squadsGot.boards[list.findIndex((q) => q.id === cur)];
@@ -1181,7 +1180,7 @@ async function home() {
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
     return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
       h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true))),
-      h("p", { class: "muted small" }, "Today’s cards open in Anki each morning. ", link("/plans", "All plans ›")));
+      h("p", { class: "muted small" }, link("/plans", "All plans ›")));
   }
   // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
@@ -1325,8 +1324,7 @@ function duePanel(followed, set, t) {
   return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
     behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
     rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
-    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null,
-    h("small", { class: "muted" }, "Tick and add in Anki, which counts your cards."));
+    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null);
 }
 
 /** K6: 1 December – 7 January, the year's card opens the rail, once a
@@ -1375,10 +1373,10 @@ function todayStrip(followed, mine) {
   if (followed.length) {
     cards.push(fresh ? card("on", "Opens today", `${fresh.toLocaleString()} new`,
       h("span", {}, link(`/plans/${opening[0][0].id}`, opening[0][0].name), ` · ${opening.slice(0, 3).map(([, u]) => u.name).join(", ")}${opening.length > 3 ? "…" : ""}`),
-      h("small", { class: "muted" }, "Your Anki opens them in the morning"))
+      null)
       : card("", "Opens today", "Nothing new", h("small", { class: "muted" }, "A day for reviews")));
   }
-  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "In Anki: Plan ▾ › Catch up")));
+  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "Catch up in Anki")));
   if (next) {
     const preps = followed.some((p) => Sched.units(p.doc).some((u) => u.for === next.ev.id && opening.some(([, o]) => o.id === u.id)));
     cards.push(card("", "Next", next.ev.name, h("span", {}, `${next.ev.day === t ? "Today" : pretty(next.ev.day)}${preps ? " · today preps for it" : ""}`),
@@ -1696,8 +1694,7 @@ function onTrackChart(p) {
   svg.append(dot, s("text", { x: x(ti) + 8, y: y(seen) + 4, class: "lab" }, `You ${seen.toLocaleString()}`));
   return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"),
     hist.length > 1 ? [h("span", {}, h("i", { class: "k-seen" }), "seen"), h("span", {}, h("i", { class: "k-open" }), "opened for you")] : null,
-    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg,
-    h("small", { class: "muted" }, "A point a day from what your Anki shares (Plan ▾ › Share my progress)."));
+    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg);
 }
 
 function barChart(values, labels, cap, unit) {
@@ -1827,7 +1824,7 @@ async function logPage() {
 
   const r30 = ret(studied30);
   page(
-    phead("Your log", "Only you see this. It fills in from Anki's syncs.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
+    phead("Your log", "Only you see this.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
     h("div", { class: "tiles" },
       tile(`${week.filter(([, r]) => r[0] || r[1]).length} of 7`, "days this week"),
       tile(hm(sum(week, 0)), "studied", `last week by ${byDay}: ${hm(sum(lastSoFar, 0))}`),
@@ -1848,7 +1845,7 @@ async function logPage() {
           tile(Math.round(sum(studied30, 1) / studied30.length).toLocaleString(), "reviews a day"),
           tile(Math.round(sum(studied30, 2) / studied30.length).toLocaleString(), "new cards a day"),
           tile(r30 === null ? "—" : `${r30.toFixed(1)}%`, "retention")) : h("p", { class: "muted small" }, "No study days yet."),
-        h("small", { class: "muted" }, "Averages leave out days off, so a rest day doesn't pull them down."),
+        h("small", { class: "muted" }, "Average of days studied"),
         h("details", {}, h("summary", { class: "small" }, "By week, 12 weeks"), weeks))),
     h("section", { class: "panel", style: "margin-top:12px" }, h("h4", {}, h("span", {}, "Day by day ", h("span", { class: "muted" }, "last 30 days")), order), table),
     followed.length ? h("h2", {}, "Plans") : null,

@@ -399,7 +399,7 @@ class SettingsDialog(QDialog):
         self._check(lay, "due_show", "Due above the board")
         self._check(lay, "due_suggest", "Suggestions from my own Anki")
         lee = self._check(lay, "due_leeches", "Recover leeches each morning")
-        lee.setToolTip("On this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
+        lee.setToolTip("Each morning, as new cards")
         # two short lines, unwrapped: a wrapped note got clipped by _shrink
         hint = QLabel("Refreshes when Anki opens or syncs, and with Refresh.<br>"
                       "Sort by clicking the board's headers.")

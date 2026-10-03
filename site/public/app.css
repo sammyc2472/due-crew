@@ -126,8 +126,10 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .dn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dtrack { position: relative; height: 12px; background: var(--well); border-radius: 3px; overflow: hidden; display: block; }
 .dtrack i { position: absolute; left: 0; top: 0; bottom: 0; }
-.dtrack .fs { background: var(--accent); opacity: 0.35; } .dtrack .fm { background: var(--accent); }
-.dtrack .fo { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--accent) 3px 4px); opacity: 0.45; }
+.dtrack .fs, .dkey .fs { background: var(--accent); opacity: 0.35; } .dtrack .fm, .dkey .fm { background: var(--accent); }
+.dkey i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; }
+.dkey i:first-child { margin-left: 0; }
+.dtrack .fo, .dkey .fo { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--accent) 3px 4px); opacity: 0.45; }
 @media (max-width: 560px) { .brdt th:nth-child(4), .brdt td:nth-child(4), .brdt th:nth-child(5), .brdt td:nth-child(5) { display: none; } .dr { grid-template-columns: 80px 1fr 80px; } }
 .panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--card); display: grid; gap: 8px; }
 .panel h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
