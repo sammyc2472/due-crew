@@ -1944,20 +1944,28 @@ def _review_banner(kind, info):
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
-def crew_menu_items(period, show_up, squad_ok=False):
-    """3.4 review, H5: the footer's Crew ▾, as [(label, command)] for the
-    tab on screen. What the footer's links were, in one place."""
-    items = [("Friends…", "friends")]
-    if period == "today" and not show_up:
-        items.append(("Share today", "sharetoday"))
-        items.append(("Share today as a picture…", "picturetoday"))
-    if period == "week" or (show_up and period == "today"):
-        items.append(("Share the week", "sharecrewweek"))
-        items.append(("Share the week as a picture…", "pictureweek"))
-    if period == "squads" and not show_up and squad_ok:
-        items.append(("Share the squad's day", "squadshare"))
-    if period == "decks":
-        items.append(("Shared decks…", "decks"))
+def crew_menu_items():
+    """The footer's Crew ▾ (3.4 review, H5; 3.7.1, H3): people only, the
+    same on every tab. What you post went to Share ▾."""
+    return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
+            ("Shared decks…", "decks")]
+
+
+def share_menu_items(show_up, squad_ok=False):
+    """The footer's Share ▾ (3.7.1, H3), as [(label, command)], a label of
+    None being a heading: as text first, then as a picture, the same on
+    every tab. Today's numbers aren't offered in just-show-up mode."""
+    items = [(None, "As text")]
+    if not show_up:
+        items.append(("Today", "sharetoday"))
+    items.append(("This week", "sharecrewweek"))
+    if squad_ok and not show_up:
+        items.append(("The squad's day", "squadshare"))
+    items.append((None, "As a picture"))
+    if not show_up:
+        items.append(("Today…", "picturetoday"))
+    items += [("My week…", "pictureweek"), ("My year…", "pictureyear"),
+              ("All time…", "picturealltime")]
     return items
 
 
@@ -2108,8 +2116,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             # 2.12: a study room for the crew
             left += (f'<a class="pb" href="#" title="Rounds and breaks with your crew" '
                      f'onclick="{_pycmd("roomopen")}">Open a room</a>')
-    left += (f'<a href="#" title="Friends, sharing" '
-             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>')
+    left += (f'<a href="#" title="Friends" '
+             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>'
+             f'<a href="#" title="As text or a picture" '
+             f'onclick="{_pycmd("sharemenu")}">Share &#9662;</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="pb warn" href="#" title="You added them; you\'re crew when they add you back" '

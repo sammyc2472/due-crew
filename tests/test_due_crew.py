@@ -430,8 +430,9 @@ def test_shares_v21():
           "duecrew:sharetoday" in js and "duecrew:shareweek" in js)
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
-    check("share: Week view's Crew menu offers the crew week (3.4 review, H5)",
-          "crewmenu" in foot_week and ("Share the week", "sharecrewweek") in board.crew_menu_items("week", False))
+    check("share: the footer's Share menu offers the crew week (3.7.1, H3)",
+          "crewmenu" in foot_week and "sharemenu" in foot_week
+          and ("This week", "sharecrewweek") in board.share_menu_items(False))
 
 
 def _luminance(hex_color):
@@ -887,10 +888,10 @@ def test_v25_edges_emoji_week():
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
-    check("squad board: Share the squad's day is in the Crew menu, not on the squad's line",
-          "squadshare" not in html and "crewmenu" in page
-          and ("Share the squad's day", "squadshare") in board.crew_menu_items("squads", False, True)
-          and not any(k == "squadshare" for _l, k in board.crew_menu_items("squads", False, False)))
+    check("squad board: Share the squad's day is in the Share menu, not on the squad's line",
+          "squadshare" not in html and "sharemenu" in page
+          and ("The squad's day", "squadshare") in board.share_menu_items(False, True)
+          and not any(k == "squadshare" for _l, k in board.share_menu_items(False, False)))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
@@ -2268,8 +2269,8 @@ def test_show_up():
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
           and "Last week" not in mode
-          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek", "pictureweek"]
-          and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
+          and [k for _l, k in board.share_menu_items(True) if _l] == [
+              "sharecrewweek", "pictureweek", "pictureyear", "picturealltime"])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
           mode.count('class="sq on"') == 3 + 2 + 3 + 1 + 2 * 0 + 0  # per person within the calendar week
@@ -5334,19 +5335,23 @@ def test_account_survives_a_reset_config():
 
 
 def test_crew_menu_pictures():
-    """K7: the Crew menu's picture lines, and a handler for every key it can offer."""
-    keys = set()
-    for period in ("today", "week", "decks", "squads", "plans"):
-        for show_up in (False, True):
-            keys |= {k for _l, k in board.crew_menu_items(period, show_up, True)}
+    """3.7.1, H3: Crew ▾ is people, Share ▾ everything you post (as text,
+    then as a picture), and a handler for every key either can offer."""
     text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-    run = text[text.index("def _crew_menu"):text.index("def open_friends")]
-    handled = set(re.findall(r'"([a-z]+)": lambda', run))
-    check("crew menu: a picture of today and of the week, each handled",
-          ("Share today as a picture…", "picturetoday") in board.crew_menu_items("today", False)
-          and "pictureweek" in [k for _l, k in board.crew_menu_items("week", False)]
-          and "picturetoday" not in [k for _l, k in board.crew_menu_items("today", True)]
-          and keys <= handled and '"/home?card=today"' in run, sorted(keys - handled))
+    for fn, nxt, keys in (
+            ("def _crew_menu", "def _share_menu", {k for _l, k in board.crew_menu_items()}),
+            ("def _share_menu", "def open_friends",
+             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l})):
+        run = text[text.index(fn):text.index(nxt)]
+        handled = set(re.findall(r'"([a-z]+)": lambda', run))
+        check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
+    full = board.share_menu_items(False, True)
+    check("share menu: as text, then as a picture, year and all time on the site",
+          [l or k for l, k in full] == ["As text", "Today", "This week", "The squad's day", "As a picture",
+                                        "Today…", "My week…", "My year…", "All time…"]
+          and '"/home?card=alltime"' in text and '"/home?card=year"' in text)
+    check("crew menu: people only",
+          [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
 
 
 def test_long_quiet_friends_fold():

@@ -1134,22 +1134,38 @@ async function home() {
       h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true))),
       h("p", { class: "muted small" }, "Today’s cards open in Anki each morning. ", link("/plans", "All plans ›")));
   }
-  // board.py's footer: Crew ▾ and who I'm waiting on; Refresh as a quiet icon
+  // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
+  // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
   const footLeft = h("span", { class: "fl" });
-  function drawFoot() {
-    const items = [["Friends…", () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } }]];
-    if (tab === "today" && !showUp) items.push(["Share today", () => share(Board.shareText(people, t))]);
-    if (tab === "week" || (showUp && tab === "today")) items.push(["Share the week", () => share(Board.shareWeek(people, t))]);
-    if (!showUp) items.push(["Picture of today…", () => weekCard(true)]);
-    items.push(["Picture of my week…", () => weekCard()]);
-    if (tab === "decks") items.push(["Shared decks…", () => { crewBtn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { crewBtn.textContent = "Crew ▾"; }, 2400); }]);
-    const crewBtn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
+  const toCode = () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } };
+  function menu(label, items) {
+    const btn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
       document.querySelectorAll(".crew-pop").forEach((x) => x.remove());
-      const pop = h("div", { class: "cheer-pop crew-pop", role: "menu" }, items.map(([l, go]) => h("button", { class: "linkish", role: "menuitem", onclick: () => { pop.remove(); go(); } }, l)));
+      const pop = h("div", { class: "cheer-pop crew-pop", role: "menu" }, items.map(([l, go]) => go
+        ? h("button", { class: "linkish", role: "menuitem", onclick: () => { pop.remove(); go(btn); } }, l)
+        : h("span", { class: "hd" }, l)));
+      pop.style.left = `${btn.offsetLeft}px`;
       e.currentTarget.after(pop);
       setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
-    } }, "Crew ▾");
-    footLeft.replaceChildren(crewBtn, waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
+    } }, `${label} ▾`);
+    return btn;
+  }
+  function drawFoot() {
+    const crewItems = [["Friends…", toCode]];
+    // its "Copied." goes where Share's does, not over the menu's name
+    if (b.me.code) crewItems.push(["Copy invite", () => copyInvite(b.me.code, { set textContent(v) {
+      if (v === "Copy invite") return;
+      updated.textContent = v; setTimeout(() => { updated.textContent = "Updated just now"; }, 2400);
+    } })]);
+    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew ▾"; }, 2400); }]);
+    const shareItems = [["As text"]];
+    if (!showUp) shareItems.push(["Today", () => share(Board.shareText(people, t))]);
+    shareItems.push(["This week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
+    if (!showUp) shareItems.push(["Today…", () => weekCard(true)]);
+    shareItems.push(["My week…", () => weekCard()],
+      ["My year…", () => openYearCard(logR.days || {}, t.slice(0, 4), logR.cheers || {})],
+      ["All time…", () => openYearCard(logR.days || {}, "all", logR.cheers || {})]);
+    footLeft.replaceChildren(menu("Crew", crewItems), menu("Share", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
       onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null);
   }
   const share = async (text) => {

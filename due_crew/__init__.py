@@ -694,6 +694,8 @@ def _on_js(handled, message, context):
             open_friends(focus_add=True)
     elif cmd == "crewmenu":
         _crew_menu(c)  # 3.4 review, H5
+    elif cmd == "sharemenu":
+        _share_menu(c)  # 3.7.1, H3
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
@@ -901,21 +903,33 @@ def _redeem(invite):
 
 
 def _crew_menu(c):
-    """The footer's Crew ▾ (3.4 review, H5), as fits the tab on screen."""
+    """The footer's Crew ▾ (3.4 review, H5): people."""
     from aqt.qt import QCursor, QMenu
     run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
-           "squadshare": lambda: _share_squad(),
+           "copyinvite": lambda: _copy_friend_invite()}
+    menu = QMenu(mw)
+    for label, key in board.crew_menu_items():
+        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    menu.exec(QCursor.pos())
+
+
+def _share_menu(c):
+    """The footer's Share ▾ (3.7.1, H3): as text, then as a picture."""
+    from aqt.qt import QCursor, QMenu
+    run = {"squadshare": lambda: _share_squad(),
            "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek"),
            # K7: the picture is drawn on duecrew.com, signed in, its sheet open
            "picturetoday": lambda: plan_flow.open_site("/home?card=today"),
-           "pictureweek": lambda: plan_flow.open_site("/home?card=week")}
+           "pictureweek": lambda: plan_flow.open_site("/home?card=week"),
+           "pictureyear": lambda: plan_flow.open_site("/home?card=year"),
+           "picturealltime": lambda: plan_flow.open_site("/home?card=alltime")}
     menu = QMenu(mw)
-    for i, (label, key) in enumerate(board.crew_menu_items(
-            c.get("period", "today"), bool(c.get("show_up")),
-            (_squad_view(c) or {}).get("state") == "ok")):
-        if i == 1:
-            menu.addSeparator()
-        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    for label, key in board.share_menu_items(
+            bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):
+        if label is None:
+            menu.addSection(key)
+        else:
+            menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
     menu.exec(QCursor.pos())
 
 

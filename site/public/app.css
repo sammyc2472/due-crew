@@ -678,6 +678,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .pillw { font: inherit; font-size: 12px; font-weight: 700; color: var(--warn); background: transparent; border: 1.5px solid var(--warn); border-radius: 99px; padding: 1px 9px; }
 .crew-pop { left: 0; right: auto; bottom: 26px; flex-direction: column; align-items: stretch; min-width: 150px; }
 .crew-pop button { font-size: 13px !important; text-align: left; padding: 5px 9px !important; }
+.crew-pop .hd { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 9px 2px; }
 .solo { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 6px; }
 .solo .codepill { background: var(--well); border-radius: 6px; padding: 3px 9px; font-weight: 700; }
 .ptab { display: grid; gap: 10px; } .pcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
