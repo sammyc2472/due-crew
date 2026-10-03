@@ -728,14 +728,16 @@ def _css(cfg):
     #due-crew .ptoday .btns a.q {{ color: var(--dc-muted); font-weight: 500; }}
     #due-crew .ptoday .btns a.bt.on {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
     #due-crew .pwh {{ display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 2px 0 6px; }}
-    #due-crew .pwh .nav {{ display: flex; gap: 10px; }}
+    #due-crew .pwh .nav {{ display: flex; align-items: center; gap: 8px; }}
+    #due-crew .pwh .nav a {{ font-size: 15px; line-height: 20px; }}
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pwh .site {{ margin-left: auto; font-weight: 600; }}
     #due-crew .pwk {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }}
     #due-crew .pwk .pc {{ border: 1px solid var(--dc-line); border-radius: 8px; padding: 4px 5px 5px; min-height: 64px;
       display: flex; flex-direction: column; gap: 3px; cursor: default; min-width: 0; text-align: left; }}
     #due-crew .pwk .pc[onclick] {{ cursor: pointer; }}
-    #due-crew .pwh .nav .tb {{ border: 1px solid var(--dc-line); border-radius: 99px; padding: 0 9px; font-weight: 600; }}
+    #due-crew .pwh .nav .tb {{ border: 1px solid var(--dc-line); border-radius: 99px; display: inline-block; box-sizing: border-box; height: 20px;
+      line-height: 18px; padding: 0 10px; font-size: 11.5px; font-weight: 600; }}
     #due-crew .pwh .nav .tb.here {{ color: var(--dc-muted); font-weight: 500; }}
     #due-crew .pwk .d b.td {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 99px; padding: 0 6px; white-space: nowrap; }}
     #due-crew .pwk .d b.td .dow {{ color: inherit; }}
