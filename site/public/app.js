@@ -971,9 +971,20 @@ const Board = (() => {
       const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
       const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
         : (ev.closest || []).length === 1 ? "one away from bingo" : `${(ev.closest || []).length} away from bingo`;
+      // K3: the card as a picture, for the group chat; never who stamped what
+      const at = (c) => (c === 4 ? { icon: sq.bingo.middle?.icon, done: !!ev.middle.done } : { icon: sq.bingo.squares?.[CELLS.indexOf(c)]?.icon, done: !!ev.squares[CELLS.indexOf(c)]?.done });
+      const card = () => {
+        const done = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => at(c).done);
+        const inLine = Array(9).fill(false);
+        for (const l of [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]) if (l.every((c) => done[c])) l.forEach((c) => { inLine[c] = true; });
+        Cards.open({ kind: "bingo", title: "Share our bingo", file: `due-crew-bingo-${String(sq.bingo.wk || isoWeek(day)).toLowerCase()}`, sizes: ["square"], switches: [],
+          data: { name: sq.name || "Our squad", week: String(Number(String(sq.bingo.wk || isoWeek(day)).split("W")[1]) || ""), icons: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => at(c).icon || ""),
+            done, inLine, stamps, state, shout: ev.lines ? "BINGO" : "Squad bingo" } });
+      };
       bingo = h("div", { class: "bgcard" }, h("span", { class: "bgmini" }, cells),
         h("span", { class: "bgt" }, h("b", {}, "Squad bingo"), h("span", { class: "muted" }, `${stamps} of 9 · ${state}`)),
-        h("span", { class: "muted small", title: ev.closest?.length ? `Closest line: ${ev.closest.join(", ")}` : "" }, "The whole card is in Anki"));
+        h("span", { class: "muted small", title: ev.closest?.length ? `Closest line: ${ev.closest.join(", ")}` : "" }, "The whole card is in Anki · ",
+          h("button", { class: "linkish", onclick: card }, "Share ›")));
     }
     // the squad's own line, as the add-on's (its code lives only in Anki)
     const acts = [];
@@ -1007,7 +1018,7 @@ const Board = (() => {
     return `Due Crew · week of ${pretty(mon)}: ${bits.join(" · ")}`;
   }
   const forget = () => { squadsGot = null; };  // a page load or Refresh reads them again
-  return { table, presence, decks, squads, shareText, shareWeek, ago, store, forget };
+  return { table, presence, decks, squads, shareText, shareWeek, ago, store, forget, showed, weekAgg };
 })();
 
 const todayLocal = () => today();
@@ -1065,6 +1076,7 @@ async function home() {
     const items = [["Friends…", () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } }]];
     if (tab === "today" && !showUp) items.push(["Share today", () => share(Board.shareText(people, t))]);
     if (tab === "week" || (showUp && tab === "today")) items.push(["Share the week", () => share(Board.shareWeek(people, t))]);
+    items.push(["Picture of my week…", () => weekCard()]);
     if (tab === "decks") items.push(["Shared decks…", () => { crewBtn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { crewBtn.textContent = "Crew ▾"; }, 2400); }]);
     const crewBtn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
       document.querySelectorAll(".crew-pop").forEach((x) => x.remove());
@@ -1082,6 +1094,29 @@ async function home() {
   const followed = plansR.plans.filter((p) => p.following);
   await draw();
   const my = b.me.week?.days || {};
+  // K1: my week as a picture; a number my Privacy switches keep home isn't in my week to draw
+  function weekCard() {
+    const lv = heatLevel(logR.days || {});
+    const sofar = [];
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const l = addDays(mon, i), d = my[l], fut = l > t;
+      if (!fut) sofar.push(l);
+      const on = !fut && Board.showed(d);
+      return { label: "MTWTFSS"[i], future: fut, today: l === t, studied: on,
+        lvl: !on ? 0 : d.studyTimeMs != null ? Math.max(1, lv(d.studyTimeMs / 60000)) : 3 };
+    });
+    const a = Board.weekAgg(my, sofar) || {};
+    const withMe = crew.filter((f) => sofar.some((l) => Board.showed((f.week?.days || {})[l]))).length;
+    const hidden = "kept home in Privacy";
+    Cards.open({ kind: "week", title: "Share my week", file: `due-crew-week-${mon}`, sizes: ["story", "link"],
+      data: { range: `${Cards.short(mon)} – ${Cards.short(addDays(mon, 6))}`, days, studied: days.filter((x) => x.studied).length, elapsed: sofar.length,
+        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe },
+      switches: [
+        { k: "time", label: "Time studied", off: a.time == null ? hidden : "" },
+        { k: "reviews", label: "Reviews and new cards", off: a.reviews == null ? hidden : "" },
+        { k: "streak", label: "Streak", off: a.streak == null ? hidden : !a.streak ? "none yet" : "" },
+        { k: "crew", label: "How many crew studied too", off: withMe ? "" : "none yet this week" }] });
+  }
   const studied = Object.entries(my).filter(([d, v]) => d >= mon && (v.studied || v.reviews)).length;
   const minutes = Object.entries(my).filter(([d]) => d >= mon).reduce((n, [, v]) => n + (v.studyTimeMs || 0), 0) / 60000;
   // 3.4 review, H1 / 3.5, H: my code to give, and any code I was sent, in the rail
@@ -1099,7 +1134,7 @@ async function home() {
       h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
         yearHeat(logR.days || {}), h("small", { class: "muted" }, "One square a day, by minutes. Point at a day for its numbers."))),
     h("aside", { class: "rail" },
-      h("section", { class: "panel" }, h("h4", {}, "This week", h("span", { class: "muted" }, "Mon–Sun")),
+      h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       sinceYouWereHere(b, crew, t),
       followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
@@ -1198,15 +1233,20 @@ function luckForm(f, done) {
 
 /** A year of my log, a square a day (Monday at the top), darker with more
  *  minutes; days before my log began are dashed. */
+/** A day's shade by minutes (0–4), against my own log's quarters. */
+function heatLevel(days) {
+  const mins = Object.values(days).map((r) => r[0]).filter((m) => m > 0).sort((a, c) => a - c);
+  const cut = [0.25, 0.5, 0.75].map((q) => mins[Math.floor(q * (mins.length - 1))] || 0);
+  return (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
+}
+
 function yearHeat(days) {
   const t = today();
   const lastMon = Sched.monday(t);
   const first = addDays(lastMon, -52 * 7);
   const logged = Object.keys(days).sort();
   const start = logged[0] || t;
-  const mins = Object.values(days).map((r) => r[0]).filter((m) => m > 0).sort((a, c) => a - c);
-  const cut = [0.25, 0.5, 0.75].map((q) => mins[Math.floor(q * (mins.length - 1))] || 0);
-  const level = (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
+  const level = heatLevel(days);
   const cells = [];
   const months = [];
   let lastLabel = -9;
@@ -1418,6 +1458,29 @@ async function logPage() {
   const logged = Object.keys(days).sort();
   const followed = plansR.plans.filter((p) => p.following);
   const wret = ret(week);
+  // K2: my year in Anki, from my log: the calendar year, Monday-first columns
+  const yearCard = () => {
+    const y = t.slice(0, 4), jan1 = `${y}-01-01`, dec31 = `${y}-12-31`;
+    const lv = heatLevel(days);
+    const did = (d) => !!days[d] && !!(days[d][0] || days[d][1]);
+    const cells = [];
+    for (let d = Sched.monday(jan1); d <= addDays(Sched.monday(dec31), 6); d = addDays(d, 1)) {
+      cells.push(d < jan1 || d > dec31 ? { out: true } : d < (logged[0] || t) ? { pre: true } : d > t ? { fut: true } : { lvl: did(d) ? Math.max(1, lv(days[d][0])) : 0 });
+    }
+    const mine = Object.keys(days).filter((d) => d >= jan1 && d <= t).sort();
+    let streak = 0, run = 0, prev = null, best = null;
+    for (const d of mine) {
+      if (!did(d)) { run = 0; prev = d; continue; }
+      run = prev && addDays(prev, 1) === d && run ? run + 1 : 1; prev = d;
+      streak = Math.max(streak, run);
+      if (!best || days[d][1] > best.n) best = { n: days[d][1], day: Cards.short(d) };
+    }
+    const yr = mine.map((d) => days[d]);
+    Cards.open({ kind: "year", title: "Share my year", file: `due-crew-${y}`, sizes: ["story"],
+      data: { year: y, studied: mine.filter(did).length, since: logged[0] > jan1 ? Cards.short(logged[0]) : "",
+        cols: cells.length / 7, cells, minutes: yr.reduce((a, r) => a + r[0], 0), reviews: yr.reduce((a, r) => a + r[1], 0), streak, best: best && best.n ? best : null },
+      switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" }, { k: "best", label: "Biggest day" }] });
+  };
   const r30 = ret(studied30);
   page(
     h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Your log"),
@@ -1430,7 +1493,8 @@ async function logPage() {
       tile(sum(week, 2).toLocaleString(), "new cards", `by ${byDay}: ${sum(lastSoFar, 2).toLocaleString()}`),
       tile(wret === null ? "—" : `${wret.toFixed(1)}%`, "retention"),
       tile(`${studied30.length} of 30`, "days studied, last 30")),
-    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`)),
+    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`,
+      logged.length ? [" · ", h("button", { class: "linkish", onclick: yearCard }, `Share my ${t.slice(0, 4)} ›`)] : null)),
       yearHeat(days), logged.length ? h("small", { class: "muted" }, `Your log starts ${pretty(logged[0])}, when Anki first sent it.`) : h("small", { class: "muted" }, "Nothing yet: Anki sends it with a full sync.")),
     h("div", { class: "agrid2", style: "margin-top:12px" },
       h("section", { class: "panel" }, h("h4", {}, "This week and last", pills), pairsBox),

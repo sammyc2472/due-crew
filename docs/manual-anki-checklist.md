@@ -505,3 +505,13 @@ In Anki (as a follower):
 - [ ] duecrew.com/home beside Anki's board, the same day: Today, Week,
       Decks, Squads and Plans show the same people in the same order with
       the same chips and notes; the footer has Crew ▾ and "N waiting".
+
+## Share cards (site)
+
+- [ ] Home › This week › Share ›: the week card; each switch redraws it; Link size; Dark.
+- [ ] On a phone, Share… opens the phone's share sheet with the picture; on a computer, Download saves a PNG.
+- [ ] With Time studied off in Anki's Privacy, its switch is off and says so.
+- [ ] Log › Share my 2026 ›: the year card, the days before the log dashed.
+- [ ] Squads › a squad with bingo › Share ›: the card, a line ringed.
+- [ ] A plan with every card seen: "Finished" on its page, Share a card ›; the code only on a code plan.
+

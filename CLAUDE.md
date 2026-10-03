@@ -467,6 +467,15 @@ add-on.
   `bingoEv` (the Worker's evaluate, done or not per square, never who).
   Change one, change both. The site can't show "back today" (the add-on's own history) or
   Copy invite for a squad (its code lives only in Anki).
+- Share cards (mock "Share Cards", K1–K5): my week (story or link
+  size, the crew count a number only), my year in Anki (from my log), a
+  squad's bingo (never who stamped what), a plan finished (its code only
+  on a code plan). Drawn in the browser on a canvas (`site/public/cards.js`)
+  from what the page already has; nothing is sent or kept, no link: the
+  phone's share sheet, or a download. A number my Privacy switches keep
+  home isn't in my week, so its switch is off. The cards keep their own
+  green, light or dark, and the one-line logo from its file
+  (`site/public/logo-line*.svg`, copies of `docs/logo`).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

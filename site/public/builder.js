@@ -622,6 +622,19 @@ async function builder(id) {
       ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((x) => h("div", { class: "dh" }, x)), cells);
   }
   const nNotes = (d) => notes.filter((x) => x.day === d).length;
+  /** K4: every date of it open and every card seen (what my Anki shares):
+   *  a card to share, with its code when it's a code plan. */
+  function finished() {
+    const f = plan.following, prog = f.progress || {};
+    const us = Sched.units(plan.doc).filter((u) => !(f.skipped || []).includes(u.id));
+    if (!us.length || !us.every((u) => prog[u.id] && prog[u.id][2] > 0 && prog[u.id][1] >= prog[u.id][2])) return null;
+    const days = us.map((u) => u.opens).sort();
+    const cards = us.reduce((a, u) => a + prog[u.id][2], 0);
+    const open = () => Cards.open({ kind: "plan", title: "Share this plan", file: `due-crew-plan-${plan.id}`, sizes: ["story"],
+      data: { name: plan.name, cards, weeks: Math.max(1, Math.ceil((Sched.diff(days[days.length - 1], days[0]) + 1) / 7)), code: plan.audience === "code" ? plan.code : null },
+      switches: plan.audience === "code" && plan.code ? [{ k: "code", label: "Its code, so others can follow" }] : [] });
+    return h("p", { class: "done-line" }, h("b", {}, "Finished. "), `You’ve seen all ${cards.toLocaleString()} cards. `, h("button", { class: "linkish", onclick: open }, "Share a card ›"));
+  }
   /** G6: a follower's own progress on a date, from what their Anki sends (only
    *  when they share it), and the dates they skip. Theirs alone to see. */
   function myLine(d) {
@@ -1653,6 +1666,7 @@ async function builder(id) {
           h("p", { class: "muted small bsub" }, subline())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
+      !author && plan.following ? finished() : null,
       !author && !plan.following ? readerActions() : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,

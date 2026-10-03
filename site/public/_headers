@@ -9,6 +9,8 @@
   Cache-Control: public, max-age=300
 /app.css
   Cache-Control: public, max-age=300
+/cards.js
+  Cache-Control: public, max-age=300
 /qr.js
   Cache-Control: public, max-age=300
 /landing.js
