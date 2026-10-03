@@ -1889,8 +1889,10 @@ def crew_menu_items(period, show_up, squad_ok=False):
     items = [("Friends…", "friends")]
     if period == "today" and not show_up:
         items.append(("Share today", "sharetoday"))
+        items.append(("Share today as a picture…", "picturetoday"))
     if period == "week" or (show_up and period == "today"):
         items.append(("Share the week", "sharecrewweek"))
+        items.append(("Share the week as a picture…", "pictureweek"))
     if period == "squads" and not show_up and squad_ok:
         items.append(("Share the squad's day", "squadshare"))
     if period == "decks":

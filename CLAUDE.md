@@ -476,6 +476,12 @@ add-on.
   home isn't in my week, so its switch is off. The cards keep their own
   green, light or dark, and the one-line logo from its file
   (`site/public/logo-line*.svg`, copies of `docs/logo`).
+  K6–K8 ("The next round"): today's card is the week card with today's
+  numbers (`one`); Anki's Crew ▾ "as a picture…" opens
+  `/home?card=today|week` signed in (`plan_flow.open_site`) with the
+  sheet open, so cards are drawn in one place; on a computer the sheet
+  copies the picture (Copy picture); from 1 Dec to 7 Jan Home's rail opens
+  with the year's card once a season per browser (`yearNudge`).
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

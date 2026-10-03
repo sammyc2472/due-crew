@@ -514,4 +514,7 @@ In Anki (as a follower):
 - [ ] Log › Share my 2026 ›: the year card, the days before the log dashed.
 - [ ] Squads › a squad with bingo › Share ›: the card, a line ringed.
 - [ ] A plan with every card seen: "Finished" on its page, Share a card ›; the code only on a code plan.
+- [ ] Anki › Crew ▾ › Share today as a picture…: the browser opens duecrew.com signed in, the today card's sheet open, the address back to /home.
+- [ ] On a computer, Copy picture, then paste into a chat.
+- [ ] In December (or with the clock set), Home's rail opens with "Your 2026 in Anki"; Not now hides it after a reload.
 

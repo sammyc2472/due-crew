@@ -2252,7 +2252,7 @@ def test_show_up():
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
           and "Last week" not in mode
-          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek"]
+          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek", "pictureweek"]
           and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
@@ -5317,6 +5317,22 @@ def test_account_survives_a_reset_config():
         _state["squads_left"] = set()
 
 
+def test_crew_menu_pictures():
+    """K7: the Crew menu's picture lines, and a handler for every key it can offer."""
+    keys = set()
+    for period in ("today", "week", "decks", "squads", "plans"):
+        for show_up in (False, True):
+            keys |= {k for _l, k in board.crew_menu_items(period, show_up, True)}
+    text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    run = text[text.index("def _crew_menu"):text.index("def open_friends")]
+    handled = set(re.findall(r'"([a-z]+)": lambda', run))
+    check("crew menu: a picture of today and of the week, each handled",
+          ("Share today as a picture…", "picturetoday") in board.crew_menu_items("today", False)
+          and "pictureweek" in [k for _l, k in board.crew_menu_items("week", False)]
+          and "picturetoday" not in [k for _l, k in board.crew_menu_items("today", True)]
+          and keys <= handled and '"/home?card=today"' in run, sorted(keys - handled))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
@@ -5328,3 +5344,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

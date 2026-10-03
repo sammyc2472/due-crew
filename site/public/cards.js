@@ -77,16 +77,17 @@ const Cards = (() => {
   async function week(c, W, H, size, d, on, pal, look) {
     const time = on.time && d.time ? hm(d.time) : null;
     const rev = on.reviews && d.reviews != null ? d.reviews : null;
-    const big = time || (rev != null ? `${n(rev)} reviews` : `${d.studied} day${d.studied === 1 ? "" : "s"}`);
-    const days = `${d.studied} of ${d.elapsed} day${d.elapsed === 1 ? "" : "s"}${d.elapsed < 7 ? " so far" : ""}`;
-    const crew = on.crew && d.crew ? `with ${d.crew} crew this week` : "";
+    const big = time || (rev != null ? `${n(rev)} reviews` : d.one ? (d.studied ? "Studied" : "Not yet") : `${d.studied} day${d.studied === 1 ? "" : "s"}`);
+    const days = d.one ? "today" : `${d.studied} of ${d.elapsed} day${d.elapsed === 1 ? "" : "s"}${d.elapsed < 7 ? " so far" : ""}`;
+    const crew = on.crew && d.crew ? `with ${d.crew} crew ${d.one ? "today" : "this week"}` : "";
+    const brow = d.one ? `Today · ${d.range}` : `My week · ${d.range}`;
     const streak = on.streak && d.streak ? d.streak : null;
     if (size === "link") {
       const P = 64;
       await head(c, pal, look, P, P, 34);
-      eyebrow(c, `My week · ${d.range}`, P, 214, 24, pal);
+      eyebrow(c, brow, P, 214, 24, pal);
       text(c, big, P, 330, 104, pal.ink, { weight: 700 });
-      const bits = [time && rev != null ? `${n(rev)} reviews` : null, on.reviews && d.newCards ? `${n(d.newCards)} new` : null, days, streak ? `🔥 ${streak}` : null].filter(Boolean);
+      const bits = [time && rev != null ? `${n(rev)} reviews` : null, on.reviews && d.newCards ? `${n(d.newCards)} new` : null, d.one ? null : days, streak ? `🔥 ${streak}` : null].filter(Boolean);
       text(c, fit(c, bits.join(" · "), 600, 30, 24, 400)[0], P, 392, 30, pal.mut);
       const x0 = 720, w = W - P - x0, gap = 12, s = (w - 6 * gap) / 7;
       d.days.forEach((x, i) => dayCell(c, x0 + i * (s + gap), 230, s, x, pal, 12, 4));
@@ -96,9 +97,9 @@ const Cards = (() => {
     }
     const P = 78;
     await head(c, pal, look, P, P, 40);
-    eyebrow(c, `My week · ${d.range}`, P, 236, 30, pal);
+    eyebrow(c, brow, P, 236, 30, pal);
     text(c, big, P, 396, 150, pal.ink, { weight: 700 });
-    text(c, `studied, ${days}`, P, 462, 38, pal.mut);
+    text(c, d.one ? (d.studied || time || rev ? "studied today" : "nothing yet today") : `studied, ${days}`, P, 462, 38, pal.mut);
     const w = W - 2 * P, gap = 20, s = (w - 6 * gap) / 7;
     d.days.forEach((x, i) => {
       dayCell(c, P + i * (s + gap), 560, s, x, pal, 26, 8);
@@ -190,7 +191,7 @@ const Cards = (() => {
     text(c, "duecrew.com", W - P, H - P, 34, pal.mut, { align: "right" });
   }
 
-  const DRAW = { week, year, bingo, plan };
+  const DRAW = { week, today: week, year, bingo, plan };
 
   /** The sheet (K5): the card, switches for each number, size and look,
    *  then Share… (the phone's own sheet) or Download. Nothing is posted. */
@@ -233,6 +234,12 @@ const Cards = (() => {
       say.textContent = "Downloaded.";
     };
     const canShare = (() => { try { return !!navigator.canShare && navigator.canShare({ files: [new File([""], "x.png", { type: "image/png" })] }); } catch { return false; } })();
+    // K8: on a computer, most chats take a pasted picture (Safari wants the promise at once)
+    const canCopy = !canShare && !!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem);
+    const copyPic = async () => {
+      try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob() })]); say.textContent = "Copied. Paste it into a chat."; }
+      catch { say.textContent = "Couldn’t copy here. Download works."; }
+    };
     const share = async () => {
       const b = await blob(); if (!b) return;
       try { await navigator.share({ files: [new File([b], name(), { type: "image/png" })] }); }
@@ -245,7 +252,8 @@ const Cards = (() => {
           sizes.length > 1 ? seg("size", sizes.map((s) => [s, s === "story" ? "Story" : s === "link" ? "Link" : "Square"]), "Size") : null,
           seg("look", [["light", "Light"], ["dark", "Dark"]], "Look"),
           h("div", { class: "row" }, canShare ? h("button", { onclick: share }, "Share…") : null,
-            h("button", { class: canShare ? "ghost" : "", onclick: download }, "Download")),
+            canCopy ? h("button", { onclick: copyPic }, "Copy picture") : null,
+            h("button", { class: canShare || canCopy ? "ghost" : "", onclick: download }, "Download")),
           say)));
     dlg.addEventListener("close", () => dlg.remove());
     dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });  // a click outside the sheet

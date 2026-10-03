@@ -901,7 +901,10 @@ def _crew_menu(c):
     from aqt.qt import QCursor, QMenu
     run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
            "squadshare": lambda: _share_squad(),
-           "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek")}
+           "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek"),
+           # K7: the picture is drawn on duecrew.com, signed in, its sheet open
+           "picturetoday": lambda: plan_flow.open_site("/home?card=today"),
+           "pictureweek": lambda: plan_flow.open_site("/home?card=week")}
     menu = QMenu(mw)
     for i, (label, key) in enumerate(board.crew_menu_items(
             c.get("period", "today"), bool(c.get("show_up")),
