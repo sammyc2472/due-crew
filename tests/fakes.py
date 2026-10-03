@@ -309,6 +309,9 @@ class FakeWorker:
     def _route(self, method, path, query, auth, body):
         parts = [p for p in path.split("/") if p]
         m = (method, parts[0] if parts else "")
+        if path == "/auth/gone" and method == "GET":
+            # Q4: a deleted-for-quiet uid, signed out
+            return 200, {"gone": query.get("uid") in getattr(self, "gone", set())}
         if path == "/version" and method == "GET":
             return 200, {"api": 1, "minClient": self.min_client}
         if parts[:1] == ["auth"]:
@@ -1400,6 +1403,9 @@ class FakeSession:
         self.store = store
 
     def request(self, method, url, headers=None, timeout=None, **kw):
+        if kw.get("params"):
+            from urllib.parse import urlencode
+            url += ("&" if "?" in url else "?") + urlencode(kw["params"])
         with self.store.lock:
             return self.store.handle(method, url, headers=headers, json_body=kw.get("json"))
 

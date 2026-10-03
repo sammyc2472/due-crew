@@ -713,3 +713,6 @@ body:has(main.wide) .appfoot { max-width: 1320px; }
 .people .crow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
 .people .crow .confirm { grid-column: 1 / -1; }
 .people .linkish.warn { color: var(--warn); }
+/* Q3: long-quiet friends, folded */
+.brdt tr.qh { display: none; } .brdt.qopen tr.qh { display: table-row; }
+.brdt tr.qfold td { text-align: left; }

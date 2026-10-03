@@ -634,7 +634,9 @@ async function account() {
   page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
     h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
       h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere")),
-    h("p", { class: "muted small", style: "margin-top:16px" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account."));
+    h("p", { class: "muted small", style: "margin-top:16px" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account."),
+    // Q2: the same sentence as Anki's Settings and the README
+    h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts."));
 }
 
 // ---- routing ----
@@ -856,8 +858,23 @@ const Board = (() => {
         h("td", { class: "n" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
         h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
     };
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }), ...dormant.map((r) => tr(r, "—"))];
-    return h("div", { class: "scrollx" }, h("table", { class: "brdt" }, h("thead", {}, head), h("tbody", {}, body)));
+    // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
+    const longQ = dormant.filter((r) => r.quiet && !r.you && r.last && Date.now() - Date.parse(r.last) > 90 * 86400000);
+    const tbl = h("table", { class: "brdt" });
+    const fold = [];
+    if (longQ.length) {
+      const names = longQ.map((r) => r.p.name);
+      const who = names.length === 1 ? names[0] : names.length <= 3 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+      const since = MONTHS[new Date(Math.max(...longQ.map((r) => Date.parse(r.last)))).getMonth()];
+      fold.push(h("tr", { class: "qfold" }, h("td", { class: "rk" }), h("td", { class: "nm", colspan: HEADS.length + 2 },
+        h("button", { class: "linkish", onclick: () => tbl.classList.toggle("qopen") }, `▸ ${longQ.length} quiet`),
+        h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
+      for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
+    }
+    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
+      ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
+    tbl.append(h("thead", {}, head), h("tbody", {}, body));
+    return h("div", { class: "scrollx" }, tbl);
   }
 
   /** show-up mode, as _presence_html: a square a day, Monday to today,

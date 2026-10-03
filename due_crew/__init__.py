@@ -428,7 +428,7 @@ def _on_render(deck_browser, content):
         if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
             content.stats += board.signed_out_card(c, expired=client().session_dead,
-                                                   moved=client().was_on_2x)
+                                                   moved=client().was_on_2x, gone=client().deleted_quiet)
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)

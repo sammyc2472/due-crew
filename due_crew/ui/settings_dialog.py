@@ -216,6 +216,11 @@ class SettingsDialog(QDialog):
         delete.clicked.connect(self._delete)
         bottom.addWidget(delete)
         lay.addLayout(bottom)
+        from ..board import KEEP_LINE  # Q2: the same sentence as the board's Settings
+        keep = QLabel(KEEP_LINE)
+        keep.setWordWrap(True)
+        keep.setStyleSheet("font-size: 11px;")
+        lay.addWidget(keep)
 
     def _who_text(self):
         name = html.escape(self.client.display_name or "?")

@@ -482,6 +482,22 @@ add-on.
   sheet open, so cards are drawn in one place; on a computer the sheet
   copies the picture (Copy picture); from 1 Dec to 7 Jan Home's rail opens
   with the year's card once a season per browser (`yearNudge`).
+- Quiet accounts ("The next round", Q1–Q6, migration 0016,
+  `worker/src/quiet.ts`). Activity is the newest of a sync or a board read
+  (`last_seen`), a week the 2.x bridge brought in, and creation. After 90
+  days crewmates' boards fold them into one "N quiet" line (add-on
+  `_quiet_fold`, squads too, and the site's `Board.table`, from when they
+  last synced: no request); after 6 months the daily job drops what a sync
+  rebuilds (decks, heatmap, plan trees, knows); after 12 months (24 when
+  paused) it deletes the account as Delete my account does, 50 a day,
+  never an admin, except that a plan someone follows passes to its first
+  co-author or stays ownerless ("a former member": followable, never
+  edited). A hash of the uid is kept a year (`gone`), so an add-on refused
+  by the server asks once (`GET /auth/gone?uid=`) and says "deleted after
+  12 months" (`signed_out_card(gone=)`). The sentence is in the README
+  (AnkiWeb), Settings (`board.KEEP_LINE`, the dialog too), the Pause choice
+  and the site's Account. Admin Today has the housekeeping counts; each
+  deletion is in the audit log.
 - The admin's account lookup (mock "Admin Account Lookup", `people.ts`):
   one person at a time, never a list of everyone. A search is an exact
   email, uid or friend code, or up to 10 names that start with it,

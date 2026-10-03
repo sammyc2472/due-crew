@@ -986,9 +986,25 @@ def test_sync_reliability_v251():
     store.tokens.clear()  # signed out everywhere, or idle 180 days
     check("session: a refused token marks the session dead",
           _denied(lambda: cl.fetch_board([TODAY.isoformat()])) and cl.session_dead and cl.signed_in)
+    check("session: a plain refusal isn't 'deleted for being quiet'", not cl.deleted_quiet)
     store.otp["sam@example.com"] = "123456"
     cl.verify_code("sam@example.com", "123456")
     check("session: signing in again clears it", not cl.session_dead and cl.signed_in)
+    # Q4: an account deleted after 12 months quiet says so, once asked
+    store.gone = {cl.user_id}
+    store.tokens.clear()
+    asked = len([r for r in store.log if r[1] == "/auth/gone"])
+    _denied(lambda: cl.fetch_board([TODAY.isoformat()]))
+    card = board.signed_out_card({}, expired=cl.session_dead, gone=cl.deleted_quiet)
+    check("session: deleted for being quiet: the card says why, and how to start again",
+          cl.deleted_quiet and "Welcome back" in card and "12 months without activity" in card and "duecrew:setup" in card
+          and len([r for r in store.log if r[1] == "/auth/gone"]) == asked + 1)
+    _denied(lambda: cl.fetch_board([TODAY.isoformat()]))
+    check("session: asked once, not at every refusal", len([r for r in store.log if r[1] == "/auth/gone"]) == asked + 1)
+    store.gone = set()
+    store.otp["sam@example.com"] = "123456"
+    cl.verify_code("sam@example.com", "123456")
+    check("session: signing in again clears 'deleted'", not cl.deleted_quiet and not cl.session_dead)
 
     col = make_user_col([TODAY])
     cl.push([TODAY.isoformat()], {}, stats=gather_stats(col, tempfile.mkdtemp()), version="3.0.0",
@@ -5331,6 +5347,39 @@ def test_crew_menu_pictures():
           and "pictureweek" in [k for _l, k in board.crew_menu_items("week", False)]
           and "picturetoday" not in [k for _l, k in board.crew_menu_items("today", True)]
           and keys <= handled and '"/home?card=today"' in run, sorted(keys - handled))
+
+
+def test_long_quiet_friends_fold():
+    """Q3: friends with no sync in 90+ days fold into one line under
+    everyone, opened in the page; a friend quiet for a week doesn't."""
+    from datetime import datetime, timedelta, timezone
+    labels = [(datetime.now() - timedelta(days=i)).date().isoformat() for i in range(7)]
+    ago = lambda d: (datetime.now(timezone.utc) - timedelta(days=d)).isoformat().replace("+00:00", "Z")
+    def ent(uid, name, last, days=None, you=False):
+        return {"user_id": uid, "name": name, "you": you, "paused": False, "last_updated": last,
+                "exam_date": "", "days": days or {}, "decks": []}
+    data = {"entries": [ent("me", "Sammy", ago(0), {labels[0]: {"studied": True, "reviews": 5}}, you=True),
+                        ent("w", "Wren", ago(8)), ent("p", "Priya", ago(120)), ent("t", "Theo<", ago(200))],
+            "labels": labels, "tomorrow": "", "pending": []}
+    page = board.render(data, {"period": "today"}, 0)
+    fold = page[page.index('class="qfold"'):]
+    fold = fold[:fold.index("</tr>")]
+    check("quiet fold: two long-quiet friends fold into one line, names escaped; a week-quiet one stays a row",
+          "2 quiet" in fold and "Priya and Theo&lt; haven't been here since" in fold
+          and page.count('<tr class="qh ') == 2 and page.index(">Wren<") < page.index('class="qfold"')
+          and "qopen" in fold and "pycmd" not in fold, fold)
+    one = dict(data, entries=data["entries"][:3])
+    check("quiet fold: one person reads 'hasn't'", "Priya hasn't been here" in board.render(one, {"period": "today"}, 0))
+    near = dict(data, entries=data["entries"][:2])
+    check("quiet fold: none when no one's been away 90 days", 'class="qfold"' not in board.render(near, {"period": "today"}, 0))
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": [{"user_id": "a", "name": "Ann", "day": labels[0], "reviews": 9, "time_ms": 60000, "week": 3},
+                     {"user_id": "b", "name": "Bo", "day": labels[3], "reviews": 4, "week": 1},
+                     {"user_id": "c", "name": "Cy", "day": "2026-01-02", "reviews": 4, "week": 0}],
+            "day": labels[0], "yesterday": labels[1], "people": 3, "reviews": 9}
+    sq = board._squads_html(view, {})
+    check("quiet fold: on a squad board too, after the recent ones", "1 quiet" in sq and "Cy hasn't been here since Jan" in sq
+          and sq.count('<tr class="qh') == 1 and sq.index(">Bo<") < sq.index("qfold"), sq[sq.find("qfold") - 20:sq.find("qfold") + 300])
 
 
 def main():

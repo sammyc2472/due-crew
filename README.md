@@ -76,7 +76,10 @@ computer: a crewmate sees a card's text only if they have the same card.
 Your email is used to sign you in. If you write in, Sam, who runs Due
 Crew, can look up your account, your squads and who's on your crew list
 to fix problems; never how you study, and each look is logged. Feedback
-you send goes to Sam with your name. Deleting your account deletes your data.
+you send goes to Sam with your name. Deleting your account deletes your
+data. Accounts with no activity for 12 months (24 when paused) are
+deleted with everything in them; opening Anki with Due Crew on, or
+signing in at duecrew.com, counts.
 The add-on and server are on
 [GitHub](https://github.com/sammyc2472/due-crew).
 

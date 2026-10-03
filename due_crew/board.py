@@ -121,6 +121,40 @@ def _ago(ts_str):
     return _ago_secs(secs)
 
 
+QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number
+# Q2: said where people read it (here, the Settings dialog, the site's Account, the README)
+KEEP_LINE = ("Kept while you use it: after 12 months with no activity (24 when paused), "
+             "your account is deleted with everything in it. Opening Anki counts.")
+
+
+def _long_quiet(ts_str, now=None):
+    """Q3: no sync in QUIET_FOLD_DAYS. An unknown time isn't long quiet."""
+    if not ts_str:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return ((now or datetime.now(timezone.utc)) - dt).total_seconds() > QUIET_FOLD_DAYS * 86400
+
+
+def _quiet_fold(rows):
+    """Q3: the fold's line for long-quiet friends: how many, their names,
+    and the month they were last here. Opened in the page, no command."""
+    names = [_html.escape(str(r["name"])) for r in rows]
+    who = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1] if len(names) <= 3 else f"{', '.join(names[:2])} and {len(names) - 2} more"
+    newest = max((str(r.get("last_updated") or "") for r in rows), default="")
+    try:
+        since = datetime.fromisoformat(newest.replace("Z", "+00:00")).strftime("%b")
+    except Exception:
+        since = ""
+    verb = "hasn't" if len(rows) == 1 else "haven't"
+    return (f'<tr class="qfold"><td class="rk"></td><td class="nm" colspan="{len(HEADERS) + 2}">'
+            f'<a href="#" onclick="this.closest(\'table\').classList.toggle(\'qopen\');return false;">'
+            f'&#9656; {len(rows)} quiet</a> <span class="dc-note">&middot; {who} {verb} been here'
+            f'{" since " + since if since else " in months"}</span></td></tr>')
+
+
 def _day_metrics(doc):
     return {"reviews": doc.get("reviews"),
             "time_ms": doc.get("studyTimeMs"),
@@ -518,6 +552,11 @@ def _css(cfg):
     #due-crew tr.you td {{ {you_bg} }}
     #due-crew tr.you td.nm {{ font-weight: 700; }}
     #due-crew tr.dim td {{ color: var(--dc-faded); }}
+    /* Q3: long-quiet friends, folded into one line until it's clicked */
+    #due-crew tr.qh {{ display: none; }}
+    #due-crew table.qopen tr.qh {{ display: table-row; }}
+    #due-crew tr.qfold td {{ text-align: left; }}
+    #due-crew tr.qfold a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .la {{ font-size: 10px; margin-left: 5px; }}
     #due-crew small.nwh {{ display: block; height: 5.5px; }}
     #due-crew small.nw {{ display: block; font-size: 10px; line-height: 1.1;
@@ -942,8 +981,15 @@ def _table_html(data, cfg, period):
             n += 1
             rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
         body += _row_html(row, rank, cfg, period)
+    # Q3: friends quiet for 90+ days fold into one line under everyone
+    long_q = [r for r in dormant if r["quiet"] and not r["you"] and _long_quiet(r["last_updated"])]
     for row in dormant:
-        body += _row_html(row, "&mdash;", cfg, period)
+        if row not in long_q:
+            body += _row_html(row, "&mdash;", cfg, period)
+    if long_q:
+        body += _quiet_fold(long_q)
+        for row in long_q:
+            body += _row_html(row, "&mdash;", cfg, period).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
     solo = ""
     if len(data["entries"]) == 1:
@@ -1560,6 +1606,14 @@ def _squads_html(view, cfg):
     waiting_today = [r for r in rows if r.get("day") == day and zero(r)]
     rest = sorted([r for r in rows if r.get("day") != day],
                   key=lambda r: r.get("day") or "", reverse=True)
+    # Q3: members with no sync in 90+ days fold into one line, as on Today
+    try:
+        cut = (datetime.fromisoformat(day) - _dt.timedelta(days=QUIET_FOLD_DAYS)).date().isoformat()
+    except Exception:
+        cut = ""
+    long_q = [r for r in rest if cut and not r.get("you") and str(r.get("day") or "") < cut]
+    rest = [r for r in rest if r not in long_q] + long_q
+    long_ids = {id(r) for r in long_q}
     people = int(view.get("people") or len(rows))
     headline = f'{people:,} in {name}'
     if view.get("open") is False:
@@ -1586,10 +1640,17 @@ def _squads_html(view, cfg):
                  '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
     n = 0
+    folded = False
     for r in live + waiting_today + rest:
         pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
         cls, note = "", ""
+        if id(r) in long_ids:
+            if not folded:
+                body += _quiet_fold([{"name": x["name"], "last_updated": x.get("day")} for x in long_q]).replace(
+                    f'colspan="{len(HEADERS) + 2}"', f'colspan="{2 + (1 if show_up else len(SQUAD_HEADERS))}"', 1)
+                folded = True
+            cls = "qh"
         if r.get("you"):
             cls = "you"
             link = (f'<a class="dc-pl" href="#" title="See what your crew sees" '
@@ -2196,7 +2257,8 @@ def _settings_you(view):
                       "Tell Sam what's working and what isn't")
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
-            f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>')
+            f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
+            f'<div class="st-foot"><span>{KEEP_LINE}</span></div>')
     return out
 
 
@@ -2262,7 +2324,8 @@ def _settings_privacy(cfg):
     return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
             + radio("numbers", "My numbers") + nums
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
-            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting.")
+            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting. "
+                    "A paused account is kept 24 months without activity; opening Anki counts.")
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
@@ -2336,9 +2399,16 @@ def _card(cfg, title, body_html):
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False, moved=False):
+def signed_out_card(cfg, expired=False, moved=False, gone=False):
     """moved: signed in on 2.x, which used passwords. 3.0 signs in with an
-    emailed code, so everyone signs in once more, and nothing is lost."""
+    emailed code, so everyone signs in once more, and nothing is lost.
+    gone (Q4): the account was deleted after 12 months without activity."""
+    if gone:
+        return _card(cfg, "Welcome back",
+                     f'Your Due Crew account was deleted after 12 months without activity, '
+                     f'as the listing says. Your Anki and its cards are untouched. '
+                     f'<a href="#" onclick="{_pycmd("setup")}">Start again with your email</a>; '
+                     f'your crew can add you with your new code.')
     if moved:
         return _card(cfg, "Due Crew",
                      f'Due Crew now signs in with a code by email, no password. '

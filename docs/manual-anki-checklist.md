@@ -518,3 +518,10 @@ In Anki (as a follower):
 - [ ] On a computer, Copy picture, then paste into a chat.
 - [ ] In December (or with the clock set), Home's rail opens with "Your 2026 in Anki"; Not now hides it after a reload.
 
+## Quiet accounts (3.7)
+
+- [ ] A crewmate with no sync in 90+ days: one "▸ N quiet" line under everyone; a click opens their rows. The same on a squad board and on duecrew.com.
+- [ ] Settings › You ends with the 12-months sentence; Privacy's "Nothing for now" mentions 24 months; the Settings dialog has the sentence too.
+- [ ] After deploying 0016: an account deleted by the job (or a test one with its uid hashed into `gone`), opened in Anki: "Welcome back… deleted after 12 months", and Start again signs up fresh.
+- [ ] Admin › Today: the Housekeeping line under Needs you.
+
