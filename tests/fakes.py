@@ -659,7 +659,7 @@ class FakeWorker:
             have = dict(self.logs.get(me) or {})
             new = dict(have, **{k: [v[0], v[1], v[2], None if v[3] is None else round(v[3], 1)]
                                 for k, v in log["days"].items()})
-            new = dict(sorted(new.items())[-400:])
+            new = dict(sorted(new.items())[-(15 * 366):])  # 3.7.1: the whole log (cards.ts LOG_KEEP)
             wrote["log"] = new != have
             if wrote["log"]:
                 self.logs[me] = new
@@ -677,7 +677,7 @@ class FakeWorker:
                     self.members[key] = new
                     wrote["squads"] = True
                     self._count("members")
-        out = {"ok": True, "gone": gone, "wrote": wrote}
+        out = {"ok": True, "gone": gone, "wrote": wrote, "logAll": True}
         if stuck is not None:
             out["cards"] = self._for_stuck(me, list(dict.fromkeys(stuck)))
         return 200, out

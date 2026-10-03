@@ -5578,6 +5578,42 @@ def test_due_board_and_clicks():
     check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
 
 
+def test_history_import():
+    """3.7.1: once the first 120 days have gone, each full sync carries one
+    more year of my log until my first review; an empty year is passed
+    over; a server that doesn't say it keeps the whole log never moves it on."""
+    from due_crew import cards as C
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    cutoff = col.sched.day_cutoff
+    for ago in (3, 200, 400, 1300):  # recent, last year, two years back, gap, four years back
+        fakes.add_review(conn, (cutoff - ago * 86400 - 3600) * 1000, cid=ago)
+    cl = types.SimpleNamespace(user_id="me", session={"log_full": "me"}, _save_session=lambda: None)
+    got = C.history_part(col, cl)
+    check("history: the year before the first 120 days", got and len(got[0]) == 2 and got[1] == C.LOG_FULL + 366, got)
+    cl.session["log_back"] = {"uid": "me", "skip": got[1]}
+    got2 = C.history_part(col, cl)
+    check("history: an empty year is passed over to the next with something",
+          got2 and len(got2[0]) == 1 and got2[1] == C.LOG_FULL + 4 * 366, got2)
+    cl.session["log_back"] = {"uid": "me", "skip": got2[1]}
+    check("history: done at my first review", C.history_part(col, cl) is None and cl.session["log_back"].get("done"))
+    check("history: never before the first 120 days have gone",
+          C.history_part(col, types.SimpleNamespace(user_id="me", session={}, _save_session=lambda: None)) is None)
+    cl2 = api.ApiClient(os.path.join(tempfile.mkdtemp(), "s.json"))
+    cl2.session.update(token="t", uid="u1")
+    sent = {}
+    cl2._call = lambda m, path, body=None, **k: (sent.update(body or {}), (200, {"ok": True}))[1]
+    labels = [(datetime.date(2026, 10, 3) - datetime.timedelta(days=i)).isoformat() for i in range(8)]
+    try:
+        cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
+    except Exception as e:
+        sent["err"] = repr(e)
+    check("history: the year rides the sync with the recent days",
+          set((sent.get("log") or {}).get("days", {})) == {labels[0], "2025-01-02"}, sent.get("log"))
+    check("history: a server that didn't say logAll doesn't move it on", "log_back" not in cl2.session, cl2.session.get("log_back"))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

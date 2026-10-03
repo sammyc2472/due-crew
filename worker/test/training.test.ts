@@ -233,6 +233,18 @@ describe("the log", () => {
     expect((await dre.call("GET", "/log")).body.days).toEqual({});
   });
 
+  it("3.7.1: keeps years of it, a year a sync, and says so (logAll)", async () => {
+    const sam = await person("sam");
+    const day = (n: number) => new Date(Date.UTC(2026, 9, 1) - n * 86400000).toISOString().slice(0, 10);
+    for (let y = 0; y < 4; y++) {
+      const days = Object.fromEntries(Array.from({ length: 366 }, (_, i) => [day(y * 366 + i), [10, 50, 5, null]]));
+      const r = await sam.call("POST", "/sync", { log: { days } });
+      expect(r.status).toBe(200);
+      expect(r.body.logAll).toBe(true);
+    }
+    expect(Object.keys((await sam.call("GET", "/log")).body.days).length).toBe(4 * 366);
+  });
+
   it("refuses a bad row", async () => {
     const sam = await person("sam");
     for (const days of [{ "2026-10-21": [80, 300, 50] }, { "x": [1, 1, 1, null] }, { "2026-10-21": [2000, 1, 1, null] },
