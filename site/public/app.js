@@ -1407,9 +1407,42 @@ function yearData(days, y) {
   return { year: y, studied: mine.filter(did).length, since: logged[0] > jan1 ? Cards.short(logged[0]) : "",
     cols: cells.length / 7, cells, minutes: yr.reduce((a, r) => a + r[0], 0), reviews: yr.reduce((a, r) => a + r[1], 0), streak, best: best && best.n ? best : null };
 }
-function openYearCard(days, y) {
-  Cards.open({ kind: "year", title: "Share my year", file: `due-crew-${y}`, sizes: ["story"], data: yearData(days, y),
-    switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" }, { k: "best", label: "Biggest day" }] });
+/** 3.7.1: my Anki, all time, from my log: a bar a year (days studied), the
+ *  total, the longest streak and the best year. */
+function allTimeData(days, cheers) {
+  const did = (d) => !!days[d] && !!(days[d][0] || days[d][1]);
+  const mine = Object.keys(days).filter(did).sort();
+  if (!mine.length) return null;
+  const y0 = Number(mine[0].slice(0, 4)), y1 = Number(today().slice(0, 4));
+  const years = [];
+  for (let y = y0; y <= y1; y++) years.push({ year: y, days: mine.filter((d) => d.startsWith(`${y}-`)).length });
+  let streak = 0, run = 0, prev = null, streakYear = null;
+  for (const d of mine) {
+    run = prev && addDays(prev, 1) === d ? run + 1 : 1; prev = d;
+    if (run > streak) { streak = run; streakYear = Number(d.slice(0, 4)); }
+  }
+  const best = years.reduce((b, r) => (r.days > (b?.days ?? -1) ? r : b), null);
+  const [fy, fm] = mine[0].split("-").map(Number);
+  return { since: `${Cards.MONTHS[fm - 1]} ${fy}`, years, days: mine.length,
+    reviews: mine.reduce((a, d) => a + days[d][1], 0), minutes: mine.reduce((a, d) => a + days[d][0], 0),
+    streak, streakYear, bestYear: years.length > 1 ? best : null,
+    cheers: Object.values(cheers || {}).reduce((a, x) => a + (Number(x) || 0), 0) };
+}
+/** The year card for `y` (or "all", the all-time one), with a row of the
+ *  years I studied in to switch between them. `cheers`: {year: received}. */
+function openYearCard(days, y, cheers = {}) {
+  const years = [...new Set(Object.keys(days).filter((d) => days[d] && (days[d][0] || days[d][1])).map((d) => d.slice(0, 4)))].sort().reverse();
+  const cur = String(today().slice(0, 4));
+  if (!years.includes(cur)) years.unshift(cur);
+  const one = (k) => (k === "all"
+    ? { kind: "alltime", title: "Share my Anki, all time", file: "due-crew-all-time", sizes: ["story", "link"], data: allTimeData(days, cheers) }
+    : { kind: "year", title: "Share my year", file: `due-crew-${k}`, sizes: ["story"], data: { ...yearData(days, k), cheers: Number(cheers[k]) || 0 } });
+  const first = one(String(y));
+  if (!first.data) return;
+  const has = (k) => k === "all" ? allTimeData(days, cheers)?.days : yearData(days, k).reviews;
+  Cards.open({ ...first, picker: { value: String(y), options: [...years.filter((k) => k === cur || has(k)).map((k) => [k, k]), ["all", "All time"]], choose: one },
+    switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" },
+      { k: "best", label: "Biggest day / best year" }, { k: "cheers", label: "Cheers from my crew", off: Object.keys(cheers || {}).length ? "" : "none yet" }] });
 }
 
 /** A day's shade by minutes (0–4), against my own log's quarters. */
