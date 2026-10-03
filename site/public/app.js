@@ -1349,7 +1349,9 @@ function sinceYouWereHere(b, crew, t) {
   const exams = crew.map((f) => [f, f.week?.examDate]).filter(([, d]) => d && d >= t && d <= addDays(t, 14)).sort((a, c) => a[1].localeCompare(c[1]))
     .map(([f, d]) => {
       const box = h("div");
-      const send = h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren())) }, "Send good luck");
+      const sentLine = () => h("small", { class: "muted" }, "Good luck sent ✓");
+      const send = luckSent(f.uid, d) ? sentLine() : h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren(),
+        () => { markLuck(f.uid, d); send.replaceWith(sentLine()); })) }, "Send good luck");
       return h("div", { class: "fi" }, h("span", { class: "ic" }, f.emoji || "🍀"),
         h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
     });
@@ -1361,16 +1363,23 @@ function sinceYouWereHere(b, crew, t) {
 }
 
 /** A good-luck line for a crewmate's exam morning (the add-on's Good-luck card). */
-function luckForm(f, done) {
+/** A good-luck line sent from this browser, per crewmate and exam date, so
+ *  the rail says so instead of asking again (a new exam date asks again). */
+const luckKey = (uid, day) => `dc-luck:${uid}:${day}`;
+function luckSent(uid, day) { try { return !!localStorage.getItem(luckKey(uid, day)); } catch { return false; } }
+function markLuck(uid, day) { try { localStorage.setItem(luckKey(uid, day), "1"); } catch { /* no storage: it asks again */ } }
+
+function luckForm(f, done, sent) {
   const line = h("input", { maxlength: 80, placeholder: `A line for ${f.name.split(" ")[0]}'s exam morning`, "aria-label": "Your line" });
   const status = h("span", { class: "status", role: "status" });
   const send = h("button", { class: "ghost", onclick: async () => {
     if (!line.value.trim()) return;
     send.disabled = true;
-    try { await api("POST", `/cheers/${f.uid}`, { emoji: "🍀", note: line.value.trim(), luck: true }); status.textContent = "Sent. They see it when they open Anki that morning."; line.remove(); send.remove(); }
+    try { await api("POST", `/cheers/${f.uid}`, { emoji: "🍀", note: line.value.trim(), luck: true }); status.textContent = "Sent. They see it when they open Anki that morning."; line.remove(); send.remove(); cancel.remove(); if (sent) sent(); }
     catch { send.disabled = false; status.className = "status bad"; status.textContent = "That didn't send. Try again."; }
   } }, "Send");
-  return h("div", { class: "copyform" }, line, send, h("button", { class: "linkish", onclick: done }, "Cancel"), status);
+  const cancel = h("button", { class: "linkish", onclick: done }, "Cancel");
+  return h("div", { class: "copyform" }, line, send, cancel, status);
 }
 
 /** A year of my log, a square a day (Monday at the top), darker with more
