@@ -16,6 +16,7 @@ import * as AS from "./adminsquads";
 import * as Q from "./squads";
 import * as Bingo from "./bingo";
 import * as S from "./social";
+import * as Quiet from "./quiet";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
@@ -37,6 +38,7 @@ open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
 open("GET", r("/plans/public"), (q, env) => P.publicPeek(q, env));  // a plan's link, before signing in
+open("GET", r("/auth/gone"), (q, env) => Quiet.gone(q, env));  // Q4: signed out, the add-on asks why
 open("POST", r("/links/email"), (q, env) => A.emailLink(q, env));  // a phone sends itself the link
 authed("POST", r("/auth/link"), (_q, s, env) => A.createLink(s, env));
 authed("GET", r("/auth/me"), (_q, s, env) => A.me(s, env));
@@ -165,6 +167,13 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM admin_actions WHERE at <= ?").bind(now - 365 * 86400),
     env.DB.prepare("DELETE FROM email_changes WHERE at <= ?").bind(now - 7 * 86400),
   ]);
+  // Q1-Q6: quiet accounts trimmed, then deleted, a few a day
+  try {
+    const q = await Quiet.run(env, now);
+    if (q.trimmed || q.deleted) console.log(`quiet: trimmed ${q.trimmed}, deleted ${q.deleted}`);
+  } catch (e) {
+    console.log(`quiet failed: ${String((e as Error)?.message || e).slice(0, 120)}`);
+  }
 }
 
 /** No Origin (the add-on, a calendar app), or a page of ours: duecrew.com,

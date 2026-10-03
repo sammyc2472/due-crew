@@ -383,7 +383,7 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
   const r = p.owner === uid ? "owner" : editors.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
   return {
     role: r, editors,
-    id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: p.owner_name || "?",
+    id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: p.owner_name || (p.owner ? "?" : "a former member"),
     audience: p.audience, version: p.version, doc, followers: ctx.n,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
     squad: p.owner === uid || (!!p.squad && ctx.mySquads.has(p.squad)) ? p.squad : null,
@@ -876,15 +876,15 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
   await limitOrThrow(env, `pub:ip:${clientIp(req)}`, 300, 3600);  // guessing codes stays slow
   const p = await env.DB.prepare(
-    `SELECT p.id, p.name, p.line, p.audience, p.version, p.doc, u.name AS owner_name,
+    `SELECT p.id, p.owner, p.name, p.line, p.audience, p.version, p.doc, u.name AS owner_name,
             (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
        FROM plans p LEFT JOIN users u ON u.uid = p.owner WHERE p.code = ?`,
-  ).bind(code).first<{ id: string; name: string; line: string; audience: string; version: number; doc: string; owner_name: string | null; followers: number }>();
+  ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string; owner_name: string | null; followers: number }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
   const doc = JSON.parse(p.doc) as { deck: string; units: Obj[]; events?: { day: string; name: string }[] };
   const n = unitCount;
   return json({
-    name: p.name, ownerName: p.owner_name || "?", line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
+    name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
     // 3.5, A: the version keys the link's preview picture; events are in the calendar feed already
     v: p.version, events: (doc.events || []).map((e) => ({ day: e.day, name: e.name })),
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),

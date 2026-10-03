@@ -5,6 +5,7 @@
 
 import type { Session } from "./auth";
 import { isAdmin } from "./notices";
+import * as Quiet from "./quiet";
 import { Env, HttpError, json, nowSec, ulid } from "./util";
 
 const day = (t = nowSec()) => new Date(t * 1000).toISOString().slice(0, 10);
@@ -142,6 +143,7 @@ export async function stats(s: Session, env: Env): Promise<Response> {
     versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "2.x", r.n]),
     feedbackOpen: (fbOpen.results[0] as { n: number }).n,
     emailChanges: (moving.results as { uid: string; name: string | null; at: number }[]).map((r) => ({ uid: r.uid, name: r.name || "?", at: r.at })),
+    housekeeping: await Quiet.counts(env),  // Q6: folded, quiet past the trim, due to go in 30 days
   });
 }
 

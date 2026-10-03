@@ -1866,8 +1866,13 @@ function needsYou(s, show) {
   if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
   for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
   if (s.bridge?.error) rows.push(row("System", "The 2.x bridge's last run failed", "Look", () => show("system"), true));
+  // Q6: quiet accounts, as the daily job sees them (each deletion is in the audit log)
+  const hk = s.housekeeping;
+  const house = hk ? h("p", { class: "muted small" }, h("b", {}, "Housekeeping "),
+    `${hk.folded.toLocaleString()} folded (90 days quiet) · ${hk.quiet.toLocaleString()} trimmed (6 months) · ${hk.dueSoon.toLocaleString()} due to be deleted in 30 days`,
+    hk.dueSoon ? [" · ", h("button", { class: "linkish", onclick: () => show("log") }, "Audit log ›")] : null) : null;
   return h("section", { class: "panel" }, h("h4", {}, "Needs you", h("span", { class: "muted" }, "everything waiting, in one list")),
-    rows.length ? h("div", { class: "nlist" }, rows) : h("p", { class: "muted small" }, "Nothing waiting."));
+    rows.length ? h("div", { class: "nlist" }, rows) : h("p", { class: "muted small" }, "Nothing waiting."), house);
 }
 
 /** Everything done from this page, newest first, kept a year (A5). */
