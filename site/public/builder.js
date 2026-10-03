@@ -765,7 +765,7 @@ async function builder(id) {
     if (!author) {
       return lines.length ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
         lines.map((x) => h("span", { class: "small" }, h("b", {}, Todo.LABEL[x.k]), ` · ${x.t}`,
-          x.url ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
+          x.url && Todo.okUrl(x.url) ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
     }
     const set = () => { if (lines.length) u.todo = lines; else delete u.todo; mark(); };
     const rows = lines.map((x, i) => h("div", { class: "todo" },

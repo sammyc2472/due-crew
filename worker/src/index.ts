@@ -75,7 +75,7 @@ authed("POST", r("/reports"), S.report);
 
 // 3.2: tips, my log, the admin's counts
 authed("POST", r("/tips/helped"), C.helped);
-authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
+authed("GET", r("/log"), (q, s, env) => C.getLog(q, s, env));
 // 3.7.1, D2: Account › Your data
 authed("DELETE", r("/log"), (_q, s, env) => C.deleteLog(s, env));
 authed("GET", r("/account/data"), (_q, s, env) => Mine.getData(s, env));

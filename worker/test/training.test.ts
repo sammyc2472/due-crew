@@ -355,6 +355,7 @@ describe("3.7.1: your data, and names to people you're connected to", () => {
     const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [day(i), [10, 50, 5, null]]));
     await sam.call("POST", "/sync", { log: { days: old } });
     expect((await sam.call("POST", "/sync", { log: { days: { [day(1)]: [1, 1, 1, null] } } })).body.logCut).toBeUndefined();
+    expect((await sam.call("GET", "/log?summary=1")).body).toEqual({ n: 40, first: day(39) });
     expect((await sam.call("DELETE", "/log")).status).toBe(200);
     expect((await sam.call("GET", "/log")).body.days).toEqual({});
     const r = await sam.call("POST", "/sync", { log: { days: old } });

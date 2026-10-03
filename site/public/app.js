@@ -666,7 +666,7 @@ async function account() {
     me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
   const [fr, pl, lg, st] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null),
-    api("GET", "/log").catch(() => null), api("GET", "/settings").catch(() => null)]);
+    api("GET", "/log?summary=1").catch(() => null), api("GET", "/settings").catch(() => null)]);
   const code = fr.code || "";
   const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
@@ -690,7 +690,7 @@ async function account() {
 /** 3.7.1, D2: Account › Your data. Download everything; delete my log or
  *  my to-dos on their own, each asked once, in place. */
 function yourData(lg, set) {
-  const days = Object.keys(lg?.days || {}).sort();
+  const days = { length: lg?.n || 0 }, first = lg?.first || "";
   const items = Array.isArray(set.due_items) ? set.due_items : [];
   const ticks = set.due_ticks && typeof set.due_ticks === "object" ? Object.keys(set.due_ticks).length : 0;
   const open = items.filter((x) => x && !(set.due_ticks || {})[x.id]).length;
@@ -724,7 +724,7 @@ function yourData(lg, set) {
   };
   return h("div", { class: "ydata" },
     row("Everything Due Crew has about you", "One file: your profile, settings, week, log, to-dos, plans and follows.", dl),
-    days.length ? ask("Your log", `${days.length.toLocaleString()} day${days.length === 1 ? "" : "s"}, from ${when(days[0])}.`,
+    days.length && first ? ask("Your log", `${days.length.toLocaleString()} day${days.length === 1 ? "" : "s"}, from ${when(first)}.`,
       ["Delete your log?", "Your year, your all-time card and the Log page start again from this past week. Your crew sees nothing different. Anki keeps your reviews; it won't send the old years again."],
       "Delete my log", "/log", "Deleted. It starts again from this past week.")
       : row("Your log", "Nothing yet."),
@@ -1017,7 +1017,7 @@ const Board = (() => {
    *  switcher, plain ranks, no medals, no cheers; these aren't necessarily
    *  people you know. Synced today with nothing studied yet sits under the
    *  ranked, with dashes. */
-  let squadsGot = null;  // {at, list, boards}: a sort redraws from these, not the network
+  let squadsGot = null;  // {at, list, boards: {id: board}}: a sort redraws from these, not the network
   const isoWeek = (iso) => {
     const d = parseIso(iso); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow + 3);
     const y = d.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
@@ -1027,7 +1027,7 @@ const Board = (() => {
     const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
-      squadsGot = { at: Date.now(), list: got, boards: await Promise.all(got.map((q) => api("GET", `/squads/${q.id}?wk=${isoWeek(day)}`).catch(() => null))) };
+      squadsGot = { at: Date.now(), list: got, boards: {} };
     }
     const list = squadsGot.list;
     const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
@@ -1035,7 +1035,9 @@ const Board = (() => {
       h("p", { class: "muted small" }, "Join with a code, or make one in Anki."));
     let cur = store("dc-squad");
     if (!list.some((q) => q.id === cur)) cur = list[0].id;
-    const sq = squadsGot.boards[list.findIndex((q) => q.id === cur)];
+    // only the squad on screen is fetched; another one when it's picked
+    if (!(cur in squadsGot.boards)) squadsGot.boards[cur] = await api("GET", `/squads/${cur}?wk=${isoWeek(day)}`).catch(() => null);
+    const sq = squadsGot.boards[cur];
     const sw = h("div", { class: "sqsw" }, list.map((q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name)), joinOrCreate);
     if (!sq) return h("div", {}, sw, h("p", { class: "muted small" }, "Couldn’t load. Check your connection and Refresh."));
     const sort = store("dc-sort") || "reviews";
@@ -2570,12 +2572,14 @@ async function route() {
  *  it leaves the address bar at once. */
 async function start() {
   const token = /^#([A-Za-z0-9_-]{43})$/.exec(location.hash);
-  if (token) {
-    history.replaceState(null, "", location.pathname + location.search);
-    try { await api("POST", "/auth/link/redeem", { token: token[1] }); }
-    catch { /* expired or used: a session already here carries on */ }
-  }
+  if (token) history.replaceState(null, "", location.pathname + location.search);
   await whoami();
+  // signed in already: the session here stands. A link someone else made
+  // can't swap this browser onto their account (a login CSRF).
+  if (token && !me) {
+    try { await api("POST", "/auth/link/redeem", { token: token[1] }); await whoami(); }
+    catch { /* expired or used */ }
+  }
   await route();
 }
 
