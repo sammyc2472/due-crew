@@ -398,6 +398,20 @@ def fmt_range(a, b):
     return f"{x:%a} {x.day} – {y:%a} {y.day}"
 
 
+def done_for_today(v):
+    """Everything today holds is ticked, and nothing waits behind: Due folds
+    itself to its one line until tomorrow (unless I opened it by hand)."""
+    return bool(v["total_n"]) and v["done_n"] >= v["total_n"] and not v["behind_n"]
+
+
+def fold_state(choice, v, today):
+    """Folded or open: my own Hide/Show today wins, else folded once the day's done.
+    `choice` is the config's {"day", "folded"} (an older bool counts as no choice)."""
+    if isinstance(choice, dict) and choice.get("day") == today:
+        return bool(choice.get("folded"))
+    return done_for_today(v)
+
+
 def empty(v):
     """Nothing at all to show: no plan dates, items, reviews or suggestions."""
     return not (v["rows"] or v["behind_n"] or any(not x.get("quiet") and (x["rows"] or x["events"]) for x in v["days"])

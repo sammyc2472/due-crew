@@ -5468,6 +5468,26 @@ def test_due_author_lines_arrive_clean():
           and len(todo) == 8, todo)
 
 
+def test_due_folds_itself_when_done():
+    """Due folds to its one line once today's all ticked and nothing's behind,
+    opens again tomorrow, and a Hide or Show by hand holds for the day."""
+    from due_crew import due as D
+    T = "2026-10-03"
+    done = D.view(T, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T, "seen": 5, "total": 5},
+                      {"pid": "p", "uid": "v", "plan": "P", "name": "Next one", "opens": "2026-10-04", "seen": 0, "total": 9}], [], {})
+    left = D.view(T, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T, "seen": 2, "total": 5}], [], {})
+    check("fold: done for today folds itself; not done stays open",
+          D.fold_state(None, done, T) is True and D.fold_state(None, left, T) is False)
+    check("fold: my Show today wins; yesterday's choice doesn't",
+          D.fold_state({"day": T, "folded": False}, done, T) is False
+          and D.fold_state({"day": "2026-10-02", "folded": True}, left, T) is False)
+    check("fold: nothing at all today isn't 'done'", D.fold_state(None, D.view(T, [], [], {}), T) is False)
+    h = board._due_html(dict(done, folded=True, done=True))
+    check("fold: the line says done and what's next, with Show",
+          "Done for today" in h and "Tomorrow: Next one" in h and "Show &#9662;" in h, h)
+    check("fold: open, Hide says what it does", "Hide &#9652;" in board._due_html(dict(left, folded=False)))
+
+
 def test_due_board_and_clicks():
     """Due on the board: the three tabs, escaped, every click sent as the
     board sends it; adding with a day said at the end; Behind; recover leeches."""
@@ -5536,7 +5556,7 @@ def test_due_board_and_clicks():
         send("duetab:upcoming")
         check("due tab", conf["due_tab"] == "upcoming")
         send("duefold")
-        check("due fold", conf["due_fold"] is True)
+        check("due fold: Hide holds for today", conf["due_fold"] == {"day": T, "folded": True}, conf.get("due_fold"))
         send("dueshow:later")
         check("due show", conf["due_tab"] == "later")
     finally:

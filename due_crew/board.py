@@ -2981,7 +2981,9 @@ DUE_CSS = """
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     #due-crew .du-h .sp { flex: 1; }
     #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
-    #due-crew .du-fold { color: var(--dc-muted); font-size: 11px; padding: 0 2px; }
+    #due-crew .du-fold { font-size: 12px; font-weight: 700; color: var(--dc-accent); border: 1px solid var(--dc-line);
+      border-radius: 99px; padding: 2px 10px; white-space: nowrap; flex: none; }
+    #due-crew .du-tm { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
     #due-crew .du-tabs { display: inline-flex; white-space: nowrap; }
     #due-crew .du-tabs a { font-size: 11px; font-weight: 700; padding: 1px 10px; border: 1px solid var(--dc-line);
       color: var(--dc-muted); }
@@ -3282,9 +3284,16 @@ def _due_html(v):
         go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
               f'Study &rsaquo; {e(st["name"])}</a>' if st else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
-        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Open">'
+        if v.get("done"):
+            # the day's done: what's next, in place of the bar
+            nxt = v["tomorrow"][:2] or (v["next"]["names"][:2] if v.get("next") else [])
+            count, bar, go = "&#10003; Done for today", "", (
+                f'<span class="du-n du-tm">{"Tomorrow" if v["tomorrow"] else e(v["next"]["day"])}: '
+                f'{", ".join(e(x) for x in nxt)}</span>' if nxt else "")
+        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Show">'
                 f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
-                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Open" onclick="{_pycmd("duefold")}">&#9662;</a></div>')
+                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Show the whole list" '
+                f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
     tab = v["tab"]
     tabs = "".join(
         f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
@@ -3292,7 +3301,7 @@ def _due_html(v):
                       ("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}')))
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
             f'<span class="sp"></span><span class="du-n">{count if tab != "later" else ""}</span>'
-            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">&#9652;</a></div>')
+            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
     toast = ""
     if v.get("toast"):
         toast = (f'<div class="du-line"><span>{e(v["toast"]["text"])}</span>'

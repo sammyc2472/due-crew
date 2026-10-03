@@ -6,7 +6,8 @@ pushes my own items ride (app.save_cfg), as any setting does.
 Account keys (every computer, and the site): `due_items` (my own to-dos),
 `due_ticks` (the author's lines I ticked), `due_show` (show it), and
 `due_suggest` (suggestions from my own Anki). Per computer, in the config:
-`due_tab`, `due_fold`, and `due_leeches` (recover leeches: it changes this
+`due_tab`, `due_fold` (my Hide/Show for one day; else Due folds
+itself once the day is done), and `due_leeches` (recover leeches: it changes this
 collection, so it's this computer's to say). Per profile, beside the
 plans (plans.json): the day's dismissed suggestions and what recovering
 leeches did today.
@@ -181,7 +182,9 @@ def view(c):
         items = D.prune(_items(c), today)
         v = D.view(today, dates, items, _ticks(c), tab=c.get("due_tab", "today"), events=events,
                    review_days=revs, reviews=_reviews() if mw.col else None,
-                   suggestions=suggestions(c, today), notes=notes(), folded=bool(c.get("due_fold")))
+                   suggestions=suggestions(c, today), notes=notes())
+        v["folded"] = D.fold_state(c.get("due_fold"), v, today)
+        v["done"] = D.done_for_today(v)
     except Exception:
         traceback.print_exc()
         return None
@@ -464,12 +467,14 @@ def on_message(cmd, parts):
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "duetab" and arg in D.TABS:
         c["due_tab"] = arg
-        c["due_fold"] = False
+        c["due_fold"] = {"day": _today(), "folded": False}
         save_cfg(c)
         _state["due_toast"] = None
         _swap(c)
     elif cmd == "duefold":
-        c["due_fold"] = not c.get("due_fold")
+        # Hide or Show by hand: it holds for today; tomorrow Due decides again
+        v = view(c)
+        c["due_fold"] = {"day": _today(), "folded": not (v or {}).get("folded")}
         save_cfg(c)
         _swap(c)
     elif cmd == "dueadd" and len(parts) > 4:
