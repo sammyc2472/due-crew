@@ -3052,7 +3052,9 @@ DUE_CSS = """
     #due-crew .du-one .sp { flex: 1 1 0; }
     #due-crew .du-one .sp { flex: 1; }
     #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }
-    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; display: inline-flex; }
+    #due-crew .du-one .du-go .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; } }
     #due-crew .du-sub a { color: var(--dc-accent); }
     #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
 """
@@ -3282,7 +3284,7 @@ def _due_html(v):
         bar = _wbar(done_n, total_n) if total_n else ""
         st = v.get("start")
         go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
-              f'Study &rsaquo; {e(st["name"])}</a>' if st else "")
+              f'Study &rsaquo;&nbsp;<span class="nm">{e(st["name"])}</span></a>' if st else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
         if v.get("done"):
             # the day's done: what's next, in place of the bar
