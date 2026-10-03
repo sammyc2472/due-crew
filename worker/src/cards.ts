@@ -143,13 +143,34 @@ export function logPart(v: unknown): Record<string, (number | null)[]> {
   return out;
 }
 
-/** Merged into what the server has, newest LOG_KEEP kept; written only when changed. */
+/** Merged into what the server has, newest LOG_KEEP kept; written only when changed.
+ *  3.7.1: after Delete my log, `cut` (first in the JSON, so logCut can see
+ *  it without parsing) is the oldest day taken again. */
 export function logMerge(have: string | null, part: Record<string, (number | null)[]>): string | null {
-  const cur = have ? (JSON.parse(have).days as Record<string, unknown>) : {};
-  const all = { ...cur, ...part };
+  const doc = have ? JSON.parse(have) as { cut?: string; days: Record<string, unknown> } : { days: {} };
+  const cut = typeof doc.cut === "string" ? doc.cut : "";
+  const all: Record<string, unknown> = { ...doc.days };
+  for (const [d, v] of Object.entries(part)) if (!cut || d >= cut) all[d] = v;
   const keep = Object.keys(all).sort().slice(-LOG_KEEP);
-  const next = JSON.stringify({ days: Object.fromEntries(keep.map((d) => [d, all[d]])) });
+  const next = JSON.stringify({ ...(cut ? { cut } : {}), days: Object.fromEntries(keep.map((d) => [d, all[d]])) });
   return next === have ? null : next;
+}
+
+/** 3.7.1: whether this log was deleted by its owner (no parse: cut is first). */
+export const logCut = (have: string | null | undefined) => !!have && have.startsWith('{"cut":');
+
+/** DELETE /log (3.7.1, D2): my log and the cheers counted beside it. The
+ *  last 8 days come back with the next syncs; nothing older is taken again,
+ *  and the add-on's history import is told it's done. */
+export async function deleteLog(s: Session, env: Env): Promise<Response> {
+  const cut = new Date(Date.now() - 8 * 86400_000).toISOString().slice(0, 10);
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO logs (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at",
+    ).bind(s.uid, JSON.stringify({ cut, days: {} }), nowSec()),
+    env.DB.prepare("DELETE FROM cheer_counts WHERE uid = ?").bind(s.uid),
+  ]);
+  return json({ ok: true, cut });
 }
 
 /** GET /log: my log, for the site. */

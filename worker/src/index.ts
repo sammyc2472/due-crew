@@ -17,6 +17,7 @@ import * as Q from "./squads";
 import * as Bingo from "./bingo";
 import * as S from "./social";
 import * as Quiet from "./quiet";
+import * as Mine from "./mydata";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
@@ -75,6 +76,10 @@ authed("POST", r("/reports"), S.report);
 // 3.2: tips, my log, the admin's counts
 authed("POST", r("/tips/helped"), C.helped);
 authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
+// 3.7.1, D2: Account › Your data
+authed("DELETE", r("/log"), (_q, s, env) => C.deleteLog(s, env));
+authed("GET", r("/account/data"), (_q, s, env) => Mine.getData(s, env));
+authed("DELETE", r("/account/todos"), (_q, s, env) => Mine.deleteTodos(s, env));
 authed("GET", r("/admin/stats"), (_q, s, env) => Ad.stats(s, env));
 authed("GET", r("/admin/trends"), Ad.trends);  // 3.5, X
 // the admin's account lookup: one person at a time

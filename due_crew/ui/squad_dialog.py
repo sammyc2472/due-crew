@@ -124,8 +124,8 @@ class SquadDialog(QDialog):
 
         def job():
             info, status = cl.peek_squad(code)
-            founder = ""
-            if info and info.get("founder"):
+            founder = (info or {}).get("founder_name") or ""
+            if info and info.get("founder") and not founder:  # a server before 3.7.1
                 founder = str((cl.profile(info["founder"]) or {}).get("name") or "")
             return info, status, founder
 

@@ -170,7 +170,7 @@ function renderFoot() {
   const foot = document.getElementById("foot");
   if (!foot) return;
   const a = (href, text) => h("a", { href }, text);
-  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a(`${SOURCE}#privacy`, "Privacy"), a(SOURCE, "Source"),
+  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a("/privacy", "Privacy"), a(SOURCE, "Source"),
     me ? link("/log", "Log") : null, me?.admin ? link("/admin", "Admin") : null,
     me ? h("a", { href: "/feedback", onclick: (e) => { e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback") : null].filter(Boolean);
   foot.replaceChildren(h("div", { class: "footin" }, h("span", { class: "fbrand" }, h("b", {}, "due crew"), h("span", { class: "muted" }, " · free for Anki")),
@@ -665,7 +665,8 @@ async function account() {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
     me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
-  const [fr, pl] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null)]);
+  const [fr, pl, lg, st] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null),
+    api("GET", "/log").catch(() => null), api("GET", "/settings").catch(() => null)]);
   const code = fr.code || "";
   const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
@@ -679,11 +680,59 @@ async function account() {
     sec("Signed in", where ? h("p", {}, where) : null,
       h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out here"),
         h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere"))),
-    sec("Your data", h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: `${SOURCE}#privacy` }, "Privacy ›")),
+    sec("Your data", yourData(lg, st?.settings || {}),
+      h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: "/privacy" }, "What Due Crew keeps ›")),
       h("p", { class: "muted small" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account. It takes everything with it."),
       // Q2: the same sentence as Anki's Settings and the README
       h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts.")));
   reading();
+}
+
+/** 3.7.1, D2: Account › Your data. Download everything; delete my log or
+ *  my to-dos on their own, each asked once, in place. */
+function yourData(lg, set) {
+  const days = Object.keys(lg?.days || {}).sort();
+  const items = Array.isArray(set.due_items) ? set.due_items : [];
+  const ticks = set.due_ticks && typeof set.due_ticks === "object" ? Object.keys(set.due_ticks).length : 0;
+  const open = items.filter((x) => x && !(set.due_ticks || {})[x.id]).length;
+  const when = (d) => { const p = parseIso(d); return `${MONTHS[p.getUTCMonth()]} ${p.getUTCFullYear()}`; };
+  const row = (title, line, ...act) => h("div", { class: "drow" }, h("div", {}, h("b", {}, title), h("p", { class: "muted small" }, line)), h("div", { class: "row" }, ...act));
+  const dl = h("button", { class: "ghost", onclick: async () => {
+    dl.disabled = true;
+    try {
+      const data = await api("GET", "/account/data");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+      const a = h("a", { href: url, download: `due-crew-data-${new Date().toISOString().slice(0, 10)}.json` });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { dl.textContent = err.status === 429 ? "Enough for today" : "Couldn't download"; }
+    dl.disabled = false;
+  } }, "Download");
+  // Delete…, then the question and its two answers where the row was
+  const ask = (title, line, question, sure, path, after) => {
+    const box = h("div", {});
+    const show = () => box.replaceChildren(row(title, line, h("button", { class: "danger", onclick: () => box.replaceChildren(
+      h("div", { class: "drow ask" }, h("div", {}, h("b", {}, question[0]), h("p", { class: "muted small" }, question[1])),
+        h("div", { class: "row" },
+          h("button", { class: "danger", onclick: async (e) => {
+            e.target.disabled = true;
+            try { await api("DELETE", path); box.replaceChildren(row(title, after)); }
+            catch { e.target.disabled = false; e.target.textContent = "Couldn't. Try again"; }
+          } }, sure),
+          h("button", { class: "quiet", onclick: show }, "Keep it")))) }, "Delete…")));
+    show();
+    return box;
+  };
+  return h("div", { class: "ydata" },
+    row("Everything Due Crew has about you", "One file: your profile, settings, week, log, to-dos, plans and follows.", dl),
+    days.length ? ask("Your log", `${days.length.toLocaleString()} day${days.length === 1 ? "" : "s"}, from ${when(days[0])}.`,
+      ["Delete your log?", "Your year, your all-time card and the Log page start again from this past week. Your crew sees nothing different. Anki keeps your reviews; it won't send the old years again."],
+      "Delete my log", "/log", "Deleted. It starts again from this past week.")
+      : row("Your log", "Nothing yet. Anki sends it with its syncs."),
+    items.length || ticks ? ask("Your to-dos", `${open} open, ${items.length - open} ticked.`,
+      ["Delete your to-dos?", "Your own to-dos and ticks, on every computer at its next refresh. A plan's dates stay on your list."],
+      "Delete my to-dos", "/account/todos", "Deleted. Anki takes it at its next refresh.")
+      : row("Your to-dos", "None."));
 }
 
 // ---- routing ----

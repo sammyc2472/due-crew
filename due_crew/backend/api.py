@@ -365,7 +365,10 @@ class ApiClient:
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
                 "squads": squads,
-                "notice": clean_notice(data.get("notice"))}  # 3.2.1
+                "notice": clean_notice(data.get("notice")),  # 3.2.1
+                # 3.7.1: when the account's settings were last saved (the site
+                # can change them: Delete my to-dos)
+                "settings_at": str(data.get("settingsAt") or "")}
 
     @staticmethod
     def _knocks(rows):
@@ -548,6 +551,9 @@ class ApiClient:
             # only a server that keeps the whole log moves the import on (one
             # still trimming to 400 days would drop the year this carried)
             self.session["log_back"] = {"uid": self.user_id, "skip": int(log_back[1])}
+        if data.get("logCut"):
+            # 3.7.1: I deleted my log on the site; the old years stay home
+            self.session["log_back"] = {"uid": self.user_id, "skip": 0, "done": True}
         if "log" in body and log:
             self.session["log_hash"] = _digest(log)
             if len(log) > 8:
@@ -805,7 +811,8 @@ class ApiClient:
         if status != 200:
             return None, status
         return {"id": data["id"], "code": data["code"], "name": data.get("name") or "?",
-                "founder": str(data.get("founder") or ""), "open": data.get("open") is True}, status
+                "founder": str(data.get("founder") or ""), "open": data.get("open") is True,
+                "founder_name": str(data.get("founderName") or "")}, status
 
     def join_squad(self, sid, code=""):
         """200, or 403 when the door is locked (or I'm blocked, or the code

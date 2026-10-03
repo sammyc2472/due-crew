@@ -105,7 +105,10 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
   if (code.length !== SQUAD_CODE_LEN) throw new HttpError(404, "no_squad");
   const id = await idForCode(env, code);
   if (!id) throw new HttpError(404, "no_squad");
-  return json(info(await getSquad(env, id), code));
+  const sq = await getSquad(env, id);
+  // 3.7.1, D5: the founder's name comes with the code (/users/{uid} is for
+  // people I'm connected to)
+  return json({ ...info(sq, code), founderName: (await nameOf(env, sq.founder))?.name ?? "" });
 }
 
 /** POST /squads/{id}/join: the only way in. The door must be open and I

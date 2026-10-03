@@ -1673,6 +1673,27 @@ def test_settings_follow_account_v213():
         a["cl"].get_settings = real_get
         check("offline: one failed pull, then the sync runs once, no loop",
               tries == [1] and runs == [1] and account.ready())
+        # 3.7.1, D2: Delete my to-dos on the site reaches Anki at its next refresh
+        use(a)
+        a["cfg"]["due_items"] = [{"id": "x1", "t": "read ch 4"}]
+        a["cl"].session.update(settings_dirty=False, settings_day=TODAY.isoformat())
+        a["cl"].put_settings("2026-10-03T08:00:00.000000Z", account.pick(a["cfg"]))
+        a["cl"].session.update(settings_seen="2026-10-03T08:00:00.000000Z", settings_dirty=False)
+        a["cl"]._call("DELETE", "/account/todos")
+        _state["settings_failed_ts"] = 0
+        board = a["cl"].fetch_board([TODAY.isoformat()])
+        account.saved_elsewhere(board["settings_at"])
+        check("a save made elsewhere (the site's Delete my to-dos) is pulled at the next refresh",
+              a["cfg"]["due_items"] == [] and a["cl"].session["settings_seen"] == store.settings["sam"]["at"])
+        pulls = []
+        real_get = a["cl"].get_settings
+        a["cl"].get_settings = lambda: (pulls.append(1), real_get())[1]
+        account.saved_elsewhere(store.settings["sam"]["at"])
+        a["cl"].session["settings_dirty"] = True
+        account.saved_elsewhere("2999-01-01T00:00:00.000000Z")
+        a["cl"].get_settings = real_get
+        a["cl"].session["settings_dirty"] = False
+        check("...and a save already seen, or one of mine still unsent, isn't pulled again", pulls == [])
     finally:
         for k, v in saved.items():
             setattr(account, k, v)
@@ -5352,6 +5373,23 @@ def test_crew_menu_pictures():
           and '"/home?card=alltime"' in text and '"/home?card=year"' in text)
     check("crew menu: people only",
           [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
+    import due_crew as dc
+    import aqt.utils as au
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    got, saved, saved_link = [], dc._share_menu, getattr(au, "openLink", None)
+    dc._share_menu = lambda c: got.append("share")
+    au.openLink = lambda url: got.append(url)
+    try:
+        dc._on_js(False, "duecrew:sharemenu", DeckBrowser())
+        dc._on_js(False, "duecrew:privacypage", DeckBrowser())
+    finally:
+        dc._share_menu = saved
+        au.openLink = saved_link
+    page = board.settings_html({"tab": "privacy", "signed_in": True}, {})
+    check("footer's Share ▾ and Privacy's What Due Crew keeps reach their handlers (3.7.1, D3)",
+          got[0] == "share" and got[1].endswith("/privacy") and "duecrew:privacypage" in page, got)
 
 
 def test_long_quiet_friends_fold():
@@ -5617,6 +5655,10 @@ def test_history_import():
     check("history: the year rides the sync with the recent days",
           set((sent.get("log") or {}).get("days", {})) == {labels[0], "2025-01-02"}, sent.get("log"))
     check("history: a server that didn't say logAll doesn't move it on", "log_back" not in cl2.session, cl2.session.get("log_back"))
+    cl2._call = lambda m, path, body=None, **k: (200, {"ok": True, "logAll": True, "logCut": True})
+    cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
+    check("history: after Delete my log (logCut) the import is done: the old years stay home (3.7.1, D2)",
+          (cl2.session.get("log_back") or {}).get("done") is True)
 
 
 def main():

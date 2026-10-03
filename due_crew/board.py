@@ -2347,7 +2347,9 @@ def _settings_privacy(cfg):
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
-            + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span></div>')
+            + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span>'
+            # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
+            f'<a class="st-lk" href="#" {_st_click("privacypage")}>What Due Crew keeps &rsaquo;</a></div>')
 
 
 def _st_toggle_cmd(cmd, on, label):

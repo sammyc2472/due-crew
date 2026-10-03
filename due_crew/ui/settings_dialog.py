@@ -523,6 +523,11 @@ class SettingsDialog(QDialog):
         away_row.addStretch()
         lay.addLayout(away_row)
         self._note(lay, "Turning a number off also removes what's already shared this week.")
+        # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
+        keeps = QLabel('<a href="https://duecrew.com/privacy">What Due Crew keeps &rsaquo;</a>')
+        keeps.setOpenExternalLinks(True)
+        keeps.setStyleSheet("font-size: 11px;")
+        lay.addWidget(keeps)
         lay.addStretch()
         return w
 

@@ -36,7 +36,7 @@ describe("squads: the id is the invite; only the founder shapes it", () => {
     expect(await bob.status("POST", "/squads", { name: "busm", code: "KQ9P2X3A" }), "squad: extra field rejected").toBe(400);
     const peek = await carol.call("GET", `/squads/peek?code=${sq.code}`);
     expect(peek.status, "squad: anyone signed in may get it").toBe(200);
-    expect(Object.keys(peek.body).sort(), "squad: the preview is the name and the door, nothing else").toEqual(["code", "founder", "id", "name", "open"]);
+    expect(Object.keys(peek.body).sort(), "squad: the preview is the name and the door, nothing else").toEqual(["code", "founder", "founderName", "id", "name", "open"]);
     expect((await api("GET", `/squads/peek?code=${sq.code}`)).status, "squad: signed out cannot").toBe(401);
     expect([404, 405], "squad: no listing").toContain(await alice.status("GET", "/squads"));
   });
@@ -133,8 +133,9 @@ describe("cheers: friends only, one emoji, optional note <= 80", () => {
 
 describe("hardening: no listing of people or codes; bounded strings", () => {
   it("profiles, codes, bounds", async () => {
-    const got = await bob.call("GET", "/users/alice");
-    expect(got.status, "profile: get by uid allowed").toBe(200);
+    expect(await bob.status("GET", "/users/alice"), "profile: a stranger's uid is no account (3.7.1, D5)").toBe(404);
+    const got = await alice.call("GET", "/users/alice");
+    expect(got.status, "profile: get by uid allowed when connected").toBe(200);
     expect(got.body, "profile: and it's a name and an emoji, nothing more (3.0)").toEqual({ uid: "alice", name: "Alice", emoji: "" });
     expect([404, 405], "profile: listing users denied").toContain(await bob.status("GET", "/users"));
     expect([404, 405], "profile: listing friend codes denied").toContain(await bob.status("GET", "/codes"));
@@ -154,7 +155,7 @@ describe("friend edges, emoji, week, ban list, founder handoff (v2.5)", () => {
     expect(await alice.status("PUT", "/friends/bob", { at: 1, note: "x" }), "edge: extra field rejected").toBe(400);
     expect((await bob.call("GET", "/board")).body.friends, "edge: cannot write someone else's (edges are always the caller's)").toEqual([]);
     expect((await carol.call("PUT", "/friends/alice")).body.mutual, "edge: the named friend may learn of it (adding back says mutual)").toBe(true);
-    expect(Object.keys((await bob.call("GET", "/users/alice")).body).sort(), "edge: a third person may not").toEqual(["emoji", "name", "uid"]);
+    expect(await bob.status("GET", "/users/alice"), "edge: a third person learns nothing, not even the name (3.7.1, D5)").toBe(404);
     expect((await alice.call("GET", "/board")).body.friends.map((f: any) => f.uid).sort(), "edge: only the owner lists (her board is hers)").toEqual(["carol", "dave"]);
     const carolSees = (await carol.call("GET", "/board")).body.friends.find((f: any) => f.uid === "alice");
     expect(carolSees.week?.days?.["2026-09-13"]?.reviews, "edge: grants stats like the array does").toBe(10);

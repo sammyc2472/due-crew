@@ -382,6 +382,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
     _state["notice"] = data.get("notice")  # 3.2.1
+    account.saved_elsewhere(data.get("settings_at"))  # 3.7.1
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
@@ -694,6 +695,9 @@ def _on_js(handled, message, context):
             open_friends(focus_add=True)
     elif cmd == "crewmenu":
         _crew_menu(c)  # 3.4 review, H5
+    elif cmd == "privacypage":
+        from aqt.utils import openLink  # 3.7.1, D3: signed out works; no token
+        openLink(plan_flow.site_base() + "/privacy")
     elif cmd == "sharemenu":
         _share_menu(c)  # 3.7.1, H3
     elif cmd == "decks":

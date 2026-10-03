@@ -41,11 +41,30 @@ export async function nameOf(env: Env, uid: string): Promise<{ name: string; emo
   return u ? { name: u.name || "?", emoji: u.emoji || "" } : null;
 }
 
-/** GET /users/{uid}: anyone signed in gets a name and an emoji, nothing
- *  more. (A Firestore profile was readable whole by anyone with the uid.) */
+/** 3.7.1, D5: a crew edge either way, a knock either way, a squad or a
+ *  plan in common (its owner, a co-author or a follower). One query. */
+export async function connected(env: Env, a: string, b: string): Promise<boolean> {
+  if (a === b) return true;
+  const row = await env.DB.prepare(
+    `SELECT EXISTS (SELECT 1 FROM friends WHERE (owner = ?1 AND friend = ?2) OR (owner = ?2 AND friend = ?1))
+         OR EXISTS (SELECT 1 FROM knocks WHERE (to_uid = ?1 AND from_uid = ?2) OR (to_uid = ?2 AND from_uid = ?1))
+         OR EXISTS (SELECT 1 FROM members x JOIN members y ON y.squad = x.squad WHERE x.uid = ?1 AND y.uid = ?2)
+         OR EXISTS (SELECT 1 FROM (SELECT id AS plan FROM plans WHERE owner = ?1
+                                   UNION SELECT plan FROM plan_editors WHERE uid = ?1
+                                   UNION SELECT plan FROM plan_follows WHERE uid = ?1) m
+                    WHERE m.plan IN (SELECT id FROM plans WHERE owner = ?2
+                                     UNION SELECT plan FROM plan_editors WHERE uid = ?2
+                                     UNION SELECT plan FROM plan_follows WHERE uid = ?2)) AS ok`,
+  ).bind(a, b).first<number>("ok");
+  return row === 1;
+}
+
+/** GET /users/{uid}: a name and an emoji, nothing more, and since 3.7.1
+ *  (D5) only to someone connected to them; anyone else gets the same 404
+ *  as no such account. Codes and invites carry their own names. */
 export async function getUser(s: Session, env: Env, [uid]: string[]): Promise<Response> {
   const u = await nameOf(env, checkUid(uid));
-  if (!u) throw new HttpError(404, "no_user");
+  if (!u || !await connected(env, s.uid, uid)) throw new HttpError(404, "no_user");
   return json({ uid, ...u });
 }
 

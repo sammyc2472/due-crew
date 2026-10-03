@@ -789,3 +789,10 @@ button.alltime b { font-size: 22px; } button.alltime small { color: var(--muted)
 .icard svg g:hover .b { fill: var(--ink); }
 .icard svg .hit { fill: transparent; }
 .icard svg text { fill: var(--muted); font-size: 10px; }
+
+/* 3.7.1, D2: Account › Your data */
+.ydata { display: grid; gap: 2px; margin-bottom: 10px; }
+.drow { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.drow > div:first-child { flex: 1 1 260px; min-width: 0; }
+.drow p { margin: 2px 0 0; }
+.drow.ask { background: var(--well, transparent); border-radius: 10px; padding: 10px 12px; border: 0; }

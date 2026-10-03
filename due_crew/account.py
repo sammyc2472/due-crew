@@ -259,6 +259,21 @@ def _pulled(result):
                 traceback.print_exc()
 
 
+def saved_elsewhere(at):
+    """3.7.1: the board says when my settings were last saved. A save this
+    computer hasn't seen (another computer, or the site's Delete my to-dos)
+    is pulled now rather than tomorrow; one of this computer's own still on
+    its way isn't."""
+    cl = client()
+    if not at or not cl.signed_in or _state["settings_pulling"] or _pushing["busy"]:
+        return
+    if at == cl.session.get("settings_seen") or cl.session.get("settings_dirty"):
+        return
+    cl.session["settings_day"] = ""
+    _state["settings_failed_ts"] = 0
+    ensure()
+
+
 _pushing = {"busy": False, "again": False}
 
 
