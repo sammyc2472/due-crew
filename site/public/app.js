@@ -1200,10 +1200,9 @@ async function home() {
         panel,
         h("div", { class: "foot" }, footLeft,
           h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻")))),
-      h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
-        yearHeat(logR.days || {}))),
+      yearPanel(logR.days || {}, logR.cheers || {}, "Your year")),
     h("aside", { class: "rail" },
-      yearNudge(logR.days || {}, t),
+      yearNudge(logR.days || {}, t, logR.cheers || {}),
       h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       duePanel(followed, sett?.settings || {}, t),
@@ -1212,10 +1211,11 @@ async function home() {
       friends)));
   // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
   const want = new URLSearchParams(location.search).get("card");
-  if (want === "today" || want === "week") {
+  if (want === "today" || want === "week" || want === "year" || want === "alltime") {
     history.replaceState(history.state, "", "/home");
     here = "/home";
-    weekCard(want === "today");
+    if (want === "year" || want === "alltime") openYearCard(logR.days || {}, want === "alltime" ? "all" : t.slice(0, 4), logR.cheers || {});
+    else weekCard(want === "today");
   }
 }
 
@@ -1266,7 +1266,7 @@ function duePanel(followed, set, t) {
 
 /** K6: 1 December – 7 January, the year's card opens the rail, once a
  *  season per browser ("Not now" hides it). In January it's last year's. */
-function yearNudge(days, t) {
+function yearNudge(days, t, cheers = {}) {
   const [y, m, d] = t.split("-").map(Number);
   const yr = m === 12 ? y : m === 1 && d <= 7 ? y - 1 : 0;
   if (!yr || !Object.keys(days).some((k) => k.startsWith(`${yr}-`))) return null;
@@ -1279,7 +1279,7 @@ function yearNudge(days, t) {
     h("div", { class: "ymini", "aria-hidden": "true" }, data.cells.map((c) => h("i", { class: c.out ? "out" : c.pre || c.fut ? "" : `l${c.lvl}` }))),
     h("span", { class: "small" }, h("b", {}, `${data.studied.toLocaleString()} day${data.studied === 1 ? "" : "s"}`),
       h("span", { class: "muted" }, ` · ${Math.round(data.minutes / 60).toLocaleString()} hours${data.streak ? ` · longest streak ${data.streak}` : ""}`)),
-    h("div", {}, h("button", { onclick: () => openYearCard(days, String(yr)) }, "Make the card")));
+    h("div", {}, h("button", { onclick: () => openYearCard(days, String(yr), cheers) }, "Make the card")));
   return box;
 }
 
@@ -1452,10 +1452,12 @@ function heatLevel(days) {
   return (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
 }
 
-function yearHeat(days) {
+function yearHeat(days, y = null) {
   const t = today();
   const lastMon = Sched.monday(t);
-  const first = addDays(lastMon, -52 * 7);
+  // 3.7.1: a calendar year when one's picked, else the last 53 weeks
+  const first = y ? Sched.monday(`${y}-01-01`) : addDays(lastMon, -52 * 7);
+  const inYear = (d) => !y || d.startsWith(`${y}-`);
   const logged = Object.keys(days).sort();
   const start = logged[0] || t;
   const level = heatLevel(days);
@@ -1471,7 +1473,7 @@ function yearHeat(days) {
     }
     for (let k = 0; k < 7; k++) {
       const d = addDays(wd, k);
-      if (d > t) { cells.push(h("i", { class: "fut" })); continue; }
+      if (d > t || !inYear(d)) { cells.push(h("i", { class: "fut" })); continue; }
       const r = days[d];
       cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, "data-d": d, tabindex: "-1" }));
     }
@@ -1480,7 +1482,7 @@ function yearHeat(days) {
     h("div", { class: "hm" }, months), h("div", { class: "hd" }, h("span", {}, "Mon"), h("span", {}, "Wed"), h("span", {}, "Fri")),
     h("div", { class: "hg" }, cells)),
     h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
-  setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
+  if (!y || y === t.slice(0, 4)) setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
   // a day's numbers under the squares: on hover with a mouse, on a tap with a finger
   const read = h("div", { class: "hread", "aria-live": "polite" });
   const say = (d) => {
@@ -1499,8 +1501,76 @@ function yearHeat(days) {
   grid.addEventListener("mouseover", (e) => pick(e.target, false));
   grid.addEventListener("mouseleave", () => { if (picked) say(picked.dataset.d); else say(t); });
   grid.addEventListener("click", (e) => pick(e.target, true));
-  say(t);
+  say(y && y !== t.slice(0, 4) ? `${y}-12-31` > t ? t : (Object.keys(days).filter((d) => d.startsWith(`${y}-`)).sort().pop() || `${y}-12-31`) : t);
   return h("div", { class: "heatbox" }, wrap, read);
+}
+
+/** 3.7.1: the year's squares with ‹ › through the years in my log, and
+ *  Share › for the year on screen (All time is on the card's own row). */
+function yearPanel(days, cheers, title, after) {
+  const t = today();
+  const cur = t.slice(0, 4);
+  const years = [...new Set(Object.keys(days).map((d) => d.slice(0, 4)))].filter((x) => x <= cur).sort();
+  if (!years.includes(cur)) years.push(cur);
+  let i = years.length - 1;
+  const box = h("div");
+  const head = h("h4", {});
+  const draw = () => {
+    const y = years[i];
+    const step = (d, lab, ok) => h("button", { class: "linkish", "aria-label": lab, disabled: ok ? null : true, onclick: () => { i += d; draw(); } }, d < 0 ? "‹" : "›");
+    head.replaceChildren(h("span", {}, title, years.length > 1 ? h("span", { class: "yrstep" }, step(-1, "An earlier year", i > 0), h("b", {}, y === cur ? "this year" : y), step(1, "A later year", i < years.length - 1)) : null),
+      h("button", { class: "linkish", onclick: () => openYearCard(days, y, cheers) }, "Share ›"));
+    box.replaceChildren(yearHeat(days, y === cur ? null : y));
+  };
+  draw();
+  return h("section", { class: "panel" }, head, box, after || null);
+}
+
+/** 3.7.1, I1: what my log says over time, a number and a line each. */
+function logInsights(days) {
+  const did = Object.entries(days).filter(([, r]) => r[1] > 0).sort(([a], [c]) => a.localeCompare(c));
+  if (did.length < 14) return null;
+  const byMonth = new Map();
+  for (const [d, r] of did) { const k = d.slice(0, 7); const m = byMonth.get(k) || [0, 0, 0, 0]; m[0] += r[0]; m[1] += r[1]; if (r[3] !== null) { m[2] += r[3] * r[1]; m[3] += r[1]; } byMonth.set(k, m); }
+  const months = [...byMonth.entries()].slice(-24);
+  const secs = months.filter(([, m]) => m[1]).map(([k, m]) => [k, (m[0] * 60) / m[1]]);
+  const rets = months.filter(([, m]) => m[3]).map(([k, m]) => [k, m[2] / m[3]]);
+  const wk = [0, 0, 0, 0, 0, 0, 0], wn = [0, 0, 0, 0, 0, 0, 0];
+  for (const [d, r] of did.slice(-180)) { const w = (parseIso(d).getUTCDay() + 6) % 7; wk[w] += r[0]; wn[w] += 1; }
+  const wavg = wk.map((m, j) => (wn[j] ? m / wn[j] : 0));
+  const weeks = []; const mon = Sched.monday(today());
+  for (let j = 25; j >= 0; j--) { const a = addDays(mon, -7 * j), b = addDays(a, 6); weeks.push([a, did.filter(([d]) => d >= a && d <= b).reduce((n, [, r]) => n + r[2], 0)]); }
+  const monthLabel = (k) => `${MONTHS[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
+  const svg = (inner, hgt = 70) => { const el = document.createElementNS("http://www.w3.org/2000/svg", "svg"); el.setAttribute("viewBox", `0 0 260 ${hgt}`); el.setAttribute("class", "ichart"); el.innerHTML = inner; return el; };
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const lineChart = (pts, fmt) => {
+    if (pts.length < 2) return null;
+    const vs = pts.map(([, v]) => v), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+    const X = (j) => 4 + (j * 252) / (pts.length - 1), Y = (v) => 6 + (1 - (v - lo) / span) * 50;
+    const d = pts.map(([, v], j) => `${j ? "L" : "M"}${X(j).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+    return svg(`<line class="g" x1="0" x2="260" y1="60" y2="60"/><path class="l" d="${d}"/><circle cx="${X(pts.length - 1)}" cy="${Y(vs[vs.length - 1])}" r="3.5"/>`
+      + pts.map(([k, v], j) => `<rect class="hit" x="${(X(j) - 6).toFixed(1)}" y="0" width="12" height="70"><title>${esc(monthLabel(k))}: ${esc(fmt(v))}</title></rect>`).join(""));
+  };
+  const barChart = (vals, labels, fmt) => {
+    const mx = Math.max(1, ...vals), n = vals.length, bw = (260 - 2 * (n - 1)) / n;
+    return svg(`<line class="g" x1="0" x2="260" y1="58" y2="58"/>` + vals.map((v, j) => {
+      const bh = v ? Math.max(2, (v / mx) * 50) : 0, x = j * (bw + 2);
+      return `<g><rect class="b" x="${x.toFixed(1)}" y="${(58 - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2"/><rect class="hit" x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="70"><title>${esc(fmt(v, j))}</title></rect></g>`
+        + (labels ? `<text x="${(x + bw / 2).toFixed(1)}" y="70" text-anchor="middle">${labels[j]}</text>` : "");
+    }).join(""));
+  };
+  const card = (label, big, note, chart, foot) => h("div", { class: "icard" }, h("h5", {}, label), h("div", { class: "ibig" }, big, note ? h("small", {}, note) : null), chart, h("small", { class: "muted" }, foot));
+  const first = (a) => a[0]?.[1], last = (a) => a[a.length - 1]?.[1];
+  const yearAgo = (a) => a.length > 12 ? a[a.length - 13][1] : first(a);
+  const s0 = yearAgo(secs), s1 = last(secs), r1 = last(rets), r0 = yearAgo(rets);
+  const top = wavg.indexOf(Math.max(...wavg));
+  const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const m30 = did.slice(-30), share = m30.reduce((n, [, r]) => n + r[1], 0) ? Math.round((100 * m30.reduce((n, [, r]) => n + r[2], 0)) / m30.reduce((n, [, r]) => n + r[1], 0)) : 0;
+  return h("div", { class: "insights" },
+    secs.length >= 2 ? card("Seconds a card", `${s1.toFixed(1)}s`, s0 && Math.abs(s0 - s1) >= 0.1 ? `${s1 < s0 ? "down" : "up"} from ${s0.toFixed(1)}` : "steady", lineChart(secs, (v) => `${v.toFixed(1)}s a card`), "By month") : null,
+    rets.length >= 2 ? card("Retention", `${Math.round(r1)}%`, r0 && Math.abs(r1 - r0) >= 1 ? `${r1 > r0 ? "up" : "down"} from ${Math.round(r0)}%` : "steady", lineChart(rets, (v) => `${v.toFixed(1)}% right`), "On reviews, by month") : null,
+    card("Your week", DOW[top], "your biggest day", barChart(wavg.map((v) => Math.round(v)), ["M", "T", "W", "T", "F", "S", "S"], (v, j) => `${DOW[j]}: ${v} min on average`), "Minutes on days you studied"),
+    card("New cards", `${share}%`, "of reviews, last 30 days", barChart(weeks.map(([, v]) => v), null, (v, j) => `Week of ${pretty(weeks[j][0])}: ${v.toLocaleString()} new`), "A week, last 26 weeks"));
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */
@@ -1688,7 +1758,7 @@ async function logPage() {
   const logged = Object.keys(days).sort();
   const followed = plansR.plans.filter((p) => p.following);
   const wret = ret(week);
-  const yearCard = () => openYearCard(days, t.slice(0, 4));
+  const allTime = allTimeData(days, log.cheers || {});
 
   const r30 = ret(studied30);
   page(
@@ -1700,9 +1770,11 @@ async function logPage() {
       tile(sum(week, 2).toLocaleString(), "new cards", `by ${byDay}: ${sum(lastSoFar, 2).toLocaleString()}`),
       tile(wret === null ? "—" : `${wret.toFixed(1)}%`, "retention"),
       tile(`${studied30.length} of 30`, "days studied, last 30")),
-    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`,
-      logged.length ? [" · ", h("button", { class: "linkish", onclick: yearCard }, `Share my ${t.slice(0, 4)} ›`)] : null)),
-      yearHeat(days), logged.length ? h("small", { class: "muted" }, `Your log starts ${pretty(logged[0])}, when Anki first sent it.`) : h("small", { class: "muted" }, "Nothing yet: Anki sends it with a full sync.")),
+    allTime ? h("button", { class: "alltime", onclick: () => openYearCard(days, "all", log.cheers || {}) },
+      h("small", {}, `All time · since ${allTime.since}`), h("b", {}, `${allTime.reviews.toLocaleString()} reviews`),
+      h("span", { class: "muted" }, `${allTime.days.toLocaleString()} days · ${Math.round(allTime.minutes / 60).toLocaleString()}h · Share ›`)) : null,
+    h("div", { style: "margin-top:14px" }, yearPanel(days, log.cheers || {}, "Your year", logged.length ? null : h("small", { class: "muted" }, "Nothing yet."))),
+    logInsights(days),
     h("div", { class: "agrid2", style: "margin-top:12px" },
       h("section", { class: "panel" }, h("h4", {}, "This week and last", pills), pairsBox),
       h("section", { class: "panel" }, h("h4", {}, "On days you studied", h("span", { class: "muted" }, "last 30 days")),

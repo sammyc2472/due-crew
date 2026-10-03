@@ -154,6 +154,11 @@ export function logMerge(have: string | null, part: Record<string, (number | nul
 
 /** GET /log: my log, for the site. */
 export async function getLog(s: Session, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT json FROM logs WHERE uid = ?").bind(s.uid).first<string>("json");
-  return json(row ? JSON.parse(row) : { days: {} });
+  const [row, counts] = await Promise.all([
+    env.DB.prepare("SELECT json FROM logs WHERE uid = ?").bind(s.uid).first<string>("json"),
+    env.DB.prepare("SELECT year, n FROM cheer_counts WHERE uid = ?").bind(s.uid).all<{ year: number; n: number }>(),
+  ]);
+  // 3.7.1: cheers my crew sent me, by year (only mine to see)
+  const cheers = Object.fromEntries(counts.results.map((r) => [String(r.year), r.n]));
+  return json({ ...(row ? JSON.parse(row) : { days: {} }), cheers });
 }

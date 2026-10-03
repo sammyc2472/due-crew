@@ -245,6 +245,21 @@ describe("the log", () => {
     expect(Object.keys((await sam.call("GET", "/log")).body.days).length).toBe(4 * 366);
   });
 
+  it("3.7.1: cheers my crew sent me, a sender once a day, mine alone, gone with my account", async () => {
+    const sam = await person("sam");
+    const dre = await person("dre");
+    const maya = await person("maya");
+    await befriend(sam, dre);
+    await befriend(sam, maya);
+    for (const p of [dre, dre, maya]) expect((await p.call("POST", "/cheers/sam", { emoji: "🎉" })).status).toBe(200);
+    await dre.call("POST", "/cheers/sam", { emoji: "🎉", note: "a tip", guid: "g1" });  // a tip isn't a cheer
+    const year = String(new Date().getUTCFullYear());
+    expect((await sam.call("GET", "/log")).body.cheers).toEqual({ [year]: 2 });
+    expect((await dre.call("GET", "/log")).body.cheers).toEqual({});
+    await sam.call("DELETE", "/account");
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM cheer_counts").first("n")).toBe(0);
+  });
+
   it("refuses a bad row", async () => {
     const sam = await person("sam");
     for (const days of [{ "2026-10-21": [80, 300, 50] }, { "x": [1, 1, 1, null] }, { "2026-10-21": [2000, 1, 1, null] },

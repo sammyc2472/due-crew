@@ -232,11 +232,21 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
   checkUid(to);
   const c = V.cheer(await readJson(req));
   if (!(await added(env, to, s.uid))) throw new HttpError(403, "not_friends");
+  const now = nowSec();
+  if (!c.guid) {
+    // 3.7.1: a cheer received counts on my year card, a sender once a day
+    const was = await env.DB.prepare("SELECT at FROM cheers WHERE to_uid = ? AND from_uid = ?").bind(to, s.uid).first<number>("at");
+    if (!was || Math.floor(was / 86400) !== Math.floor(now / 86400)) {
+      await env.DB.prepare(
+        `INSERT INTO cheer_counts (uid, year, n) VALUES (?, ?, 1) ON CONFLICT(uid, year) DO UPDATE SET n = n + 1`,
+      ).bind(to, new Date(now * 1000).getUTCFullYear()).run();
+    }
+  }
   await env.DB.prepare(
     `INSERT INTO cheers (to_uid, from_uid, emoji, note, luck, guid, at) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET emoji = excluded.emoji, note = excluded.note,
        luck = excluded.luck, guid = excluded.guid, at = excluded.at`,
-  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, nowSec()).run();
+  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, now).run();
   // 3.2: a tip with words stays on its card, for the crew who has it
   if (c.guid && c.note) await tipWrite(env, s.uid, c.guid, c.note).run();
   // 3.0.1: the first tip on a flagged card takes the flag down for the whole

@@ -164,7 +164,7 @@ const Cards = (() => {
   function bars(c, x, y, w, h, years, pal, label) {
     const most = Math.max(1, ...years.map((r) => r.days));
     const best = years.reduce((b, r) => (r.days > (b?.days ?? -1) ? r : b), null);
-    const gap = Math.min(24, w / years.length / 4), bw = (w - gap * (years.length - 1)) / years.length;
+    const gap = Math.min(24, w / years.length / 4), bw = Math.min(140, (w - gap * (years.length - 1)) / years.length);
     years.forEach((r, i) => {
       const bh = Math.max(r.days ? 6 : 0, Math.round((r.days / most) * h));
       const bx = x + i * (bw + gap);
@@ -199,12 +199,12 @@ const Cards = (() => {
     text(c, big, P, 380, 132, pal.ink, { weight: 700 });
     text(c, "reviews", P, 446, 38, pal.mut);
     const w = W - 2 * P;
-    bars(c, P, 520, w, 240, d.years, pal, 40);
-    text(c, "days studied, a bar a year", P, 860, 28, pal.mut);
-    const top = 900;
+    bars(c, P, 510, w, 200, d.years, pal, 40);
+    text(c, "days studied, a bar a year", P, 800, 28, pal.mut);
+    const top = 836;
     c.fillStyle = pal.line; c.fillRect(P, top, w, 3);
     stats.forEach(([v, l], i) => {
-      const x = P + (i % 2) * (w / 2), y = top + 100 + Math.floor(i / 2) * 140;
+      const x = P + (i % 2) * (w / 2), y = top + 96 + Math.floor(i / 2) * 136;
       text(c, v, x, y, 60, pal.ink, { weight: 700 });
       text(c, l, x, y + 46, 30, pal.mut);
     });

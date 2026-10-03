@@ -767,3 +767,24 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .sc-years button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sc-years button.all { border-style: dashed; }
 .sc-years button.all.on { border-style: solid; }
+/* 3.7.1: ‹ year › on a year's squares; the All time tile; the Log's insights */
+.yrstep { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; font-weight: 600; }
+.yrstep b { font-weight: 600; min-width: 4.5em; text-align: center; color: var(--muted); }
+.yrstep button { font-size: 16px; padding: 0 6px; }
+.yrstep button[disabled] { opacity: .3; cursor: default; }
+button.alltime { display: grid; gap: 2px; justify-items: start; text-align: left; width: 100%; margin-top: 14px; padding: 12px 14px;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; font-weight: 400; }
+button.alltime b { font-size: 22px; } button.alltime small { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 12px; }
+.icard { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.icard h5 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.icard .ibig { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.icard .ibig small { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.icard svg.ichart { width: 100%; height: auto; display: block; overflow: visible; }
+.icard svg .g { stroke: var(--line); stroke-width: 1; }
+.icard svg .l { fill: none; stroke: var(--accent); stroke-width: 2; }
+.icard svg circle { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+.icard svg .b { fill: var(--accent); }
+.icard svg g:hover .b { fill: var(--ink); }
+.icard svg .hit { fill: transparent; }
+.icard svg text { fill: var(--muted); font-size: 10px; }
