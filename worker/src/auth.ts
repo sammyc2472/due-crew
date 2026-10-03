@@ -213,6 +213,14 @@ export async function signOut(s: Session, env: Env, req?: Request): Promise<Resp
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });
 }
 
+/** GET /auth/places (S6): where I'm signed in, as counts: computers (the
+ *  add-on) and browsers (duecrew.com). Nothing about which, or where. */
+export async function places(s: Session, env: Env): Promise<Response> {
+  const rows = await env.DB.prepare("SELECT device FROM sessions WHERE uid = ?").bind(s.uid).all<{ device: string }>();
+  const browsers = rows.results.filter((r) => r.device === "duecrew.com").length;
+  return json({ computers: rows.results.length - browsers, browsers });
+}
+
 export async function signOutAll(s: Session, env: Env, req?: Request): Promise<Response> {
   await env.DB.prepare("DELETE FROM sessions WHERE uid = ?").bind(s.uid).run();
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0, req) });

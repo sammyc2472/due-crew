@@ -467,6 +467,18 @@ add-on.
   `bingoEv` (the Worker's evaluate, done or not per square, never who).
   Change one, change both. The site can't show "back today" (the add-on's own history) or
   Copy invite for a squad (its code lives only in Anki).
+- The site, together ("Site, together" S1–S7, built with "The next
+  round"): every page in one 1180px frame (`main.wide` the same); pages to
+  read (sign-in, account, feedback, a plan's or an invite's link) use a
+  narrower column inside it (`reading()`), left-aligned with the logo. One
+  footer on every page (`renderFoot`; `index.html` and `classes.html`
+  match it by hand). A page opens with `phead(title, line, button)`: at
+  most one filled button, on the title's line. Buttons climb one ladder:
+  filled for the main thing, `ghost` (outlined), `quiet`, `linkish`, and
+  the warm `danger`/`warn` only for removing; a library card is Look
+  (filled), Copy (outlined), and ⋯ for Report and Take out. Account shows
+  my code, where I'm signed in (`GET /auth/places`, counts only) and my
+  data.
 - Share cards (mock "Share Cards", K1–K5): my week (story or link
   size, the crew count a number only), my year in Anki (from my log), a
   squad's bingo (never who stamped what), a plan finished (its code only

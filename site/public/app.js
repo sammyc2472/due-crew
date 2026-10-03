@@ -161,12 +161,34 @@ async function whoami() {
   return me;
 }
 
+const ANKIWEB = "https://ankiweb.net/shared/info/2035408484";
+const SOURCE = "https://github.com/sammyc2472/due-crew";
+
+/** S2: one footer on every page, signed in or not: what this is, and where
+ *  a visitor looks. Feedback (signed in) carries the page it came from. */
+function renderFoot() {
+  const foot = document.getElementById("foot");
+  if (!foot) return;
+  const a = (href, text) => h("a", { href }, text);
+  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a(`${SOURCE}#privacy`, "Privacy"), a(SOURCE, "Source"),
+    me ? link("/log", "Log") : null, me?.admin ? link("/admin", "Admin") : null,
+    me ? h("a", { href: "/feedback", onclick: (e) => { e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback") : null].filter(Boolean);
+  foot.replaceChildren(h("div", { class: "footin" }, h("span", { class: "fbrand" }, h("b", {}, "due crew"), h("span", { class: "muted" }, " · free for Anki")),
+    h("span", { class: "flinks" }, links.flatMap((x, i) => (i ? [h("span", { class: "dot", "aria-hidden": "true" }, "·"), x] : [x])))));
+}
+
+/** S3: every page opens the same way: a title, one line, at most one main button on the title's line. */
+function phead(title, line, button) {
+  return h("div", { class: "phead" }, h("div", {}, h("h1", {}, title), line ? h("p", { class: "muted" }, line) : null), button || null);
+}
+
+/** S1/S5: pages to read (sign-in, account, feedback, a plan's or an invite's link) keep
+ *  the frame and use a narrower column inside it, left-aligned with the logo. */
+function reading() { $app().classList.add("narrow"); }
+
 function renderNav() {
   const nav = document.getElementById("nav");
-  // 3.6.5, P6: Feedback in the footer of every signed-in page, carrying the page it came from
-  const foot = document.getElementById("foot");
-  if (foot) foot.replaceChildren(...(me ? [h("a", { href: "/feedback", onclick: (e) => {
-    e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback")] : []));
+  renderFoot();
   if (!me) { nav.replaceChildren(link("/sign-in", "Sign in")); return; }
   // 3.4 review, N4: on a phone, Home and Plans, and the rest under me
   const rest = () => [link("/log", "Log"), me.admin ? link("/admin", "Admin") : null, link("/account", me.name || "Account")].filter(Boolean);
@@ -205,7 +227,7 @@ function signIn() {
   }
   const form = h("form", { class: "stack", novalidate: true },
     title,
-    h("p", { class: "muted" }, "The same email you use in Anki. New here? The same code makes your account."),
+    h("p", { class: "muted" }, "The same email you use in Anki. We'll email you a 6-digit code, good for 10 minutes. New here? The same code makes your account."),
     h("label", { for: "email" }, "Email"), email,
     h("div", {}, h("button", { type: "submit" }, "Send code")), status);
   form.addEventListener("submit", async (e) => {
@@ -284,16 +306,18 @@ async function plansList() {
       p.doc.deck !== p.name ? p.doc.deck : null, planDays(p.doc), span(p)].filter(Boolean).join(" · ")));
   const how = h("p", { class: "muted small", hidden: true }, "Pick the deck in Anki: Tools › Due Crew › Make a plan from a deck. It opens here.");
   page(
-    h("h1", {}, "Plans"),
-    codeBox(),
-    h("div", { class: "row", style: "justify-content:space-between;margin-top:18px" }, h("h2", { style: "margin:0" }, "Yours"),
-      h("button", { class: "ghost", onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
+    phead("Plans", "Dates for a deck; your Anki opens each one on its day.",
+      h("button", { onclick: () => { how.hidden = !how.hidden; } }, "New plan")), how,
+    h("h2", {}, "Yours"),
     mineP.length ? h("div", { class: "plans" }, mineP.map(row))
       : h("p", { class: "muted" }, "None yet."),
     h("h2", {}, "Following"),
     followed.length ? h("div", { class: "plans" }, followed.map(row))
-      : h("p", { class: "muted" }, "None yet. A plan's code goes in the box above."),
-    h("p", { class: "muted small", style: "margin-top:12px" }, "Or find one to follow or copy in the ", link("/library", "library"), "."),
+      : h("p", { class: "muted" }, "None yet. A plan's code goes in the box below."),
+    h("div", { class: "agrid2", style: "margin-top:20px" },
+      h("section", { class: "panel" }, codeBox()),
+      h("section", { class: "panel" }, h("h4", {}, "Find one to follow"),
+        h("p", { class: "muted small" }, "Plans people share for anyone to follow or copy."), link("/library", "Open the library ›"))),
   );
 }
 
@@ -356,14 +380,18 @@ async function libraryPage() {
       h("div", { class: "lctags" }, tags(p).map((t) => h("span", {}, t))),
       h("span", { class: "muted small" }, `${p.followers.toLocaleString()} following`),
       h("div", { class: "row" },
-        link(`/plans/${p.id}`, "Look", "btn ghost"),
-        h("button", { onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
-        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : h("button", { class: "linkish", style: "margin-left:auto", onclick: () => extra.replaceChildren(reportForm(p, () => extra.replaceChildren())) }, "Report"),
-        me.admin ? h("button", { class: "linkish", onclick: async () => {
-          const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
-          if (!note) return;
-          try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
-        } }, "Take out") : null),
+        link(`/plans/${p.id}`, "Look", "btn"),
+        h("button", { class: "ghost", onclick: () => extra.replaceChildren(copyForm(p, () => extra.replaceChildren())) }, "Copy"),
+        p.mine ? h("span", { class: "muted small", style: "margin-left:auto" }, "Yours") : null,
+        p.mine && !me.admin ? null : h("details", { class: "calmenu lcmore", style: p.mine ? "" : "margin-left:auto" },
+          h("summary", { "aria-label": "More" }, "⋯"),
+          h("div", { class: "calpop" },
+            p.mine ? null : h("button", { class: "linkish", onclick: (e) => { e.target.closest("details").open = false; extra.replaceChildren(reportForm(p, () => extra.replaceChildren())); } }, "Report…"),
+            me.admin ? h("button", { class: "linkish warn", onclick: async () => {
+              const note = prompt("Take it out of the library. Its author reads why:", "Not a study plan");
+              if (!note) return;
+              try { await api("POST", `/admin/library/${p.id}`, { note }); el.remove(); } catch { alert("That didn't work."); }
+            } }, "Take out…") : null))),
       extra);
     return el;
   }
@@ -391,8 +419,7 @@ async function libraryPage() {
   more.addEventListener("click", () => { pg++; load(false); });
   let t = null;
   search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = search.value.trim(); load(true); }, 300); });
-  page(h("h1", {}, "Library"),
-    h("p", { class: "muted" }, "Plans people list for anyone to follow or copy. Newest first."),
+  page(phead("Library", "Plans people list for anyone to follow or copy. Newest first."),
     h("div", { class: "row" }, search), filters, grid, empty, more);
   await load(true);
 }
@@ -542,7 +569,7 @@ function planIntro(p) {
   return [h("h1", {}, p.name),
     h("p", { class: "muted" }, `${p.ownerName}'s plan · ${u.length} date${u.length === 1 ? "" : "s"}${u.length ? `, ${pretty(u[0].opens)} to ${pretty(last.due || last.opens)}` : ""} · ${p.followers} following`),
     p.line ? h("p", {}, p.line) : null,
-    u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? x.n.toLocaleString() : ""))),
+    u.length ? h("div", { class: "pdates" }, shown.map((x) => h("div", {}, h("small", {}, pretty(x.opens)), h("span", {}, x.name), h("small", {}, x.n ? `${x.n.toLocaleString()} card${x.n === 1 ? "" : "s"}` : ""))),
       u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
 }
 
@@ -566,15 +593,18 @@ async function codePage(code) {
   if (!p) {
     page(h("h1", {}, "No plan with that code"), h("p", { class: "muted" }, "Check the code with whoever sent it. A plan for one squad only opens for its members."),
       me ? null : h("p", { class: "muted small" }, link(`/sign-in?next=${encodeURIComponent(`/p/${code}`)}`, "Sign in"), " if it's your squad's."));
+    reading();
     return;
   }
   const cal = p.audience === "squad" ? null : calMenu(code);
   page(...planIntro(p),
     cal ? h("div", { class: "phone-only" }, cal) : null,
     emailMe(`/p/${code}`),
-    h("h2", {}, "Follow it in Anki"), steps(p.deck),
+    h("section", { class: "panel stepcard" }, h("h4", {}, "Follow it in Anki"), steps(p.deck),
+      me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck.")),
     cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
-    me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
+    me ? null : h("p", { class: "muted small" }, "Due Crew opens a plan's cards in your Anki on their days, and puts friends' studying next to yours. Free. ", h("a", { href: "/" }, "What's Due Crew?")));
+  reading();
 }
 
 /** 3.5.0: /i/CODE, a friend's invite. A one-time invite (10) makes you crew
@@ -586,6 +616,7 @@ async function invitePage(code) {
     page(h("h1", {}, inv ? "Too many tries" : "No invite with that code"),
       h("p", { class: "muted" }, inv ? "Try again in an hour." : "Check the link with whoever sent it."),
       h("p", { class: "muted small" }, h("a", { href: "/" }, "What's Due Crew?")));
+    reading();
     return;
   }
   // a one-time invite, first use within 14 days: crew at once. Used or old,
@@ -609,21 +640,24 @@ async function invitePage(code) {
           : "That didn't work. Try again.";
       }
     } }, `Add ${inv.name}`);
-    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "quiet")), out);
+    page(head, h("div", { class: "row" }, btn, link("/home", "Home", "btn quiet")), out);
+    reading();
     return;
   }
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
   const shown = code.length === 10 ? `${code.slice(0, 5)} ${code.slice(5)}` : code;
   page(head,
+    h("p", { class: "muted" }, "Due Crew puts friends' studying next to yours on Anki's Decks screen. Free."),
     emailMe(`/i/${code}`),
-    h("ol", { class: "steps wide-only" },
+    h("section", { class: "panel stepcard wide-only" }, h("ol", { class: "steps" },
       h("li", {}, h("b", {}, "Add Due Crew to Anki. "), "Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ",
         copyBtn("2035408484"), ", then restart Anki.", h("br"),
         h("span", { class: "muted small" }, "No Anki yet? ", h("a", { href: "https://apps.ankiweb.net" }, "Get it free"))),
       h("li", {}, h("b", {}, "Start with your email. "), "On Anki's Decks screen. We'll email you a code."),
       h("li", {}, h("b", {}, `Paste ${inv.name}'s code `), h("b", { class: "mono" }, shown), " ", copyBtn(code),
-        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`)),
-    h("p", { class: "muted small" }, "Free · your studying goes only to people you add · ", h("a", { href: "/" }, "What's Due Crew?")));
+        once ? " on the welcome screen, and you're crew." : ` on the welcome screen. You're crew once ${inv.name} adds you back.`))),
+    h("p", { class: "muted small" }, "Only people you add see your studying. ", h("a", { href: "/" }, "What's Due Crew?")));
+  reading();
 }
 
 async function account() {
@@ -631,12 +665,25 @@ async function account() {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
     me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
-  page(h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email),
-    h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out"),
-      h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere")),
-    h("p", { class: "muted small", style: "margin-top:16px" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account."),
-    // Q2: the same sentence as Anki's Settings and the README
-    h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts."));
+  const [fr, pl] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null)]);
+  const code = fr.code || "";
+  const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
+  const sec = (title, ...kids) => h("section", { class: "panel acc" }, h("h4", {}, title), ...kids);
+  page(
+    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
+      h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
+    sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
+      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null),
+      h("p", { class: "muted small" }, "A friend adds you with it; Copy invite makes a link that makes you crew at once.")),
+    sec("Signed in", where ? h("p", {}, where) : null,
+      h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out here"),
+        h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere"))),
+    sec("Your data", h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: `${SOURCE}#privacy` }, "Privacy ›")),
+      h("p", { class: "muted small" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account. It takes everything with it."),
+      // Q2: the same sentence as Anki's Settings and the README
+      h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts.")));
+  reading();
 }
 
 // ---- routing ----
@@ -1539,9 +1586,7 @@ async function logPage() {
 
   const r30 = ret(studied30);
   page(
-    h("div", { class: "row", style: "justify-content:space-between" }, h("h1", {}, "Your log"),
-      logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
-    h("p", { class: "muted" }, "Only you see this. It fills in from Anki's syncs."),
+    phead("Your log", "Only you see this. It fills in from Anki's syncs.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
     h("div", { class: "tiles" },
       tile(`${week.filter(([, r]) => r[0] || r[1]).length} of 7`, "days this week"),
       tile(hm(sum(week, 0)), "studied", `last week by ${byDay}: ${hm(sum(lastSoFar, 0))}`),
@@ -2201,18 +2246,17 @@ function feedbackPage() {
     send.disabled = true; status.className = "status"; status.textContent = "Sending…";
     try {
       await api("POST", "/feedback", { text, ver: `duecrew.com${from ? ` ${from}` : ""}` });
-      box.value = ""; status.textContent = "Thanks! Sam reads every one.";
+      form.replaceChildren(h("p", { class: "status" }, "Sent. Thanks!"), h("button", { class: "ghost", onclick: () => go(`/feedback${from ? `?from=${encodeURIComponent(from)}` : ""}`) }, "Send another"));
+      return;
     } catch (err) {
       status.className = "status bad";
       status.textContent = err.status === 429 ? "That's five today. Send more tomorrow." : "That didn't send. Try again.";
     }
     send.disabled = false;
   } }, "Send");
-  page(h("h1", {}, "Send feedback to Sam"),
-    h("p", { class: "muted" }, "What's working, what isn't, what you'd add. Sam sees your name with it and can write back to your email. Nobody else sees it."),
-    h("div", { class: "stack", style: "max-width:640px" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status));
-  $app().classList.remove("wide");
-  box.focus();
+  const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
+  page(phead("Send feedback", "What's working, what isn't, what you'd add. Sam reads every one, sees your name with it, and can write back to your email. Nobody else sees it."), form);
+  reading();
 }
 
 /** 3.6.5, P6: the admin's Feedback: newest first, Reply by mail from Due

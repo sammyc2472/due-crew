@@ -11,17 +11,18 @@
 body { margin: 0; background: var(--bg); color: var(--ink);
        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 a { color: var(--accent); }
-.top { max-width: 1060px; margin: 0 auto; padding: 18px 20px 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.top { max-width: 1180px; margin: 0 auto; padding: 18px 20px 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .brand img { height: 22px; width: auto; display: block; }
 .logo-dark { display: none !important; }
 .brand .logo-inline { display: block; height: 22px; width: auto; }
 @media (prefers-color-scheme: dark) { .logo-light { display: none !important; } .logo-dark { display: block !important; } }
 nav { display: flex; gap: 16px; font-size: 14px; }
 nav a { color: var(--ink); text-decoration: none; } nav a:hover { color: var(--accent); }
-main { max-width: 1060px; margin: 0 auto; padding: 18px 20px 80px; }
-main.narrow { max-width: 460px; }
+main { max-width: 1180px; margin: 0 auto; padding: 18px 20px 80px; }
+/* S1: a page to read keeps the frame; its column is narrower, left-aligned with the logo */
+main.narrow > * { max-width: 560px; }
 h1 { font-size: 26px; line-height: 1.2; margin: 12px 0 6px; letter-spacing: -0.01em; }
-h2 { font-size: 18px; margin: 22px 0 8px; }
+h2 { font-size: 15px; margin: 22px 0 8px; }  /* S7: two heading sizes, the page's and a card's */
 p { margin: 0 0 10px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
@@ -176,7 +177,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 @media (max-width: 560px) { .brdt .bub { border-radius: 12px; } }
 
 /* 3.3: the plan builder is a calendar */
-main.wide { max-width: 1320px; }
+main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .bl2 { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
 .bl2 > * { min-width: 0; }
 .side2 > summary { display: none; }
@@ -269,7 +270,7 @@ label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; ma
   .cal2 .d, .cal2.week .d { min-height: 0; }
   .cal2 .d.off:not(:has(.ch)), .cal2 .d.other { display: none; }
 }
-body:has(main.wide) > .top { max-width: 1320px; }
+
 .calwrap { display: grid; gap: 10px; align-items: start; }
 .calwrap.has-day { grid-template-columns: minmax(0, 1fr) 320px; }
 .calwrap > * { min-width: 0; }
@@ -610,7 +611,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 @media (max-width: 560px) { .brow { grid-template-columns: 1fr; gap: 2px; } }
 .brow input[type="checkbox"] { justify-self: start; }
 /* 3.6.5, P6: the footer's Feedback, and the admin's Feedback panel */
-.appfoot { max-width: 1060px; margin: 0 auto; padding: 0 20px 28px; font-size: 13px; }
+.appfoot { max-width: 1180px; margin: 0 auto; padding: 0 20px 28px; font-size: 13px; }
 .appfoot a { color: var(--muted); }
 .fb { display: grid; gap: 8px; }
 .fb .item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: grid; gap: 4px; background: var(--card); }
@@ -659,7 +660,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .aside { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
   .aside button { padding: 6px 10px; }
 }
-body:has(main.wide) .appfoot { max-width: 1320px; }
+
 .apage .linkish { font-size: inherit; }
 
 /* the board, closer to the add-on's (board.py) */
@@ -716,3 +717,24 @@ body:has(main.wide) .appfoot { max-width: 1320px; }
 /* Q3: long-quiet friends, folded */
 .brdt tr.qh { display: none; } .brdt.qopen tr.qh { display: table-row; }
 .brdt tr.qfold td { text-align: left; }
+
+/* S2: one footer, everywhere */
+.footin { border-top: 1px solid var(--line); padding-top: 14px; display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: baseline; justify-content: space-between; }
+.footin .fbrand b { font-weight: 700; color: var(--ink); }
+.footin .flinks { display: flex; gap: 4px 8px; flex-wrap: wrap; align-items: baseline; }
+.footin .flinks a { text-decoration: none; } .footin .flinks a:hover { color: var(--accent); }
+.footin .dot { color: var(--faint); }
+/* S3: a title, one line, one main button on the title's line */
+.phead { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.phead > div { min-width: 0; } .phead h1 { margin-bottom: 4px; } .phead p { margin: 0; }
+/* S5: the steps in a card */
+.stepcard { margin: 14px 0; } .stepcard ol.steps { margin: 6px 0 0; }
+/* S6: Account */
+.accwho { display: flex; gap: 12px; align-items: center; } .accwho .em { font-size: 34px; line-height: 1; }
+.panel.acc { margin-top: 12px; } .panel.acc .row { gap: 8px 14px; }
+/* S4: a library card's ⋯ */
+.lcmore > summary::after { content: none; }
+.lcmore summary { list-style: none; cursor: pointer; padding: 2px 8px; border-radius: 6px; color: var(--muted); font-weight: 700; }
+.lcmore summary::-webkit-details-marker { display: none; }
+.lcmore .calpop { right: 0; left: auto; display: grid; gap: 4px; }
+.linkish.warn { color: var(--warn); }
