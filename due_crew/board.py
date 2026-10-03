@@ -705,7 +705,8 @@ def _css(cfg):
        screen's text; the tab reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
-      display: grid; gap: 6px; margin: 2px 0 10px; }}
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 2px 0 10px; }}
+    #due-crew .ptoday > * {{ min-width: 0; }}
     #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-accent); }}
     #due-crew .ptoday.rest {{ border-color: var(--dc-line); }}
