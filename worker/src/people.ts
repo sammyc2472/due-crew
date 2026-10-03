@@ -1,4 +1,4 @@
-// The admin's account lookup (mock "Admin Account Lookup"): one person at a
+// The admin's account lookup: one person at a
 // time, to answer a support email or check a report. A search gives at most
 // ten, emails partly hidden, and a squad code gives that squad; one account
 // gives who they are, where they are (squads, plans), counts of their crew,
@@ -6,7 +6,7 @@
 // only behind a click, and each look goes in the audit log ("The next
 // round", F1-F3). Never how they study (their week, days, heatmap, decks,
 // log or plan progress), never whom they muted, never their settings,
-// never a list of everyone. Sign-in help (mock "Admin, grown up", A3): a fresh code past
+// never a list of everyone. Sign-in help: a fresh code past
 // the limits, the limits cleared, an email change that finishes at the new
 // address's first sign-in. Every action goes in the audit log. Nothing here
 // logs an email, a name, a code or what was searched.
@@ -202,11 +202,11 @@ export async function changeEmail(req: Request, s: Session, env: Env, [uid]: str
   await env.DB.prepare("INSERT INTO email_changes (uid, email, at) VALUES (?1, ?2, ?3) ON CONFLICT(uid) DO UPDATE SET email = ?2, at = ?3")
     .bind(uid, email, nowSec()).run();
   await sendMail(env, email, "Your Due Crew account is moving here",
-    "Sam from Due Crew is moving your Due Crew account to this address, as you asked.\n\n" +
+    "Due Crew is moving your account to this address, as you asked.\n\n" +
     "To finish, sign in to Due Crew with this address in the next 7 days (in Anki or at duecrew.com). " +
     "Until then nothing changes.\n\nDidn't ask for this? Ignore this email and nothing happens.");
   await sendMail(env, u.email, "Your Due Crew account is moving",
-    "Sam from Due Crew is moving your Due Crew account to a new email address, as asked. " +
+    "Due Crew is moving your account to a new email address, as asked. " +
     "It moves when that address signs in, and from then on this one no longer signs in.\n\n" +
     "Didn't ask for this? Sign in and use Send feedback before then, and it will be stopped.");
   await logAction(env, "started an email change", { uid });
@@ -276,8 +276,8 @@ export async function removeEdge(req: Request, s: Session, env: Env, [uid, other
   const them = (await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(other).first<string>("name")) || "someone";
   try {
     await sendMail(env, u.email, "Your Due Crew list",
-      (side === "mine" ? `As you asked, Sam took ${them} off your Due Crew list.` : `As you asked, Sam took you off ${them}'s Due Crew list.`) +
-      "\n\nQuestions? Reply in Due Crew with Send feedback.\n\n— Sam, Due Crew (duecrew.com)\n");
+      (side === "mine" ? `As you asked, Due Crew took ${them} off your list.` : `As you asked, Due Crew took you off ${them}'s list.`) +
+      "\n\nQuestions? Reply in Due Crew with Send feedback.\n\n— Due Crew (duecrew.com)\n");
   } catch { /* what was done stays done */ }
   await logAction(env, side === "mine" ? "took someone off their list" : "took them off someone's list", { uid });
   return json({ ok: true });

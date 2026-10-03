@@ -345,7 +345,7 @@ function copyForm(p, done) {
     done ? h("button", { class: "linkish", onclick: done }, "Cancel") : null, status);
 }
 
-/** Report a plan in the library: it goes to Sam by mail; nothing is stored. */
+/** Report a plan in the library: it goes to the admin by mail; nothing is stored. */
 function reportForm(p, done) {
   const why = h("select", { "aria-label": "Why" }, [["spam", "Not a study plan"], ["copied", "Copied without credit"], ["other", "Something else"]]
     .map(([v, t]) => h("option", { value: v }, t)));
@@ -1285,7 +1285,7 @@ async function home() {
   }
 }
 
-/** Due (mock "My List"), as the site can show it: today's dates from the
+/** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
  *  and my own to-dos from my settings. Ticking and adding happen in Anki,
  *  which counts the cards; this is the look from a phone. */
@@ -1889,7 +1889,7 @@ const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return 
 
 /** The admin's account lookup: one person at a time (never a list of
  *  everyone, never how anyone studies), with sign-in help, a note of mine
- *  and what I've done there (mock "Admin, grown up", A3, A5). */
+ *  and what I've done there. */
 function peoplePanel(nav) {
   const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
   const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
@@ -2061,9 +2061,8 @@ function peoplePanel(nav) {
   return { el, open: (uid) => { q.value = uid; hits.replaceChildren(); status.textContent = ""; open(uid); } };
 }
 
-/** One squad at a time, by its code or from an account (mock "Admin,
- *  grown up", A4): its members by name, and the founder's tools done from
- *  here. The founder gets an email for each. */
+/** One squad at a time, by its code or from an account: its members by
+ *  name, and the founder's tools done from here. The founder gets an email for each. */
 function squadPanel(nav) {
   const el = h("section", { class: "panel people" });
   const when = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -2438,7 +2437,7 @@ async function adminPage() {
   const versions = h("section", { class: "panel" }, h("h4", {}, "Versions", h("span", { class: "muted" }, "accounts by the add-on they last used")),
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
-  // mock "Admin, grown up", A2: a sidebar of pages, one set of gaps
+  // The admin: a sidebar of pages, one set of gaps
   const nav = {};
   const people = peoplePanel(nav);
   const squads = squadPanel(nav);
@@ -2476,8 +2475,8 @@ async function adminPage() {
   await drawTiles();
 }
 
-/** 3.6.5, P6: Send feedback to Sam. The page it came from rides along;
- *  Sam sees the name and can write back by mail, never the address. */
+/** 3.6.5, P6: Send feedback. The page it came from rides along; the
+ *  admin sees the name and can write back by mail, never the address. */
 function feedbackPage() {
   const from = (new URLSearchParams(location.search).get("from") || "").replace(/[^A-Za-z0-9/_-]/g, "").slice(0, 80);
   const box = h("textarea", { rows: 7, maxlength: 2000, "aria-label": "Your feedback", placeholder: "What's working, what isn't, what you'd add…", style: "font-family:inherit;font-size:15px" });
@@ -2497,7 +2496,7 @@ function feedbackPage() {
     send.disabled = false;
   } }, "Send");
   const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
-  page(phead("Send feedback", "What's working, what isn't, what you'd add. Sam reads every one, sees your name with it, and can write back to your email. Nobody else sees it."), form);
+  page(phead("Send feedback", "What's working, what isn't, what you'd add. Every one is read, with your name, and we can write back to your email. Nobody else sees it."), form);
   reading();
 }
 

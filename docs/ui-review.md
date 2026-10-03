@@ -4,9 +4,8 @@ September 2026. Two passes over every screen, both rendered from this repo
 (`tools/site_preview.sh`, `tools/preview.py`, `tools/dialogs.py`) at desktop
 and phone width:
 
-1. **The designer.** Someone ruthless about conversion, who has studied
-   Linear, Superhuman, Vercel, Raycast and Arc and can spot a vibe-coded
-   project from across the room. They go through every visual decision.
+1. **The designer.** Someone exacting about clarity and conversion, who
+   goes through every visual decision.
 2. **The first-time user.** Someone who clicks through from the landing
    page to a working crew (and from a teacher's plan link to a followed
    plan), noting every moment they got confused or wanted to leave.
@@ -19,14 +18,14 @@ pays off:
 
 Each item is tagged **[D]** (designer), **[U]** (first-time user) or both.
 It says where the problem is and suggests a fix. These are proposals only.
-Per CLAUDE.md, anything users see goes to a mockup and Sam's sign-off
+Anything users see goes to a mockup and the maintainer's sign-off
 first. Where the designer's instincts clash with the product's rules
 (friendship, never competition; terse copy; no ranking anywhere new), the
 rules win, and the item says so.
 
 ---
 
-## Status (Sam's sign-off, built)
+## Status (signed off, built)
 
 Built: C1–C6, H1 (one "Got a code?" box), H2, H3, H5, H6, H8, H9, H10,
 N1–N11, and the table: one chip in colour (T1, T2), headings as words
@@ -209,7 +208,7 @@ list.
 The designer's instinct is to lean into this. The product rule ("crew",
 never competition) says to go the other way. Show-up mode proves the product
 works without ranks.
-**Fix (for Sam to decide):**
+**Fix (to decide):**
 - Keep sorting, drop the medals and "#n".
 - Give a small highlight to whoever studied most today ("🔥 top day") only
   when the crew has three or more people.
@@ -265,7 +264,7 @@ crop of three rows plus a cheer, at readable size. Add a dark-mode version
 There's no count, no names, and no "used by". The designer would add social
 proof. Within the product's rules, the honest version is quiet: "Free, open
 source, and on AnkiWeb" with the AnkiWeb rating, or "N people studying with
-their crew this week" from `/admin/stats`, if Sam wants it public.
+their crew this week" from `/admin/stats`, if it should be public.
 
 ### N3. The sign-in page gives no context [D]
 It's a lone form on a blank page, with no reason to sign in. **Fix:** one

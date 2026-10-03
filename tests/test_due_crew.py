@@ -3287,7 +3287,7 @@ def test_export_for_my_ai_365():
 
 
 def test_feedback_365():
-    """3.6.5, P6: Send feedback to Sam, from Tools › Due Crew and Settings
+    """3.6.5, P6: Send feedback, from Tools › Due Crew and Settings
     (the board's You tab, and the dialog), with the versions if ticked."""
     from due_crew import app as appmod
     store = world({"maya": "Maya"})

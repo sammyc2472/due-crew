@@ -143,7 +143,7 @@ describe("the admin's squad tools", () => {
     expect((await admin(sam, `/admin/squads/${sq.id}/remove/kai`, "POST", { why: "Not in our class" })).status).toBe(200);
     expect((await kai.call("POST", `/squads/${sq.id}/join`, { code: sq.code })).body.error).toBe("blocked");
     const mail = box.sent.find((m) => m.to === "maya@example.com")!;
-    expect(mail.text).toContain("Sam removed Kai from your squad");
+    expect(mail.text).toContain("Due Crew removed Kai from your squad");
     expect(mail.text).toContain("Why: Not in our class");
     expect((await admin(sam, `/admin/squads/${sq.id}`)).body.actions[0]).toMatchObject({ action: "removed from a squad", who: "Kai" });
   });

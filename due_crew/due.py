@@ -1,4 +1,4 @@
-"""Due (mock "My List", L1-L15): the day's to-do in a box above the board.
+"""Due: the day's to-do in a box above the board.
 
 Pure: no Anki, no network. The glue (due_flow) gathers what this computer
 knows (the plans I follow, my own items, reviews due, today's misses) and

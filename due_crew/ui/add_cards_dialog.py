@@ -1,4 +1,4 @@
-"""Add cards to a plan (3.1, mock 1.3), from Anki's browser: the picked
+"""Add cards to a plan (3.1), from Anki's browser: the picked
 cards onto a date of a plan I wrote, or onto a new date. Only those
 cards, never their siblings, and only which cards they are ([note guid,
 card number]), never their text. Two requests, both on a click: my plans

@@ -119,7 +119,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   let isNew = false;
   if (!user) {
     // an email change the admin started finishes here: this address just
-    // proved itself, so the account moves to it (mock "Admin, grown up", A3)
+    // proved itself, so the account moves to it
     const moving = await env.DB.prepare("DELETE FROM email_changes WHERE email = ? AND at > ? RETURNING uid")
       .bind(email, now - 7 * DAY).first<{ uid: string }>();
     if (moving) {

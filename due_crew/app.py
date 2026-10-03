@@ -199,7 +199,7 @@ sync = None       # sync(**kw): _on_sync_done (upload + fetch)
 
 
 def feedback_versions(addon_version=None):
-    """3.6.5, P6: 'add-on 3.6.5 · Anki 24.11 · Mac', what Sam sees beside
+    """3.6.5, P6: 'add-on 3.6.5 · Anki 24.11 · Mac', what the admin sees beside
     feedback when the box is ticked."""
     import platform
     try:

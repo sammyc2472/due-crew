@@ -1370,7 +1370,7 @@ async function builder(id) {
   function libraryBox() {
     if (plan.listed === -1) {
       return h("div", { class: "libnote out" }, h("b", {}, "Taken out of the library"), h("span", {}, plan.listedNote || ""),
-        h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Write to Sam if it's a mistake."));
+        h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Send feedback if it's a mistake."));
     }
     const why = plan.audience !== "code" ? "Only a plan anyone with the code can follow goes in the library."
       : !plan.doc.units.length ? "Put some dates on it first." : null;

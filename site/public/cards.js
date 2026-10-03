@@ -1,5 +1,5 @@
 "use strict";
-// Share cards (mock "Share Cards", K1–K5): pictures of my own studying,
+// Share cards: pictures of my own studying,
 // drawn here in the browser from numbers the page already has. Nothing is
 // sent or kept: the picture goes out through the phone's share sheet, or
 // downloads. One person's own numbers, no names, no ranks. The cards wear

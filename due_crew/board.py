@@ -1220,7 +1220,7 @@ def _plans_empty_html():
 
 
 def _plan_card_html(card):
-    """3.5.0, the Plans tab (mock "Plans Tab Review"): the plan, a Today
+    """3.5.0, the Plans tab: the plan, a Today
     box, this week as the site's calendar draws it (a list when narrow),
     one note at most, and the crew. Plan, date and event names are the
     author's: escaped here."""
@@ -1712,7 +1712,7 @@ def _squads_html(view, cfg):
     return sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
 
 
-# ---- 3.6: squad bingo (mock "Squad Bingo") ----
+# ---- 3.6: squad bingo ----
 
 BINGO_CSS = """
     /* the whole card's frame is #due-crew.bg-full itself: its rules say so */
@@ -2265,7 +2265,7 @@ def _settings_you(view):
     # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
     out += ('<div class="st-box">'
             + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>',
-                      "Tell Sam what's working and what isn't")
+                      "What's working and what isn't")
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
@@ -2358,7 +2358,7 @@ def _st_toggle_cmd(cmd, on, label):
 
 
 def settings_html(view, cfg):
-    """3.5.0: Settings in place of the board (mock "Settings in the Board").
+    """3.5.0: Settings in place of the board.
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
     from the glue; every string in it is escaped here."""
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
@@ -2983,7 +2983,7 @@ def profile_overlay_js(profile):
     """ % (inner, act_label, act_primary, act_cmd)
 
 
-# ---- Due (mock "My List"): the day's to-do, above the board ----
+# ---- Due: the day's to-do, above the board ----
 
 DUE_CSS = """
     #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
@@ -3284,7 +3284,7 @@ def _due_add(v, default):
 
 
 def _due_html(v):
-    """Due, above the board on every tab (mock "My List"). v: due.view, from
+    """Due, above the board on every tab. v: due.view, from
     due_flow.view; every string in it is escaped here."""
     if not v:
         return ""

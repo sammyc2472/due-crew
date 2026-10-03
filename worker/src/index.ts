@@ -87,7 +87,7 @@ authed("GET", r("/admin/people"), People.search);
 authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
 authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
 authed("DELETE", r(`/admin/people/${ID}`), People.remove);
-// mock "Admin, grown up": sign-in help, a note, the audit log, squads
+// The admin: sign-in help, a note, the audit log, squads
 authed("POST", r(`/admin/people/${ID}/code`), (_q, s, env, p) => People.sendFreshCode(s, env, p));
 authed("POST", r(`/admin/people/${ID}/limits`), (_q, s, env, p) => People.clearLimits(s, env, p));
 authed("PUT", r(`/admin/people/${ID}/email`), People.changeEmail);

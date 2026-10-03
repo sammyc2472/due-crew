@@ -1142,12 +1142,12 @@ def _delete_account():
 
 
 def open_feedback():
-    """3.6.5, P6: Send feedback to Sam (Tools › Due Crew, and Settings)."""
+    """3.6.5, P6: Send feedback (Tools › Due Crew, and Settings)."""
     if not client().signed_in:
         tooltip("Sign in to send feedback.")
         return
     from .ui.feedback_dialog import FeedbackDialog
-    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks! Sam reads every one.")).exec()
+    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks, every one is read.")).exec()
 
 
 def open_settings(tab=None):

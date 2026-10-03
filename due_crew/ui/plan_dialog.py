@@ -1,4 +1,4 @@
-"""Make a plan from a deck (3.1, mock 1.1): the deck's tag and subdeck
+"""Make a plan from a deck (3.1): the deck's tag and subdeck
 names with card counts go to Due Crew, and the builder opens on the site,
 signed in by a one-time link. Names and counts only, never card text.
 

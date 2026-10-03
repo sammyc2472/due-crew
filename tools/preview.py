@@ -194,7 +194,7 @@ sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.rend
              "uid": "m", "index": 0, "known": True}],
     asks=[{"text": "The external iliac artery becomes the femoral artery as it c", "who": [], "state": "open", "index": 0},
           {"text": "Warfarin inhibits vitamin K epoxide reductase", "who": ["Dre"], "state": "answered"}]))
-# Due (mock "My List"): above the board on every tab, each of its tabs and folded
+# Due: above the board on every tab, each of its tabs and folded
 from due_crew import due as _D
 _T = L[0]
 _d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()

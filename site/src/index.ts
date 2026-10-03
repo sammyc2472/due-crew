@@ -52,7 +52,7 @@ async function peekInvite(code: string, req: Request, env: Env, ctx: ExecutionCo
   return res.status === 200 ? ((await res.json()) as Invite) : null;
 }
 
-/** The page head for an invite: "Sam invited you", and its picture. */
+/** The page head for an invite: "Maya invited you", and its picture. */
 export function inviteTags(inv: Invite, code: string, origin: string): string {
   const url = `${origin}/i/${code}`;
   const title = `${inv.emoji ? `${inv.emoji} ` : ""}${inv.name} invited you to Due Crew`;

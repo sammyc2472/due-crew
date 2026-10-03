@@ -790,7 +790,7 @@ class ApiClient:
         return status == 200
 
     def send_feedback(self, text, ver=""):
-        """3.6.5, P6: feedback for Sam's admin page. A POST that adds a row,
+        """3.6.5, P6: feedback for the admin page. A POST that adds a row,
         so it's sent once. Returns the status (201 sent, 429 five today)."""
         body = {"text": str(text or "").strip()[:FEEDBACK_MAX]}
         if ver:
