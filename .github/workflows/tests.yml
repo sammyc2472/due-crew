@@ -94,7 +94,7 @@ jobs:
       - run: npx wrangler d1 migrations apply due-crew --local --env=""
       - name: client against the Worker (wrangler dev, local D1)
         run: |
-          npx wrangler dev --env="" --local --port 8787 --ip 127.0.0.1 > ../wdev.log 2>&1 &
+          npx wrangler dev --env="" --local --port 8787 --ip 127.0.0.1 --var DEV_MAIL_LOG:1 --var ADMIN_TOKEN:smoke-admin > ../wdev.log 2>&1 &
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8787/version && break; sleep 1; done
           cd .. && python3 tools/smoke_worker.py wdev.log
 
