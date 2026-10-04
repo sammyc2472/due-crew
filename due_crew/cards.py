@@ -215,6 +215,7 @@ def chip_view(info, local_tips, names, asks=()):
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
+  if (Array.isArray(D.accent)) { D.accent = D.accent[0]; }
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
@@ -237,17 +238,126 @@ def chip_js(data):
     return _CHIP_JS.replace("__DATA__", json.dumps(data)) + BAR_BALANCE
 
 
+# The chip as a small card above the bar, bottom right of the review
+# screen (mock "Ask chip", B). It shows only while the card's own text and
+# pictures leave that corner free (looked at again as pictures load, and on
+# scroll and resize); otherwise, or the moment it isn't, the chip goes back
+# beside Edit (`knowsbar`). Its clicks come from the review screen, where a
+# card's script runs too, so they're keyed (room_model.CARD_PAGE_CMDS) and
+# This helped from here asks first.
+_FLOAT_JS = """(function () {
+  var old = document.getElementById('dc-knows-card'); if (old) { old.remove(); }
+  if (window.dcKnowsOff) { window.dcKnowsOff(); window.dcKnowsOff = null; }
+  var D = __DATA__; if (!D) { return false; }
+  var KEY = __KEY__, gone = false;
+  function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + KEY); } catch (e) {} }
+  var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
+  var acc = night ? D.accent[1] : D.accent[0];
+  var c = night ? {bg: '#2c2c2c', ink: '#e8e8e8', mut: '#9c9c9c', line: '#3d403b'} : {bg: '#ffffff', ink: '#222222', mut: '#777777', line: '#e2e2da'};
+  function el(tag, css, text) { var e = document.createElement(tag); e.style.cssText = css; if (text != null) { e.textContent = text; } return e; }
+  var box = el('div', 'position:fixed;right:12px;bottom:12px;max-width:260px;box-sizing:border-box;display:grid;gap:6px;padding:9px 12px;' +
+    'border:1px solid ' + c.line + ';border-radius:12px;background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 6px 18px rgba(0,0,0,.22);' +
+    'font:12.5px/1.35 -apple-system,Segoe UI,sans-serif;text-align:left;z-index:60;');
+  box.id = 'dc-knows-card';
+  var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', D.text);
+  if (D.title) { head.title = D.title; }
+  head.onclick = function () { send(D.cmd); };
+  var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
+  function link(text, color, bold, fn) {
+    var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
+    a.onclick = function (e) { e.stopPropagation(); fn(); }; acts.appendChild(a); return a;
+  }
+  if (D.act) { link(D.act, acc, true, function () { send(D.actcmd || D.cmd); }); }
+  if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
+  link('Not now', c.mut, false, function () { off(); });
+  box.appendChild(head); box.appendChild(acts);
+  document.body.appendChild(box);
+  function hit(r, b) { return r.width > 0 && r.height > 0 && r.left < b.right + 8 && r.right > b.left - 8 && r.top < b.bottom + 8 && r.bottom > b.top - 8; }
+  function free() {
+    var b = box.getBoundingClientRect(), qa = document.getElementById('qa') || document.body;
+    var w = document.createTreeWalker(qa, NodeFilter.SHOW_TEXT), n, g = document.createRange();
+    while ((n = w.nextNode())) {
+      if (!/\\S/.test(n.nodeValue) || box.contains(n)) { continue; }
+      g.selectNodeContents(n);
+      var rs = g.getClientRects();
+      for (var i = 0; i < rs.length; i++) { if (hit(rs[i], b)) { return false; } }
+    }
+    var m = qa.querySelectorAll('img,table,canvas,svg,video,iframe,input,textarea,select,button');
+    for (var j = 0; j < m.length; j++) { if (!box.contains(m[j]) && hit(m[j].getBoundingClientRect(), b)) { return false; } }
+    return true;
+  }
+  function off() {
+    if (gone) { return; }
+    gone = true; box.remove();
+    window.removeEventListener('scroll', check, true); window.removeEventListener('resize', check);
+    document.removeEventListener('load', check, true);
+  }
+  function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
+  window.addEventListener('scroll', check, true); window.addEventListener('resize', check);
+  document.addEventListener('load', check, true);  // a picture that loads late
+  window.dcKnowsOff = off;
+  if (!free()) { off(); return false; }
+  return true;
+})();"""
+
+
+def float_js(data):
+    from .room_model import CMD_KEY
+    return _FLOAT_JS.replace("__DATA__", json.dumps(data)).replace("__KEY__", json.dumps(CMD_KEY))
+
+
+_LAST = {"n": 0, "view": None}
+
+
+def _review_web():
+    rv = getattr(mw, "reviewer", None)
+    return getattr(rv, "web", None) if mw.state == "review" else None
+
+
+def _show(view):
+    """The card above the bar when the corner's free, else the bar chip."""
+    _LAST["n"] += 1
+    n, _LAST["view"] = _LAST["n"], view
+    bar, page = _bottom(), _review_web()
+
+    def to_bar(shown):
+        if n != _LAST["n"] or bar is None:
+            return  # a newer card is up
+        try:
+            bar.eval(chip_js(None if shown else view))
+        except Exception:
+            pass
+    if view and page is not None:
+        try:
+            page.evalWithCallback(float_js(view), to_bar)
+            return
+        except Exception:
+            pass
+    to_bar(False)
+
+
+def to_bar():
+    """knowsbar: the corner stopped being free (a picture loaded, a scroll)."""
+    bar = _bottom()
+    if bar is not None and _LAST["view"]:
+        try:
+            bar.eval(chip_js(_LAST["view"]))
+        except Exception:
+            pass
+
+
 def _bottom():
     rv = getattr(mw, "reviewer", None)
     return getattr(getattr(rv, "bottom", None), "web", None) if mw.state == "review" else None
 
 
 def _accent():
+    """[light, dark]: the bar chip wears the first, the card picks by night mode."""
     try:
         from .rooms import _accent_pair
-        return _accent_pair()[0]
+        return list(_accent_pair())
     except Exception:
-        return "#2e7d32"
+        return ["#2e7d32", "#7cc47f"]
 
 
 def on_answer(card):
@@ -266,19 +376,18 @@ def on_answer(card):
         view = None
     if view:
         view["accent"] = _accent()
-    try:
-        web.eval(chip_js(view))
-    except Exception:
-        pass
+    _show(view)
 
 
 def on_question(card):
-    web = _bottom()
-    if web is not None:
-        try:
-            web.eval(chip_js(None))
-        except Exception:
-            pass
+    _LAST["n"] += 1
+    _LAST["view"] = None
+    for web, js in ((_bottom(), chip_js(None)), (_review_web(), float_js(None))):
+        if web is not None:
+            try:
+                web.eval(js)
+            except Exception:
+                pass
 
 
 def _card():
@@ -375,6 +484,13 @@ def helped(guid, from_uid, on=True):
     _bg(lambda: cl.tip_helped(guid, from_uid, on), done)
 
 
+def _tip_from(from_uid):
+    card = _card()
+    if card is None:
+        return None
+    return next((t for t in _tips_here(card.note().guid) if t["from"] == from_uid), None)
+
+
 def helped_toggle(from_uid):
     """The bar's This helped (K1): on the tip it shows, for the card up now."""
     card = _card()
@@ -386,12 +502,20 @@ def helped_toggle(from_uid):
         helped(guid, from_uid, not tip["helped"])
 
 
-def on_message(cmd, parts=()):
+def on_message(cmd, parts=(), from_card_page=False):
     if cmd == "knowsask":
         ask()
     elif cmd == "knowstip":
         show_tips()
+    elif cmd == "knowsbar":
+        to_bar()
     elif cmd == "knowshelped" and len(parts) > 2:
+        if from_card_page:
+            # the review screen runs the card's script too: a thanks is sent only on a yes
+            from aqt.utils import askUser
+            tip = _tip_from(parts[2])
+            if tip is None or (not tip["helped"] and not askUser(f"Tell {tip['name'].split(' ')[0]} this tip helped?")):
+                return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:
         from .together import send_tip

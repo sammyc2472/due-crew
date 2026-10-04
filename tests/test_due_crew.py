@@ -2155,6 +2155,28 @@ def test_together_v210():
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
           and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
           and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
+    fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
+    check("ask card: above the bar only while the corner is free, else back to the bar",
+          "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
+          and rm.CMD_KEY in fj and "textContent" in fj and "innerHTML" not in fj
+          and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
+    import aqt.utils as _au
+    calls, asked = [], []
+    real_toggle, real_ask = crew_cards.helped_toggle, _au.askUser
+    crew_cards.helped_toggle = calls.append
+    real_tip = crew_cards._tip_from
+    crew_cards._tip_from = lambda uid: {"name": "Eve Park", "helped": False, "from": uid}
+    try:
+        _au.askUser = lambda q, *a, **k: asked.append(q) or False
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
+        no = list(calls)
+        _au.askUser = lambda q, *a, **k: asked.append(q) or True
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"])
+    finally:
+        crew_cards.helped_toggle, _au.askUser, crew_cards._tip_from = real_toggle, real_ask, real_tip
+    check("ask card: This helped from the review screen asks first; from the bar it doesn't",
+          no == [] and calls == ["eve", "eve"] and len(asked) == 2 and "Eve" in asked[0], str((calls, asked)))
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
     check("tips: a tip kept before 3.5.0 still shows, without This helped (no one to thank)",
           old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)
@@ -3048,7 +3070,10 @@ def test_room_commands_from_the_card_page_need_the_key():
     check("room: the board's commands need none", rm.trusted("duecrew:roomjoin:abc:1", False) == ("duecrew:roomjoin:abc:1", True))
     check("room: from the card page, even keyed, nothing but the widget's own",
           rm.trusted(f"duecrew:roomjoin:abc|{rm.CMD_KEY}", True)[1] is False
-          and rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True)[1] is False)
+          and rm.trusted(f"duecrew:cheerpick:u|{rm.CMD_KEY}", True)[1] is False)
+    check("room: the Ask card's keyed clicks count from the card page, bare ones don't",
+          rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True) == ("duecrew:knowsask", True)
+          and rm.trusted("duecrew:knowshelped:u", True)[1] is False)
 
 
 def test_only_our_pages_act_bare():

@@ -188,7 +188,11 @@ add-on.
   guid (`knows`, as changes, `known.json` beside the session); the cards
   I'm stuck on (2+ lapses, or Again today) ride every sync (`stuck`) and
   come back with who knows each and their tips (`cards` in the session).
-  The chip is beside Edit on the answer side, never inside a card: who
+  The chip is on the answer side, never inside a card: since 3.7.1 a small
+  card bottom right of the review screen while the card's own text and
+  pictures leave that corner free (looked at again as pictures load, on
+  scroll and resize), else beside Edit (`knowsbar`); its clicks are keyed
+  (`CARD_PAGE_CMDS`), and This helped from there asks first. Who
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
   3.5.0 (mock "Card Help Flow"): the chip shows a tip's own words (its

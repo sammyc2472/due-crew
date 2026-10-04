@@ -630,18 +630,20 @@ def _our_page(context):
 def _on_js(handled, message, context):
     if rooms.swallow(message):
         return (True, None)  # 2.12: no answering under the break
+    card_page = False
     if message.startswith("duecrew:"):
         # the reviewer's page runs the card's own script too: from there only
-        # the room widget's keyed buttons count, never a bare command
+        # the widgets' keyed buttons count, never a bare command
         from .room_model import trusted
-        message, ok = trusted(message, not _our_page(context))
+        card_page = not _our_page(context)
+        message, ok = trusted(message, card_page)
         if not ok:
             return (True, None)
     if message.startswith("duecrew:knows"):
-        # 3.2: the chip in the reviewer's bottom bar
+        # 3.2: the chip in the reviewer's bottom bar, or its card above it
         try:
             parts = message.split(":")
-            crew_cards.on_message(parts[1], parts)
+            crew_cards.on_message(parts[1], parts, from_card_page=card_page)
         except Exception:
             traceback.print_exc()
         return (True, None)

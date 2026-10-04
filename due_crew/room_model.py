@@ -484,9 +484,13 @@ def widget_js(kind, data=None):
             + (BAR_BALANCE if kind in ("bottom", "off") else ""))
 
 
-# what the widget sends from the reviewer's page (the margin card, the
-# break, the room's card): nothing else is ever taken from there
-CARD_PAGE_CMDS = ("roomcard", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave")
+# what the widgets send from the reviewer's page (the margin card, the
+# break, the room's card, the Ask card): nothing else is ever taken from there
+CARD_PAGE_CMDS = ("roomcard", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave",
+                  # the Ask card above the bar (cards.py): opening a dialog or a
+                  # menu (Tip asks for its line), moving the chip to the bar, and This
+                  # helped, which asks first
+                  "knowsask", "knowstip", "knowsbar", "knowshelped", "knowsreply")
 
 
 def trusted(message, from_card_page):
