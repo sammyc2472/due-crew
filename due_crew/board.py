@@ -650,10 +650,12 @@ def _css(cfg):
     #due-crew .dtrack {{ position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
       border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }}
     #due-crew .dtrack i {{ position: absolute; left: 0; top: 0; bottom: 0; display: block; }}
-    #due-crew .dtrack .fo {{ opacity: 0.5; background: repeating-linear-gradient(
+    #due-crew .dtrack .fo, #due-crew .dkey .fo {{ opacity: 0.5; background: repeating-linear-gradient(
       135deg, var(--dc-accent) 0 1.5px, transparent 1.5px 5px); }}
-    #due-crew .dtrack .fs {{ background: var(--dc-accent); opacity: 0.35; }}
-    #due-crew .dtrack .fm {{ background: var(--dc-accent); }}
+    #due-crew .dtrack .fs, #due-crew .dkey .fs {{ background: var(--dc-accent); opacity: 0.35; }}
+    #due-crew .dtrack .fm, #due-crew .dkey .fm {{ background: var(--dc-accent); }}
+    #due-crew .dkey i {{ display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: 0; }}
+    #due-crew .dkey i:first-child {{ margin-left: 0; }}
     #due-crew .dc-count {{ min-width: 118px; flex-shrink: 0; display: flex;
       flex-direction: column; align-items: flex-end; line-height: 1.25;
       white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
@@ -1218,7 +1220,7 @@ def _plans_empty_html():
 
 
 def _plan_card_html(card):
-    """3.5.0, the Plans tab (mock "Plans Tab Review"): the plan, a Today
+    """3.5.0, the Plans tab: the plan, a Today
     box, this week as the site's calendar draws it (a list when narrow),
     one note at most, and the crew. Plan, date and event names are the
     author's: escaped here."""
@@ -1548,10 +1550,8 @@ def _decks_body(data, deltas=None):
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
     html += ('<div class="dc-line" style="padding-top: 2px;">'
-             # named by texture, not by light/dark: in dark mode the mature fill
-             # is the bright one, and "dark = mature" read backwards there
-             'solid = mature &middot; faded = seen &middot; hatched = unlocked &middot; '
-             '% of each person&rsquo;s own copy &middot; hover for numbers</div>')
+             # 3.7.1, I6: a key drawn like the bars, no words about hovering
+             '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span></div>')
     return html
 
 
@@ -1712,7 +1712,7 @@ def _squads_html(view, cfg):
     return sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
 
 
-# ---- 3.6: squad bingo (mock "Squad Bingo") ----
+# ---- 3.6: squad bingo ----
 
 BINGO_CSS = """
     /* the whole card's frame is #due-crew.bg-full itself: its rules say so */
@@ -1944,20 +1944,28 @@ def _review_banner(kind, info):
             f'onclick="{_pycmd(cmd_x)}">&times;</a></div>')
 
 
-def crew_menu_items(period, show_up, squad_ok=False):
-    """3.4 review, H5: the footer's Crew ▾, as [(label, command)] for the
-    tab on screen. What the footer's links were, in one place."""
-    items = [("Friends…", "friends")]
-    if period == "today" and not show_up:
-        items.append(("Share today", "sharetoday"))
-        items.append(("Share today as a picture…", "picturetoday"))
-    if period == "week" or (show_up and period == "today"):
-        items.append(("Share the week", "sharecrewweek"))
-        items.append(("Share the week as a picture…", "pictureweek"))
-    if period == "squads" and not show_up and squad_ok:
-        items.append(("Share the squad's day", "squadshare"))
-    if period == "decks":
-        items.append(("Shared decks…", "decks"))
+def crew_menu_items():
+    """The footer's Crew ▾ (3.4 review, H5; 3.7.1, H3): people only, the
+    same on every tab. What you post went to Share ▾."""
+    return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
+            ("Shared decks…", "decks")]
+
+
+def share_menu_items(show_up, squad_ok=False):
+    """The footer's Share ▾ (3.7.1, H3), as [(label, command)], a label of
+    None being a heading: as text first, then as a picture, the same on
+    every tab. Today's numbers aren't offered in just-show-up mode."""
+    items = [(None, "As text")]
+    if not show_up:
+        items.append(("Today", "sharetoday"))
+    items.append(("This week", "sharecrewweek"))
+    if squad_ok and not show_up:
+        items.append(("The squad's day", "squadshare"))
+    items.append((None, "As a picture"))
+    if not show_up:
+        items.append(("Today…", "picturetoday"))
+    items += [("My week…", "pictureweek"), ("My year…", "pictureyear"),
+              ("All time…", "picturealltime")]
     return items
 
 
@@ -2108,8 +2116,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             # 2.12: a study room for the crew
             left += (f'<a class="pb" href="#" title="Rounds and breaks with your crew" '
                      f'onclick="{_pycmd("roomopen")}">Open a room</a>')
-    left += (f'<a href="#" title="Friends, sharing" '
-             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>')
+    left += (f'<a href="#" title="Friends" '
+             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>'
+             f'<a href="#" title="As text or a picture" '
+             f'onclick="{_pycmd("sharemenu")}">Share &#9662;</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="pb warn" href="#" title="You added them; you\'re crew when they add you back" '
@@ -2255,7 +2265,7 @@ def _settings_you(view):
     # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
     out += ('<div class="st-box">'
             + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>',
-                      "Tell Sam what's working and what isn't")
+                      "What's working and what isn't")
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
@@ -2297,7 +2307,7 @@ def _settings_board(cfg):
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
                       "From your own Anki: today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
-                      "Each morning on this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
+                      "Each morning, as new cards")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
@@ -2337,7 +2347,9 @@ def _settings_privacy(cfg):
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
-            + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span></div>')
+            + '</div><div class="st-foot"><span>Turning a number off also takes it off this week.</span>'
+            # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
+            f'<a class="st-lk" href="#" {_st_click("privacypage")}>What Due Crew keeps &rsaquo;</a></div>')
 
 
 def _st_toggle_cmd(cmd, on, label):
@@ -2346,7 +2358,7 @@ def _st_toggle_cmd(cmd, on, label):
 
 
 def settings_html(view, cfg):
-    """3.5.0: Settings in place of the board (mock "Settings in the Board").
+    """3.5.0: Settings in place of the board.
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
     from the glue; every string in it is escaped here."""
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
@@ -2971,7 +2983,7 @@ def profile_overlay_js(profile):
     """ % (inner, act_label, act_primary, act_cmd)
 
 
-# ---- Due (mock "My List"): the day's to-do, above the board ----
+# ---- Due: the day's to-do, above the board ----
 
 DUE_CSS = """
     #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
@@ -2981,7 +2993,9 @@ DUE_CSS = """
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     #due-crew .du-h .sp { flex: 1; }
     #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
-    #due-crew .du-fold { color: var(--dc-muted); font-size: 11px; padding: 0 2px; }
+    #due-crew .du-fold { font-size: 12px; font-weight: 700; color: var(--dc-accent); border: 1px solid var(--dc-line);
+      border-radius: 99px; padding: 2px 10px; white-space: nowrap; flex: none; }
+    #due-crew .du-tm { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
     #due-crew .du-tabs { display: inline-flex; white-space: nowrap; }
     #due-crew .du-tabs a { font-size: 11px; font-weight: 700; padding: 1px 10px; border: 1px solid var(--dc-line);
       color: var(--dc-muted); }
@@ -3050,7 +3064,9 @@ DUE_CSS = """
     #due-crew .du-one .sp { flex: 1 1 0; }
     #due-crew .du-one .sp { flex: 1; }
     #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }
-    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; display: inline-flex; }
+    #due-crew .du-one .du-go .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; } }
     #due-crew .du-sub a { color: var(--dc-accent); }
     #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
 """
@@ -3268,7 +3284,7 @@ def _due_add(v, default):
 
 
 def _due_html(v):
-    """Due, above the board on every tab (mock "My List"). v: due.view, from
+    """Due, above the board on every tab. v: due.view, from
     due_flow.view; every string in it is escaped here."""
     if not v:
         return ""
@@ -3280,11 +3296,18 @@ def _due_html(v):
         bar = _wbar(done_n, total_n) if total_n else ""
         st = v.get("start")
         go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
-              f'Study &rsaquo; {e(st["name"])}</a>' if st else "")
+              f'Study &rsaquo;&nbsp;<span class="nm">{e(st["name"])}</span></a>' if st else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
-        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Open">'
+        if v.get("done"):
+            # the day's done: what's next, in place of the bar
+            nxt = v["tomorrow"][:2] or (v["next"]["names"][:2] if v.get("next") else [])
+            count, bar, go = "&#10003; Done for today", "", (
+                f'<span class="du-n du-tm">{"Tomorrow" if v["tomorrow"] else e(v["next"]["day"])}: '
+                f'{", ".join(e(x) for x in nxt)}</span>' if nxt else "")
+        return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Show">'
                 f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
-                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Open" onclick="{_pycmd("duefold")}">&#9662;</a></div>')
+                f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Show the whole list" '
+                f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
     tab = v["tab"]
     tabs = "".join(
         f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
@@ -3292,7 +3315,7 @@ def _due_html(v):
                       ("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}')))
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
             f'<span class="sp"></span><span class="du-n">{count if tab != "later" else ""}</span>'
-            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">&#9652;</a></div>')
+            f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
     toast = ""
     if v.get("toast"):
         toast = (f'<div class="du-line"><span>{e(v["toast"]["text"])}</span>'

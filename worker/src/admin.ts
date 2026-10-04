@@ -20,7 +20,7 @@ export async function bump(env: Env, key: string, by = 1): Promise<void> {
   } catch { /* a count, not the sign-in */ }
 }
 
-/** One line in the admin's audit log (mock "Admin, grown up", A5): what,
+/** One line in the admin's audit log: what,
  *  to whose account or which squad, and a detail that never holds an
  *  email, a code or a token. Kept a year. */
 export async function logAction(env: Env, action: string, at: { uid?: string; squad?: string; detail?: string } = {}): Promise<void> {

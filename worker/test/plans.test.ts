@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person } from "./helpers";
+import { api, db, person, from2x } from "./helpers";
 
 const SITE = { "x-due-crew": "1" };  // what the site's own script sends
 
@@ -312,6 +312,7 @@ describe("limits the audit asked for", () => {
   it("PUT /friends only restores once, before the account's first 3.x sync", async () => {
     const nia = await person("nia");
     await person("sam");
+    await from2x("nia");
     expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual(["sam"]);
     await nia.call("POST", "/sync", { profile: { name: "Nia", clientVersion: "3.0.1" } });
     await nia.call("DELETE", "/friends/sam");
@@ -330,5 +331,31 @@ describe("limits the audit asked for", () => {
     await dre.call("DELETE", `/squads/${sq.id}/members/maya`);
     expect((await maya.call("GET", "/board?decks=1")).body.plans).toEqual([]);
     expect(await maya.status("GET", `/plans/${plan.id}`)).toBe(404);
+    // 3.7.1 review: nor its notes, its saves, or the site's list and rail
+    expect(await maya.status("GET", `/plans/${plan.id}/notes`)).toBe(404);
+    expect(await maya.status("POST", `/plans/${plan.id}/notes`, { day: "2026-10-05", text: "hi" })).toBe(404);
+    expect((await maya.call("GET", "/plans/mine")).body.plans).toEqual([]);
+    // back in the squad, back in the plan
+    await maya.call("POST", `/squads/${sq.id}/join`, { code: sq.code });
+    expect((await maya.call("GET", "/plans/mine")).body.plans).toHaveLength(1);
+  });
+
+  it("3.7.1 review: a retired friend code is never handed to someone who asks for it", async () => {
+    const sam = await person("sam");
+    const old = (await sam.call("GET", "/friends")).body.code || (await sam.call("POST", "/codes", {})).body.code;
+    const fresh = (await sam.call("POST", "/codes", {})).body.code;
+    expect(fresh).not.toBe(old);
+    const eve = await person("eve");
+    await db().prepare("UPDATE users SET code = NULL WHERE uid = 'eve'").run();
+    await db().prepare("DELETE FROM codes WHERE uid = 'eve'").run();
+    expect((await eve.call("POST", "/codes", { code: old })).body.code).not.toBe(old);
+  });
+
+  it("3.7.1 review: adding someone by uid tells a stranger no name", async () => {
+    await person("sam");
+    const eve = await person("eve");
+    const r = await eve.call("PUT", "/friends/sam");
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ uid: "sam", name: "", mutual: false });
   });
 });

@@ -1,8 +1,8 @@
-// The admin's squad tools (mock "Admin, grown up", A4): one squad at a
+// The admin's squad tools: one squad at a
 // time, reached by its code or from an account, never a list of every
 // squad. Each action is a founder's own tool done from the admin's side:
 // remove (and block), a new code, open or close, rename, hand over, delete.
-// The founder gets one plain email saying what Sam did, and every action
+// The founder gets one plain email saying what the admin did, and every action
 // goes in the audit log. Never how anyone studies: names, emoji and when
 // they joined, nothing from their rows.
 
@@ -39,7 +39,7 @@ async function tellFounder(env: Env, q: Sq, text: string): Promise<boolean> {
   const to = await env.DB.prepare("SELECT email FROM users WHERE uid = ?").bind(q.founder).first<string>("email");
   if (!to) return false;
   try {
-    await sendMail(env, to, `Your Due Crew squad, ${q.name}`, `${text}\n\nQuestions? Reply in Due Crew with Send feedback.\n\n— Sam, Due Crew (duecrew.com)\n`);
+    await sendMail(env, to, `Your Due Crew squad, ${q.name}`, `${text}\n\nQuestions? Reply in Due Crew with Send feedback.\n\n— Due Crew (duecrew.com)\n`);
     return true;
   } catch {
     return false;
@@ -94,7 +94,7 @@ export async function patch(req: Request, s: Session, env: Env, [id]: string[]):
   }
   if (!stmts.length) return json({ ok: true });
   await env.DB.batch(stmts);
-  const line = `Sam ${said.join(", and ")}.`;
+  const line = `Due Crew ${said.join(", and ")}.`;
   await tellFounder(env, q, line);  // the founder it had
   if (newFounder && newFounder !== q.founder) await tellFounder(env, { ...q, founder: newFounder }, line);
   await logAction(env, said.join("; "), { squad: id });
@@ -117,7 +117,7 @@ export async function newCode(s: Session, env: Env, [id]: string[]): Promise<Res
       env.DB.prepare("UPDATE squads SET code_id = ? WHERE id = ?").bind(h, id),
     ]);
     const told = await tellFounder(env, q,
-      `Sam gave your squad a new code: ${code.slice(0, 4)} ${code.slice(4)}. The old code no longer lets anyone join; everyone in the squad stays. ` +
+      `Due Crew gave your squad a new code: ${code.slice(0, 4)} ${code.slice(4)}. The old code no longer lets anyone join; everyone in the squad stays. ` +
       "Share the new one with anyone you still want to invite.");
     await logAction(env, "gave a new code", { squad: id });
     return json({ code, told });
@@ -141,7 +141,7 @@ export async function remove(req: Request, s: Session, env: Env, [id, uid]: stri
     env.DB.prepare("INSERT INTO bans (squad, uid) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(id, uid),
     env.DB.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid),
   ]);
-  await tellFounder(env, q, `Sam removed ${who} from your squad. They can't rejoin with its code.${why ? `\n\nWhy: ${why}` : ""}`);
+  await tellFounder(env, q, `Due Crew removed ${who} from your squad. They can't rejoin with its code.${why ? `\n\nWhy: ${why}` : ""}`);
   await logAction(env, "removed from a squad", { uid, squad: id });
   return json({ ok: true });
 }
@@ -153,7 +153,7 @@ export async function del(req: Request, s: Session, env: Env, [id]: string[]): P
   const q = await squad(env, id);
   const body = await readJson(req);
   if (typeof body.name !== "string" || body.name.trim() !== q.name) throw new HttpError(400, "confirm");
-  await tellFounder(env, q, "Sam deleted your squad. Its members are still each other's crew where they added each other.");
+  await tellFounder(env, q, "Due Crew deleted your squad. Its members are still each other's crew where they added each other.");
   await env.DB.batch([
     env.DB.prepare("DELETE FROM members WHERE squad = ?").bind(id),
     env.DB.prepare("DELETE FROM bans WHERE squad = ?").bind(id),

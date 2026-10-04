@@ -1,7 +1,7 @@
 """Paste-ready shares for the group chat. Pure text: no network, no
 collection access — callers hand in day flags and numbers.
 
-Grammar (v2.1, simplified with Sam): the unit is a DAY. A week is seven
+Grammar (v2.1): the unit is a DAY. A week is seven
 squares (🟩 studied, ⬜ not), one row per person; today is one honest
 line of numbers. Effort first, identity (🔥 streak, 🎯 retention) last,
 and every share signs off with the add-on code. Names go on the clipboard

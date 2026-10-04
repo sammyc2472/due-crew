@@ -119,7 +119,7 @@ export async function verifyCode(req: Request, env: Env): Promise<Response> {
   let isNew = false;
   if (!user) {
     // an email change the admin started finishes here: this address just
-    // proved itself, so the account moves to it (mock "Admin, grown up", A3)
+    // proved itself, so the account moves to it
     const moving = await env.DB.prepare("DELETE FROM email_changes WHERE email = ? AND at > ? RETURNING uid")
       .bind(email, now - 7 * DAY).first<{ uid: string }>();
     if (moving) {
@@ -277,6 +277,7 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM tips WHERE uid = ?1",
     "DELETE FROM tip_helped WHERE tip_uid = ?1 OR by_uid = ?1",
     "DELETE FROM logs WHERE uid = ?1",
+    "DELETE FROM cheer_counts WHERE uid = ?1",  // 3.7.1
     "DELETE FROM feedback WHERE uid = ?1",  // 3.6.5, P6
     "DELETE FROM admin_notes WHERE uid = ?1",
     "DELETE FROM email_changes WHERE uid = ?1",
@@ -326,7 +327,7 @@ export async function importUsers(req: Request, env: Env): Promise<Response> {
   for (let i = 0; i < rows.length; i += 50) {
     const chunk = rows.slice(i, i + 50);
     const results = await env.DB.batch(chunk.map((r) => env.DB.prepare(
-      `INSERT INTO users (uid, email, name, created_at) VALUES (?, ?, ?, ?)
+      `INSERT INTO users (uid, email, name, created_at, from2x) VALUES (?, ?, ?, ?, 1)
        ON CONFLICT DO NOTHING`).bind(r.uid, r.email, r.name, now)));
     const coded = chunk.filter((r, j) => results[j].meta.changes && r.code);
     if (coded.length) {

@@ -1,5 +1,5 @@
 "use strict";
-// Share cards (mock "Share Cards", K1–K5): pictures of my own studying,
+// Share cards: pictures of my own studying,
 // drawn here in the browser from numbers the page already has. Nothing is
 // sent or kept: the picture goes out through the phone's share sheet, or
 // downloads. One person's own numbers, no names, no ranks. The cards wear
@@ -152,7 +152,64 @@ const Cards = (() => {
       text(c, v, x, y, 64, pal.ink, { weight: 700 });
       text(c, l, x, y + 48, 32, pal.mut);
     });
+    cheered(c, d, on, P, H - P - 64, pal);
     text(c, "duecrew.com", P, H - P, 34, pal.mut);
+  }
+  // 3.7.1: cheers my crew sent me (received only, never sent; only on my own cards)
+  function cheered(c, d, on, x, y, pal) {
+    if (on.cheers && d.cheers) text(c, `🎉 Cheered on ${n(d.cheers)} time${d.cheers === 1 ? "" : "s"} by my crew`, x, y, 34, pal.ink, { weight: 600 });
+  }
+
+  // ---- 3.7.1: my Anki, all time: a bar a year ----
+  function bars(c, x, y, w, h, years, pal, label) {
+    const most = Math.max(1, ...years.map((r) => r.days));
+    const best = years.reduce((b, r) => (r.days > (b?.days ?? -1) ? r : b), null);
+    const gap = Math.min(24, w / years.length / 4), bw = Math.min(140, (w - gap * (years.length - 1)) / years.length);
+    years.forEach((r, i) => {
+      const bh = Math.max(r.days ? 6 : 0, Math.round((r.days / most) * h));
+      const bx = x + i * (bw + gap);
+      c.fillStyle = r === best ? pal.g : mix(pal.g, pal.g3, 0.5);
+      if (bh) { rr(c, bx, y + h - bh, bw, bh, Math.min(10, bw / 4)); c.fill(); }
+      text(c, `’${String(r.year).slice(2)}`, bx + bw / 2, y + h + label, label * 0.75, pal.mut, { weight: 700, align: "center" });
+    });
+  }
+  async function alltime(c, W, H, size, d, on, pal, look) {
+    const brow = `My Anki, all time · since ${d.since}`;
+    const big = n(d.reviews);
+    const stats = [
+      [`${n(d.days)} day${d.days === 1 ? "" : "s"}`, "studied"],
+      on.time && d.minutes ? [`${n(Math.round(d.minutes / 60))}h`, "in Anki"] : null,
+      on.streak && d.streak ? [`${n(d.streak)} day${d.streak === 1 ? "" : "s"}`, `longest streak${d.streakYear ? ` · ${d.streakYear}` : ""}`] : null,
+      on.best && d.bestYear ? [String(d.bestYear.year), `best year · ${n(d.bestYear.days)} days`] : null,
+    ].filter(Boolean);
+    if (size === "link") {
+      const P = 64;
+      await head(c, pal, look, P, P, 34);
+      eyebrow(c, brow, P, 200, 22, pal);
+      text(c, big, P, 316, 104, pal.ink, { weight: 700 });
+      text(c, fit(c, ["reviews", ...stats.slice(0, 2).map(([v, l]) => `${v} ${l}`)].join(" · "), 560, 28, 22, 400)[0], P, 374, 28, pal.mut);
+      bars(c, 700, 150, W - P - 700, 300, d.years, pal, 34);
+      if (on.cheers && d.cheers) text(c, `🎉 Cheered on ${n(d.cheers)} times by my crew`, P, H - P - 46, 26, pal.ink, { weight: 600 });
+      text(c, "duecrew.com", P, H - P, 26, pal.mut);
+      return;
+    }
+    const P = 72;
+    await head(c, pal, look, P, P, 40);
+    eyebrow(c, brow, P, 236, 30, pal);
+    text(c, big, P, 380, 132, pal.ink, { weight: 700 });
+    text(c, "reviews", P, 446, 38, pal.mut);
+    const w = W - 2 * P;
+    bars(c, P, 510, w, 200, d.years, pal, 40);
+    text(c, "days studied, a bar a year", P, 800, 28, pal.mut);
+    const top = 836;
+    c.fillStyle = pal.line; c.fillRect(P, top, w, 3);
+    stats.forEach(([v, l], i) => {
+      const x = P + (i % 2) * (w / 2), y = top + 96 + Math.floor(i / 2) * 136;
+      text(c, v, x, y, 60, pal.ink, { weight: 700 });
+      text(c, l, x, y + 46, 30, pal.mut);
+    });
+    cheered(c, d, on, P, H - P - 64, pal);
+    text(c, "duecrew.com", W - P, H - P, 34, pal.mut, { align: "right" });
   }
 
   // ---- K3: our squad's bingo ----
@@ -191,11 +248,11 @@ const Cards = (() => {
     text(c, "duecrew.com", W - P, H - P, 34, pal.mut, { align: "right" });
   }
 
-  const DRAW = { week, today: week, year, bingo, plan };
+  const DRAW = { week, today: week, year, alltime, bingo, plan };
 
   /** The sheet (K5): the card, switches for each number, size and look,
    *  then Share… (the phone's own sheet) or Download. Nothing is posted. */
-  function open({ kind, title, data, file, sizes, switches }) {
+  function open({ kind, title, data, file, sizes, switches, picker }) {
     const st = { size: sizes[0], look: (() => { try { return localStorage.getItem("dc-card-look") || "light"; } catch { return "light"; } })(),
       on: Object.fromEntries(switches.map((s) => [s.k, s.on !== false && !s.off])) };
     const cv = document.createElement("canvas");
@@ -208,7 +265,7 @@ const Cards = (() => {
       const c = off.getContext("2d");
       const pal = LOOKS[st.look];
       c.fillStyle = pal.bg; c.fillRect(0, 0, W, H);
-      await DRAW[kind](c, W, H, st.size, data, st.on, pal, st.look);
+      await DRAW[kind](c, W, H, st.size === "link" && !sizes.includes("link") ? sizes[0] : st.size, data, st.on, pal, st.look);
       if (mine !== seq) return;  // a later switch drew over this one
       cv.width = W; cv.height = H; cv.getContext("2d").drawImage(off, 0, 0);
       cv.style.aspectRatio = `${W} / ${H}`;
@@ -224,6 +281,20 @@ const Cards = (() => {
       h("input", { type: "checkbox", role: "switch", ...(st.on[s.k] ? { checked: "" } : {}), ...(s.off ? { disabled: "" } : {}),
         onchange: (e) => { st.on[s.k] = e.target.checked; paint(); } })));
     const say = h("small", { class: "muted", role: "status" }, "Made here, from your own numbers. Nothing is posted or kept.");
+    // 3.7.1: which year (or All time), when the card has a choice; the sheet
+    // keeps its switches and look, and the size row follows what the card takes
+    let sizeRow = null;
+    const pick = picker ? h("div", { class: "sc-years", role: "group", "aria-label": "Which" }, picker.options.map(([k, l]) =>
+      h("button", { class: `${k === picker.value ? "on" : ""}${k === "all" ? " all" : ""}`, "aria-pressed": String(k === picker.value), onclick: (e) => {
+        const next = picker.choose(k);
+        ({ kind, data, file, sizes } = next);
+        if (!sizes.includes(st.size)) st.size = sizes[0];
+        e.currentTarget.parentNode.querySelectorAll("button").forEach((b) => { const me = b === e.currentTarget; b.classList.toggle("on", me); b.setAttribute("aria-pressed", String(me)); });
+        dlg.querySelector(".sc-head b").textContent = next.title;
+        const fresh = sizes.length > 1 ? seg("size", sizes.map((z) => [z, z === "story" ? "Story" : z === "link" ? "Link" : "Square"]), "Size") : h("span");
+        sizeRow.replaceWith(fresh); sizeRow = fresh;
+        paint();
+      } }, l))) : null;
     const blob = () => new Promise((ok) => cv.toBlob(ok, "image/png"));
     const name = () => `${file}-${st.size}.png`;
     const download = async () => {
@@ -248,8 +319,8 @@ const Cards = (() => {
     const dlg = h("dialog", { class: "sc-dlg", "aria-label": title },
       h("div", { class: "sc-head" }, h("b", {}, title), h("button", { class: "linkish", "aria-label": "Close", onclick: () => dlg.close() }, "✕")),
       h("div", { class: "sc-body" }, h("div", { class: "sc-pic" }, cv),
-        h("div", { class: "sc-side" }, rows,
-          sizes.length > 1 ? seg("size", sizes.map((s) => [s, s === "story" ? "Story" : s === "link" ? "Link" : "Square"]), "Size") : null,
+        h("div", { class: "sc-side" }, pick, rows,
+          (sizeRow = sizes.length > 1 ? seg("size", sizes.map((s) => [s, s === "story" ? "Story" : s === "link" ? "Link" : "Square"]), "Size") : h("span")),
           seg("look", [["light", "Light"], ["dark", "Dark"]], "Look"),
           h("div", { class: "row" }, canShare ? h("button", { onclick: share }, "Share…") : null,
             canCopy ? h("button", { onclick: copyPic }, "Copy picture") : null,
@@ -265,5 +336,5 @@ const Cards = (() => {
 
   /** A date as the cards say it: "28 Sep". */
   const short = (iso) => { const [y, m, d] = iso.split("-").map(Number); return `${d} ${MONTHS[m - 1]}`; };
-  return { open, short, SIZES };
+  return { open, short, SIZES, MONTHS };
 })();

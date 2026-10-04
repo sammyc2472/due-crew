@@ -233,6 +233,35 @@ describe("the log", () => {
     expect((await dre.call("GET", "/log")).body.days).toEqual({});
   });
 
+  it("3.7.1: keeps years of it, a year a sync, and says so (logAll)", async () => {
+    const sam = await person("sam");
+    const day = (n: number) => new Date(Date.UTC(2026, 9, 1) - n * 86400000).toISOString().slice(0, 10);
+    for (let y = 0; y < 4; y++) {
+      const days = Object.fromEntries(Array.from({ length: 366 }, (_, i) => [day(y * 366 + i), [10, 50, 5, null]]));
+      const r = await sam.call("POST", "/sync", { log: { days } });
+      expect(r.status).toBe(200);
+      expect(r.body.logAll).toBe(true);
+    }
+    expect(Object.keys((await sam.call("GET", "/log")).body.days).length).toBe(4 * 366);
+  });
+
+  it("3.7.1: cheers my crew sent me, a sender once a day, mine alone, gone with my account", async () => {
+    const sam = await person("sam");
+    const dre = await person("dre");
+    const maya = await person("maya");
+    await befriend(sam, dre);
+    await befriend(sam, maya);
+    for (const p of [dre, dre, maya]) expect((await p.call("POST", "/cheers/sam", { emoji: "🎉" })).status).toBe(200);
+    await sam.call("GET", "/board");  // read, so the cheers go
+    expect((await dre.call("POST", "/cheers/sam", { emoji: "🎉" })).status).toBe(200);  // a sender still counts once a day
+    await dre.call("POST", "/cheers/sam", { emoji: "🎉", note: "a tip", guid: "g1" });  // a tip isn't a cheer
+    const year = String(new Date().getUTCFullYear());
+    expect((await sam.call("GET", "/log")).body.cheers).toEqual({ [year]: 2 });
+    expect((await dre.call("GET", "/log")).body.cheers).toEqual({});
+    await sam.call("DELETE", "/account");
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM cheer_counts").first("n")).toBe(0);
+  });
+
   it("refuses a bad row", async () => {
     const sam = await person("sam");
     for (const days of [{ "2026-10-21": [80, 300, 50] }, { "x": [1, 1, 1, null] }, { "2026-10-21": [2000, 1, 1, null] },
@@ -301,5 +330,64 @@ describe("3.2.1: the admin's notice", () => {
     expect(older("3.1.10", "3.2")).toBe(true);
     expect(older("3.2.1", "3.2.1")).toBe(false);
     expect(older("3.10.0", "3.9.9")).toBe(false);
+  });
+});
+
+describe("3.7.1: your data, and names to people you're connected to", () => {
+  it("D5: a name for a uid only to someone connected (crew either way, a squad), else no_user", async () => {
+    const sam = await person("sam");
+    const dre = await person("dre");
+    const eve = await person("eve");
+    expect(await eve.status("GET", "/users/sam")).toBe(404);
+    expect((await sam.call("GET", "/users/sam")).body.name).toBe("Sam");
+    await sam.call("PUT", "/friends/dre", {});  // one edge is enough, both ways
+    expect((await dre.call("GET", "/users/sam")).body.name).toBe("Sam");
+    expect((await sam.call("GET", "/users/dre")).body.name).toBe("Dre");
+    const sq = (await sam.call("POST", "/squads", { name: "Night owls" })).body;
+    const peek = (await eve.call("GET", `/squads/peek?code=${sq.code}`)).body;
+    expect(peek.founderName).toBe("Sam");  // the code carries the founder's name
+    expect(await eve.status("GET", "/users/sam")).toBe(404);
+    expect(await eve.status("POST", `/squads/${sq.id}/join`, { code: sq.code })).toBe(200);
+    expect((await eve.call("GET", "/users/sam")).body.name).toBe("Sam");
+  });
+
+  it("D2: Delete my log keeps nothing older than 8 days and tells the add-on its import is done", async () => {
+    const sam = await person("sam");
+    const day = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [day(i), [10, 50, 5, null]]));
+    await sam.call("POST", "/sync", { log: { days: old } });
+    expect((await sam.call("POST", "/sync", { log: { days: { [day(1)]: [1, 1, 1, null] } } })).body.logCut).toBeUndefined();
+    expect((await sam.call("GET", "/log?summary=1")).body).toEqual({ n: 40, first: day(39) });
+    expect((await sam.call("DELETE", "/log")).status).toBe(200);
+    expect((await sam.call("GET", "/log")).body.days).toEqual({});
+    const r = await sam.call("POST", "/sync", { log: { days: old } });
+    expect(r.body.logCut).toBe(true);
+    expect(Object.keys((await sam.call("GET", "/log")).body.days).sort()).toEqual(Array.from({ length: 9 }, (_, i) => day(8 - i)));
+  });
+
+  it("D2: Delete my to-dos empties them under a newer save; the board says when", async () => {
+    const sam = await person("sam");
+    const at = "2026-10-01T10:00:00.000000Z";
+    await sam.call("PUT", "/settings", { v: 1, at, settings: { due_items: [{ id: "a", t: "read ch 4" }], due_ticks: { a: "2026-10-01" }, accent: "teal" } });
+    expect((await sam.call("GET", "/board")).body.settingsAt).toBe(at);
+    expect((await sam.call("DELETE", "/account/todos")).status).toBe(200);
+    const s = (await sam.call("GET", "/settings")).body;
+    expect(s.settings).toEqual({ due_items: [], due_ticks: {}, accent: "teal" });
+    expect(s.at > at).toBe(true);
+    expect((await sam.call("GET", "/board")).body.settingsAt).toBe(s.at);
+  });
+
+  it("D2: Download is mine, whole, and names no one's email but mine", async () => {
+    const sam = await person("sam");
+    const dre = await person("dre");
+    await befriend(sam, dre);
+    await befriend(dre, sam);
+    await sam.call("POST", "/sync", { log: { days: { "2026-10-01": [10, 50, 5, null] } } });
+    const r = await sam.call("GET", "/account/data");
+    expect(r.status).toBe(200);
+    expect(r.body.you.name).toBe("Sam");
+    expect(r.body.crew).toEqual([expect.objectContaining({ name: "Dre", mutual: true })]);
+    expect(r.body.log.days["2026-10-01"]).toBeTruthy();
+    expect(JSON.stringify(r.body)).not.toMatch(/dre@|token_hash/);
   });
 });

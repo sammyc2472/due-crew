@@ -262,6 +262,7 @@ class FakeWorker:
         self.tips = {}       # (guid, uid) -> {text, at}
         self.helped = set()  # (guid, tip_uid, by_uid)
         self.logs = {}       # uid -> {date: row}
+        self.log_cut = {}    # 3.7.1: uid -> the oldest day taken again after Delete my log
         self.notices = []    # 3.2.1: [{id, text, link, below}], newest last (live ones only)
         self.log = []        # (method, path, status)
         self.bodies = []     # (method, path, json body)
@@ -360,7 +361,7 @@ class FakeWorker:
             return 200, {"ok": True}
         if m == ("GET", "users") and len(parts) == 2:
             u = self.users.get(parts[1])
-            if not u:
+            if not u or not self._connected(me, parts[1]):  # 3.7.1, D5
                 raise Bad(404, "no_user")
             return 200, {"uid": parts[1], "name": u["name"] or "?", "emoji": u["emoji"] or ""}
         if parts[:1] == ["friends"]:
@@ -400,6 +401,16 @@ class FakeWorker:
                 self.helped.discard((g, frm, me))
             else:
                 self.helped.add((g, frm, me))
+            return 200, {"ok": True}
+        if m == ("DELETE", "log"):  # 3.7.1, D2 (cards.ts deleteLog)
+            self.logs[me] = {}
+            self.log_cut[me] = (datetime.date.today() - datetime.timedelta(days=8)).isoformat()
+            return 200, {"ok": True}
+        if method == "DELETE" and parts == ["account", "todos"]:
+            doc = self.settings.get(me)
+            if doc:
+                doc["settings"] = dict(doc["settings"], due_items=[], due_ticks={})
+                doc["at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             return 200, {"ok": True}
         if m == ("GET", "log"):
             return 200, {"days": dict(self.logs.get(me) or {})}
@@ -480,7 +491,8 @@ class FakeWorker:
         out = {"me": {"uid": me, "name": u["name"] or "", "emoji": u["emoji"] or "", "code": u["code"] or "",
                       "week": week, "updatedAt": at},
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
-               "notice": self._notice_for(u.get("client_version"))}
+               "notice": self._notice_for(u.get("client_version")),
+               "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
@@ -658,8 +670,8 @@ class FakeWorker:
         if log is not None:
             have = dict(self.logs.get(me) or {})
             new = dict(have, **{k: [v[0], v[1], v[2], None if v[3] is None else round(v[3], 1)]
-                                for k, v in log["days"].items()})
-            new = dict(sorted(new.items())[-400:])
+                                for k, v in log["days"].items() if k >= self.log_cut.get(me, "")})
+            new = dict(sorted(new.items())[-(15 * 366):])  # 3.7.1: the whole log (cards.ts LOG_KEEP)
             wrote["log"] = new != have
             if wrote["log"]:
                 self.logs[me] = new
@@ -677,7 +689,9 @@ class FakeWorker:
                     self.members[key] = new
                     wrote["squads"] = True
                     self._count("members")
-        out = {"ok": True, "gone": gone, "wrote": wrote}
+        out = {"ok": True, "gone": gone, "wrote": wrote, "logAll": True}
+        if me in self.log_cut:
+            out["logCut"] = True
         if stuck is not None:
             out["cards"] = self._for_stuck(me, list(dict.fromkeys(stuck)))
         return 200, out
@@ -908,6 +922,23 @@ class FakeWorker:
                                    "streak": None, "week": None, "emoji": None, "newCards": None, "play": None,
                                    "joined_day": datetime.date.today().isoformat()}
 
+    def _connected(self, a, b):
+        """social.ts connected: an edge or a knock either way, a squad or a
+        plan in common."""
+        if a == b or (a, b) in self.friends or (b, a) in self.friends:
+            return True
+        if (a, b) in self.knocks or (b, a) in self.knocks:
+            return True
+        sq = {s for s, u in self.members if u == a}
+        if any(s in sq for s, u in self.members if u == b):
+            return True
+
+        def plans(uid):
+            return ({p for p, v in self.plans.items() if v.get("owner") == uid}
+                    | {p for p, u in self.follows if u == uid}
+                    | {p for p, v in self.plans.items() if uid in (v.get("editors") or ())})
+        return bool(plans(a) & plans(b))
+
     def _info(self, sid, code=None):
         sq = self.squads[sid]
         out = {"id": sid, "name": sq["name"], "founder": sq["founder"], "open": sq["open"]}
@@ -934,7 +965,8 @@ class FakeWorker:
             sid = self.squad_id(code)
             if len(code) != 8 or sid not in self.squads:
                 raise Bad(404, "no_squad")
-            return 200, self._info(sid, code)
+            fu = self.users.get(self.squads[sid]["founder"]) or {}
+            return 200, dict(self._info(sid, code), founderName=fu.get("name") or "")
         if method == "POST" and rest == ["restore"]:
             code = "".join(ch for ch in str(body.get("code", "")).upper() if ch in SQUAD_ALPHABET)
             sid = self.squad_id(code)

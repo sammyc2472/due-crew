@@ -77,9 +77,11 @@ class ApiClient:
             try:
                 os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
                 tmp = self.session_file + ".tmp"
-                with open(tmp, "w") as f:
+                # holds the session token: mine alone from the first byte
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
                     json.dump(dict(self.session), f)
-                os.chmod(tmp, 0o600)  # holds the session token
+                os.chmod(tmp, 0o600)  # an older .tmp kept its own mode
                 os.replace(tmp, self.session_file)
             except OSError:
                 pass
@@ -171,7 +173,9 @@ class ApiClient:
                      or isinstance(e, requests.exceptions.ConnectTimeout))
             if retry and again:
                 return self._call(method, path, body, auth, retry=False)
-            raise TransportError(f"{method} {_said(path)} failed")
+            # from None: requests' own message carries the whole URL (a
+            # friend, plan or squad code), and a chained traceback prints it
+            raise TransportError(f"{method} {_said(path)} failed") from None
         try:
             data = r.json() if r.content else {}
         except ValueError:
@@ -365,7 +369,10 @@ class ApiClient:
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
                 "squads": squads,
-                "notice": clean_notice(data.get("notice"))}  # 3.2.1
+                "notice": clean_notice(data.get("notice")),  # 3.2.1
+                # 3.7.1: when the account's settings were last saved (the site
+                # can change them: Delete my to-dos)
+                "settings_at": str(data.get("settingsAt") or "")}
 
     @staticmethod
     def _knocks(rows):
@@ -470,7 +477,7 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None):
+             known=None, stuck=None, log=None, log_back=None, log_window=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -519,6 +526,9 @@ class ApiClient:
             body["stuck"] = list(stuck)[:300]
         if log and _digest(log) != self.session.get("log_hash"):
             body["log"] = {"days": log}
+        if log_back and log_back[0]:
+            # 3.7.1: a year of my history, riding this sync (the server merges it)
+            body["log"] = {"days": {**log_back[0], **(log or {})}}
         status, data = self._call("POST", "/sync", body)
         if status == 400 and data.get("error") in ("bad_sync", "bad_week"):
             # 3.2 against a server that doesn't know 3.2's parts yet (a Worker
@@ -541,10 +551,19 @@ class ApiClient:
             self._save_known(sent_known)
         if "stuck" in body:
             self.session["cards"] = clean_cards(data.get("cards"))
-        if "log" in body:
+        if log_back and "log" in body and data.get("logAll"):
+            # only a server that keeps the whole log moves the import on (one
+            # still trimming to 400 days would drop the year this carried)
+            self.session["log_back"] = {"uid": self.user_id, "skip": int(log_back[1])}
+        if data.get("logCut"):
+            # 3.7.1: I deleted my log on the site; the old years stay home
+            self.session["log_back"] = {"uid": self.user_id, "skip": 0, "done": True}
+        if "log" in body and log:
             self.session["log_hash"] = _digest(log)
-            if len(log) > 8:
-                self.session["log_full"] = self.user_id  # the long first upload went: 8 days from now on
+        if log_window == "full":
+            # the long first window went (or had nothing to send: a break of
+            # months): 8 days from now on, and the history import may start
+            self.session["log_full"] = self.user_id
         self.session["last_ok"] = _now_iso()
         self._save_session()
         return True, [str(s) for s in data.get("gone") or []]
@@ -771,7 +790,7 @@ class ApiClient:
         return status == 200
 
     def send_feedback(self, text, ver=""):
-        """3.6.5, P6: feedback for Sam's admin page. A POST that adds a row,
+        """3.6.5, P6: feedback for the admin page. A POST that adds a row,
         so it's sent once. Returns the status (201 sent, 429 five today)."""
         body = {"text": str(text or "").strip()[:FEEDBACK_MAX]}
         if ver:
@@ -798,7 +817,8 @@ class ApiClient:
         if status != 200:
             return None, status
         return {"id": data["id"], "code": data["code"], "name": data.get("name") or "?",
-                "founder": str(data.get("founder") or ""), "open": data.get("open") is True}, status
+                "founder": str(data.get("founder") or ""), "open": data.get("open") is True,
+                "founder_name": str(data.get("founderName") or "")}, status
 
     def join_squad(self, sid, code=""):
         """200, or 403 when the door is locked (or I'm blocked, or the code

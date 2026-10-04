@@ -1,4 +1,4 @@
-"""Due (mock "My List", L1-L15): the day's to-do in a box above the board.
+"""Due: the day's to-do in a box above the board.
 
 Pure: no Anki, no network. The glue (due_flow) gathers what this computer
 knows (the plans I follow, my own items, reviews due, today's misses) and
@@ -255,6 +255,12 @@ def todo_key(pid, uid, n):
     return f"{pid}:{uid}:{n}"
 
 
+def sibling_line(n, buried):
+    """A date done but for siblings Anki spaces out (they count as seen)."""
+    n = int(n)
+    return f"done \u00b7 {n:,} sibling{'s' if n != 1 else ''} {'tomorrow' if buried else 'later'}"
+
+
 def date_state(x, ticks):
     """(done, part): a date is done when its cards are seen and its author's
     lines are ticked; part when anything of it is."""
@@ -285,6 +291,9 @@ def _date_row(x, ticks, today, short=False):
         n = f"{total:,} new" if total else ""
     elif total:
         n = "all seen" if seen >= total else f"{seen:,} / {total:,}"
+        sib, buried = (x.get("sibs") or [0, 0])[:2]
+        if sib and seen >= total:
+            n = sibling_line(sib, buried)
     else:
         n = ""
     return {"kind": "plan", "pid": x["pid"], "uid": x["uid"], "plan": x.get("plan") or "",
@@ -396,6 +405,20 @@ def fmt_range(a, b):
     if a == b:
         return f"{x:%a} {x.day}"
     return f"{x:%a} {x.day} – {y:%a} {y.day}"
+
+
+def done_for_today(v):
+    """Everything today holds is ticked, and nothing waits behind: Due folds
+    itself to its one line until tomorrow (unless I opened it by hand)."""
+    return bool(v["total_n"]) and v["done_n"] >= v["total_n"] and not v["behind_n"]
+
+
+def fold_state(choice, v, today):
+    """Folded or open: my own Hide/Show today wins, else folded once the day's done.
+    `choice` is the config's {"day", "folded"} (an older bool counts as no choice)."""
+    if isinstance(choice, dict) and choice.get("day") == today:
+        return bool(choice.get("folded"))
+    return done_for_today(v)
 
 
 def empty(v):

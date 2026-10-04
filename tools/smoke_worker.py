@@ -3,7 +3,7 @@ locally by wrangler with a local D1. Where the suite's fake and the Worker's
 own tests each prove one side, this proves they agree.
 
     cd worker && npx wrangler d1 migrations apply due-crew --local --env=""
-    npx wrangler dev --env="" --local --port 8787 > ../wdev.log 2>&1 &
+    npx wrangler dev --env="" --local --port 8787 --var DEV_MAIL_LOG:1 --var ADMIN_TOKEN:smoke-admin > ../wdev.log 2>&1 &
     cd .. && python3 tools/smoke_worker.py wdev.log
 
 Local dev never sends mail: each code lands in wrangler's log, or (with the
@@ -12,6 +12,8 @@ on any failure. CI runs it in the worker job.
 """
 import datetime
 import os
+
+import requests
 import re
 import sys
 import tempfile
@@ -125,7 +127,13 @@ code_view, people, _k = dre.friends_view()
 check("friends view", [p[0] for p in people] == [sam.user_id] and people[0][3] is True)
 new_code, e2 = sam.new_friend_code(code)
 check("new code; the old one is gone", e2 is None and new_code != code and dre.add_friend(code)[1] is not None)
-# a 2.x account, imported and restored
+# a 2.x account, imported and restored (only an imported account may restore:
+# users.from2x, set by the import, so it's imported first, as real ones were)
+kai_uid = "kai" + stamp
+imp = requests.post(f"{BASE}/admin/import-users", timeout=15,
+                    headers={"authorization": "Bearer " + os.environ.get("SMOKE_ADMIN_TOKEN", "smoke-admin")},
+                    json={"users": [{"uid": kai_uid, "email": f"kai{stamp}@example.com"}]})
+check("import: a 2.x account", imp.status_code == 200, imp.text[:200])
 kai = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"), base=BASE)
 n = len(_codes())
 kai.request_code(f"kai{stamp}@example.com")

@@ -17,6 +17,7 @@ import * as Q from "./squads";
 import * as Bingo from "./bingo";
 import * as S from "./social";
 import * as Quiet from "./quiet";
+import * as Mine from "./mydata";
 import { ANY_BODY_MAX, Env, HttpError, json } from "./util";
 
 
@@ -74,7 +75,11 @@ authed("POST", r("/reports"), S.report);
 
 // 3.2: tips, my log, the admin's counts
 authed("POST", r("/tips/helped"), C.helped);
-authed("GET", r("/log"), (_q, s, env) => C.getLog(s, env));
+authed("GET", r("/log"), (q, s, env) => C.getLog(q, s, env));
+// 3.7.1, D2: Account › Your data
+authed("DELETE", r("/log"), (_q, s, env) => C.deleteLog(s, env));
+authed("GET", r("/account/data"), (_q, s, env) => Mine.getData(s, env));
+authed("DELETE", r("/account/todos"), (_q, s, env) => Mine.deleteTodos(s, env));
 authed("GET", r("/admin/stats"), (_q, s, env) => Ad.stats(s, env));
 authed("GET", r("/admin/trends"), Ad.trends);  // 3.5, X
 // the admin's account lookup: one person at a time
@@ -82,7 +87,7 @@ authed("GET", r("/admin/people"), People.search);
 authed("GET", r(`/admin/people/${ID}`), (_q, s, env, p) => People.person(s, env, p));
 authed("POST", r(`/admin/people/${ID}/signout`), (_q, s, env, p) => People.signOut(s, env, p));
 authed("DELETE", r(`/admin/people/${ID}`), People.remove);
-// mock "Admin, grown up": sign-in help, a note, the audit log, squads
+// The admin: sign-in help, a note, the audit log, squads
 authed("POST", r(`/admin/people/${ID}/code`), (_q, s, env, p) => People.sendFreshCode(s, env, p));
 authed("POST", r(`/admin/people/${ID}/limits`), (_q, s, env, p) => People.clearLimits(s, env, p));
 authed("PUT", r(`/admin/people/${ID}/email`), People.changeEmail);

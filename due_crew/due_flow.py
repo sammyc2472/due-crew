@@ -6,7 +6,8 @@ pushes my own items ride (app.save_cfg), as any setting does.
 Account keys (every computer, and the site): `due_items` (my own to-dos),
 `due_ticks` (the author's lines I ticked), `due_show` (show it), and
 `due_suggest` (suggestions from my own Anki). Per computer, in the config:
-`due_tab`, `due_fold`, and `due_leeches` (recover leeches: it changes this
+`due_tab`, `due_fold` (my Hide/Show for one day; else Due folds
+itself once the day is done), and `due_leeches` (recover leeches: it changes this
 collection, so it's this computer's to say). Per profile, beside the
 plans (plans.json): the day's dismissed suggestions and what recovering
 leeches did today.
@@ -68,6 +69,7 @@ def plan_dates(today):
     pf = _pf()
     prog = _state.get("plan_progress") or {}
     parts = _state.get("plan_parts") or {}
+    sibs = _state.get("plan_sibs") or {}
     state = pf._state_cfg()
     end = D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD))
     dates, events, reviews = [], [], []
@@ -94,6 +96,7 @@ def plan_dates(today):
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
                           "opens": opens, "seen": int(s), "total": int(t) or (P.unit_total(u) if opens > today else 0),
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
+                          "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
                           "what": P.topics_line([u]),
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
@@ -145,6 +148,11 @@ def suggestions(c, today):
         return []
     _pc, st = _day_state()
     gone = set(st.get("dismissed") or [])
+    # every render asks; the answer changes only when the collection does
+    key = (getattr(mw.col, "mod", None), _today(), tuple(sorted(gone)), bool(c.get("due_leeches")))
+    hit = _state.get("due_suggest")
+    if key[0] is not None and hit and hit[0] == key:
+        return list(hit[1])
     out = []
     try:
         start = (mw.col.sched.day_cutoff - 86400) * 1000
@@ -161,6 +169,7 @@ def suggestions(c, today):
                 out.append({"key": "leeches", "text": f"{lee:,} new leeches this week", "go": "See them"})
     except Exception:
         traceback.print_exc()
+    _state["due_suggest"] = (key, out[:2])
     return out[:2]
 
 
@@ -181,7 +190,9 @@ def view(c):
         items = D.prune(_items(c), today)
         v = D.view(today, dates, items, _ticks(c), tab=c.get("due_tab", "today"), events=events,
                    review_days=revs, reviews=_reviews() if mw.col else None,
-                   suggestions=suggestions(c, today), notes=notes(), folded=bool(c.get("due_fold")))
+                   suggestions=suggestions(c, today), notes=notes())
+        v["folded"] = D.fold_state(c.get("due_fold"), v, today)
+        v["done"] = D.done_for_today(v)
     except Exception:
         traceback.print_exc()
         return None
@@ -206,7 +217,7 @@ def parts(col, idxs, today):
         return
     pf = _pf()
     state = pf._state_cfg()
-    out = {}
+    out, sibs = {}, {}  # sibs: {pid: {uid: [counted, buried today]}}
     for p in pf.followed():
         st = state.get(p["id"])
         if p.get("paused") or not st or not pf._deck_ok(col, st.get("deck_id")):
@@ -221,7 +232,11 @@ def parts(col, idxs, today):
                 got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
+                sib = idx.siblings(idx.match(u, pf._swap(st), doc.get("deck", "")))
+                if sib[0]:
+                    sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
     _state["plan_parts"] = out
+    _state["plan_sibs"] = sibs
 
 
 def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
@@ -464,12 +479,14 @@ def on_message(cmd, parts):
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "duetab" and arg in D.TABS:
         c["due_tab"] = arg
-        c["due_fold"] = False
+        c["due_fold"] = {"day": _today(), "folded": False}
         save_cfg(c)
         _state["due_toast"] = None
         _swap(c)
     elif cmd == "duefold":
-        c["due_fold"] = not c.get("due_fold")
+        # Hide or Show by hand: it holds for today; tomorrow Due decides again
+        v = view(c)
+        c["due_fold"] = {"day": _today(), "folded": not (v or {}).get("folded")}
         save_cfg(c)
         _swap(c)
     elif cmd == "dueadd" and len(parts) > 4:

@@ -1,6 +1,6 @@
 // Mail goes out by Cloudflare Email Service (the EMAIL binding), else
 // Resend (RESEND_API_KEY). Plain text, no links. With neither (dev, tests)
-// a sign-in code is logged instead; the address never is.
+// a sign-in code is logged instead, only with DEV_MAIL_LOG=1; the address never is.
 
 import { Env, HttpError } from "./util";
 
@@ -11,6 +11,9 @@ export function codeText(code: string): string {
 export async function sendCode(env: Env, email: string, code: string): Promise<void> {
   const text = codeText(code);
   if (!env.EMAIL && !env.RESEND_API_KEY) {
+    // only where asked (tools/site_preview.sh): a deploy that lost its mail
+    // binding refuses rather than writing codes into Workers Logs
+    if (env.DEV_MAIL_LOG !== "1") throw new HttpError(503, "mail_unavailable");
     console.log(`due crew (dev, no RESEND_API_KEY): ${text}`);
     return;
   }

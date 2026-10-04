@@ -38,6 +38,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 input, select, textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
 textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+/* hidden means hidden: a class that sets display (.stack, .row) would
+   otherwise beat the browser's own [hidden] rule and keep it on screen */
+[hidden] { display: none !important; }
 .row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
 .stack { display: grid; gap: 10px; }
 .otp { letter-spacing: 0.3em; font-size: 22px; width: 11ch; text-align: center; font-family: ui-monospace, Menlo, monospace; }
@@ -123,8 +126,10 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .dn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dtrack { position: relative; height: 12px; background: var(--well); border-radius: 3px; overflow: hidden; display: block; }
 .dtrack i { position: absolute; left: 0; top: 0; bottom: 0; }
-.dtrack .fs { background: var(--accent); opacity: 0.35; } .dtrack .fm { background: var(--accent); }
-.dtrack .fo { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--accent) 3px 4px); opacity: 0.45; }
+.dtrack .fs, .dkey .fs { background: var(--accent); opacity: 0.35; } .dtrack .fm, .dkey .fm { background: var(--accent); }
+.dkey i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; }
+.dkey i:first-child { margin-left: 0; }
+.dtrack .fo, .dkey .fo { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--accent) 3px 4px); opacity: 0.45; }
 @media (max-width: 560px) { .brdt th:nth-child(4), .brdt td:nth-child(4), .brdt th:nth-child(5), .brdt td:nth-child(5) { display: none; } .dr { grid-template-columns: 80px 1fr 80px; } }
 .panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--card); display: grid; gap: 8px; }
 .panel h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
@@ -625,7 +630,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .fb textarea { font-family: inherit; }
 .fb [hidden] { display: none; }
 
-/* mock "Admin, grown up", A2: a sidebar of pages and one set of gaps
+/* The admin: a sidebar of pages and one set of gaps
    (16px between boxes, 12px inside them) */
 .ashell { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 8px; }
 .aside { position: sticky; top: 12px; display: grid; gap: 2px; }
@@ -675,6 +680,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .pillw { font: inherit; font-size: 12px; font-weight: 700; color: var(--warn); background: transparent; border: 1.5px solid var(--warn); border-radius: 99px; padding: 1px 9px; }
 .crew-pop { left: 0; right: auto; bottom: 26px; flex-direction: column; align-items: stretch; min-width: 150px; }
 .crew-pop button { font-size: 13px !important; text-align: left; padding: 5px 9px !important; }
+.crew-pop .hd { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 9px 2px; }
 .solo { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 6px; }
 .solo .codepill { background: var(--well); border-radius: 6px; padding: 3px 9px; font-weight: 700; }
 .ptab { display: grid; gap: 10px; } .pcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
@@ -751,3 +757,44 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .panel.due .dbx { box-sizing: border-box; width: 12px; height: 12px; border: 1.5px solid var(--faint, #a8a8a0); border-radius: 3px; margin-top: 3px; flex: none; }
 .panel.due .dbx.auto { border-style: dashed; }
 .panel.due .dbx.on { background: var(--accent); border: 1.5px solid var(--accent); }
+
+/* the year's squares: the day under the pointer (or the one tapped) says its numbers */
+.heatbox { display: grid; gap: 6px; }
+.heat .hg i { cursor: pointer; }
+.heat .hg i.sel, .heat .hg i:hover { outline: 2px solid var(--ink); outline-offset: 0; }
+.hread { font-size: 12.5px; color: var(--muted); min-height: 1.4em; }
+.hread b { color: var(--ink); font-weight: 600; }
+/* 3.7.1: the share sheet's row of years, All time last */
+.sc-years { display: flex; gap: 5px; flex-wrap: wrap; }
+.sc-years button { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.sc-years button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.sc-years button.all { border-style: dashed; }
+.sc-years button.all.on { border-style: solid; }
+/* 3.7.1: ‹ year › on a year's squares; the All time tile; the Log's insights */
+.yrstep { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; font-weight: 600; }
+.yrstep b { font-weight: 600; min-width: 4.5em; text-align: center; color: var(--muted); }
+.yrstep button { font-size: 16px; padding: 0 6px; }
+.yrstep button[disabled] { opacity: .3; cursor: default; }
+button.alltime { display: grid; gap: 2px; justify-items: start; text-align: left; width: 100%; margin-top: 14px; padding: 12px 14px;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; font-weight: 400; }
+button.alltime b { font-size: 22px; } button.alltime small { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 12px; }
+.icard { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.icard h5 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.icard .ibig { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.icard .ibig small { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.icard svg.ichart { width: 100%; height: auto; display: block; overflow: visible; }
+.icard svg .g { stroke: var(--line); stroke-width: 1; }
+.icard svg .l { fill: none; stroke: var(--accent); stroke-width: 2; }
+.icard svg circle { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+.icard svg .b { fill: var(--accent); }
+.icard svg g:hover .b { fill: var(--ink); }
+.icard svg .hit { fill: transparent; }
+.icard svg text { fill: var(--muted); font-size: 10px; }
+
+/* 3.7.1, D2: Account › Your data */
+.ydata { display: grid; gap: 2px; margin-bottom: 10px; }
+.drow { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.drow > div:first-child { flex: 1 1 260px; min-width: 0; }
+.drow p { margin: 2px 0 0; }
+.drow.ask { background: var(--well, transparent); border-radius: 10px; padding: 10px 12px; border: 0; }

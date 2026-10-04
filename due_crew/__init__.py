@@ -382,6 +382,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
     _state["notice"] = data.get("notice")  # 3.2.1
+    account.saved_elsewhere(data.get("settings_at"))  # 3.7.1
     for sid in gone or ():
         name = next((sq.get("name") for sq in _my_squads() if sq["id"] == sid), None)
         _drop_squad(sid, swap=False)
@@ -610,22 +611,39 @@ def _on_sync_done(full=False, light=False, fetch=None):
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
 
 
+def _our_page(context):
+    """3.7.1 review: the pages Due Crew draws on, where a card's own script
+    never runs: the Decks screen, Overview, the top bar and the reviewer's
+    bottom bar. Everything else (the review screen, the browser's preview,
+    Cards…, another add-on's page) gets the card page's rules: the room
+    widget's keyed commands only."""
+    ours = [DeckBrowser]
+    for mod, name in (("aqt.overview", "Overview"), ("aqt.toolbar", "Toolbar"),
+                      ("aqt.reviewer", "ReviewerBottomBar")):
+        try:
+            ours.append(getattr(__import__(mod, fromlist=[name]), name))
+        except (ImportError, AttributeError):
+            pass
+    return isinstance(context, tuple(ours))
+
+
 def _on_js(handled, message, context):
     if rooms.swallow(message):
         return (True, None)  # 2.12: no answering under the break
+    card_page = False
     if message.startswith("duecrew:"):
         # the reviewer's page runs the card's own script too: from there only
-        # the room widget's keyed buttons count, never a bare command
-        from aqt.reviewer import Reviewer
+        # the widgets' keyed buttons count, never a bare command
         from .room_model import trusted
-        message, ok = trusted(message, isinstance(context, Reviewer))
+        card_page = not _our_page(context)
+        message, ok = trusted(message, card_page)
         if not ok:
             return (True, None)
     if message.startswith("duecrew:knows"):
-        # 3.2: the chip in the reviewer's bottom bar
+        # 3.2: the chip in the reviewer's bottom bar, or its card above it
         try:
             parts = message.split(":")
-            crew_cards.on_message(parts[1], parts)
+            crew_cards.on_message(parts[1], parts, from_card_page=card_page)
         except Exception:
             traceback.print_exc()
         return (True, None)
@@ -694,6 +712,11 @@ def _on_js(handled, message, context):
             open_friends(focus_add=True)
     elif cmd == "crewmenu":
         _crew_menu(c)  # 3.4 review, H5
+    elif cmd == "privacypage":
+        from aqt.utils import openLink  # 3.7.1, D3: signed out works; no token
+        openLink(plan_flow.site_base() + "/privacy")
+    elif cmd == "sharemenu":
+        _share_menu(c)  # 3.7.1, H3
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
@@ -901,21 +924,33 @@ def _redeem(invite):
 
 
 def _crew_menu(c):
-    """The footer's Crew ▾ (3.4 review, H5), as fits the tab on screen."""
+    """The footer's Crew ▾ (3.4 review, H5): people."""
     from aqt.qt import QCursor, QMenu
     run = {"friends": lambda: open_friends(), "decks": lambda: open_decks(),
-           "squadshare": lambda: _share_squad(),
+           "copyinvite": lambda: _copy_friend_invite()}
+    menu = QMenu(mw)
+    for label, key in board.crew_menu_items():
+        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    menu.exec(QCursor.pos())
+
+
+def _share_menu(c):
+    """The footer's Share ▾ (3.7.1, H3): as text, then as a picture."""
+    from aqt.qt import QCursor, QMenu
+    run = {"squadshare": lambda: _share_squad(),
            "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek"),
            # K7: the picture is drawn on duecrew.com, signed in, its sheet open
            "picturetoday": lambda: plan_flow.open_site("/home?card=today"),
-           "pictureweek": lambda: plan_flow.open_site("/home?card=week")}
+           "pictureweek": lambda: plan_flow.open_site("/home?card=week"),
+           "pictureyear": lambda: plan_flow.open_site("/home?card=year"),
+           "picturealltime": lambda: plan_flow.open_site("/home?card=alltime")}
     menu = QMenu(mw)
-    for i, (label, key) in enumerate(board.crew_menu_items(
-            c.get("period", "today"), bool(c.get("show_up")),
-            (_squad_view(c) or {}).get("state") == "ok")):
-        if i == 1:
-            menu.addSeparator()
-        menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
+    for label, key in board.share_menu_items(
+            bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):
+        if label is None:
+            menu.addSection(key)
+        else:
+            menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
     menu.exec(QCursor.pos())
 
 
@@ -1109,12 +1144,12 @@ def _delete_account():
 
 
 def open_feedback():
-    """3.6.5, P6: Send feedback to Sam (Tools › Due Crew, and Settings)."""
+    """3.6.5, P6: Send feedback (Tools › Due Crew, and Settings)."""
     if not client().signed_in:
         tooltip("Sign in to send feedback.")
         return
     from .ui.feedback_dialog import FeedbackDialog
-    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks! Sam reads every one.")).exec()
+    FeedbackDialog(mw, client(), ADDON_VERSION, on_sent=lambda: tooltip("Sent. Thanks, every one is read.")).exec()
 
 
 def open_settings(tab=None):

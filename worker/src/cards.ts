@@ -12,7 +12,8 @@ export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
 export const TIP_MAX = V.NOTE_MAX;
 const CHUNK = 90;           // D1: at most 100 bound parameters a statement
-const LOG_DAYS = 400;
+const LOG_DAYS = 400;      // days one sync carries
+const LOG_KEEP = 15 * 366;  // 3.7.1: days kept, so a year card reaches back (the history import)
 const KNOWERS_SHOWN = 5;
 const TIPS_SHOWN = 3;
 
@@ -142,17 +143,50 @@ export function logPart(v: unknown): Record<string, (number | null)[]> {
   return out;
 }
 
-/** Merged into what the server has, newest LOG_DAYS kept; written only when changed. */
+/** Merged into what the server has, newest LOG_KEEP kept; written only when changed.
+ *  3.7.1: after Delete my log, `cut` (first in the JSON, so logCut can see
+ *  it without parsing) is the oldest day taken again. */
 export function logMerge(have: string | null, part: Record<string, (number | null)[]>): string | null {
-  const cur = have ? (JSON.parse(have).days as Record<string, unknown>) : {};
-  const all = { ...cur, ...part };
-  const keep = Object.keys(all).sort().slice(-LOG_DAYS);
-  const next = JSON.stringify({ days: Object.fromEntries(keep.map((d) => [d, all[d]])) });
+  const doc = have ? JSON.parse(have) as { cut?: string; days: Record<string, unknown> } : { days: {} };
+  const cut = typeof doc.cut === "string" ? doc.cut : "";
+  const all: Record<string, unknown> = { ...doc.days };
+  for (const [d, v] of Object.entries(part)) if (!cut || d >= cut) all[d] = v;
+  const keep = Object.keys(all).sort().slice(-LOG_KEEP);
+  const next = JSON.stringify({ ...(cut ? { cut } : {}), days: Object.fromEntries(keep.map((d) => [d, all[d]])) });
   return next === have ? null : next;
 }
 
-/** GET /log: my log, for the site. */
-export async function getLog(s: Session, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT json FROM logs WHERE uid = ?").bind(s.uid).first<string>("json");
-  return json(row ? JSON.parse(row) : { days: {} });
+/** 3.7.1: whether this log was deleted by its owner (no parse: cut is first). */
+export const logCut = (have: string | null | undefined) => !!have && have.startsWith('{"cut":');
+
+/** DELETE /log (3.7.1, D2): my log and the cheers counted beside it. The
+ *  last 8 days come back with the next syncs; nothing older is taken again,
+ *  and the add-on's history import is told it's done. */
+export async function deleteLog(s: Session, env: Env): Promise<Response> {
+  const cut = new Date(Date.now() - 8 * 86400_000).toISOString().slice(0, 10);
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO logs (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at",
+    ).bind(s.uid, JSON.stringify({ cut, days: {} }), nowSec()),
+    env.DB.prepare("DELETE FROM cheer_counts WHERE uid = ?").bind(s.uid),
+  ]);
+  return json({ ok: true, cut });
+}
+
+/** GET /log: my log, for the site. ?summary=1 (Account): how many days and
+ *  the first, not 15 years of them. */
+export async function getLog(req: Request, s: Session, env: Env): Promise<Response> {
+  if (new URL(req.url).searchParams.get("summary") === "1") {
+    const r = await env.DB.prepare(
+      "SELECT COUNT(d.key) AS n, MIN(d.key) AS first FROM logs l, json_each(l.json, '$.days') d WHERE l.uid = ?",
+    ).bind(s.uid).first<{ n: number; first: string | null }>();
+    return json({ n: r?.n ?? 0, first: r?.first ?? "" });
+  }
+  const [row, counts] = await Promise.all([
+    env.DB.prepare("SELECT json FROM logs WHERE uid = ?").bind(s.uid).first<string>("json"),
+    env.DB.prepare("SELECT year, n FROM cheer_counts WHERE uid = ?").bind(s.uid).all<{ year: number; n: number }>(),
+  ]);
+  // 3.7.1: cheers my crew sent me, by year (only mine to see)
+  const cheers = Object.fromEntries(counts.results.map((r) => [String(r.year), r.n]));
+  return json({ ...(row ? JSON.parse(row) : { days: {} }), cheers });
 }

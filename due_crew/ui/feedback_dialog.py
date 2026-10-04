@@ -1,5 +1,5 @@
-"""Send feedback to Sam (3.6.5, P6): one box, and the versions if ticked.
-It goes to the admin page with my name and emoji; Sam can write back to
+"""Send feedback (3.6.5, P6): one box, and the versions if ticked.
+It goes to the admin page with my name and emoji; the admin can write back to
 my email from Due Crew. One request, on Send, in the background."""
 
 from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, Qt, QVBoxLayout
@@ -14,7 +14,7 @@ class FeedbackDialog(QDialog):
         super().__init__(parent)
         self.client, self.addon_version, self.on_sent = client, addon_version, on_sent
         attach_alive(self)
-        self.setWindowTitle("Send feedback to Sam")
+        self.setWindowTitle("Send feedback")
         self.setMinimumWidth(420)
         lay = QVBoxLayout(self)
         self.box = QPlainTextEdit()
@@ -25,7 +25,7 @@ class FeedbackDialog(QDialog):
         self.ver = QCheckBox("Include my Due Crew and Anki versions")
         self.ver.setChecked(True)
         lay.addWidget(self.ver)
-        note = QLabel("Sam sees your name and emoji with it, and can write back to your email. Nobody else sees it.")
+        note = QLabel("Due Crew sees your name and emoji with it, and can write back to your email. Nobody else sees it.")
         note.setWordWrap(True)
         note.setStyleSheet("color: palette(placeholder-text);")
         lay.addWidget(note)

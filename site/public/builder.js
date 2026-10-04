@@ -765,7 +765,7 @@ async function builder(id) {
     if (!author) {
       return lines.length ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
         lines.map((x) => h("span", { class: "small" }, h("b", {}, Todo.LABEL[x.k]), ` · ${x.t}`,
-          x.url ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
+          x.url && Todo.okUrl(x.url) ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
     }
     const set = () => { if (lines.length) u.todo = lines; else delete u.todo; mark(); };
     const rows = lines.map((x, i) => h("div", { class: "todo" },
@@ -777,7 +777,7 @@ async function builder(id) {
         onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
       h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
     return h("div", { class: "addc" }, h("span", { class: "lbl" }, "To do"),
-      h("small", { class: "muted" }, "Things cards can't measure. Followers tick them in Due."), rows,
+      rows,
       lines.length < Todo.MAX ? h("button", { class: "linkish", onclick: () => {
         u.todo = [...lines, { k: "watch", t: "" }]; mark(); draw(); } }, "+ Add a line") : null);
   }
@@ -1370,7 +1370,7 @@ async function builder(id) {
   function libraryBox() {
     if (plan.listed === -1) {
       return h("div", { class: "libnote out" }, h("b", {}, "Taken out of the library"), h("span", {}, plan.listedNote || ""),
-        h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Write to Sam if it's a mistake."));
+        h("span", { class: "muted small" }, "It stays yours, and its followers keep following. Send feedback if it's a mistake."));
     }
     const why = plan.audience !== "code" ? "Only a plan anyone with the code can follow goes in the library."
       : !plan.doc.units.length ? "Put some dates on it first." : null;

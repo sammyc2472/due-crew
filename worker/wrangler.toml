@@ -8,7 +8,7 @@ routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 
 # Workers Logs: what the code logs (errors, the bridge's counts), kept a few
 # days in the dashboard. Not each request: URLs carry friend and plan codes,
-# and CLAUDE.md says codes are never logged.
+# and codes are never logged.
 [observability]
 enabled = true
 
@@ -19,7 +19,7 @@ invocation_logs = false
 API_VERSION = "1"
 MIN_CLIENT = "3.1.0"
 MAIL_FROM = "Due Crew <codes@duecrew.com>"
-# The admin (duecrew.com/admin, notices): Sam's "sammy" account. A uid alone
+# The admin (duecrew.com/admin, notices): the maintainer's account. A uid alone
 # opens nothing; the account still signs in by emailed code.
 ADMINS = "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"
 # Where POST /reports mails a report. Unset: reports are only counted in the log.

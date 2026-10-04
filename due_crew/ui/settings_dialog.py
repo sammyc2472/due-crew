@@ -399,7 +399,7 @@ class SettingsDialog(QDialog):
         self._check(lay, "due_show", "Due above the board")
         self._check(lay, "due_suggest", "Suggestions from my own Anki")
         lee = self._check(lay, "due_leeches", "Recover leeches each morning")
-        lee.setToolTip("On this computer: the leech tag off, and back as new cards. Edit › Undo puts them back.")
+        lee.setToolTip("Each morning, as new cards")
         # two short lines, unwrapped: a wrapped note got clipped by _shrink
         hint = QLabel("Refreshes when Anki opens or syncs, and with Refresh.<br>"
                       "Sort by clicking the board's headers.")
@@ -523,6 +523,11 @@ class SettingsDialog(QDialog):
         away_row.addStretch()
         lay.addLayout(away_row)
         self._note(lay, "Turning a number off also removes what's already shared this week.")
+        # 3.7.1, D3: the page that says what's kept, for how long, and how it goes
+        keeps = QLabel('<a href="https://duecrew.com/privacy">What Due Crew keeps &rsaquo;</a>')
+        keeps.setOpenExternalLinks(True)
+        keeps.setStyleSheet("font-size: 11px;")
+        lay.addWidget(keeps)
         lay.addStretch()
         return w
 

@@ -106,8 +106,8 @@ describe("the admin's account lookup", () => {
     expect((await admin(sam, "/admin/people/maya/crew/kai?side=mine", "DELETE")).status).toBe(200);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM friends").first<number>("n")).toBe(0);
     expect(box.sent.map((m) => [m.to, m.text.split("\n")[0]])).toEqual([
-      ["maya@example.com", "As you asked, Sam took you off Theo's Due Crew list."],
-      ["maya@example.com", "As you asked, Sam took Kai off your Due Crew list."]]);
+      ["maya@example.com", "As you asked, Due Crew took you off Theo's list."],
+      ["maya@example.com", "As you asked, Due Crew took Kai off your list."]]);
     const log = await db().prepare("SELECT action, detail FROM admin_actions WHERE uid = 'maya' ORDER BY at").all<{ action: string; detail: string }>();
     expect(log.results.map((a) => a.action)).toEqual(["took them off someone's list", "took someone off their list"]);
     expect(JSON.stringify(log.results)).not.toContain("@");

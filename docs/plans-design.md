@@ -1,7 +1,7 @@
 # Plans (3.1): design
 
 Signed-off mock: the "Due Crew Plans" artifact (Dre builds, Maya follows).
-This file is how it's built. What users see is in the mock; ask Sam before
+This file is how it's built. What users see is in the mock; ask the maintainer before
 changing any of it.
 
 ## Words
@@ -251,7 +251,7 @@ follower without a schedule, and the morning runs such a plan through the
 
 ### Following: do what's on the day
 
-Sam's call: a follower doesn't set study days or minutes. Each date opens
+The maintainer's call: a follower doesn't set study days or minutes. Each date opens
 on its day, whole, or in slices when the author split it evenly over the
 plan's study days (`pace.days`). The plan card shows today's new cards,
 reviews due and minutes left, on track or behind, from the plan's own
@@ -315,7 +315,7 @@ plan_log     (plan, version, uid, at, summary, prev)   PK (plan, version)
 
 ## 3.3: a class through Step (C1–C5)
 
-Signed-off mock: "A class through Step", with Sam's picks (the preset:
+Signed-off mock: "A class through Step", with the maintainer's picks (the preset:
 a copy when shared; keep note ids for tag and subdeck dates).
 
 - **C1 Anki's daily limit.** `plan_flow.new_limit` reads what Anki will
@@ -463,9 +463,9 @@ but never orders the list. Look opens its calendar (a listed plan reads
 like one shared by code), Follow follows it, Copy makes a plan of my own
 starting on a day I pick (dates, events and review days move together;
 no followers, notes or co-authors) that says whose it was based on. A
-plan made for a squad leaves the library. Report mails Sam; Sam's Take
+plan made for a squad leaves the library. Report mails the admin; the admin's Take
 out removes it with a line its author reads on Settings, and it can't be
-listed again until Sam puts it back. Deleting an account takes its name
+listed again until the admin puts it back. Deleting an account takes its name
 out of copies' credit.
 
 ### C: classes

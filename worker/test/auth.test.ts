@@ -49,15 +49,23 @@ describe("codes", () => {
     expect(JSON.stringify(row)).not.toContain(box.code("sam@example.com"));
   });
 
-  it("with no Resend key, logs the code and sends nothing; the address stays out of the log", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+  it("with no mail at all a deploy refuses rather than log a code (3.7.1 review)", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const r = await api("POST", "/auth/code", { body: { email: "dev@example.com" }, env: { RESEND_API_KEY: undefined } });
+    expect(r.status).toBe(503);
+    expect(log.mock.calls.map((c) => c.join(" ")).join("\n")).not.toMatch(/code: \d{3}/);
+    log.mockRestore();
+  });
+
+  it("with no Resend key and DEV_MAIL_LOG=1 (local), logs the code and sends nothing; the address stays out of the log", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const r = await api("POST", "/auth/code", { body: { email: "dev2@example.com" }, env: { RESEND_API_KEY: undefined, DEV_MAIL_LOG: "1" } });
     expect(r.status).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
     const line = log.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(line).toMatch(/code: \d{3} \d{3}/);
-    expect(line).not.toContain("dev@example.com");
+    expect(line).not.toContain("dev2@example.com");
   });
 
   it("refuses what isn't an address", async () => {

@@ -7,7 +7,7 @@
 
 import type { Session } from "./auth";
 import { tipWrite } from "./cards";
-import { limitOrThrow } from "./limits";
+import { hit, limitOrThrow } from "./limits";
 import { sendMail } from "./mail";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
@@ -41,15 +41,43 @@ export async function nameOf(env: Env, uid: string): Promise<{ name: string; emo
   return u ? { name: u.name || "?", emoji: u.emoji || "" } : null;
 }
 
-/** GET /users/{uid}: anyone signed in gets a name and an emoji, nothing
- *  more. (A Firestore profile was readable whole by anyone with the uid.) */
+/** 3.7.1, D5: a crew edge either way, a knock either way, a squad or a
+ *  plan in common (its owner, a co-author or a follower). One query. */
+export async function connected(env: Env, a: string, b: string): Promise<boolean> {
+  if (a === b) return true;
+  const row = await env.DB.prepare(
+    `SELECT EXISTS (SELECT 1 FROM friends WHERE (owner = ?1 AND friend = ?2) OR (owner = ?2 AND friend = ?1))
+         OR EXISTS (SELECT 1 FROM knocks WHERE (to_uid = ?1 AND from_uid = ?2) OR (to_uid = ?2 AND from_uid = ?1))
+         OR EXISTS (SELECT 1 FROM members x JOIN members y ON y.squad = x.squad WHERE x.uid = ?1 AND y.uid = ?2)
+         OR EXISTS (SELECT 1 FROM (SELECT id AS plan FROM plans WHERE owner = ?1
+                                   UNION SELECT plan FROM plan_editors WHERE uid = ?1
+                                   UNION SELECT plan FROM plan_follows WHERE uid = ?1) m
+                    WHERE m.plan IN (SELECT id FROM plans WHERE owner = ?2
+                                     UNION SELECT plan FROM plan_editors WHERE uid = ?2
+                                     UNION SELECT plan FROM plan_follows WHERE uid = ?2)) AS ok`,
+  ).bind(a, b).first<number>("ok");
+  return row === 1;
+}
+
+/** GET /users/{uid}: a name and an emoji, nothing more, and since 3.7.1
+ *  (D5) only to someone connected to them; anyone else gets the same 404
+ *  as no such account. Codes and invites carry their own names. */
 export async function getUser(s: Session, env: Env, [uid]: string[]): Promise<Response> {
   const u = await nameOf(env, checkUid(uid));
-  if (!u) throw new HttpError(404, "no_user");
+  if (!u || !await connected(env, s.uid, uid)) throw new HttpError(404, "no_user");
   return json({ uid, ...u });
 }
 
 // ---- friends ----
+
+/** 3.7.1 review: an account that came from 2.x and hasn't synced from 3.x
+ *  yet (users.from2x: the import sets it, a 3.x sync clears it). The
+ *  client version alone was anyone's to set. */
+export async function from2x(env: Env, uid: string): Promise<boolean> {
+  const u = await env.DB.prepare("SELECT from2x, client_version FROM users WHERE uid = ?").bind(uid)
+    .first<{ from2x: number; client_version: string | null }>();
+  return !!u && u.from2x === 1 && !/^3\./.test(u.client_version || "");
+}
 
 async function addEdge(env: Env, me: string, fid: string) {
   await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
@@ -64,9 +92,11 @@ export async function putFriend(req: Request, s: Session, env: Env, [fid]: strin
   if (fid === s.uid) throw new HttpError(400, "self");
   const u = await nameOf(env, fid);
   if (!u) throw new HttpError(404, "no_user");
+  const known = await connected(env, s.uid, fid);  // before my edge makes us so
   await addEdge(env, s.uid, fid);
   await env.DB.prepare("DELETE FROM knocks WHERE to_uid = ? AND from_uid = ?").bind(s.uid, fid).run();
-  return json({ uid: fid, ...u, mutual: await mutual(env, s.uid, fid) });
+  // 3.7.1, D5: the name only to someone who was connected already
+  return json({ uid: fid, ...(known ? u : { name: "", emoji: "" }), mutual: await mutual(env, s.uid, fid) });
 }
 
 /** PUT /friends {ids}: 3.0's first sync re-adds the crew by uid, once.
@@ -80,8 +110,7 @@ export async function restoreFriends(req: Request, s: Session, env: Env): Promis
   // 3.0's first sync brings back a 2.x crew, once: only before this account
   // has synced from 3.x, and rarely. Otherwise it would let anyone knock
   // anyone, again and again, with no code and no squad in common.
-  const version = await env.DB.prepare("SELECT client_version FROM users WHERE uid = ?").bind(s.uid).first<string | null>("client_version");
-  if (/^3\./.test(version || "")) return json({ added: [] });
+  if (!(await from2x(env, s.uid))) return json({ added: [] });
   await limitOrThrow(env, `restore:${s.uid}`, 3, 86400);
   // D1 binds at most 100 parameters a query and runs at most 1,000 queries
   // a request: 90 at a time keeps a 500-friend restore well inside both
@@ -171,6 +200,9 @@ export async function newCode(req: Request, s: Session, env: Env): Promise<Respo
   // a wanted code is only for an account without one (the 2.x restore):
   // it must never undo a code someone chose to change
   if (want && old) return json({ code: old });
+  // a code someone retired (a new code, a deleted account) is never
+  // handed to a stranger who asks for it by name: only a 2.x account's own
+  if (want && !(await from2x(env, s.uid))) want = null;
   for (let i = 0; i < 5; i++) {
     const code = want && i === 0 ? want : drawCode();
     const r = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")
@@ -232,11 +264,24 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
   checkUid(to);
   const c = V.cheer(await readJson(req));
   if (!(await added(env, to, s.uid))) throw new HttpError(403, "not_friends");
+  // a cheer overwrites the last, but each is a write: a ceiling (a room's
+  // cheer goes to every member, a card script could loop it)
+  await limitOrThrow(env, `cheer:${s.uid}`, 200, 3600);
+  const now = nowSec();
+  if (!c.guid) {
+    // 3.7.1: a cheer received counts on my year card, a sender once a day,
+    // read or not (a key of its own: the cheer row goes when it's read)
+    if (await hit(env, `cheerday:${s.uid}:${to}:${Math.floor(now / 86400)}`, 1, 86400)) {
+      await env.DB.prepare(
+        `INSERT INTO cheer_counts (uid, year, n) VALUES (?, ?, 1) ON CONFLICT(uid, year) DO UPDATE SET n = n + 1`,
+      ).bind(to, new Date(now * 1000).getUTCFullYear()).run();
+    }
+  }
   await env.DB.prepare(
     `INSERT INTO cheers (to_uid, from_uid, emoji, note, luck, guid, at) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET emoji = excluded.emoji, note = excluded.note,
        luck = excluded.luck, guid = excluded.guid, at = excluded.at`,
-  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, nowSec()).run();
+  ).bind(to, s.uid, c.emoji, c.note, c.luck, c.guid, now).run();
   // 3.2: a tip with words stays on its card, for the crew who has it
   if (c.guid && c.note) await tipWrite(env, s.uid, c.guid, c.note).run();
   // 3.0.1: the first tip on a flagged card takes the flag down for the whole

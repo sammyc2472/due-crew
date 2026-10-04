@@ -170,7 +170,7 @@ function renderFoot() {
   const foot = document.getElementById("foot");
   if (!foot) return;
   const a = (href, text) => h("a", { href }, text);
-  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a(`${SOURCE}#privacy`, "Privacy"), a(SOURCE, "Source"),
+  const links = [a("/classes", "For classes"), link("/library", "Library"), a(ANKIWEB, "AnkiWeb"), a("/privacy", "Privacy"), a(SOURCE, "Source"),
     me ? link("/log", "Log") : null, me?.admin ? link("/admin", "Admin") : null,
     me ? h("a", { href: "/feedback", onclick: (e) => { e.preventDefault(); go(`/feedback?from=${encodeURIComponent(location.pathname)}`); } }, "Feedback") : null].filter(Boolean);
   foot.replaceChildren(h("div", { class: "footin" }, h("span", { class: "fbrand" }, h("b", {}, "due crew"), h("span", { class: "muted" }, " · free for Anki")),
@@ -227,7 +227,7 @@ function signIn() {
   }
   const form = h("form", { class: "stack", novalidate: true },
     title,
-    h("p", { class: "muted" }, "The same email you use in Anki. We'll email you a 6-digit code, good for 10 minutes. New here? The same code makes your account."),
+    h("p", { class: "muted" }, "We'll email you a code."),
     h("label", { for: "email" }, "Email"), email,
     h("div", {}, h("button", { type: "submit" }, "Send code")), status);
   form.addEventListener("submit", async (e) => {
@@ -317,7 +317,7 @@ async function plansList() {
     h("div", { class: "agrid2", style: "margin-top:20px" },
       h("section", { class: "panel" }, codeBox()),
       h("section", { class: "panel" }, h("h4", {}, "Find one to follow"),
-        h("p", { class: "muted small" }, "Plans people share for anyone to follow or copy."), link("/library", "Open the library ›"))),
+        link("/library", "Open the library ›"))),
   );
 }
 
@@ -345,7 +345,7 @@ function copyForm(p, done) {
     done ? h("button", { class: "linkish", onclick: done }, "Cancel") : null, status);
 }
 
-/** Report a plan in the library: it goes to Sam by mail; nothing is stored. */
+/** Report a plan in the library: it goes to the admin by mail; nothing is stored. */
 function reportForm(p, done) {
   const why = h("select", { "aria-label": "Why" }, [["spam", "Not a study plan"], ["copied", "Copied without credit"], ["other", "Something else"]]
     .map(([v, t]) => h("option", { value: v }, t)));
@@ -665,7 +665,8 @@ async function account() {
     try { await api("POST", all ? "/auth/signout-all" : "/auth/signout"); } catch { return; }
     me = null; wearAccent("green"); renderNav(); go("/sign-in");  // the next person here starts green
   };
-  const [fr, pl] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null)]);
+  const [fr, pl, lg, st] = await Promise.all([api("GET", "/friends").catch(() => ({})), api("GET", "/auth/places").catch(() => null),
+    api("GET", "/log?summary=1").catch(() => null), api("GET", "/settings").catch(() => null)]);
   const code = fr.code || "";
   const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
@@ -674,16 +675,63 @@ async function account() {
     h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
       h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
     sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
-      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null),
-      h("p", { class: "muted small" }, "A friend adds you with it; Copy invite makes a link that makes you crew at once.")),
+      code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null)),
     sec("Signed in", where ? h("p", {}, where) : null,
       h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => out(false) }, "Sign out here"),
         h("button", { class: "quiet", onclick: () => out(true) }, "Sign out everywhere"))),
-    sec("Your data", h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: `${SOURCE}#privacy` }, "Privacy ›")),
+    sec("Your data", yourData(lg, st?.settings || {}),
+      h("div", { class: "row" }, link("/log", "Your log and CSV ›"), link("/feedback", "Send feedback ›"), h("a", { href: "/privacy" }, "What Due Crew keeps ›")),
       h("p", { class: "muted small" }, "Deleting your account is in Anki: Tools › Due Crew › Settings › Account. It takes everything with it."),
       // Q2: the same sentence as Anki's Settings and the README
       h("p", { class: "muted small" }, "Kept while you use it: after 12 months with no activity (24 when paused), your account is deleted with everything in it. Opening Anki, or signing in here, counts.")));
   reading();
+}
+
+/** 3.7.1, D2: Account › Your data. Download everything; delete my log or
+ *  my to-dos on their own, each asked once, in place. */
+function yourData(lg, set) {
+  const days = { length: lg?.n || 0 }, first = lg?.first || "";
+  const items = Array.isArray(set.due_items) ? set.due_items : [];
+  const ticks = set.due_ticks && typeof set.due_ticks === "object" ? Object.keys(set.due_ticks).length : 0;
+  const open = items.filter((x) => x && !(set.due_ticks || {})[x.id]).length;
+  const when = (d) => { const p = parseIso(d); return `${MONTHS[p.getUTCMonth()]} ${p.getUTCFullYear()}`; };
+  const row = (title, line, ...act) => h("div", { class: "drow" }, h("div", {}, h("b", {}, title), h("p", { class: "muted small" }, line)), h("div", { class: "row" }, ...act));
+  const dl = h("button", { class: "ghost", onclick: async () => {
+    dl.disabled = true;
+    try {
+      const data = await api("GET", "/account/data");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+      const a = h("a", { href: url, download: `due-crew-data-${new Date().toISOString().slice(0, 10)}.json` });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { dl.textContent = err.status === 429 ? "Enough for today" : "Couldn't download"; }
+    dl.disabled = false;
+  } }, "Download");
+  // Delete…, then the question and its two answers where the row was
+  const ask = (title, line, question, sure, path, after) => {
+    const box = h("div", {});
+    const show = () => box.replaceChildren(row(title, line, h("button", { class: "danger", onclick: () => box.replaceChildren(
+      h("div", { class: "drow ask" }, h("div", {}, h("b", {}, question[0]), h("p", { class: "muted small" }, question[1])),
+        h("div", { class: "row" },
+          h("button", { class: "danger", onclick: async (e) => {
+            e.target.disabled = true;
+            try { await api("DELETE", path); box.replaceChildren(row(title, after)); }
+            catch { e.target.disabled = false; e.target.textContent = "Couldn't. Try again"; }
+          } }, sure),
+          h("button", { class: "quiet", onclick: show }, "Keep it")))) }, "Delete…")));
+    show();
+    return box;
+  };
+  return h("div", { class: "ydata" },
+    row("Everything Due Crew has about you", "One file: your profile, settings, week, log, to-dos, plans and follows.", dl),
+    days.length && first ? ask("Your log", `${days.length.toLocaleString()} day${days.length === 1 ? "" : "s"}, from ${when(first)}.`,
+      ["Delete your log?", "Your year, your all-time card and the Log page start again from this past week. Your crew sees nothing different. Anki keeps your reviews; it won't send the old years again."],
+      "Delete my log", "/log", "Deleted. It starts again from this past week.")
+      : row("Your log", "Nothing yet."),
+    items.length || ticks ? ask("Your to-dos", `${open} open, ${items.length - open} ticked.`,
+      ["Delete your to-dos?", "Your own to-dos and ticks, on every computer at its next refresh. A plan's dates stay on your list."],
+      "Delete my to-dos", "/account/todos", "Deleted. Anki takes it at its next refresh.")
+      : row("Your to-dos", "None."));
 }
 
 // ---- routing ----
@@ -962,14 +1010,14 @@ const Board = (() => {
     };
     return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
       bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
-      h("p", { class: "muted small dleg" }, "solid = mature · faded = seen · hatched = unlocked · % of each person’s own copy · hover for numbers"));
+      h("p", { class: "muted small dleg dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked"));
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
    *  switcher, plain ranks, no medals, no cheers; these aren't necessarily
    *  people you know. Synced today with nothing studied yet sits under the
    *  ranked, with dashes. */
-  let squadsGot = null;  // {at, list, boards}: a sort redraws from these, not the network
+  let squadsGot = null;  // {at, list, boards: {id: board}}: a sort redraws from these, not the network
   const isoWeek = (iso) => {
     const d = parseIso(iso); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow + 3);
     const y = d.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
@@ -979,15 +1027,17 @@ const Board = (() => {
     const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
-      squadsGot = { at: Date.now(), list: got, boards: await Promise.all(got.map((q) => api("GET", `/squads/${q.id}?wk=${isoWeek(day)}`).catch(() => null))) };
+      squadsGot = { at: Date.now(), list: got, boards: {} };
     }
     const list = squadsGot.list;
     const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
     if (!list.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
-      h("p", { class: "muted small" }, "A private board for any group. Join with a code, or create one in Anki: Tools › Due Crew › Squads."));
+      h("p", { class: "muted small" }, "Join with a code, or make one in Anki."));
     let cur = store("dc-squad");
     if (!list.some((q) => q.id === cur)) cur = list[0].id;
-    const sq = squadsGot.boards[list.findIndex((q) => q.id === cur)];
+    // only the squad on screen is fetched; another one when it's picked
+    if (!(cur in squadsGot.boards)) squadsGot.boards[cur] = await api("GET", `/squads/${cur}?wk=${isoWeek(day)}`).catch(() => null);
+    const sq = squadsGot.boards[cur];
     const sw = h("div", { class: "sqsw" }, list.map((q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name)), joinOrCreate);
     if (!sq) return h("div", {}, sw, h("p", { class: "muted small" }, "Couldn’t load. Check your connection and Refresh."));
     const sort = store("dc-sort") || "reviews";
@@ -1132,24 +1182,40 @@ async function home() {
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
     return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
       h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true))),
-      h("p", { class: "muted small" }, "Today’s cards open in Anki each morning. ", link("/plans", "All plans ›")));
+      h("p", { class: "muted small" }, link("/plans", "All plans ›")));
   }
-  // board.py's footer: Crew ▾ and who I'm waiting on; Refresh as a quiet icon
+  // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
+  // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
   const footLeft = h("span", { class: "fl" });
-  function drawFoot() {
-    const items = [["Friends…", () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } }]];
-    if (tab === "today" && !showUp) items.push(["Share today", () => share(Board.shareText(people, t))]);
-    if (tab === "week" || (showUp && tab === "today")) items.push(["Share the week", () => share(Board.shareWeek(people, t))]);
-    if (!showUp) items.push(["Picture of today…", () => weekCard(true)]);
-    items.push(["Picture of my week…", () => weekCard()]);
-    if (tab === "decks") items.push(["Shared decks…", () => { crewBtn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { crewBtn.textContent = "Crew ▾"; }, 2400); }]);
-    const crewBtn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
+  const toCode = () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } };
+  function menu(label, items) {
+    const btn = h("button", { class: "linkish", "aria-haspopup": "menu", onclick: (e) => {
       document.querySelectorAll(".crew-pop").forEach((x) => x.remove());
-      const pop = h("div", { class: "cheer-pop crew-pop", role: "menu" }, items.map(([l, go]) => h("button", { class: "linkish", role: "menuitem", onclick: () => { pop.remove(); go(); } }, l)));
+      const pop = h("div", { class: "cheer-pop crew-pop", role: "menu" }, items.map(([l, go]) => go
+        ? h("button", { class: "linkish", role: "menuitem", onclick: () => { pop.remove(); go(btn); } }, l)
+        : h("span", { class: "hd" }, l)));
+      pop.style.left = `${btn.offsetLeft}px`;
       e.currentTarget.after(pop);
       setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
-    } }, "Crew ▾");
-    footLeft.replaceChildren(crewBtn, waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
+    } }, `${label} ▾`);
+    return btn;
+  }
+  function drawFoot() {
+    const crewItems = [["Friends…", toCode]];
+    // its "Copied." goes where Share's does, not over the menu's name
+    if (b.me.code) crewItems.push(["Copy invite", () => copyInvite(b.me.code, { set textContent(v) {
+      if (v === "Copy invite") return;
+      updated.textContent = v; setTimeout(() => { updated.textContent = "Updated just now"; }, 2400);
+    } })]);
+    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew ▾"; }, 2400); }]);
+    const shareItems = [["As text"]];
+    if (!showUp) shareItems.push(["Today", () => share(Board.shareText(people, t))]);
+    shareItems.push(["This week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
+    if (!showUp) shareItems.push(["Today…", () => weekCard(true)]);
+    shareItems.push(["My week…", () => weekCard()],
+      ["My year…", () => openYearCard(logR.days || {}, t.slice(0, 4), logR.cheers || {})],
+      ["All time…", () => openYearCard(logR.days || {}, "all", logR.cheers || {})]);
+    footLeft.replaceChildren(menu("Crew", crewItems), menu("Share", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
       onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null);
   }
   const share = async (text) => {
@@ -1200,10 +1266,9 @@ async function home() {
         panel,
         h("div", { class: "foot" }, footLeft,
           h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻")))),
-      h("section", { class: "panel" }, h("h4", {}, "Your year", h("span", { class: "muted" }, "only you see this · ", link("/log", "Log ›"))),
-        yearHeat(logR.days || {}), h("small", { class: "muted" }, "One square a day, by minutes. Point at a day for its numbers."))),
+      yearPanel(logR.days || {}, logR.cheers || {}, "Your year")),
     h("aside", { class: "rail" },
-      yearNudge(logR.days || {}, t),
+      yearNudge(logR.days || {}, t, logR.cheers || {}),
       h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       duePanel(followed, sett?.settings || {}, t),
@@ -1212,14 +1277,15 @@ async function home() {
       friends)));
   // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
   const want = new URLSearchParams(location.search).get("card");
-  if (want === "today" || want === "week") {
+  if (want === "today" || want === "week" || want === "year" || want === "alltime") {
     history.replaceState(history.state, "", "/home");
     here = "/home";
-    weekCard(want === "today");
+    if (want === "year" || want === "alltime") openYearCard(logR.days || {}, want === "alltime" ? "all" : t.slice(0, 4), logR.cheers || {});
+    else weekCard(want === "today");
   }
 }
 
-/** Due (mock "My List"), as the site can show it: today's dates from the
+/** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
  *  and my own to-dos from my settings. Ticking and adding happen in Anki,
  *  which counts the cards; this is the look from a phone. */
@@ -1260,13 +1326,12 @@ function duePanel(followed, set, t) {
   return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
     behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
     rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
-    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null,
-    h("small", { class: "muted" }, "Tick and add in Anki, which counts your cards."));
+    tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null);
 }
 
 /** K6: 1 December – 7 January, the year's card opens the rail, once a
  *  season per browser ("Not now" hides it). In January it's last year's. */
-function yearNudge(days, t) {
+function yearNudge(days, t, cheers = {}) {
   const [y, m, d] = t.split("-").map(Number);
   const yr = m === 12 ? y : m === 1 && d <= 7 ? y - 1 : 0;
   if (!yr || !Object.keys(days).some((k) => k.startsWith(`${yr}-`))) return null;
@@ -1279,7 +1344,7 @@ function yearNudge(days, t) {
     h("div", { class: "ymini", "aria-hidden": "true" }, data.cells.map((c) => h("i", { class: c.out ? "out" : c.pre || c.fut ? "" : `l${c.lvl}` }))),
     h("span", { class: "small" }, h("b", {}, `${data.studied.toLocaleString()} day${data.studied === 1 ? "" : "s"}`),
       h("span", { class: "muted" }, ` · ${Math.round(data.minutes / 60).toLocaleString()} hours${data.streak ? ` · longest streak ${data.streak}` : ""}`)),
-    h("div", {}, h("button", { onclick: () => openYearCard(days, String(yr)) }, "Make the card")));
+    h("div", {}, h("button", { onclick: () => openYearCard(days, String(yr), cheers) }, "Make the card")));
   return box;
 }
 
@@ -1310,10 +1375,10 @@ function todayStrip(followed, mine) {
   if (followed.length) {
     cards.push(fresh ? card("on", "Opens today", `${fresh.toLocaleString()} new`,
       h("span", {}, link(`/plans/${opening[0][0].id}`, opening[0][0].name), ` · ${opening.slice(0, 3).map(([, u]) => u.name).join(", ")}${opening.length > 3 ? "…" : ""}`),
-      h("small", { class: "muted" }, "Your Anki opens them in the morning"))
+      null)
       : card("", "Opens today", "Nothing new", h("small", { class: "muted" }, "A day for reviews")));
   }
-  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "In Anki: Plan ▾ › Catch up")));
+  if (behind) cards.push(card("", "From earlier dates", behind.toLocaleString(), h("span", {}, "new cards waiting"), h("small", { class: "muted" }, "Catch up in Anki")));
   if (next) {
     const preps = followed.some((p) => Sched.units(p.doc).some((u) => u.for === next.ev.id && opening.some(([, o]) => o.id === u.id)));
     cards.push(card("", "Next", next.ev.name, h("span", {}, `${next.ev.day === t ? "Today" : pretty(next.ev.day)}${preps ? " · today preps for it" : ""}`),
@@ -1349,7 +1414,9 @@ function sinceYouWereHere(b, crew, t) {
   const exams = crew.map((f) => [f, f.week?.examDate]).filter(([, d]) => d && d >= t && d <= addDays(t, 14)).sort((a, c) => a[1].localeCompare(c[1]))
     .map(([f, d]) => {
       const box = h("div");
-      const send = h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren())) }, "Send good luck");
+      const sentLine = () => h("small", { class: "muted" }, "Good luck sent ✓");
+      const send = luckSent(f.uid, d) ? sentLine() : h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren(),
+        () => { markLuck(f.uid, d); send.replaceWith(sentLine()); })) }, "Send good luck");
       return h("div", { class: "fi" }, h("span", { class: "ic" }, f.emoji || "🍀"),
         h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
     });
@@ -1361,16 +1428,23 @@ function sinceYouWereHere(b, crew, t) {
 }
 
 /** A good-luck line for a crewmate's exam morning (the add-on's Good-luck card). */
-function luckForm(f, done) {
+/** A good-luck line sent from this browser, per crewmate and exam date, so
+ *  the rail says so instead of asking again (a new exam date asks again). */
+const luckKey = (uid, day) => `dc-luck:${uid}:${day}`;
+function luckSent(uid, day) { try { return !!localStorage.getItem(luckKey(uid, day)); } catch { return false; } }
+function markLuck(uid, day) { try { localStorage.setItem(luckKey(uid, day), "1"); } catch { /* no storage: it asks again */ } }
+
+function luckForm(f, done, sent) {
   const line = h("input", { maxlength: 80, placeholder: `A line for ${f.name.split(" ")[0]}'s exam morning`, "aria-label": "Your line" });
   const status = h("span", { class: "status", role: "status" });
   const send = h("button", { class: "ghost", onclick: async () => {
     if (!line.value.trim()) return;
     send.disabled = true;
-    try { await api("POST", `/cheers/${f.uid}`, { emoji: "🍀", note: line.value.trim(), luck: true }); status.textContent = "Sent. They see it when they open Anki that morning."; line.remove(); send.remove(); }
+    try { await api("POST", `/cheers/${f.uid}`, { emoji: "🍀", note: line.value.trim(), luck: true }); status.textContent = "Sent. They see it when they open Anki that morning."; line.remove(); send.remove(); cancel.remove(); if (sent) sent(); }
     catch { send.disabled = false; status.className = "status bad"; status.textContent = "That didn't send. Try again."; }
   } }, "Send");
-  return h("div", { class: "copyform" }, line, send, h("button", { class: "linkish", onclick: done }, "Cancel"), status);
+  const cancel = h("button", { class: "linkish", onclick: done }, "Cancel");
+  return h("div", { class: "copyform" }, line, send, cancel, status);
 }
 
 /** A year of my log, a square a day (Monday at the top), darker with more
@@ -1398,9 +1472,42 @@ function yearData(days, y) {
   return { year: y, studied: mine.filter(did).length, since: logged[0] > jan1 ? Cards.short(logged[0]) : "",
     cols: cells.length / 7, cells, minutes: yr.reduce((a, r) => a + r[0], 0), reviews: yr.reduce((a, r) => a + r[1], 0), streak, best: best && best.n ? best : null };
 }
-function openYearCard(days, y) {
-  Cards.open({ kind: "year", title: "Share my year", file: `due-crew-${y}`, sizes: ["story"], data: yearData(days, y),
-    switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" }, { k: "best", label: "Biggest day" }] });
+/** 3.7.1: my Anki, all time, from my log: a bar a year (days studied), the
+ *  total, the longest streak and the best year. */
+function allTimeData(days, cheers) {
+  const did = (d) => !!days[d] && !!(days[d][0] || days[d][1]);
+  const mine = Object.keys(days).filter(did).sort();
+  if (!mine.length) return null;
+  const y0 = Number(mine[0].slice(0, 4)), y1 = Number(today().slice(0, 4));
+  const years = [];
+  for (let y = y0; y <= y1; y++) years.push({ year: y, days: mine.filter((d) => d.startsWith(`${y}-`)).length });
+  let streak = 0, run = 0, prev = null, streakYear = null;
+  for (const d of mine) {
+    run = prev && addDays(prev, 1) === d ? run + 1 : 1; prev = d;
+    if (run > streak) { streak = run; streakYear = Number(d.slice(0, 4)); }
+  }
+  const best = years.reduce((b, r) => (r.days > (b?.days ?? -1) ? r : b), null);
+  const [fy, fm] = mine[0].split("-").map(Number);
+  return { since: `${Cards.MONTHS[fm - 1]} ${fy}`, years, days: mine.length,
+    reviews: mine.reduce((a, d) => a + days[d][1], 0), minutes: mine.reduce((a, d) => a + days[d][0], 0),
+    streak, streakYear, bestYear: years.length > 1 ? best : null,
+    cheers: Object.values(cheers || {}).reduce((a, x) => a + (Number(x) || 0), 0) };
+}
+/** The year card for `y` (or "all", the all-time one), with a row of the
+ *  years I studied in to switch between them. `cheers`: {year: received}. */
+function openYearCard(days, y, cheers = {}) {
+  const years = [...new Set(Object.keys(days).filter((d) => days[d] && (days[d][0] || days[d][1])).map((d) => d.slice(0, 4)))].sort().reverse();
+  const cur = String(today().slice(0, 4));
+  if (!years.includes(cur)) years.unshift(cur);
+  const one = (k) => (k === "all"
+    ? { kind: "alltime", title: "Share my Anki, all time", file: "due-crew-all-time", sizes: ["story", "link"], data: allTimeData(days, cheers) }
+    : { kind: "year", title: "Share my year", file: `due-crew-${k}`, sizes: ["story"], data: { ...yearData(days, k), cheers: Number(cheers[k]) || 0 } });
+  const first = one(String(y));
+  if (!first.data) return;
+  const has = (k) => k === "all" ? allTimeData(days, cheers)?.days : yearData(days, k).reviews;
+  Cards.open({ ...first, picker: { value: String(y), options: [...years.filter((k) => k === cur || has(k)).map((k) => [k, k]), ["all", "All time"]], choose: one },
+    switches: [{ k: "time", label: "Hours studied" }, { k: "reviews", label: "Reviews" }, { k: "streak", label: "Longest streak" },
+      { k: "best", label: "Biggest day / best year" }, { k: "cheers", label: "Cheers from my crew", off: Object.keys(cheers || {}).length ? "" : "none yet" }] });
 }
 
 /** A day's shade by minutes (0–4), against my own log's quarters. */
@@ -1410,10 +1517,12 @@ function heatLevel(days) {
   return (m) => (!m ? 0 : m <= cut[0] ? 1 : m <= cut[1] ? 2 : m <= cut[2] ? 3 : 4);
 }
 
-function yearHeat(days) {
+function yearHeat(days, y = null) {
   const t = today();
   const lastMon = Sched.monday(t);
-  const first = addDays(lastMon, -52 * 7);
+  // 3.7.1: a calendar year when one's picked, else the last 53 weeks
+  const first = y ? Sched.monday(`${y}-01-01`) : addDays(lastMon, -52 * 7);
+  const inYear = (d) => !y || d.startsWith(`${y}-`);
   const logged = Object.keys(days).sort();
   const start = logged[0] || t;
   const level = heatLevel(days);
@@ -1429,18 +1538,104 @@ function yearHeat(days) {
     }
     for (let k = 0; k < 7; k++) {
       const d = addDays(wd, k);
-      if (d > t) { cells.push(h("i", { class: "fut" })); continue; }
+      if (d > t || !inYear(d)) { cells.push(h("i", { class: "fut" })); continue; }
       const r = days[d];
-      const title = r ? `${pretty(d)}: ${r[0]} min, ${r[1].toLocaleString()} reviews` : `${pretty(d)}${d < start ? ", before your log" : ""}`;
-      cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, title }));
+      cells.push(h("i", { class: d < start ? "pre" : `l${level(r?.[0] || 0)}${d === t ? " now" : ""}`, "data-d": d, tabindex: "-1" }));
     }
   }
   const wrap = h("div", { class: "heatwrap" }, h("div", { class: "heat" },
     h("div", { class: "hm" }, months), h("div", { class: "hd" }, h("span", {}, "Mon"), h("span", {}, "Wed"), h("span", {}, "Fri")),
     h("div", { class: "hg" }, cells)),
     h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
-  setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
-  return wrap;
+  if (!y || y === t.slice(0, 4)) setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
+  // a day's numbers under the squares: on hover with a mouse, on a tap with a finger
+  const read = h("div", { class: "hread", "aria-live": "polite" });
+  const say = (d) => {
+    const r = days[d];
+    const bits = !r ? [d < start ? "before your log" : "no study"]
+      : [`${r[0]} min`, `${r[1].toLocaleString()} reviews`, r[2] ? `${r[2].toLocaleString()} new` : "", r[3] != null ? `${r[3]}% right` : ""].filter(Boolean);
+    read.replaceChildren(h("b", {}, d === t ? "Today" : pretty(d)), ` · ${bits.join(" · ")}`);
+  };
+  let picked = null;
+  const grid = wrap.querySelector(".hg");
+  const pick = (el, keep) => {
+    if (!el || !el.dataset.d) return;
+    if (keep) { if (picked) picked.classList.remove("sel"); picked = el; el.classList.add("sel"); }
+    say(el.dataset.d);
+  };
+  grid.addEventListener("mouseover", (e) => pick(e.target, false));
+  grid.addEventListener("mouseleave", () => { if (picked) say(picked.dataset.d); else say(t); });
+  grid.addEventListener("click", (e) => pick(e.target, true));
+  say(y && y !== t.slice(0, 4) ? `${y}-12-31` > t ? t : (Object.keys(days).filter((d) => d.startsWith(`${y}-`)).sort().pop() || `${y}-12-31`) : t);
+  return h("div", { class: "heatbox" }, wrap, read);
+}
+
+/** 3.7.1: the year's squares with ‹ › through the years in my log, and
+ *  Share › for the year on screen (All time is on the card's own row). */
+function yearPanel(days, cheers, title, after) {
+  const t = today();
+  const cur = t.slice(0, 4);
+  const years = [...new Set(Object.keys(days).map((d) => d.slice(0, 4)))].filter((x) => x <= cur).sort();
+  if (!years.includes(cur)) years.push(cur);
+  let i = years.length - 1;
+  const box = h("div");
+  const head = h("h4", {});
+  const draw = () => {
+    const y = years[i];
+    const step = (d, lab, ok) => h("button", { class: "linkish", "aria-label": lab, disabled: ok ? null : true, onclick: () => { i += d; draw(); } }, d < 0 ? "‹" : "›");
+    head.replaceChildren(h("span", {}, title, years.length > 1 ? h("span", { class: "yrstep" }, step(-1, "An earlier year", i > 0), h("b", {}, y === cur ? "this year" : y), step(1, "A later year", i < years.length - 1)) : null),
+      h("button", { class: "linkish", onclick: () => openYearCard(days, y, cheers) }, "Share ›"));
+    box.replaceChildren(yearHeat(days, y === cur ? null : y));
+  };
+  draw();
+  return h("section", { class: "panel" }, head, box, after || null);
+}
+
+/** 3.7.1, I1: what my log says over time, a number and a line each. */
+function logInsights(days) {
+  const did = Object.entries(days).filter(([, r]) => r[1] > 0).sort(([a], [c]) => a.localeCompare(c));
+  if (did.length < 14) return null;
+  const byMonth = new Map();
+  for (const [d, r] of did) { const k = d.slice(0, 7); const m = byMonth.get(k) || [0, 0, 0, 0]; m[0] += r[0]; m[1] += r[1]; if (r[3] !== null) { m[2] += r[3] * r[1]; m[3] += r[1]; } byMonth.set(k, m); }
+  const months = [...byMonth.entries()].slice(-24);
+  const secs = months.filter(([, m]) => m[1]).map(([k, m]) => [k, (m[0] * 60) / m[1]]);
+  const rets = months.filter(([, m]) => m[3]).map(([k, m]) => [k, m[2] / m[3]]);
+  const wk = [0, 0, 0, 0, 0, 0, 0], wn = [0, 0, 0, 0, 0, 0, 0];
+  for (const [d, r] of did.slice(-180)) { const w = (parseIso(d).getUTCDay() + 6) % 7; wk[w] += r[0]; wn[w] += 1; }
+  const wavg = wk.map((m, j) => (wn[j] ? m / wn[j] : 0));
+  const weeks = []; const mon = Sched.monday(today());
+  for (let j = 25; j >= 0; j--) { const a = addDays(mon, -7 * j), b = addDays(a, 6); weeks.push([a, did.filter(([d]) => d >= a && d <= b).reduce((n, [, r]) => n + r[2], 0)]); }
+  const monthLabel = (k) => `${MONTHS[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
+  const svg = (inner, hgt = 70) => { const el = document.createElementNS("http://www.w3.org/2000/svg", "svg"); el.setAttribute("viewBox", `0 0 260 ${hgt}`); el.setAttribute("class", "ichart"); el.innerHTML = inner; return el; };
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const lineChart = (pts, fmt) => {
+    if (pts.length < 2) return null;
+    const vs = pts.map(([, v]) => v), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+    const X = (j) => 4 + (j * 252) / (pts.length - 1), Y = (v) => 6 + (1 - (v - lo) / span) * 50;
+    const d = pts.map(([, v], j) => `${j ? "L" : "M"}${X(j).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+    return svg(`<line class="g" x1="0" x2="260" y1="60" y2="60"/><path class="l" d="${d}"/><circle cx="${X(pts.length - 1)}" cy="${Y(vs[vs.length - 1])}" r="3.5"/>`
+      + pts.map(([k, v], j) => `<rect class="hit" x="${(X(j) - 6).toFixed(1)}" y="0" width="12" height="70"><title>${esc(monthLabel(k))}: ${esc(fmt(v))}</title></rect>`).join(""));
+  };
+  const barChart = (vals, labels, fmt) => {
+    const mx = Math.max(1, ...vals), n = vals.length, bw = (260 - 2 * (n - 1)) / n;
+    return svg(`<line class="g" x1="0" x2="260" y1="58" y2="58"/>` + vals.map((v, j) => {
+      const bh = v ? Math.max(2, (v / mx) * 50) : 0, x = j * (bw + 2);
+      return `<g><rect class="b" x="${x.toFixed(1)}" y="${(58 - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2"/><rect class="hit" x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="70"><title>${esc(fmt(v, j))}</title></rect></g>`
+        + (labels ? `<text x="${(x + bw / 2).toFixed(1)}" y="70" text-anchor="middle">${labels[j]}</text>` : "");
+    }).join(""));
+  };
+  const card = (label, big, note, chart, foot) => h("div", { class: "icard" }, h("h5", {}, label), h("div", { class: "ibig" }, big, note ? h("small", {}, note) : null), chart, h("small", { class: "muted" }, foot));
+  const first = (a) => a[0]?.[1], last = (a) => a[a.length - 1]?.[1];
+  const yearAgo = (a) => a.length > 12 ? a[a.length - 13][1] : first(a);
+  const s0 = yearAgo(secs), s1 = last(secs), r1 = last(rets), r0 = yearAgo(rets);
+  const top = wavg.indexOf(Math.max(...wavg));
+  const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const m30 = did.slice(-30), share = m30.reduce((n, [, r]) => n + r[1], 0) ? Math.round((100 * m30.reduce((n, [, r]) => n + r[2], 0)) / m30.reduce((n, [, r]) => n + r[1], 0)) : 0;
+  return h("div", { class: "insights" },
+    secs.length >= 2 ? card("Seconds a card", `${s1.toFixed(1)}s`, s0 && Math.abs(s0 - s1) >= 0.1 ? `${s1 < s0 ? "down" : "up"} from ${s0.toFixed(1)}` : "steady", lineChart(secs, (v) => `${v.toFixed(1)}s a card`), "By month") : null,
+    rets.length >= 2 ? card("Retention", `${Math.round(r1)}%`, r0 && Math.abs(r1 - r0) >= 1 ? `${r1 > r0 ? "up" : "down"} from ${Math.round(r0)}%` : "steady", lineChart(rets, (v) => `${v.toFixed(1)}% right`), "On reviews, by month") : null,
+    card("Your week", DOW[top], "your biggest day", barChart(wavg.map((v) => Math.round(v)), ["M", "T", "W", "T", "F", "S", "S"], (v, j) => `${DOW[j]}: ${v} min on average`), "Minutes on days you studied"),
+    card("New cards", `${share}%`, "of reviews, last 30 days", barChart(weeks.map(([, v]) => v), null, (v, j) => `Week of ${pretty(weeks[j][0])}: ${v.toLocaleString()} new`), "A week, last 26 weeks"));
 }
 
 /** A plan I follow: cards seen against my schedule, from what my Anki last shared. */
@@ -1501,8 +1696,7 @@ function onTrackChart(p) {
   svg.append(dot, s("text", { x: x(ti) + 8, y: y(seen) + 4, class: "lab" }, `You ${seen.toLocaleString()}`));
   return h("div", {}, h("div", { class: "key" }, h("span", {}, h("i", { class: "k-you" }), "you"),
     hist.length > 1 ? [h("span", {}, h("i", { class: "k-seen" }), "seen"), h("span", {}, h("i", { class: "k-open" }), "opened for you")] : null,
-    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg,
-    h("small", { class: "muted" }, "A point a day from what your Anki shares (Plan ▾ › Share my progress)."));
+    h("span", {}, h("i", { class: "k-plan" }), sched ? "your schedule" : "the plan's dates")), svg);
 }
 
 function barChart(values, labels, cap, unit) {
@@ -1628,11 +1822,11 @@ async function logPage() {
   const logged = Object.keys(days).sort();
   const followed = plansR.plans.filter((p) => p.following);
   const wret = ret(week);
-  const yearCard = () => openYearCard(days, t.slice(0, 4));
+  const allTime = allTimeData(days, log.cheers || {});
 
   const r30 = ret(studied30);
   page(
-    phead("Your log", "Only you see this. It fills in from Anki's syncs.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
+    phead("Your log", "Only you see this.", logged.length ? h("button", { class: "ghost", onclick: csv }, "Export CSV") : null),
     h("div", { class: "tiles" },
       tile(`${week.filter(([, r]) => r[0] || r[1]).length} of 7`, "days this week"),
       tile(hm(sum(week, 0)), "studied", `last week by ${byDay}: ${hm(sum(lastSoFar, 0))}`),
@@ -1640,9 +1834,11 @@ async function logPage() {
       tile(sum(week, 2).toLocaleString(), "new cards", `by ${byDay}: ${sum(lastSoFar, 2).toLocaleString()}`),
       tile(wret === null ? "—" : `${wret.toFixed(1)}%`, "retention"),
       tile(`${studied30.length} of 30`, "days studied, last 30")),
-    h("section", { class: "panel", style: "margin-top:14px" }, h("h4", {}, "The last year", h("span", { class: "muted" }, `${logged.length} day${logged.length === 1 ? "" : "s"} in your log`,
-      logged.length ? [" · ", h("button", { class: "linkish", onclick: yearCard }, `Share my ${t.slice(0, 4)} ›`)] : null)),
-      yearHeat(days), logged.length ? h("small", { class: "muted" }, `Your log starts ${pretty(logged[0])}, when Anki first sent it.`) : h("small", { class: "muted" }, "Nothing yet: Anki sends it with a full sync.")),
+    allTime ? h("button", { class: "alltime", onclick: () => openYearCard(days, "all", log.cheers || {}) },
+      h("small", {}, `All time · since ${allTime.since}`), h("b", {}, `${allTime.reviews.toLocaleString()} reviews`),
+      h("span", { class: "muted" }, `${allTime.days.toLocaleString()} days · ${Math.round(allTime.minutes / 60).toLocaleString()}h · Share ›`)) : null,
+    h("div", { style: "margin-top:14px" }, yearPanel(days, log.cheers || {}, "Your year", logged.length ? null : h("small", { class: "muted" }, "Nothing yet."))),
+    logInsights(days),
     h("div", { class: "agrid2", style: "margin-top:12px" },
       h("section", { class: "panel" }, h("h4", {}, "This week and last", pills), pairsBox),
       h("section", { class: "panel" }, h("h4", {}, "On days you studied", h("span", { class: "muted" }, "last 30 days")),
@@ -1651,7 +1847,7 @@ async function logPage() {
           tile(Math.round(sum(studied30, 1) / studied30.length).toLocaleString(), "reviews a day"),
           tile(Math.round(sum(studied30, 2) / studied30.length).toLocaleString(), "new cards a day"),
           tile(r30 === null ? "—" : `${r30.toFixed(1)}%`, "retention")) : h("p", { class: "muted small" }, "No study days yet."),
-        h("small", { class: "muted" }, "Averages leave out days off, so a rest day doesn't pull them down."),
+        h("small", { class: "muted" }, "Average of days studied"),
         h("details", {}, h("summary", { class: "small" }, "By week, 12 weeks"), weeks))),
     h("section", { class: "panel", style: "margin-top:12px" }, h("h4", {}, h("span", {}, "Day by day ", h("span", { class: "muted" }, "last 30 days")), order), table),
     followed.length ? h("h2", {}, "Plans") : null,
@@ -1693,7 +1889,7 @@ const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return 
 
 /** The admin's account lookup: one person at a time (never a list of
  *  everyone, never how anyone studies), with sign-in help, a note of mine
- *  and what I've done there (mock "Admin, grown up", A3, A5). */
+ *  and what I've done there. */
 function peoplePanel(nav) {
   const when = (t) => (t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "never");
   const seen = (t) => (t ? new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet");
@@ -1865,9 +2061,8 @@ function peoplePanel(nav) {
   return { el, open: (uid) => { q.value = uid; hits.replaceChildren(); status.textContent = ""; open(uid); } };
 }
 
-/** One squad at a time, by its code or from an account (mock "Admin,
- *  grown up", A4): its members by name, and the founder's tools done from
- *  here. The founder gets an email for each. */
+/** One squad at a time, by its code or from an account: its members by
+ *  name, and the founder's tools done from here. The founder gets an email for each. */
 function squadPanel(nav) {
   const el = h("section", { class: "panel people" });
   const when = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -2242,7 +2437,7 @@ async function adminPage() {
   const versions = h("section", { class: "panel" }, h("h4", {}, "Versions", h("span", { class: "muted" }, "accounts by the add-on they last used")),
     hbars(s.versions, (label) => !/^3\./.test(label)));
 
-  // mock "Admin, grown up", A2: a sidebar of pages, one set of gaps
+  // The admin: a sidebar of pages, one set of gaps
   const nav = {};
   const people = peoplePanel(nav);
   const squads = squadPanel(nav);
@@ -2280,8 +2475,8 @@ async function adminPage() {
   await drawTiles();
 }
 
-/** 3.6.5, P6: Send feedback to Sam. The page it came from rides along;
- *  Sam sees the name and can write back by mail, never the address. */
+/** 3.6.5, P6: Send feedback. The page it came from rides along; the
+ *  admin sees the name and can write back by mail, never the address. */
 function feedbackPage() {
   const from = (new URLSearchParams(location.search).get("from") || "").replace(/[^A-Za-z0-9/_-]/g, "").slice(0, 80);
   const box = h("textarea", { rows: 7, maxlength: 2000, "aria-label": "Your feedback", placeholder: "What's working, what isn't, what you'd add…", style: "font-family:inherit;font-size:15px" });
@@ -2301,7 +2496,7 @@ function feedbackPage() {
     send.disabled = false;
   } }, "Send");
   const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
-  page(phead("Send feedback", "What's working, what isn't, what you'd add. Sam reads every one, sees your name with it, and can write back to your email. Nobody else sees it."), form);
+  page(phead("Send feedback", "What's working, what isn't, what you'd add. Every one is read, with your name, and we can write back to your email. Nobody else sees it."), form);
   reading();
 }
 
@@ -2376,12 +2571,14 @@ async function route() {
  *  it leaves the address bar at once. */
 async function start() {
   const token = /^#([A-Za-z0-9_-]{43})$/.exec(location.hash);
-  if (token) {
-    history.replaceState(null, "", location.pathname + location.search);
-    try { await api("POST", "/auth/link/redeem", { token: token[1] }); }
-    catch { /* expired or used: a session already here carries on */ }
-  }
+  if (token) history.replaceState(null, "", location.pathname + location.search);
   await whoami();
+  // signed in already: the session here stands. A link someone else made
+  // can't swap this browser onto their account (a login CSRF).
+  if (token && !me) {
+    try { await api("POST", "/auth/link/redeem", { token: token[1] }); await whoami(); }
+    catch { /* expired or used */ }
+  }
   await route();
 }
 

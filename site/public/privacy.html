@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Due Crew keeps</title>
+<meta name="description" content="For each kind of data: who sees it, how long it's kept, and how to delete it.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon.png" type="image/png">
+<style>
+  :root {
+    --bg: #fbfbf8; --ink: #2a2c28; --muted: #6b6f68; --line: #e2e2da; --well: #f2f2ec;
+    --accent: #2e7d32; --accent-ink: #ffffff;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1c; --ink: #dfe1dc; --muted: #9a9e97; --line: #3d403b; --well: #2b2d29;
+            --accent: #7cc47f; --accent-ink: #122912; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 660px; margin: 0 auto; padding: 56px 20px 40px; }
+  main { max-width: 860px; }
+  .logo { display: block; width: 180px; max-width: 60%; height: auto; }
+  h1 { font-size: 28px; line-height: 1.25; font-weight: 700; margin: 26px 0 8px; letter-spacing: -0.01em; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  .lede { font-size: 18px; color: var(--muted); margin: 0 0 22px; max-width: 62ch; }
+  .never { background: var(--well); border-radius: 12px; padding: 14px 18px; margin: 0 0 24px; }
+  .never b { display: block; margin-bottom: 2px; }
+  .keeps { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); }
+  thead th { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+  tbody th { font-weight: 600; width: 22%; }
+  tbody th small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  tr.grp th { padding-top: 22px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); width: auto; }
+  td:nth-child(2) { width: 30%; } td:nth-child(3) { width: 22%; }
+  .after { margin-top: 24px; color: var(--muted); max-width: 62ch; }
+  footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 18px; font-size: 15px; color: var(--muted); }
+  footer a { color: inherit; }
+  @media (max-width: 700px) {
+    .logo { width: 150px; }
+    thead { display: none; }
+    table, tbody, tr, th, td { display: block; width: auto; }
+    tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
+    tr.grp { border: 0; padding: 0; }
+    th, td { border: 0; padding: 2px 0; }
+    tbody th, td:nth-child(2), td:nth-child(3) { width: auto; }
+    td::before { content: attr(data-h) " · "; color: var(--muted); font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <a href="/"><picture>
+    <source srcset="/logo-dark.svg" media="(prefers-color-scheme: dark)">
+    <img class="logo" src="/logo.svg" alt="Due Crew" width="401" height="137">
+  </picture></a>
+
+  <h1>What Due Crew keeps</h1>
+  <p class="lede">For each kind of data: who sees it, how long it&rsquo;s kept, and how to delete it.</p>
+
+  <div class="never"><b>Never sent, never kept</b>Card text. Which cards you studied. Your decks&rsquo; contents. A password (there isn&rsquo;t one). Your email in any log.</div>
+
+  <div class="keeps">
+    <table>
+      <thead><tr><th scope="col">What</th><th scope="col">Who sees it</th><th scope="col">Kept</th><th scope="col">To delete it</th></tr></thead>
+      <tbody>
+      <tr class="grp"><th colspan="4" scope="colgroup">You</th></tr>
+      <tr><th scope="row">Email<small>to send sign-in codes</small></th><td data-h="Who sees it">Only you; Sam if you write in</td><td data-h="Kept">Until you delete your account</td><td data-h="To delete it">Account &rsaquo; Delete</td></tr>
+      <tr><th scope="row">Name and emoji</th><td data-h="Who sees it">People you&rsquo;re connected to: your crew and the people you&rsquo;ve added, your squadmates, a plan&rsquo;s co-authors, and whoever has your code or invite link. Plans you make show your name to their followers.</td><td data-h="Kept">Until you change them</td><td data-h="To delete it">Settings &rsaquo; You</td></tr>
+      <tr><th scope="row">Status</th><td data-h="Who sees it">Your crew</td><td data-h="Kept">Until you change it</td><td data-h="To delete it">Settings &rsaquo; You</td></tr>
+      <tr><th scope="row">Settings<small>privacy switches, dates, squads, accent</small></th><td data-h="Who sees it">Only you</td><td data-h="Kept">Until you delete your account</td><td data-h="To delete it">Account &rsaquo; Delete</td></tr>
+      <tr class="grp"><th colspan="4" scope="colgroup">What your crew sees</th></tr>
+      <tr><th scope="row">Your week<small>the last 8 days&rsquo; numbers you share, exam and away dates, studying now, cards you flagged</small></th><td data-h="Who sees it">People you&rsquo;ve added who added you back</td><td data-h="Kept">8 days, rolling</td><td data-h="To delete it">Settings &rsaquo; Privacy turns any number off at the next sync; Pause hides all of it</td></tr>
+      <tr><th scope="row">Shared decks<small>names and card counts</small></th><td data-h="Who sees it">Your crew</td><td data-h="Kept">While you share them</td><td data-h="To delete it">Settings &rsaquo; Shared decks</td></tr>
+      <tr><th scope="row">Heatmap<small>reviews a day</small></th><td data-h="Who sees it">Your crew, on your profile</td><td data-h="Kept">Half a year</td><td data-h="To delete it">Settings &rsaquo; Privacy &rsaquo; Heatmap</td></tr>
+      <tr><th scope="row">Cards you have down or are stuck on<small>as a note&rsquo;s ID, never its text</small></th><td data-h="Who sees it">Crewmates who share that deck</td><td data-h="Kept">While you share the deck</td><td data-h="To delete it">Stop sharing the deck</td></tr>
+      <tr><th scope="row">Squad rows</th><td data-h="Who sees it">Your squadmates</td><td data-h="Kept">While you&rsquo;re in the squad</td><td data-h="To delete it">Leave the squad</td></tr>
+      <tr><th scope="row">Cheers, knocks, tips</th><td data-h="Who sees it">The person you sent them to</td><td data-h="Kept">Cheers and knocks until read; tips while on the card</td><td data-h="To delete it">They go with your account</td></tr>
+      <tr class="grp"><th colspan="4" scope="colgroup">Only you</th></tr>
+      <tr><th scope="row">Your log<small>each day&rsquo;s minutes, reviews, new cards, retention</small></th><td data-h="Who sees it">Only you, on Home and Log</td><td data-h="Kept">Up to 15 years</td><td data-h="To delete it">Account &rsaquo; Delete my log</td></tr>
+      <tr><th scope="row">Due to-dos and ticks</th><td data-h="Who sees it">Only you</td><td data-h="Kept">Ticked ones a week; open ones until you delete them</td><td data-h="To delete it">Account &rsaquo; Delete my to-dos</td></tr>
+      <tr><th scope="row">Cheers received<small>a count for your year card</small></th><td data-h="Who sees it">Only you</td><td data-h="Kept">With your log</td><td data-h="To delete it">With your log</td></tr>
+      <tr class="grp"><th colspan="4" scope="colgroup">Plans</th></tr>
+      <tr><th scope="row">Plans you make<small>dates, tags, notes, the last 30 saves</small></th><td data-h="Who sees it">Followers and co-authors; anyone, if you list it in the library</td><td data-h="Kept">Until you delete it</td><td data-h="To delete it">The plan&rsquo;s page &rsaquo; Delete (a plan people follow passes to a co-author when you leave)</td></tr>
+      <tr><th scope="row">Plans you follow</th><td data-h="Who sees it">Its authors see counts, only if you share progress</td><td data-h="Kept">While you follow</td><td data-h="To delete it">Stop following</td></tr>
+      <tr class="grp"><th colspan="4" scope="colgroup">Running it</th></tr>
+      <tr><th scope="row">Feedback you send</th><td data-h="Who sees it">Sam, with your name</td><td data-h="Kept">A year</td><td data-h="To delete it">Ask, or delete your account</td></tr>
+      <tr><th scope="row">Sign-ins</th><td data-h="Who sees it">Only you (Account &rsaquo; Signed in)</td><td data-h="Kept">180 days unused</td><td data-h="To delete it">Account &rsaquo; Sign out everywhere</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="after">An account with no activity for 12 months (24 when paused) is deleted with everything in it. Deleting your account deletes everything above at once. <a href="/account">Account</a> downloads all of it as one file. The add-on and server are <a href="https://github.com/sammyc2472/due-crew">open on GitHub</a>.</p>
+
+  <footer>
+    <b>due crew</b> &middot; free for Anki &middot;
+    <a href="/classes">For classes</a> &middot;
+    <a href="/library">Library</a> &middot;
+    <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot;
+    <a href="/privacy">Privacy</a> &middot;
+    <a href="https://github.com/sammyc2472/due-crew">Source</a>
+  </footer>
+</main>
+</body>
+</html>

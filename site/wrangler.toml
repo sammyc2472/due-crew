@@ -12,7 +12,7 @@ routes = [
 
 # Workers Logs: what the code logs (errors, the bridge's counts), kept a few
 # days in the dashboard. Not each request: URLs carry friend and plan codes,
-# and CLAUDE.md says codes are never logged.
+# and codes are never logged.
 [observability]
 enabled = true
 

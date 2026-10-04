@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WEEK, api, befriend, db, person } from "./helpers";
+import { WEEK, api, befriend, db, person, from2x } from "./helpers";
 
 type P = Awaited<ReturnType<typeof person>>;
 let sam: P, dre: P, nia: P;
@@ -169,6 +169,10 @@ describe("friends and codes", () => {
   });
 
   it("the first 3.0 sync re-adds the crew by uid: add-only, unknown uids skipped", async () => {
+    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);  // not from 2.x: nothing
+    await nia.call("POST", "/sync", { profile: { clientVersion: "2.9.0" } });  // and saying so isn't enough
+    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);
+    await from2x("nia", "dre");
     const r = await nia.call("PUT", "/friends", { ids: ["sam", "dre", "ghost", "nia", "sam"] });
     expect(r.body.added).toEqual(["dre", "sam"]);
     expect((await sam.call("GET", "/board")).body.friends.find((f: any) => f.uid === "nia").mutual).toBe(true);
@@ -216,6 +220,8 @@ describe("squads", () => {
   });
 
   it("restore: the first member back recreates it with its founder; the rest join", async () => {
+    expect(await nia.status("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" })).toBe(404);  // not from 2.x
+    await from2x("dre", "sam", "nia");
     const r1 = await dre.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" });
     expect(r1.body).toMatchObject({ name: "busm", founder: "sam", open: true, code: "KQ9P2X3A" });
     const r2 = await sam.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "other name", founder: "dre" });
@@ -230,6 +236,7 @@ describe("squads", () => {
   });
 
   it("restore isn't a way round create's limit, and a squad fills at 500", async () => {
+    await from2x("nia");
     for (let i = 0; i < 30; i++) {
       expect(await nia.status("POST", "/squads/restore", { code: `ABCDEF${"23456789"[i % 8]}${"23456789"[Math.floor(i / 8)]}`, name: "x" })).toBe(200);
     }

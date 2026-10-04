@@ -1,4 +1,4 @@
-"""Follow a plan (3.1, mocks 2.2 and 2.3): a code (or a pasted link), a
+"""Follow a plan (3.1): a code (or a pasted link), a
 look at the plan, the deck to run it on, how much of it this copy has,
 what to do about units that have already opened, and whether the crew
 sees my progress. The tag-swap question comes up once per deck, when my
@@ -36,7 +36,7 @@ def late_label(n_units, n_cards, while_paused=False):
 
 
 class SwapDialog(QDialog):
-    """Mock 2.3: "Your tags start differently"."""
+    """When "your tags start differently"."""
 
     def __init__(self, parent, swap, matched):
         super().__init__(parent)

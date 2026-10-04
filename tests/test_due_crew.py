@@ -430,8 +430,9 @@ def test_shares_v21():
           "duecrew:sharetoday" in js and "duecrew:shareweek" in js)
     foot_week = board.render({"entries": [], "labels": labels[::-1], "tomorrow": "",
                               "pending": []}, {"period": "week"}, 0)
-    check("share: Week view's Crew menu offers the crew week (3.4 review, H5)",
-          "crewmenu" in foot_week and ("Share the week", "sharecrewweek") in board.crew_menu_items("week", False))
+    check("share: the footer's Share menu offers the crew week (3.7.1, H3)",
+          "crewmenu" in foot_week and "sharemenu" in foot_week
+          and ("This week", "sharecrewweek") in board.share_menu_items(False))
 
 
 def _luminance(hex_color):
@@ -887,10 +888,10 @@ def test_v25_edges_emoji_week():
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
                         {"period": "squads"}, 0, squad_view=view)
-    check("squad board: Share the squad's day is in the Crew menu, not on the squad's line",
-          "squadshare" not in html and "crewmenu" in page
-          and ("Share the squad's day", "squadshare") in board.crew_menu_items("squads", False, True)
-          and not any(k == "squadshare" for _l, k in board.crew_menu_items("squads", False, False)))
+    check("squad board: Share the squad's day is in the Share menu, not on the squad's line",
+          "squadshare" not in html and "sharemenu" in page
+          and ("The squad's day", "squadshare") in board.share_menu_items(False, True)
+          and not any(k == "squadshare" for _l, k in board.share_menu_items(False, False)))
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
@@ -1174,9 +1175,9 @@ def test_decks():
     # backwards in dark mode, where the mature fill is the bright one
     legend = board._decks_html({"labels": [today], "entries": [
         {"user_id": "me", "name": "Sam", "you": True, "decks": clean(payload)}]})
-    check("decks legend: names the fills by texture, which holds in both themes",
-          "solid = mature" in legend and "faded = seen" in legend and "hatched = unlocked" in legend
-          and "light =" not in legend and "dark =" not in legend)
+    check("decks legend: a key drawn with the bars' own fills, which holds in both themes (3.7.1, I6)",
+          '<i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked' in legend
+          and "light =" not in legend and "dark =" not in legend and "hover" not in legend)
 
 
 def test_calendar_weeks_and_ledger():
@@ -1672,6 +1673,27 @@ def test_settings_follow_account_v213():
         a["cl"].get_settings = real_get
         check("offline: one failed pull, then the sync runs once, no loop",
               tries == [1] and runs == [1] and account.ready())
+        # 3.7.1, D2: Delete my to-dos on the site reaches Anki at its next refresh
+        use(a)
+        a["cfg"]["due_items"] = [{"id": "x1", "t": "read ch 4"}]
+        a["cl"].session.update(settings_dirty=False, settings_day=TODAY.isoformat())
+        a["cl"].put_settings("2026-10-03T08:00:00.000000Z", account.pick(a["cfg"]))
+        a["cl"].session.update(settings_seen="2026-10-03T08:00:00.000000Z", settings_dirty=False)
+        a["cl"]._call("DELETE", "/account/todos")
+        _state["settings_failed_ts"] = 0
+        board = a["cl"].fetch_board([TODAY.isoformat()])
+        account.saved_elsewhere(board["settings_at"])
+        check("a save made elsewhere (the site's Delete my to-dos) is pulled at the next refresh",
+              a["cfg"]["due_items"] == [] and a["cl"].session["settings_seen"] == store.settings["sam"]["at"])
+        pulls = []
+        real_get = a["cl"].get_settings
+        a["cl"].get_settings = lambda: (pulls.append(1), real_get())[1]
+        account.saved_elsewhere(store.settings["sam"]["at"])
+        a["cl"].session["settings_dirty"] = True
+        account.saved_elsewhere("2999-01-01T00:00:00.000000Z")
+        a["cl"].get_settings = real_get
+        a["cl"].session["settings_dirty"] = False
+        check("...and a save already seen, or one of mine still unsent, isn't pulled again", pulls == [])
     finally:
         for k, v in saved.items():
             setattr(account, k, v)
@@ -2128,6 +2150,33 @@ def test_together_v210():
     js = crew_cards.chip_js(dict(chip, accent="#0a0"))
     check("tips: This helped is its own click, the tip's words go in as text",
           "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+    from due_crew import room_model as rm
+    check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
+          "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
+          and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
+          and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
+    fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
+    check("ask card: above the bar only while the corner is free, else back to the bar",
+          "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
+          and rm.CMD_KEY in fj and "textContent" in fj and "innerHTML" not in fj
+          and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
+    import aqt.utils as _au
+    calls, asked = [], []
+    real_toggle, real_ask = crew_cards.helped_toggle, _au.askUser
+    crew_cards.helped_toggle = calls.append
+    real_tip = crew_cards._tip_from
+    crew_cards._tip_from = lambda uid: {"name": "Eve Park", "helped": False, "from": uid}
+    try:
+        _au.askUser = lambda q, *a, **k: asked.append(q) or False
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
+        no = list(calls)
+        _au.askUser = lambda q, *a, **k: asked.append(q) or True
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"], from_card_page=True)
+        crew_cards.on_message("knowshelped", ["duecrew", "knowshelped", "eve"])
+    finally:
+        crew_cards.helped_toggle, _au.askUser, crew_cards._tip_from = real_toggle, real_ask, real_tip
+    check("ask card: This helped from the review screen asks first; from the bar it doesn't",
+          no == [] and calls == ["eve", "eve"] and len(asked) == 2 and "Eve" in asked[0], str((calls, asked)))
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
     check("tips: a tip kept before 3.5.0 still shows, without This helped (no one to thank)",
           old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)
@@ -2268,8 +2317,8 @@ def test_show_up():
     check("mode: one crew pill, the week's totals banner gone, Share week offered, Share today not",
           ">Crew</a>" in mode and ">Today</a>" not in mode and ">Week</a>" not in mode
           and "Last week" not in mode
-          and [k for _l, k in board.crew_menu_items("week", True)] == ["friends", "sharecrewweek", "pictureweek"]
-          and "sharetoday" not in [k for _l, k in board.crew_menu_items("today", True)])
+          and [k for _l, k in board.share_menu_items(True) if _l] == [
+              "sharecrewweek", "pictureweek", "pictureyear", "picturealltime"])
     week_len = len(board.week_labels(labels))
     check("mode: a square per day Monday to today, today's letter marked, sorted by days then name",
           mode.count('class="sq on"') == 3 + 2 + 3 + 1 + 2 * 0 + 0  # per person within the calendar week
@@ -3021,7 +3070,35 @@ def test_room_commands_from_the_card_page_need_the_key():
     check("room: the board's commands need none", rm.trusted("duecrew:roomjoin:abc:1", False) == ("duecrew:roomjoin:abc:1", True))
     check("room: from the card page, even keyed, nothing but the widget's own",
           rm.trusted(f"duecrew:roomjoin:abc|{rm.CMD_KEY}", True)[1] is False
-          and rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True)[1] is False)
+          and rm.trusted(f"duecrew:cheerpick:u|{rm.CMD_KEY}", True)[1] is False)
+    check("room: the Ask card's keyed clicks count from the card page, bare ones don't",
+          rm.trusted(f"duecrew:knowsask|{rm.CMD_KEY}", True) == ("duecrew:knowsask", True)
+          and rm.trusted("duecrew:knowshelped:u", True)[1] is False)
+
+
+def test_only_our_pages_act_bare():
+    """3.7.1 review: a card's own script runs in the browser's preview and
+    in Cards… too, not only on the review screen. Only the pages Due Crew
+    draws on (Decks, Overview, the top bar, the reviewer's bottom bar) send
+    bare commands; from anywhere else a room or card command needs the key."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    from due_crew import rooms as R, cards as CC, room_model as rm
+    got, saved = [], (R.on_message, CC.on_message)
+    R.on_message = lambda cmd, parts: (got.append(cmd), True)[1]
+    CC.on_message = lambda cmd, parts: got.append(cmd)
+    Previewer = type("Previewer", (), {})
+    try:
+        dc._on_js(False, "duecrew:roomcheer", Previewer())
+        dc._on_js(False, "duecrew:knowshelped:sam", Previewer())
+        dc._on_js(False, f"duecrew:roomcheer|{rm.CMD_KEY}", Previewer())  # the widget's own, keyed
+        dc._on_js(False, "duecrew:roomcheer", DeckBrowser())
+    finally:
+        R.on_message, CC.on_message = saved
+    check("a preview's card script can't cheer the room or mark a tip; the widget's keyed button and the board can",
+          got == ["roomcheer", "roomcheer"], got)
 
 
 def test_room_chip_side_v301():
@@ -3112,6 +3189,33 @@ def test_plans_events_f1():
     html = board._plan_card_html({"id": "p", "title": "Plan", "prep": dict(pf, when="Thu")})
     check("events: the card line, the name escaped",
           "For <b>Micro &lt;quiz&gt;</b> on Thu &middot; 2 more days of prep" in html, html)
+
+
+def test_plans_buried_siblings():
+    """A new card whose note has a card answered counts as seen: Anki
+    buries and spaces siblings, so the date is done and never behind for
+    them, and Due says when they come back. A suspended sibling stays out."""
+    from due_crew import plans as P, due
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id = 5")
+    col.db.conn.execute("UPDATE cards SET queue = -3, type = 0 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: c2 buried behind a studied c1 counts as seen", idx.counts({5, 6}) == [2, 2, 2], str(idx.counts({5, 6})))
+    check("siblings: counted, and buried today", idx.siblings({5, 6}) == (1, 1))
+    doc = {"units": [{"id": "u", "name": "Cloze", "opens": "2026-01-01", "due": "2026-01-02"}]}
+    check("siblings: a past date isn't behind for them", P.ahead_behind(doc, {"u": idx.counts({5, 6})}, "2026-03-01") == [])
+    col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: a suspended sibling isn't seen", idx.counts({5, 6}) == [1, 1, 2] and idx.siblings({5, 6}) == (0, 0))
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: unburied, they come back later", idx.siblings({5, 6}) == (1, 0))
+    x = {"pid": "p", "uid": "u", "name": "Cloze", "opens": "2026-01-01", "seen": 2, "total": 2}
+    check("siblings: Due says when they come back",
+          due._date_row(dict(x, sibs=[12, 12]), set(), "2026-03-01")["n"] == "done \u00b7 12 siblings tomorrow"
+          and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["n"] == "done \u00b7 1 sibling later"
+          and due._date_row(x, set(), "2026-03-01")["n"] == "all seen"
+          and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["done"])
 
 
 def test_plans_ids_e1():
@@ -3240,7 +3344,7 @@ def test_export_for_my_ai_365():
 
 
 def test_feedback_365():
-    """3.6.5, P6: Send feedback to Sam, from Tools › Due Crew and Settings
+    """3.6.5, P6: Send feedback, from Tools › Due Crew and Settings
     (the board's You tab, and the dialog), with the versions if ticked."""
     from due_crew import app as appmod
     store = world({"maya": "Maya"})
@@ -4637,8 +4741,12 @@ def test_who_knows_v32():
     log = K.log_days(col, 8)
     check("log: minutes, reviews, new cards and retention, studied days only",
           log == {_day(-1): [0, 1, 1, 0.0], _day(0): [2, 2, 1, 50.0]}, str(log))
-    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)})
+    sam.push(labels, {}, log={f"2026-0{m}-1{d}": [1, 1, 0, None] for m in (5, 6) for d in range(9)}, log_window="full")
     check("log: the long first upload marks it sent", sam.session["log_full"] == "sam" and len(store.logs["sam"]) == 18)
+    dre.session.pop("log_full", None)
+    dre.push(labels, {}, log={}, log_window="full")
+    check("log: a first window with nothing in it (months away) still counts as sent, so the history import can start",
+          dre.session.get("log_full") == "dre")
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     sam.push(labels, {}, log={"2026-06-19": [1, 1, 0, None]})
     check("log: unchanged, not sent again", "log" not in store.bodies[-1][2])
@@ -5334,19 +5442,40 @@ def test_account_survives_a_reset_config():
 
 
 def test_crew_menu_pictures():
-    """K7: the Crew menu's picture lines, and a handler for every key it can offer."""
-    keys = set()
-    for period in ("today", "week", "decks", "squads", "plans"):
-        for show_up in (False, True):
-            keys |= {k for _l, k in board.crew_menu_items(period, show_up, True)}
+    """3.7.1, H3: Crew ▾ is people, Share ▾ everything you post (as text,
+    then as a picture), and a handler for every key either can offer."""
     text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
-    run = text[text.index("def _crew_menu"):text.index("def open_friends")]
-    handled = set(re.findall(r'"([a-z]+)": lambda', run))
-    check("crew menu: a picture of today and of the week, each handled",
-          ("Share today as a picture…", "picturetoday") in board.crew_menu_items("today", False)
-          and "pictureweek" in [k for _l, k in board.crew_menu_items("week", False)]
-          and "picturetoday" not in [k for _l, k in board.crew_menu_items("today", True)]
-          and keys <= handled and '"/home?card=today"' in run, sorted(keys - handled))
+    for fn, nxt, keys in (
+            ("def _crew_menu", "def _share_menu", {k for _l, k in board.crew_menu_items()}),
+            ("def _share_menu", "def open_friends",
+             {k for show_up in (False, True) for _l, k in board.share_menu_items(show_up, True) if _l})):
+        run = text[text.index(fn):text.index(nxt)]
+        handled = set(re.findall(r'"([a-z]+)": lambda', run))
+        check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
+    full = board.share_menu_items(False, True)
+    check("share menu: as text, then as a picture, year and all time on the site",
+          [l or k for l, k in full] == ["As text", "Today", "This week", "The squad's day", "As a picture",
+                                        "Today…", "My week…", "My year…", "All time…"]
+          and '"/home?card=alltime"' in text and '"/home?card=year"' in text)
+    check("crew menu: people only",
+          [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
+    import due_crew as dc
+    import aqt.utils as au
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    got, saved, saved_link = [], dc._share_menu, getattr(au, "openLink", None)
+    dc._share_menu = lambda c: got.append("share")
+    au.openLink = lambda url: got.append(url)
+    try:
+        dc._on_js(False, "duecrew:sharemenu", DeckBrowser())
+        dc._on_js(False, "duecrew:privacypage", DeckBrowser())
+    finally:
+        dc._share_menu = saved
+        au.openLink = saved_link
+    page = board.settings_html({"tab": "privacy", "signed_in": True}, {})
+    check("footer's Share ▾ and Privacy's What Due Crew keeps reach their handlers (3.7.1, D3)",
+          got[0] == "share" and got[1].endswith("/privacy") and "duecrew:privacypage" in page, got)
 
 
 def test_long_quiet_friends_fold():
@@ -5468,6 +5597,26 @@ def test_due_author_lines_arrive_clean():
           and len(todo) == 8, todo)
 
 
+def test_due_folds_itself_when_done():
+    """Due folds to its one line once today's all ticked and nothing's behind,
+    opens again tomorrow, and a Hide or Show by hand holds for the day."""
+    from due_crew import due as D
+    T = "2026-10-03"
+    done = D.view(T, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T, "seen": 5, "total": 5},
+                      {"pid": "p", "uid": "v", "plan": "P", "name": "Next one", "opens": "2026-10-04", "seen": 0, "total": 9}], [], {})
+    left = D.view(T, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T, "seen": 2, "total": 5}], [], {})
+    check("fold: done for today folds itself; not done stays open",
+          D.fold_state(None, done, T) is True and D.fold_state(None, left, T) is False)
+    check("fold: my Show today wins; yesterday's choice doesn't",
+          D.fold_state({"day": T, "folded": False}, done, T) is False
+          and D.fold_state({"day": "2026-10-02", "folded": True}, left, T) is False)
+    check("fold: nothing at all today isn't 'done'", D.fold_state(None, D.view(T, [], [], {}), T) is False)
+    h = board._due_html(dict(done, folded=True, done=True))
+    check("fold: the line says done and what's next, with Show",
+          "Done for today" in h and "Tomorrow: Next one" in h and "Show &#9662;" in h, h)
+    check("fold: open, Hide says what it does", "Hide &#9652;" in board._due_html(dict(left, folded=False)))
+
+
 def test_due_board_and_clicks():
     """Due on the board: the three tabs, escaped, every click sent as the
     board sends it; adding with a day said at the end; Behind; recover leeches."""
@@ -5536,7 +5685,7 @@ def test_due_board_and_clicks():
         send("duetab:upcoming")
         check("due tab", conf["due_tab"] == "upcoming")
         send("duefold")
-        check("due fold", conf["due_fold"] is True)
+        check("due fold: Hide holds for today", conf["due_fold"] == {"day": T, "folded": True}, conf.get("due_fold"))
         send("dueshow:later")
         check("due show", conf["due_tab"] == "later")
     finally:
@@ -5556,6 +5705,70 @@ def test_due_board_and_clicks():
     check("leeches: its sibling and a non-leech left alone", rows[2] == (2, 2, 1) and rows[3] == (2, 2, 9))
     check("leeches: one undo step", len(col.undo_steps) == 1 and col.undo_steps[0][0].startswith("Due Crew"))
     check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
+
+
+def test_history_import():
+    """3.7.1: once the first 120 days have gone, each full sync carries one
+    more year of my log until my first review; an empty year is passed
+    over; a server that doesn't say it keeps the whole log never moves it on."""
+    from due_crew import cards as C
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    cutoff = col.sched.day_cutoff
+    for ago in (3, 200, 400, 1300):  # recent, last year, two years back, gap, four years back
+        fakes.add_review(conn, (cutoff - ago * 86400 - 3600) * 1000, cid=ago)
+    cl = types.SimpleNamespace(user_id="me", session={"log_full": "me"}, _save_session=lambda: None)
+    got = C.history_part(col, cl)
+    check("history: the year before the first 120 days", got and len(got[0]) == 2 and got[1] == C.LOG_FULL + 366, got)
+    cl.session["log_back"] = {"uid": "me", "skip": got[1]}
+    got2 = C.history_part(col, cl)
+    check("history: an empty year is passed over to the next with something",
+          got2 and len(got2[0]) == 1 and got2[1] == C.LOG_FULL + 4 * 366, got2)
+    cl.session["log_back"] = {"uid": "me", "skip": got2[1]}
+    check("history: done at my first review", C.history_part(col, cl) is None and cl.session["log_back"].get("done"))
+    check("history: never before the first 120 days have gone",
+          C.history_part(col, types.SimpleNamespace(user_id="me", session={}, _save_session=lambda: None)) is None)
+    cl2 = api.ApiClient(os.path.join(tempfile.mkdtemp(), "s.json"))
+    cl2.session.update(token="t", uid="u1")
+    sent = {}
+    cl2._call = lambda m, path, body=None, **k: (sent.update(body or {}), (200, {"ok": True}))[1]
+    labels = [(datetime.date(2026, 10, 3) - datetime.timedelta(days=i)).isoformat() for i in range(8)]
+    try:
+        cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
+    except Exception as e:
+        sent["err"] = repr(e)
+    check("history: the year rides the sync with the recent days",
+          set((sent.get("log") or {}).get("days", {})) == {labels[0], "2025-01-02"}, sent.get("log"))
+    check("history: a server that didn't say logAll doesn't move it on", "log_back" not in cl2.session, cl2.session.get("log_back"))
+    cl2._call = lambda m, path, body=None, **k: (200, {"ok": True, "logAll": True, "logCut": True})
+    cl2.push(labels, {}, log={labels[0]: [5, 10, 1, 90.0]}, log_back=({"2025-01-02": [9, 20, 2, None]}, 486))
+    check("history: after Delete my log (logCut) the import is done: the old years stay home (3.7.1, D2)",
+          (cl2.session.get("log_back") or {}).get("done") is True)
+
+
+def test_offline_error_names_no_code():
+    """3.7.1 review: requests' own error carries the whole URL (a friend,
+    plan or squad code); the add-on's error is raised without it, so a
+    traceback printed by _bg can't show it either."""
+    import traceback as tb
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "s.json"))
+    cl.session.update(token="t", uid="u1")
+
+    class Down:
+        def request(self, method, url, **kw):
+            raise api.requests.RequestException(f"Max retries exceeded with url: {url}")
+    cl.http = Down()
+    path = "/codes/" + "ABCD" + "1234" + "/add"  # (a traceback quotes this line, not the code)
+    try:
+        cl._call("POST", path)
+        text = ""
+    except Exception as e:
+        text = "".join(tb.format_exception(type(e), e, e.__traceback__))
+    check("offline: the error and its traceback name no code", text and "ABCD1234" not in text, text[-300:])
+    p = cl.session_file
+    cl._save_session()
+    check("session file: mine alone", (os.stat(p).st_mode & 0o077) == 0)
 
 
 def main():

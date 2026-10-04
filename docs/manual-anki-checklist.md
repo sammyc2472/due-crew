@@ -263,7 +263,7 @@ deck both share (Settings › Shared decks).
 
 ### 3.2.1: the admin's notice
 
-- [ ] Signed in on duecrew.com as sammy: the nav has Admin. Anyone else: no Admin, and /admin says Not found.
+- [ ] Signed in on duecrew.com as the admin: the nav has Admin. Anyone else: no Admin, and /admin says Not found.
 - [ ] Admin → A notice: post "Testing a notice" with https://duecrew.com as the link. It's under Showing now. In Anki (3.2.1), Refresh: 📣 Testing a notice · More · × on top of every tab. More opens the link in the browser; × hides it, and it stays hidden after a restart.
 - [ ] Post one "only to add-ons older than 3.2.1": a 3.2.1 board doesn't show it. Take down: the next refresh drops it.
 - [ ] A link that isn't https is refused with a plain message.
@@ -330,7 +330,7 @@ In Anki (as a follower):
 - [ ] A: paste a plan's link (duecrew.com/p/CODE) into iMessage or Slack: the plan's name, one line and its picture show. A squad's plan shows the plain Due Crew card.
 - [ ] B: a plan's Settings › Library › List it in the library; it shows at /library. Filter by its deck and length; search a word in its name.
 - [ ] B: signed in as someone else: Look opens its calendar; Follow follows it (the add-on's next morning opens today's date); Copy › a Monday › it opens as your plan, "based on …".
-- [ ] B: Report on someone's card sends a mail to REPORT_TO. As sammy, Take out: the author's Settings says why and the switch is gone.
+- [ ] B: Report on someone's card sends a mail to REPORT_TO. As the admin, Take out: the author's Settings says why and the switch is gone.
 - [ ] C1: duecrew.com/classes reads right on a phone and a computer; the landing links to it.
 - [ ] C2: with 3+ followers sharing and most behind on a past date, Progress says so; Give the class a day moves the later dates (Save to keep).
 - [ ] C3: Share › A poster for the class › Print: one page, the QR code scans to the plan's link.
@@ -340,7 +340,7 @@ In Anki (as a follower):
 - [ ] Home: the strip says what opens today, what's waiting, the next event, and today so far; the year shows under the board; "Since you were here" lists crew added back, notes and plan changes (a second visit shows only what's new).
 - [ ] Home: a crewmate with an exam in the next two weeks: Send good luck › a line › Send. On their exam morning, their Anki shows it with the others.
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
-- [ ] Admin (sammy): tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
+- [ ] Admin: tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
 
 ### 3.5.0: asking about a card (K1–K3)
 

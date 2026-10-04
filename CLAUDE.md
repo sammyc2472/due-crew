@@ -78,8 +78,10 @@ add-on.
 - Friendship is two edges, one per person (`friends(owner, friend)`).
   Mutual = both exist. Only mutual friends read my week, decks and heatmap;
   a cheer lands only if its recipient added the sender; a knock needs a
-  squad in common or comes from adding the recipient's code. Anyone signed
-  in gets a name and an emoji for a uid, nothing more.
+  squad in common or comes from adding the recipient's code. Someone
+  connected to me (a crew edge or a knock either way, a squad or a plan in
+  common) gets a name and an emoji for my uid, nothing more (3.7.1, D5);
+  codes and invites carry their own names.
 - A squad row is an UPDATE on the server, never an insert; the join
   (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
   `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
@@ -90,6 +92,9 @@ add-on.
   (`ApiClient.restore_from_2x`): its code (when `session.friend_code` has
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
+  Only an imported account restores (`users.from2x`, migration 0018: the
+  import sets it, the first 3.x sync clears it); the client version alone
+  was anyone's to set.
 - The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
   `FIREBASE_SA` secret): for people still on 2.x, Firestore is the truth
   and their week, name and emoji, shared decks, heatmap and squad rows
@@ -183,7 +188,11 @@ add-on.
   guid (`knows`, as changes, `known.json` beside the session); the cards
   I'm stuck on (2+ lapses, or Again today) ride every sync (`stuck`) and
   come back with who knows each and their tips (`cards` in the session).
-  The chip is beside Edit on the answer side, never inside a card: who
+  The chip is on the answer side, never inside a card: since 3.7.1 a small
+  card bottom right of the review screen while the card's own text and
+  pictures leave that corner free (looked at again as pictures load, on
+  scroll and resize), else beside Edit (`knowsbar`); its clicks are keyed
+  (`CARD_PAGE_CMDS`), and This helped from there asks first. Who
   knows it (Ask: a flag with my line, `q`), a tip (This helped), or a
   crewmate's ask (Tip). A tip with words stays on its card (`tips`).
   3.5.0 (mock "Card Help Flow"): the chip shows a tip's own words (its
@@ -563,6 +572,27 @@ add-on.
   leech, suspended or 8+ lapses, gets its tag off and Anki's Forget, one
   undo step) are in Settings › Board. No new requests: items ride the
   settings push.
+- 3.7.1 (mocks "History", "Due fold", "What Due Crew Keeps", "Insights"):
+  the history import (`cards.history_part`: a year of my log per full
+  sync once the first 120 days went, up to 15 years, advanced only when
+  the reply says `logAll`; the server keeps 15 years). Share cards for
+  any year and all time (`/home?card=year|alltime`). Crew ▾ is people
+  (`board.crew_menu_items`), Share ▾ is what you post, as text then as a
+  picture (`share_menu_items`), in Anki and on the site. Due folds itself
+  once the day is done (`due.fold_state`); Hide/Show holds for the day.
+  Cheers received are counted (`cheer_counts`, migration 0017), shown
+  only on my own cards. Privacy: `site/public/privacy.html` is the table
+  of what's kept (change it in the same commit as what it describes);
+  Account › Your data downloads it all (`GET /account/data`), deletes my
+  log (`DELETE /log`: `cut`, and `logCut` ends the import) or my to-dos
+  (`DELETE /account/todos`; the board's `settingsAt` makes Anki pull a
+  save it hasn't seen, `account.saved_elsewhere`). Log has four insights
+  (`logInsights`). Copy: say what isn't on screen; never narrate what is.
+  Seen, for a plan, includes a new card whose note has a card answered
+  (`DeckIndex.counts`): Anki buries and spaces siblings, so a date whose
+  notes are all started is done and never behind for them; Due says
+  "done · N siblings tomorrow/later" (`DeckIndex.siblings`). Suspended
+  siblings stay out.
 
 ## Releasing
 
@@ -619,7 +649,9 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   that sends it through `_on_js` as the board does (3.5.0's Settings went
   out with its clicks reaching nothing). Anything a click adds has its way
   back on the same screen.
-- The reviewer's page runs the card's own script too: from there only the
+- A card's own script runs on the review screen, in the browser's preview
+  and in Cards…: from any page but the ones Due Crew draws on (Decks,
+  Overview, the top bar, the reviewer's bottom bar: `_our_page`) only the
   room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
   the board, the bars or a dialog.

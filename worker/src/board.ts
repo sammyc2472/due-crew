@@ -32,7 +32,7 @@ const FEED_MAX = 20;
  *  exams come with the board already. */
 async function feed(env: Env, uid: string) {
   const since = nowSec() - FEED_DAYS * 86400;
-  const mine = "SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_follows WHERE uid = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1";
+  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION SELECT plan FROM plan_editors WHERE uid = ?1`;
   const [back, notes, saves, sett] = await env.DB.batch<any>([
     env.DB.prepare(
       `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
@@ -73,7 +73,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const db = env.DB;
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
-      `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at FROM users u
+      `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
+         (SELECT at FROM settings WHERE uid = u.uid) AS sat FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added
     db.prepare(
@@ -110,6 +111,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
           week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at) },
     friends, cheers, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
+    settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
@@ -223,6 +225,10 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     }
     wrote.profile = sets.length > 0;
     if (sets.length) writes.push(db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE uid = ?`).bind(...vals, s.uid));
+    // a 3.x add-on has synced: the one-time 2.x restore is spent
+    if (typeof profile.client_version === "string" && /^3\./.test(profile.client_version)) {
+      writes.push(db.prepare("UPDATE users SET from2x = 0 WHERE uid = ? AND from2x = 1").bind(s.uid));
+    }
   }
   if (week !== null) {
     wrote.week = week !== have.week;
@@ -308,7 +314,8 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   // 3.2: the cards I'm stuck on: who has them down, and their tips
   const cards = stuck ? await C.forStuck(env, s.uid, stuck) : undefined;
   await touchSeen(env, s.uid);
-  return json({ ok: true, gone, wrote, ...(cards ? { cards } : {}) });
+  // logAll: this server keeps the whole log, so the add-on's history import moves on
+  return json({ ok: true, gone, wrote, logAll: true, ...(C.logCut(have.log) ? { logCut: true } : {}), ...(cards ? { cards } : {}) });
 }
 
 // ---- settings (2.13): mine only ----
