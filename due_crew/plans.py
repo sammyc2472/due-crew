@@ -132,7 +132,7 @@ def swapped(path, swap):
 # ---- the deck, read once ----
 
 _STATIC = {}  # (collection, deck id) -> (fingerprint, the parts that change only with notes, collection ref)
-_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "by_nid", "_searches")
+_STATIC_KEYS = ("leech", "by_deck", "by_ref", "home", "by_tag", "tag_names", "tag_keys", "by_guid", "guid_of", "by_nid", "nid_of", "_searches")
 
 
 class DeckIndex:
@@ -185,6 +185,7 @@ class DeckIndex:
                 self.cards[cid] = (int(queue), int(ctype))
                 self.order[cid] = (int(ctype) == 0, int(due or 0), cid)
         self.fell_back = set()  # unit ids matched by their note ids (C5)
+        self._started = None  # note ids with a card answered: siblings wait on these
         self._fresh = {}  # a search about my own reviews: this refresh only
 
     def _read_static(self, col, tree, where):
@@ -196,6 +197,7 @@ class DeckIndex:
         self.by_ref = {}     # (guid, ord) -> cid
         self.home = set()    # the cids in this deck and its subdecks
         self.by_nid = {}     # E1: note id -> [cid]
+        self.nid_of = {}     # cid -> note id
         by_tag = {}          # lowercased tag -> [cid]
         self.tag_names = {}  # lowercased tag -> as written
         treeset = set(tree)
@@ -205,6 +207,7 @@ class DeckIndex:
             cid = int(cid)
             self.home.add(cid)
             self.by_nid.setdefault(int(nid), []).append(cid)
+            self.nid_of[cid] = int(nid)
             self.by_deck.setdefault(int(home), []).append(cid)
             self.by_ref[(str(guid), int(ord_))] = cid
             for t in str(tags or "").split():
@@ -340,15 +343,37 @@ class DeckIndex:
 
     # -- numbers --
 
+    def started(self):
+        """Note ids with a card answered at least once."""
+        if self._started is None:
+            nid_of = self.nid_of
+            self._started = {nid_of[c] for c, (_q, t) in self.cards.items() if t != 0}
+        return self._started
+
     def counts(self, cids):
         """[opened, seen, total]: opened = not suspended, seen = answered at
-        least once (Anki's own "not new")."""
+        least once (Anki's own "not new"), or a new sibling of a card that
+        was: Anki buries siblings and spaces them out, so a date whose notes
+        are all started is done, and never behind for them."""
         opened = seen = 0
+        started, nid_of = self.started(), self.nid_of
         for cid in cids:
             queue, ctype = self.cards[cid]
             opened += queue != -1
-            seen += ctype != 0
+            seen += ctype != 0 or (queue != -1 and nid_of.get(cid) in started)
         return [opened, seen, len(cids)]
+
+    def siblings(self, cids):
+        """(new cards counted as seen for a started note, how many of them
+        Anki has buried today)."""
+        n = buried = 0
+        started, nid_of = self.started(), self.nid_of
+        for cid in cids:
+            queue, ctype = self.cards[cid]
+            if ctype == 0 and queue != -1 and nid_of.get(cid) in started:
+                n += 1
+                buried += queue in (-2, -3)
+        return n, buried
 
     def suspended(self, cids):
         return {cid for cid in cids if self.cards[cid][0] == -1}

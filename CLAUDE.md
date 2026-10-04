@@ -584,6 +584,11 @@ add-on.
   (`DELETE /account/todos`; the board's `settingsAt` makes Anki pull a
   save it hasn't seen, `account.saved_elsewhere`). Log has four insights
   (`logInsights`). Copy: say what isn't on screen; never narrate what is.
+  Seen, for a plan, includes a new card whose note has a card answered
+  (`DeckIndex.counts`): Anki buries and spaces siblings, so a date whose
+  notes are all started is done and never behind for them; Due says
+  "done · N siblings tomorrow/later" (`DeckIndex.siblings`). Suspended
+  siblings stay out.
 
 ## Releasing
 

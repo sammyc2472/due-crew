@@ -3166,6 +3166,33 @@ def test_plans_events_f1():
           "For <b>Micro &lt;quiz&gt;</b> on Thu &middot; 2 more days of prep" in html, html)
 
 
+def test_plans_buried_siblings():
+    """A new card whose note has a card answered counts as seen: Anki
+    buries and spaces siblings, so the date is done and never behind for
+    them, and Due says when they come back. A suspended sibling stays out."""
+    from due_crew import plans as P, due
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 2, type = 2 WHERE id = 5")
+    col.db.conn.execute("UPDATE cards SET queue = -3, type = 0 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: c2 buried behind a studied c1 counts as seen", idx.counts({5, 6}) == [2, 2, 2], str(idx.counts({5, 6})))
+    check("siblings: counted, and buried today", idx.siblings({5, 6}) == (1, 1))
+    doc = {"units": [{"id": "u", "name": "Cloze", "opens": "2026-01-01", "due": "2026-01-02"}]}
+    check("siblings: a past date isn't behind for them", P.ahead_behind(doc, {"u": idx.counts({5, 6})}, "2026-03-01") == [])
+    col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: a suspended sibling isn't seen", idx.counts({5, 6}) == [1, 1, 2] and idx.siblings({5, 6}) == (0, 0))
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: unburied, they come back later", idx.siblings({5, 6}) == (1, 0))
+    x = {"pid": "p", "uid": "u", "name": "Cloze", "opens": "2026-01-01", "seen": 2, "total": 2}
+    check("siblings: Due says when they come back",
+          due._date_row(dict(x, sibs=[12, 12]), set(), "2026-03-01")["n"] == "done \u00b7 12 siblings tomorrow"
+          and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["n"] == "done \u00b7 1 sibling later"
+          and due._date_row(x, set(), "2026-03-01")["n"] == "all seen"
+          and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["done"])
+
+
 def test_plans_ids_e1():
     """E1: note ids and card ids pasted onto a date: a note id brings every
     card of it, a card id that one card, only inside the plan's deck; they

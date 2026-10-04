@@ -69,6 +69,7 @@ def plan_dates(today):
     pf = _pf()
     prog = _state.get("plan_progress") or {}
     parts = _state.get("plan_parts") or {}
+    sibs = _state.get("plan_sibs") or {}
     state = pf._state_cfg()
     end = D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD))
     dates, events, reviews = [], [], []
@@ -95,6 +96,7 @@ def plan_dates(today):
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
                           "opens": opens, "seen": int(s), "total": int(t) or (P.unit_total(u) if opens > today else 0),
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
+                          "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
                           "what": P.topics_line([u]),
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
@@ -215,7 +217,7 @@ def parts(col, idxs, today):
         return
     pf = _pf()
     state = pf._state_cfg()
-    out = {}
+    out, sibs = {}, {}  # sibs: {pid: {uid: [counted, buried today]}}
     for p in pf.followed():
         st = state.get(p["id"])
         if p.get("paused") or not st or not pf._deck_ok(col, st.get("deck_id")):
@@ -230,7 +232,11 @@ def parts(col, idxs, today):
                 got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
+                sib = idx.siblings(idx.match(u, pf._swap(st), doc.get("deck", "")))
+                if sib[0]:
+                    sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
     _state["plan_parts"] = out
+    _state["plan_sibs"] = sibs
 
 
 def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):

@@ -255,6 +255,12 @@ def todo_key(pid, uid, n):
     return f"{pid}:{uid}:{n}"
 
 
+def sibling_line(n, buried):
+    """A date done but for siblings Anki spaces out (they count as seen)."""
+    n = int(n)
+    return f"done \u00b7 {n:,} sibling{'s' if n != 1 else ''} {'tomorrow' if buried else 'later'}"
+
+
 def date_state(x, ticks):
     """(done, part): a date is done when its cards are seen and its author's
     lines are ticked; part when anything of it is."""
@@ -285,6 +291,9 @@ def _date_row(x, ticks, today, short=False):
         n = f"{total:,} new" if total else ""
     elif total:
         n = "all seen" if seen >= total else f"{seen:,} / {total:,}"
+        sib, buried = (x.get("sibs") or [0, 0])[:2]
+        if sib and seen >= total:
+            n = sibling_line(sib, buried)
     else:
         n = ""
     return {"kind": "plan", "pid": x["pid"], "uid": x["uid"], "plan": x.get("plan") or "",
