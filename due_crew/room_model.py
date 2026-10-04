@@ -198,6 +198,43 @@ SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;heigh
                                   (289.8, "on"), (362.25, "on"), (434.7, "on")))
            + "</svg>")
 
+# Anki's bottom bar is a table of three cells: Edit's, the answer buttons',
+# More's. Whatever widens one side cell (our chip or room, another add-on's
+# button) pushes the buttons off centre, so the side cells keep one width,
+# set on every card (the chip's eval runs at each question and answer);
+# when that wouldn't fit, the table's own layout stays.
+BAR_BALANCE = r"""
+(function () {
+  window.dcBarBalance = function () {
+    var t = document.getElementById('innertable'), row = t && t.rows[0];
+    if (!row || row.cells.length < 3) { return; }
+    var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
+    l.style.width = r.style.width = '';
+    function w(c) {   // what the cell's own elements need
+      var a = Infinity, z = -Infinity, cs = getComputedStyle(c);
+      for (var k = 0; k < c.children.length; k++) {
+        var b = c.children[k].getBoundingClientRect();
+        if (b.width > 0) { a = Math.min(a, b.left); z = Math.max(z, b.right); }
+      }
+      return Math.ceil((z > a ? z - a : 0) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight));
+    }
+    var side = Math.max(w(l), w(r)) + 16, over = 2 * side + w(m) - t.clientWidth, txt = document.getElementById('dc-knows-t');
+    // the chip's text gives way first (it ends in an ellipsis, the whole in its tooltip)
+    for (var i = 0; over > 0 && txt && i < 4; i++) {
+      var tw = txt.getBoundingClientRect().width;
+      if (tw <= 60) { break; }
+      txt.style.maxWidth = Math.max(60, tw - Math.ceil(over / 2)) + 'px';
+      side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
+    }
+    if (over > 0) { return; }
+    l.style.width = r.style.width = side + 'px';
+  };
+  if (!window.dcBarResize) { window.dcBarResize = true; window.addEventListener('resize', function () { window.dcBarBalance(); }); }
+  window.dcBarBalance();
+})();
+"""
+
+
 # The widget's commands carry this, so the reviewer page (where a card's own
 # script runs too) is heard only through the widget's buttons. New each run,
 # and only inside the widget's closure: never on the page for a card to read.
@@ -212,10 +249,10 @@ _RUNTIME = r"""
   var ids = ['chip', 'bottom', 'gutter', 'break', 'card'];
   function drop(k) {
     var el = document.getElementById('dc-room-' + k);
-    if (el) { el.remove(); }
+    if (el) { el.remove(); if (k === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); } }
     if (window['dcRoomTick_' + k]) { clearInterval(window['dcRoomTick_' + k]); window['dcRoomTick_' + k] = null; }
   }
-  if (KIND === 'off') { ids.forEach(drop); window.dcRoomFit = null; return; }
+  if (KIND === 'off') { ids.forEach(drop); window.dcRoomFit = null; window.dcBarBalance && window.dcBarBalance(); return; }
   drop(KIND);
   if (!D) { return; }
   function night() {
@@ -421,6 +458,7 @@ _RUNTIME = r"""
     if (p.state === 'done' && KIND !== 'break') { drop(KIND); return; }
     update(p);
     if (KIND === 'gutter' && window.dcRoomFit) { window.dcRoomFit(); }
+    if (KIND === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); }
   }
   tick();
   window['dcRoomTick_' + KIND] = setInterval(tick, KIND === 'break' ? 1000 : 10000);
@@ -442,7 +480,8 @@ def widget_js(kind, data=None):
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
             .replace("__SIDE__", chip_side((data or {}).get("side")))
-            .replace("__KEY__", json.dumps(CMD_KEY)))
+            .replace("__KEY__", json.dumps(CMD_KEY))
+            + (BAR_BALANCE if kind in ("bottom", "off") else ""))
 
 
 # what the widget sends from the reviewer's page (the margin card, the

@@ -2150,6 +2150,11 @@ def test_together_v210():
     js = crew_cards.chip_js(dict(chip, accent="#0a0"))
     check("tips: This helped is its own click, the tip's words go in as text",
           "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+    from due_crew import room_model as rm
+    check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
+          "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
+          and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
+          and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
     old_style = crew_cards.chip_view(None, [("Eve", "S3 = Kentucky")], {})
     check("tips: a tip kept before 3.5.0 still shows, without This helped (no one to thank)",
           old_style["text"] == "\U0001F4A1 Eve: S3 = Kentucky" and "act" not in old_style)

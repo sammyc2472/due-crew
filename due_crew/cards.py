@@ -220,8 +220,8 @@ _CHIP_JS = """(function () {
   var s = document.createElement('span'); s.id = 'dc-knows';
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
     'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
-  var t = document.createElement('span'); t.textContent = D.text; s.appendChild(t);
-  if (D.title) { s.title = D.title; t.style.cssText = 'display:inline-block;max-width:38vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;'; }
+  var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
+  if (D.title) { s.title = D.title; t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;'; }
   if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
   if (D.act) {
     var a = document.createElement('b'); a.textContent = D.act; a.style.color = D.accent; s.appendChild(a);
@@ -233,7 +233,8 @@ _CHIP_JS = """(function () {
 
 
 def chip_js(data):
-    return _CHIP_JS.replace("__DATA__", json.dumps(data))
+    from .room_model import BAR_BALANCE
+    return _CHIP_JS.replace("__DATA__", json.dumps(data)) + BAR_BALANCE
 
 
 def _bottom():
