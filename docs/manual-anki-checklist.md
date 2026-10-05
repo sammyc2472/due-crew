@@ -554,7 +554,7 @@ In Anki (as a follower):
 - [ ] Ask the team (type, Enter): it shows for the other at their next Team open, with a badge on Team until they open it; your own question never badges you.
 - [ ] Reply (Anki asks in a small box; the site opens one under the question); the asker marks That helped; Remove your own; Report someone else's (they're muted for you, their words go).
 - [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the team about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
-- [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); squares count from the plan's cards only; nobody's name on a square.
+- [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
 - [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the team (the streak, "Showed up 3 days").
 - [ ] Insights: "Last 14 days", Topic · Missed · Trend. Study opens a filtered deck of the missed cards; Re-watch only where the date has a watch link; Ask goes to Team with the topic in the box.
 - [ ] Leave the team: off it, your questions stay. Stopping the plan also takes you off.

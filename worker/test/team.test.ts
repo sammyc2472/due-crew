@@ -136,7 +136,7 @@ describe("a plan's team (3.7.3)", () => {
     expect((await sam.call("POST", `/plans/${p.id}/asks`, { text: "one more" })).status).toBe(429);
   });
 
-  it("the team's bingo: the week's squares, the team's middle, counts never who", async () => {
+  it("the team's bingo is the squads' card, counted the same; counts never who", async () => {
     const { sam, kai, p } = await setup();
     for (const x of [sam, kai]) await x.call("POST", `/plans/${p.id}/team`);
     const wk = B.isoWeek(new Date());
@@ -144,14 +144,11 @@ describe("a plan's team (3.7.3)", () => {
     await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()], play: { wk: n, s: 1 } } } });
     const v = (await kai.call("GET", `/plans/${p.id}/team?wk=${wk}`)).body;
     expect(v.bingo.card.wk).toBe(wk);
-    expect(v.bingo.card.middle.group).toBe("team");
-    expect(v.bingo.card.squares).toEqual((await B.cardFor((await import("cloudflare:workers")).env as any, wk)).squares);
+    expect(v.bingo.card).toEqual(await B.cardFor((await import("cloudflare:workers")).env as any, wk));
     expect(v.bingo.ev.squares[0].n).toBe(1);
     expect(JSON.stringify(v.bingo.ev)).not.toMatch(/sam|kai/);
     // no week, no card
     expect((await kai.call("GET", `/plans/${p.id}/team`)).body.bingo).toBeUndefined();
-    // the middle, by turn
-    expect(T.teamMiddle("2026-W41", 8).goal).toBe([3, 5, 4][B.wkNum("2026-W41") % 3]);
   });
 
   it("goes with the plan and with an account; is in my data", async () => {

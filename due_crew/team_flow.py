@@ -3,8 +3,8 @@
 The Plans tab's plan card has three tabs: Plan, Team and Insights
 (`_state["plan_sub"]`, per session). Team is opt-in per plan: joining
 shares that I showed up today (answered one of the plan's cards), my
-questions and answers, and my bingo squares, worked out from the plan's
-cards only; never a number. The board's refresh carries a few counts
+questions and answers, and my bingo squares (the same play as on my squad
+rows: the week's one card); never a number. The board's refresh carries a few counts
 (`session["teams"]`); the tab itself is one request when it opens, and each
 click is one more. Showed-up days and squares ride the sync (`for_sync`).
 
@@ -353,7 +353,7 @@ def bingo_view(pid):
     b = data.get("bingo")
     if not b:
         return None
-    mine = (_state.get("team_bingo_mine") or {}).get(pid) or {}
+    mine = _state.get("bingo_mine") or {}  # my squares, as the sync worked them out
     p = _plan(pid)
     return {"card": b["card"], "ev": b["ev"], "progress": mine.get("progress") if mine.get("wk") == b["card"]["wk"] else None,
             "me": client().user_id, "names": {}, "squad": (p or {}).get("name") or "", "team": True,
@@ -449,8 +449,8 @@ def ask_about(pid, key):
 def for_sync(c):
     """{plan id: {days?, play?}} for the teams I'm on: the days of the last
     eight I answered one of the plan's cards (reviews from a phone arrive
-    here only with the AnkiWeb sync, so a day can come late), and my squares
-    from its cards. None when I'm on no team (or paused). Main thread."""
+    here only with the AnkiWeb sync, so a day can come late), and my week's
+    play, the same as on my squad rows. None when I'm on no team (or paused). Main thread."""
     if not teams() or not mw.col or c.get("paused"):
         return None
     from . import bingo_flow
@@ -458,12 +458,7 @@ def for_sync(c):
     q = StatsQueries(mw.col)
     cutoff = int(mw.col.sched.day_cutoff)
     out = {}
-    tree = {}  # Anki's deck tree, read once a sync however many teams
-
-    def deck_tree():
-        if "t" not in tree:
-            tree["t"] = mw.col.sched.deck_due_tree()
-        return tree["t"]
+    play = bingo_flow.my_play(c)  # the same play as my squad rows: one square, stamped everywhere
     for pid in list(teams())[:20]:
         dids = _deck_ids(pid)
         if not dids:
@@ -476,7 +471,6 @@ def for_sync(c):
             cutoff - 1, (cutoff - 8 * 86400) * 1000, cutoff * 1000)
         if agos:
             part["days"] = sorted(q.day_label(int(a)) for a in agos)
-        play = bingo_flow.for_team(c, pid, dids, deck_tree)
         if play:
             part["play"] = play
         if part:
