@@ -6204,12 +6204,15 @@ def test_plan_team_v39():
             # today, one of the plan's cards answered: showed up rides the sync, once
             cut = fakes.day_cutoff_for(TODAY)
             fakes.add_review(col.db.conn, (cut - 3600) * 1000, ease=1, rtype=1, cid=8)
+            fakes.add_review(col.db.conn, (cut - 3 * 86400 - 3600) * 1000, ease=3, rtype=1, cid=8)  # a phone's, come late
+            fakes.add_review(col.db.conn, (cut - 20 * 86400) * 1000, ease=3, rtype=1, cid=8)       # too long ago to say
             part = TF.for_sync({})
-            check("team: answered a plan card today: the sync says I showed up", part == {pid: {"day": _day(0)}}, part)
+            check("team: the sync says the days of the last eight I answered a plan card, a late one too",
+                  part == {pid: {"days": [_day(-3), _day(0)]}}, part)
             maya.push(labels, {}, team=part)
-            check("team: the fake Worker kept the day", store.team[(pid, "maya")]["days"] == [_day(0)])
+            check("team: the fake Worker kept the days", store.team[(pid, "maya")]["days"] == [_day(-3), _day(0)])
             maya.push(labels, {}, team=part)
-            check("team: the same part again isn't sent", maya.session.get("team_hash") and store.team[(pid, "maya")]["days"] == [_day(0)])
+            check("team: the same part again isn't sent", maya.session.get("team_hash") and store.team[(pid, "maya")]["days"] == [_day(-3), _day(0)])
             check("team: an older server's retry drops the team part", "team" not in maya._without_32({"team": part, "week": {}}))
             # Insights, worked out here from my reviews of the plan's cards
             saved_min = T.MIN_CARDS

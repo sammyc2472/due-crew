@@ -704,14 +704,15 @@ class FakeWorker:
                 raise Bad(400, "bad_team")
             wrote["team"] = False
             for pid, x in t.items():
-                if not isinstance(x, dict) or not set(x) <= {"day", "play"} or (
-                        x.get("day") is not None and not DATE_RE.fullmatch(str(x["day"]))):
+                days_in = x.get("days") or [] if isinstance(x, dict) else None
+                if not isinstance(x, dict) or not set(x) <= {"days", "play"} or not isinstance(days_in, list) or len(days_in) > 9 \
+                        or not all(DATE_RE.fullmatch(str(d)) for d in days_in):
                     raise Bad(400, "bad_team")
                 row = self.team.get((pid, me))
                 if row is None:
                     continue
                 play = self._clean_play(x.get("play")) if x.get("play") is not None else row["play"]
-                days = sorted(set(row["days"]) | ({x["day"]} if x.get("day") else set()))[-60:]
+                days = sorted(set(row["days"]) | set(days_in))[-60:]
                 if days != row["days"] or play != row["play"]:
                     row["days"], row["play"] = days, play
                     wrote["team"] = True

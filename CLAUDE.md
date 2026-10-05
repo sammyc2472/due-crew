@@ -639,7 +639,7 @@ add-on.
   (`_state["plan_sub"]`, per session). Team is opt-in per plan (migration
   0020, `worker/src/team.ts`, `team_flow.py` glue, `team.py` pure): joining
   shares that I showed up today (answered one of the plan's cards, my Anki
-  day; `team` on the sync, rows I hold only), my questions and answers, and
+  day; `team` on the sync carries the last 8 such days, so a phone's come late; rows I hold only), my questions and answers, and
   my bingo squares from the plan's cards only (`bingo_flow.for_team`);
   never a number, never weak spots. The board carries counts (`teams`:
   shown, of, streak, faces, act, last) for the Plan tab's line and the

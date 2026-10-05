@@ -429,16 +429,16 @@ def ask_about(pid, key):
 # ---- the sync ----
 
 def for_sync(c):
-    """{plan id: {day?, play?}} for the teams I'm on: today if I answered one
-    of the plan's cards today, and my squares from its cards. None when I'm
-    on no team (or paused). Main thread."""
+    """{plan id: {days?, play?}} for the teams I'm on: the days of the last
+    eight I answered one of the plan's cards (reviews from a phone arrive
+    here only with the AnkiWeb sync, so a day can come late), and my squares
+    from its cards. None when I'm on no team (or paused). Main thread."""
     if not teams() or not mw.col or c.get("paused"):
         return None
     from . import bingo_flow
     from .stats.queries import StatsQueries
     q = StatsQueries(mw.col)
-    today = q.day_label(0)
-    start, end = q.day_bounds_ms(0)
+    cutoff = int(mw.col.sched.day_cutoff)
     out = {}
     tree = {}  # Anki's deck tree, read once a sync however many teams
 
@@ -452,10 +452,12 @@ def for_sync(c):
             continue
         ids = ",".join(str(d) for d in dids)
         part = {}
-        if mw.col.db.scalar(
-                f"SELECT 1 FROM revlog WHERE id >= ? AND id < ? AND ease > 0 AND cid IN "
-                f"(SELECT id FROM cards WHERE did IN ({ids}) OR odid IN ({ids})) LIMIT 1", start, end):
-            part["day"] = today
+        agos = mw.col.db.list(
+            f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
+            f"AND cid IN (SELECT id FROM cards WHERE did IN ({ids}) OR odid IN ({ids}))",
+            cutoff - 1, (cutoff - 8 * 86400) * 1000, cutoff * 1000)
+        if agos:
+            part["days"] = sorted(q.day_label(int(a)) for a in agos)
         play = bingo_flow.for_team(c, pid, dids, deck_tree)
         if play:
             part["play"] = play

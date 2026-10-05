@@ -141,7 +141,7 @@ leaves, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
 streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,
 or `{on: false, count}` off the team. Showed up: a member answered one of
 the plan's cards on their own Anki day; it rides the sync as `team:
-{planId: {day, play?}}` (rows I hold only, written when changed; `play`
+{planId: {days, play?}}` (the last 8 days with one, so a phone's arrive late; rows I hold only, written when changed; `play`
 is my squares from the plan's cards only). The streak is days in a row
 when more than half the team showed up. `asks`: the newest 30 threads by
 activity, `{id, uid, name, emoji, text, at, act, topic, guid?, ord?, mine,

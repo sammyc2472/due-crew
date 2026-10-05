@@ -282,16 +282,21 @@ export async function helped(req: Request, s: Session, env: Env, [id, aid]: stri
 
 // ---- the sync and the board ----
 
-/** A sync's `team` part: {planId: {day, play?}}: I answered one of the
- *  plan's cards on `day` (my Anki day), and my squares from its cards. */
-export function teamPart(v: unknown): Record<string, { day: string | null; play: string | null }> {
+/** A sync's `team` part: {planId: {days?, play?}}: the days of my last
+ *  eight (my Anki days) I answered one of the plan's cards, and my squares
+ *  from its cards. A phone's reviews reach my computer's Anki only with the
+ *  AnkiWeb sync, so yesterday can arrive today; days outside the last nine
+ *  (or after tomorrow) are left out. */
+export function teamPart(v: unknown, now = nowSec()): Record<string, { days: string[]; play: string | null }> {
   if (!V.isObj(v) || Object.keys(v).length > TEAMS_PER_SYNC) throw V.bad("team");
-  const out: Record<string, { day: string | null; play: string | null }> = {};
+  const lo = dayOf(now - 9 * 86400), hi = dayOf(now + 86400);
+  const out: Record<string, { days: string[]; play: string | null }> = {};
   for (const [pid, x] of Object.entries(v)) {
     if (!/^[a-z0-9]{1,32}$/.test(pid) || !V.isObj(x)) throw V.bad("team");
-    for (const k of Object.keys(x)) if (!["day", "play"].includes(k)) throw V.bad("team");
-    if (x.day !== undefined && x.day !== null && !V.isDate(x.day)) throw V.bad("team");
-    out[pid] = { day: (x.day as string) ?? null, play: V.play(x.play) };
+    for (const k of Object.keys(x)) if (!["days", "play"].includes(k)) throw V.bad("team");
+    const days = x.days ?? [];
+    if (!Array.isArray(days) || days.length > 9 || !days.every((d) => V.isDate(d))) throw V.bad("team");
+    out[pid] = { days: [...new Set(days as string[])].filter((d) => d >= lo && d <= hi), play: V.play(x.play) };
   }
   return out;
 }
@@ -308,7 +313,7 @@ export async function teamWrites(env: Env, uid: string, part: ReturnType<typeof 
   for (const r of rows.results) {
     const x = part[r.plan];
     let days = parseDays(r.days);
-    if (x.day && !days.includes(x.day)) days = [...days, x.day].sort().slice(-DAYS_KEEP);
+    if (x.days.some((d) => !days.includes(d))) days = [...new Set([...days, ...x.days])].sort().slice(-DAYS_KEEP);
     const dj = days.length ? JSON.stringify(days) : null;
     const play = x.play ?? r.play;
     const last = days.length ? days[days.length - 1] : null;  // what the board reads, not the whole list

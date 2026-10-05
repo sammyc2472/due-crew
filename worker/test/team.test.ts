@@ -60,13 +60,13 @@ describe("a plan's team (3.7.3)", () => {
   it("showed up rides the sync: only rows I hold, only when it changed", async () => {
     const { sam, kai, p } = await setup();
     // not on the team: the sync writes nothing (an update never joins)
-    const r0 = (await sam.call("POST", "/sync", { team: { [p.id]: { day: today() } } })).body;
+    const r0 = (await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()] } } })).body;
     expect(r0.wrote.team).toBe(false);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_team").first("n")).toBe(0);
     await sam.call("POST", `/plans/${p.id}/team`);
     await kai.call("POST", `/plans/${p.id}/team`);
-    expect((await sam.call("POST", "/sync", { team: { [p.id]: { day: today() } } })).body.wrote.team).toBe(true);
-    expect((await sam.call("POST", "/sync", { team: { [p.id]: { day: today() } } })).body.wrote.team).toBe(false);
+    expect((await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()] } } })).body.wrote.team).toBe(true);
+    expect((await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()] } } })).body.wrote.team).toBe(false);
     const v = (await kai.call("GET", `/plans/${p.id}/team`)).body;
     expect(v.shown).toBe(1);
     expect(v.faces.map((f: any) => [f.uid, f.shown])).toEqual([["sam", true], ["kai", false]]);
@@ -78,8 +78,13 @@ describe("a plan's team (3.7.3)", () => {
     expect(b.teams[p.id].streak).toBeUndefined();  // the tab says it; the board reads only last days
     expect((await kai.call("GET", "/board?keep=1")).body.teams).toBeUndefined();
     // bad parts
-    expect((await sam.call("POST", "/sync", { team: { [p.id]: { day: "nope" } } })).status).toBe(400);
-    expect((await sam.call("POST", "/sync", { team: { [p.id]: { day: today(), x: 1 } } })).status).toBe(400);
+    expect((await sam.call("POST", "/sync", { team: { [p.id]: { days: ["nope"] } } })).status).toBe(400);
+    expect((await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()], x: 1 } } })).status).toBe(400);
+    // a phone's days arrive late, with the AnkiWeb sync: they still count; a far one doesn't
+    await sam.call("POST", "/sync", { team: { [p.id]: { days: [back(3), back(2), back(30), today()] } } });
+    const row = await db().prepare("SELECT days, last_day FROM plan_team WHERE uid = 'sam'").first<{ days: string; last_day: string }>();
+    expect(JSON.parse(row!.days)).toEqual([back(3), back(2), today()]);
+    expect(row!.last_day).toBe(today());
   });
 
   it("the streak: days more than half the team showed up", () => {
@@ -131,7 +136,7 @@ describe("a plan's team (3.7.3)", () => {
     for (const x of [sam, kai]) await x.call("POST", `/plans/${p.id}/team`);
     const wk = B.isoWeek(new Date());
     const n = B.wkNum(wk);
-    await sam.call("POST", "/sync", { team: { [p.id]: { day: today(), play: { wk: n, s: 1 } } } });
+    await sam.call("POST", "/sync", { team: { [p.id]: { days: [today()], play: { wk: n, s: 1 } } } });
     const v = (await kai.call("GET", `/plans/${p.id}/team?wk=${wk}`)).body;
     expect(v.bingo.card.wk).toBe(wk);
     expect(v.bingo.card.middle.group).toBe("team");
@@ -159,6 +164,5 @@ describe("a plan's team (3.7.3)", () => {
     expect((await dre.call("DELETE", `/plans/${p.id}`)).status).toBe(200);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_asks").first("n")).toBe(0);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_team").first("n")).toBe(0);
-    void back;
   });
 });
