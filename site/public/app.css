@@ -327,13 +327,14 @@ label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; ma
 .calpop a, .calpop button { padding: 7px 14px; text-decoration: none; color: var(--ink); font-size: 13.5px; text-align: left; font-weight: 500; }
 .calpop a:hover, .calpop button:hover { background: var(--well); }
 main:not(.wide) .calmenu .calpop { left: 0; right: auto; }
+.lcmore .calpop, main:not(.wide) .lcmore .calpop { left: auto; right: 0; }  /* a library card's ⋯ sits at its right end */
 
 /* 3.4 review */
 .invwho { display: flex; align-items: center; gap: 12px; } .invwho .em { font-size: 34px; line-height: 1; } .invwho h1 { margin: 0; }
 .phone-only { display: none; }
 @media (max-width: 700px) { .phone-only { display: block; } .wide-only { display: none !important; } }
 nav .wide-only { display: inline-flex; gap: 16px; }
-nav .navme { display: none; position: relative; }
+nav .navme { display: none; position: relative; white-space: nowrap; }  /* the initial and its ▾ on one line */
 @media (max-width: 700px) { nav .navme { display: block; } }
 nav .navme summary { list-style: none; width: 26px; height: 26px; border-radius: 50%; background: var(--well); display: grid; place-items: center; font-weight: 700; font-size: 12px; cursor: pointer; }
 nav .navme summary::-webkit-details-marker { display: none; }
@@ -415,7 +416,9 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .dayp .acts { display: flex; gap: 16px; flex-wrap: wrap; }
 .notesw { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .notesw .notes { border-top: 0; padding-top: 0; }
-@media (max-width: 700px) { .sharepop { left: 0; right: auto; } }
+/* anchored on its button's right edge (it sits at the end of the title row);
+   only when the header wraps on a phone does it open from the left */
+@media (max-width: 420px) { .sharepop { left: 0; right: auto; } }
 
 /* E1: pasting ids */
 .addin { flex: 1; resize: vertical; min-height: 34px; font-size: 12.5px; }

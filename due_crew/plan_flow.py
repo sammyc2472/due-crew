@@ -130,7 +130,24 @@ def _deck_ok(col, did):
 
 
 def _sig(st):
-    return lambda u: P.unit_sig(u, st.get("deck_id"), st.get("swap"))
+    deck_id, swap = st.get("deck_id"), st.get("swap")
+    # 3.7.2: the sig takes C5's ids now. The first pass over a plan applied
+    # before carries its dates over as they stand (what opened then stays as
+    # it is); from then on, ids that arrive or change open what they add
+    legacy = not st.get("sig2")
+    st["sig2"] = 1
+
+    def sig(u):
+        s = P.unit_sig(u, deck_id, swap)
+        if legacy and u.get("ids"):
+            have, old = (st.get("applied") or {}).get(u["id"]), P.unit_sig_v1(u, deck_id, swap)
+            src = (st.get("src") or {}).get(u["id"])
+            if have in (old, "skip:" + old) and not any(isinstance(x, dict) and "ids" in x for x in src or []):
+                st["applied"][u["id"]] = ("skip:" if have.startswith("skip:") else "") + s
+                if isinstance(src, list):
+                    src.append({"ids": list(u["ids"])})
+        return s
+    return sig
 
 
 def _swap(st):
@@ -198,10 +215,13 @@ def _unit_cids(idx, st, u, deck, whole=False):
     before = {"tags": tags, "decks": decks, "cards": cards}
     # what came after the first five (P.unit_sources): a date's searches
     # (3.3, C3: a list of strings), its pasted ids (E1: [nids, cids]), its
-    # notes and the refs behind its ids (3.6.5: a dict)
+    # notes and the refs behind its ids (3.6.5: a dict), C5's note ids (3.7.2: {"ids"})
     for extra in was[5:]:
         if isinstance(extra, dict):
-            before["notes"], before["idr"] = extra.get("notes") or [], extra.get("idr") or []
+            if "ids" in extra:
+                before["ids"] = extra.get("ids") or []
+            if "notes" in extra or "idr" in extra:
+                before["notes"], before["idr"] = extra.get("notes") or [], extra.get("idr") or []
         elif extra and all(isinstance(x, str) for x in extra):
             before["search"] = extra
         elif isinstance(extra, list) and len(extra) == 2 and all(isinstance(x, list) for x in extra):
@@ -241,7 +261,7 @@ def run(col, plan_list, state, today, mode=None, everything=False):
     `state`. Returns {n, names, label, per: {plan id: [names, n]},
     units: {plan id: [unit ids opened]}}. G2: a unit put off to a later
     morning (`later` in the state) waits for it, unless `everything`."""
-    all_cids, names, per, opened_units = set(), [], {}, {}
+    all_cids, names, per, opened_units, spread = set(), [], {}, {}, {}
     for p in plan_list:
         p = mine(p)  # G3, G4: my shift, my skips
         st = state.get(p["id"])
@@ -254,8 +274,10 @@ def run(col, plan_list, state, today, mode=None, everything=False):
         # 3.3, C2: a follower who studies on a phone opens days early
         when = S.iso(S.d(today) + datetime.timedelta(days=int(p.get("early") or 0))) if mode != "skip" else today
         if (p.get("sched") or S.has_even(doc)) and not everything and mode != "skip":
-            pnames, pcids = _spread(col, p, st, when)
+            pnames, pcids, puids = _spread(col, p, st, when, today)
             if pnames:
+                opened_units[p["id"]] = puids  # so Not today can put them off
+                spread[p["id"]] = puids  # and Undo leaves them to their schedule (3.7.2)
                 per[p["id"]] = [pnames, len(pcids)]
                 names += pnames
                 all_cids |= pcids
@@ -289,7 +311,7 @@ def run(col, plan_list, state, today, mode=None, everything=False):
             all_cids |= pcids
     label = P.step_label(names) if names else ""
     n = P.open_cards(col, all_cids, label) if names else 0
-    return {"n": n, "names": names, "label": label, "per": per, "units": opened_units}
+    return {"n": n, "names": names, "label": label, "per": per, "units": opened_units, "spread": spread}
 
 
 def open_one(col, plan, st, uid, today):
@@ -322,25 +344,32 @@ def put_off(st, uids, today):
     return st
 
 
-def _spread(col, p, st, today):
+def _spread(col, p, st, today, now=None):
     """3.2, a plan run on my schedule: each unit whose window has started
     opens up to today's quota, the first cards in the deck's order. A unit
     is marked applied once its window is over (all of it open), so from
     then on it behaves as in 3.1: an author's change opens only what it
-    adds. Skipped units stay skipped. Returns (names, cids) to open."""
+    adds. Skipped units stay skipped. G2: a unit put off (`later`) waits
+    for that morning (`now`, today's date when `today` looks ahead).
+    Returns (names, cids to open, unit ids opened)."""
     doc, sched = p["doc"], p.get("sched")
+    later = st.get("later") or {}
+    now = now or today
     applied, src, sig = st["applied"], st["src"], _sig(st)
     day = S.d(today)
     shift = S.shift_days(doc, sched)
     idx = P.DeckIndex(col, st["deck_id"])
-    names, cids_out = [], set()
+    names, cids_out, uids = [], set(), []
     for u in P.units(doc):
         have, s = applied.get(u["id"]), sig(u)
         if isinstance(have, str) and (have == s or have.startswith("skip:")):
             continue
+        if str(later.get(u["id"]) or "") > now:
+            continue
         first, _last = S.window(doc, u, shift)
         if day < first:
             continue
+        later.pop(u["id"], None)
         cids = _unit_cids(idx, st, u, doc.get("deck", ""))
         if have:  # applied whole before, and the author changed it: what's new opens
             chosen = idx.openable(cids)
@@ -358,7 +387,8 @@ def _spread(col, p, st, today):
         if chosen:
             names.append(u.get("name") or "?")
             cids_out |= set(chosen)
-    return names, cids_out
+            uids.append(u["id"])
+    return names, cids_out, uids
 
 
 def waiting(col, plan, st, today):
@@ -419,7 +449,9 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     for uid, cids in matches.items():
         totals[uid] = len(cids)
         seen = idx.counts(cids)[1]
-        today_n = sum(1 for c in cids if first_seen.get(c) == 0)
+        # a sibling Anki buried today counts as seen (plans.counts): done
+        # today too, so the Today box reaches done when Due does
+        today_n = sum(1 for c in cids if first_seen.get(c) == 0) + idx.siblings(cids)[1]
         new_today += today_n
         seen_before[uid] = seen - today_n
         for c in cids:
@@ -616,7 +648,8 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
         return None
     c["plans"] = state
     if res["n"]:
-        c["plans_opened"] = {"day": today, "label": res["label"], "per": res["per"], "units": res.get("units") or {}}
+        c["plans_opened"] = {"day": today, "label": res["label"], "per": res["per"], "units": res.get("units") or {},
+                             "spread": res.get("spread") or {}}
     _psave(c)
     if res["n"]:
         _after_change()
@@ -646,7 +679,11 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
             ids = {p["id"] for p in plan_list}
             gone = [pid for pid in state if pid not in ids]
             for pid in gone:
-                state.pop(pid, None)  # stopped, or taken down: nothing is suspended
+                held = (state.pop(pid, None) or {}).get("held") or []
+                if held and mw.col:
+                    # taken down elsewhere (the author deleted it, or I stopped
+                    # it on the site): what Hold back suspended opens again, as Stop does
+                    P.open_cards(mw.col, held, "Due Crew: a plan you followed ended")
             changed = bool(gone)
             for p in plan_list:
                 st = state.get(p["id"])
@@ -716,7 +753,7 @@ def offer_hold(pids, ask=None):
         st = state.get(pid)
         if not p or not st or not _deck_ok(mw.col, st.get("deck_id")):
             continue
-        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), p["doc"], _today(), _swap(st))
+        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), p["doc"], _today(), _swap(st), st.get("applied"))
         if not cids or not ask(p.get("name") or "The plan", len(cids)):
             continue
         n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
@@ -1184,14 +1221,22 @@ def undo_morning(put_off_too=False):
 
     def done(_out=None):
         # Undo: the units stay marked as applied, the next morning won't open them again;
-        # Not today: they open on tomorrow's
+        # Not today: they open on tomorrow's. A date opened in slices (an even
+        # date, a 3.2 schedule) has no "won't open again": its next morning
+        # opens what its schedule says is due, so plain Undo leaves it to that
+        # (3.7.2; before, a window's last day stayed applied and its cards shut)
         pc = _pcfg()
+        state = _state_cfg(pc)
         if put_off_too:
-            state = _state_cfg(pc)
             for pid, uids in (opened.get("units") or {}).items():
                 if pid in state:
                     put_off(state[pid], uids, _today())
-            pc["plans"] = state
+        else:
+            for pid, uids in (opened.get("spread") or {}).items():
+                for uid in uids if pid in state else ():
+                    (state[pid].get("applied") or {}).pop(uid, None)
+                    (state[pid].get("src") or {}).pop(uid, None)
+        pc["plans"] = state
         pc["plans_opened"] = {}
         _psave(pc)
         try:
@@ -1794,7 +1839,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
         state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
     if hold and mw.col:
         idx = P.DeckIndex(mw.col, deck_id)
-        cids = P.holdable(idx, plan["doc"], _today(), swap)
+        cids = P.holdable(idx, plan["doc"], _today(), swap, state[plan["id"]].get("applied"))
         n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {plan.get('name') or 'plan'}")
         if n:
             state[plan["id"]]["held"] = sorted(set(state[plan["id"]].get("held") or []) | set(int(c) for c in cids))

@@ -57,7 +57,8 @@ add-on.
 
 - A refresh is one request: `GET /board` returns me, my crew (the people I
   added, each with their week when they added me back, name and emoji only
-  when not yet), my cheers (deleted as they're read), my knocks, and shared
+  when not yet), my cheers (3.7.2: kept until the next refresh's `got=`
+  says the last reply's arrived; older add-ons, deleted as read), my knocks, and shared
   decks on the day's first refresh. A sync is one request: `POST /sync`
   with my profile, my week, decks, heatmap and squad row. The server writes
   only what changed. `test_request_budget` pins this: a change there is a
@@ -81,7 +82,9 @@ add-on.
   squad in common or comes from adding the recipient's code. Someone
   connected to me (a crew edge or a knock either way, a squad or a plan in
   common) gets a name and an emoji for my uid, nothing more (3.7.1, D5);
-  codes and invites carry their own names.
+  codes and invites carry their own names. Adding by uid (`PUT
+  /friends/{uid}`: add back, a knock's Add) needs that connection already;
+  a stranger's uid gets the same 404 as no such account.
 - A squad row is an UPDATE on the server, never an insert; the join
   (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
   `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
@@ -93,8 +96,9 @@ add-on.
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
   Only an imported account restores (`users.from2x`, migration 0018: the
-  import sets it, the first 3.x sync clears it); the client version alone
-  was anyone's to set.
+  import sets it to 1, the first 3.x sync sets it to that time, and it's
+  spent a week later, so a restore that failed once tries again); the
+  client version alone was anyone's to set.
 - The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
   `FIREBASE_SA` secret): for people still on 2.x, Firestore is the truth
   and their week, name and emoji, shared decks, heatmap and squad rows
@@ -593,6 +597,22 @@ add-on.
   notes are all started is done and never behind for them; Due says
   "done · N siblings tomorrow/later" (`DeckIndex.siblings`). Suspended
   siblings stay out.
+- 3.7.2 (what the October bug run left): Due's ticks on an author's lines
+  are keyed by the line (`due.line_keys`: FNV-1a of kind and text, a
+  count for twins; `dueLineKeys` in app.js: change one, change both), so a
+  reorder moves them; a 3.7.1 tick by place still reads. C5's `ids` are in
+  a unit's sig and sources, so ids arriving after a date opened open what
+  they add (a plan's first pass under 3.7.2 carries applied dates over as
+  they stand, `sig2`). While an even date (or a 3.2 schedule) runs, Due
+  counts what has opened so far, so its unseen slice is Behind; a date with
+  nothing of it here is done once counted, so Due folds. Plain Undo leaves
+  a date opened in slices to its schedule. The Worker's days are the
+  person's Anki day (`ankiDay` on `users.tz`/`rollover`): plan history,
+  cheer counts, Delete my log. An account's plans keep at most 24 MB
+  (`PLAN_BYTES_MAX`: docs, library cards, Undo's copy, only the latest
+  save's), its deck trees 6 MB (oldest go first); a save that shrinks is
+  never refused. `PUT /settings` with the save the server has writes
+  nothing.
 
 ## Releasing
 
@@ -650,9 +670,10 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   out with its clicks reaching nothing). Anything a click adds has its way
   back on the same screen.
 - A card's own script runs on the review screen, in the browser's preview
-  and in Cards…: from any page but the ones Due Crew draws on (Decks,
-  Overview, the top bar, the reviewer's bottom bar: `_our_page`) only the
-  room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
+  and in Cards…, and a deck's description runs on Overview: from any page
+  but the ones Due Crew draws on (Decks, the top bar, the reviewer's bottom
+  bar: `_our_page`) only the widgets' keyed commands in
+  `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
   the board, the bars or a dialog.
 - A failed request is sent again only when twice can't do a thing twice

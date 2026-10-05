@@ -78,7 +78,15 @@ def unit_sources(unit, deck_id=None, swap=None):
         out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
     if unit.get("notes") or unit.get("idr"):
         out.append({"notes": list(unit.get("notes") or []), "idr": [list(r) for r in unit.get("idr") or []]})  # 3.6.5
+    if unit.get("ids"):
+        out.append({"ids": list(unit["ids"])})  # 3.7.2: C5's note ids, so ones arriving later open what they add
     return out
+
+
+def unit_sig_v1(unit, deck_id=None, swap=None):
+    """The sig before 3.7.2, which left C5's `ids` out (plan_flow._sig
+    carries a unit applied under it over once)."""
+    return unit_sig({k: v for k, v in unit.items() if k != "ids"}, deck_id, swap)
 
 
 def unit_sig(unit, deck_id=None, swap=None):
@@ -93,7 +101,8 @@ def unit_sig(unit, deck_id=None, swap=None):
                          if unit.get("notes") or unit.get("idr") else [])
                       + ([sorted(unit["search"])] if unit.get("search") else [])
                       + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
-                         if unit.get("nids") or unit.get("cids") else []))
+                         if unit.get("nids") or unit.get("cids") else [])
+                      + ([{"ids": sorted(str(g) for g in unit["ids"])}] if unit.get("ids") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -161,7 +170,7 @@ class DeckIndex:
         # kept between refreshes while this fingerprint holds (a few ms),
         # and only each card's state is read again
         sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
-               tuple(col.db.first("SELECT count(), max(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
                                   f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
         key = (id(col), self.did)
         kept = _STATIC.get(key)
@@ -672,8 +681,8 @@ def waiting_new(doc, prog, today):
     n = 0
     for u in units(doc):
         if str(u.get("opens") or "9999") < today:
-            _o, s, t = prog.get(u["id"], [0, 0, 0])
-            n += max(0, int(t) - int(s))
+            o, s, _t = prog.get(u["id"], [0, 0, 0])
+            n += max(0, int(o) - int(s))  # opened and not seen: an even date's later slices are shut on purpose
     return n
 
 
@@ -733,15 +742,19 @@ def open_cards(col, cids, label):
     return len(ids)
 
 
-def holdable(idx, doc, today, swap=None):
+def holdable(idx, doc, today, swap=None, applied=None):
     """3.3, "Hold back later dates until their day": the cards of dates
     that haven't opened yet which are active now and never studied (new,
     not suspended, not a leech). A card that is also on an opened date is
-    never held. What Follow offers to suspend, once, when asked."""
+    never held. A date already applied here (opened early, C2) counts as
+    opened. What Follow offers to suspend, once, when asked."""
+    applied = applied or {}
     opened, later = set(), set()
     for u in units(doc):
         cids = idx.match(u, swap, doc.get("deck", ""))
-        (opened if str(u.get("opens") or "") <= today else later).update(cids)
+        have = applied.get(u["id"])
+        done = isinstance(have, str) and not have.startswith("skip:")
+        (opened if done or str(u.get("opens") or "") <= today else later).update(cids)
     return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
 
 

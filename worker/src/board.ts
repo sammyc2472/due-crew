@@ -9,7 +9,7 @@ import * as C from "./cards";
 import * as N from "./notices";
 import * as P from "./plans";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson } from "./util";
+import { ankiDay, Env, HttpError, json, nowSec, readJson } from "./util";
 
 const SEEN_EVERY = 3600;  // users.last_seen is written at most hourly
 const SQUADS_PER_SYNC = 20;
@@ -61,16 +61,24 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1]: me, the people I added (with their week
- *  when they added me back, name and emoji only when they haven't yet), my
- *  cheers (delivered once: they go as they're read), my knocks. One
- *  request. keep=1 (3.2, the site's home) shows the cheers waiting and
- *  leaves them for Anki to play. */
+/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N]: me, the people I added (with
+ *  their week when they added me back, name and emoji only when they haven't
+ *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
+ *  shows the cheers waiting and leaves them for Anki to play. got= (3.7.2)
+ *  says which cheers the last reply delivered (its `cheersAt`): those go now,
+ *  so a reply lost on the way loses no cheer. Without got= (older add-ons)
+ *  cheers go as they're read. */
 export async function board(req: Request, s: Session, env: Env): Promise<Response> {
   const params = new URL(req.url).searchParams;
   const withDecks = params.get("decks") === "1";
   const keep = params.get("keep") === "1";
+  const gotRaw = params.get("got");
+  const acks = !keep && gotRaw !== null;  // 3.7.2: cheers go when the next request says they arrived
+  const got = Number(gotRaw) || 0;
   const db = env.DB;
+  if (acks && got > 0) {
+    await db.prepare("DELETE FROM cheers WHERE to_uid = ? AND at <= ?").bind(s.uid, Math.floor(got)).run();
+  }
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
@@ -100,7 +108,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     cheers.push({ from: c.from_uid, name: from.name, emoji: c.emoji, note: c.note || "",
                   luck: c.luck === 1, guid: c.guid || "", at: iso(c.at) });
   }
-  if (cheersRes.results.length && !keep) {
+  const cheersAt = Math.max(0, ...(cheersRes.results as any[]).map((c) => Number(c.at) || 0));
+  if (cheersRes.results.length && !keep && !acks) {
     // delivered, or no longer deliverable: either way done. Only the ones
     // read go: a cheer landing mid-request waits for the next refresh.
     await db.batch((cheersRes.results as any[]).map((c) => db.prepare(
@@ -109,7 +118,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const out: Record<string, unknown> = {
     me: { uid: me.uid, name: me.name || "", emoji: me.emoji || "", code: me.code || "",
           week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at) },
-    friends, cheers, knocks: await listKnocks(env, s.uid),
+    friends, cheers, cheersAt, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
   };
@@ -225,9 +234,10 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     }
     wrote.profile = sets.length > 0;
     if (sets.length) writes.push(db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE uid = ?`).bind(...vals, s.uid));
-    // a 3.x add-on has synced: the one-time 2.x restore is spent
+    // a 3.x add-on has synced: the 2.x restore has a week left
     if (typeof profile.client_version === "string" && /^3\./.test(profile.client_version)) {
-      writes.push(db.prepare("UPDATE users SET from2x = 0 WHERE uid = ? AND from2x = 1").bind(s.uid));
+      // the first 3.x sync starts the restore's week (social.from2x)
+      writes.push(db.prepare("UPDATE users SET from2x = ? WHERE uid = ? AND from2x = 1").bind(nowSec(), s.uid));
     }
   }
   if (week !== null) {
@@ -283,7 +293,9 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     }
   }
   if (planProgress) {
-    const pw = await P.progressWrites(env, s.uid, planProgress);
+    // 3.7.2: my history's day is my Anki day (this sync's clock, else the last one)
+    const pw = await P.progressWrites(env, s.uid, planProgress,
+      ankiDay(now, profile?.tz ?? have.tz, profile?.rollover ?? have.rollover));
     wrote.plans = pw.length > 0;
     writes.push(...pw);
   }
@@ -321,9 +333,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
 // ---- settings (2.13): mine only ----
 
 function putSettingsStmt(env: Env, uid: string, s: { v: number; at: string; json: string }) {
+  // the same save again writes nothing (3.7.2)
   return env.DB.prepare(
     `INSERT INTO settings (uid, v, at, json) VALUES (?, ?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json`,
+     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json
+       WHERE NOT (v IS excluded.v AND at IS excluded.at AND json IS excluded.json)`,
   ).bind(uid, s.v, s.at, s.json);
 }
 

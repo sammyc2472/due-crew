@@ -94,7 +94,11 @@ def _fetch_squad(force=False):
         except TransportError as e:
             return None, ("gone" if e.status == 403 else "error"), knocks
 
+    gen = app.generation
+
     def commit(result):
+        if gen != app.generation:
+            return  # another profile or account since it went out
         data, state, knocks = result or (None, "error", None)
         if knocks is not None:
             _state["knocks"] = drop_muted([], [tuple(k) for k in knocks], muted_uids(cfg()))[1]

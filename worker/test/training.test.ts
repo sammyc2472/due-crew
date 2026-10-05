@@ -340,7 +340,7 @@ describe("3.7.1: your data, and names to people you're connected to", () => {
     const eve = await person("eve");
     expect(await eve.status("GET", "/users/sam")).toBe(404);
     expect((await sam.call("GET", "/users/sam")).body.name).toBe("Sam");
-    await sam.call("PUT", "/friends/dre", {});  // one edge is enough, both ways
+    await befriend(sam, dre);  // one edge is enough, both ways
     expect((await dre.call("GET", "/users/sam")).body.name).toBe("Sam");
     expect((await sam.call("GET", "/users/dre")).body.name).toBe("Dre");
     const sq = (await sam.call("POST", "/squads", { name: "Night owls" })).body;

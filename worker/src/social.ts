@@ -10,7 +10,7 @@ import { tipWrite } from "./cards";
 import { hit, limitOrThrow } from "./limits";
 import { sendMail } from "./mail";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
+import { ankiDay, Env, HttpError, json, nowSec, readJson, readText } from "./util";
 
 export const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 export const CODE_LEN = 6;
@@ -74,10 +74,16 @@ export async function getUser(s: Session, env: Env, [uid]: string[]): Promise<Re
  *  yet (users.from2x: the import sets it, a 3.x sync clears it). The
  *  client version alone was anyone's to set. */
 export async function from2x(env: Env, uid: string): Promise<boolean> {
-  const u = await env.DB.prepare("SELECT from2x, client_version FROM users WHERE uid = ?").bind(uid)
-    .first<{ from2x: number; client_version: string | null }>();
-  return !!u && u.from2x === 1 && !/^3\./.test(u.client_version || "");
+  const u = await env.DB.prepare("SELECT from2x FROM users WHERE uid = ?").bind(uid).first<{ from2x: number }>();
+  if (!u || !u.from2x) return false;
+  // 1: imported, not synced from 3.x yet. Since the first 3.x sync, the time
+  // of it: the restore stays open a week, so one that failed (a 5xx, a
+  // timeout) tries again at the next sync instead of being lost for good
+  if (u.from2x === 1) return true;
+  return nowSec() - u.from2x < FROM2X_GRACE;
 }
+
+const FROM2X_GRACE = 7 * 86400;
 
 async function addEdge(env: Env, me: string, fid: string) {
   await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
@@ -92,11 +98,14 @@ export async function putFriend(req: Request, s: Session, env: Env, [fid]: strin
   if (fid === s.uid) throw new HttpError(400, "self");
   const u = await nameOf(env, fid);
   if (!u) throw new HttpError(404, "no_user");
-  const known = await connected(env, s.uid, fid);  // before my edge makes us so
+  // every way to this call (add back, a knock's Add, someone from a squad or
+  // a plan) is a connection already; a uid alone, with none, is a stranger:
+  // the same 404 as no such account, and no edge (it would hand over the
+  // name: D5). Codes and invites are their own calls.
+  if (!(await connected(env, s.uid, fid))) throw new HttpError(404, "no_user");
   await addEdge(env, s.uid, fid);
   await env.DB.prepare("DELETE FROM knocks WHERE to_uid = ? AND from_uid = ?").bind(s.uid, fid).run();
-  // 3.7.1, D5: the name only to someone who was connected already
-  return json({ uid: fid, ...(known ? u : { name: "", emoji: "" }), mutual: await mutual(env, s.uid, fid) });
+  return json({ uid: fid, ...u, mutual: await mutual(env, s.uid, fid) });
 }
 
 /** PUT /friends {ids}: 3.0's first sync re-adds the crew by uid, once.
@@ -271,10 +280,14 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
   if (!c.guid) {
     // 3.7.1: a cheer received counts on my year card, a sender once a day,
     // read or not (a key of its own: the cheer row goes when it's read)
-    if (await hit(env, `cheerday:${s.uid}:${to}:${Math.floor(now / 86400)}`, 1, 86400)) {
+    // 3.7.2: by the recipient's own day and year, not UTC's
+    const clock = await env.DB.prepare("SELECT tz, rollover FROM users WHERE uid = ?").bind(to)
+      .first<{ tz: number | null; rollover: number | null }>();
+    const day = ankiDay(now, clock?.tz, clock?.rollover);
+    if (await hit(env, `cheerday:${s.uid}:${to}:${day}`, 1, 86400)) {
       await env.DB.prepare(
         `INSERT INTO cheer_counts (uid, year, n) VALUES (?, ?, 1) ON CONFLICT(uid, year) DO UPDATE SET n = n + 1`,
-      ).bind(to, new Date(now * 1000).getUTCFullYear()).run();
+      ).bind(to, Number(day.slice(0, 4))).run();
     }
   }
   await env.DB.prepare(

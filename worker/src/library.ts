@@ -119,6 +119,7 @@ export async function copy(req: Request, s: Session, env: Env, [id]: string[]): 
   const firsts = [...doc.units.map((u) => u.opens as string), ...((doc.events as Obj[] | undefined) || []).map((e) => e.day as string)].sort();
   const n = firsts.length ? Math.round((Date.parse(body.start as string) - Date.parse(firsts[0])) / 86400000) : 0;
   const clean = JSON.stringify(P.planDoc(shifted(doc, n)));
+  await P.roomFor(env, s.uid, clean.length);  // 3.7.2
   const owner = await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner).first<string>("name");
   const credit = JSON.stringify({ id: p.id, name: p.name, owner: owner || "?" });
   const name = p.owner === s.uid ? V.displayName(`${p.name} (copy)`.slice(0, V.NAME_MAX)) : p.name;

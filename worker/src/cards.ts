@@ -4,7 +4,7 @@
 
 import type { Session } from "./auth";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson } from "./util";
+import { ankiDay, Env, HttpError, json, nowSec, readJson } from "./util";
 
 export const KNOWS_PER_SYNC = 2000;
 export const KNOWS_MAX = 100000;  // a person's cards "down": a big shared deck has ~35,000 notes
@@ -163,7 +163,9 @@ export const logCut = (have: string | null | undefined) => !!have && have.starts
  *  last 8 days come back with the next syncs; nothing older is taken again,
  *  and the add-on's history import is told it's done. */
 export async function deleteLog(s: Session, env: Env): Promise<Response> {
-  const cut = new Date(Date.now() - 8 * 86400_000).toISOString().slice(0, 10);
+  const clock = await env.DB.prepare("SELECT tz, rollover FROM users WHERE uid = ?").bind(s.uid)
+    .first<{ tz: number | null; rollover: number | null }>();
+  const cut = ankiDay(nowSec() - 8 * 86400, clock?.tz, clock?.rollover);  // 3.7.2: my day, not UTC's
   await env.DB.batch([
     env.DB.prepare(
       "INSERT INTO logs (uid, json, at) VALUES (?, ?, ?) ON CONFLICT(uid) DO UPDATE SET json = excluded.json, at = excluded.at",

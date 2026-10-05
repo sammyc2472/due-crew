@@ -1822,7 +1822,8 @@ async function builder(id) {
       setTimeout(() => { flash = false; if (!dirty) document.querySelector(".savebar")?.classList.add("clean"); }, merged ? 5000 : 2200);
     } catch (err) {
       status.className = "status bad";
-      status.textContent = err.status === 409 ? "It changed again while saving. Save once more."
+      status.textContent = err.body?.error === "plans_full" ? "Your plans hold as much as one account can. Make this one smaller, or delete a plan."
+        : err.status === 409 ? "It changed again while saving. Save once more."
         : err.body?.error === "bad_plan" ? "A date isn't valid: a due date can't be before it opens, and review-only days need an end date."
         : "That didn't save. Try again.";
     } finally { saveBtn.disabled = false; }

@@ -26,7 +26,8 @@ export const isInt = (v: unknown, lo = 0, hi = Number.MAX_SAFE_INTEGER): v is nu
   typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
 export const isStr = (v: unknown, max: number, min = 0): v is string =>
   typeof v === "string" && v.length >= min && v.length <= max;
-export const isDate = (v: unknown): v is string => typeof v === "string" && DATE_RE.test(v) && !isNaN(Date.parse(v));
+export const isDate = (v: unknown): v is string => typeof v === "string" && DATE_RE.test(v) && !isNaN(Date.parse(v))
+  && new Date(v + "T00:00:00Z").toISOString().slice(0, 10) === v;  // Date.parse takes 2026-02-31; Python doesn't
 export const isIso = (v: unknown): v is string => isStr(v, 40, 10) && !isNaN(Date.parse(v as string));
 
 /** Any one emoji: no letters, digits or spaces, at most 16 UTF-16 units

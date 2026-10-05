@@ -338,7 +338,8 @@ function copyForm(p, done) {
       go(`/plans/${mine.id}`);
     } catch (err) {
       btn.disabled = false; status.className = "status bad";
-      status.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
+      status.textContent = err.body?.error === "too_many_plans" ? "You have 50 plans. Delete one first."
+        : err.body?.error === "plans_full" ? "Your plans hold as much as one account can. Delete one first." : err.status === 429 ? "That's a lot of new plans. Try again in an hour." : "That didn't work. Try again.";
     }
   } }, "Copy");
   return h("div", { class: "copyform" }, h("span", { class: "muted small" }, "Starting"), start, btn,
@@ -987,7 +988,7 @@ const Board = (() => {
     return h("div", { class: "scrollx" }, h("table", { class: "brdt" },
       h("thead", {}, h("tr", {}, h("th", { class: "lt", colspan: 2 }, `${todayN} showed up today`), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
       h("tbody", {}, [...fresh, ...dormant].map((r) => h("tr", { class: [r.you ? "you" : "", r.paused || r.quiet || r.stale ? "dim" : ""].join(" ").trim() },
-        h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name}`), note(r)),
+        h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name || "?"}`), note(r)),
         wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); }))))));
   }
 
@@ -1285,6 +1286,22 @@ async function home() {
   }
 }
 
+/** A tick's key per author's line, from what it says (3.7.2): due.line_keys
+ *  in the add-on, FNV-1a over code points. Change one, change both. */
+function dueLineHash(text) {
+  let h = 0x811c9dc5;
+  for (const ch of text) h = Math.imul(h ^ ch.codePointAt(0), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+function dueLineKeys(pid, uid, todo) {
+  const count = {};
+  return todo.map((td) => {
+    const hh = dueLineHash(`${td?.k || ""}\n${td?.t || ""}`);
+    count[hh] = (count[hh] || 0) + 1;
+    return `${pid}:${uid}:${hh}` + (count[hh] > 1 ? `.${count[hh]}` : "");
+  });
+}
+
 /** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
  *  and my own to-dos from my settings. Ticking and adding happen in Anki,
@@ -1306,8 +1323,9 @@ function duePanel(followed, set, t) {
       if (day === tm) tomorrow.push(u.name);
       if (day !== t) continue;
       const pr = prog[u.id];
+      const keys = dueLineKeys(p.id, u.id, u.todo || []);
       const lines = (u.todo || []).map((x, i) => h("span", { class: "small duel" },
-        h("i", { class: `dbx${ticks[`${p.id}:${u.id}:${i}`] ? " on" : ""}`, "aria-hidden": "true" }),
+        h("i", { class: `dbx${ticks[keys[i]] || ticks[`${p.id}:${u.id}:${i}`] ? " on" : ""}`, "aria-hidden": "true" }),
         h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[x.k] || "Do"), " · ",
         x.url && /^https:\/\//.test(x.url) ? h("a", { href: x.url, target: "_blank", rel: "noopener" }, x.t) : x.t));
       const done = pr && pr[2] && pr[1] >= pr[2];

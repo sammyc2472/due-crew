@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { api, db, person } from "./helpers";
+import { api, db, person, befriend } from "./helpers";
 import * as Quiet from "../src/quiet";
 
 // "The next round", Q1-Q6: quiet accounts. Trimmed at 6 months (only what a
@@ -20,7 +20,7 @@ describe("quiet accounts", () => {
   it("6 months quiet: only what a sync rebuilds goes; the account, crew, squads and week stay", async () => {
     const maya = await person("maya");
     const dre = await person("dre");
-    await maya.call("PUT", "/friends/dre"); await dre.call("PUT", "/friends/maya");
+    await befriend(maya, { uid: "dre" }); await befriend(dre, { uid: "maya" });
     await maya.call("POST", "/sync", { week: { v: 1, days: {} }, heatmap: { "2026-01-01": 3 } });
     await db().prepare("INSERT INTO weeks (uid, doc, updated_at) VALUES ('maya', '{}', 0) ON CONFLICT(uid) DO NOTHING").run();
     await db().prepare("INSERT INTO decks (uid, json) VALUES ('maya', '{}') ON CONFLICT(uid) DO NOTHING").run();
@@ -56,7 +56,7 @@ describe("quiet accounts", () => {
     const dre = await person("dre");
     const kai = await person("kai");
     const maya = await person("maya");
-    await dre.call("PUT", "/friends/kai"); await kai.call("PUT", "/friends/dre");
+    await befriend(dre, { uid: "kai" }); await befriend(kai, { uid: "dre" });
     const mk = async (name: string) => {
       const made = await dre.call("POST", "/plans", { name, deck: "D" });
       return (await dre.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "D", units: [{ id: "a", name: "A", opens: "2026-10-05", tags: ["X"] }] } })).body;

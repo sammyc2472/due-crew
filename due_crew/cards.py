@@ -60,7 +60,7 @@ def known_and_stuck(col, dids, day_cutoff, with_known=True):
     today = (day_cutoff - 86400) * 1000
     known = set(col.db.list(
         f"SELECT DISTINCT n.guid FROM cards c JOIN notes n ON n.id = c.nid WHERE {in_tree} "
-        f"AND c.type = 2 AND c.queue = 2 AND c.ivl >= {KNOWN_IVL} "
+        f"AND c.type = 2 AND c.queue != -1 AND c.ivl >= {KNOWN_IVL} "  # buried today is still known
         "AND c.id NOT IN (SELECT cid FROM revlog WHERE id >= ? AND ease = 1)",
         clean_since)) if with_known else set()
     rows = col.db.all(
@@ -70,6 +70,20 @@ def known_and_stuck(col, dids, day_cutoff, with_known=True):
         today, STUCK_MAX)
     stuck = [str(g) for g, _l in rows]
     return {str(g) for g in known} - set(stuck), stuck
+
+
+def log_today(col):
+    from .stats.queries import StatsQueries
+    return StatsQueries(col).day_label(0)
+
+
+def _days_since(day, today):
+    """Whole days from `day` to `today` (labels); 0 when unknown."""
+    import datetime
+    try:
+        return max(0, (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(str(day))).days)
+    except (TypeError, ValueError):
+        return 0
 
 
 def log_days(col, days, skip=0):
@@ -105,6 +119,12 @@ def for_sync(c, light=False):
             out["known"] = known
     if not light:
         days = LOG_RECENT if cl.session.get("log_full") == cl.user_id else LOG_FULL
+        today = log_today(mw.col)
+        if days == LOG_RECENT:
+            # every day since the log last went up (two weeks on a phone
+            # leave no hole), never more than the first window
+            days = max(LOG_RECENT, min(LOG_FULL, _days_since(cl.session.get("log_sent_day"), today) + 1))
+        cl.session["log_try_day"] = today
         log = log_days(mw.col, days)
         if log:
             out["log"] = log
@@ -215,7 +235,10 @@ def chip_view(info, local_tips, names, asks=()):
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
-  if (Array.isArray(D.accent)) { D.accent = D.accent[0]; }
+  if (Array.isArray(D.accent)) {
+    var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
+    D.accent = D.accent[night ? 1 : 0];
+  }
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
@@ -291,10 +314,16 @@ _FLOAT_JS = """(function () {
     gone = true; box.remove();
     window.removeEventListener('scroll', check, true); window.removeEventListener('resize', check);
     document.removeEventListener('load', check, true);
+    if (ro) { ro.disconnect(); }
+    clearTimeout(later);
   }
   function check() { if (!gone && !free()) { off(); send('knowsbar'); } }
   window.addEventListener('scroll', check, true); window.addEventListener('resize', check);
   document.addEventListener('load', check, true);  // a picture that loads late
+  // Anki puts the answer in a moment later (pictures preloaded, MathJax
+  // typeset): look again when the card's area changes size, and once more
+  var qa = document.getElementById('qa'), ro = null, later = setTimeout(check, 600);
+  if (qa && window.ResizeObserver) { ro = new ResizeObserver(check); ro.observe(qa); }
   window.dcKnowsOff = off;
   if (!free()) { off(); return false; }
   return true;
@@ -303,7 +332,7 @@ _FLOAT_JS = """(function () {
 
 def float_js(data):
     from .room_model import CMD_KEY
-    return _FLOAT_JS.replace("__DATA__", json.dumps(data)).replace("__KEY__", json.dumps(CMD_KEY))
+    return _FLOAT_JS.replace("__KEY__", json.dumps(CMD_KEY)).replace("__DATA__", json.dumps(data))
 
 
 _LAST = {"n": 0, "view": None}
@@ -331,6 +360,11 @@ def _show(view):
         try:
             page.evalWithCallback(float_js(view), to_bar)
             return
+        except Exception:
+            pass
+    if not view and page is not None:
+        try:
+            page.eval(float_js(None))  # nothing to show now: the card above the bar goes too
         except Exception:
             pass
     to_bar(False)
@@ -518,8 +552,17 @@ def on_message(cmd, parts=(), from_card_page=False):
                 return True
         helped_toggle(parts[2])
     elif cmd == "knowsreply" and len(parts) > 3:
-        from .together import send_tip
-        send_tip(parts[2], parts[3])
+        # the ask on the card up now, found again by its guid: the index the
+        # chip was drawn with moves once a tip takes a flag down
+        card = _card()
+        entry = next((e for e in _state["entries"] or [] if e["user_id"] == parts[2]), None)
+        if card is None or entry is None:
+            return True
+        guid = card.note().guid
+        idx = next((i for i, t in enumerate(entry.get("tricky") or []) if t.get("guid") == guid and t.get("q")), None)
+        if idx is not None:
+            from .together import send_tip
+            send_tip(parts[2], idx)
     else:
         return False
     return True

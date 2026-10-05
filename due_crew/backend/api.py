@@ -283,7 +283,10 @@ class ApiClient:
         newest first. Raises TransportError; the caller keeps its cache."""
         # 3.6: the day's first refresh asks for my week's bingo card too
         wk = _bingo.week_key(labels[0]) if with_decks and labels else ""
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}" if with_decks else "/board")
+        # 3.7.2: got= says the last reply's cheers arrived, so the server lets
+        # them go only now: a reply lost on the way loses no cheer
+        got = int(self.session.get("cheers_got") or 0)
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}" if with_decks else f"/board?got={got}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
         span = list(labels) + ([tomorrow] if tomorrow else [])
@@ -365,6 +368,7 @@ class ApiClient:
                 "plans_fresh": bool(with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
+                "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,
                 "my_friends": friends,
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),
@@ -507,7 +511,9 @@ class ApiClient:
             self._note_days(labels, stats, backfill)
         body["week"] = self.week_doc(labels, cfg)
         paused = bool(cfg.get("paused"))
-        if shared_decks is not None and not paused and _digest(shared_decks) != self.session.get("decks_hash"):
+        if paused and shared_decks is not None:
+            shared_decks = []  # nothing for now: the decks come down too, as the heatmap does
+        if shared_decks is not None and _digest(shared_decks) != self.session.get("decks_hash"):
             body["decks"] = shared_decks
         if heatmap is not None:
             want = {"counts": heatmap} if isinstance(heatmap, dict) and not paused else None
@@ -560,6 +566,9 @@ class ApiClient:
             self.session["log_back"] = {"uid": self.user_id, "skip": 0, "done": True}
         if "log" in body and log:
             self.session["log_hash"] = _digest(log)
+        if self.session.get("log_try_day"):
+            # the log through this day is up (sent now, or the same as last time)
+            self.session["log_sent_day"] = self.session.pop("log_try_day")
         if log_window == "full":
             # the long first window went (or had nothing to send: a break of
             # months): 8 days from now on, and the history import may start
@@ -648,18 +657,24 @@ class ApiClient:
         # A code the account already has always stays: a 2.x friend_code on
         # this computer may be one the account has since regenerated.
         code = friend_code_from(self.session.get("friend_code") or "")
+        statuses = []
         status, data = self._call("GET", "/friends")
+        statuses.append(status)
         if status == 200 and not data.get("code"):
-            self._call("POST", "/codes", {"code": code} if code else {})
+            statuses.append(self._call("POST", "/codes", {"code": code} if code else {})[0])
         ids = [f for f in self.session.get("friend_ids") or [] if isinstance(f, str)]
         if ids:
-            self._call("PUT", "/friends", {"ids": ids[:500]})
+            statuses.append(self._call("PUT", "/friends", {"ids": ids[:500]})[0])
         for sq in cfg.get("squads") or []:
             if not isinstance(sq, dict) or not sq.get("code"):
                 continue
-            self._call("POST", "/squads/restore", {
+            statuses.append(self._call("POST", "/squads/restore", {
                 "code": sq["code"], "name": clean_note(sq.get("name"), 24) or "squad",
-                "founder": sq.get("founder") or ""})
+                "founder": sq.get("founder") or ""})[0])
+        if any(s >= 500 or s == 429 for s in statuses):
+            # the server's trouble, not a refusal: the next sync tries again
+            # (the server keeps the restore open a week after the first 3.x sync)
+            return False
         self.session.pop("needs_restore", None)
         self.session["restored_to"] = self.base
         self._save_session()

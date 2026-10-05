@@ -33,6 +33,14 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
+/** A person's Anki day (YYYY-MM-DD) at time t: their clock (minutes east of
+ *  UTC) and the hour their day rolls over, as their add-on last said
+ *  (users.tz, users.rollover). UTC at midnight when it never said. */
+export function ankiDay(t: number, tz: number | null | undefined, rollover: number | null | undefined): string {
+  const shift = (Number(tz) || 0) * 60 - (rollover == null ? 0 : Number(rollover) || 0) * 3600;
+  return new Date((t + shift) * 1000).toISOString().slice(0, 10);
+}
+
 export function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }

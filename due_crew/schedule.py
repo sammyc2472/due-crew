@@ -128,6 +128,9 @@ def quota(doc, unit, sched, total, day, shift=None):
     day after it."""
     if shift is None:
         shift = shift_days(doc, sched)
+    if not sched and not unit.get("even"):
+        # opens whole on its day: no window to work out (window() sorts every date)
+        return total if total > 0 and day >= d(unit["opens"]) + datetime.timedelta(days=shift) else 0
     first, last = window(doc, unit, shift)
     if day < first or total <= 0:
         return 0

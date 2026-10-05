@@ -225,7 +225,17 @@ export async function removeMember(s: Session, env: Env, [id, uid]: string[]): P
   checkUid(uid);
   if (uid !== s.uid) await founderOnly(env, id, s);
   else await getSquad(env, id);
-  await env.DB.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid).run();
+  const db = env.DB;
+  await db.batch([
+    db.prepare("DELETE FROM members WHERE squad = ? AND uid = ?").bind(id, uid),
+    // a founder who leaves hands the squad to its longest-standing member
+    // (as deleting the account does), or it goes with the last one out
+    db.prepare(`UPDATE squads SET founder = (SELECT uid FROM members WHERE squad = ?1 ORDER BY joined_at, uid LIMIT 1)
+                 WHERE id = ?1 AND founder = ?2 AND EXISTS (SELECT 1 FROM members WHERE squad = ?1)`).bind(id, uid),
+    db.prepare("DELETE FROM squads WHERE id = ?1 AND founder = ?2 AND NOT EXISTS (SELECT 1 FROM members WHERE squad = ?1)").bind(id, uid),
+    db.prepare("DELETE FROM bans WHERE squad = ?1 AND NOT EXISTS (SELECT 1 FROM squads WHERE id = ?1)").bind(id),
+    db.prepare("DELETE FROM squad_codes WHERE squad = ?1 AND NOT EXISTS (SELECT 1 FROM squads WHERE id = ?1)").bind(id),
+  ]);
   return json({ ok: true });
 }
 

@@ -35,10 +35,16 @@ const SUMMARY_MAX = 120;
 const LOG_KEEP = 30;
 const EDITORS_MAX = 10;
 const NOTES_MAX = 500;
+const NOTES_PER_PERSON = 50;  // one follower's share of a plan's notes
 const NOTE_TEXT_MAX = 280;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
 export const PLANS_MAX = 50;
+// 3.7.2: what one account's plans keep in all (docs, library cards and the
+// copy Undo puts back). A save that grows past it is refused; one that
+// shrinks never is. With TREES_BYTES, one account can't fill the database.
+export const PLAN_BYTES_MAX = 24 * 1024 * 1024;
+const TREES_BYTES = 6 * 1024 * 1024;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
 
 type Obj = Record<string, unknown>;
@@ -419,10 +425,18 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
   };
 }
 
-const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
+// D1 binds at most 100 parameters: ids go 90 at a time (one person can be
+// in more than 100 plans: 50 owned, 20 followed, any number co-authored)
+async function inChunks<T>(ids: string[], q: (part: string[]) => Promise<{ results: T[] }>): Promise<{ results: T[] }> {
+  const results: T[] = [];
+  for (let i = 0; i < ids.length; i += 90) results.push(...(await q(ids.slice(i, i + 90))).results);
+  return { results };
+}
+
+const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.prepare(
   `SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid
-    WHERE e.plan IN (${ids.map(() => "?").join(",")}) ORDER BY e.at`,
-).bind(...ids).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>();
+    WHERE e.plan IN (${part.map(() => "?").join(",")}) ORDER BY e.at`,
+).bind(...part).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>());
 
 export async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
@@ -475,11 +489,18 @@ export async function putTree(req: Request, s: Session, env: Env): Promise<Respo
     doc = JSON.stringify({ tags: list(body.tags ?? []), decks: list(body.decks ?? []) });
   }
   await limitOrThrow(env, `tree:${s.uid}`, 30, 3600);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_trees WHERE uid = ? AND deck != ?").bind(s.uid, deck).first<number>("n");
-  if ((n ?? 0) >= TREES_MAX) {
-    // the oldest tree makes room: a tree is only ever the latest upload
-    await env.DB.prepare("DELETE FROM plan_trees WHERE uid = ?1 AND deck = (SELECT deck FROM plan_trees WHERE uid = ?1 ORDER BY at LIMIT 1)")
-      .bind(s.uid).run();
+  // the oldest trees make room, by count and (3.7.2) by size: a tree is only
+  // ever the latest upload, and the add-on sends it again when it's needed
+  const others = (await env.DB.prepare("SELECT deck, LENGTH(doc) AS n FROM plan_trees WHERE uid = ? AND deck != ? ORDER BY at DESC")
+    .bind(s.uid, deck).all<{ deck: string; n: number }>()).results;
+  let kept = 0, bytes = doc.length;
+  const drop: string[] = [];
+  for (const t of others) {
+    if (kept + 1 >= TREES_MAX || bytes + t.n > TREES_BYTES) drop.push(t.deck);
+    else { kept++; bytes += t.n; }
+  }
+  if (drop.length) {
+    await env.DB.batch(drop.map((d) => env.DB.prepare("DELETE FROM plan_trees WHERE uid = ? AND deck = ?").bind(s.uid, d)));
   }
   const now = nowSec();
   await env.DB.prepare(
@@ -597,6 +618,12 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   // 3.5, B: a plan for one squad leaves the library; a listed plan's card follows its doc
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
+  if (next.doc !== p.doc) {
+    // 3.7.2: the new doc, the old one kept for Undo, the library card; less the
+    // copy Undo held before (it goes) and the old card
+    const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
+    await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
+  }
   const r = await env.DB.prepare(
     `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
@@ -607,8 +634,25 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
 }
 
 /** One row of the plan's history: who saved, what they said it did, and
- *  the doc it replaced (for Undo). The last LOG_KEEP stay. */
-const PREV_KEEP = 10;
+ *  the doc it replaced (for Undo). The last LOG_KEEP stay; only the latest
+ *  keeps its doc, since Undo only ever puts back the latest save's (3.7.2). */
+const PREV_KEEP = 1;
+
+/** 3.7.2: the bytes an owner's plans keep (PLAN_BYTES_MAX). */
+export async function ownerBytes(env: Env, owner: string): Promise<number> {
+  const r = await env.DB.prepare(
+    `SELECT COALESCE(SUM(LENGTH(doc) + COALESCE(LENGTH(lib), 0)), 0)
+       + COALESCE((SELECT SUM(LENGTH(l.prev)) FROM plan_log l JOIN plans q ON q.id = l.plan
+                   WHERE q.owner = ?1 AND l.prev IS NOT NULL), 0) AS n
+     FROM plans WHERE owner = ?1`,
+  ).bind(owner).first<number>("n");
+  return r ?? 0;
+}
+
+export async function roomFor(env: Env, owner: string | null, grow: number) {
+  if (!owner || grow <= 0) return;
+  if ((await ownerBytes(env, owner)) + grow > PLAN_BYTES_MAX) throw new HttpError(409, "plans_full");
+}
 
 export async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
   await env.DB.batch([
@@ -666,6 +710,7 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
+  await roomFor(env, p.owner, clean.length - p.doc.length);  // 3.7.2
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
     .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
@@ -762,8 +807,13 @@ export async function addNote(req: Request, s: Session, env: Env, [id]: string[]
   const text = V.oneLine(body.text as string, NOTE_TEXT_MAX);
   if (!text) throw V.bad("note");
   await limitOrThrow(env, `plannote:${s.uid}`, 60, 3600);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_notes WHERE plan = ?").bind(id).first<number>("n");
-  if ((n ?? 0) >= NOTES_MAX) throw new HttpError(409, "too_many_notes");
+  // the plan's ceiling, and one person's share of it: one follower can't
+  // fill a plan's notes and leave its authors none (authors aren't capped)
+  const c = await env.DB.prepare(
+    "SELECT COUNT(*) AS n, SUM(CASE WHEN uid = ?2 THEN 1 ELSE 0 END) AS mine FROM plan_notes WHERE plan = ?1",
+  ).bind(id, s.uid).first<{ n: number; mine: number | null }>();
+  if ((c?.n ?? 0) >= NOTES_MAX) throw new HttpError(409, "too_many_notes");
+  if ((c?.mine ?? 0) >= NOTES_PER_PERSON && !(await authorUids(env, p)).has(s.uid)) throw new HttpError(409, "too_many_notes");
   const r = await env.DB.prepare("INSERT INTO plan_notes (plan, uid, day, text, at) VALUES (?, ?, ?, ?, ?)")
     .bind(id, s.uid, body.day, text, nowSec()).run();
   return json({ id: r.meta.last_row_id, day: body.day, text });
@@ -1003,12 +1053,12 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
   const ids = rows.results.map((p) => p.id);
   if (!ids.length) return json({ plans: [] });
-  const inIds = ids.map(() => "?").join(",");
   const [fs, ns, eds, sq] = await Promise.all([
     env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
-    env.DB.prepare(`SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${inIds}) GROUP BY plan`).bind(...ids)
-      .all<{ plan: string; n: number }>(),
+    inChunks(ids, (part) => env.DB.prepare(
+      `SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")}) GROUP BY plan`)
+      .bind(...part).all<{ plan: string; n: number }>()),
     editorsOf(env, ids),
     env.DB.prepare("SELECT squad FROM members WHERE uid = ?").bind(s.uid).all<{ squad: string }>(),
   ]);
@@ -1056,13 +1106,13 @@ export function histNext(have: string | null, units: Record<string, [number, num
 
 /** The statements that store my progress: only for plans I follow with
  *  sharing on, and only where it changed; my history rides the same write. */
-export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>) {
+export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>,
+                                     today = new Date().toISOString().slice(0, 10)) {
   const ids = Object.keys(part);
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
     `SELECT plan, progress, hist FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
   ).bind(uid, ...ids).all<{ plan: string; progress: string | null; hist: string | null }>();
-  const today = new Date().toISOString().slice(0, 10);
   return rows.results
     .map((r) => ({ r, doc: JSON.stringify(part[r.plan]) }))
     .filter(({ r, doc }) => r.progress !== doc)
@@ -1142,10 +1192,10 @@ export async function forBoard(env: Env, uid: string) {
     .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
-    plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
+    plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
-    planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
+    planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
   };
 }
