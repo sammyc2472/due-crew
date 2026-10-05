@@ -5619,6 +5619,11 @@ def test_due_folds_itself_when_done():
     check("fold: the line says done and what's next, with Show",
           "Done for today" in h and "Tomorrow: Next one" in h and "Show &#9662;" in h, h)
     check("fold: open, Hide says what it does", "Hide &#9652;" in board._due_html(dict(left, folded=False)))
+    css = board.DUE_CSS
+    check("fold: a long 'Tomorrow' gives way (ellipsis, the whole in its tooltip) so Show stays in the box",
+          "#due-crew .du-one .du-tm { flex: 0 1 auto; min-width: 0;" in css
+          and css.index("#due-crew .du-one .du-tm") > css.index("#due-crew .du-one > * { flex: none; }")
+          and 'title="Next one"' in h, h)
 
 
 def test_due_board_and_clicks():

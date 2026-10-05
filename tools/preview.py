@@ -224,6 +224,9 @@ for _tab in ("today", "upcoming", "later"):
     sections.append(f"<h3>Due: {_tab}</h3>" + board.render(DATA, {"period": "today"}, now_ts - 60,
                                                             due=dict(_DV, tab=_tab)).replace('id="du-', f'id="du{_tab}-'))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True)))
+sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(
+    DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True, done=True, behind_n=0, start=None, tomorrow=[
+        "F3-1 SLGs 1-3 - Drug delivery and elimination kinetics", "F3-2 SLG 7 - Autonomic wiring and muscarinic antagonists"])))
 sections.append("<h3>Due: added somewhere else</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, due=dict(_DV, toast={"text": "Added to Fri 9 Oct", "tab": "upcoming"},
                                                      rows=[], behind_n=0, behind_plans=[], behind_mine=[], suggestions=[])))

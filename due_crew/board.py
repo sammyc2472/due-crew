@@ -3066,6 +3066,9 @@ DUE_CSS = """
     #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }
     #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; display: inline-flex; }
     #due-crew .du-one .du-go .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* what's next when the day's done: the one part that gives way (else it
+       ran past the box and took Show with it) */
+    #due-crew .du-one .du-tm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; } }
     #due-crew .du-sub a { color: var(--dc-accent); }
     #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
@@ -3302,7 +3305,8 @@ def _due_html(v):
             # the day's done: what's next, in place of the bar
             nxt = v["tomorrow"][:2] or (v["next"]["names"][:2] if v.get("next") else [])
             count, bar, go = "&#10003; Done for today", "", (
-                f'<span class="du-n du-tm">{"Tomorrow" if v["tomorrow"] else e(v["next"]["day"])}: '
+                f'<span class="du-n du-tm" title="{", ".join(e(x) for x in nxt)}">'
+                f'{"Tomorrow" if v["tomorrow"] else e(v["next"]["day"])}: '
                 f'{", ".join(e(x) for x in nxt)}</span>' if nxt else "")
         return (f'<div class="du du-one" data-today="{today}"><a href="#" onclick="{_pycmd("duefold")}" title="Show">'
                 f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
