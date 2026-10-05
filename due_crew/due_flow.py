@@ -85,16 +85,23 @@ def plan_dates(today):
             opens = str(u.get("opens") or "")
             if not opens or opens > end:
                 continue
-            if opens < today:
-                a = applied.get(u["id"])
-                if not a or str(a).startswith("skip:"):
-                    continue  # never opened here (followed after it): not mine to be behind on
-            o, s, t = (prog.get(p["id"]) or {}).get(u["id"], [0, 0, 0])
+            a = applied.get(u["id"])
+            pr = (prog.get(p["id"]) or {}).get(u["id"])
+            o, s, t = pr or [0, 0, 0]
+            # 3.7.2: an even date (or a 3.2 schedule) opens in slices and is
+            # applied only when its window ends: while it runs, what's due is
+            # what has opened so far
+            running = not a and int(o) > 0 and bool(u.get("even") or p.get("sched"))
+            if opens < today and (not (a or running) or str(a).startswith("skip:")):
+                continue  # never opened here (followed after it): not mine to be behind on
             if not int(t) and opens < today and not u.get("todo"):
                 continue  # nothing of it in my deck: nothing to be behind on
             ev = evs.get(u.get("for"))
             dates.append({"pid": p["id"], "uid": u["id"], "plan": title, "name": str(u.get("name") or "?"),
-                          "opens": opens, "seen": int(s), "total": int(t) or (P.unit_total(u) if opens > today else 0),
+                          "opens": opens, "seen": int(s),
+                          "total": int(o) if running else int(t) or (P.unit_total(u) if opens > today else 0),
+                          # counted here and nothing of it in my deck: done once it's open (3.7.2)
+                          "counted": pr is not None and opens <= today,
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
                           "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
@@ -225,10 +232,13 @@ def parts(col, idxs, today):
         idx = pf._index(col, st, idxs)
         applied = st.get("applied") or {}
         doc = p["doc"]
+        prog = (_state.get("plan_progress") or {}).get(p["id"]) or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
-            if opens == today or (opens < today and applied.get(u["id"])
-                                  and not str(applied[u["id"]]).startswith("skip:")):
+            a = applied.get(u["id"])
+            running = (not a and int((prog.get(u["id"]) or [0])[0]) > 0
+                       and bool(u.get("even") or p.get("sched")))  # an even date part open (3.7.2)
+            if opens == today or (opens < today and (a or running) and not str(a).startswith("skip:")):
                 got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
@@ -414,14 +424,17 @@ def tick(c, ident):
 def todo_tick(c, key):
     """An author's line, ticked by hand (only once its date has opened)."""
     today = _today()
-    pid, uid, n = (key.split(":") + ["", "", ""])[:3]
+    pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
     dates, _e, _r = plan_dates(today)
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
-    if not x or not n.isdigit() or int(n) >= len(x.get("todo") or []) or x["opens"] > today:
+    keys = D.line_keys(pid, uid, (x or {}).get("todo"))
+    if not x or key not in keys or x["opens"] > today:
         return
+    n = keys.index(key)
     ticks = _ticks(c)
-    if key in ticks:
-        ticks.pop(key)
+    if D.line_ticked(x, ticks)[n]:
+        ticks.pop(key, None)
+        ticks.pop(D.todo_key(pid, uid, n), None)  # one from before 3.7.2
     else:
         ticks[key] = today
     _save(c, ticks=D.clean_ticks(ticks))
@@ -430,13 +443,14 @@ def todo_tick(c, key):
 
 def open_link(key):
     """An author's line's link, in the browser: only an https one on a date I follow."""
-    pid, uid, n = (key.split(":") + ["", "", ""])[:3]
+    pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
     dates, _e, _r = plan_dates(_today())
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
     todo = (x or {}).get("todo") or []
-    if n.isdigit() and int(n) < len(todo) and str(todo[int(n)].get("url") or "").startswith("https://"):
+    keys = D.line_keys(pid, uid, todo)
+    if key in keys and str(todo[keys.index(key)].get("url") or "").startswith("https://"):
         from aqt.utils import openLink
-        openLink(todo[int(n)]["url"])
+        openLink(todo[keys.index(key)]["url"])
 
 
 def go(key):

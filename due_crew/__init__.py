@@ -367,8 +367,10 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     together.forget_tipped(cheers)  # a tipped flag stays down
     fresh, seen = _fresh_cheers(cheers, cl.session.get("cheers_seen"),
                                 cl.session.get("cheers_seen_ts", ""))
-    if seen != cl.session.get("cheers_seen"):
+    got = data.get("cheers_at") or 0  # 3.7.2: the next refresh says these arrived
+    if seen != cl.session.get("cheers_seen") or got != (cl.session.get("cheers_got") or 0):
         cl.session["cheers_seen"] = seen
+        cl.session["cheers_got"] = got
         cl.session.pop("cheers_seen_ts", None)
         cl._save_session()
     # 2.10: good-luck lines wait for my exam morning, tips for their card

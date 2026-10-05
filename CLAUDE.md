@@ -57,7 +57,8 @@ add-on.
 
 - A refresh is one request: `GET /board` returns me, my crew (the people I
   added, each with their week when they added me back, name and emoji only
-  when not yet), my cheers (deleted as they're read), my knocks, and shared
+  when not yet), my cheers (3.7.2: kept until the next refresh's `got=`
+  says the last reply's arrived; older add-ons, deleted as read), my knocks, and shared
   decks on the day's first refresh. A sync is one request: `POST /sync`
   with my profile, my week, decks, heatmap and squad row. The server writes
   only what changed. `test_request_budget` pins this: a change there is a
@@ -596,6 +597,22 @@ add-on.
   notes are all started is done and never behind for them; Due says
   "done · N siblings tomorrow/later" (`DeckIndex.siblings`). Suspended
   siblings stay out.
+- 3.7.2 (what the October bug run left): Due's ticks on an author's lines
+  are keyed by the line (`due.line_keys`: FNV-1a of kind and text, a
+  count for twins; `dueLineKeys` in app.js: change one, change both), so a
+  reorder moves them; a 3.7.1 tick by place still reads. C5's `ids` are in
+  a unit's sig and sources, so ids arriving after a date opened open what
+  they add (a plan's first pass under 3.7.2 carries applied dates over as
+  they stand, `sig2`). While an even date (or a 3.2 schedule) runs, Due
+  counts what has opened so far, so its unseen slice is Behind; a date with
+  nothing of it here is done once counted, so Due folds. Plain Undo leaves
+  a date opened in slices to its schedule. The Worker's days are the
+  person's Anki day (`ankiDay` on `users.tz`/`rollover`): plan history,
+  cheer counts, Delete my log. An account's plans keep at most 24 MB
+  (`PLAN_BYTES_MAX`: docs, library cards, Undo's copy, only the latest
+  save's), its deck trees 6 MB (oldest go first); a save that shrinks is
+  never refused. `PUT /settings` with the save the server has writes
+  nothing.
 
 ## Releasing
 

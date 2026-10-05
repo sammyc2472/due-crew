@@ -40,6 +40,11 @@ const NOTE_TEXT_MAX = 280;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
 export const PLANS_MAX = 50;
+// 3.7.2: what one account's plans keep in all (docs, library cards and the
+// copy Undo puts back). A save that grows past it is refused; one that
+// shrinks never is. With TREES_BYTES, one account can't fill the database.
+export const PLAN_BYTES_MAX = 24 * 1024 * 1024;
+const TREES_BYTES = 6 * 1024 * 1024;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
 
 type Obj = Record<string, unknown>;
@@ -484,11 +489,18 @@ export async function putTree(req: Request, s: Session, env: Env): Promise<Respo
     doc = JSON.stringify({ tags: list(body.tags ?? []), decks: list(body.decks ?? []) });
   }
   await limitOrThrow(env, `tree:${s.uid}`, 30, 3600);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_trees WHERE uid = ? AND deck != ?").bind(s.uid, deck).first<number>("n");
-  if ((n ?? 0) >= TREES_MAX) {
-    // the oldest tree makes room: a tree is only ever the latest upload
-    await env.DB.prepare("DELETE FROM plan_trees WHERE uid = ?1 AND deck = (SELECT deck FROM plan_trees WHERE uid = ?1 ORDER BY at LIMIT 1)")
-      .bind(s.uid).run();
+  // the oldest trees make room, by count and (3.7.2) by size: a tree is only
+  // ever the latest upload, and the add-on sends it again when it's needed
+  const others = (await env.DB.prepare("SELECT deck, LENGTH(doc) AS n FROM plan_trees WHERE uid = ? AND deck != ? ORDER BY at DESC")
+    .bind(s.uid, deck).all<{ deck: string; n: number }>()).results;
+  let kept = 0, bytes = doc.length;
+  const drop: string[] = [];
+  for (const t of others) {
+    if (kept + 1 >= TREES_MAX || bytes + t.n > TREES_BYTES) drop.push(t.deck);
+    else { kept++; bytes += t.n; }
+  }
+  if (drop.length) {
+    await env.DB.batch(drop.map((d) => env.DB.prepare("DELETE FROM plan_trees WHERE uid = ? AND deck = ?").bind(s.uid, d)));
   }
   const now = nowSec();
   await env.DB.prepare(
@@ -606,6 +618,12 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   // 3.5, B: a plan for one squad leaves the library; a listed plan's card follows its doc
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
+  if (next.doc !== p.doc) {
+    // 3.7.2: the new doc, the old one kept for Undo, the library card; less the
+    // copy Undo held before (it goes) and the old card
+    const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
+    await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
+  }
   const r = await env.DB.prepare(
     `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
@@ -616,8 +634,25 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
 }
 
 /** One row of the plan's history: who saved, what they said it did, and
- *  the doc it replaced (for Undo). The last LOG_KEEP stay. */
-const PREV_KEEP = 10;
+ *  the doc it replaced (for Undo). The last LOG_KEEP stay; only the latest
+ *  keeps its doc, since Undo only ever puts back the latest save's (3.7.2). */
+const PREV_KEEP = 1;
+
+/** 3.7.2: the bytes an owner's plans keep (PLAN_BYTES_MAX). */
+export async function ownerBytes(env: Env, owner: string): Promise<number> {
+  const r = await env.DB.prepare(
+    `SELECT COALESCE(SUM(LENGTH(doc) + COALESCE(LENGTH(lib), 0)), 0)
+       + COALESCE((SELECT SUM(LENGTH(l.prev)) FROM plan_log l JOIN plans q ON q.id = l.plan
+                   WHERE q.owner = ?1 AND l.prev IS NOT NULL), 0) AS n
+     FROM plans WHERE owner = ?1`,
+  ).bind(owner).first<number>("n");
+  return r ?? 0;
+}
+
+export async function roomFor(env: Env, owner: string | null, grow: number) {
+  if (!owner || grow <= 0) return;
+  if ((await ownerBytes(env, owner)) + grow > PLAN_BYTES_MAX) throw new HttpError(409, "plans_full");
+}
 
 export async function logSave(env: Env, plan: string, version: number, uid: string, summary: string, prev: string | null) {
   await env.DB.batch([
@@ -675,6 +710,7 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
+  await roomFor(env, p.owner, clean.length - p.doc.length);  // 3.7.2
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
     .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
@@ -1070,13 +1106,13 @@ export function histNext(have: string | null, units: Record<string, [number, num
 
 /** The statements that store my progress: only for plans I follow with
  *  sharing on, and only where it changed; my history rides the same write. */
-export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>) {
+export async function progressWrites(env: Env, uid: string, part: ReturnType<typeof progressPart>,
+                                     today = new Date().toISOString().slice(0, 10)) {
   const ids = Object.keys(part);
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
     `SELECT plan, progress, hist FROM plan_follows WHERE uid = ? AND share = 1 AND plan IN (${ids.map(() => "?").join(",")})`,
   ).bind(uid, ...ids).all<{ plan: string; progress: string | null; hist: string | null }>();
-  const today = new Date().toISOString().slice(0, 10);
   return rows.results
     .map((r) => ({ r, doc: JSON.stringify(part[r.plan]) }))
     .filter(({ r, doc }) => r.progress !== doc)

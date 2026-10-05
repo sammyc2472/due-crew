@@ -283,7 +283,10 @@ class ApiClient:
         newest first. Raises TransportError; the caller keeps its cache."""
         # 3.6: the day's first refresh asks for my week's bingo card too
         wk = _bingo.week_key(labels[0]) if with_decks and labels else ""
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}" if with_decks else "/board")
+        # 3.7.2: got= says the last reply's cheers arrived, so the server lets
+        # them go only now: a reply lost on the way loses no cheer
+        got = int(self.session.get("cheers_got") or 0)
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}" if with_decks else f"/board?got={got}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
         span = list(labels) + ([tomorrow] if tomorrow else [])
@@ -365,6 +368,7 @@ class ApiClient:
                 "plans_fresh": bool(with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
+                "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,
                 "my_friends": friends,
                 "my_code": str(me.get("code") or ""),
                 "knocks": self._knocks(data.get("knocks")),

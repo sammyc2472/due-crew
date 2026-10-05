@@ -252,7 +252,37 @@ def since(day, today):
 # An event: {day, name, plan}; a review day: {day, plan}.
 
 def todo_key(pid, uid, n):
+    """3.7.1's key: the line's place. Still read, so a tick from before
+    3.7.2 holds; a new tick is keyed by the line itself (line_keys)."""
     return f"{pid}:{uid}:{n}"
+
+
+def _fnv(text):
+    """FNV-1a over code points, 8 hex digits (`dueLineHash` in app.js: change
+    one, change both)."""
+    h = 0x811C9DC5
+    for ch in text:
+        h = ((h ^ ord(ch)) * 0x01000193) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
+def line_keys(pid, uid, todo):
+    """A tick's key per author's line, from what the line says (3.7.2), so
+    an author who reorders a date's lines moves the ticks with them; a
+    second identical line is told apart by its count."""
+    out, count = [], {}
+    for td in todo or []:
+        h = _fnv(f"{td.get('k') or ''}\n{td.get('t') or ''}")
+        count[h] = count.get(h, 0) + 1
+        out.append(f"{pid}:{uid}:{h}" + (f".{count[h]}" if count[h] > 1 else ""))
+    return out
+
+
+def line_ticked(x, ticks):
+    """Which of a date's author's lines are ticked: by the line's key, or by
+    its place for a tick from before 3.7.2."""
+    keys = line_keys(x["pid"], x["uid"], x.get("todo"))
+    return [k in ticks or todo_key(x["pid"], x["uid"], n) in ticks for n, k in enumerate(keys)]
 
 
 def sibling_line(n, buried):
@@ -265,12 +295,14 @@ def date_state(x, ticks):
     """(done, part): a date is done when its cards are seen and its author's
     lines are ticked; part when anything of it is."""
     lines = x.get("todo") or []
-    ticked = sum(1 for n in range(len(lines)) if todo_key(x["pid"], x["uid"], n) in ticks)
+    ticked = sum(line_ticked(x, ticks))
     total, seen = int(x.get("total") or 0), int(x.get("seen") or 0)
     cards_done = seen >= total if total else True
     if not total and not lines:
-        cards_done = False  # nothing here to see: never ticks itself
-    done = cards_done and ticked == len(lines) and (total or lines)
+        # nothing of it here: done once its day came and the deck was read
+        # (3.7.2), so Due can fold; never before it's been counted
+        cards_done = bool(x.get("counted"))
+    done = cards_done and ticked == len(lines) and (total or lines or x.get("counted"))
     return bool(done), bool(seen or ticked) and not done
 
 
@@ -281,10 +313,10 @@ def _date_row(x, ticks, today, short=False):
         for g, s, t in x.get("parts") or []:
             lines.append({"kind": "part", "label": g, "seen": int(s), "total": int(t),
                           "done": int(t) > 0 and int(s) >= int(t)})
+        keys, on = line_keys(x["pid"], x["uid"], x.get("todo")), line_ticked(x, ticks)
         for n, td in enumerate(x.get("todo") or []):
-            key = todo_key(x["pid"], x["uid"], n)
             lines.append({"kind": "todo", "label": TODO_KINDS.get(td.get("k"), "Do"), "text": str(td.get("t") or ""),
-                          "url": str(td.get("url") or ""), "key": key, "done": key in ticks,
+                          "url": str(td.get("url") or ""), "key": keys[n], "done": on[n],
                           "can": x["opens"] <= today})
     total, seen = int(x.get("total") or 0), int(x.get("seen") or 0)
     if x["opens"] > today:

@@ -342,7 +342,7 @@ class FakeWorker:
             return self._auth(method, parts[1:], auth, body or {})
         me = self._me(auth)
         if m == ("GET", "board"):
-            return 200, self._board(me, query.get("decks") == "1", query.get("wk"))
+            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"))
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -459,12 +459,20 @@ class FakeWorker:
         raise Bad(404, "not_found")
 
     # -- board and sync ------------------------------------------------------
+    def _next_cheer(self):
+        # the Worker's cheer `at` is in seconds; the fake counts, so two in a second differ
+        self._cheer_n = getattr(self, "_cheer_n", 0) + 1
+        return self._cheer_n
+
     def _week_of(self, uid):
         w = self.weeks.get(uid)
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
-    def _board(self, me, with_decks, wk=None):
+    def _board(self, me, with_decks, wk=None, got=None):
         u = self.users[me]
+        if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
+            for key in [k for k, c in self.cheers.items() if k[0] == me and c["n"] <= int(got)]:
+                del self.cheers[key]
         week, at = self._week_of(me)
         friends = []
         for owner, fid in sorted(self.friends):
@@ -486,9 +494,11 @@ class FakeWorker:
                 cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
                                "note": c.get("note") or "", "luck": bool(c.get("luck")),
                                "guid": c.get("guid") or "", "at": c["at"]})
-        for key in [k for k in self.cheers if k[0] == me]:
-            del self.cheers[key]
-        out = {"me": {"uid": me, "name": u["name"] or "", "emoji": u["emoji"] or "", "code": u["code"] or "",
+        mine = [c["n"] for (to, _f), c in self.cheers.items() if to == me]
+        if got is None:  # an older add-on: they go as they're read
+            for key in [k for k in self.cheers if k[0] == me]:
+                del self.cheers[key]
+        out = {"cheersAt": max(mine, default=0),"me": {"uid": me, "name": u["name"] or "", "emoji": u["emoji"] or "", "code": u["code"] or "",
                       "week": week, "updatedAt": at},
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
@@ -841,7 +851,7 @@ class FakeWorker:
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
-                                 "guid": body.get("guid"), "at": _now()}
+                                 "guid": body.get("guid"), "at": _now(), "n": self._next_cheer()}
         if body.get("guid") and body.get("note"):  # 3.2: a tip with words stays on its card
             self.tips[(body["guid"], me)] = {"text": " ".join(body["note"].split())[:80], "at": len(self.tips) + 1}
             self._count("tips")

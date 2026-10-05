@@ -86,7 +86,14 @@ def fetch_as(store, cl, col):
     q = StatsQueries(col)
     labels = [q.day_label(i) for i in range(7)]
     tomorrow = q.day_label(-1)
-    return cl.fetch_board(labels, tomorrow=tomorrow, with_decks=True), labels, tomorrow
+    return acked(cl, cl.fetch_board(labels, tomorrow=tomorrow, with_decks=True)), labels, tomorrow
+
+
+def acked(cl, data):
+    """What the main thread's commit does with a refresh's cheers (3.7.2):
+    the next refresh tells the server they arrived."""
+    cl.session["cheers_got"] = data.get("cheers_at") or 0
+    return data
 
 
 def showed_days(entry, labels):
@@ -1348,6 +1355,7 @@ def test_cheer_any_emoji():
     sam = new_client(store, "sam", "Sammy")
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
     check("any emoji: a cheer that isn't one emoji is dropped on receive", data["cheers"] == [])
+    fetch_as(store, sam, make_user_col([TODAY]))
     check("any emoji: a delivered cheer is gone", ("sam", "dre") not in store.cheers)
     dre.send_cheer("sam", thumbs)
     data, _l, _t = fetch_as(store, sam, make_user_col([TODAY]))
@@ -1404,8 +1412,11 @@ def test_request_budget():
           count(lambda: [sam.check_version(labels[0], "3.0.0") for _ in range(3)]) == 1)
     new_client(store, "f0").send_cheer("sam", "\U0001F525")
     data = sam.fetch_board(labels, tomorrow)
-    check("cheers: they ride the refresh, and are delivered once",
-          [c["from"] for c in data["cheers"]] == ["f0"] and sam.fetch_board(labels, tomorrow)["cheers"] == [])
+    again = sam.fetch_board(labels, tomorrow)  # that reply was lost: nothing acked yet
+    acked(sam, again)
+    check("cheers: they ride the refresh, a lost reply loses none, and once seen they go",
+          [c["from"] for c in data["cheers"]] == ["f0"] and [c["from"] for c in again["cheers"]] == ["f0"]
+          and sam.fetch_board(labels, tomorrow)["cheers"] == [])
     store.friends.discard(("f4", "sam"))
     data = sam.fetch_board(labels, tomorrow)
     check("a friend who removed me drops off the board at the next refresh, no error",
@@ -2618,7 +2629,7 @@ def test_tip_clears_flag_v301():
 
     dre.push(labels, {})
     check("race: Dre's sync before he's read the tip doesn't put the flag back", flags() == ["g2"])
-    data = dre.fetch_board(labels, tomorrow=tomorrow)
+    data = acked(dre, dre.fetch_board(labels, tomorrow=tomorrow))
     check("race: the tip is still his to read", [c["guid"] for c in data["cheers"]] == ["g1"])
     real = together.client
     together.client = lambda: dre
@@ -2632,6 +2643,7 @@ def test_tip_clears_flag_v301():
         check("arrival: a cheer without a card changes nothing", len(dre.session["tricky"]) == 1)
     finally:
         together.client = real
+    dre.fetch_board(labels, tomorrow=tomorrow)  # the next refresh says the tip arrived
     dre.session["tricky"].append({"guid": "g1", "deck": "Cardio", "at": labels[0]})
     dre.push(labels, {})
     check("re-flag: flagging it again is Dre's to do", flags() == ["g2", "g1"])
@@ -4820,7 +4832,8 @@ def test_who_knows_v32():
     check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
-    sam.fetch_board(labels)  # Dre's tip is read, so a flag on that card may go up again
+    acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
+    sam.fetch_board(labels)               # says so: a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
     from due_crew import together
     from due_crew.app import _state
@@ -5883,6 +5896,126 @@ def test_offline_error_names_no_code():
     p = cl.session_file
     cl._save_session()
     check("session file: mine alone", (os.stat(p).st_mode & 0o077) == 0)
+
+
+def test_remaining_oct():
+    """What the October bug run left: a date opened before its author's note
+    ids came picks them up; an author's lines keep their ticks when they're
+    reordered."""
+    from due_crew import plans as P, plan_flow as F, due as D
+    col = _spread_col()
+    idx = P.DeckIndex(col, 10)
+    guids = {cid: g for (g, _o), cid in idx.by_ref.items()}
+    day = TODAY.isoformat()
+    unit = {"id": "r", "name": "Renal", "opens": day, "tags": ["Step1_v13::Renal"], "decks": [], "cards": []}
+    p = {"doc": {"deck": "Step 1", "units": [unit]}}
+    st = {"deck_id": 10, "applied": {}, "src": {}}
+    names, cids, _u = F._spread(col, p, st, day)
+    check("ids: a date whose tag matches nothing here opens nothing, and is applied", not cids and "r" in st["applied"])
+    unit["ids"] = [guids[103], guids[104]]
+    names, cids, _u = F._spread(col, p, st, day)
+    check("ids: the author's note ids arriving later open what they find", cids == {103, 104}, str(cids))
+    check("ids: and then it's applied as it stands", F._spread(col, p, st, day)[1] == set())
+    old = {"deck_id": 10, "applied": {"r": P.unit_sig_v1(unit, 10, None)}, "src": {"r": P.unit_sources(dict(unit, ids=[]), 10, None)}}
+    check("ids: a date applied before 3.7.2 is carried over as it stands",
+          F._spread(col, p, old, day)[1] == set() and old["applied"]["r"] == P.unit_sig(unit, 10, None) and old["sig2"])
+    unit["ids"] = unit["ids"] + [guids[105]]
+    check("ids: from then on, one more opens", F._spread(col, p, old, day)[1] == {105})
+
+    x = {"pid": "p1", "uid": "u1", "todo": [{"k": "watch", "t": "Lecture 14"}, {"k": "read", "t": "Ch 3"}]}
+    keys = D.line_keys("p1", "u1", x["todo"])
+    ticks = {keys[0]: day}
+    moved = dict(x, todo=list(reversed(x["todo"])))
+    check("ticks: keyed by the line, so a reorder moves the tick with it",
+          D.line_ticked(x, ticks) == [True, False] and D.line_ticked(moved, ticks) == [False, True])
+    check("ticks: two identical lines are told apart",
+          len(set(D.line_keys("p", "u", [{"k": "do", "t": "Qs"}, {"k": "do", "t": "Qs"}]))) == 2)
+    check("ticks: one from before 3.7.2 (the line's place) still reads",
+          D.line_ticked(x, {D.todo_key("p1", "u1", 1): day}) == [False, True])
+    import re as _re
+    app_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    init_src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    check("cheers: the main thread's commit is what says they arrived (cheers_got from the reply's cheers_at)",
+          'got = data.get("cheers_at") or 0' in init_src and 'cl.session["cheers_got"] = got' in init_src)
+    check("ticks: the site hashes lines the same way (FNV-1a, code points)",
+          "0x811c9dc5" in app_js and "0x01000193" in app_js and "codePointAt" in app_js
+          and _re.search(r"ticks\[keys\[i\]\]", app_js))
+
+
+def test_remaining_oct_due():
+    """Due, from what the bug run left: an even date while it runs counts
+    what has opened so far (and shows under Behind when that's not seen); a
+    date with nothing of it in this copy is done once counted, so Due folds."""
+    from due_crew import due as D, due_flow as F
+    from due_crew.app import _state
+    T = "2026-10-05"
+    unit = {"id": "e", "name": "Renal", "opens": "2026-10-02", "due": "2026-10-09", "even": True}
+    empty = {"id": "z", "name": "Nothing here", "opens": T}
+    plan = {"id": "p1", "name": "Big", "doc": {"deck": "Step 1", "units": [unit, empty]}}
+    st = {"deck_id": 10, "applied": {}}
+    saved = (F._pf, sys.modules["aqt"].mw.col, dict(_state))
+    F._pf = lambda: types.SimpleNamespace(_state_cfg=lambda: {"p1": st}, followed=lambda: [plan], _deck_ok=lambda col, d: True)
+    sys.modules["aqt"].mw.col = object()
+    try:
+        _state["plan_progress"] = {"p1": {"e": [40, 25, 100], "z": [0, 0, 0]}}
+        _state["plan_parts"], _state["plan_sibs"] = {}, {}
+        dates, _e, _r = F.plan_dates(T)
+        e = next((x for x in dates if x["uid"] == "e"), None)
+        check("even date running: shown, and what's due is what has opened (40), not the whole 100",
+              e is not None and e["total"] == 40 and e["seen"] == 25, str(dates))
+        v = D.view(T, dates, [], {})
+        check("even date running: its unseen opened slice is Behind (15 left), not the shut 60",
+              [(b["uid"], b["left"]) for b in v["behind_plans"]] == [("e", 15)], str(v["behind_plans"]))
+        _state["plan_progress"]["p1"]["e"] = [40, 40, 100]
+        dates, _e, _r = F.plan_dates(T)
+        v = D.view(T, dates, [], {})
+        z = next(x for x in dates if x["uid"] == "z")
+        check("nothing of it here: counted, so done", z["counted"] and D.date_state(z, {})[0])
+        check("fold: today done, with the slice seen and the empty date counted", D.fold_state(None, v, T) is True)
+        _state["plan_progress"] = {}
+        dates, _e, _r = F.plan_dates(T)
+        z = next(x for x in dates if x["uid"] == "z")
+        check("nothing counted yet: not done (the deck hasn't been read)", not D.date_state(z, {})[0])
+        st["applied"]["e"] = "skip:x"
+        _state["plan_progress"] = {"p1": {"e": [40, 0, 100]}}
+        check("a skipped date stays out", all(x["uid"] != "e" for x in F.plan_dates(T)[0]))
+    finally:
+        F._pf, sys.modules["aqt"].mw.col = saved[0], saved[1]
+        _state.clear()
+        _state.update(saved[2])
+
+
+def test_remaining_oct_spread_undo():
+    """Plain Undo after a morning that opened a slice of an even date leaves
+    it to its schedule (its next morning opens what's due), so the last day
+    of a window never stays applied with its cards shut. Other dates keep
+    plain Undo's meaning: they stay applied."""
+    from due_crew import plan_flow as F
+    pc = {"plans": {"p1": {"applied": {"e": "sig-e", "n": "sig-n"}, "src": {"e": [1], "n": [1]}}},
+          "plans_opened": {"day": "2026-10-05", "label": "Due Crew: open 2 dates",
+                           "units": {"p1": ["e", "n"]}, "spread": {"p1": ["e"]}}}
+    saved = (F._pcfg, F._psave, F._undo_ok, F.refresh_progress, F.app.swap, F.cfg, sys.modules.get("aqt.operations"))
+    undone = []
+    F._pcfg, F._psave, F._undo_ok = (lambda: pc), (lambda d: None), (lambda label: True)
+    F.refresh_progress, F.app.swap, F.cfg = (lambda: None), (lambda c, **k: None), (lambda: {})
+    sys.modules["aqt.operations"] = types.ModuleType("aqt.operations")  # no CollectionOp: mw.undo, now
+    real_undo = getattr(F.mw, "undo", None)
+    F.mw.undo = lambda: undone.append(1)
+    try:
+        F.undo_morning()
+        st = pc["plans"]["p1"]
+        check("spread undo: the even date goes back to its schedule; the plain date stays applied",
+              undone and "e" not in st["applied"] and "e" not in st["src"] and st["applied"].get("n") == "sig-n", str(pc))
+    finally:
+        F._pcfg, F._psave, F._undo_ok, F.refresh_progress, F.app.swap, F.cfg = saved[:6]
+        if saved[6] is None:
+            sys.modules.pop("aqt.operations", None)
+        else:
+            sys.modules["aqt.operations"] = saved[6]
+        if real_undo is None:
+            del F.mw.undo
+        else:
+            F.mw.undo = real_undo
 
 
 def main():

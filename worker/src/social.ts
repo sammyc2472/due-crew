@@ -10,7 +10,7 @@ import { tipWrite } from "./cards";
 import { hit, limitOrThrow } from "./limits";
 import { sendMail } from "./mail";
 import * as V from "./validate";
-import { Env, HttpError, json, nowSec, readJson, readText } from "./util";
+import { ankiDay, Env, HttpError, json, nowSec, readJson, readText } from "./util";
 
 export const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 export const CODE_LEN = 6;
@@ -280,10 +280,14 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
   if (!c.guid) {
     // 3.7.1: a cheer received counts on my year card, a sender once a day,
     // read or not (a key of its own: the cheer row goes when it's read)
-    if (await hit(env, `cheerday:${s.uid}:${to}:${Math.floor(now / 86400)}`, 1, 86400)) {
+    // 3.7.2: by the recipient's own day and year, not UTC's
+    const clock = await env.DB.prepare("SELECT tz, rollover FROM users WHERE uid = ?").bind(to)
+      .first<{ tz: number | null; rollover: number | null }>();
+    const day = ankiDay(now, clock?.tz, clock?.rollover);
+    if (await hit(env, `cheerday:${s.uid}:${to}:${day}`, 1, 86400)) {
       await env.DB.prepare(
         `INSERT INTO cheer_counts (uid, year, n) VALUES (?, ?, 1) ON CONFLICT(uid, year) DO UPDATE SET n = n + 1`,
-      ).bind(to, new Date(now * 1000).getUTCFullYear()).run();
+      ).bind(to, Number(day.slice(0, 4))).run();
     }
   }
   await env.DB.prepare(

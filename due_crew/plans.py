@@ -78,7 +78,15 @@ def unit_sources(unit, deck_id=None, swap=None):
         out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
     if unit.get("notes") or unit.get("idr"):
         out.append({"notes": list(unit.get("notes") or []), "idr": [list(r) for r in unit.get("idr") or []]})  # 3.6.5
+    if unit.get("ids"):
+        out.append({"ids": list(unit["ids"])})  # 3.7.2: C5's note ids, so ones arriving later open what they add
     return out
+
+
+def unit_sig_v1(unit, deck_id=None, swap=None):
+    """The sig before 3.7.2, which left C5's `ids` out (plan_flow._sig
+    carries a unit applied under it over once)."""
+    return unit_sig({k: v for k, v in unit.items() if k != "ids"}, deck_id, swap)
 
 
 def unit_sig(unit, deck_id=None, swap=None):
@@ -93,7 +101,8 @@ def unit_sig(unit, deck_id=None, swap=None):
                          if unit.get("notes") or unit.get("idr") else [])
                       + ([sorted(unit["search"])] if unit.get("search") else [])
                       + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
-                         if unit.get("nids") or unit.get("cids") else []))
+                         if unit.get("nids") or unit.get("cids") else [])
+                      + ([{"ids": sorted(str(g) for g in unit["ids"])}] if unit.get("ids") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
