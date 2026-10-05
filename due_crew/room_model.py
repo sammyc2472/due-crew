@@ -211,7 +211,11 @@ BAR_BALANCE = r"""
     var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
     l.style.width = r.style.width = '';
     var t0 = document.getElementById('dc-knows-t');
-    if (t0) { t0.style.maxWidth = '24vw'; [].forEach.call(t0.parentNode.querySelectorAll('span'), function (x) { x.style.display = 'inline-block'; }); }  // as drawn (cards._CHIP_JS); shrunk again below if need be
+    if (t0) {
+      t0.style.maxWidth = '24vw'; t0.textContent = t0.getAttribute('data-full') || t0.textContent;
+      [].forEach.call(t0.parentNode.querySelectorAll('span,b'), function (x) { x.style.display = ''; });
+      t0.style.display = 'inline-block';
+    }  // as drawn (cards._CHIP_JS); shrunk again below if need be
     // another add-on can draw its button over the bar (positioned, out of
     // the row), so ours would sit underneath it: step past anything that does
     function clear(el) {
@@ -248,13 +252,18 @@ BAR_BALANCE = r"""
     // the chip's text gives way first (it ends in an ellipsis, the whole in its tooltip)
     for (var i = 0; over > 0 && txt && i < 4; i++) {
       var tw = txt.getBoundingClientRect().width;
-      if (tw <= 60) { break; }
-      txt.style.maxWidth = Math.max(60, tw - Math.ceil(over / 2)) + 'px';
+      if (tw <= 120) { break; }
+      txt.style.maxWidth = Math.max(120, tw - Math.ceil(over / 2)) + 'px';
       side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
     }
-    // still too wide: the chip keeps its button (Ask, Tip, This helped), its words go to its tooltip
-    if (over > 0 && txt && txt.parentNode.querySelector('b')) {
-      [].forEach.call(txt.parentNode.querySelectorAll('span'), function (x) { x.style.display = 'none'; });
+    // still too wide: the short form ("Ameya +1", "Ameya's tip"); a tip's
+    // This helped goes with its words (it's in the tips the chip opens)
+    if (over > 0 && txt) {
+      txt.textContent = txt.getAttribute('data-short') || txt.textContent;
+      txt.style.maxWidth = 'none';
+      [].forEach.call(txt.parentNode.children, function (x) {
+        if (x !== txt && (x.tagName === 'SPAN' || txt.getAttribute('data-tip'))) { x.style.display = 'none'; }
+      });
       side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
     }
     if (over > 0) { return; }

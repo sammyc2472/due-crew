@@ -2177,7 +2177,7 @@ def test_together_v210():
     check("bottom bar: the chip's words end in an ellipsis (never under its button), the cells are measured unwrapped",
           "text-overflow:ellipsis" in kj and "flex:none" in kj and "s.title = D.title || D.text" in kj
           and "sum +=" in rm.BAR_BALANCE and "paddingLeft) - parseFloat" in rm.BAR_BALANCE
-          and "x.style.display = 'none'" in rm.BAR_BALANCE)
+          and "data-short" in rm.BAR_BALANCE and "data-short" in kj and "data-full" in rm.BAR_BALANCE)
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
@@ -4849,6 +4849,15 @@ def test_who_knows_v32():
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
     check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    asked_q = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")])
+    check("chip: a crewmate's ask shows their line, and a short form for a narrow bar",
+          asked_q["text"] == "\U0001F419 Dre: \u201cwhy axillary?\u201d" and asked_q["short"] == "\U0001F419 Dre asked"
+          and asked["text"] == "\U0001F419 Dre asked about this", str(asked_q))
+    check("chip: once I've asked, it says so (Asked changes my line)",
+          K.chip_view({"knows": ["dre"]}, [], names, mine=True)["act"] == "Asked" and v["act"] == "Ask"
+          and v["short"] == "\U0001F419 Dre +1")
+    check("chip: a tip's short form names whose tip it is",
+          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh

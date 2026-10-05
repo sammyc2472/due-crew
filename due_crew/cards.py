@@ -200,21 +200,29 @@ def tip_list(info, local_tips, names):
     return out
 
 
-def chip_view(info, local_tips, names, asks=()):
+def chip_view(info, local_tips, names, asks=(), mine=False):
     """What the chip says for one card, or None. info: the session's entry
     for the card; local_tips: the tips kept here for it (together.local_tips);
-    asks: [(uid, index)] crewmates asking about this card (on their week).
-    3.5.0, K1: a tip shows its own words in the bar, with This helped."""
-    asks = [(u, i) for u, i in asks if u in names]
+    asks: [(uid, index[, line])] crewmates asking about this card (on their
+    week); mine: I've asked about it myself and no tip has come yet.
+    3.5.0, K1: a tip shows its own words in the bar, with This helped.
+    `short` is what the bar says when the words don't fit beside Edit."""
+    asks = [a for a in asks if a[0] in names]
     if asks:
         name, emoji = names[asks[0][0]]
-        return {"kind": "asked", "text": f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]} asked about this",
-                "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
+        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+        q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
+        view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
+                "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
+        if q:
+            view["title"] = q
+        return view
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
     tips = tip_list(info, local_tips, names)
     if tips:
         first = tips[0]
-        view = {"kind": "tip", "text": f"\U0001F4A1 {first['name'].split(' ')[0]}: {first['text']}",
+        who = first["name"].split(" ")[0]
+        view = {"kind": "tip", "text": f"\U0001F4A1 {who}: {first['text']}", "short": f"\U0001F4A1 {who}'s tip",
                 "title": first["text"], "cmd": "knowstip"}
         if len(tips) > 1:
             view["more"] = len(tips) - 1
@@ -224,11 +232,11 @@ def chip_view(info, local_tips, names, asks=()):
         return view
     if knows:
         name, emoji = names[knows[0]]
-        who = name.split(" ")[0]
+        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
         more = len(knows) - 1
-        return {"kind": "knows", "text": f"{emoji + ' ' if emoji else ''}{who}"
-                + (f" and {more} more know this" if more > 0 else " knows this"), "ask": True,
-                "cmd": "knowsask", "act": "Ask"}
+        return {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
+                "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
+                "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
     return None
 
 
@@ -245,6 +253,8 @@ _CHIP_JS = """(function () {
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
     'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
   var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
+  t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
+  if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
   s.title = D.title || D.text;
   t.style.cssText = 'display:inline-block;max-width:24vw;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;';
   if (D.more) { var m = document.createElement('span'); m.textContent = '+' + D.more + ' more'; m.style.opacity = '0.7'; s.appendChild(m); }
@@ -404,9 +414,11 @@ def on_answer(card):
     try:
         guid = card.note().guid
         from .together import local_tips
-        asks = [(e["user_id"], i) for e in _state["entries"] or [] if not e.get("you")
+        asks = [(e["user_id"], i, t["q"]) for e in _state["entries"] or [] if not e.get("you")
                 for i, t in enumerate(e.get("tricky") or []) if t.get("guid") == guid and t.get("q")]
-        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks)
+        from .together import _today
+        mine = any(f["guid"] == guid for f in clean_tricky(client().session.get("tricky"), _today()))
+        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine)
     except Exception:
         view = None
     if view:
@@ -448,8 +460,12 @@ def ask(card=None):
         lead = f"{listed} {'has' if len(who) == 1 else 'have'} it down. "
     else:
         lead = ""
+    from .together import _today
+    asked = next((f for f in clean_tricky(client().session.get("tricky"), _today()) if f["guid"] == guid), None)
     line, ok = ask_text(mw, "Ask your crew about this card",
-                        lead + "Your crew sees it on their copy of the card. One line, optional.")
+                        lead + ("You've asked. Change your line, or leave it as it is."
+                                if asked else "Your crew sees it on their copy of the card. One line, optional."),
+                        (asked or {}).get("q") or "")
     if not ok:
         return
     flag(card, clean_note(line) or "")
