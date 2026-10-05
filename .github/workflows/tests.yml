@@ -11,10 +11,10 @@ permissions:
 jobs:
   lint:
     name: undefined names (pyflakes)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install pyflakes
@@ -24,20 +24,20 @@ jobs:
 
   suite:
     name: client suite (fake Worker)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python3 tests/test_due_crew.py
 
   dialogs:
     name: dialogs build (offscreen PyQt6)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: |
@@ -46,26 +46,26 @@ jobs:
             libglib2.0-0 libdbus-1-3 libfontconfig1 libxcb-cursor0
       - run: pip install PyQt6
       - run: QT_QPA_PLATFORM=offscreen python3 tools/dialogs.py dialog-shots
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dialog-shots
           path: dialog-shots
 
   rules:
     name: rules (Firestore emulator)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install -g firebase-tools
       - run: firebase emulators:exec --only firestore --project demo-due-crew "python3 tests/rules/emulator_rules_test.py"
 
@@ -73,13 +73,13 @@ jobs:
   # the rules job once 3.0 ships; until then both run.
   worker:
     name: worker (vitest, workerd + D1)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: worker
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - run: npm ci
@@ -87,7 +87,7 @@ jobs:
       - run: npx vitest run
       # the real client against the real Worker: where the suite's fake and
       # the Worker's own tests each prove one side, this proves they agree
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install requests
@@ -106,7 +106,7 @@ jobs:
     name: deploy worker (v* tags)
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [lint, suite, dialogs, rules, worker]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     defaults:
       run:
@@ -115,10 +115,11 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
+          package-manager-cache: false  # this job holds the Cloudflare secrets: no shared cache
       - name: Cloudflare set up?
         id: ready
         run: |
