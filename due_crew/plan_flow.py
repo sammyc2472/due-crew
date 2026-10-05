@@ -457,11 +457,11 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     day = S.d(today)
     shift = S.shift_days(doc, sched)
     matches = P.unit_matches(idx, doc, _swap(st))
-    totals, seen_before, new_today = {}, {}, 0
+    totals, seen_before, seen_now, new_today = {}, {}, {}, 0
     new_by_day = {}
     for uid, cids in matches.items():
         totals[uid] = len(cids)
-        seen = idx.counts(cids)[1]
+        seen = seen_now[uid] = idx.counts(cids)[1]
         # a sibling Anki buried today counts as seen (plans.counts): done
         # today too, so the Today box reaches done when Due does; only for a
         # note started today (one started before was seen before today)
@@ -474,7 +474,7 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
                 k = S.iso(day - datetime.timedelta(days=ago))
                 new_by_day[k] = new_by_day.get(k, 0) + 1
     catch = (st.get("catch") or {}).get("mode")
-    view = S.today_view(doc, sched, totals, seen_before, new_today, day, catch=catch)
+    view = S.today_view(doc, sched, totals, seen_before, new_today, day, catch=catch, seen_now=seen_now)
     shares = {}
     for i in range(1, 15):
         x = day - datetime.timedelta(days=i)
