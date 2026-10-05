@@ -2155,6 +2155,10 @@ def test_together_v210():
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
           and all("window.dcBarBalance = function" in rm.widget_js(k, None) for k in ("bottom", "off"))
           and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
+    check("bottom bar: our chip steps past a button another add-on draws over the bar",
+          "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
+          and "clear(document.getElementById('dc-knows'))" in rm.BAR_BALANCE
+          and "clear(document.getElementById('dc-room-bottom'))" in rm.BAR_BALANCE)
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj

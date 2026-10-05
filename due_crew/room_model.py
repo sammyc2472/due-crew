@@ -210,6 +210,30 @@ BAR_BALANCE = r"""
     if (!row || row.cells.length < 3) { return; }
     var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
     l.style.width = r.style.width = '';
+    // another add-on can draw its button over the bar (positioned, out of
+    // the row), so ours would sit underneath it: step past anything that does
+    function clear(el) {
+      if (!el) { return; }
+      el.style.marginLeft = '';
+      var over = [].filter.call(document.body.getElementsByTagName('*'), function (o) {
+        if (o === el || el.contains(o) || o.contains(el)) { return false; }
+        var p = getComputedStyle(o).position;
+        return p === 'absolute' || p === 'fixed';
+      });
+      for (var pass = 0; pass < 4; pass++) {
+        var b = el.getBoundingClientRect(), push = 0;
+        over.forEach(function (o) {
+          var q = o.getBoundingClientRect();
+          if (q.width > 0 && q.height > 0 && q.left < b.right && q.right > b.left && q.top < b.bottom && q.bottom > b.top) {
+            push = Math.max(push, q.right - b.left + 8);
+          }
+        });
+        if (!push) { return; }
+        el.style.marginLeft = (parseFloat(getComputedStyle(el).marginLeft) || 0) + push + 'px';
+      }
+    }
+    clear(document.getElementById('dc-knows'));
+    clear(document.getElementById('dc-room-bottom'));
     function w(c) {   // what the cell's own elements need
       var a = Infinity, z = -Infinity, cs = getComputedStyle(c);
       for (var k = 0; k < c.children.length; k++) {
@@ -231,6 +255,9 @@ BAR_BALANCE = r"""
   };
   if (!window.dcBarResize) { window.dcBarResize = true; window.addEventListener('resize', function () { window.dcBarBalance(); }); }
   window.dcBarBalance();
+  // a button another add-on adds a moment later is stepped past too
+  clearTimeout(window.dcBarLater);
+  window.dcBarLater = setTimeout(function () { window.dcBarBalance(); }, 400);
 })();
 """
 
