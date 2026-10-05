@@ -33,7 +33,7 @@ const FEED_MAX = 20;
 async function feed(env: Env, uid: string) {
   const since = nowSec() - FEED_DAYS * 86400;
   const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION SELECT plan FROM plan_editors WHERE uid = ?1`;
-  const [back, notes, saves, sett] = await env.DB.batch<any>([
+  const [back, notes, saves, sett, posted] = await env.DB.batch<any>([
     env.DB.prepare(
       `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
          JOIN users u ON u.uid = f.owner WHERE f.friend = ?1 AND f.at > ?2 AND f.at > b.at ORDER BY f.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
@@ -48,6 +48,11 @@ async function feed(env: Env, uid: string) {
          JOIN plans p ON p.id = l.plan LEFT JOIN users u ON u.uid = l.uid
         WHERE l.plan IN (${mine}) AND l.uid != ?1 AND l.at > ?2 ORDER BY l.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
     env.DB.prepare("SELECT json FROM settings WHERE uid = ?").bind(uid),
+    // 3.8: what the authors posted to a plan I'm in
+    env.DB.prepare(
+      `SELECT t.plan, p.name AS plan_name, t.text, t.at, t.uid, u.name, u.emoji FROM plan_posts t
+         JOIN plans p ON p.id = t.plan LEFT JOIN users u ON u.uid = t.uid
+        WHERE t.plan IN (${mine}) AND t.uid != ?1 AND t.at > ?2 ORDER BY t.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
   ]);
   let muted = new Set<string>();
   try { muted = new Set((JSON.parse((sett.results[0] as any)?.json || "{}").muted as string[]) || []); } catch { /* none */ }
@@ -57,11 +62,13 @@ async function feed(env: Env, uid: string) {
                                         plan: r.plan, planName: r.plan_name, day: r.day, text: r.text })),
     ...saves.results.map((r: any) => ({ kind: "change", uid: r.uid, name: r.name || "?", at: r.at,
                                         plan: r.plan, planName: r.plan_name, summary: r.summary })),
+    ...posted.results.map((r: any) => ({ kind: "post", uid: r.uid, name: r.name || "?", emoji: r.emoji || "", at: r.at,
+                                         plan: r.plan, planName: r.plan_name, text: r.text })),
   ].filter((x) => !muted.has(x.uid));
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N]: me, the people I added (with
+/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP]: me, the people I added (with
  *  their week when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
  *  shows the cheers waiting and leaves them for Anki to play. got= (3.7.2)
@@ -123,8 +130,16 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
-  // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine
-  if (withDecks && !keep) Object.assign(out, await P.forBoard(env, s.uid));
+  // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine.
+  // 3.8: every add-on refresh carries a stamp of them (pv=, what it last saw);
+  // the plans come again only when it moved, so an author's save reaches
+  // followers at their next refresh with no request of its own
+  const pv = params.get("pv");
+  if (!keep && (withDecks || pv !== null)) {
+    const stamp = await P.planStamp(env, s.uid);
+    if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid));
+    out.pv = stamp;
+  }
   // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad;
   // and the squads I'm in, so an add-on whose config was reset finds them
   if (withDecks && !keep) {

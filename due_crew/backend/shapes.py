@@ -630,7 +630,19 @@ def clean_plan(p):
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
             "early": _early(p.get("early", following.get("early"))),
+            "posts": clean_posts(p.get("posts")),  # 3.8: the authors' newest posts
             **clean_days(p if "shift" in p or "skipped" in p else following)}
+
+
+def clean_posts(v):
+    """3.8: a plan's newest posts to its followers, as the board carries them."""
+    out = []
+    for x in v if isinstance(v, list) else []:
+        if isinstance(x, dict) and _as_int(x.get("id")) and clean_note(x.get("text"), 200):
+            out.append({"id": _as_int(x["id"]), "name": clean_note(x.get("name"), 60) or "?",
+                        "text": clean_note(x.get("text"), 200), "withSave": x.get("withSave") is True,
+                        "at": _as_int(x.get("at")) or 0})
+    return sorted(out, key=lambda x: -x["id"])[:3]
 
 
 def clean_days(v):

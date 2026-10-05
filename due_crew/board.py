@@ -1432,6 +1432,23 @@ def _plan_notes(card, pid, skip_waiting=False):
         a2 += f'<a href="#" onclick="{_pycmd("planleave:" + pid)}">Leave them</a>'
         out.append(f'<div class="pn warn"><span>Missed <b>{e(when)}</b>: {int(ask["waiting"]):,} new waiting</span>'
                    f'<span class="acts">{a2}</span></div>')
+    upd = card.get("update")
+    if upd and int(upd.get("n") or 0):
+        # 3.8: an author's update adds to today or earlier: nothing opens until I say
+        n = int(upd["n"])
+        names = [str(x) for x in upd.get("names") or []]
+        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        who = e(str(card.get("owner_name") or "The plan"))
+        lim = s.get("limit")
+        over = (f' Anki shows {int(lim):,} new a day in this deck.'
+                if lim is not None and int(s.get("target") or 0) + n > int(lim) else "")
+        out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
+                   f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+    for post in (card.get("posts") or [])[:1]:
+        # 3.8: the authors' words to followers, the newest unread
+        out.append(f'<div class="pn post"><span><b>{e(str(post.get("name") or "?"))}</b>: {e(str(post.get("text") or ""))}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planpostok:" + pid)}">OK</a></span></div>')
     if card.get("change"):
         out.append(f'<div class="pn"><span>{_segs(card["change"])}</span>'
                    f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
@@ -3237,6 +3254,10 @@ def _due_plan(r):
         extra.append(f'for {e(r["prep"])}')
     if r.get("crew") and int(r["crew"][1]) > 1:
         extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
+    if r.get("upd"):
+        # 3.8: an author's update adds to this date; it opens when I say
+        said = f'+{int(r["upd"]):,} added' if int(r["upd"]) > 0 else "updated"
+        extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
     bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""

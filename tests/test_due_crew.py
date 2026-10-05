@@ -3705,9 +3705,10 @@ def test_plans_glue_v31():
         n = len(store.log)
         light = maya.fetch_board(labels)
         full = maya.fetch_board(labels, with_decks=True)
-        check("board: plans ride the decks=1 refresh only, and a light one still has them",
-              len(store.log) - n == 2 and full["plans_fresh"] and not light["plans_fresh"]
-              and full["plans"][0]["id"] == pid and maya.fetch_board(labels)["plans"][0]["id"] == pid)
+        again = maya.fetch_board(labels)
+        check("board: plans ride the decks=1 refresh, and a light one when their stamp moved (3.8: never seen here)",
+              len(store.log) - n == 3 and full["plans_fresh"] and light["plans_fresh"] and light["plans_update"]
+              and not again["plans_fresh"] and full["plans"][0]["id"] == pid and again["plans"][0]["id"] == pid)
         F.maybe_morning(awaiting_sync=True, fresh=True)
         check("morning: waits for the day's AnkiWeb sync", _open(col) == {8} and "plans_day" not in box["cfg"])
         F.maybe_morning(awaiting_sync=False)
@@ -6016,6 +6017,92 @@ def test_remaining_oct_spread_undo():
             del F.mw.undo
         else:
             F.mw.undo = real_undo
+
+
+def test_plan_updates_v38():
+    """3.8: an author's save reaches a follower at their next refresh (the
+    stamp moved); what it adds to today waits for Open (only on the Decks
+    screen, never mid-review); Not today leaves it to tomorrow's morning;
+    a follower who chose Hold back has new later cards held too; the
+    authors' posts show once; the change note says a date was updated."""
+    import due_crew as dc
+    from due_crew import plan_flow as F
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    labels = [_day(-i) for i in range(7)]
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0, type = 0 WHERE id = 9")  # active and new: holdable
+    saved_state = getattr(F.mw, "state", None)
+    saved_swap = dc.plan_flow.app.swap
+    try:
+        with _PlanGlue({"A": maya}, {"A": col}) as g:
+            plan, _ = maya.follow_plan(code)
+            F.open_schedule = _skip_schedule
+            F.on_followed(plan, 10, None, "open")
+            st = g.state()["plans"][pid]
+            st["held"] = [999]  # this follower chose Hold back
+            pc = g.state()
+            pc["plans_day"] = _day(0)
+            F._psave(pc)
+            first = maya.fetch_board(labels, with_decks=True)
+            check("updates: the day's first refresh brings the plans and their stamp",
+                  first["plans_fresh"] and not first["plans_update"] and maya.session.get("plans_pv"))
+            check("updates: nothing moved, nothing comes", not maya.fetch_board(labels)["plans_fresh"])
+            units = _plan_units()
+            units[1] = dict(units[1], decks=["Step 1::Extras"])          # today's date: card 4 added
+            units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # a later date: card 9 added
+            store.edit_plan(pid, units)
+            store.add_post(pid, "dre", "Added the <extras> to today.")
+            upd = maya.fetch_board(labels)
+            check("updates: the author's save comes with the next refresh", upd["plans_fresh"] and upd["plans_update"]
+                  and upd["plans"][0]["posts"][0]["text"] == "Added the <extras> to today.")
+            F.mw.state = "review"
+            _state["plan_updates"] = {}
+            F.maybe_morning(False, fresh=True, update=True)
+            check("updates: never mid-review: it waits for the Decks screen",
+                  _state.get("plans_midday") is True and 4 not in _open(col) and not _state["plan_updates"]
+                  and 9 in _open(col))
+            F.mw.state = "deckBrowser"
+            F.maybe_morning(False, fresh=True, update=True)
+            u = _state["plan_updates"].get(pid) or {}
+            check("updates: today's addition waits for Open, counted", u.get("n") == 1 and u.get("units") == ["ar"]
+                  and 4 not in _open(col), str(_state["plan_updates"]))
+            check("updates: held back, a later date's new card is held too (that was the follower's yes)",
+                  9 not in _open(col) and 9 in g.state()["plans"][pid]["held"])
+            card = F.card_view(next(p for p in F.followed() if p["id"] == pid), g.state()["plans"][pid], {}, _day(0))
+            notes = "".join(board._plan_notes(card, pid))
+            check("updates: the line says who added what, with Open and Not today",
+                  "Dre added 1 card to <b>Arrhythmia</b>." in notes and "duecrew:planupdopen:" + pid in notes
+                  and "duecrew:planupdlater:" + pid in notes, notes)
+            check("posts: the authors' words, escaped, with OK", "<b>Dre</b>: Added the &lt;extras&gt; to today." in notes
+                  and "duecrew:planpostok:" + pid in notes)
+            check("change: a date whose cards changed is said", "updated" in str(card.get("change")), str(card.get("change")))
+            from due_crew import due as D
+            row = D._date_row({"pid": pid, "uid": "ar", "plan": "Step 1", "name": "Arrhythmia", "opens": _day(0),
+                               "seen": 0, "total": 1, "upd": 1}, {}, _day(0))
+            h = board._due_plan(row)
+            check("updates: Due's row says it, with Open", "+1 added" in h and "duecrew:planupdopen:" + pid in h, h)
+            dc._on_js(False, "duecrew:planupdlater:" + pid, DeckBrowser())
+            check("updates: Not today: nothing opens, tomorrow's morning will (still applied as it was)",
+                  4 not in _open(col) and pid not in _state["plan_updates"]
+                  and (g.state()["plans"][pid].get("later") or {}).get("ar") == _day(1)
+                  and g.state()["plans"][pid]["applied"].get("ar"))
+            g.state()["plans"][pid]["later"].pop("ar")
+            F.maybe_morning(False, fresh=True, update=True)
+            dc._on_js(False, "duecrew:planupdopen:" + pid, DeckBrowser())
+            check("updates: Open opens what it adds, in one step", 4 in _open(col) and pid not in _state["plan_updates"])
+            dc._on_js(False, "duecrew:planpostok:" + pid, DeckBrowser())
+            card = F.card_view(next(p for p in F.followed() if p["id"] == pid), g.state()["plans"][pid], {}, _day(0))
+            check("posts: read once, then gone", card["posts"] == [])
+    finally:
+        F.mw.state = saved_state
+        dc.plan_flow.app.swap = saved_swap
+        _state["plan_updates"], _state["plans_midday"] = {}, False
 
 
 def main():

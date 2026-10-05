@@ -165,6 +165,11 @@ async function builder(id) {
 
   const status = h("span", { class: "status", role: "status" });
   const saveBtn = h("button", { onclick: () => save() }, "Save");
+  // 3.8: a line to the plan's followers, with the save (it lands in Updates)
+  const tell = h("input", { class: "tell", type: "text", maxlength: 200, placeholder: "Tell followers…",
+    "aria-label": "Tell followers, with this save" });
+  tell.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+  let posts = null;  // 3.8: the Updates tab's list, loaded when it opens
   const mark = () => {
     dirty = true; status.className = "status"; status.textContent = "Unsaved changes";
     document.querySelector(".savebar")?.classList.remove("clean");  // C6: on a phone, Save shows now
@@ -1680,6 +1685,44 @@ async function builder(id) {
         draw(); } }, "Undo") : h("span"))));
   }
 
+  /** 3.8: what the authors said to followers, newest first; the authors post
+   *  here any time (a save's "Tell followers" lands here too). Anki shows
+   *  the newest unread on the plan, the site's home lists them. */
+  function updatesTab() {
+    if (!posts) {
+      api("GET", `/plans/${id}/posts`).then((r) => { posts = r.posts; draw(); }).catch(() => { posts = []; draw(); });
+      return h("p", { class: "muted" }, "Loading…");
+    }
+    const ago2 = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : pretty(iso(new Date(t * 1000))); };
+    const st = h("span", { class: "status", role: "status" });
+    let box = null;
+    if (author) {
+      const ta = h("textarea", { rows: 2, maxlength: 200, style: "font-family:inherit;font-size:14px", placeholder: `Post to the ${plan.followers.toLocaleString()} following`, "aria-label": "Post to followers" });
+      const cnt = h("small", { class: "muted" }, "0 / 200");
+      ta.addEventListener("input", () => { ta.value = ta.value.replace(/[\r\n]+/g, " "); cnt.textContent = `${ta.value.length} / 200`; });
+      const go = h("button", { onclick: async () => {
+        const text = ta.value.trim();
+        if (!text) return;
+        go.disabled = true;
+        try { await api("POST", `/plans/${id}/posts`, { text }); posts = null; draw(); }
+        catch (err) { go.disabled = false; st.className = "status bad"; st.textContent = err.status === 429 ? "Five posts a day per plan. Try tomorrow." : "That didn't post. Try again."; }
+      } }, "Post");
+      const [r, of] = plan.reached || [0, 0];
+      box = h("div", { class: "stack", style: "max-width:720px;margin-bottom:14px" }, ta,
+        h("div", { class: "row" }, of ? h("small", { class: "muted" }, `This version is in ${r.toLocaleString()} of ${of.toLocaleString()} followers' Anki`) : null,
+          h("span", { style: "flex:1" }), cnt, st, go));
+    }
+    if (!posts.length) return h("div", {}, box, h("p", { class: "muted" }, author ? "Nothing posted yet. Followers see a post in Anki and on their home page." : "Nothing from the authors yet."));
+    return h("div", {}, box, h("div", { class: "hist" }, posts.map((x) => h("div", { class: "hrow" },
+      h("span", {}, h("b", {}, x.uid === me.uid ? "You" : x.name), x.coauthor ? h("small", { class: "muted" }, " (co-author)") : null, ` ${x.text}`,
+        x.withSave ? h("small", { class: "muted" }, " · with a save") : null),
+      h("small", { class: "muted" }, ago2(x.at)),
+      x.remove ? h("button", { class: "linkish", onclick: async () => {
+        try { await api("DELETE", `/plans/${id}/posts/${x.id}`); posts = posts.filter((y) => y.id !== x.id); draw(); }
+        catch { st.className = "status bad"; st.textContent = "That didn't work. Try again."; }
+      } }, "Remove") : h("span")))));
+  }
+
   /** Someone looking at a plan they don't follow (from its code or the
    *  library): follow it here, or copy it into a plan of their own. */
   let copying = false;
@@ -1711,9 +1754,11 @@ async function builder(id) {
       if (window.ResizeObserver) { let w = 0; new ResizeObserver(() => { if (t.clientWidth !== w) { w = t.clientWidth; fit(); } }).observe(t); }
       return t;
     }
-    const tabs = author ? [["calendar", "Calendar"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
+    const tabs = author ? [["calendar", "Calendar"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean)
+      : plan.following ? [["calendar", "Calendar"], ["updates", "Updates"]] : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
-    const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab() : calendarTab();
+    const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab()
+      : tab === "updates" ? updatesTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
         h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
@@ -1724,7 +1769,8 @@ async function builder(id) {
       !author && !plan.following ? readerActions() : null,
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
-      author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status, saveBtn) : null);
+      author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status,
+        plan.followers > (plan.following ? 1 : 0) ? tell : null, saveBtn) : null);
     $app().classList.add("wide");
   }
 
@@ -1800,6 +1846,7 @@ async function builder(id) {
         return t.length ? { ...u, todo: t } : u;
       }) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
+      if (tell.value.trim()) body.post = tell.value.trim();  // 3.8
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;
       let merged = false;
@@ -1816,8 +1863,11 @@ async function builder(id) {
       }
       doc = structuredClone(plan.doc);
       base = structuredClone(plan.doc);
-      dirty = false; history = null; progressData = null;
-      status.textContent = merged ? "Saved, with the other changes kept" : "Saved";
+      dirty = false; history = null; progressData = null; posts = null;
+      const postFailed = plan.posted && plan.posted.error;
+      if (!postFailed) tell.value = "";
+      status.textContent = postFailed ? "Saved. Five posts a day per plan: your line didn't go."
+        : merged ? "Saved, with the other changes kept" : "Saved";
       flash = true; draw();
       setTimeout(() => { flash = false; if (!dirty) document.querySelector(".savebar")?.classList.add("clean"); }, merged ? 5000 : 2200);
     } catch (err) {

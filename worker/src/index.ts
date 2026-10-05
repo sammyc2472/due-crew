@@ -146,6 +146,9 @@ authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEdi
 authed("GET", r(`/plans/${ID}/notes`), (_q, s, env, p) => P.notes(s, env, p));
 authed("POST", r(`/plans/${ID}/notes`), P.addNote);
 authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.removeNote(s, env, p));
+authed("GET", r(`/plans/${ID}/posts`), (_q, s, env, p) => P.posts(s, env, p));         // 3.8
+authed("POST", r(`/plans/${ID}/posts`), P.addPost);
+authed("DELETE", r(`/plans/${ID}/posts/(\\d{1,12})`), (_q, s, env, p) => P.removePost(s, env, p));
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);

@@ -286,7 +286,10 @@ class ApiClient:
         # 3.7.2: got= says the last reply's cheers arrived, so the server lets
         # them go only now: a reply lost on the way loses no cheer
         got = int(self.session.get("cheers_got") or 0)
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}" if with_decks else f"/board?got={got}")
+        # 3.8: the plans' stamp as I last saw it; they come again only when it moved
+        pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}" if with_decks
+                                  else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
         span = list(labels) + ([tomorrow] if tomorrow else [])
@@ -341,8 +344,10 @@ class ApiClient:
             self.session["friend_ids"] = friends
             self.session.setdefault("restored_to", self.base)
             self._save_session()
-        # 3.1: plans ride the day's first refresh; later ones render the last
-        if with_decks:
+        # 3.1: plans ride the day's first refresh; 3.8: and any refresh whose
+        # stamp moved (an author saved, posted, or my own days changed on the site)
+        plans_came = with_decks or isinstance(data.get("plans"), list)
+        if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
             authored = [a for a in map(clean_authored, data.get("authored") or []) if a]
@@ -351,6 +356,9 @@ class ApiClient:
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
                 self._save_session()
+        if isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
+            self.session["plans_pv"] = data["pv"][:40]
+            self._save_session()
         squads = None
         if with_decks and isinstance(data.get("squads"), list):
             # 3.6: the squads I'm in, as the server knows (it's the truth; the config caches it)
@@ -365,7 +373,9 @@ class ApiClient:
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
                 "plan_offers": list(self.session.get("plan_offers") or []),
-                "plans_fresh": bool(with_decks),
+                "plans_fresh": bool(plans_came),
+                # 3.8: plans that came later in the day (an update): ask, don't open
+                "plans_update": bool(plans_came and not with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
                 "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,

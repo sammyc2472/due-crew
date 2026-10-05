@@ -397,7 +397,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
-    opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False)
+    opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False,
+                      update=bool(data.get("plans_update")))  # 3.8: later in the day, asked
     if opened:
         toasts.append(opened)
     elif data.get("plans"):
@@ -510,6 +511,10 @@ def _board_html(c):
 def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
+    if _state.get("plans_midday") and not _closing:
+        # 3.8: an update that came while reviewing waits for the Decks screen
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: plan_flow.midday(plan_flow.followed()))
     together.show_luck_card()
     rooms.refresh_widgets()
 

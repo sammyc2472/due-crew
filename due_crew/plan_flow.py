@@ -21,6 +21,7 @@ unit the author changes opens only the cards the change adds, and a leech
 never opens.
 """
 
+import copy
 import datetime
 import hashlib
 import html
@@ -253,7 +254,7 @@ def aside(plan, st):
     return [lee, sum(int(m) for m, _o in ms), sum(int(o) for _m, o in ms)]
 
 
-def run(col, plan_list, state, today, mode=None, everything=False):
+def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
     """Open what's due (or, with `everything`, every unit) for these plans,
     in one undo step. mode "skip" marks due units applied without opening
     them (joining late, "Start from the next unit"); "open" is the default.
@@ -310,7 +311,8 @@ def run(col, plan_list, state, today, mode=None, everything=False):
             names += pnames
             all_cids |= pcids
     label = P.step_label(names) if names else ""
-    n = P.open_cards(col, all_cids, label) if names else 0
+    # dry (3.8): what it would open, for the update line; nothing is touched
+    n = P.open_cards(col, all_cids, label, dry=dry) if names else 0
     return {"n": n, "names": names, "label": label, "per": per, "units": opened_units, "spread": spread}
 
 
@@ -340,6 +342,17 @@ def put_off(st, uids, today):
     for uid in uids:
         (st.get("applied") or {}).pop(uid, None)
         (st.get("src") or {}).pop(uid, None)
+        later[uid] = tomorrow
+    return st
+
+
+def ask_later(st, uids, today):
+    """3.8, Not today on an update: those dates' changes open on tomorrow's
+    morning. Unlike put_off nothing was opened, so they stay applied as
+    they were: tomorrow opens only what the update adds."""
+    tomorrow = S.iso(S.d(today) + datetime.timedelta(days=1))
+    later = st.setdefault("later", {})
+    for uid in uids:
         later[uid] = tomorrow
     return st
 
@@ -585,6 +598,10 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
                        if opened and opened[1] else None),
             "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
+            # 3.8: what an author's update adds to today and earlier, waiting for Open; their posts
+            "update": (_state.get("plan_updates") or {}).get(plan["id"]) if mw else None,
+            "posts": unread_posts(plan) if mw else [],
+            "owner_name": str(plan.get("ownerName") or ""),
             "session": None if no_deck or plan.get("paused") else session,
             "today": P.fmt_day(today), "sched": bool(plan.get("sched")),
             "early": int(plan.get("early") or 0),
@@ -659,7 +676,7 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
     return res
 
 
-def maybe_morning(awaiting_sync, fresh=False, toast=True):
+def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
     """Main thread. Once per Anki day, for each followed, unpaused plan:
     open what's due. Waits for the day's AnkiWeb sync when this profile
     syncs (the phone's reviews, and the other computer's opened cards,
@@ -699,6 +716,11 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
         today = _today()
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
+        if c.get("plans_day") == today:
+            # 3.8: plans that came again after today's morning (an author's
+            # update, or Anki opened again): asked, not opened
+            return midday(plan_list, toast=toast)
+        _state["plan_updates"] = {}
         new_here = []
         for p in plan_list:
             if p["id"] not in state:
@@ -710,6 +732,8 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
         c["plans_day"] = today
         _psave(c)
         line = opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
+        if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today):
+            _after_change()  # 3.8: what an author added to later dates waits, for whoever chose Hold back
         apply_catch()  # G5
         backs = [p["id"] for p in plan_list if p.get("paused") and p.get("until") and str(p["until"]) < today]
         if backs:
@@ -728,6 +752,119 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True):
     except Exception:
         traceback.print_exc()
         return None
+
+
+def midday(plan_list, toast=True):
+    """3.8, main thread, an update later in the day. Only on the Decks screen
+    (holding back is an undo step, and a change must never land mid-review):
+    elsewhere it waits for the next time Decks draws. A plan new here opens
+    as the morning would (following it was mine to do); a plan whose
+    follower chose Hold back holds the new cards of its later dates too;
+    what the update adds to today and earlier waits for my Open
+    (`_state["plan_updates"]`: {plan id: {n, names, units}})."""
+    if not mw.col:
+        return None
+    if getattr(mw, "state", "") != "deckBrowser":
+        _state["plans_midday"] = True
+        return None
+    _state["plans_midday"] = False
+    c = _pcfg()
+    state = _state_cfg(c)
+    today = _today()
+    live = [p for p in plan_list if not p.get("paused")]
+    new_here = []
+    for p in plan_list:
+        if p["id"] not in state:
+            st = new_state(mw.col, p)
+            if st:
+                state[p["id"]] = skip_past(st, p, today)
+                new_here.append(p["id"])
+    c["plans"] = state
+    _psave(c)
+    line = None
+    if new_here:
+        line = opened_line(_open_now([p for p in live if p["id"] in new_here], toast=toast))
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: offer_hold(new_here))
+    held = hold_new(live, state, today)
+    try:
+        dry = run(mw.col, [p for p in live if p["id"] not in new_here], copy.deepcopy(state), today, dry=True)
+    except Exception:
+        traceback.print_exc()
+        dry = {"per": {}, "units": {}}
+    _state["plan_updates"] = {pid: {"n": int(v[1]), "names": list(v[0]), "units": list(dry["units"].get(pid) or [])}
+                              for pid, v in (dry.get("per") or {}).items() if v[1]}
+    if held:
+        _after_change()
+    refresh_progress()
+    app.swap(cfg())
+    return line
+
+
+def hold_new(plan_list, state, today):
+    """3.8: a follower who chose Hold back gets it for what an author adds to
+    later dates too (that was their yes): those cards are suspended until
+    their day, one undo step a plan. Never for anyone else. Returns how many."""
+    n = 0
+    for p in plan_list:
+        st = state.get(p["id"])
+        if not st or not st.get("held") or not _deck_ok(mw.col, st.get("deck_id")):
+            continue
+        q = mine(p)
+        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), q["doc"], today, _swap(st), st.get("applied"))
+        cids -= set(int(x) for x in st.get("held") or [])
+        if not cids:
+            continue
+        got = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
+        if got:
+            st["held"] = sorted(set(st["held"]) | {int(x) for x in cids})
+            n += got
+    if n:
+        c = _pcfg()
+        c["plans"] = state
+        _psave(c)
+    return n
+
+
+def update_open(pid):
+    """3.8, Open on an update's line: what it adds opens now, in one undo step."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    (_state.get("plan_updates") or {}).pop(pid, None)
+    if p and not p.get("paused"):
+        _open_now([p])
+    app.swap(cfg())
+
+
+def update_later(pid):
+    """3.8, Not today on an update's line: tomorrow's morning opens it."""
+    upd = (_state.get("plan_updates") or {}).pop(pid, None) or {}
+    c = _pcfg()
+    state = _state_cfg(c)
+    if pid in state and upd.get("units"):
+        ask_later(state[pid], upd["units"], _today())
+        c["plans"] = state
+        _psave(c)
+    app.swap(cfg())
+
+
+def post_seen(pid):
+    """3.8: the newest post on a plan is read here."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    c = _pcfg()
+    seen = c.setdefault("posts_seen", {})
+    top = max([int(x.get("id") or 0) for x in (p or {}).get("posts") or []] + [int(seen.get(pid) or 0)])
+    seen[pid] = top
+    _psave(c)
+    app.swap(cfg())
+
+
+def unread_posts(plan):
+    """3.8: the plan's posts I haven't marked read, newest first; ones over
+    a week old don't come up (a plan followed today shows its last week)."""
+    seen = int(((_pcfg().get("posts_seen") or {}) if mw else {}).get(plan["id"]) or 0)
+    import time as _time
+    cut = int(_time.time()) - 7 * 86400
+    return [x for x in plan.get("posts") or [] if int(x.get("id") or 0) > seen and int(x.get("at") or 0) > cut]
 
 
 def offer_hold(pids, ask=None):
@@ -1165,6 +1302,12 @@ def on_message(cmd, parts):
         plan_menu(arg)
     elif cmd == "planok" and arg:
         seen_change(arg)
+    elif cmd == "planupdopen" and arg:   # 3.8: an update's Open
+        update_open(arg)
+    elif cmd == "planupdlater" and arg:  # 3.8: an update's Not today
+        update_later(arg)
+    elif cmd == "planpostok" and arg:    # 3.8: the authors' post, read
+        post_seen(arg)
     elif cmd == "plandeck" and arg:
         change_deck(arg)
     elif cmd == "planlook" and arg:

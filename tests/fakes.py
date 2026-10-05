@@ -5,7 +5,9 @@ rules; worker/test proves the real thing in workerd with D1.
 """
 
 import datetime
+import hashlib
 import json
+import time
 import re
 import sys
 import threading
@@ -254,6 +256,7 @@ class FakeWorker:
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
+        self.plan_posts = {} # 3.8: plan id -> [{id, name, text, withSave, at}]
         self.plan_trees = {}  # (uid, deck) -> {tags, decks}
         self.follows = {}    # (plan, uid) -> {share, paused, progress (json text or None)}
         self.links = {}      # one-time site sign-in tokens -> uid
@@ -342,7 +345,7 @@ class FakeWorker:
             return self._auth(method, parts[1:], auth, body or {})
         me = self._me(auth)
         if m == ("GET", "board"):
-            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"))
+            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"), query.get("pv"))
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -468,7 +471,20 @@ class FakeWorker:
         w = self.weeks.get(uid)
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
-    def _board(self, me, with_decks, wk=None, got=None):
+    def _plan_stamp(self, me):
+        """3.8, as planStamp: my follows as they stand, their versions and newest posts."""
+        rows = [[pid, self.plans[pid]["version"], json.dumps({k: v for k, v in f.items() if k != "progress"}, sort_keys=True),
+                 max([x["id"] for x in self.plan_posts.get(pid, [])], default=0)]
+                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans]
+        return hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:16]
+
+    def add_post(self, pid, uid, text):
+        """3.8, setup helper: an author's post to followers."""
+        self._post_n = getattr(self, "_post_n", 0) + 1
+        self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
+                                                    "text": text, "withSave": False, "at": int(time.time())})
+
+    def _board(self, me, with_decks, wk=None, got=None, pv=None):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
             for key in [k for k, c in self.cheers.items() if k[0] == me and c["n"] <= int(got)]:
@@ -503,6 +519,11 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        if pv is not None:  # 3.8: the plans again, when their stamp moved
+            stamp = self._plan_stamp(me)
+            if not with_decks and pv != stamp:
+                out.update(self._plans_for_board(me))
+            out["pv"] = stamp
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
@@ -1420,7 +1441,8 @@ class FakeWorker:
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
                           "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                          "followers": len(rows), "crewDone": done})
+                          "followers": len(rows), "crewDone": done,
+                          "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
                   for pid, p in sorted(self.plans.items())

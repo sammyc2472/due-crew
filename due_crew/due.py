@@ -331,7 +331,7 @@ def _date_row(x, ticks, today, short=False):
     return {"kind": "plan", "pid": x["pid"], "uid": x["uid"], "plan": x.get("plan") or "",
             "name": x.get("name") or "?", "what": x.get("what") or "", "done": done, "part": part,
             "future": x["opens"] > today, "n": n, "seen": seen, "total": total, "lines": lines,
-            "crew": x.get("crew"), "prep": x.get("prep")}
+            "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0)}
 
 
 def _item_row(it, today):

@@ -614,6 +614,26 @@ add-on.
   never refused. `PUT /settings` with the save the server has writes
   nothing.
 
+- 3.8 plan updates (mock "Plan Updates", option B): every refresh sends the
+  plans' stamp it last saw (`pv`, `session.plans_pv`) and the plans come
+  again only when it moved (an author saved or posted, my own days changed
+  on the site): no new requests. After the day's morning (`plans_day`)
+  fresh plans never open on their own: `plan_flow.midday`, on the Decks
+  screen only (it waits for Decks from the reviewer, `plans_midday`), dry-
+  runs the morning (`run(dry=True)`) and keeps what an update adds to today
+  and earlier in `_state["plan_updates"]` for the plan's note (Open, one undo
+  step; Not today, `ask_later`: tomorrow's morning, still applied as it
+  was) and Due's row. Future dates redraw at once. A follower who chose
+  Hold back has new cards of later dates held too (`hold_new`, morning and
+  midday). The change note says "updated" for a date whose picks changed
+  (`snapshot`'s third item; C5 ids and refs don't count). Posts
+  (`plan_posts`, migration 0019): authors post to followers on the plan
+  page's Updates tab or with a save ("Tell followers…"); Anki shows the
+  newest unread on the plan (`posts_seen` in plans.json, a week back at
+  most), the site's home feed lists them. An author sees "This version is
+  in N of M followers' Anki" (`seen_version`, written when a board carries
+  it). A date that opened is never closed again by an update.
+
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.

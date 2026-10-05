@@ -118,6 +118,23 @@ list and the home feed show only theirs, plus my own from before);
 `GET /plans/{id}/log` and `POST /plans/{id}/undo {version}` (the latest
 save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
+
+3.8 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
+saw on every refresh) answers `pv` (a short hash of the plans I follow:
+their versions, my follow's own days, their newest post; never my
+progress) and carries `plans`, `planOffers` and `authored` again only when
+it moved, so a save reaches followers at their next refresh with no
+request of its own. Each plan on the board has `posts` (its newest 3:
+`{id, name, text, withSave, at}`), and the board marks the version as
+reached (`plan_follows.seen_version`, written only when it changed).
+`GET /plans/{id}/posts` (anyone in the plan), `POST /plans/{id}/posts
+{text}` and `DELETE /plans/{id}/posts/{pid}` (authors; the owner removes
+any): one line, 200 characters, 5 a day per plan (`429 too_many_posts`),
+the newest 50 kept. `PUT /plans/{id}` takes `post` too: it rides the save
+(`posted: {id, text}`, or `{error: "too_many_posts"}` while the save still
+stands). An author's view has `reached: [n, of]`, the followers (not the
+owner) whose Anki has this version. The home feed (`feed=1`) lists posts
+as `kind: "post"`.
 C1–C5: `PATCH /plans/{id}/follow {early}` (0–7); a date's `search`
 (up to 10) and `sn` (their counts), `ids` (note ids, 50,000 a plan);
 `reviews: [{day, from, to}]` on the doc; 50,000 single cards and 1.5 MB

@@ -102,6 +102,8 @@ _state = {
     "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
     "plan_progress": {},   # 3.1: {plan id: {unit id: [opened, seen, total]}}, counted here
     "plan_session": {},    # 3.2: {plan id: today's session}, for plans on my schedule
+    "plan_updates": {},    # 3.8: {plan id: {n, names, units}}: an update's cards, waiting for Open
+    "plans_midday": False, # 3.8: an update came while reviewing; it waits for the Decks screen
     "notice": None,        # 3.2.1: the admin's notice, {id, text, link}
     "bingo_open": False,   # 3.6: the squad's bingo card is open in the board's place
     "bingo_mine": None,    # 3.6: {wk, play, progress}: my week as worked out at the sync (progress never sent)
@@ -185,6 +187,7 @@ def _reset_runtime(keep_sync=False):
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
                   settings_failed_ts=0.0, plan_progress={}, plan_session={}, notice=None,
+                  plan_updates={}, plans_midday=False,
                   bingo_open=False, bingo_mine=None, squads_left=set(),
                   settings_tab=None)
     _pending_cheers.clear()

@@ -711,11 +711,11 @@ def next_unit(doc, today):
     return next((u for u in units(doc) if str(u.get("opens") or "") > today), None)
 
 
-def open_cards(col, cids, label):
+def open_cards(col, cids, label, dry=False):
     """Unsuspend the suspended ones among `cids`, as one undo step named
     `label`. Only queue -1 is touched, and never a leech (Anki suspended it
     for a reason); never suspends. Returns how many opened (0: nothing was
-    suspended, and no undo step is made)."""
+    suspended, and no undo step is made). dry (3.8): how many it would."""
     if not cids:
         return 0
     ids = []
@@ -725,8 +725,8 @@ def open_cards(col, cids, label):
         ids += col.db.list(
             f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.queue = -1 "
             f"AND c.id IN ({chunk}) AND (' ' || lower(n.tags) || ' ') NOT LIKE '% leech %'")
-    if not ids:
-        return 0
+    if not ids or dry:
+        return len(ids)
     pos = None
     if hasattr(col, "add_custom_undo_entry"):
         try:
@@ -967,8 +967,13 @@ def ahead_behind(doc, prog, today):
 
 
 def snapshot(doc):
-    """What a change note compares: {unit id: [name, opens]}."""
-    return {u["id"]: [str(u.get("name") or ""), str(u.get("opens") or "")] for u in units(doc)}
+    """What a change note compares: {unit id: [name, opens, what it picks]}
+    (3.8: the third, a short hash of its sources, so "updated" can be said;
+    a snapshot from before has two)."""
+    # what the author picked, not what their Anki worked out (C5 ids, refs):
+    # those arrive on their own and would say "updated" for nothing
+    picked = lambda u: {k: v for k, v in u.items() if k not in ("ids", "idr")}
+    return {u["id"]: [str(u.get("name") or ""), str(u.get("opens") or ""), unit_sig(picked(u))[:8]] for u in units(doc)}
 
 
 def change_note(owner, old, doc):
@@ -978,7 +983,10 @@ def change_note(owner, old, doc):
     moved = [(new[u][0], new[u][1]) for u in new if u in old and old[u][1] != new[u][1]]
     added = [new[u][0] for u in new if u not in old]
     gone = [old[u][0] for u in old if u not in new]
-    if not (moved or added or gone):
+    # 3.8: a date whose cards changed (a tag, a search, cards added or taken off)
+    changed = [new[u][0] for u in new if u in old and len(old[u]) > 2 and old[u][2] != new[u][2]
+               and old[u][1] == new[u][1]]
+    if not (moved or added or gone or changed):
         return None
     clauses = []
 
@@ -1000,6 +1008,8 @@ def change_note(owner, old, doc):
         clauses.append(names(added, "added"))
     if gone:
         clauses.append(names(gone, "took out"))
+    if changed:
+        clauses.append(names(changed, "updated"))
     segs = [(f"{owner or '?'} ", False)]
     for i, c in enumerate(clauses):
         if i:
