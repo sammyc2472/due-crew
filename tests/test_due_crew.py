@@ -439,7 +439,7 @@ def test_shares_v21():
                               "pending": []}, {"period": "week"}, 0)
     check("share: the footer's Share menu offers the crew week (3.7.1, H3)",
           "crewmenu" in foot_week and "sharemenu" in foot_week
-          and ("This week", "sharecrewweek") in board.share_menu_items(False))
+          and ("Our week", "sharecrewweek") in board.share_menu_items(False))
 
 
 def _luminance(hex_color):
@@ -5577,8 +5577,9 @@ def test_crew_menu_pictures():
         check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
     full = board.share_menu_items(False, True)
     check("share menu: as text, then as a picture, year and all time on the site",
-          [l or k for l, k in full] == ["As text", "Today", "This week", "The squad's day", "As a picture",
-                                        "Today…", "My week…", "My year…", "All time…"]
+          [l or k for l, k in full] == ["As text", "My day", "Our week", "The squad's day", "As a picture",
+                                        "My day…", "My week…", "My year…", "All time…"]
+          and "head.setEnabled(False)" in text
           and '"/home?card=alltime"' in text and '"/home?card=year"' in text)
     check("crew menu: people only",
           [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])

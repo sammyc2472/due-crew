@@ -971,7 +971,12 @@ def _share_menu(c):
     for label, key in board.share_menu_items(
             bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):
         if label is None:
-            menu.addSection(key)
+            # a heading: macOS draws a QMenu section's title as a bare line,
+            # so it's a greyed item that can't be clicked
+            if menu.actions():
+                menu.addSeparator()
+            head = menu.addAction(key)
+            head.setEnabled(False)
         else:
             menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
     menu.exec(QCursor.pos())

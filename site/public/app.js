@@ -1210,9 +1210,9 @@ async function home() {
     } })]);
     crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew ▾"; }, 2400); }]);
     const shareItems = [["As text"]];
-    if (!showUp) shareItems.push(["Today", () => share(Board.shareText(people, t))]);
-    shareItems.push(["This week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
-    if (!showUp) shareItems.push(["Today…", () => weekCard(true)]);
+    if (!showUp) shareItems.push(["My day", () => share(Board.shareText(people, t))]);
+    shareItems.push(["Our week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
+    if (!showUp) shareItems.push(["My day…", () => weekCard(true)]);
     shareItems.push(["My week…", () => weekCard()],
       ["My year…", () => openYearCard(logR.days || {}, t.slice(0, 4), logR.cheers || {})],
       ["All time…", () => openYearCard(logR.days || {}, "all", logR.cheers || {})]);

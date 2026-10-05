@@ -2187,13 +2187,13 @@ def share_menu_items(show_up, squad_ok=False):
     every tab. Today's numbers aren't offered in just-show-up mode."""
     items = [(None, "As text")]
     if not show_up:
-        items.append(("Today", "sharetoday"))
-    items.append(("This week", "sharecrewweek"))
+        items.append(("My day", "sharetoday"))
+    items.append(("Our week", "sharecrewweek"))
     if squad_ok and not show_up:
         items.append(("The squad's day", "squadshare"))
     items.append((None, "As a picture"))
     if not show_up:
-        items.append(("Today…", "picturetoday"))
+        items.append(("My day…", "picturetoday"))
     items += [("My week…", "pictureweek"), ("My year…", "pictureyear"),
               ("All time…", "picturealltime")]
     return items
