@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person } from "./helpers";
+import { api, db, person, befriend } from "./helpers";
 
 // 3.5, B: the plan library, and A's public peek additions
 
@@ -51,7 +51,7 @@ describe("the library (3.5, B)", () => {
     const dre = await person("dre");
     const p = await plan(dre);
     const kai = await person("kai");  // a co-author
-    await dre.call("PUT", `/friends/kai`); await kai.call("PUT", `/friends/dre`);
+    await befriend(dre, { uid: "kai" }); await befriend(kai, { uid: "dre" });
     expect(await dre.status("POST", `/plans/${p.id}/editors`, { uid: "kai" })).toBe(200);
     const zed = await person("zed");  // a stranger who follows from the code, before it's listed
     await zed.call("POST", "/plans/follow", { code: p.code });

@@ -828,6 +828,9 @@ def test_v25_edges_emoji_week():
     check("emoji: a sync carries it", store.users["sam"]["emoji"] == "🦊")
     info = sam.add_back("eve")
     check("edges: adding someone who added me makes it mutual at once", info and info["mutual"] is True)
+    check("edges: a stranger can't be added by uid alone (D5: it would hand over the name)",
+          sam.add_back("dre") is None and ("sam", "dre") not in store.friends)
+    store.knocks[("sam", "dre")] = {"squad": "", "at": "2026-01-01T00:00:00Z"}  # dre added my code: a knock
     info = sam.add_back("dre")
     check("edges: adding someone who hasn't is pending", info and info["mutual"] is False)
     _code, people, _k = sam.friends_view()

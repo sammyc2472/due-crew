@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { housekeeping } from "../src/index";
-import { api, db, mailbox, person, signIn } from "./helpers";
+import { api, db, mailbox, person, signIn, befriend } from "./helpers";
 
 // 3.5: the admin's history (X), the home's feed (H), a plan's history for my log (L)
 
@@ -77,11 +77,11 @@ describe("H: the home's feed", () => {
     const sam = await person("sam");
     const dre = await person("dre");
     const maya = await person("maya");
-    await sam.call("PUT", "/friends/dre");
-    await sam.call("PUT", "/friends/maya");
+    await befriend(sam, { uid: "dre" });
+    await befriend(sam, { uid: "maya" });
     await db().prepare("UPDATE friends SET at = at - 10 WHERE owner = 'sam'").run();
-    await dre.call("PUT", "/friends/sam");
-    await maya.call("PUT", "/friends/sam");
+    await befriend(dre, { uid: "sam" });
+    await befriend(maya, { uid: "sam" });
     const made = await dre.call("POST", "/plans", { name: "Cardio", deck: "D" });
     const p = (await dre.call("PUT", `/plans/${made.body.id}`, { version: 1, summary: "moved Renal pharm to Fri",
       doc: { deck: "D", units: [{ id: "a", name: "A", opens: "2026-10-05", tags: ["X"] }] } })).body;

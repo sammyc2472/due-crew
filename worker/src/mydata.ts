@@ -38,6 +38,21 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q("SELECT guid FROM knows WHERE uid = ?1"),
     q("SELECT at, text FROM feedback WHERE uid = ?1 ORDER BY at"),
     q("SELECT device, created_at, last_used FROM sessions WHERE uid = ?1 ORDER BY last_used DESC"),
+    // the rest of what's kept about me (bug run, Oct): deck trees, invites,
+    // waiting cheers and knocks either way, co-authoring, plan saves,
+    // "this helped", squads I'm blocked from, an email change, the admin's note
+    q("SELECT deck, doc, at FROM plan_trees WHERE uid = ?1"),
+    q("SELECT expires_at, used_at FROM invites WHERE uid = ?1 ORDER BY expires_at"),
+    q(`SELECT u.name AS from_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.from_uid WHERE c.to_uid = ?1`),
+    q(`SELECT u.name AS to_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.to_uid WHERE c.from_uid = ?1`),
+    q(`SELECT u.name AS from_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.from_uid WHERE k.to_uid = ?1`),
+    q(`SELECT u.name AS to_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.to_uid WHERE k.from_uid = ?1`),
+    q("SELECT p.name AS plan, e.at FROM plan_editors e JOIN plans p ON p.id = e.plan WHERE e.uid = ?1"),
+    q("SELECT p.name AS plan, l.version, l.summary, l.at FROM plan_log l JOIN plans p ON p.id = l.plan WHERE l.uid = ?1 ORDER BY l.at"),
+    q("SELECT guid FROM tip_helped WHERE by_uid = ?1"),
+    q("SELECT q.name FROM bans b JOIN squads q ON q.id = b.squad WHERE b.uid = ?1"),
+    q("SELECT email, at FROM email_changes WHERE uid = ?1"),
+    q("SELECT text, at FROM admin_notes WHERE uid = ?1"),
   ]);
   const rows = (i: number) => r[i].results as Record<string, unknown>[];
   const one = (i: number) => rows(i)[0];
@@ -62,6 +77,18 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     cardsYouHaveDown: rows(13).map((k) => k.guid),
     feedback: rows(14).map((f) => ({ ...f, at: when(f.at) })),
     signedIn: rows(15).map((x) => ({ device: x.device, since: when(x.created_at), lastUsed: when(x.last_used) })),
+    deckTrees: rows(16).map((t) => ({ deck: t.deck, tree: parse(t.doc), at: when(t.at) })),
+    invites: rows(17).map((i) => ({ expires: when(i.expires_at), used: when(i.used_at) })),
+    cheersWaiting: rows(18).map((c) => ({ ...c, at: when(c.at) })),
+    cheersSentNotYetRead: rows(19).map((c) => ({ ...c, at: when(c.at) })),
+    knocksToYou: rows(20).map((k) => ({ ...k, at: when(k.at) })),
+    knocksYouSent: rows(21).map((k) => ({ ...k, at: when(k.at) })),
+    plansCoAuthored: rows(22).map((e) => ({ ...e, at: when(e.at) })),
+    planSaves: rows(23).map((l) => ({ ...l, at: when(l.at) })),
+    tipsYouSaidHelped: rows(24).map((t) => t.guid),
+    squadsBlockedFrom: rows(25).map((b) => b.name),
+    emailChange: one(26) ? { ...one(26), at: when(one(26).at) } : null,
+    adminNote: one(27) ? { ...one(27), at: when(one(27).at) } : null,
   };
   return new Response(JSON.stringify(out, null, 1), {
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",

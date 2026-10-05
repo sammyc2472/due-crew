@@ -653,18 +653,24 @@ class ApiClient:
         # A code the account already has always stays: a 2.x friend_code on
         # this computer may be one the account has since regenerated.
         code = friend_code_from(self.session.get("friend_code") or "")
+        statuses = []
         status, data = self._call("GET", "/friends")
+        statuses.append(status)
         if status == 200 and not data.get("code"):
-            self._call("POST", "/codes", {"code": code} if code else {})
+            statuses.append(self._call("POST", "/codes", {"code": code} if code else {})[0])
         ids = [f for f in self.session.get("friend_ids") or [] if isinstance(f, str)]
         if ids:
-            self._call("PUT", "/friends", {"ids": ids[:500]})
+            statuses.append(self._call("PUT", "/friends", {"ids": ids[:500]})[0])
         for sq in cfg.get("squads") or []:
             if not isinstance(sq, dict) or not sq.get("code"):
                 continue
-            self._call("POST", "/squads/restore", {
+            statuses.append(self._call("POST", "/squads/restore", {
                 "code": sq["code"], "name": clean_note(sq.get("name"), 24) or "squad",
-                "founder": sq.get("founder") or ""})
+                "founder": sq.get("founder") or ""})[0])
+        if any(s >= 500 or s == 429 for s in statuses):
+            # the server's trouble, not a refusal: the next sync tries again
+            # (the server keeps the restore open a week after the first 3.x sync)
+            return False
         self.session.pop("needs_restore", None)
         self.session["restored_to"] = self.base
         self._save_session()

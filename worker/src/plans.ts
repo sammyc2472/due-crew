@@ -35,6 +35,7 @@ const SUMMARY_MAX = 120;
 const LOG_KEEP = 30;
 const EDITORS_MAX = 10;
 const NOTES_MAX = 500;
+const NOTES_PER_PERSON = 50;  // one follower's share of a plan's notes
 const NOTE_TEXT_MAX = 280;
 export const FOLLOWS_MAX = 20;
 const TREES_MAX = 20;
@@ -419,10 +420,18 @@ function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unkno
   };
 }
 
-const editorsOf = (env: Env, ids: string[]) => env.DB.prepare(
+// D1 binds at most 100 parameters: ids go 90 at a time (one person can be
+// in more than 100 plans: 50 owned, 20 followed, any number co-authored)
+async function inChunks<T>(ids: string[], q: (part: string[]) => Promise<{ results: T[] }>): Promise<{ results: T[] }> {
+  const results: T[] = [];
+  for (let i = 0; i < ids.length; i += 90) results.push(...(await q(ids.slice(i, i + 90))).results);
+  return { results };
+}
+
+const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.prepare(
   `SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid
-    WHERE e.plan IN (${ids.map(() => "?").join(",")}) ORDER BY e.at`,
-).bind(...ids).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>();
+    WHERE e.plan IN (${part.map(() => "?").join(",")}) ORDER BY e.at`,
+).bind(...part).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>());
 
 export async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
@@ -762,8 +771,13 @@ export async function addNote(req: Request, s: Session, env: Env, [id]: string[]
   const text = V.oneLine(body.text as string, NOTE_TEXT_MAX);
   if (!text) throw V.bad("note");
   await limitOrThrow(env, `plannote:${s.uid}`, 60, 3600);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_notes WHERE plan = ?").bind(id).first<number>("n");
-  if ((n ?? 0) >= NOTES_MAX) throw new HttpError(409, "too_many_notes");
+  // the plan's ceiling, and one person's share of it: one follower can't
+  // fill a plan's notes and leave its authors none (authors aren't capped)
+  const c = await env.DB.prepare(
+    "SELECT COUNT(*) AS n, SUM(CASE WHEN uid = ?2 THEN 1 ELSE 0 END) AS mine FROM plan_notes WHERE plan = ?1",
+  ).bind(id, s.uid).first<{ n: number; mine: number | null }>();
+  if ((c?.n ?? 0) >= NOTES_MAX) throw new HttpError(409, "too_many_notes");
+  if ((c?.mine ?? 0) >= NOTES_PER_PERSON && !(await authorUids(env, p)).has(s.uid)) throw new HttpError(409, "too_many_notes");
   const r = await env.DB.prepare("INSERT INTO plan_notes (plan, uid, day, text, at) VALUES (?, ?, ?, ?, ?)")
     .bind(id, s.uid, body.day, text, nowSec()).run();
   return json({ id: r.meta.last_row_id, day: body.day, text });
@@ -1003,12 +1017,12 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
   const ids = rows.results.map((p) => p.id);
   if (!ids.length) return json({ plans: [] });
-  const inIds = ids.map(() => "?").join(",");
   const [fs, ns, eds, sq] = await Promise.all([
     env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
-    env.DB.prepare(`SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${inIds}) GROUP BY plan`).bind(...ids)
-      .all<{ plan: string; n: number }>(),
+    inChunks(ids, (part) => env.DB.prepare(
+      `SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")}) GROUP BY plan`)
+      .bind(...part).all<{ plan: string; n: number }>()),
     editorsOf(env, ids),
     env.DB.prepare("SELECT squad FROM members WHERE uid = ?").bind(s.uid).all<{ squad: string }>(),
   ]);
@@ -1142,10 +1156,10 @@ export async function forBoard(env: Env, uid: string) {
     .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
-    plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || "?",
+    plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {} })),
-    planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || "?" })),
+    planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
   };
 }

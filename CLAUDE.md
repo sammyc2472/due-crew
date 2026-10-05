@@ -81,7 +81,9 @@ add-on.
   squad in common or comes from adding the recipient's code. Someone
   connected to me (a crew edge or a knock either way, a squad or a plan in
   common) gets a name and an emoji for my uid, nothing more (3.7.1, D5);
-  codes and invites carry their own names.
+  codes and invites carry their own names. Adding by uid (`PUT
+  /friends/{uid}`: add back, a knock's Add) needs that connection already;
+  a stranger's uid gets the same 404 as no such account.
 - A squad row is an UPDATE on the server, never an insert; the join
   (`POST /squads/{id}/join {code}`, the code required since 3.6.2, with
   `MIN_CLIENT` 3.1.0) is the only way in. That is what keeps Remove
@@ -93,8 +95,9 @@ add-on.
   it), its crew by uid (`session.friend_ids`), its squads by their codes
   (config), with ids unchanged. Friendships re-form as each side updates.
   Only an imported account restores (`users.from2x`, migration 0018: the
-  import sets it, the first 3.x sync clears it); the client version alone
-  was anyone's to set.
+  import sets it to 1, the first 3.x sync sets it to that time, and it's
+  spent a week later, so a restore that failed once tries again); the
+  client version alone was anyone's to set.
 - The 2.x bridge (`worker/src/bridge.ts`, every 15 minutes, only with the
   `FIREBASE_SA` secret): for people still on 2.x, Firestore is the truth
   and their week, name and emoji, shared decks, heatmap and squad rows

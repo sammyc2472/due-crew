@@ -151,6 +151,8 @@ describe("hardening: no listing of people or codes; bounded strings", () => {
 describe("friend edges, emoji, week, ban list, founder handoff (v2.5)", () => {
   it("edges", async () => {
     await alice.call("POST", "/sync", { week: WEEK("2026-09-13") });
+    expect(await alice.status("PUT", "/friends/carol"), "edge: a stranger by uid alone: no (D5)").toBe(404);
+    await db().prepare("INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES ('alice', 'carol', '', 0)").run();  // carol added alice's code
     expect(await alice.status("PUT", "/friends/carol"), "edge: owner creates").toBe(200);
     expect(await alice.status("PUT", "/friends/bob", { at: 1, note: "x" }), "edge: extra field rejected").toBe(400);
     expect((await bob.call("GET", "/board")).body.friends, "edge: cannot write someone else's (edges are always the caller's)").toEqual([]);

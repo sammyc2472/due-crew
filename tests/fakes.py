@@ -751,8 +751,8 @@ class FakeWorker:
         if method == "PUT":
             if fid == me:
                 raise Bad(400, "self")
-            if fid not in self.users:
-                raise Bad(404, "no_user")
+            if fid not in self.users or not self._connected(me, fid):
+                raise Bad(404, "no_user")  # a stranger by uid: as no such account (D5)
             self.friends.add((me, fid))
             self.knocks.pop((me, fid), None)
             f = self.users[fid]

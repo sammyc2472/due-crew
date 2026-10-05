@@ -225,9 +225,10 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
     }
     wrote.profile = sets.length > 0;
     if (sets.length) writes.push(db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE uid = ?`).bind(...vals, s.uid));
-    // a 3.x add-on has synced: the one-time 2.x restore is spent
+    // a 3.x add-on has synced: the 2.x restore has a week left
     if (typeof profile.client_version === "string" && /^3\./.test(profile.client_version)) {
-      writes.push(db.prepare("UPDATE users SET from2x = 0 WHERE uid = ? AND from2x = 1").bind(s.uid));
+      // the first 3.x sync starts the restore's week (social.from2x)
+      writes.push(db.prepare("UPDATE users SET from2x = ? WHERE uid = ? AND from2x = 1").bind(nowSec(), s.uid));
     }
   }
   if (week !== null) {

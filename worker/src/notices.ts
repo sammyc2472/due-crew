@@ -86,10 +86,12 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
 }
 
 /** For GET /board: the newest live notice for this add-on's version, or null.
+ *  50 live ones looked at, so a run of version-targeted notices can't hide
+ *  an older one for everyone (the admin posts a handful a month).
  *  A version the server doesn't know yet (the add-on hasn't synced) gets
  *  only the notices for everyone. */
 export async function forBoard(env: Env, clientVersion: string | null): Promise<{ id: number; text: string; link: string | null } | null> {
-  const rows = await env.DB.prepare("SELECT id, text, link, below FROM notices WHERE until > ? ORDER BY id DESC LIMIT 5")
+  const rows = await env.DB.prepare("SELECT id, text, link, below FROM notices WHERE until > ? ORDER BY id DESC LIMIT 50")
     .bind(nowSec()).all<{ id: number; text: string; link: string | null; below: string | null }>();
   for (const n of rows.results) {
     if (!n.below || (clientVersion && VERSION.test(clientVersion) && older(clientVersion, n.below))) {

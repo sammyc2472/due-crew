@@ -288,9 +288,15 @@ export async function bridge(env: Env, fetcher: Fetch = fetch): Promise<BridgeCo
     if (prof) {
       const want = [...(mutual.get(r.uid) ?? [])].sort();
       const have = Array.isArray(prof.friends) ? (prof.friends as unknown[]).map(String).sort() : [];
-      if (stable(have) !== stable(want)) put(`users/${r.uid}`, { friends: want }, ["friends"], true);
-      for (const edge of await listIds(fetcher, auth, `users/${r.uid}/friends`)) {
-        if (!want.includes(edge)) writes.push({ delete: `${DOCS}/users/${r.uid}/friends/${edge}` });
+      const differs = stable(have) !== stable(want);
+      if (differs) put(`users/${r.uid}`, { friends: want }, ["friends"], true);
+      // listing the edges is a Firestore request a person: only when the
+      // array was off, and otherwise once a day each (a run every 15 min is
+      // 96 slots), so a run stays well inside the subrequest limit
+      if (differs || dailySlot(r.uid)) {
+        for (const edge of await listIds(fetcher, auth, `users/${r.uid}/friends`)) {
+          if (!want.includes(edge)) writes.push({ delete: `${DOCS}/users/${r.uid}/friends/${edge}` });
+        }
       }
     }
     // the profile says 2.9+ (so 2.x reads the week doc), with the current name and emoji
@@ -363,4 +369,11 @@ export async function forget(env: Env, uid: string, fetcher: Fetch = fetch): Pro
 /** For tests: forget the cached Google token. */
 export function _resetToken(): void {
   cached = null;
+}
+
+/** Whether this 15-minute run is this person's turn of the day (96 a day). */
+function dailySlot(uid: string): boolean {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) >>> 0;
+  return h % 96 === Math.floor(Date.now() / 900_000) % 96;
 }

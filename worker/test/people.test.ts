@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, mailbox, person } from "./helpers";
+import { api, db, mailbox, person, befriend } from "./helpers";
 
 // The admin's account lookup: one person at a time, never how they study.
 
@@ -39,8 +39,8 @@ describe("the admin's account lookup", () => {
     const maya = await person("maya", "Maya Chen");
     const dre = await person("dre");
     await person("kai");
-    await maya.call("PUT", "/friends/dre"); await dre.call("PUT", "/friends/maya");
-    await maya.call("PUT", "/friends/kai");
+    await befriend(maya, { uid: "dre" }); await befriend(dre, { uid: "maya" });
+    await befriend(maya, { uid: "kai" });
     const sq = await maya.call("POST", "/squads", { name: "MS2 Squad" });
     expect(sq.status).toBe(200);
     await maya.call("PUT", "/settings", { v: 1, at: new Date().toISOString(), settings: { muted: ["zed"] } });
@@ -77,10 +77,10 @@ describe("the admin's account lookup", () => {
     const dre = await person("dre");
     const kai = await person("kai");
     await person("zed");
-    await maya.call("PUT", "/friends/dre"); await dre.call("PUT", "/friends/maya");
-    await maya.call("PUT", "/friends/kai");
-    await kai.call("PUT", "/friends/zed");
-    await (await person("theo")).call("PUT", "/friends/maya");
+    await befriend(maya, { uid: "dre" }); await befriend(dre, { uid: "maya" });
+    await befriend(maya, { uid: "kai" });
+    await befriend(kai, { uid: "zed" });
+    await befriend((await person("theo")), { uid: "maya" });
     await dre.call("POST", "/sync", { week: { v: 1, days: { "2026-10-01": { reviews: 412 } } } });
     expect((await api("GET", "/admin/people/maya/crew", { token: maya.token, env })).status).toBe(404);  // admin only
     const r = await admin(sam, "/admin/people/maya/crew");
@@ -97,8 +97,8 @@ describe("the admin's account lookup", () => {
     const maya = await person("maya", "Maya Chen");
     const theo = await person("theo");
     const kai = await person("kai");
-    await theo.call("PUT", "/friends/maya");   // someone Maya doesn't know added her
-    await maya.call("PUT", "/friends/kai");
+    await befriend(theo, { uid: "maya" });   // someone Maya doesn't know added her
+    await befriend(maya, { uid: "kai" });
     const box = mailbox();
     expect((await admin(sam, "/admin/people/maya/crew/theo?side=sideways", "DELETE")).status).toBe(400);
     expect((await admin(sam, "/admin/people/maya/crew/kai?side=theirs", "DELETE")).status).toBe(404);  // kai never added her: nothing made

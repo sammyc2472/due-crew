@@ -71,7 +71,11 @@ export async function person(uid: string, name = uid[0].toUpperCase() + uid.slic
   return { uid, token, call, status: async (method: string, path: string, body?: unknown) => (await call(method, path, body)).status };
 }
 
-export async function befriend(a: { call: Function }, b: { uid: string }) {
+export async function befriend(a: { call: Function; uid?: string }, b: { uid: string }) {
+  // adding by uid is for someone connected already (add back, a knock):
+  // b knocks a first, as a code or a squad would, unless they're connected
+  if (a.uid) await env.DB.prepare("INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES (?, ?, '', ?) ON CONFLICT DO NOTHING")
+    .bind(a.uid, b.uid, Math.floor(Date.now() / 1000)).run();
   const r = await (a.call as any)("PUT", `/friends/${b.uid}`);
   if (r.status !== 200) throw new Error(`befriend ${r.status}`);
 }
