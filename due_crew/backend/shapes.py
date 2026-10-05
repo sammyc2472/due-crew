@@ -630,7 +630,19 @@ def clean_plan(p):
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
             "early": _early(p.get("early", following.get("early"))),
+            "posts": clean_posts(p.get("posts")),  # 3.7.3: the authors' newest posts
             **clean_days(p if "shift" in p or "skipped" in p else following)}
+
+
+def clean_posts(v):
+    """3.7.3: a plan's newest posts to its followers, as the board carries them."""
+    out = []
+    for x in v if isinstance(v, list) else []:
+        if isinstance(x, dict) and _as_int(x.get("id")) and clean_note(x.get("text"), 200):
+            out.append({"id": _as_int(x["id"]), "name": clean_note(x.get("name"), 60) or "?",
+                        "text": clean_note(x.get("text"), 200), "withSave": x.get("withSave") is True,
+                        "at": _as_int(x.get("at")) or 0})
+    return sorted(out, key=lambda x: -x["id"])[:3]
 
 
 def clean_days(v):
@@ -651,3 +663,76 @@ def clean_offer(o):
     return {"id": o["id"], "name": clean_note(o.get("name"), 60) or "Plan",
             "code": normalize_code(o.get("code")), "squad": str(o.get("squad") or ""),
             "ownerName": clean_note(o.get("ownerName"), 60) or "?"}
+
+
+# ---- 3.7.3: a plan's team ----
+
+_UID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+TEAM_TEXT_MAX = 280
+
+
+def _nat(v, hi=10 ** 9):
+    n = v if isinstance(v, int) and not isinstance(v, bool) else None
+    return n if n is not None and 0 <= n <= hi else 0
+
+
+def clean_teams(v):
+    """The board's counts for the teams I'm on: {plan id: {shown, of,
+    streak, faces, act, last}}."""
+    out = {}
+    for pid, t in (v.items() if isinstance(v, dict) else []):
+        if not _PLAN_ID.fullmatch(str(pid)) or not isinstance(t, dict):
+            continue
+        last = t.get("last") if isinstance(t.get("last"), dict) else None
+        out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")),
+                    "faces": [clean_emoji(e) for e in (t.get("faces") or [])[:4] if isinstance(e, str)],
+                    "act": sorted((_nat(a) for a in (t.get("act") or [])[:20]), reverse=True),
+                    "last": {"name": clean_note(last.get("name"), 60) or "?",
+                             "text": clean_note(last.get("text"), TEAM_TEXT_MAX)} if last else None}
+        if len(out) >= 20:
+            break
+    return out
+
+
+def _clean_ask(a, reply=False):
+    if not isinstance(a, dict) or not _nat(a.get("id")) or not clean_note(a.get("text"), TEAM_TEXT_MAX):
+        return None
+    uid = str(a.get("uid") or "")
+    out = {"id": _nat(a["id"]), "uid": uid if _UID.fullmatch(uid) else "", "name": clean_note(a.get("name"), 60) or "?",
+           "emoji": clean_emoji(a.get("emoji")), "text": clean_note(a.get("text"), TEAM_TEXT_MAX), "at": _nat(a.get("at")),
+           "author": a.get("author") is True, "mine": a.get("mine") is True, "remove": a.get("remove") is True}
+    if reply:
+        out["helped"] = a.get("helped") is True
+        return out
+    guid = a.get("guid")
+    out.update({"act": _nat(a.get("act")), "topic": clean_note(a.get("topic"), 80),
+                "guid": guid[:GUID_MAX] if isinstance(guid, str) and guid else "", "ord": _nat(a.get("ord"), 500),
+                "replies": [r for r in (_clean_ask(x, True) for x in (a.get("replies") or [])[:50]) if r]})
+    return out
+
+
+def clean_team_view(v):
+    """GET /plans/{id}/team: the team as its tab shows it."""
+    if not isinstance(v, dict) or v.get("on") is not True:
+        return {"on": False, "count": _nat((v or {}).get("count") if isinstance(v, dict) else 0)}
+    faces = []
+    for f in (v.get("faces") or [])[:24]:
+        if isinstance(f, dict):
+            uid = str(f.get("uid") or "")
+            faces.append({"uid": uid if _UID.fullmatch(uid) else "", "name": clean_note(f.get("name"), 60) or "?",
+                          "emoji": clean_emoji(f.get("emoji")), "shown": f.get("shown") is True})
+    out = {"on": True, "count": _nat(v.get("count")), "shown": _nat(v.get("shown")), "streak": _nat(v.get("streak"), 366),
+           "faces": faces, "more": _nat(v.get("more")),
+           "asks": [a for a in (_clean_ask(x) for x in (v.get("asks") or [])[:30]) if a]}
+    b = v.get("bingo") if isinstance(v.get("bingo"), dict) else None
+    ev = b.get("ev") if b and isinstance(b.get("ev"), dict) else None
+    from .. import bingo as _bingo
+    card = _bingo.clean_card(b.get("card")) if b else None
+    if card and ev and isinstance(ev.get("squares"), list) and len(ev["squares"]) == 8 and isinstance(ev.get("middle"), dict):
+        mid = ev["middle"]
+        out["bingo"] = {"card": card, "ev": {
+            "squares": [{"n": _nat(q.get("n")) if isinstance(q, dict) else 0, "need": max(1, _nat(q.get("need"))) if isinstance(q, dict) else 1,
+                         "done": isinstance(q, dict) and q.get("done") is True, "who": []} for q in ev["squares"]],
+            "middle": {"have": _nat(mid.get("have")), "goal": max(1, _nat(mid.get("goal"))), "done": mid.get("done") is True},
+            "lines": _nat(ev.get("lines"), 8), "older": _nat(ev.get("older"))}}
+    return out

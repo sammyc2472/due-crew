@@ -5,7 +5,9 @@ rules; worker/test proves the real thing in workerd with D1.
 """
 
 import datetime
+import hashlib
 import json
+import time
 import re
 import sys
 import threading
@@ -254,6 +256,9 @@ class FakeWorker:
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
+        self.plan_posts = {} # 3.7.3: plan id -> [{id, name, text, withSave, at}]
+        self.team = {}       # 3.7.3: (plan, uid) -> {joined, days: [label], play}
+        self.team_asks = []  # 3.7.3: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
         self.plan_trees = {}  # (uid, deck) -> {tags, decks}
         self.follows = {}    # (plan, uid) -> {share, paused, progress (json text or None)}
         self.links = {}      # one-time site sign-in tokens -> uid
@@ -342,7 +347,7 @@ class FakeWorker:
             return self._auth(method, parts[1:], auth, body or {})
         me = self._me(auth)
         if m == ("GET", "board"):
-            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"))
+            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"), query.get("pv"))
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -388,6 +393,8 @@ class FakeWorker:
             return 201, {"ok": True}
         if parts[:1] == ["squads"]:
             return self._squad(method, me, parts[1:], query, body or {})
+        if parts[:1] == ["plans"] and len(parts) >= 3 and parts[2] in ("team", "asks"):
+            return self._team_route(method, me, parts[1], parts[2:], query, body or {})
         if parts[:1] == ["plans"]:
             return self._plans(method, me, parts[1:], query, body or {})
         if m == ("POST", "tips") and parts[1:] == ["helped"]:
@@ -468,7 +475,20 @@ class FakeWorker:
         w = self.weeks.get(uid)
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
-    def _board(self, me, with_decks, wk=None, got=None):
+    def _plan_stamp(self, me):
+        """3.7.3, as planStamp: my follows as they stand, their versions and newest posts."""
+        rows = [[pid, self.plans[pid]["version"], json.dumps({k: v for k, v in f.items() if k != "progress"}, sort_keys=True),
+                 max([x["id"] for x in self.plan_posts.get(pid, [])], default=0)]
+                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans]
+        return hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:16]
+
+    def add_post(self, pid, uid, text):
+        """3.7.3, setup helper: an author's post to followers."""
+        self._post_n = getattr(self, "_post_n", 0) + 1
+        self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
+                                                    "text": text, "withSave": False, "at": int(time.time())})
+
+    def _board(self, me, with_decks, wk=None, got=None, pv=None):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
             for key in [k for k, c in self.cheers.items() if k[0] == me and c["n"] <= int(got)]:
@@ -503,11 +523,19 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        if pv is not None:  # 3.7.3: the plans again, when their stamp moved
+            stamp = self._plan_stamp(me)
+            if not with_decks and pv != stamp:
+                out.update(self._plans_for_board(me))
+            out["pv"] = stamp
+        teams = self._teams_for_board(me)  # 3.7.3
+        if teams:
+            out["teams"] = teams
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
-            # 3.6: the week's bingo card, to anyone in a squad
-            if wk in self.bingo_cards and any(u == me for (_s, u) in self.members):
+            # 3.6: the week's bingo card, to anyone in a squad (3.7.3: or on a plan's team)
+            if wk in self.bingo_cards and (any(u == me for (_s, u) in self.members) or any(u == me for (_p, u) in self.team)):
                 out["bingo"] = self.bingo_cards[wk]
         return out
 
@@ -596,7 +624,7 @@ class FakeWorker:
         return out, r.get("name")
 
     def _sync(self, me, body):
-        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log"}:
+        if not set(body) <= {"profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team"}:
             raise Bad(400, "bad_sync")
         prof = body.get("profile")
         if prof is not None:
@@ -669,6 +697,26 @@ class FakeWorker:
                     f["progress"] = text
                     wrote["plans"] = True
                     self._count("plan_follows")
+        if "team" in body:
+            # 3.7.3 (team.ts teamWrites): only rows I hold, only what changed
+            t = body["team"]
+            if not isinstance(t, dict) or len(t) > 20:
+                raise Bad(400, "bad_team")
+            wrote["team"] = False
+            for pid, x in t.items():
+                days_in = x.get("days") or [] if isinstance(x, dict) else None
+                if not isinstance(x, dict) or not set(x) <= {"days", "play"} or not isinstance(days_in, list) or len(days_in) > 9 \
+                        or not all(DATE_RE.fullmatch(str(d)) for d in days_in):
+                    raise Bad(400, "bad_team")
+                row = self.team.get((pid, me))
+                if row is None:
+                    continue
+                play = self._clean_play(x.get("play")) if x.get("play") is not None else row["play"]
+                days = sorted(set(row["days"]) | set(days_in))[-60:]
+                if days != row["days"] or play != row["play"]:
+                    row["days"], row["play"] = days, play
+                    wrote["team"] = True
+                    self._count("plan_team")
         if knows is not None:
             before = set(self.knows)
             if knows.get("reset"):
@@ -1267,6 +1315,7 @@ class FakeWorker:
         pid = rest[0] if rest else ""
         if rest[1:] == ["follow"] and method == "DELETE":
             self.follows.pop((pid, me), None)  # stopping: my progress goes with it
+            self.team.pop((pid, me), None)  # 3.7.3: and my place on its team
             return 200, {"ok": True}
         if pid not in self.plans:
             raise Bad(404, "no_plan")
@@ -1401,6 +1450,114 @@ class FakeWorker:
                 out[pid][uid] = list(t)
         return out
 
+    # ---- 3.7.3: a plan's team (worker/src/team.ts) ----
+
+    def today_label(self):
+        return getattr(self, "today", None) or datetime.date.today().isoformat()
+
+    def _teams_for_board(self, me):
+        out = {}
+        for (pid, uid) in sorted(self.team):
+            if uid != me:
+                continue
+            rows = [(u, r) for (p, u), r in self.team.items() if p == pid]
+            shown = [u for u, r in rows if self.today_label() in r["days"]]
+            threads = sorted((a for a in self.team_asks if a["plan"] == pid and a["parent"] is None),
+                             key=lambda a: (-a["act"], -a["id"]))[:20]
+            last = next((a for a in threads if a["uid"] != me), None)
+            out[pid] = {"shown": len(shown), "of": len(rows),
+                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4],
+                        "act": [a["act"] for a in threads if a.get("act_by", a["uid"]) != me]}
+            if last:
+                out[pid]["last"] = {"name": self.users[last["uid"]]["name"] or "?", "text": last["text"]}
+        return out
+
+    def _team_view(self, pid, me, wk=None):
+        rows = [(u, r) for (p, u), r in sorted(self.team.items()) if p == pid]
+        if not any(u == me for u, _r in rows):
+            return {"on": False, "count": len(rows)}
+        p = self.plans[pid]
+        authors = {p["owner"]}
+        today = self.today_label()
+        faces = sorted(({"uid": u, "name": self.users[u]["name"] or "?", "emoji": self.users[u]["emoji"] or "",
+                         "shown": today in r["days"]} for u, r in rows), key=lambda f: not f["shown"])
+        asks = []
+        for a in sorted((a for a in self.team_asks if a["plan"] == pid and a["parent"] is None),
+                        key=lambda a: (-a["act"], -a["id"]))[:30]:
+            reps = [{"id": r["id"], "uid": r["uid"], "name": self.users[r["uid"]]["name"] or "?", "emoji": "",
+                     "text": r["text"], "at": r["at"], "helped": r["helped"], "author": r["uid"] in authors,
+                     "mine": r["uid"] == me, "remove": r["uid"] == me or me in authors}
+                    for r in self.team_asks if r["parent"] == a["id"]]
+            x = {"id": a["id"], "uid": a["uid"], "name": self.users[a["uid"]]["name"] or "?", "emoji": self.users[a["uid"]]["emoji"] or "",
+                 "text": a["text"], "at": a["at"], "act": a["act"], "topic": a["topic"] or "",
+                 "mine": a["uid"] == me, "remove": a["uid"] == me or me in authors, "author": a["uid"] in authors, "replies": reps}
+            if a["guid"]:
+                x.update(guid=a["guid"], ord=a["ord"])
+            asks.append(x)
+        out = {"on": True, "count": len(rows), "shown": sum(1 for f in faces if f["shown"]), "streak": 0,
+               "faces": faces[:24], "more": max(0, len(rows) - 24), "asks": asks}
+        if wk and wk in self.bingo_cards:
+            card = dict(self.bingo_cards[wk], middle={"id": "tq", "group": "team", "icon": "🙋", "name": "Ask away",
+                                                       "rule": "Questions asked", "detail": "", "type": "team", "params": {}, "goal": 3, "unit": ""})
+            n = [sum(1 for _u, r in rows if r["play"] and r["play"].get("s", 0) & (1 << i)) for i in range(8)]
+            out["bingo"] = {"card": card, "ev": {"squares": [{"n": k, "need": 1, "done": k >= 1} for k in n],
+                                                 "middle": {"have": 0, "goal": 3, "done": False}, "lines": 0}}
+        return out
+
+    def _team_route(self, method, me, pid, rest, query, body):
+        p = self.plans.get(pid)
+        in_plan = p and (p["owner"] == me or (pid, me) in self.follows)
+        if not in_plan:
+            raise Bad(404, "no_plan")
+        now = int(time.time())
+        if rest == ["team"]:
+            if method == "GET":
+                return 200, self._team_view(pid, me, query.get("wk"))
+            if method == "POST":
+                self.team.setdefault((pid, me), {"joined": now, "days": [], "play": None})
+                return 200, self._team_view(pid, me, query.get("wk"))
+            if method == "DELETE":
+                self.team.pop((pid, me), None)
+                return 200, {"ok": True}
+        if (pid, me) not in self.team and not (method == "DELETE"):
+            raise Bad(403, "not_on_team")
+        if rest == ["asks"] and method == "POST":
+            text = " ".join(str(body.get("text") or "").split())[:280]
+            if not text:
+                raise Bad(400, "bad_ask")
+            parent = body.get("parent")
+            if parent is not None and not any(a["id"] == parent and a["plan"] == pid and a["parent"] is None for a in self.team_asks):
+                raise Bad(404, "no_ask")
+            mine_today = sum(1 for a in self.team_asks if a["plan"] == pid and a["uid"] == me and a["parent"] is None and a["at"] > now - 86400)
+            if parent is None and mine_today >= 10:
+                raise Bad(429, "too_many_asks")
+            aid = max([a["id"] for a in self.team_asks] + [0]) + 1
+            self.team_asks.append({"id": aid, "plan": pid, "uid": me, "parent": parent, "text": text,
+                                   "guid": body.get("guid") if parent is None else None, "ord": body.get("ord") or 0,
+                                   "topic": body.get("topic") if parent is None else None, "helped": False, "at": now, "act": now, "act_by": me})
+            if parent is not None:
+                for a in self.team_asks:
+                    if a["id"] == parent:
+                        a["act"], a["act_by"] = now, me
+            return 200, {"id": aid, "text": text}
+        if len(rest) >= 2 and rest[0] == "asks":
+            aid = int(rest[1])
+            a = next((x for x in self.team_asks if x["id"] == aid and x["plan"] == pid), None)
+            if a is None:
+                raise Bad(404, "no_ask")
+            if len(rest) == 2 and method == "DELETE":
+                if a["uid"] != me and p["owner"] != me:
+                    raise Bad(403, "not_yours")
+                self.team_asks = [x for x in self.team_asks if x["id"] != aid and x["parent"] != aid]
+                return 200, {"ok": True}
+            if rest[2:] == ["helped"]:
+                q = next((x for x in self.team_asks if x["id"] == a["parent"]), None)
+                if not q or q["uid"] != me:
+                    raise Bad(403, "not_yours")
+                a["helped"] = bool(body.get("on"))
+                return 200, {"ok": True}
+        raise Bad(404, "nope")
+
     def _plans_for_board(self, me):
         """The plans I follow (with crew counts), and squad offers."""
         plans = []
@@ -1420,7 +1577,8 @@ class FakeWorker:
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
                           "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                          "followers": len(rows), "crewDone": done})
+                          "followers": len(rows), "crewDone": done,
+                          "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
                   for pid, p in sorted(self.plans.items())

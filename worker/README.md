@@ -118,6 +118,43 @@ list and the home feed show only theirs, plus my own from before);
 `GET /plans/{id}/log` and `POST /plans/{id}/undo {version}` (the latest
 save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
+
+3.7.3 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
+saw on every refresh) answers `pv` (a short hash of the plans I follow:
+their versions, my follow's own days, their newest post; never my
+progress) and carries `plans`, `planOffers` and `authored` again only when
+it moved, so a save reaches followers at their next refresh with no
+request of its own. Each plan on the board has `posts` (its newest 3:
+`{id, name, text, withSave, at}`), and the board marks the version as
+reached (`plan_follows.seen_version`, written only when it changed).
+`GET /plans/{id}/posts` (anyone in the plan), `POST /plans/{id}/posts
+{text}` and `DELETE /plans/{id}/posts/{pid}` (authors; the owner removes
+any): one line, 200 characters, 5 a day per plan (`429 too_many_posts`),
+the newest 50 kept. `PUT /plans/{id}` takes `post` too: it rides the save
+(`posted: {id, text}`, or `{error: "too_many_posts"}` while the save still
+stands). An author's view has `reached: [n, of]`, the followers (not the
+owner) whose Anki has this version. The home feed (`feed=1`) lists posts
+as `kind: "post"`.
+3.7.3 a plan's team (`team.ts`, migration 0020), opt-in, for anyone in the
+plan (its authors and followers): `POST /plans/{id}/team` joins, `DELETE`
+leaves, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
+streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,
+or `{on: false, count}` off the team. Showed up: a member answered one of
+the plan's cards on their own Anki day; it rides the sync as `team:
+{planId: {days, play?}}` (the last 8 days with one, so a phone's arrive late; rows I hold only, written when changed; `play`
+is my squares from the plan's cards only). The streak is days in a row
+when more than half the team showed up. `asks`: the newest 30 threads by
+activity, `{id, uid, name, emoji, text, at, act, topic, guid?, ord?, mine,
+remove, author, replies: [...]}`. `POST /plans/{id}/asks
+{text, parent? | guid, ord, topic?}` (team only; 280 characters; 10 new
+questions a person a plan a day, `429 too_many_asks`; 50 replies a
+thread; a plan keeps its newest 200), `DELETE /plans/{id}/asks/{aid}` (its
+writer or an author; a question takes its replies), `POST
+.../asks/{aid}/helped {on}` (the asker, on a reply). Muted people's words are left out. The bingo is the week's
+squares (`cardFor`) with the team's own middle (asks, answers, 3 days),
+counts only. `GET /board` carries `teams: {planId: {shown, of, streak,
+faces, act, last?}}` for an add-on (not `keep=1`), and the week's card
+for a team member as for a squad member.
 C1–C5: `PATCH /plans/{id}/follow {early}` (0–7); a date's `search`
 (up to 10) and `sn` (their counts), `ids` (note ids, 50,000 a plan);
 `reviews: [{day, from, to}]` on the doc; 50,000 single cards and 1.5 MB

@@ -537,3 +537,26 @@ In Anki (as a follower):
 - [ ] Settings › Board › Due: turning off Due, Suggestions, and Recover leeches (on: the next refresh brings leeches back as new, the tag off; Edit › Undo puts them back; "Recovered N leeches · See them" opens the browser).
 - [ ] With 10+ misses today, "Go over today's N misses" builds a filtered deck and opens it; × hides it for the day.
 - [ ] A second computer, after its morning pull, shows the same own items.
+
+
+## 3.7.3: plan updates (an author and a follower)
+
+- [ ] The author adds cards to today's date and saves. The follower, on the Decks screen, refreshes: "Dre added N cards to …" with Open and Not today; nothing opened yet. Open: they open in one step (Edit › Undo closes them). Mid-review the line waits until you're back on Decks.
+- [ ] Not today: tomorrow's morning opens them. A later date the author changed redraws on the week at once.
+- [ ] Held back on Follow: a new card added to a later date stays suspended.
+- [ ] "Tell followers…" with a save, and a post on the plan page's Updates tab: the follower's plan card shows the newest one with OK; the site shows it above Calendar · Team until Close.
+- [ ] The author's Updates tab: "This version is in N of M followers' Anki" after the follower refreshes.
+
+## 3.7.3: a plan's Team and Insights (two followers, or an author and a follower)
+
+- [ ] The plan card has Plan · Team · Insights. Team, not joined: "N on the team", the one line about what it shares, Join the team.
+- [ ] Both join. Review one of the plan's cards on one side and sync: the other side's Team shows them lit (others faded); the Plan tab's line says "N of the team showed up".
+- [ ] Ask the team (type, Enter): it shows for the other at their next Team open, with a badge on Team until they open it; your own question never badges you.
+- [ ] Reply (Anki asks in a small box; the site opens one under the question); the asker marks That helped; Remove your own; Report someone else's (they're muted for you, their words go).
+- [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the team about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
+- [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); squares count from the plan's cards only; nobody's name on a square.
+- [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the team (the streak, "Showed up 3 days").
+- [ ] Insights: "Last 14 days", Topic · Missed · Trend. Study opens a filtered deck of the missed cards; Re-watch only where the date has a watch link; Ask goes to Team with the topic in the box.
+- [ ] Leave the team: off it, your questions stay. Stopping the plan also takes you off.
+- [ ] duecrew.com, the plan's page as a follower: Calendar · Team, the same team; on a phone the rail stacks under the questions.
+- [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….

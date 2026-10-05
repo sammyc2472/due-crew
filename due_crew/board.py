@@ -812,6 +812,56 @@ def _css(cfg):
     #due-crew .ptoday .tw {{ display: block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
+    #due-crew .pcrew a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    /* 3.7.3: the plan's tabs, Team and Insights */
+    #due-crew .psub {{ display: flex; gap: 16px; align-items: baseline; font-size: 12px; margin: 0 0 8px;
+      border-bottom: 1px solid var(--dc-line); text-align: left; }}
+    #due-crew .psub a {{ color: var(--dc-muted); font-weight: 700; text-decoration: none; padding: 3px 0 5px; margin-bottom: -1px; }}
+    #due-crew .psub a.on {{ color: var(--dc-ink); box-shadow: inset 0 -2px var(--dc-accent); }}
+    #due-crew .psub a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
+      background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
+    #due-crew .tg {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); margin: 12px 0 4px; text-align: left; }}
+    #due-crew .tg:first-child {{ margin-top: 2px; }}
+    #due-crew .faces {{ display: flex; flex-wrap: wrap; gap: 8px 14px; text-align: left; }}
+    #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
+    #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
+    #due-crew .face.away {{ opacity: .38; }}
+    #due-crew .face b {{ color: var(--dc-ink); font-weight: 600; font-size: 11.5px; max-width: 64px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .face.more b {{ color: var(--dc-muted); }}
+    #due-crew .tqa {{ display: flex; gap: 6px; align-items: center; margin: 2px 0 6px; }}
+    #due-crew .tqa input {{ flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink); background: var(--dc-bg);
+      border: 1px solid var(--dc-line); border-radius: 7px; padding: 5px 8px; }}
+    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a, #due-crew .tleave a {{
+      color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; white-space: nowrap; }}
+    #due-crew .tq {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 7px 10px; margin-top: 6px;
+      display: grid; gap: 3px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }}
+    #due-crew .tq .t {{ display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }}
+    #due-crew .tq .t .m {{ margin-left: auto; color: var(--dc-muted); font-size: 11px; white-space: nowrap; }}
+    #due-crew .tq .t .acts {{ display: flex; gap: 10px; }}
+    #due-crew .tq .t .acts a.q {{ color: var(--dc-muted); font-weight: 500; }}
+    #due-crew .tq .card {{ font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .tq .rep {{ border-left: 2px solid var(--dc-line); padding-left: 8px; font-size: 11.5px; color: var(--dc-muted); }}
+    #due-crew .tq .rep b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .tq .rep .ok {{ color: var(--dc-accent); font-weight: 700; }}
+    #due-crew .tq .rep a {{ margin-left: 8px; font-size: 11px; }}
+    #due-crew .tq .rep a.q {{ color: var(--dc-muted); font-weight: 500; }}
+    #due-crew .tjoin {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px;
+      text-align: left; font-size: 12px; }}
+    #due-crew .tjoin a.bt {{ justify-self: start; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
+    #due-crew .tjoin .k, #due-crew .tq0 {{ color: var(--dc-muted); font-size: 11.5px; text-align: left; }}
+    #due-crew .tleave {{ text-align: left; margin-top: 10px; }}
+    #due-crew .wk2 {{ display: grid; grid-template-columns: minmax(0, 1fr) 64px 76px 150px; gap: 12px; align-items: center;
+      font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--dc-line); text-align: left; }}
+    #due-crew .wk2:last-child {{ border-bottom: 0; }}
+    #due-crew .wk2 .sub {{ display: block; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .wk2 .n {{ text-align: right; color: var(--dc-muted); font-variant-numeric: tabular-nums; }}
+    #due-crew .wk2 .tr {{ font-size: 11px; }}
+    #due-crew .wk2 .tr.up {{ color: var(--dc-hours); }}
+    #due-crew .wk2 .tr.dn {{ color: var(--dc-accent); }}
+    #due-crew .wk2 .acts {{ display: flex; gap: 10px; }}
+    #due-crew .wk2.hd {{ font-size: 10.5px; color: var(--dc-muted); font-weight: 700; padding-bottom: 3px; }}
     #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
     #due-crew .dc-pways .t {{ font-size: 14px; }}
     #due-crew .dc-pways .ways {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }}
@@ -824,6 +874,9 @@ def _css(cfg):
     @media (max-width: 560px) {{
       #due-crew .dc-pc .u3 {{ grid-template-columns: minmax(0, 1fr) 70px; }}
       #due-crew .dc-pc .u3 .n {{ grid-column: 1 / -1; text-align: left; }}
+      #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
+      #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
+      #due-crew .wk2.hd span:last-child {{ display: none; }}
       /* the week as a list */
       #due-crew .pwk {{ grid-template-columns: 1fr; }}
       #due-crew .pwk .pc {{ min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }}
@@ -1229,6 +1282,12 @@ def _plan_card_html(card):
     out = (f'<div class="dc-pc"><div class="pk"><b>{e(str(card.get("title") or "Plan"))}</b>'
            f'<span>{e(str(card.get("sub") or ""))}</span>'
            f'<span class="acts"><a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
+    tabs = card.get("tabs") or {}
+    out += _plan_tabs(pid, tabs)
+    if tabs.get("sub") == "team":
+        return out + _team_html(pid, tabs) + "</div>"
+    if tabs.get("sub") == "ins":
+        return out + _insights_html(pid, tabs.get("insights") or []) + "</div>"
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
@@ -1237,10 +1296,159 @@ def _plan_card_html(card):
     notes = _plan_notes(card, pid, skip_waiting=behind)
     if notes:
         out += notes[0]
-    crew = _crew_line(card)
+    crew = _team_line(pid, tabs) or _crew_line(card)
     if crew:
         out += f'<div class="pcrew">{crew}</div>'
     return out + "</div>"
+
+
+# ---- 3.7.3: the plan's tabs: Plan, Team, Insights ----
+
+def _plan_tabs(pid, tabs):
+    sub = tabs.get("sub") or "plan"
+    badge = int(tabs.get("unread") or 0)
+    out = ""
+    for k, name in (("plan", "Plan"), ("team", "Team"), ("ins", "Insights")):
+        b = f"<i>{badge}</i>" if k == "team" and badge and sub != "team" else ""
+        out += f'<a href="#" class="{"on" if k == sub else ""}" onclick="{_pycmd(f"plansub:{pid}:{k}")}">{name}{b}</a>'
+    return f'<div class="psub">{out}</div>'
+
+
+def _team_line(pid, tabs):
+    """The Plan tab's line about the team: faces, how many showed up, the
+    newest question from someone else."""
+    e = _html.escape
+    s = tabs.get("summary")
+    if not s:
+        return ""
+    faces = "".join(e(str(x)) for x in s.get("faces") or [])
+    n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
+    out = f'{faces} {n} of the team showed up' if n else f'{of} on the team'
+    last = s.get("last")
+    if last:
+        out += f' &middot; <a href="#" onclick="{_pycmd(f"plansub:{pid}:team")}">{e(str(last.get("name") or "?"))} asked &rsaquo;</a>'
+    return out
+
+
+def _team_ago(at, now=None):
+    import time as _time
+    d = max(0, int((now or _time.time()) - int(at or 0)))
+    if d < 60:
+        return "now"
+    if d < 3600:
+        return f"{d // 60}m"
+    if d < 86400:
+        return f"{d // 3600}h"
+    return "yesterday" if d < 2 * 86400 else f"{d // 86400}d"
+
+
+def _team_html(pid, tabs):
+    """Who showed up today, the team's bingo, Ask the team and its threads.
+    Names, words and topics are other people's: escaped here."""
+    e = _html.escape
+    st, v = tabs.get("team_state"), tabs.get("team")
+    if v is None:
+        if st == "failed":
+            return (f'<div class="tq0">Couldn&rsquo;t reach Due Crew. '
+                    f'<a href="#" onclick="{_pycmd(f"planteamretry:{pid}")}">Try again</a></div>')
+        return '<div class="tq0">Fetching&hellip;</div>'
+    if not v.get("on"):
+        n = int(v.get("count") or 0)
+        return (f'<div class="tjoin"><b>{f"{n} on the team" if n else "No team yet"}</b>'
+                '<span class="k">The team sees that you showed up today, and your questions and answers. Never your numbers.</span>'
+                f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join the team</a></div>')
+    me = tabs.get("me")
+    faces = ""
+    for f in v.get("faces") or []:
+        name = "You" if f.get("uid") == me else str(f.get("name") or "?")
+        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{e(str(f.get("emoji") or "") or "&#128100;")}</span>'
+                  f'<b>{e(name)}</b></div>')
+    if int(v.get("more") or 0):
+        more = int(v["more"])
+        faces += f'<div class="face more"><span class="e">+</span><b>{more:,} more</b></div>'
+    head = f'Showed up today &middot; {int(v.get("shown") or 0)} of {int(v.get("count") or 0)}'
+    if int(v.get("streak") or 0) > 1:
+        head += f' &middot; {int(v["streak"])} days running'
+    out = f'<div class="tg">{head}</div><div class="faces">{faces}</div>'
+    b = v.get("bingo")
+    if b:
+        from .team import bingo_line
+        ev = b["ev"]
+        cells = "".join(f'<i class="{"on" if (ev["middle"]["done"] if c == 4 else ev["squares"][CELLS_BINGO.index(c)]["done"]) else ""}"></i>'
+                        for c in range(9))
+        out += (f'<style>{BINGO_CSS}</style><div class="bg-card" style="margin-top:8px"><span class="bg-mini">{cells}</span>'
+                f'<span class="bg-t"><b>Team bingo</b><span>{e(bingo_line(ev))}</span></span>'
+                f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">Open</a></div>')
+    draft = e(str(tabs.get("draft") or ""), quote=True)
+    send = (f"var v=document.getElementById('dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}').value;"
+            f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280)));return false;")
+    iid = f"dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}"
+    out += (f'<div class="tg">Ask the team</div><div class="tqa"><input id="{iid}" maxlength="280" '
+            f'placeholder="Ask anything&hellip;" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
+            f'<a href="#" onclick="{send}">Ask</a></div>')
+    known = tabs.get("known") or {}
+    down, have = set(known.get("down") or []), set(known.get("have") or [])
+    for a in v.get("asks") or []:
+        aid = int(a["id"])
+        who = "You" if a.get("mine") else f'{e(str(a.get("emoji") or ""))} <b>{e(str(a.get("name") or "?"))}</b>'
+        if a.get("guid"):
+            on = " on a card you have down" if a["guid"] in down else " on a card"
+            head = f'<span>{who}{on}</span>'
+            body = f'<div>&ldquo;{e(str(a.get("text") or ""))}&rdquo;</div>'
+        else:
+            head = f'<span>{who}: {e(str(a.get("text") or ""))}</span>'
+            body = ""
+        reps = ""
+        for r in a.get("replies") or []:
+            rid = int(r["id"])
+            rn = "You" if r.get("mine") else e(str(r.get("name") or "?"))
+            extra = ""
+            if a.get("mine") and not r.get("mine"):
+                extra = f'<a href="#" onclick="{_pycmd(f"planteamhelped:{pid}:{rid}")}">{"Helped &#10003;" if r.get("helped") else "That helped"}</a>'
+            elif r.get("helped"):
+                extra = '<span class="ok"> &#10003; helped</span>'
+            if r.get("remove"):
+                extra += f'<a href="#" onclick="{_pycmd(f"planteamremove:{pid}:{rid}")}">Remove</a>'
+            elif not r.get("mine"):
+                extra += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{rid}")}">Report</a>'
+            reps += (f'<div class="rep"><b>{rn}</b>{" (author)" if r.get("author") else ""}: '
+                     f'{e(str(r.get("text") or ""))}{extra}</div>')
+        n_rep = len(a.get("replies") or [])
+        bits = [x for x in (str(a.get("topic") or ""),
+                            f'{n_rep} repl{"ies" if n_rep != 1 else "y"}' if n_rep else "") if x]
+        acts = f'<a href="#" onclick="{_pycmd(f"planteamreply:{pid}:{aid}")}">{"Answer" if a.get("guid") else "Reply"}</a>'
+        if a.get("guid") and a["guid"] in have:
+            acts += f'<a href="#" onclick="{_pycmd(f"planteamcard:{pid}:{aid}")}">See the card</a>'
+        if a.get("remove"):
+            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamremove:{pid}:{aid}")}">Remove</a>'
+        elif not a.get("mine"):
+            acts += f'<a class="q" href="#" onclick="{_pycmd(f"planteamreport:{pid}:{aid}")}">Report</a>'
+        out += (f'<div class="tq"><div class="t">{head}<span class="m">{_team_ago(a.get("act") or a.get("at"))}</span></div>'
+                f'{body}{reps}<div class="t"><span class="card">{e(" · ".join(bits))}</span>'
+                f'<span class="acts">{acts}</span></div></div>')
+    if not v.get("asks"):
+        out += '<div class="tq0">No questions yet.</div>'
+    return out + f'<div class="tleave"><a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">Leave the team</a></div>'
+
+
+def _insights_html(pid, rows):
+    """3.7.3: this plan's topics I missed most in the last 14 days, mine alone."""
+    e = _html.escape
+    if not rows:
+        return '<div class="tg">Last 14 days</div><div class="tq0">Nothing missed.</div>'
+    out = ('<div class="tg">Last 14 days</div>'
+           '<div class="wk2 hd"><span>Topic</span><span class="n">Missed</span><span class="tr">Trend</span><span></span></div>')
+    words = {"worse": ("up", "&uarr; worse"), "better": ("dn", "&darr; better"), "steady": ("", "steady"), "": ("", "")}
+    for k, r in enumerate(rows):  # by place: a row is what this computer just worked out
+        cls, word = words.get(r.get("trend") or "", ("", ""))
+        acts = f'<a href="#" onclick="{_pycmd(f"planinsstudy:{pid}:{k}")}">Study</a>'
+        if r.get("url"):
+            acts += f'<a href="#" onclick="{_pycmd(f"planinswatch:{pid}:{k}")}">Re-watch</a>'
+        acts += f'<a href="#" onclick="{_pycmd(f"planinsask:{pid}:{k}")}">Ask</a>'
+        out += (f'<div class="wk2"><span><b>{e(str(r["name"]))}</b><span class="sub">{e(str(r.get("sub") or ""))}</span></span>'
+                f'<span class="n">{int(r["missed"])} of {int(r["of"])}</span><span class="tr {cls}">{word}</span>'
+                f'<span class="acts">{acts}</span></div>')
+    return out
 
 
 def _today_box(card, pid):
@@ -1432,6 +1640,23 @@ def _plan_notes(card, pid, skip_waiting=False):
         a2 += f'<a href="#" onclick="{_pycmd("planleave:" + pid)}">Leave them</a>'
         out.append(f'<div class="pn warn"><span>Missed <b>{e(when)}</b>: {int(ask["waiting"]):,} new waiting</span>'
                    f'<span class="acts">{a2}</span></div>')
+    upd = card.get("update")
+    if upd and int(upd.get("n") or 0):
+        # 3.7.3: an author's update adds to today or earlier: nothing opens until I say
+        n = int(upd["n"])
+        names = [str(x) for x in upd.get("names") or []]
+        what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
+        who = e(str(card.get("owner_name") or "The plan"))
+        lim = s.get("limit")
+        over = (f' Anki shows {int(lim):,} new a day in this deck.'
+                if lim is not None and int(s.get("target") or 0) + n > int(lim) else "")
+        out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
+                   f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+    for post in (card.get("posts") or [])[:1]:
+        # 3.7.3: the authors' words to followers, the newest unread
+        out.append(f'<div class="pn post"><span><b>{e(str(post.get("name") or "?"))}</b>: {e(str(post.get("text") or ""))}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planpostok:" + pid)}">OK</a></span></div>')
     if card.get("change"):
         out.append(f'<div class="pn"><span>{_segs(card["change"])}</span>'
                    f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
@@ -1810,17 +2035,19 @@ def bingo_card_html(bv):
 CELLS_BINGO = (0, 1, 2, 3, 5, 6, 7, 8)
 
 
-def bingo_html(bv, cfg, loading=False):
+def bingo_html(bv, cfg, loading=False, team=False):
     """The whole card, in the board's place (like Settings). Every string
     from the server is escaped here. A square's details show in the page
     when it's clicked: no request."""
     e = _html.escape
     head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
-    back = f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>'
+    team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
+    back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Plans</a>' if team_card
+            else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>')
     if not bv:
         said = "Fetching&hellip;" if loading else "No card this week yet. Refresh brings it."
-        return head + f'<div class="bg-bar">{back}<b>Squad bingo</b></div><div class="bg-q">{said}</div></div>'
+        return head + f'<div class="bg-bar">{back}<b>{"Team" if team_card else "Squad"} bingo</b></div><div class="bg-q">{said}</div></div>'
     card, ev = bv["card"], bv["ev"]
     names, me = bv.get("names") or {}, bv.get("me")
     progress = bv.get("progress") or []
@@ -1844,17 +2071,18 @@ def bingo_html(bv, cfg, loading=False):
                         f'<span class="ic">{e(m["icon"]) if mid["done"] else "&#128274;"}</span>'
                         f'<span class="tt">{e(m["name"])}</span><span class="rl">{e(m["rule"])}</span>{prog}</button>')
             state = ("Unlocked. It counts toward all four lines through the middle." if mid["done"]
-                     else f'{mid["have"]} of {mid["goal"]} so far. The squad unlocks it together.')
+                     else f'{mid["have"]} of {mid["goal"]} so far. The {"team" if team_card else "squad"} unlocks it together.')
             infos += (f'<div data-i="m" hidden><b>{e(m["icon"])} {e(m["name"])}: {e(m["rule"])}</b>'
                       f'<span>{e(m["detail"])}</span><span class="k">{"This week the middle is free." if free else state}</span></div>')
             continue
         i = CELLS_BINGO.index(c)
         sq, st = card["squares"][i], ev["squares"][i]
         known = sq.get("type") in _BINGO_TYPES
-        who = st["who"]
+        who = st.get("who") or []
+        n_who = int(st.get("n", len(who)))
         team = ""
         if st["need"] > 1 or sq.get("need") in ("half", "third", "quarter"):
-            so_far = " &#10003;" if st["done"] else f' &middot; {len(who)}/{st["need"]}'
+            so_far = " &#10003;" if st["done"] else f' &middot; {n_who}/{st["need"]}'
             team = (f'<span class="tm{" ok" if st["done"] else ""}">&#128101; {_bg_need(sq, st["need"])}'
                     f'{so_far}</span>')
         marks = "".join(
@@ -1866,16 +2094,16 @@ def bingo_html(bv, cfg, loading=False):
                     f'<span class="fm">{fams.get(sq.get("fam"), "")}</span><span class="df" title="{dname}">{dots}</span>'
                     f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
                     f'{rule}{team}{marks}</button>')
-        whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who)
+        whose = ", ".join(e(names.get(u, ("?", ""))[0]) for u in who) if who else (f"{n_who} of you" if n_who else "")
         if st["need"] > 1 or sq.get("need") in ("half", "third", "quarter"):
             state = (f'A team square: {_bg_need(sq, st["need"])} have to pass the mark this week. '
-                     + (f"Done by {whose}." if st["done"] else f"So far: {whose}." if who else "Nobody yet."))
+                     + (f"Done by {whose}." if st["done"] else f"So far: {whose}." if whose else "Nobody yet."))
         else:
-            state = f"Stamped by {whose}." if who else "Not yet. Any one of you can stamp it."
+            state = f"Stamped by {whose}." if whose else "Not yet. Any one of you can stamp it."
         mine = ""
         if known and i < len(progress) and progress[i]:
             done, words = progress[i]
-            if me in who or done:
+            if me in who or done:  # a team card has no who: my own progress says
                 mine = '<span class="me">You: done.</span>'
             elif sq.get("type") in (bv.get("withheld") or ()):
                 mine = (f'<span class="me">You: {e(words)}</span>'
@@ -1899,10 +2127,12 @@ def bingo_html(bv, cfg, loading=False):
     if ev.get("older"):
         n = ev["older"]
         older = f'<div class="bg-row bg-q">{n} of you need{"s" if n == 1 else ""} to update Due Crew to play.</div>'
+    copy = ("" if team_card else
+            f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a>')
+    title = "Team bingo" if team_card else f'{e(bv.get("squad") or "Squad")} bingo'
     return (head
-            + f'<div class="bg-bar">{back}<b>{e(bv.get("squad") or "Squad")} bingo</b>'
-              f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>'
-              f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a></div>'
+            + f'<div class="bg-bar">{back}<b>{title}</b>'
+              f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>{copy}</div>'
             + f'<div class="bg-grid">{squares}</div>'
             + f'<div class="bg-row">{foot}</div>' + older
             + f'<div class="bg-info"><div data-i=""></div>{infos}</div>'
@@ -1957,13 +2187,13 @@ def share_menu_items(show_up, squad_ok=False):
     every tab. Today's numbers aren't offered in just-show-up mode."""
     items = [(None, "As text")]
     if not show_up:
-        items.append(("Today", "sharetoday"))
-    items.append(("This week", "sharecrewweek"))
+        items.append(("My day", "sharetoday"))
+    items.append(("Our week", "sharecrewweek"))
     if squad_ok and not show_up:
         items.append(("The squad's day", "squadshare"))
     items.append((None, "As a picture"))
     if not show_up:
-        items.append(("Today…", "picturetoday"))
+        items.append(("My day…", "picturetoday"))
     items += [("My week…", "pictureweek"), ("My year…", "pictureyear"),
               ("All time…", "picturealltime")]
     return items
@@ -3237,6 +3467,10 @@ def _due_plan(r):
         extra.append(f'for {e(r["prep"])}')
     if r.get("crew") and int(r["crew"][1]) > 1:
         extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
+    if r.get("upd"):
+        # 3.7.3: an author's update adds to this date; it opens when I say
+        said = f'+{int(r["upd"]):,} added' if int(r["upd"]) > 0 else "updated"
+        extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
     bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""

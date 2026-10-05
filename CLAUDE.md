@@ -614,6 +614,50 @@ add-on.
   never refused. `PUT /settings` with the save the server has writes
   nothing.
 
+- 3.7.3 plan updates (mock "Plan Updates", option B): every refresh sends the
+  plans' stamp it last saw (`pv`, `session.plans_pv`) and the plans come
+  again only when it moved (an author saved or posted, my own days changed
+  on the site): no new requests. After the day's morning (`plans_day`)
+  fresh plans never open on their own: `plan_flow.midday`, on the Decks
+  screen only (it waits for Decks from the reviewer, `plans_midday`), dry-
+  runs the morning (`run(dry=True)`) and keeps what an update adds to today
+  and earlier in `_state["plan_updates"]` for the plan's note (Open, one undo
+  step; Not today, `ask_later`: tomorrow's morning, still applied as it
+  was) and Due's row. Future dates redraw at once. A follower who chose
+  Hold back has new cards of later dates held too (`hold_new`, morning and
+  midday). The change note says "updated" for a date whose picks changed
+  (`snapshot`'s third item; C5 ids and refs don't count). Posts
+  (`plan_posts`, migration 0019): authors post to followers on the plan
+  page's Updates tab or with a save ("Tell followers…"); Anki shows the
+  newest unread on the plan (`posts_seen` in plans.json, a week back at
+  most), the site's home feed lists them. An author sees "This version is
+  in N of M followers' Anki" (`seen_version`, written when a board carries
+  it). A date that opened is never closed again by an update.
+
+- 3.7.3 a plan's team and Insights (mocks "Plan Team and Insights", rounds
+  1–6): the plan card has three tabs, Plan · Team · Insights
+  (`_state["plan_sub"]`, per session). Team is opt-in per plan (migration
+  0020, `worker/src/team.ts`, `team_flow.py` glue, `team.py` pure): joining
+  shares that I showed up today (answered one of the plan's cards, my Anki
+  day; `team` on the sync carries the last 8 such days, so a phone's come late; rows I hold only), my questions and answers, and
+  my bingo squares from the plan's cards only (`bingo_flow.for_team`);
+  never a number, never weak spots. The board carries counts (`teams`:
+  shown, of, streak, faces, act, last) for the Plan tab's line and the
+  badge (unread: `team_seen` in plans.json); the tab is one request when it
+  opens (`GET /plans/{id}/team`), each click one more. Card questions carry
+  guid + card number, never text; each reader's Anki says "on a card you
+  have down" itself (`cards.i_know`), from the reviewer's "ask the team
+  about this…". Team bingo: the week's squares, the team's own middle
+  (asks, answers, 3 days), counts never who; `team.bingo_line` =
+  `bingoLine` in builder.js. Insights are mine alone and Anki only
+  (`team.insights`): the plan's topics (a tag's last part as words, merged
+  across resources) I pressed Again on in review or relearning in 14 days,
+  missed of reviewed (cards, 5+), the trend against the 14 before (10
+  points), Study (a filtered deck of those cards), Re-watch (the date's
+  watch link), Ask (Team with the topic in the box). On the site a
+  follower's plan page is Calendar · Team, the authors' newest post above
+  the tabs until closed (per browser); authors keep Updates.
+
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.

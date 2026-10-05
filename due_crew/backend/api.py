@@ -29,6 +29,7 @@ from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
+    clean_team_view, clean_teams,
 )
 
 FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
@@ -286,7 +287,10 @@ class ApiClient:
         # 3.7.2: got= says the last reply's cheers arrived, so the server lets
         # them go only now: a reply lost on the way loses no cheer
         got = int(self.session.get("cheers_got") or 0)
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}" if with_decks else f"/board?got={got}")
+        # 3.7.3: the plans' stamp as I last saw it; they come again only when it moved
+        pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}" if with_decks
+                                  else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
         span = list(labels) + ([tomorrow] if tomorrow else [])
@@ -341,8 +345,10 @@ class ApiClient:
             self.session["friend_ids"] = friends
             self.session.setdefault("restored_to", self.base)
             self._save_session()
-        # 3.1: plans ride the day's first refresh; later ones render the last
-        if with_decks:
+        # 3.1: plans ride the day's first refresh; 3.7.3: and any refresh whose
+        # stamp moved (an author saved, posted, or my own days changed on the site)
+        plans_came = with_decks or isinstance(data.get("plans"), list)
+        if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
             authored = [a for a in map(clean_authored, data.get("authored") or []) if a]
@@ -351,6 +357,14 @@ class ApiClient:
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
                 self._save_session()
+        # 3.7.3: the teams I'm on, as counts (none: on no team)
+        teams = clean_teams(data.get("teams"))
+        if teams != (self.session.get("teams") or {}):
+            self.session["teams"] = teams
+            self._save_session()
+        if isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
+            self.session["plans_pv"] = data["pv"][:40]
+            self._save_session()
         squads = None
         if with_decks and isinstance(data.get("squads"), list):
             # 3.6: the squads I'm in, as the server knows (it's the truth; the config caches it)
@@ -365,7 +379,9 @@ class ApiClient:
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
                 "plan_offers": list(self.session.get("plan_offers") or []),
-                "plans_fresh": bool(with_decks),
+                "plans_fresh": bool(plans_came),
+                # 3.7.3: plans that came later in the day (an update): ask, don't open
+                "plans_update": bool(plans_came and not with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
                 "cheers_at": int(data.get("cheersAt") or 0) if isinstance(data.get("cheersAt"), (int, float)) else 0,
@@ -481,7 +497,7 @@ class ApiClient:
 
     def push(self, labels, cfg, stats=None, backfill=None, shared_decks=None, heatmap=None,
              squad_row=None, squads=(), version=None, clock=None, plans=None,
-             known=None, stuck=None, log=None, log_back=None, log_window=None):
+             known=None, stuck=None, log=None, log_back=None, log_window=None, team=None):
         """One POST /sync with whatever this sync has. Returns (ok, gone):
         gone lists the squads I'm no longer in. heatmap: counts to share,
         "off" to take it down, None to leave it. plans (3.1): {plan id:
@@ -490,7 +506,8 @@ class ApiClient:
         3.2: known, the guids of cards I have down in decks I share (sent
         as changes since the last that went); stuck, the guids I'm stuck
         on (the answer lands in session["cards"]); log, my study log's
-        days, sent when they changed.
+        days, sent when they changed. 3.7.3: team, {plan id: {day?, play?}}
+        for the plans whose team I'm on, sent when it changed.
         Raises TransportError."""
         if self.session.get("needs_restore"):
             try:
@@ -530,6 +547,8 @@ class ApiClient:
                 body["knows"] = part
         if stuck is not None and not paused:
             body["stuck"] = list(stuck)[:300]
+        if team and not paused and _digest(team) != self.session.get("team_hash"):
+            body["team"] = team
         if log and _digest(log) != self.session.get("log_hash"):
             body["log"] = {"days": log}
         if log_back and log_back[0]:
@@ -553,6 +572,8 @@ class ApiClient:
             self.session["heatmap_hash"] = _digest(body["heatmap"])
         if "plans" in body:
             self.session["plans_hash"] = _digest(body["plans"])
+        if "team" in body:
+            self.session["team_hash"] = _digest(body["team"])
         if "knows" in body:
             self._save_known(sent_known)
         if "stuck" in body:
@@ -581,7 +602,7 @@ class ApiClient:
     def _without_32(body):
         """The sync as a 3.1 server takes it: no known or stuck cards, no
         log, and the week without a recap or asks' lines."""
-        out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log")}
+        out = {k: v for k, v in body.items() if k not in ("knows", "stuck", "log", "team")}
         week = out.get("week")
         if isinstance(week, dict) and ("recap" in week or any("q" in t for t in week.get("tricky") or [])):
             week = {k: v for k, v in week.items() if k != "recap"}
@@ -1007,6 +1028,49 @@ class ApiClient:
         if refs:
             body["refs"] = refs  # 3.6.5: pasted ids as guid + card number
         status, _ = self._call("PUT", f"/plans/{plan_id}/ids", body)
+        return status == 200
+
+    # ---- 3.7.3: a plan's team (each one request, on a click) ----
+
+    def team(self, plan_id, wk=""):
+        """The team as its tab shows it, or None. Raises TransportError."""
+        status, data = self._call("GET", f"/plans/{plan_id}/team" + (f"?wk={wk}" if wk else ""))
+        return clean_team_view(data) if status == 200 else None
+
+    def team_join(self, plan_id, wk=""):
+        status, data = self._call("POST", f"/plans/{plan_id}/team" + (f"?wk={wk}" if wk else ""), retry=False)
+        if status != 200:
+            return status  # 409: the team is full
+        self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "act": [], "last": None}
+        self._save_session()
+        return clean_team_view(data)
+
+    def team_leave(self, plan_id):
+        status, _ = self._call("DELETE", f"/plans/{plan_id}/team")
+        if status == 200:
+            (self.session.get("teams") or {}).pop(plan_id, None)
+            self._save_session()
+        return status == 200
+
+    def team_ask(self, plan_id, text, parent=None, guid=None, ord=0, topic=""):
+        """A question to the team (a card's: guid + card number, a topic),
+        or a reply. Never sent twice: it would post twice. The status."""
+        body = {"text": str(text)}
+        if parent:
+            body["parent"] = int(parent)
+        elif guid:
+            body.update(guid=str(guid)[:40], ord=int(ord or 0))
+        if topic and not parent:
+            body["topic"] = str(topic)[:80]
+        status, _ = self._call("POST", f"/plans/{plan_id}/asks", body, retry=False)
+        return status
+
+    def team_remove(self, plan_id, ask_id):
+        status, _ = self._call("DELETE", f"/plans/{plan_id}/asks/{int(ask_id)}")
+        return status == 200
+
+    def team_helped(self, plan_id, ask_id, on):
+        status, _ = self._call("POST", f"/plans/{plan_id}/asks/{int(ask_id)}/helped", {"on": bool(on)})
         return status == 200
 
     def my_plans(self):

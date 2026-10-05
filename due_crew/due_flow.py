@@ -81,6 +81,7 @@ def plan_dates(today):
         evs = {e.get("id"): e for e in doc.get("events") or [] if isinstance(e, dict)}
         applied = st.get("applied") or {}
         crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
+        upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
             if not opens or opens > end:
@@ -107,7 +108,11 @@ def plan_dates(today):
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
                           "what": P.topics_line([u]),
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
-                          "prep": str(ev.get("name") or "") if ev else None})
+                          "prep": str(ev.get("name") or "") if ev else None,
+                          # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
+                          # the only date the update touches; -1: one of several)
+                          "upd": (0 if u["id"] not in (upd.get("units") or []) else
+                                  int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1)})
         for e in evs.values():
             if today <= str(e.get("day") or "") <= end:
                 events.append({"day": e["day"], "name": str(e.get("name") or "?"), "plan": title})

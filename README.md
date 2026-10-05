@@ -50,7 +50,9 @@ chapters from a deck (Tools → Due Crew → Make a plan from a deck), set a
 pace, mark the exam, and share the code. Everyone following gets that
 day's cards each morning. Behind? **Catch up** or **Move my days back**.
 Plans can have co-authors and notes, go in your calendar app, and be
-shared in the library.
+shared in the library. Join a plan's **Team** to see who showed up today,
+ask and answer questions, and play bingo together; **Insights** shows the
+topics you miss most, worked out in your Anki.
 
 **Due**, above the board, is your day: what your plans open, ticking
 itself as you review, the lecture or chapter that goes with it, and your

@@ -397,7 +397,8 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   my_code=str(data.get("my_code") or _state["my_code"]),
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
-    opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False)
+    opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False,
+                      update=bool(data.get("plans_update")))  # 3.7.3: later in the day, asked
     if opened:
         toasts.append(opened)
     elif data.get("plans"):
@@ -485,6 +486,11 @@ def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
+    if _state.get("team_bingo_open"):
+        from . import team_flow  # 3.7.3: a plan team's card in its place
+        pid = _state["team_bingo_open"]
+        tv = (_state.get("team_view") or {}).get(pid) or {}
+        return board.bingo_html(team_flow.bingo_view(pid), c, loading=tv.get("state") == "fetching", team=True)
     if _state.get("bingo_open"):
         return board.bingo_html(_bingo_view(c), c,  # 3.6: the squad's card in its place
                                 loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()))
@@ -510,6 +516,10 @@ def _board_html(c):
 def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
+    if _state.get("plans_midday") and not _closing:
+        # 3.7.3: an update that came while reviewing waits for the Decks screen
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: plan_flow.midday(plan_flow.followed()))
     together.show_luck_card()
     rooms.refresh_widgets()
 
@@ -611,6 +621,13 @@ def _on_sync_done(full=False, light=False, fetch=None):
         extras = crew_cards.for_sync(c, light=light)  # 3.2: cards I know and I'm stuck on, my log
     except Exception:
         traceback.print_exc()
+    try:
+        from . import team_flow
+        team = team_flow.for_sync(c)  # 3.7.3: showed up today, and my squares, per plan team
+        if team:
+            extras = dict(extras or {}, team=team)
+    except Exception:
+        traceback.print_exc()
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
 
@@ -679,6 +696,7 @@ def _on_js(handled, message, context):
         _bingo_cmd(cmd)
     elif cmd == "period" and len(parts) > 2 and parts[2] in board.PERIODS:
         _state["bingo_open"] = False
+        _state["team_bingo_open"] = None
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)
@@ -953,7 +971,12 @@ def _share_menu(c):
     for label, key in board.share_menu_items(
             bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):
         if label is None:
-            menu.addSection(key)
+            # a heading: macOS draws a QMenu section's title as a bare line,
+            # so it's a greyed item that can't be clicked
+            if menu.actions():
+                menu.addSeparator()
+            head = menu.addAction(key)
+            head.setEnabled(False)
         else:
             menu.addAction(label).triggered.connect(lambda _=False, k=key: run[k]())
     menu.exec(QCursor.pos())

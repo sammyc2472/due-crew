@@ -63,7 +63,7 @@ def _week(wk):
         seen = d.get("seen")
         d.clear()
         d.update(wk=wk, zero=[], newdone=[], counts={}, lines={}, seen=seen if seen == wk else "")
-    for k, default in (("zero", []), ("newdone", []), ("counts", {}), ("lines", {})):
+    for k, default in (("zero", []), ("newdone", []), ("counts", {}), ("lines", {}), ("team", {})):
         if not isinstance(d.get(k), type(default)):
             d[k] = default
     return d
@@ -174,6 +174,86 @@ def for_row(c):
         _state["bingo_mine"] = {"wk": wk, "play": play, "ids": _ids(cd),
                                 "progress": [B.progress(sq, f) if B.known(sq) else (False, "")
                                              for sq in cd["squares"]] if cd else None}
+        _save()
+        return play
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+# ---- 3.7.3: a plan's team plays the week's squares on the plan's cards only ----
+
+def _in_plan(dids):
+    ids = ",".join(str(int(d)) for d in dids) or "0"
+    return f"cid IN (SELECT id FROM cards WHERE did IN ({ids}) OR odid IN ({ids}))"
+
+
+def _team_facts(q, dids, today, td, deck_tree=None):
+    """bingo.facts for one plan: my answers on its deck's cards, new cards
+    from it, and the days its deck was seen with nothing due / no new left
+    (`td`, kept per plan in bingo.json)."""
+    inplan = _in_plan(dids)
+    week = B.week_labels(today)
+    cutoff = int(mw.col.sched.day_cutoff)
+    times = {}
+    for rid, in_day in mw.col.db.all(
+            f"SELECT id, CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog "
+            f"WHERE ease > 0 AND id >= ? AND id < ? AND {inplan} ORDER BY id",
+            cutoff - 1, (cutoff - 7 * 86400) * 1000, cutoff * 1000):
+        lb = q.day_label(int(in_day))
+        if lb in week:
+            times.setdefault(lb, []).append(datetime.datetime.fromtimestamp(rid / 1000))
+    daily = {q.day_label(int(ago)): int(n) for ago, n in mw.col.db.all(
+        f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), COUNT(*) FROM revlog "
+        f"WHERE ease > 0 AND id >= ? AND id < ? AND {inplan} GROUP BY 1",
+        cutoff - 1, (cutoff - 45 * 86400) * 1000, cutoff * 1000) or []}
+    new = {q.day_label(int(ago)): int(n) for ago, n in mw.col.db.all(
+        f"SELECT CAST((? - r.id / 1000) / 86400 AS INTEGER), COUNT(DISTINCT r.cid) FROM revlog r "
+        f"WHERE r.ease > 0 AND r.id >= ? AND r.id < ? AND r.{inplan} AND NOT EXISTS "
+        f"(SELECT 1 FROM revlog x WHERE x.cid = r.cid AND x.ease > 0 AND x.id < r.id) GROUP BY 1",
+        cutoff - 1, (cutoff - 8 * 86400) * 1000, cutoff * 1000) or []}
+    if times.get(today) and (today not in td["zero"] or today not in td["newdone"]):
+        node = _node((deck_tree or mw.col.sched.deck_due_tree)(), int(dids[0]))
+        if node is not None:
+            if node.review_count + node.learn_count == 0 and today not in td["zero"]:
+                td["zero"].append(today)
+            if new.get(today) and node.new_count == 0 and today not in td["newdone"]:
+                td["newdone"].append(today)
+    roll = datetime.datetime.fromtimestamp(cutoff).hour
+    return B.facts(week, today, times, daily, new, td["zero"], td["newdone"], rollover=roll)
+
+
+def _node(node, did):
+    if node.deck_id == did:
+        return node
+    for child in node.children:
+        got = _node(child, did)
+        if got is not None:
+            return got
+    return None
+
+
+def for_team(c, pid, dids, deck_tree=None):
+    """My play on a plan's team this week, from the plan's cards only, or
+    None (no card this week, or paused). Main thread."""
+    if not mw.col or c.get("paused") or not dids:
+        return None
+    try:
+        from .stats.queries import StatsQueries
+        q = StatsQueries(mw.col)
+        today = q.day_label(0)
+        wk = B.week_key(today)
+        d = _week(wk)
+        teams = d.setdefault("team", {})
+        td = teams.setdefault(pid, {"zero": [], "newdone": []})
+        f = _team_facts(q, list(dids), today, td, deck_tree)
+        cd = card()
+        cd = cd if cd and cd.get("wk") == wk else None
+        if not cd:
+            return None
+        play = B.play(cd, f, show_up=bool(c.get("show_up")), counts={}, hide=B.withheld(c))
+        _state.setdefault("team_bingo_mine", {})[pid] = {
+            "wk": wk, "progress": [B.progress(sq, f) if B.known(sq) else (False, "") for sq in cd["squares"]]}
         _save()
         return play
     except Exception:
