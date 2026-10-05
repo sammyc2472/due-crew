@@ -215,9 +215,9 @@ def gather_shared_decks(col, cfg):
             "day": today_label,
         }
         # the same privacy switches as the board's columns
-        if cfg.get("share_reviews", True):
+        if cfg.get("share_reviews", True) and not cfg.get("show_up"):
             entry["today"] = today
-        if cfg.get("share_retention", True) and graded:
+        if cfg.get("share_retention", True) and graded and not cfg.get("show_up"):
             entry["ret"] = round(correct / graded * 100, 1)
         out.append(entry)
     return out

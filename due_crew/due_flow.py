@@ -247,7 +247,7 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
     Returns the card ids."""
     rows = col.db.all(
         "SELECT c.id, c.nid FROM cards c JOIN notes n ON n.id = c.nid "
-        "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND (c.queue = -1 OR c.lapses >= 8) "
+        "WHERE (' ' || lower(n.tags) || ' ') LIKE '% leech %' AND c.lapses > 0 AND (c.queue = -1 OR c.lapses >= 8) "
         f"ORDER BY c.id LIMIT {int(cap)}")
     if not rows:
         return []

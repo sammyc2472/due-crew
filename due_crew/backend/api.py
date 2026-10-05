@@ -507,7 +507,9 @@ class ApiClient:
             self._note_days(labels, stats, backfill)
         body["week"] = self.week_doc(labels, cfg)
         paused = bool(cfg.get("paused"))
-        if shared_decks is not None and not paused and _digest(shared_decks) != self.session.get("decks_hash"):
+        if paused and shared_decks is not None:
+            shared_decks = []  # nothing for now: the decks come down too, as the heatmap does
+        if shared_decks is not None and _digest(shared_decks) != self.session.get("decks_hash"):
             body["decks"] = shared_decks
         if heatmap is not None:
             want = {"counts": heatmap} if isinstance(heatmap, dict) and not paused else None
@@ -560,6 +562,9 @@ class ApiClient:
             self.session["log_back"] = {"uid": self.user_id, "skip": 0, "done": True}
         if "log" in body and log:
             self.session["log_hash"] = _digest(log)
+        if self.session.get("log_try_day"):
+            # the log through this day is up (sent now, or the same as last time)
+            self.session["log_sent_day"] = self.session.pop("log_try_day")
         if log_window == "full":
             # the long first window went (or had nothing to send: a break of
             # months): 8 days from now on, and the history import may start

@@ -210,12 +210,17 @@ def ensure(then=None):
         return
     cl = client()
     _state["settings_pulling"] = True
-    app._bg(cl.get_settings, _pulled)
+    gen = app.generation
+    app._bg(cl.get_settings, lambda result: _pulled(result, gen))
 
 
-def _pulled(result):
+def _pulled(result, gen=None):
     cl = client()
     doc, status = result if isinstance(result, tuple) else (None, 0)
+    if gen is not None and gen != app.generation:
+        # another profile or account since it went out: not theirs to apply
+        _state["settings_pulling"] = False
+        return
     try:
         if status == 200 and isinstance(doc, dict):
             at = str(doc.get("at") or "")
@@ -237,6 +242,8 @@ def _pulled(result):
                     cl._save_session()
                     if app.swap:
                         app.swap(cfg())
+            elif cl.session.get("settings_dirty"):
+                push(cfg())  # an edit whose upload failed: nothing newer up there
         elif status == 404:
             push(cfg())  # the account's first settings: this computer's
     finally:
@@ -315,11 +322,13 @@ def on_change(c):
     """app.save_cfg calls this when an account setting changed here."""
     if not client().signed_in:
         return
-    if _state["settings_ready"]:
+    cl = client()
+    if _state["settings_ready"] and (cfg().get(SEEN_KEY) or cl.session.get("settings_day") == _today()):
         push(c)
     else:
-        # not pulled yet: note the edit, pull, and let the newer side win
-        cl = client()
+        # not pulled yet, or the pull failed on a config that has never held
+        # the account's settings: pushing now would put this computer's
+        # defaults over them. Note the edit, pull, and let the newer side win
         cl.session.update(settings_dirty=True, settings_local_at=_now())
         cl._save_session()
         ensure()

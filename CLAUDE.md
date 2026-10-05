@@ -650,9 +650,10 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   out with its clicks reaching nothing). Anything a click adds has its way
   back on the same screen.
 - A card's own script runs on the review screen, in the browser's preview
-  and in Cards…: from any page but the ones Due Crew draws on (Decks,
-  Overview, the top bar, the reviewer's bottom bar: `_our_page`) only the
-  room widget's keyed commands in `room_model.CARD_PAGE_CMDS` are taken
+  and in Cards…, and a deck's description runs on Overview: from any page
+  but the ones Due Crew draws on (Decks, the top bar, the reviewer's bottom
+  bar: `_our_page`) only the widgets' keyed commands in
+  `room_model.CARD_PAGE_CMDS` are taken
   (`room_model.trusted`); anything that acts for me elsewhere comes from
   the board, the bars or a dialog.
 - A failed request is sent again only when twice can't do a thing twice

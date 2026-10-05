@@ -245,6 +245,12 @@ def _show_break(room):
     except Exception:
         pass
     _state["room_break"] = True
+    # Anki's Auto Advance answers on a timer, past the shortcuts: its
+    # timers start after this hook, so they're stopped a moment later
+    try:
+        mw.progress.single_shot(50, _stop_auto_advance)
+    except Exception:
+        pass
     # one refresh per break: who's in the room now, for the chip. At most
     # one light fetch a round (a doc per friend), and only while reviewing.
     mark = (room_model.room_key(room), room_model.phase(room)["round"])
@@ -282,6 +288,24 @@ def _remove_break():
         mw.reviewer.replayAudio()
     except Exception:
         pass
+
+
+def _stop_auto_advance():
+    if _state["room_break"] and mw.state == "review":
+        stop = getattr(mw.reviewer, "_clear_auto_advance_timers", None)
+        if stop:
+            try:
+                stop()
+            except Exception:
+                pass
+
+
+def will_answer(proceed, reviewer, card, ease):
+    """reviewer_will_answer_card: no answer lands under the break, whatever
+    sends it (Auto Advance, another add-on)."""
+    if _state["room_break"]:
+        return (False, ease)
+    return (proceed, ease)
 
 
 def swallow(message):
@@ -329,6 +353,8 @@ def on_question(card):
 
 
 def on_answer(card):
+    if _state["room_break"]:
+        _stop_auto_advance()  # Auto Advance's answer timer starts with the answer side
     _eval(getattr(getattr(mw, "reviewer", None), "web", None),
           "window.dcRoomFit && window.dcRoomFit();")
 

@@ -3069,7 +3069,12 @@ DUE_CSS = """
     /* what's next when the day's done: the one part that gives way (else it
        ran past the box and took Show with it) */
     #due-crew .du-one .du-tm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; } }
+    /* narrow: the bar goes and "Study ›" keeps its words (it was squeezed to
+       nothing and Show spilled out of the box) */
+    @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; }
+      #due-crew .du-one .wbar { display: none; } #due-crew .du-one .du-go { min-width: auto; } }
+    /* narrower still, there's more than one line holds: it wraps */
+    @media (max-width: 400px) { #due-crew .du-one { flex-wrap: wrap; } }
     #due-crew .du-sub a { color: var(--dc-accent); }
     #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
 """

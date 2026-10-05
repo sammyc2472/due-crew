@@ -161,7 +161,7 @@ class DeckIndex:
         # kept between refreshes while this fingerprint holds (a few ms),
         # and only each card's state is read again
         sig = (tuple(sorted((d, names.get(d, "")) for d in tree)),
-               tuple(col.db.first("SELECT count(), max(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
+               tuple(col.db.first("SELECT count(), max(n.mod), total(n.mod), max(c.id), sum(c.did), sum(c.odid), sum(c.ord) "
                                   f"FROM cards c JOIN notes n ON n.id = c.nid {where}") or ()))
         key = (id(col), self.did)
         kept = _STATIC.get(key)
@@ -672,8 +672,8 @@ def waiting_new(doc, prog, today):
     n = 0
     for u in units(doc):
         if str(u.get("opens") or "9999") < today:
-            _o, s, t = prog.get(u["id"], [0, 0, 0])
-            n += max(0, int(t) - int(s))
+            o, s, _t = prog.get(u["id"], [0, 0, 0])
+            n += max(0, int(o) - int(s))  # opened and not seen: an even date's later slices are shut on purpose
     return n
 
 
@@ -733,15 +733,19 @@ def open_cards(col, cids, label):
     return len(ids)
 
 
-def holdable(idx, doc, today, swap=None):
+def holdable(idx, doc, today, swap=None, applied=None):
     """3.3, "Hold back later dates until their day": the cards of dates
     that haven't opened yet which are active now and never studied (new,
     not suspended, not a leech). A card that is also on an opened date is
-    never held. What Follow offers to suspend, once, when asked."""
+    never held. A date already applied here (opened early, C2) counts as
+    opened. What Follow offers to suspend, once, when asked."""
+    applied = applied or {}
     opened, later = set(), set()
     for u in units(doc):
         cids = idx.match(u, swap, doc.get("deck", ""))
-        (opened if str(u.get("opens") or "") <= today else later).update(cids)
+        have = applied.get(u["id"])
+        done = isinstance(have, str) and not have.startswith("skip:")
+        (opened if done or str(u.get("opens") or "") <= today else later).update(cids)
     return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
 
 

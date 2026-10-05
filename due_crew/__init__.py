@@ -569,6 +569,8 @@ def _on_sync_done(full=False, light=False, fetch=None):
         try:
             heat = (cached_heatmap(StatsQueries(mw.col), _profile_files(), HEATMAP_DAYS)
                     if c.get("share_heatmap", True) else "off")
+            if isinstance(heat, dict) and c.get("show_up"):
+                heat = {lb: 1 for lb, n in heat.items() if n}  # just show up: which days, no counts
         except Exception:
             traceback.print_exc()
     row = None
@@ -613,12 +615,13 @@ def _on_sync_done(full=False, light=False, fetch=None):
 
 def _our_page(context):
     """3.7.1 review: the pages Due Crew draws on, where a card's own script
-    never runs: the Decks screen, Overview, the top bar and the reviewer's
-    bottom bar. Everything else (the review screen, the browser's preview,
-    Cards…, another add-on's page) gets the card page's rules: the room
-    widget's keyed commands only."""
+    never runs: the Decks screen, the top bar and the reviewer's bottom bar.
+    Everything else (the review screen, Overview with a deck's description,
+    the browser's preview, Cards…, another add-on's page) gets the card
+    page's rules: the widgets' keyed commands only."""
     ours = [DeckBrowser]
-    for mod, name in (("aqt.overview", "Overview"), ("aqt.toolbar", "Toolbar"),
+    # not Overview: it puts a deck's description in as it is, script and all
+    for mod, name in (("aqt.toolbar", "Toolbar"),
                       ("aqt.reviewer", "ReviewerBottomBar")):
         try:
             ours.append(getattr(__import__(mod, fromlist=[name]), name))
@@ -1337,6 +1340,8 @@ gui_hooks.browser_will_show_context_menu.append(plan_flow.browser_menu)
 # waits for the card on screen to be answered.
 gui_hooks.reviewer_did_show_question.append(rooms.on_question)
 gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
+if hasattr(gui_hooks, "reviewer_will_answer_card"):
+    gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
 gui_hooks.state_did_change.append(rooms.on_state)
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)

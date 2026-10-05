@@ -210,6 +210,8 @@ BAR_BALANCE = r"""
     if (!row || row.cells.length < 3) { return; }
     var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
     l.style.width = r.style.width = '';
+    var t0 = document.getElementById('dc-knows-t');
+    if (t0 && t0.style.maxWidth) { t0.style.maxWidth = '24vw'; }  // as drawn (cards._CHIP_JS); shrunk again below if need be
     // another add-on can draw its button over the bar (positioned, out of
     // the row), so ours would sit underneath it: step past anything that does
     function clear(el) {
@@ -404,7 +406,10 @@ _RUNTIME = r"""
       }
       root.style.display = left > 16 + __GUTTER__ + 24 ? 'grid' : 'none';
     };
-    window.addEventListener('resize', function () { window.dcRoomFit && window.dcRoomFit(); });
+    if (!window.dcRoomFitResize) {
+      window.dcRoomFitResize = true;
+      window.addEventListener('resize', function () { window.dcRoomFit && window.dcRoomFit(); });
+    }
   } else if (KIND === 'break') {
     // a type-in answer box keeps no focus under the break
     try { if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); } } catch (e) {}
@@ -462,6 +467,8 @@ _RUNTIME = r"""
     leave.onclick = function () { drop('card'); send('roomleave'); };
     setTimeout(function () {
       document.addEventListener('mousedown', function out(ev) {
+        // a card closed some other way (×, Tuck, Leave, redrawn) takes this with it
+        if (!root.isConnected) { document.removeEventListener('mousedown', out); return; }
         if (!root.contains(ev.target)) { drop('card'); document.removeEventListener('mousedown', out); }
       });
     }, 0);
@@ -502,12 +509,13 @@ def chip_side(value):
 def widget_js(kind, data=None):
     """The JS that draws (or, with data None, removes) one widget. kind
     'off' removes them all from this webview."""
-    return (_RUNTIME.replace("__DATA__", json.dumps(data))
-            .replace("__KIND__", json.dumps(kind))
+    # the data goes in last: a name or a tip holding "__KEY__" stays text
+    return (_RUNTIME.replace("__KIND__", json.dumps(kind))
             .replace("__SQUARES__", json.dumps(SQUARES))
             .replace("__GUTTER__", str(GUTTER_WIDTH))
             .replace("__SIDE__", chip_side((data or {}).get("side")))
             .replace("__KEY__", json.dumps(CMD_KEY))
+            .replace("__DATA__", json.dumps(data))
             + (BAR_BALANCE if kind in ("bottom", "off") else ""))
 
 

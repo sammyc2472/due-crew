@@ -1637,7 +1637,7 @@ def test_settings_follow_account_v213():
         use(b)
         order = []
         real_pulled = account._pulled
-        account._pulled = lambda r: (order.append("pulled"), real_pulled(r))[1]
+        account._pulled = lambda r, *a: (order.append("pulled"), real_pulled(r, *a))[1]
         account.ensure(lambda: order.append("sync"))
         account._pulled = real_pulled
         check("second computer: pulls before its first sync, and takes the account's settings",
@@ -3220,6 +3220,108 @@ def test_plans_buried_siblings():
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["n"] == "done \u00b7 1 sibling later"
           and due._date_row(x, set(), "2026-03-01")["n"] == "all seen"
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["done"])
+
+
+def test_bug_squash_oct():
+    """The October bug run: settings that never reach the account or that a
+    new computer's defaults overwrite; show-up and pause leaking numbers;
+    recover leeches touching a leech's siblings; a stale deck index; Hold
+    back re-closing early dates; Behind counting even dates' shut slices;
+    placeholders in names; Overview's description trusted."""
+    from due_crew import account, app as appmod, plans as P, due_flow as F, room_model as rm, cards as K
+    from due_crew.app import _state
+    import due_crew as dc
+    saved = (account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col)
+
+    def _bg(job, done=None):
+        try:
+            r = job()
+        except Exception:
+            r = None
+        if done:
+            done(r)
+    try:
+        appmod._bg, appmod.swap, account.mw.col = _bg, None, None
+        store = world({"sam": "Sammy"}, {})
+        a = new_client(store, "sam", "Sammy")
+        a.put_settings("2026-10-01T00:00:00.000000Z", {"shared_decks": [{"id": 11, "name": "Big"}], "muted": ["troll"],
+                       "share_retention": False})
+        b = new_client(store, "sam", "Sammy")
+        box = {"cfg": {"share_retention": True, "shared_decks": [], "emoji": ""}}
+        account.cfg, account.client = (lambda: dict(box["cfg"])), (lambda: b)
+        appmod.save_cfg = lambda c, from_account=False: box["cfg"].update(c)
+        _state.update(settings_ready=False, settings_pulling=False)
+        real = b.get_settings
+        b.get_settings = lambda: (None, 0)  # the first pull doesn't answer
+        account.ensure()
+        b.get_settings = real
+        box["cfg"]["emoji"] = "\U0001F525"
+        account.on_change(box["cfg"])
+        kept = store.settings["sam"]["settings"]
+        check("settings: a new computer whose first pull failed doesn't put its defaults over the account",
+              kept.get("muted") == ["troll"] and kept.get("share_retention") is False, kept)
+
+        # an edit whose upload failed goes at the next good pull
+        _state.update(settings_ready=False, settings_pulling=False)
+        b.session["settings_day"] = ""
+        account.ensure()  # pulled now: this computer holds the account's save
+        real_put = b.put_settings
+        b.put_settings = lambda at, s: False  # offline
+        box["cfg"]["share_retention"] = True
+        account.on_change(box["cfg"])
+        b.put_settings = real_put
+        check("settings: the failed upload leaves the edit dirty", b.session.get("settings_dirty") is True)
+        _state.update(settings_ready=False, settings_pulling=False)
+        b.session["settings_day"] = ""
+        account.ensure()
+        check("settings: the next pull with nothing newer up there sends it",
+              store.settings["sam"]["settings"].get("share_retention") is True and not b.session.get("settings_dirty"),
+              store.settings["sam"])
+    finally:
+        account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col = saved
+
+    # recover leeches: a leech's never-lapsed sibling stays shut
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET type = 2, lapses = 8, queue = -1 WHERE id = 5")
+    col.db.conn.execute("UPDATE notes SET tags = ' leech ' WHERE id = 50")
+    col.db.conn.execute("UPDATE cards SET type = 0, lapses = 0, queue = -1 WHERE id = 6")
+    sql = []
+    real_all = col.db.all
+    col.db.all = lambda q, *a: (sql.append(q), real_all(q, *a))[1]
+    try:
+        F.recover_leeches(col)
+    except Exception:
+        pass
+    col.db.all = real_all
+    check("recover leeches: only cards that lapsed themselves", any("c.lapses > 0" in q for q in sql), sql)
+
+    # the deck index sees a retag older than the newest note
+    col = _plan_col()
+    idx = P.DeckIndex(col, 10)
+    col.db.conn.execute("UPDATE notes SET tags = 'Step1::Renal::New', mod = 1 WHERE id = (SELECT nid FROM cards WHERE id = 3)")
+    check("deck index: a note edited with an older mtime is read again",
+          P.DeckIndex(col, 10).tag_cards("Step1::Renal::New") == {3})
+
+    # hold back leaves dates opened early alone; Behind counts what's open
+    doc = {"units": [{"id": "a", "opens": "2026-09-01", "tags": ["Step1::Cardio::Arrhythmia"]},
+                     {"id": "b", "opens": "2026-09-03", "tags": ["Step1::Renal"]}]}
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0, type = 0 WHERE id IN (3, 8)")
+    idx = P.DeckIndex(col, 10)
+    check("hold back: a later date already opened here isn't held",
+          P.holdable(idx, doc, "2026-09-01", applied={"b": "sig"}) == set()
+          and 8 in P.holdable(idx, doc, "2026-09-01") | {8})
+    check("Behind: opened and unseen only (an even date's later slices are shut on purpose)",
+          P.waiting_new({"units": [{"id": "u", "opens": "2026-09-01"}]}, {"u": [2, 2, 10]}, "2026-09-05") == 0)
+
+    # a crewmate's name holding a placeholder stays text
+    js = rm.widget_js("bottom", {"title": "Al__KEY__x", "names": ["Al__KEY__x"]})
+    check("widgets: a name with __KEY__ in it isn't replaced", "Al__KEY__x" in js and K.float_js({"text": "__KEY__"}).count("__KEY__") == 1)
+
+    # Overview runs a deck's description: not one of our pages
+    import inspect
+    check("trust: Overview (a deck's description runs there) isn't one of our pages",
+          '"aqt.overview"' not in inspect.getsource(dc._our_page))
 
 
 def test_plans_ids_e1():
