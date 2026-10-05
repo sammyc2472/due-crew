@@ -110,9 +110,11 @@ def fetch(pid, force=False):
     have = views.get(pid) or {}
     if not force and have.get("data") is not None and time.time() - float(have.get("at") or 0) < FRESH:
         return
-    if have.get("state") == "fetching":
+    if have.get("busy"):
+        if force:
+            views[pid] = dict(have, again=True)  # one more when this one lands: it may predate the change
         return
-    views[pid] = dict(have, state="fetching" if have.get("data") is None else have.get("state") or "ok")
+    views[pid] = dict(have, busy=True, state="fetching" if have.get("data") is None else have.get("state") or "ok")
     gen, cl, wk = app.generation, client(), _wk()
 
     def job():
@@ -124,16 +126,32 @@ def fetch(pid, force=False):
     def done(data):
         if gen != app.generation:
             return
+        again = (views.get(pid) or {}).get("again")
         if data is None or data is False:
-            views[pid] = dict(views.get(pid) or {}, state="failed" if (views.get(pid) or {}).get("data") is None else "ok")
+            views[pid] = dict(views.get(pid) or {}, busy=False, again=False,
+                              state="failed" if (views.get(pid) or {}).get("data") is None else "ok")
         else:
             views[pid] = {"at": time.time(), "data": data, "state": "ok"}
             if data.get("on"):
                 _mark_seen(pid, data)
+                _seed_card(data)
             else:
-                client().session.get("teams", {}).pop(pid, None)
+                (client().session.get("teams") or {}).pop(pid, None)
         app.swap(cfg())
+        if again:
+            fetch(pid, force=True)
     _bg(job, done)
+
+
+def _seed_card(data):
+    """The week's squares, from the team's card, for someone in no squad who
+    joined since the day's first refresh: their squares count from the next
+    sync, not tomorrow's. A squad's own card is never replaced (its middle
+    is the squad's)."""
+    b = data.get("bingo")
+    cl = client()
+    if b and not cl.session.get("bingo"):
+        cl.session["bingo"] = dict(b["card"], middle=dict(b["card"]["middle"]))
 
 
 def _mark_seen(pid, data):

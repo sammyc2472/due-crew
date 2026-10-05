@@ -117,8 +117,13 @@ describe("a plan's team (3.7.3)", () => {
     expect(v.asks[0]).toMatchObject({ name: "Kai", mine: false, remove: false,
       replies: [{ name: "Dre", text: "Both.", helped: true, author: true }] });
     expect(v.asks[1]).toMatchObject({ guid: "g1", ord: 0, topic: "Complement", mine: true, remove: true });
-    // the board: activity times and the latest question from someone else
-    expect((await sam.call("GET", "/board")).body.teams[p.id]).toMatchObject({ last: { name: "Kai" } });
+    // the board: the latest question from someone else; what moved, not by me
+    const tb = (await sam.call("GET", "/board")).body.teams[p.id];
+    expect(tb).toMatchObject({ last: { name: "Kai" } });
+    expect(tb.act).toHaveLength(1);  // kai's thread (dre replied); my own card question isn't news to me
+    await sam.call("POST", `/plans/${p.id}/asks`, { text: "me too", parent: q.id });
+    expect((await sam.call("GET", "/board")).body.teams[p.id].act).toHaveLength(0);  // I replied last
+    expect((await kai.call("GET", "/board")).body.teams[p.id].act).toHaveLength(2);
     // sam mutes kai: kai's question goes from sam's view
     await sam.call("PUT", "/settings", { v: 1, at: "2026-10-05T00:00:00.000000Z", settings: { muted: ["kai"] } });
     expect((await sam.call("GET", `/plans/${p.id}/team`)).body.asks.map((a: any) => a.id)).toEqual([card.id]);

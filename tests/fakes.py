@@ -1466,7 +1466,8 @@ class FakeWorker:
                              key=lambda a: (-a["act"], -a["id"]))[:20]
             last = next((a for a in threads if a["uid"] != me), None)
             out[pid] = {"shown": len(shown), "of": len(rows),
-                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4], "act": [a["act"] for a in threads]}
+                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4],
+                        "act": [a["act"] for a in threads if a.get("act_by", a["uid"]) != me]}
             if last:
                 out[pid]["last"] = {"name": self.users[last["uid"]]["name"] or "?", "text": last["text"]}
         return out
@@ -1533,11 +1534,11 @@ class FakeWorker:
             aid = max([a["id"] for a in self.team_asks] + [0]) + 1
             self.team_asks.append({"id": aid, "plan": pid, "uid": me, "parent": parent, "text": text,
                                    "guid": body.get("guid") if parent is None else None, "ord": body.get("ord") or 0,
-                                   "topic": body.get("topic") if parent is None else None, "helped": False, "at": now, "act": now})
+                                   "topic": body.get("topic") if parent is None else None, "helped": False, "at": now, "act": now, "act_by": me})
             if parent is not None:
                 for a in self.team_asks:
                     if a["id"] == parent:
-                        a["act"] = now
+                        a["act"], a["act_by"] = now, me
             return 200, {"id": aid, "text": text}
         if len(rest) >= 2 and rest[0] == "asks":
             aid = int(rest[1])

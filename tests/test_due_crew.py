@@ -6227,6 +6227,15 @@ def test_plan_team_v39():
             card = F.board_view({})["cards"][0]
             check("insights: the plan's card carries its tab", card["tabs"]["sub"] == "ins")
             dc._on_js(False, f"duecrew:planinsask:{pid}:0", DeckBrowser())
+            sq_card = {"wk": "2026-W36", "squares": [], "middle": {"name": "Squad's"}}
+            maya.session.pop("bingo", None)
+            TF._seed_card({"bingo": {"card": {"wk": "2026-W36", "squares": [], "middle": {"name": "Ask away"}}}})
+            seeded = maya.session.get("bingo")
+            maya.session["bingo"] = sq_card
+            TF._seed_card({"bingo": {"card": {"wk": "2026-W36", "squares": [], "middle": {"name": "Ask away"}}}})
+            check("team bingo: someone in no squad gets the week's card from the team's; a squad's card stays",
+                  seeded and seeded["middle"]["name"] == "Ask away" and maya.session["bingo"] is sq_card)
+            maya.session.pop("bingo", None)
             check("insights: Ask goes to Team with the topic in the box", _state["plan_sub"][pid] == "team"
                   and _state["team_draft"][pid] == "Renal: ")
     finally:

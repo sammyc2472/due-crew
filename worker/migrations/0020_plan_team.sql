@@ -27,7 +27,8 @@ CREATE TABLE plan_asks (
   topic TEXT,
   helped INTEGER NOT NULL DEFAULT 0,
   at INTEGER NOT NULL,
-  act INTEGER NOT NULL
+  act INTEGER NOT NULL,
+  act_by TEXT
 );
 CREATE INDEX plan_asks_plan ON plan_asks (plan, parent, act);
 CREATE INDEX plan_asks_parent ON plan_asks (parent);

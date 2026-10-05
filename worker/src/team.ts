@@ -224,7 +224,7 @@ export async function ask(req: Request, s: Session, env: Env, [id]: string[]): P
     const r = await env.DB.batch([
       env.DB.prepare("INSERT INTO plan_asks (plan, uid, parent, text, at, act) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(id, s.uid, body.parent, text, now, now),
-      env.DB.prepare("UPDATE plan_asks SET act = ? WHERE id = ?").bind(now, body.parent),
+      env.DB.prepare("UPDATE plan_asks SET act = ?, act_by = ? WHERE id = ?").bind(now, s.uid, body.parent),
     ]);
     return json({ id: r[0].meta.last_row_id, text });
   }
@@ -239,8 +239,8 @@ export async function ask(req: Request, s: Session, env: Env, [id]: string[]): P
   const mine = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_asks WHERE plan = ? AND uid = ? AND parent IS NULL AND at > ?")
     .bind(id, s.uid, now - 86400).first<number>("n");
   if ((mine ?? 0) >= THREADS_PER_DAY) throw new HttpError(429, "too_many_asks");
-  const r = await env.DB.prepare("INSERT INTO plan_asks (plan, uid, text, guid, ord, topic, at, act) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, s.uid, text, guid, ord, topic, now, now).run();
+  const r = await env.DB.prepare("INSERT INTO plan_asks (plan, uid, text, guid, ord, topic, at, act, act_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, s.uid, text, guid, ord, topic, now, now, s.uid).run();
   // the plan keeps its newest threads; their replies go with them
   const old = `SELECT id FROM plan_asks WHERE plan = ?1 AND parent IS NULL AND id NOT IN
                  (SELECT id FROM plan_asks WHERE plan = ?1 AND parent IS NULL ORDER BY act DESC, id DESC LIMIT ?2)`;
@@ -338,8 +338,8 @@ export async function forBoard(env: Env, uid: string) {
       `SELECT t.plan, t.uid, t.last_day, u.emoji, u.tz, u.rollover FROM plan_team t
          JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs}) AND ${STILL_IN}`).bind(...mine),
     env.DB.prepare(
-      `SELECT plan, uid, act, text, name FROM (
-         SELECT a.plan, a.uid, a.act, a.text, u.name,
+      `SELECT plan, uid, act, act_by, text, name FROM (
+         SELECT a.plan, a.uid, a.act, a.act_by, a.text, u.name,
                 ROW_NUMBER() OVER (PARTITION BY a.plan ORDER BY a.act DESC, a.id DESC) AS k
            FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid WHERE a.plan IN (${qs}) AND a.parent IS NULL)
         WHERE k <= ${ACT_ON_BOARD} ORDER BY act DESC`).bind(...mine),
@@ -354,7 +354,8 @@ export async function forBoard(env: Env, uid: string) {
     const threads = (acts.results as Obj[]).filter((a) => a.plan === plan && !muted.has(a.uid as string));
     const last = threads.find((a) => a.uid !== uid);
     out[plan] = { shown: shown.length, of: rows.length, faces: shown.slice(0, 4).map((m) => m.emoji || ""),
-      act: threads.map((a) => a.act), ...(last ? { last: { name: (last.name as string) || "?", text: last.text } } : {}) };
+      // what moved since I looked: not by me (my own question, my own reply)
+      act: threads.filter((a) => (a.act_by ?? a.uid) !== uid).map((a) => a.act), ...(last ? { last: { name: (last.name as string) || "?", text: last.text } } : {}) };
   }
   return out;
 }
