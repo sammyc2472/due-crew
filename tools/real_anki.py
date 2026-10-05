@@ -213,6 +213,36 @@ def check(path):
     ok("who knows it: the same cards as a card-by-card look", known == by_card and len(stuck) == 300, f"{len(known):,} known")
     ok("…read in one pass of the recent answers", t_full < 60 and t_light < 20,
        f"{t_full*1000:.0f} ms a full sync, {t_light*1000:.0f} ms a light one")
+
+    # 3.7.3: Insights, worked out on the main thread when the tab opens, and
+    # the team's days on every sync, over the same 400,000 answers
+    from due_crew import team as T
+    dids = ",".join(str(d) for d in col.decks.deck_and_child_ids(did))
+    # the last four weeks: 300 answers a day (the history above ends months ago)
+    recent, rid = [], (cut - 28 * 86400) * 1000
+    for _ in range(28 * 300):
+        rid += random.randint(250000, 326000)
+        recent.append((rid, random.choice(studied), -1, random.choice([1, 3, 3, 3, 4]), 10, 5, 2500, 8000, 1))
+    col.db.executemany("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)", recent)
+    t = tm()
+    answers = col.db.all(
+        f"SELECT r.cid, CAST((? - r.id / 1000) / 86400 AS INTEGER), r.ease FROM revlog r "
+        f"WHERE r.id >= ? AND r.ease > 0 AND r.type IN (1, 2) "
+        f"AND r.cid IN (SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids}))",
+        cut - 1, (cut - 2 * T.DAYS * 86400) * 1000)
+    idx3 = P.DeckIndex(col, did)
+    rows = T.insights(T.topic_list(doc), lambda tg: idx3.tag_cards(tg), answers)
+    t_ins = tm() - t
+    ok("insights: the plan's topics missed most, from 28 days of answers", 0 < len(rows) <= T.ROWS and t_ins < 0.5,
+       f"{len(answers):,} answers, {len(rows)} rows, {t_ins*1000:.0f} ms")
+    t = tm()
+    days = col.db.list(
+        f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
+        f"AND cid IN (SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids}))",
+        cut - 1, (cut - 8 * 86400) * 1000, cut * 1000)
+    t_days = tm() - t
+    ok("team: the last eight days with a plan card answered, every sync", len(days) == 8 and t_days < 0.05,
+       f"{t_days*1000:.0f} ms")
     col.close()
 
 
