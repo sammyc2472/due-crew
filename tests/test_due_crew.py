@@ -2173,6 +2173,11 @@ def test_together_v210():
           "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-knows'))" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-room-bottom'))" in rm.BAR_BALANCE)
+    kj = crew_cards.chip_js({"text": "x", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
+    check("bottom bar: the chip's words end in an ellipsis (never under its button), the cells are measured unwrapped",
+          "text-overflow:ellipsis" in kj and "flex:none" in kj and "s.title = D.title || D.text" in kj
+          and "sum +=" in rm.BAR_BALANCE and "paddingLeft) - parseFloat" in rm.BAR_BALANCE
+          and "data-short" in rm.BAR_BALANCE and "data-short" in kj and "data-full" in rm.BAR_BALANCE)
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
@@ -3247,7 +3252,8 @@ def test_plans_buried_siblings():
     v = F.session_view(plan, {"deck_id": 10}, idx, {}, _day(0))
     check("behind: a sibling buried by an older note's review today isn't behind", v["behind"] == 0 and v["done"] == 0, v)
     v = F.session_view(plan, {"deck_id": 10}, idx, {5: 0}, _day(0))
-    check("behind: one buried by a note started today is today's", v["done"] == 2 and v["behind"] == 2, v)
+    check("behind: a past date's cards seen today (one buried by a note started today) clear it",
+          v["done"] == 0 and v["behind"] == 0, v)
 
 
 def test_bug_squash_oct():
@@ -4502,6 +4508,14 @@ def test_schedule_model_v32():
           view["share"] == 20 and view["behind"] == 30 and view["target"] == 28 and view["done"] == 5, str(view))
     leave = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 0, D("2026-10-07"), catch="leave")
     check("today: leaving it open keeps just the share", leave["target"] == 20)
+    caught = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 30, D("2026-10-07"), catch="leave", seen_now={"rn": 40})
+    check("today: catching up today clears behind (it's counted now, not this morning)",
+          caught["behind"] == 0 and caught["target"] == 20 and caught["done"] == 0, str(caught))
+    ahead = S.today_view(doc, five, {"rn": 100}, {"rn": 10}, 50, D("2026-10-07"), seen_now={"rn": 60})
+    check("today: past what was behind, the rest is today's", ahead["behind"] == 0 and ahead["done"] == 20, str(ahead))
+    sib = S.today_view(doc, five, {"rn": 100}, {"rn": 45}, 15, D("2026-10-07"), seen_now={"rn": 60})
+    check("today: what was already seen (a started note's siblings) isn't asked again",
+          sib["target"] == 15 and sib["done"] == 15 and sib["behind"] == 0, str(sib))
     rest = S.today_view(doc, five, {"rn": 100}, {"rn": 100}, 0, D("2026-10-10"))
     check("today: a rest day says so", rest["kind"] == "rest" and rest["target"] == 0)
     missed = S.missed_study_days(doc, five, D("2026-10-08"), {"2026-10-05": 20, "2026-10-06": 2},
@@ -4844,6 +4858,15 @@ def test_who_knows_v32():
     check("chip: nobody I can name, nothing", K.chip_view({"knows": ["zed"], "tips": []}, [], names) is None)
     asked = K.chip_view(None, [], names, asks=[("dre", 1)])
     check("chip: a crewmate's ask on a card I have, with Tip", asked["cmd"] == "knowsreply:dre:1" and asked["act"] == "Tip")
+    asked_q = K.chip_view(None, [], names, asks=[("dre", 1, "why axillary?")])
+    check("chip: a crewmate's ask shows their line, and a short form for a narrow bar",
+          asked_q["text"] == "\U0001F419 Dre: \u201cwhy axillary?\u201d" and asked_q["short"] == "\U0001F419 Dre asked"
+          and asked["text"] == "\U0001F419 Dre asked about this", str(asked_q))
+    check("chip: once I've asked, it says so (Asked changes my line)",
+          K.chip_view({"knows": ["dre"]}, [], names, mine=True)["act"] == "Asked" and v["act"] == "Ask"
+          and v["short"] == "\U0001F419 Dre +1")
+    check("chip: a tip's short form names whose tip it is",
+          K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
@@ -4965,8 +4988,12 @@ def test_session_card_v32():
     check("session: answered, the question goes, and spreading adds a quarter a day",
           v2["ask"] is None and v2["target"] == 3 + 3)
     seen_today = {c: 0 for c in list(idx.cards)[:4]}
-    v3 = F.session_view(plan, dict(st, catch=None), idx, seen_today, _day(0))
-    check("session: cards first seen today count toward today", v3["done"] == 4)
+    for c in seen_today:
+        col.db.conn.execute("UPDATE cards SET type = 2, queue = 2 WHERE id = ?", (c,))
+    v3 = F.session_view(plan, dict(st, catch=None), F_idx := P.DeckIndex(col, 10), seen_today, _day(0))
+    check("session: cards seen today fill what's behind first (the oldest dates), then today's",
+          v3["behind"] == 5 and v3["done"] == 0, str(v3))
+    idx = F_idx
     html_ = board._plan_card_html(F.card_view(plan, st, {}, _day(0), session=v2))
     check("board: the Today box, and Study now", "/ 6 new" in html_ and "reviews" in html_ and 'class="ptoday' in html_
           and "planstudy:p1" in html_ and "<i>" not in html_.replace("<i style", "").replace("<i class", ""))

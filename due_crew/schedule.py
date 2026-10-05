@@ -173,25 +173,38 @@ def pick(order, open_now, want):
 
 # ---- today's session, behind, the push back ----
 
-def today_view(doc, sched, totals, seen_before, new_today, day, catch=None):
+def today_view(doc, sched, totals, seen_before, new_today, day, catch=None, seen_now=None):
     """What the session card says for one plan. totals: {unit id: cards};
     seen_before: {unit id: seen by the start of today}; new_today: plan
-    cards seen for the first time today. catch: "spread" or "leave" once
-    I've answered the missed-days question. Returns {kind, target, done,
-    behind, share}."""
+    cards seen for the first time today; seen_now: {unit id: seen now}
+    (plans.counts, as the day's details and Due count). catch: "spread" or
+    "leave" once I've answered the missed-days question. Returns {kind,
+    target, done, behind, share}: behind is what's still behind now, so
+    catching up today clears it; target is what today asks beyond what was
+    already seen, and done what of it (and of a spread's catch-up) is seen."""
     shift = shift_days(doc, sched)
     yesterday = day - datetime.timedelta(days=1)
-    todays = behind = 0
+    todays = behind = start_behind = ask = done = 0
     for u in units(doc):
         t = int(totals.get(u["id"]) or 0)
         if not t:
             continue
         todays += share(doc, u, sched, t, day, shift)
-        behind += max(0, quota(doc, u, sched, t, yesterday, shift) - int(seen_before.get(u["id"]) or 0))
-    extra = math.ceil(behind / CATCH_UP_DAYS) if behind and catch == "spread" else 0
+        q0, q1 = quota(doc, u, sched, t, yesterday, shift), quota(doc, u, sched, t, day, shift)
+        sb = int(seen_before.get(u["id"]) or 0)
+        sn = sb if seen_now is None else int(seen_now.get(u["id"]) or 0)
+        start_behind += max(0, q0 - sb)
+        behind += max(0, q0 - sn)
+        ask += max(0, q1 - max(q0, sb))
+        done += max(0, sn - max(q0, sb))
+    if seen_now is None:  # the old shape: behind as of this morning, today's firsts as done
+        behind, ask, done = start_behind, todays, int(new_today)
+    extra = math.ceil(start_behind / CATCH_UP_DAYS) if start_behind and catch == "spread" else 0
+    if seen_now is not None and extra:
+        done += min(extra, start_behind - behind)
     ph = phase(doc, day, shift)
     kind = ph if ph != "build" else ("rest" if weight(doc, sched, day, shift) == 0 and not todays else "study")
-    return {"kind": kind, "target": todays + extra, "share": todays, "done": int(new_today),
+    return {"kind": kind, "target": ask + extra, "share": todays, "done": done,
             "behind": behind}
 
 

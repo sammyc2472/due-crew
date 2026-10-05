@@ -174,9 +174,10 @@ def send_tip(uid, index):
         return
     text = next((v["text"] for v in tricky_view()
                  if v["uid"] == uid and v["index"] == int(index)), "")
+    first = str(entry['name']).split(' ')[0]
+    q = f" {first} asks: “{flag['q']}”" if flag.get("q") else ""
     tip = _ask_line("Send a tip",
-                    f"On “{text or 'this card'}”. One line; "
-                    f"{str(entry['name']).split(' ')[0]} sees it when the card comes up.")
+                    f"On “{text or 'this card'}”.{q}\n\nOne line; {first} sees it when the card comes up.")
     if tip:
         _send_cheer(uid, entry["name"], TIP_EMOJI, tip, guid=flag["guid"],
                     then=lambda ok: ok and hide_tipped(uid, flag["guid"]))
