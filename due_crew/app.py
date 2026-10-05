@@ -112,7 +112,6 @@ _state = {
     "team_view": {},       # 3.7.3: {plan id: {at, data, state}}: the team as its tab last fetched it
     "team_draft": {},      # 3.7.3: {plan id: text}: Ask, filled in from Insights
     "team_bingo_open": None,  # 3.7.3: the plan whose team bingo card is open in the board's place
-    "team_bingo_mine": {},  # 3.7.3: {plan id: {wk, progress}}: my squares on the plan's cards (never sent)
     "insights": {},        # 3.7.3: {plan id: {at, rows}}: worked out here, never sent
 }
 
@@ -196,7 +195,7 @@ def _reset_runtime(keep_sync=False):
                   plan_updates={}, plans_midday=False,
                   bingo_open=False, bingo_mine=None, squads_left=set(),
                   settings_tab=None, plan_sub={}, team_view={}, team_draft={},
-                  team_bingo_open=None, team_bingo_mine={}, insights={})
+                  team_bingo_open=None, insights={})
     _pending_cheers.clear()
 
 

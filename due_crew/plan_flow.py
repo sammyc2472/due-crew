@@ -463,8 +463,9 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
         totals[uid] = len(cids)
         seen = idx.counts(cids)[1]
         # a sibling Anki buried today counts as seen (plans.counts): done
-        # today too, so the Today box reaches done when Due does
-        today_n = sum(1 for c in cids if first_seen.get(c) == 0) + idx.siblings(cids)[1]
+        # today too, so the Today box reaches done when Due does; only for a
+        # note started today (one started before was seen before today)
+        today_n = sum(1 for c in cids if first_seen.get(c) == 0) + idx.buried_today(cids, first_seen)
         new_today += today_n
         seen_before[uid] = seen - today_n
         for c in cids:

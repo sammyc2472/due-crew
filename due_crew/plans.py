@@ -384,6 +384,18 @@ class DeckIndex:
                 buried += queue in (-2, -3)
         return n, buried
 
+    def buried_today(self, cids, first_seen):
+        """New siblings Anki buried today whose note was started today: today's
+        own progress. A note started before today had them counted as seen
+        already; a review card of it due today buries them too, and that
+        burial isn't today's progress (nor makes them behind). first_seen:
+        {cid: days ago its first answer was} (0 today)."""
+        before = {self.nid_of[c] for c, (_q, t) in self.cards.items() if t != 0 and first_seen.get(c) != 0}
+        started, nid_of = self.started(), self.nid_of
+        return sum(1 for c in cids
+                   if self.cards[c][1] == 0 and self.cards[c][0] in (-2, -3)
+                   and nid_of.get(c) in started and nid_of.get(c) not in before)
+
     def suspended(self, cids):
         return {cid for cid in cids if self.cards[cid][0] == -1}
 

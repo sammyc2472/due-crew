@@ -142,7 +142,7 @@ streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,
 or `{on: false, count}` off the team. Showed up: a member answered one of
 the plan's cards on their own Anki day; it rides the sync as `team:
 {planId: {days, play?}}` (the last 8 days with one, so a phone's arrive late; rows I hold only, written when changed; `play`
-is my squares from the plan's cards only). The streak is days in a row
+is the same as on my squad rows). The streak is days in a row
 when more than half the team showed up. `asks`: the newest 30 threads by
 activity, `{id, uid, name, emoji, text, at, act, topic, guid?, ord?, mine,
 remove, author, replies: [...]}`. `POST /plans/{id}/asks
@@ -150,9 +150,8 @@ remove, author, replies: [...]}`. `POST /plans/{id}/asks
 questions a person a plan a day, `429 too_many_asks`; 50 replies a
 thread; a plan keeps its newest 200), `DELETE /plans/{id}/asks/{aid}` (its
 writer or an author; a question takes its replies), `POST
-.../asks/{aid}/helped {on}` (the asker, on a reply). Muted people's words are left out. The bingo is the week's
-squares (`cardFor`) with the team's own middle (asks, answers, 3 days),
-counts only. `GET /board` carries `teams: {planId: {shown, of, streak,
+.../asks/{aid}/helped {on}` (the asker, on a reply). Muted people's words are left out. The bingo is the squads'
+card (`cardFor`), evaluated the same, counts only. `GET /board` carries `teams: {planId: {shown, of, streak,
 faces, act, last?}}` for an add-on (not `keep=1`), and the week's card
 for a team member as for a squad member.
 C1–C5: `PATCH /plans/{id}/follow {early}` (0–7); a date's `search`

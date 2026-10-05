@@ -1,9 +1,9 @@
 // 3.7.3: a plan's team. Followers and authors who join (opt-in, per plan) see
 // who on the team showed up today (answered one of the plan's cards), ask
-// the team anything and answer, and play a bingo card together. Joining
+// the team anything and answer, and play the week's bingo card together. Joining
 // shares that I showed up, my questions and answers, and my bingo squares;
-// never my numbers. Each add-on says it showed up (and its squares, worked
-// out from the plan's cards only) with the sync it already makes; the board
+// never my numbers. Each add-on says it showed up (and its squares, the same
+// as on its squad rows) with the sync it already makes; the board
 // carries a few counts; the tab itself is one request when it opens.
 
 import type { Session } from "./auth";
@@ -60,21 +60,6 @@ export function streak(members: { days: string[]; joined: string }[], today: str
   let n = past(today) ? 1 : 0;
   for (let d = prevDay(today), i = 0; i < max && past(d); d = prevDay(d), i++) n++;
   return n;
-}
-
-/** The team's middle square: the team's own, worked out here from what the
- *  server already holds (questions, answers, days), never from anyone's
- *  numbers. One a week, in turn. */
-const MIDDLES = [
-  { id: "tq", icon: "🙋", name: "Ask away", rule: "Questions asked" },
-  { id: "ta", icon: "💬", name: "Lend a hand", rule: "Answers given" },
-  { id: "t3", icon: "🙌", name: "All in", rule: "Showed up 3 days" },
-] as const;
-
-export function teamMiddle(wk: string, count: number): B.Middle {
-  const m = MIDDLES[B.wkNum(wk) % MIDDLES.length];
-  const goal = m.id === "tq" ? 3 : m.id === "ta" ? 5 : B.howMany("half", count);
-  return { id: m.id, group: "team", icon: m.icon, name: m.name, rule: m.rule, detail: "", type: "team", params: {}, goal, unit: "" };
 }
 
 async function mutedOf(env: Env, uid: string): Promise<Set<string>> {
@@ -150,41 +135,25 @@ export async function view(env: Env, p: P.Plan, uid: string, wk: unknown) {
       helped: r.helped === 1, author: authors.has(r.uid as string), mine: r.uid === uid, remove: r.uid === uid || isAuthor })),
   }));
   const out: Obj = { on: true, count: rows.length, shown: shown.size, streak: run, faces, more: Math.max(0, rows.length - FACES_MAX), asks };
-  if (B.askable(wk)) out.bingo = await bingo(env, p.id, wk, rows);
+  if (B.askable(wk)) out.bingo = await bingo(env, wk, rows);
   return out;
 }
 
-/** The team's card: the week's squares (B.cardFor, the squads' card) and
- *  the team's own middle. Squares are stamped by members' play (each worked
- *  out from the plan's cards only); counts, never who. */
-async function bingo(env: Env, plan: string, wk: string, rows: Member[]) {
-  const base = await B.cardFor(env, wk);
-  const monday = B.mondayOf(wk);
-  const mon = monday.toISOString().slice(0, 10);
-  const since = Math.floor(monday.getTime() / 1000);
-  const middle = teamMiddle(wk, rows.length);
-  const card: B.Card = { wk, squares: base.squares, middle };
+/** The team's card is the squad's (B.cardFor): the same squares and the
+ *  same middle, each member's play the same as on their squad rows (worked
+ *  out from all their studying), so a square stamped once counts in every
+ *  squad and team they're in. Counts, never who. */
+async function bingo(env: Env, wk: string, rows: Member[]) {
+  const card = await B.cardFor(env, wk);
   const brows: B.Row[] = rows.map((m) => {
     const days = parseDays(m.days);
     let play: Obj | null = null;
     try { play = m.play ? JSON.parse(m.play) : null; } catch { /* none */ }
     return { uid: m.uid, emoji: m.emoji, day: days.length ? days[days.length - 1] : null, joined: dayOf(m.joined_at), play };
   });
-  const ev = B.evaluate({ ...card, middle: { ...middle, type: "free" } }, brows);
-  let have = 0;
-  if (middle.id === "tq" || middle.id === "ta") {
-    have = (await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM plan_asks WHERE plan = ? AND at >= ? AND parent IS ${middle.id === "tq" ? "" : "NOT "}NULL`,
-    ).bind(plan, since).first<number>("n")) ?? 0;
-  } else {
-    have = rows.filter((m) => parseDays(m.days).filter((d) => d >= mon).length >= 3).length;
-  }
-  const goal = middle.goal as number;
-  const mid = { have: Math.min(have, goal), goal, done: have >= goal };
-  const cell = (c: number) => (c === 4 ? mid.done : ev.squares[B.CELLS.indexOf(c)]?.done ?? false);
-  const lines = B.LINES.filter((l) => l.every(cell)).length;
+  const ev = B.evaluate(card, brows);
   return { card, ev: { squares: ev.squares.map((q) => ({ n: q.who.length, need: q.need, done: q.done })),
-    middle: mid, lines, players: ev.players, active: ev.active, older: ev.older } };
+    middle: ev.middle, lines: ev.lines, players: ev.players, active: ev.active, older: ev.older } };
 }
 
 /** POST /plans/{id}/team: join. DELETE: leave (my questions stay). */

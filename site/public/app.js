@@ -2580,6 +2580,7 @@ async function route() {
     page(h("h1", {}, "Not here"), link("/plans", "Your plans"));
   } catch (err) {
     if (err.status === 401) { me = null; renderNav(); return needSignIn(); }
+    if (!err.status) console.error(err);  // the page's own error, for the console (an API's says itself)
     page(h("h1", {}, err.status === 404 ? "Not found" : "Something went wrong"),
       h("p", { class: "muted" }, err.status === 404 ? "It may have been deleted, or it isn't yours to see." : "Try again in a moment."));
   }

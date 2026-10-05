@@ -640,15 +640,16 @@ add-on.
   0020, `worker/src/team.ts`, `team_flow.py` glue, `team.py` pure): joining
   shares that I showed up today (answered one of the plan's cards, my Anki
   day; `team` on the sync carries the last 8 such days, so a phone's come late; rows I hold only), my questions and answers, and
-  my bingo squares from the plan's cards only (`bingo_flow.for_team`);
+  my bingo squares (`bingo_flow.my_play`, the same as on my squad rows);
   never a number, never weak spots. The board carries counts (`teams`:
   shown, of, streak, faces, act, last) for the Plan tab's line and the
   badge (unread: `team_seen` in plans.json); the tab is one request when it
   opens (`GET /plans/{id}/team`), each click one more. Card questions carry
   guid + card number, never text; each reader's Anki says "on a card you
   have down" itself (`cards.i_know`), from the reviewer's "ask the team
-  about this…". Team bingo: the week's squares, the team's own middle
-  (asks, answers, 3 days), counts never who; `team.bingo_line` =
+  about this…". Team bingo is the squads' card, middle and all,
+  each member's play the same as on their squad rows (one stamp counts
+  everywhere), counts never who; `team.bingo_line` =
   `bingoLine` in builder.js. Insights are mine alone and Anki only
   (`team.insights`): the plan's topics (a tag's last part as words, merged
   across resources) I pressed Again on in review or relearning in 14 days,
@@ -657,6 +658,10 @@ add-on.
   watch link), Ask (Team with the topic in the box). On the site a
   follower's plan page is Calendar · Team, the authors' newest post above
   the tabs until closed (per browser); authors keep Updates.
+- 3.7.4: a plan team's bingo is the squads' card (one play, stamped
+  everywhere); behind leaves out the new siblings Anki buries for an older
+  note's review (`DeckIndex.buried_today`); the plan page no longer fails to
+  open on a named date with no tag or subdeck in the deck's tree.
 
 ## Releasing
 

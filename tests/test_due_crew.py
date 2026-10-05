@@ -3235,6 +3235,19 @@ def test_plans_buried_siblings():
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["n"] == "done \u00b7 1 sibling later"
           and due._date_row(x, set(), "2026-03-01")["n"] == "all seen"
           and due._date_row(dict(x, sibs=[1, 0]), set(), "2026-03-01")["done"])
+    # 3.7.3: a review card of an older note, due today, buries its new sibling;
+    # that sibling was seen before today, so it isn't today's progress, nor behind
+    from due_crew import plan_flow as F
+    col.db.conn.execute("UPDATE cards SET queue = -3 WHERE id = 6")
+    idx = P.DeckIndex(col, 10)
+    check("siblings: buried today for a note started before today isn't today's", idx.buried_today({5, 6}, {}) == 0)
+    check("siblings: buried today for a note started today is", idx.buried_today({5, 6}, {5: 0}) == 1)
+    plan = {"id": "p", "doc": {"deck": "Step 1", "units": [
+        {"id": "u", "name": "Cloze", "opens": _day(-3), "cards": [["guid000050", 0], ["guid000050", 1]]}]}}
+    v = F.session_view(plan, {"deck_id": 10}, idx, {}, _day(0))
+    check("behind: a sibling buried by an older note's review today isn't behind", v["behind"] == 0 and v["done"] == 0, v)
+    v = F.session_view(plan, {"deck_id": 10}, idx, {5: 0}, _day(0))
+    check("behind: one buried by a note started today is today's", v["done"] == 2 and v["behind"] == 2, v)
 
 
 def test_bug_squash_oct():
@@ -6209,7 +6222,10 @@ def test_plan_team_v39():
             fakes.add_review(col.db.conn, (cut - 20 * 86400) * 1000, ease=3, rtype=1, cid=8)       # too long ago to say
             part = TF.for_sync({})
             check("team: the sync says the days of the last eight I answered a plan card, a late one too",
-                  part == {pid: {"days": [_day(-3), _day(0)]}}, part)
+                  part[pid]["days"] == [_day(-3), _day(0)], part)
+            from due_crew import bingo_flow
+            check("team: the play is my squad rows' play, the same everywhere (3.7.3)",
+                  part[pid].get("play") == bingo_flow.my_play({}), part)
             maya.push(labels, {}, team=part)
             check("team: the fake Worker kept the days", store.team[(pid, "maya")]["days"] == [_day(-3), _day(0)])
             maya.push(labels, {}, team=part)
