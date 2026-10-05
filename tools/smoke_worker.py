@@ -104,8 +104,12 @@ check("board: flag without text; live; room", d["tricky"] == [{"guid": "Ab3$kQ9+
 check("board: decks", d["decks"][0]["name"] == "Big Deck" and d["decks"][0]["ret"] == 90.1)
 check("heatmap", sam.fetch_heatmap(dre.user_id) == {labels[0]: 205, labels[2]: 50})
 check("cheer", dre.send_cheer(sam.user_id, "🍀", "Go get it", luck=True) is True)
-c = sam.fetch_board(labels, tomorrow)["cheers"]
-check("cheer arrives once, marked", len(c) == 1 and c[0]["luck"] and c[0]["name"] == "Dre"
+got = sam.fetch_board(labels, tomorrow)
+c = got["cheers"]
+again = sam.fetch_board(labels, tomorrow)["cheers"]  # that reply "was lost": nothing acked yet
+sam.session["cheers_got"] = got["cheers_at"]          # as the add-on's commit does (3.7.2)
+check("cheer arrives, marked; kept until the next refresh says it arrived, then gone",
+      len(c) == 1 and c[0]["luck"] and c[0]["name"] == "Dre" and len(again) == 1
       and sam.fetch_board(labels, tomorrow)["cheers"] == [], str(c))
 sq = sam.create_squad("busm")
 info, st = dre.peek_squad(sq["code"].lower())
