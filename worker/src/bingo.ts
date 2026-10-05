@@ -245,7 +245,7 @@ export async function cardFor(env: Env, wk: string): Promise<Card> {
 /** For GET /board and a squad: the card, when I'm in a squad (or on a plan's team) and asked for a week I may. */
 export async function forMember(env: Env, uid: string, wk: unknown): Promise<Card | undefined> {
   if (!askable(wk)) return undefined;
-  // 3.9: a plan's team plays the week's squares too
+  // 3.7.3: a plan's team plays the week's squares too
   const any = await env.DB.prepare("SELECT 1 FROM members WHERE uid = ?1 UNION ALL SELECT 1 FROM plan_team WHERE uid = ?1 LIMIT 1").bind(uid).first();
   return any ? cardFor(env, wk) : undefined;
 }

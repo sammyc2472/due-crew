@@ -102,18 +102,18 @@ _state = {
     "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
     "plan_progress": {},   # 3.1: {plan id: {unit id: [opened, seen, total]}}, counted here
     "plan_session": {},    # 3.2: {plan id: today's session}, for plans on my schedule
-    "plan_updates": {},    # 3.8: {plan id: {n, names, units}}: an update's cards, waiting for Open
-    "plans_midday": False, # 3.8: an update came while reviewing; it waits for the Decks screen
+    "plan_updates": {},    # 3.7.3: {plan id: {n, names, units}}: an update's cards, waiting for Open
+    "plans_midday": False, # 3.7.3: an update came while reviewing; it waits for the Decks screen
     "notice": None,        # 3.2.1: the admin's notice, {id, text, link}
     "bingo_open": False,   # 3.6: the squad's bingo card is open in the board's place
     "bingo_mine": None,    # 3.6: {wk, play, progress}: my week as worked out at the sync (progress never sent)
     "squads_left": set(),  # 3.6: squads I left this session, which heal_squads never brings back
-    "plan_sub": {},        # 3.9: {plan id: "team" | "ins"}: the plan's tab on screen (Plan when absent)
-    "team_view": {},       # 3.9: {plan id: {at, data, state}}: the team as its tab last fetched it
-    "team_draft": {},      # 3.9: {plan id: text}: Ask, filled in from Insights
-    "team_bingo_open": None,  # 3.9: the plan whose team bingo card is open in the board's place
-    "team_bingo_mine": {},  # 3.9: {plan id: {wk, progress}}: my squares on the plan's cards (never sent)
-    "insights": {},        # 3.9: {plan id: {at, rows}}: worked out here, never sent
+    "plan_sub": {},        # 3.7.3: {plan id: "team" | "ins"}: the plan's tab on screen (Plan when absent)
+    "team_view": {},       # 3.7.3: {plan id: {at, data, state}}: the team as its tab last fetched it
+    "team_draft": {},      # 3.7.3: {plan id: text}: Ask, filled in from Insights
+    "team_bingo_open": None,  # 3.7.3: the plan whose team bingo card is open in the board's place
+    "team_bingo_mine": {},  # 3.7.3: {plan id: {wk, progress}}: my squares on the plan's cards (never sent)
+    "insights": {},        # 3.7.3: {plan id: {at, rows}}: worked out here, never sent
 }
 
 

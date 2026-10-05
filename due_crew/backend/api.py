@@ -287,7 +287,7 @@ class ApiClient:
         # 3.7.2: got= says the last reply's cheers arrived, so the server lets
         # them go only now: a reply lost on the way loses no cheer
         got = int(self.session.get("cheers_got") or 0)
-        # 3.8: the plans' stamp as I last saw it; they come again only when it moved
+        # 3.7.3: the plans' stamp as I last saw it; they come again only when it moved
         pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
         status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}" if with_decks
                                   else f"/board?got={got}&pv={pv}")
@@ -345,7 +345,7 @@ class ApiClient:
             self.session["friend_ids"] = friends
             self.session.setdefault("restored_to", self.base)
             self._save_session()
-        # 3.1: plans ride the day's first refresh; 3.8: and any refresh whose
+        # 3.1: plans ride the day's first refresh; 3.7.3: and any refresh whose
         # stamp moved (an author saved, posted, or my own days changed on the site)
         plans_came = with_decks or isinstance(data.get("plans"), list)
         if plans_came:
@@ -357,7 +357,7 @@ class ApiClient:
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
                 self._save_session()
-        # 3.9: the teams I'm on, as counts (none: on no team)
+        # 3.7.3: the teams I'm on, as counts (none: on no team)
         teams = clean_teams(data.get("teams"))
         if teams != (self.session.get("teams") or {}):
             self.session["teams"] = teams
@@ -380,7 +380,7 @@ class ApiClient:
                 "plans": list(self.session.get("plans") or []),
                 "plan_offers": list(self.session.get("plan_offers") or []),
                 "plans_fresh": bool(plans_came),
-                # 3.8: plans that came later in the day (an update): ask, don't open
+                # 3.7.3: plans that came later in the day (an update): ask, don't open
                 "plans_update": bool(plans_came and not with_decks),
                 "pending": [str(f.get("name") or "?") for f in data.get("friends") or [] if not f.get("mutual")],
                 "cheers": cheers,
@@ -506,7 +506,7 @@ class ApiClient:
         3.2: known, the guids of cards I have down in decks I share (sent
         as changes since the last that went); stuck, the guids I'm stuck
         on (the answer lands in session["cards"]); log, my study log's
-        days, sent when they changed. 3.9: team, {plan id: {day?, play?}}
+        days, sent when they changed. 3.7.3: team, {plan id: {day?, play?}}
         for the plans whose team I'm on, sent when it changed.
         Raises TransportError."""
         if self.session.get("needs_restore"):
@@ -1030,7 +1030,7 @@ class ApiClient:
         status, _ = self._call("PUT", f"/plans/{plan_id}/ids", body)
         return status == 200
 
-    # ---- 3.9: a plan's team (each one request, on a click) ----
+    # ---- 3.7.3: a plan's team (each one request, on a click) ----
 
     def team(self, plan_id, wk=""):
         """The team as its tab shows it, or None. Raises TransportError."""
@@ -1040,7 +1040,7 @@ class ApiClient:
     def team_join(self, plan_id, wk=""):
         status, data = self._call("POST", f"/plans/{plan_id}/team" + (f"?wk={wk}" if wk else ""), retry=False)
         if status != 200:
-            return None
+            return status  # 409: the team is full
         self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "act": [], "last": None}
         self._save_session()
         return clean_team_view(data)

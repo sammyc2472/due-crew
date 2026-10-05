@@ -119,7 +119,7 @@ list and the home feed show only theirs, plus my own from before);
 save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
 
-3.8 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
+3.7.3 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
 saw on every refresh) answers `pv` (a short hash of the plans I follow:
 their versions, my follow's own days, their newest post; never my
 progress) and carries `plans`, `planOffers` and `authored` again only when
@@ -135,7 +135,7 @@ the newest 50 kept. `PUT /plans/{id}` takes `post` too: it rides the save
 stands). An author's view has `reached: [n, of]`, the followers (not the
 owner) whose Anki has this version. The home feed (`feed=1`) lists posts
 as `kind: "post"`.
-3.9 a plan's team (`team.ts`, migration 0020), opt-in, for anyone in the
+3.7.3 a plan's team (`team.ts`, migration 0020), opt-in, for anyone in the
 plan (its authors and followers): `POST /plans/{id}/team` joins, `DELETE`
 leaves, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
 streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as B from "../src/bingo";
 import * as T from "../src/team";
-import { db, person } from "./helpers";
+import { befriend, db, person } from "./helpers";
 
-// 3.9 a plan's team: opt-in per plan; who showed up today, the streak,
+// 3.7.3 a plan's team: opt-in per plan; who showed up today, the streak,
 // questions and replies, the team's bingo. Never numbers.
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -20,7 +20,7 @@ async function setup() {
   return { dre, sam, kai, p };
 }
 
-describe("a plan's team (3.9)", () => {
+describe("a plan's team (3.7.3)", () => {
   it("is opt-in, for people in the plan; leaving and unfollowing take you off", async () => {
     const { dre, sam, p } = await setup();
     const out = await person("out");
@@ -38,6 +38,23 @@ describe("a plan's team (3.9)", () => {
     await sam.call("POST", `/plans/${p.id}/team`);
     await sam.call("DELETE", `/plans/${p.id}/follow`);
     expect((await dre.call("GET", `/plans/${p.id}/team`)).body.count).toBe(1);
+  });
+
+  it("someone who can't see the plan any more drops off it: a co-author removed", async () => {
+    const { dre, p } = await setup();
+    const ed = await person("ed");
+    await befriend(dre, ed);
+    await befriend(ed, dre);
+    expect((await dre.call("POST", `/plans/${p.id}/editors`, { uid: "ed" })).status).toBe(200);
+    await dre.call("POST", `/plans/${p.id}/team`);
+    await ed.call("POST", `/plans/${p.id}/team`);
+    await ed.call("POST", `/plans/${p.id}/asks`, { text: "secret plans" });
+    expect((await dre.call("GET", `/plans/${p.id}/team`)).body.count).toBe(2);
+    await dre.call("DELETE", `/plans/${p.id}/editors/ed`);
+    expect((await ed.call("GET", "/board")).body.teams).toBeUndefined();
+    expect((await ed.call("GET", `/plans/${p.id}/team`)).status).toBe(404);
+    expect((await dre.call("GET", `/plans/${p.id}/team`)).body.count).toBe(1);
+    expect((await dre.call("GET", "/board")).body.teams[p.id].of).toBe(1);
   });
 
   it("showed up rides the sync: only rows I hold, only when it changed", async () => {
@@ -58,6 +75,7 @@ describe("a plan's team (3.9)", () => {
     // the board carries the counts for the Plan tab
     const b = (await kai.call("GET", "/board")).body;
     expect(b.teams[p.id]).toMatchObject({ shown: 1, of: 2, act: [] });
+    expect(b.teams[p.id].streak).toBeUndefined();  // the tab says it; the board reads only last days
     expect((await kai.call("GET", "/board?keep=1")).body.teams).toBeUndefined();
     // bad parts
     expect((await sam.call("POST", "/sync", { team: { [p.id]: { day: "nope" } } })).status).toBe(400);

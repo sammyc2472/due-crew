@@ -3706,7 +3706,7 @@ def test_plans_glue_v31():
         light = maya.fetch_board(labels)
         full = maya.fetch_board(labels, with_decks=True)
         again = maya.fetch_board(labels)
-        check("board: plans ride the decks=1 refresh, and a light one when their stamp moved (3.8: never seen here)",
+        check("board: plans ride the decks=1 refresh, and a light one when their stamp moved (3.7.3: never seen here)",
               len(store.log) - n == 3 and full["plans_fresh"] and light["plans_fresh"] and light["plans_update"]
               and not again["plans_fresh"] and full["plans"][0]["id"] == pid and again["plans"][0]["id"] == pid)
         F.maybe_morning(awaiting_sync=True, fresh=True)
@@ -6020,7 +6020,7 @@ def test_remaining_oct_spread_undo():
 
 
 def test_plan_updates_v38():
-    """3.8: an author's save reaches a follower at their next refresh (the
+    """3.7.3: an author's save reaches a follower at their next refresh (the
     stamp moved); what it adds to today waits for Open (only on the Decks
     screen, never mid-review); Not today leaves it to tomorrow's morning;
     a follower who chose Hold back has new later cards held too; the
@@ -6106,7 +6106,7 @@ def test_plan_updates_v38():
 
 
 def test_plan_team_v39():
-    """3.9: a plan's team (opt-in; who showed up today, questions and
+    """3.7.3: a plan's team (opt-in; who showed up today, questions and
     answers, the team's bingo) and Insights (mine alone: the topics I
     missed most in 14 days). The sync carries the showed-up day only for
     teams I'm on; the board escapes everyone's words; every click reaches

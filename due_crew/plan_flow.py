@@ -311,7 +311,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
             names += pnames
             all_cids |= pcids
     label = P.step_label(names) if names else ""
-    # dry (3.8): what it would open, for the update line; nothing is touched
+    # dry (3.7.3): what it would open, for the update line; nothing is touched
     n = P.open_cards(col, all_cids, label, dry=dry) if names else 0
     return {"n": n, "names": names, "label": label, "per": per, "units": opened_units, "spread": spread}
 
@@ -347,7 +347,7 @@ def put_off(st, uids, today):
 
 
 def ask_later(st, uids, today):
-    """3.8, Not today on an update: those dates' changes open on tomorrow's
+    """3.7.3, Not today on an update: those dates' changes open on tomorrow's
     morning. Unlike put_off nothing was opened, so they stay applied as
     they were: tomorrow opens only what the update adds."""
     tomorrow = S.iso(S.d(today) + datetime.timedelta(days=1))
@@ -598,7 +598,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
                        if opened and opened[1] else None),
             "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
-            # 3.8: what an author's update adds to today and earlier, waiting for Open; their posts
+            # 3.7.3: what an author's update adds to today and earlier, waiting for Open; their posts
             "update": (_state.get("plan_updates") or {}).get(plan["id"]) if mw else None,
             "posts": unread_posts(plan) if mw else [],
             "owner_name": str(plan.get("ownerName") or ""),
@@ -717,7 +717,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
         if c.get("plans_day") == today:
-            # 3.8: plans that came again after today's morning (an author's
+            # 3.7.3: plans that came again after today's morning (an author's
             # update, or Anki opened again): asked, not opened
             return midday(plan_list, toast=toast)
         _state["plan_updates"] = {}
@@ -733,7 +733,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         _psave(c)
         line = opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
         if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today):
-            _after_change()  # 3.8: what an author added to later dates waits, for whoever chose Hold back
+            _after_change()  # 3.7.3: what an author added to later dates waits, for whoever chose Hold back
         apply_catch()  # G5
         backs = [p["id"] for p in plan_list if p.get("paused") and p.get("until") and str(p["until"]) < today]
         if backs:
@@ -755,7 +755,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
 
 
 def midday(plan_list, toast=True):
-    """3.8, main thread, an update later in the day. Only on the Decks screen
+    """3.7.3, main thread, an update later in the day. Only on the Decks screen
     (holding back is an undo step, and a change must never land mid-review):
     elsewhere it waits for the next time Decks draws. A plan new here opens
     as the morning would (following it was mine to do); a plan whose
@@ -802,7 +802,7 @@ def midday(plan_list, toast=True):
 
 
 def hold_new(plan_list, state, today):
-    """3.8: a follower who chose Hold back gets it for what an author adds to
+    """3.7.3: a follower who chose Hold back gets it for what an author adds to
     later dates too (that was their yes): those cards are suspended until
     their day, one undo step a plan. Never for anyone else. Returns how many."""
     n = 0
@@ -827,7 +827,7 @@ def hold_new(plan_list, state, today):
 
 
 def update_open(pid):
-    """3.8, Open on an update's line: what it adds opens now, in one undo step."""
+    """3.7.3, Open on an update's line: what it adds opens now, in one undo step."""
     p = next((x for x in followed() if x["id"] == pid), None)
     (_state.get("plan_updates") or {}).pop(pid, None)
     if p and not p.get("paused"):
@@ -836,7 +836,7 @@ def update_open(pid):
 
 
 def update_later(pid):
-    """3.8, Not today on an update's line: tomorrow's morning opens it."""
+    """3.7.3, Not today on an update's line: tomorrow's morning opens it."""
     upd = (_state.get("plan_updates") or {}).pop(pid, None) or {}
     c = _pcfg()
     state = _state_cfg(c)
@@ -848,7 +848,7 @@ def update_later(pid):
 
 
 def post_seen(pid):
-    """3.8: the newest post on a plan is read here."""
+    """3.7.3: the newest post on a plan is read here."""
     p = next((x for x in followed() if x["id"] == pid), None)
     c = _pcfg()
     seen = c.setdefault("posts_seen", {})
@@ -859,7 +859,7 @@ def post_seen(pid):
 
 
 def unread_posts(plan):
-    """3.8: the plan's posts I haven't marked read, newest first; ones over
+    """3.7.3: the plan's posts I haven't marked read, newest first; ones over
     a week old don't come up (a plan followed today shows its last week)."""
     seen = int(((_pcfg().get("posts_seen") or {}) if mw else {}).get(plan["id"]) or 0)
     import time as _time
@@ -1253,7 +1253,7 @@ def board_view(c):
     from . import team_flow
     for card in cards:
         try:
-            card["tabs"] = team_flow.card_bits(card["id"])  # 3.9: Plan · Team · Insights
+            card["tabs"] = team_flow.card_bits(card["id"])  # 3.7.3: Plan · Team · Insights
         except Exception:
             traceback.print_exc()
     from .squads import _my_squads
@@ -1268,7 +1268,7 @@ def board_view(c):
 def on_message(cmd, parts):
     """duecrew:plan* from the board. True when handled."""
     if cmd == "plansub" or cmd.startswith("planteam") or cmd.startswith("planins"):
-        from . import team_flow  # 3.9: the plan's Team and Insights tabs
+        from . import team_flow  # 3.7.3: the plan's Team and Insights tabs
         return team_flow.on_message(cmd, parts)
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "planundo":
@@ -1311,11 +1311,11 @@ def on_message(cmd, parts):
         plan_menu(arg)
     elif cmd == "planok" and arg:
         seen_change(arg)
-    elif cmd == "planupdopen" and arg:   # 3.8: an update's Open
+    elif cmd == "planupdopen" and arg:   # 3.7.3: an update's Open
         update_open(arg)
-    elif cmd == "planupdlater" and arg:  # 3.8: an update's Not today
+    elif cmd == "planupdlater" and arg:  # 3.7.3: an update's Not today
         update_later(arg)
-    elif cmd == "planpostok" and arg:    # 3.8: the authors' post, read
+    elif cmd == "planpostok" and arg:    # 3.7.3: the authors' post, read
         post_seen(arg)
     elif cmd == "plandeck" and arg:
         change_deck(arg)

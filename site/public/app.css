@@ -804,7 +804,7 @@ button.alltime b { font-size: 22px; } button.alltime small { color: var(--muted)
 .drow p { margin: 2px 0 0; }
 .drow.ask { background: var(--well, transparent); border-radius: 10px; padding: 10px 12px; border: 0; }
 
-/* 3.9: a plan's team */
+/* 3.7.3: a plan's team */
 .postnote { background: var(--well); border-radius: 10px; padding: 9px 12px; font-size: 14px; display: flex; gap: 10px;
   align-items: baseline; flex-wrap: wrap; margin: 6px 0 2px; }
 .faces { display: flex; flex-wrap: wrap; gap: 10px 16px; }

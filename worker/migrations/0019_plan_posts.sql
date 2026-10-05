@@ -1,4 +1,4 @@
--- 3.8 plan updates: a plan's authors post to its followers (one line, any
+-- 3.7.3 plan updates: a plan's authors post to its followers (one line, any
 -- time, or with a save), and an author sees how many followers' Anki has the
 -- latest version (seen_version, written when a board carries it to them).
 CREATE TABLE plan_posts (

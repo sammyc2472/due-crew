@@ -165,11 +165,11 @@ async function builder(id) {
 
   const status = h("span", { class: "status", role: "status" });
   const saveBtn = h("button", { onclick: () => save() }, "Save");
-  // 3.8: a line to the plan's followers, with the save (it lands in Updates)
+  // 3.7.3: a line to the plan's followers, with the save (it lands in Updates)
   const tell = h("input", { class: "tell", type: "text", maxlength: 200, placeholder: "Tell followers…",
     "aria-label": "Tell followers, with this save" });
   tell.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
-  let posts = null;  // 3.8: the Updates tab's list, loaded when it opens
+  let posts = null;  // 3.7.3: the Updates tab's list, loaded when it opens
   const mark = () => {
     dirty = true; status.className = "status"; status.textContent = "Unsaved changes";
     document.querySelector(".savebar")?.classList.remove("clean");  // C6: on a phone, Save shows now
@@ -1685,7 +1685,7 @@ async function builder(id) {
         draw(); } }, "Undo") : h("span"))));
   }
 
-  /** 3.8: what the authors said to followers, newest first; the authors post
+  /** 3.7.3: what the authors said to followers, newest first; the authors post
    *  here any time (a save's "Tell followers" lands here too). Anki shows
    *  the newest unread on the plan, the site's home lists them. */
   function updatesTab() {
@@ -1723,7 +1723,7 @@ async function builder(id) {
       } }, "Remove") : h("span")))));
   }
 
-  /** 3.9: the plan's team. Opt-in: who showed up today (answered one of the
+  /** 3.7.3: the plan's team. Opt-in: who showed up today (answered one of the
    *  plan's cards), questions to the team and their answers, the team's
    *  bingo. Never anyone's numbers. Each click is one request. */
   let team = null;          // GET /plans/{id}/team, loaded when the tab opens
@@ -1753,7 +1753,8 @@ async function builder(id) {
     }
     const st = h("span", { class: "status", role: "status" });
     const again = (p, bad = "That didn't work. Try again.") => p.then(() => { team = null; draw(); }).catch((err) => {
-      st.className = "status bad"; st.textContent = err.status === 429 ? "That's a lot of questions today. Try tomorrow." : bad; });
+      st.className = "status bad"; st.textContent = err.status === 429 ? "That's a lot of questions today. Try tomorrow."
+        : err.body?.error === "team_full" ? "This team is full." : bad; });
     if (team.failed) return h("p", { class: "muted" }, "Couldn't load the team. ", h("button", { class: "linkish", onclick: () => { team = null; draw(); } }, "Try again"));
     if (!team.on) {
       return h("div", { class: "panel", style: "max-width:560px" },
@@ -1813,7 +1814,7 @@ async function builder(id) {
         h("div", {}, h("button", { class: "quiet", onclick: () => { if (confirm("Leave the team? Your questions and answers stay.")) again(api("DELETE", `/plans/${id}/team`)); } }, "Leave the team"))));
   }
 
-  /** 3.9: a follower sees the authors' newest post above the tabs until they
+  /** 3.7.3: a follower sees the authors' newest post above the tabs until they
    *  close it (Updates is the authors' tab now). Per browser. */
   let postNote = undefined;
   function postLine() {
@@ -1864,7 +1865,7 @@ async function builder(id) {
       if (window.ResizeObserver) { let w = 0; new ResizeObserver(() => { if (t.clientWidth !== w) { w = t.clientWidth; fit(); } }).observe(t); }
       return t;
     }
-    // 3.9: followers: Calendar and Team (the authors' posts show above the tabs); authors keep Updates
+    // 3.7.3: followers: Calendar and Team (the authors' posts show above the tabs); authors keep Updates
     const tabs = author ? [["calendar", "Calendar"], ["team", "Team"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean)
       : plan.following ? [["calendar", "Calendar"], ["team", "Team"]] : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
@@ -1958,7 +1959,7 @@ async function builder(id) {
         return t.length ? { ...u, todo: t } : u;
       }) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
-      if (tell.value.trim()) body.post = tell.value.trim();  // 3.8
+      if (tell.value.trim()) body.post = tell.value.trim();  // 3.7.3
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;
       if (owner && meta.audience !== plan.audience) body.audience = meta.audience;
       let merged = false;

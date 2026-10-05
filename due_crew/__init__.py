@@ -398,7 +398,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
                   my_friends=list(data.get("my_friends") or []))
     # 3.1: plans ride the day's first refresh; the morning follows it
     opened = _morning(_awaiting_phone(), fresh=bool(data.get("plans_fresh")), toast=False,
-                      update=bool(data.get("plans_update")))  # 3.8: later in the day, asked
+                      update=bool(data.get("plans_update")))  # 3.7.3: later in the day, asked
     if opened:
         toasts.append(opened)
     elif data.get("plans"):
@@ -487,7 +487,7 @@ def _board_html(c):
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
     if _state.get("team_bingo_open"):
-        from . import team_flow  # 3.9: a plan team's card in its place
+        from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
         tv = (_state.get("team_view") or {}).get(pid) or {}
         return board.bingo_html(team_flow.bingo_view(pid), c, loading=tv.get("state") == "fetching", team=True)
@@ -517,7 +517,7 @@ def _on_did_render(deck_browser):
     mw.web.eval(board.keep_me_in_view_js())
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
-        # 3.8: an update that came while reviewing waits for the Decks screen
+        # 3.7.3: an update that came while reviewing waits for the Decks screen
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: plan_flow.midday(plan_flow.followed()))
     together.show_luck_card()
@@ -623,7 +623,7 @@ def _on_sync_done(full=False, light=False, fetch=None):
         traceback.print_exc()
     try:
         from . import team_flow
-        team = team_flow.for_sync(c)  # 3.9: showed up today, and my squares, per plan team
+        team = team_flow.for_sync(c)  # 3.7.3: showed up today, and my squares, per plan team
         if team:
             extras = dict(extras or {}, team=team)
     except Exception:

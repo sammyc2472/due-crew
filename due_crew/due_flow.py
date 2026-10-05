@@ -109,7 +109,7 @@ def plan_dates(today):
                           "what": P.topics_line([u]),
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
-                          # 3.8: an author's update adds to it, waiting for Open (its count when it's
+                          # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
                           # the only date the update touches; -1: one of several)
                           "upd": (0 if u["id"] not in (upd.get("units") or []) else
                                   int(upd.get("n") or 0) if len(upd["units"]) == 1 else -1)})

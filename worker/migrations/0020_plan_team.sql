@@ -1,4 +1,4 @@
--- 3.9 a plan's team: followers and authors who join (opt-in, per plan).
+-- 3.7.3 a plan's team: followers and authors who join (opt-in, per plan).
 -- The team sees who showed up today (days: the last 60 Anki days I
 -- answered one of the plan's cards), the questions asked of it, and its
 -- bingo card (play: my squares, from the plan's cards only). Never numbers.
@@ -7,6 +7,7 @@ CREATE TABLE plan_team (
   uid TEXT NOT NULL,
   joined_at INTEGER NOT NULL,
   days TEXT,
+  last_day TEXT,
   play TEXT,
   PRIMARY KEY (plan, uid)
 );

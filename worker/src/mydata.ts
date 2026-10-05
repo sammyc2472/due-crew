@@ -53,8 +53,8 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q("SELECT q.name FROM bans b JOIN squads q ON q.id = b.squad WHERE b.uid = ?1"),
     q("SELECT email, at FROM email_changes WHERE uid = ?1"),
     q("SELECT text, at FROM admin_notes WHERE uid = ?1"),
-    q("SELECT p.name AS plan, t.text, t.at FROM plan_posts t JOIN plans p ON p.id = t.plan WHERE t.uid = ?1 ORDER BY t.at"),  // 3.8
-    // 3.9: the teams I'm on (the days I showed up, my squares), what I asked and answered
+    q("SELECT p.name AS plan, t.text, t.at FROM plan_posts t JOIN plans p ON p.id = t.plan WHERE t.uid = ?1 ORDER BY t.at"),  // 3.7.3
+    // 3.7.3: the teams I'm on (the days I showed up, my squares), what I asked and answered
     q("SELECT p.name AS plan, t.joined_at, t.days, t.play FROM plan_team t JOIN plans p ON p.id = t.plan WHERE t.uid = ?1"),
     q(`SELECT p.name AS plan, a.parent IS NOT NULL AS answer, a.text, a.guid, a.ord, a.topic, a.helped, a.at
          FROM plan_asks a JOIN plans p ON p.id = a.plan WHERE a.uid = ?1 ORDER BY a.at`),

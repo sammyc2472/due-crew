@@ -49,7 +49,7 @@ async function feed(env: Env, uid: string) {
          JOIN plans p ON p.id = l.plan LEFT JOIN users u ON u.uid = l.uid
         WHERE l.plan IN (${mine}) AND l.uid != ?1 AND l.at > ?2 ORDER BY l.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
     env.DB.prepare("SELECT json FROM settings WHERE uid = ?").bind(uid),
-    // 3.8: what the authors posted to a plan I'm in
+    // 3.7.3: what the authors posted to a plan I'm in
     env.DB.prepare(
       `SELECT t.plan, p.name AS plan_name, t.text, t.at, t.uid, u.name, u.emoji FROM plan_posts t
          JOIN plans p ON p.id = t.plan LEFT JOIN users u ON u.uid = t.uid
@@ -132,7 +132,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   };
   if (withDecks) out.decks = await decksFor(env, s.uid);
   // 3.1: the plans I follow, and offers; the site's home (keep=1) reads its plans from /plans/mine.
-  // 3.8: every add-on refresh carries a stamp of them (pv=, what it last saw);
+  // 3.7.3: every add-on refresh carries a stamp of them (pv=, what it last saw);
   // the plans come again only when it moved, so an author's save reaches
   // followers at their next refresh with no request of its own
   const pv = params.get("pv");
@@ -150,7 +150,7 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     const card = await B.forMember(env, s.uid, params.get("wk"));
     if (card) out.bingo = card;
   }
-  // 3.9: the teams I'm on: counts for the Plan tab and the Team badge
+  // 3.7.3: the teams I'm on: counts for the Plan tab and the Team badge
   if (!keep) {
     const teams = await T.forBoard(env, s.uid);
     if (teams) out.teams = teams;
@@ -205,7 +205,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
   const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
   const log = "log" in body ? C.logPart(body.log) : null;
-  const team = "team" in body ? T.teamPart(body.team) : null;               // 3.9
+  const team = "team" in body ? T.teamPart(body.team) : null;               // 3.7.3
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;

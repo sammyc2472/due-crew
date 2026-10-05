@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { befriend, db, person } from "./helpers";
 
-// 3.8 plan updates: the plans ride a refresh when their stamp moved; authors
+// 3.7.3 plan updates: the plans ride a refresh when their stamp moved; authors
 // post to followers (with a save or on their own); the authors see how many
 // followers' Anki has the latest version.
 
@@ -17,7 +17,7 @@ async function setup() {
 
 const doc = (n: number) => ({ deck: "D", units: Array.from({ length: n }, (_, i) => ({ id: `u${i}`, name: `U${i}`, opens: "2026-10-05", tags: [`T${i}`] })) });
 
-describe("plan updates (3.8)", () => {
+describe("plan updates (3.7.3)", () => {
   it("a refresh carries the plans only when their stamp moved", async () => {
     const { dre, sam, p } = await setup();
     const first = (await sam.call("GET", "/board?pv=")).body;

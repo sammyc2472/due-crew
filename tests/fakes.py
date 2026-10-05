@@ -256,9 +256,9 @@ class FakeWorker:
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
         self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
-        self.plan_posts = {} # 3.8: plan id -> [{id, name, text, withSave, at}]
-        self.team = {}       # 3.9: (plan, uid) -> {joined, days: [label], play}
-        self.team_asks = []  # 3.9: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
+        self.plan_posts = {} # 3.7.3: plan id -> [{id, name, text, withSave, at}]
+        self.team = {}       # 3.7.3: (plan, uid) -> {joined, days: [label], play}
+        self.team_asks = []  # 3.7.3: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
         self.plan_trees = {}  # (uid, deck) -> {tags, decks}
         self.follows = {}    # (plan, uid) -> {share, paused, progress (json text or None)}
         self.links = {}      # one-time site sign-in tokens -> uid
@@ -476,14 +476,14 @@ class FakeWorker:
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
     def _plan_stamp(self, me):
-        """3.8, as planStamp: my follows as they stand, their versions and newest posts."""
+        """3.7.3, as planStamp: my follows as they stand, their versions and newest posts."""
         rows = [[pid, self.plans[pid]["version"], json.dumps({k: v for k, v in f.items() if k != "progress"}, sort_keys=True),
                  max([x["id"] for x in self.plan_posts.get(pid, [])], default=0)]
                 for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans]
         return hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:16]
 
     def add_post(self, pid, uid, text):
-        """3.8, setup helper: an author's post to followers."""
+        """3.7.3, setup helper: an author's post to followers."""
         self._post_n = getattr(self, "_post_n", 0) + 1
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
                                                     "text": text, "withSave": False, "at": int(time.time())})
@@ -523,18 +523,18 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
-        if pv is not None:  # 3.8: the plans again, when their stamp moved
+        if pv is not None:  # 3.7.3: the plans again, when their stamp moved
             stamp = self._plan_stamp(me)
             if not with_decks and pv != stamp:
                 out.update(self._plans_for_board(me))
             out["pv"] = stamp
-        teams = self._teams_for_board(me)  # 3.9
+        teams = self._teams_for_board(me)  # 3.7.3
         if teams:
             out["teams"] = teams
         if with_decks:
             out["decks"] = self._decks_for(me)
             out.update(self._plans_for_board(me))  # 3.1
-            # 3.6: the week's bingo card, to anyone in a squad (3.9: or on a plan's team)
+            # 3.6: the week's bingo card, to anyone in a squad (3.7.3: or on a plan's team)
             if wk in self.bingo_cards and (any(u == me for (_s, u) in self.members) or any(u == me for (_p, u) in self.team)):
                 out["bingo"] = self.bingo_cards[wk]
         return out
@@ -698,7 +698,7 @@ class FakeWorker:
                     wrote["plans"] = True
                     self._count("plan_follows")
         if "team" in body:
-            # 3.9 (team.ts teamWrites): only rows I hold, only what changed
+            # 3.7.3 (team.ts teamWrites): only rows I hold, only what changed
             t = body["team"]
             if not isinstance(t, dict) or len(t) > 20:
                 raise Bad(400, "bad_team")
@@ -1314,7 +1314,7 @@ class FakeWorker:
         pid = rest[0] if rest else ""
         if rest[1:] == ["follow"] and method == "DELETE":
             self.follows.pop((pid, me), None)  # stopping: my progress goes with it
-            self.team.pop((pid, me), None)  # 3.9: and my place on its team
+            self.team.pop((pid, me), None)  # 3.7.3: and my place on its team
             return 200, {"ok": True}
         if pid not in self.plans:
             raise Bad(404, "no_plan")
@@ -1449,7 +1449,7 @@ class FakeWorker:
                 out[pid][uid] = list(t)
         return out
 
-    # ---- 3.9: a plan's team (worker/src/team.ts) ----
+    # ---- 3.7.3: a plan's team (worker/src/team.ts) ----
 
     def today_label(self):
         return getattr(self, "today", None) or datetime.date.today().isoformat()
@@ -1464,7 +1464,7 @@ class FakeWorker:
             threads = sorted((a for a in self.team_asks if a["plan"] == pid and a["parent"] is None),
                              key=lambda a: (-a["act"], -a["id"]))[:20]
             last = next((a for a in threads if a["uid"] != me), None)
-            out[pid] = {"shown": len(shown), "of": len(rows), "streak": 0,
+            out[pid] = {"shown": len(shown), "of": len(rows),
                         "faces": [self.users[u]["emoji"] or "" for u in shown][:4], "act": [a["act"] for a in threads]}
             if last:
                 out[pid]["last"] = {"name": self.users[last["uid"]]["name"] or "?", "text": last["text"]}

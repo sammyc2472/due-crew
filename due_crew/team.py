@@ -1,4 +1,4 @@
-"""3.9 a plan's team and its Insights, the pure parts (team_flow.py is the
+"""3.7.3 a plan's team and its Insights, the pure parts (team_flow.py is the
 glue). Insights: this plan's cards I missed in the last 14 days, by the
 topic they share (a tag under its resource, read as words, as `plans.topics`
 names it), with the 14 days before as the trend. Worked out in my Anki from

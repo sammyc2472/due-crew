@@ -614,7 +614,7 @@ add-on.
   never refused. `PUT /settings` with the save the server has writes
   nothing.
 
-- 3.8 plan updates (mock "Plan Updates", option B): every refresh sends the
+- 3.7.3 plan updates (mock "Plan Updates", option B): every refresh sends the
   plans' stamp it last saw (`pv`, `session.plans_pv`) and the plans come
   again only when it moved (an author saved or posted, my own days changed
   on the site): no new requests. After the day's morning (`plans_day`)
@@ -634,7 +634,7 @@ add-on.
   in N of M followers' Anki" (`seen_version`, written when a board carries
   it). A date that opened is never closed again by an update.
 
-- 3.9 a plan's team and Insights (mocks "Plan Team and Insights", rounds
+- 3.7.3 a plan's team and Insights (mocks "Plan Team and Insights", rounds
   1–6): the plan card has three tabs, Plan · Team · Insights
   (`_state["plan_sub"]`, per session). Team is opt-in per plan (migration
   0020, `worker/src/team.ts`, `team_flow.py` glue, `team.py` pure): joining

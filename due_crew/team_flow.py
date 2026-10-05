@@ -1,4 +1,4 @@
-"""3.9 a plan's team and its Insights, the glue (team.py is pure).
+"""3.7.3 a plan's team and its Insights, the glue (team.py is pure).
 
 The Plans tab's plan card has three tabs: Plan, Team and Insights
 (`_state["plan_sub"]`, per session). Team is opt-in per plan: joining
@@ -163,8 +163,8 @@ def join(pid):
     def done(data):
         if gen != app.generation:
             return
-        if not data:
-            tooltip("Couldn't join just now.")
+        if not isinstance(data, dict):
+            tooltip("This team is full." if data == 409 else "Couldn't join just now.")
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": data, "state": "ok"}
         app.swap(cfg())
@@ -174,7 +174,7 @@ def join(pid):
 
 def leave(pid):
     from aqt.utils import askUser
-    if not askUser("Leave the team? Your questions and answers stay. You can join again any time."):
+    if not askUser("Leave the team? Your questions and answers stay."):
         return
     gen, cl = app.generation, client()
 
@@ -440,6 +440,12 @@ def for_sync(c):
     today = q.day_label(0)
     start, end = q.day_bounds_ms(0)
     out = {}
+    tree = {}  # Anki's deck tree, read once a sync however many teams
+
+    def deck_tree():
+        if "t" not in tree:
+            tree["t"] = mw.col.sched.deck_due_tree()
+        return tree["t"]
     for pid in list(teams())[:20]:
         dids = _deck_ids(pid)
         if not dids:
@@ -450,7 +456,7 @@ def for_sync(c):
                 f"SELECT 1 FROM revlog WHERE id >= ? AND id < ? AND ease > 0 AND cid IN "
                 f"(SELECT id FROM cards WHERE did IN ({ids}) OR odid IN ({ids})) LIMIT 1", start, end):
             part["day"] = today
-        play = bingo_flow.for_team(c, pid, dids)
+        play = bingo_flow.for_team(c, pid, dids, deck_tree)
         if play:
             part["play"] = play
         if part:

@@ -813,7 +813,7 @@ def _css(cfg):
                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
     #due-crew .pcrew a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    /* 3.9: the plan's tabs, Team and Insights */
+    /* 3.7.3: the plan's tabs, Team and Insights */
     #due-crew .psub {{ display: flex; gap: 16px; align-items: baseline; font-size: 12px; margin: 0 0 8px;
       border-bottom: 1px solid var(--dc-line); text-align: left; }}
     #due-crew .psub a {{ color: var(--dc-muted); font-weight: 700; text-decoration: none; padding: 3px 0 5px; margin-bottom: -1px; }}
@@ -1302,7 +1302,7 @@ def _plan_card_html(card):
     return out + "</div>"
 
 
-# ---- 3.9: the plan's tabs: Plan, Team, Insights ----
+# ---- 3.7.3: the plan's tabs: Plan, Team, Insights ----
 
 def _plan_tabs(pid, tabs):
     sub = tabs.get("sub") or "plan"
@@ -1432,10 +1432,10 @@ def _team_html(pid, tabs):
 
 
 def _insights_html(pid, rows):
-    """3.9: this plan's topics I missed most in the last 14 days, mine alone."""
+    """3.7.3: this plan's topics I missed most in the last 14 days, mine alone."""
     e = _html.escape
     if not rows:
-        return '<div class="tg">Last 14 days</div><div class="tq0">Nothing to strengthen yet.</div>'
+        return '<div class="tg">Last 14 days</div><div class="tq0">Nothing missed.</div>'
     out = ('<div class="tg">Last 14 days</div>'
            '<div class="wk2 hd"><span>Topic</span><span class="n">Missed</span><span class="tr">Trend</span><span></span></div>')
     words = {"worse": ("up", "&uarr; worse"), "better": ("dn", "&darr; better"), "steady": ("", "steady"), "": ("", "")}
@@ -1642,7 +1642,7 @@ def _plan_notes(card, pid, skip_waiting=False):
                    f'<span class="acts">{a2}</span></div>')
     upd = card.get("update")
     if upd and int(upd.get("n") or 0):
-        # 3.8: an author's update adds to today or earlier: nothing opens until I say
+        # 3.7.3: an author's update adds to today or earlier: nothing opens until I say
         n = int(upd["n"])
         names = [str(x) for x in upd.get("names") or []]
         what = " and ".join(f"<b>{e(x)}</b>" for x in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
@@ -1654,7 +1654,7 @@ def _plan_notes(card, pid, skip_waiting=False):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
                    f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
     for post in (card.get("posts") or [])[:1]:
-        # 3.8: the authors' words to followers, the newest unread
+        # 3.7.3: the authors' words to followers, the newest unread
         out.append(f'<div class="pn post"><span><b>{e(str(post.get("name") or "?"))}</b>: {e(str(post.get("text") or ""))}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planpostok:" + pid)}">OK</a></span></div>')
     if card.get("change"):
@@ -2042,7 +2042,7 @@ def bingo_html(bv, cfg, loading=False, team=False):
     e = _html.escape
     head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
-    team_card = bool(bv and bv.get("team")) or team  # 3.9: a plan team's card: counts, never who
+    team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
     back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Plans</a>' if team_card
             else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>')
     if not bv:
@@ -3468,7 +3468,7 @@ def _due_plan(r):
     if r.get("crew") and int(r["crew"][1]) > 1:
         extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
     if r.get("upd"):
-        # 3.8: an author's update adds to this date; it opens when I say
+        # 3.7.3: an author's update adds to this date; it opens when I say
         said = f'+{int(r["upd"]):,} added' if int(r["upd"]) > 0 else "updated"
         extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)

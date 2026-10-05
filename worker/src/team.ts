@@ -1,4 +1,4 @@
-// 3.9: a plan's team. Followers and authors who join (opt-in, per plan) see
+// 3.7.3: a plan's team. Followers and authors who join (opt-in, per plan) see
 // who on the team showed up today (answered one of the plan's cards), ask
 // the team anything and answer, and play a bingo card together. Joining
 // shares that I showed up, my questions and answers, and my bingo squares;
@@ -23,6 +23,15 @@ const REPLIES_MAX = 50;      // a thread's replies
 const THREADS_PER_DAY = 10;  // one person's new questions to one plan, a day
 const TEAMS_PER_SYNC = 20;   // P.FOLLOWS_MAX
 const ACT_ON_BOARD = 20;
+const TEAM_MAX = 500;        // members of one plan's team
+
+/** A team row whose member may still see the plan: an author, or a
+ *  follower (of a squad's plan, while in the squad). Losing that ends what
+ *  the team shows of them and to them, without a write. `t` is plan_team. */
+const STILL_IN = `(EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.plan = t.plan AND f.uid = t.uid
+             AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = t.uid))))`;
 
 type Obj = Record<string, unknown>;
 type Member = { uid: string; days: string | null; play: string | null; joined_at: number; name: string | null;
@@ -80,7 +89,7 @@ async function mutedOf(env: Env, uid: string): Promise<Set<string>> {
 async function members(env: Env, plan: string): Promise<Member[]> {
   return (await env.DB.prepare(
     `SELECT t.uid, t.days, t.play, t.joined_at, u.name, u.emoji, u.tz, u.rollover FROM plan_team t
-       JOIN users u ON u.uid = t.uid WHERE t.plan = ? ORDER BY t.joined_at, t.uid`,
+       JOIN users u ON u.uid = t.uid WHERE t.plan = ? AND ${STILL_IN} ORDER BY t.joined_at, t.uid LIMIT ${TEAM_MAX}`,
   ).bind(plan).all<Member>()).results;
 }
 
@@ -181,6 +190,8 @@ async function bingo(env: Env, plan: string, wk: string, rows: Member[]) {
 /** POST /plans/{id}/team: join. DELETE: leave (my questions stay). */
 export async function join(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await teamPlan(env, id, s.uid);
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_team WHERE plan = ?").bind(id).first<number>("n");
+  if ((n ?? 0) >= TEAM_MAX && !(await onTeam(env, id, s.uid))) throw new HttpError(409, "team_full");
   await env.DB.prepare("INSERT INTO plan_team (plan, uid, joined_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
     .bind(id, s.uid, nowSec()).run();
   return json(await view(env, p, s.uid, new URL(req.url).searchParams.get("wk")));
@@ -291,8 +302,8 @@ export async function teamWrites(env: Env, uid: string, part: ReturnType<typeof 
   const ids = Object.keys(part);
   if (!ids.length) return [];
   const rows = await env.DB.prepare(
-    `SELECT plan, days, play FROM plan_team WHERE uid = ? AND plan IN (${ids.map(() => "?").join(",")})`,
-  ).bind(uid, ...ids).all<{ plan: string; days: string | null; play: string | null }>();
+    `SELECT plan, days, last_day, play FROM plan_team WHERE uid = ? AND plan IN (${ids.map(() => "?").join(",")})`,
+  ).bind(uid, ...ids).all<{ plan: string; days: string | null; last_day: string | null; play: string | null }>();
   const out: D1PreparedStatement[] = [];
   for (const r of rows.results) {
     const x = part[r.plan];
@@ -300,39 +311,44 @@ export async function teamWrites(env: Env, uid: string, part: ReturnType<typeof 
     if (x.day && !days.includes(x.day)) days = [...days, x.day].sort().slice(-DAYS_KEEP);
     const dj = days.length ? JSON.stringify(days) : null;
     const play = x.play ?? r.play;
-    if (dj !== r.days || play !== r.play) {
-      out.push(env.DB.prepare("UPDATE plan_team SET days = ?, play = ? WHERE plan = ? AND uid = ?").bind(dj, play, r.plan, uid));
+    const last = days.length ? days[days.length - 1] : null;  // what the board reads, not the whole list
+    if (dj !== r.days || play !== r.play || last !== r.last_day) {
+      out.push(env.DB.prepare("UPDATE plan_team SET days = ?, last_day = ?, play = ? WHERE plan = ? AND uid = ?").bind(dj, last, play, r.plan, uid));
     }
   }
   return out;
 }
 
 /** For an add-on's refresh: per plan I'm on the team of, the counts its
- *  Plan tab and badge need. Three reads, however many teams. */
+ *  Plan tab line and badge need: who showed up today (each member's last
+ *  day, not their history), and when the newest threads moved. The streak
+ *  waits for the tab. Three reads, however many teams. */
 export async function forBoard(env: Env, uid: string) {
-  const mine = (await env.DB.prepare("SELECT plan FROM plan_team WHERE uid = ?").bind(uid).all<{ plan: string }>()).results.map((r) => r.plan);
+  const mine = (await env.DB.prepare(`SELECT t.plan FROM plan_team t WHERE t.uid = ? AND ${STILL_IN}`)
+    .bind(uid).all<{ plan: string }>()).results.map((r) => r.plan);
   if (!mine.length) return undefined;
   const qs = mine.map(() => "?").join(",");
-  const [mem, acts, me] = await env.DB.batch<any>([
+  const [mem, acts] = await env.DB.batch<any>([
     env.DB.prepare(
-      `SELECT t.plan, t.uid, t.days, t.play, t.joined_at, u.name, u.emoji, u.tz, u.rollover FROM plan_team t
-         JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs})`).bind(...mine),
+      `SELECT t.plan, t.uid, t.last_day, u.emoji, u.tz, u.rollover FROM plan_team t
+         JOIN users u ON u.uid = t.uid WHERE t.plan IN (${qs}) AND ${STILL_IN}`).bind(...mine),
     env.DB.prepare(
-      `SELECT a.plan, a.id, a.uid, a.act, a.text, u.name FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid
-        WHERE a.plan IN (${qs}) AND a.parent IS NULL
-          AND (SELECT COUNT(*) FROM plan_asks x WHERE x.plan = a.plan AND x.parent IS NULL AND x.act > a.act) < ${ACT_ON_BOARD}
-        ORDER BY a.act DESC`).bind(...mine),
-    env.DB.prepare("SELECT tz, rollover FROM users WHERE uid = ?").bind(uid),
+      `SELECT plan, uid, act, text, name FROM (
+         SELECT a.plan, a.uid, a.act, a.text, u.name,
+                ROW_NUMBER() OVER (PARTITION BY a.plan ORDER BY a.act DESC, a.id DESC) AS k
+           FROM plan_asks a LEFT JOIN users u ON u.uid = a.uid WHERE a.plan IN (${qs}) AND a.parent IS NULL)
+        WHERE k <= ${ACT_ON_BOARD} ORDER BY act DESC`).bind(...mine),
   ]);
   const muted = await mutedOf(env, uid);
-  const meRow = (me.results[0] ?? { tz: 0, rollover: 0 }) as { tz: number | null; rollover: number | null };
+  const now = nowSec();
   const out: Record<string, Obj> = {};
   for (const plan of mine) {
-    const rows = (mem.results as (Member & { plan: string })[]).filter((m) => m.plan === plan);
-    const { shown, run } = showed(rows, meRow);
+    const rows = (mem.results as { plan: string; uid: string; last_day: string | null; emoji: string | null; tz: number | null; rollover: number | null }[])
+      .filter((m) => m.plan === plan);
+    const shown = rows.filter((m) => m.last_day && m.last_day === ankiDay(now, m.tz, m.rollover));
     const threads = (acts.results as Obj[]).filter((a) => a.plan === plan && !muted.has(a.uid as string));
     const last = threads.find((a) => a.uid !== uid);
-    out[plan] = { shown: shown.size, of: rows.length, streak: run, faces: rows.filter((m) => shown.has(m.uid)).slice(0, 4).map((m) => m.emoji || ""),
+    out[plan] = { shown: shown.length, of: rows.length, faces: shown.slice(0, 4).map((m) => m.emoji || ""),
       act: threads.map((a) => a.act), ...(last ? { last: { name: (last.name as string) || "?", text: last.text } } : {}) };
   }
   return out;

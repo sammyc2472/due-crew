@@ -630,12 +630,12 @@ def clean_plan(p):
             "following": bool(following) or "share" in p,
             "sched": clean_sched(p.get("sched", following.get("sched"))),
             "early": _early(p.get("early", following.get("early"))),
-            "posts": clean_posts(p.get("posts")),  # 3.8: the authors' newest posts
+            "posts": clean_posts(p.get("posts")),  # 3.7.3: the authors' newest posts
             **clean_days(p if "shift" in p or "skipped" in p else following)}
 
 
 def clean_posts(v):
-    """3.8: a plan's newest posts to its followers, as the board carries them."""
+    """3.7.3: a plan's newest posts to its followers, as the board carries them."""
     out = []
     for x in v if isinstance(v, list) else []:
         if isinstance(x, dict) and _as_int(x.get("id")) and clean_note(x.get("text"), 200):
@@ -665,7 +665,7 @@ def clean_offer(o):
             "ownerName": clean_note(o.get("ownerName"), 60) or "?"}
 
 
-# ---- 3.9: a plan's team ----
+# ---- 3.7.3: a plan's team ----
 
 _UID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 TEAM_TEXT_MAX = 280
@@ -684,7 +684,7 @@ def clean_teams(v):
         if not _PLAN_ID.fullmatch(str(pid)) or not isinstance(t, dict):
             continue
         last = t.get("last") if isinstance(t.get("last"), dict) else None
-        out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")), "streak": _nat(t.get("streak"), 366),
+        out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")),
                     "faces": [clean_emoji(e) for e in (t.get("faces") or [])[:4] if isinstance(e, str)],
                     "act": sorted((_nat(a) for a in (t.get("act") or [])[:20]), reverse=True),
                     "last": {"name": clean_note(last.get("name"), 60) or "?",

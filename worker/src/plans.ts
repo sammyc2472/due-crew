@@ -37,7 +37,7 @@ const EDITORS_MAX = 10;
 const NOTES_MAX = 500;
 const NOTES_PER_PERSON = 50;  // one follower's share of a plan's notes
 const NOTE_TEXT_MAX = 280;
-const POST_MAX = 200;        // 3.8: a post to followers, one line
+const POST_MAX = 200;        // 3.7.3: a post to followers, one line
 const POSTS_PER_DAY = 5;     // a plan's posts in a day, all its authors together
 const POSTS_KEEP = 50;       // a plan keeps its newest
 const POSTS_ON_BOARD = 3;    // the newest per plan ride an add-on's board
@@ -445,7 +445,7 @@ const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.pr
 export async function view(env: Env, p: Plan, uid: string) {
   const [f, n, eds, owner, member] = await env.DB.batch<any>([
     env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
-    // 3.8: and how many of them have this version in their Anki
+    // 3.7.3: and how many of them have this version in their Anki
     env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(uid != ?3), 0) AS m,
                     COALESCE(SUM(seen_version = ?2 AND uid != ?3), 0) AS r FROM plan_follows WHERE plan = ?1`)
       .bind(p.id, p.version, p.owner ?? ""),
@@ -600,7 +600,7 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
   const body = await readJson(req, PLAN_BODY_MAX);
   for (const k of Object.keys(body)) if (!["version", "name", "line", "audience", "squad", "doc", "summary", "post"].includes(k)) throw V.bad("plan");
-  // 3.8: a line to followers with the save; checked before anything is written
+  // 3.7.3: a line to followers with the save; checked before anything is written
   if (body.post !== undefined && (!V.isStr(body.post, POST_MAX * 4, 1) || !V.oneLine(body.post as string, POST_MAX))) throw V.bad("post");
   if (p.owner !== s.uid && ((body.audience !== undefined && body.audience !== p.audience)
       || (body.squad !== undefined && body.squad !== p.squad))) throw new HttpError(403, "not_owner");
@@ -845,7 +845,7 @@ export async function removeNote(s: Session, env: Env, [id, nid]: string[]): Pro
   return json({ ok: true });
 }
 
-// ---- 3.8: posts to followers ----
+// ---- 3.7.3: posts to followers ----
 
 /** One post, written with a save or on its own: authors only, one line, a
  *  ceiling a day per plan, the newest POSTS_KEEP kept. */
@@ -939,7 +939,7 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
     env.DB.prepare("DELETE FROM plan_notes WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plan_log WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plan_posts WHERE plan = ?").bind(id),
-    env.DB.prepare("DELETE FROM plan_team WHERE plan = ?").bind(id),  // 3.9
+    env.DB.prepare("DELETE FROM plan_team WHERE plan = ?").bind(id),  // 3.7.3
     env.DB.prepare("DELETE FROM plan_asks WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plans WHERE id = ?").bind(id),
   ]);
@@ -1098,7 +1098,7 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
 export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Response> {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM plan_follows WHERE plan = ? AND uid = ?").bind(id, s.uid),
-    env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(id, s.uid),  // 3.9: off its team too
+    env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(id, s.uid),  // 3.7.3: off its team too
   ]);
   return json({ ok: true });
 }
@@ -1212,7 +1212,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
 
 // ---- the board ----
 
-/** 3.8: what a refresh compares: the plans I follow as they stand (their
+/** 3.7.3: what a refresh compares: the plans I follow as they stand (their
  *  version, my follow's own days, their newest post). Not my progress, which
  *  moves at every sync. A short hash; one read. */
 export async function planStamp(env: Env, uid: string): Promise<string> {
@@ -1226,7 +1226,7 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
   return Array.from(h.slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** What the day's first refresh carries (and, since 3.8, a refresh whose
+/** What the day's first refresh carries (and, since 3.7.3, a refresh whose
  *  stamp moved): the plans I follow, and plans offered to my squads that I
  *  don't follow yet; with each plan its newest posts, and the version is
  *  noted as reached (seen_version, written only when it changed). */
@@ -1275,7 +1275,7 @@ export async function forBoard(env: Env, uid: string) {
                     + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
   ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
-  // 3.8: the newest posts per plan, and this version reached me
+  // 3.7.3: the newest posts per plan, and this version reached me
   const posts = new Map<string, Obj[]>();
   if (mineRows.results.length) {
     const ids = mineRows.results.map((r) => r.id as string);

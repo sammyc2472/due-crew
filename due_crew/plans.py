@@ -715,7 +715,7 @@ def open_cards(col, cids, label, dry=False):
     """Unsuspend the suspended ones among `cids`, as one undo step named
     `label`. Only queue -1 is touched, and never a leech (Anki suspended it
     for a reason); never suspends. Returns how many opened (0: nothing was
-    suspended, and no undo step is made). dry (3.8): how many it would."""
+    suspended, and no undo step is made). dry (3.7.3): how many it would."""
     if not cids:
         return 0
     ids = []
@@ -968,7 +968,7 @@ def ahead_behind(doc, prog, today):
 
 def snapshot(doc):
     """What a change note compares: {unit id: [name, opens, what it picks]}
-    (3.8: the third, a short hash of its sources, so "updated" can be said;
+    (3.7.3: the third, a short hash of its sources, so "updated" can be said;
     a snapshot from before has two)."""
     # what the author picked, not what their Anki worked out (C5 ids, refs):
     # those arrive on their own and would say "updated" for nothing
@@ -983,7 +983,7 @@ def change_note(owner, old, doc):
     moved = [(new[u][0], new[u][1]) for u in new if u in old and old[u][1] != new[u][1]]
     added = [new[u][0] for u in new if u not in old]
     gone = [old[u][0] for u in old if u not in new]
-    # 3.8: a date whose cards changed (a tag, a search, cards added or taken off)
+    # 3.7.3: a date whose cards changed (a tag, a search, cards added or taken off)
     changed = [new[u][0] for u in new if u in old and len(old[u]) > 2 and old[u][2] != new[u][2]
                and old[u][1] == new[u][1]]
     if not (moved or added or gone or changed):

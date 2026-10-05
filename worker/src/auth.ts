@@ -264,8 +264,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plan_editors WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_notes WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_log WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
-    "DELETE FROM plan_posts WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",  // 3.8
-    // 3.9: my place on teams, my questions (with their replies) and answers; my plans' teams
+    "DELETE FROM plan_posts WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",  // 3.7.3
+    // 3.7.3: my place on teams, my questions (with their replies) and answers; my plans' teams
     "DELETE FROM plan_team WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_asks WHERE parent IN (SELECT id FROM plan_asks WHERE uid = ?1)",
     "DELETE FROM plan_asks WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",

@@ -181,14 +181,14 @@ def for_row(c):
         return None
 
 
-# ---- 3.9: a plan's team plays the week's squares on the plan's cards only ----
+# ---- 3.7.3: a plan's team plays the week's squares on the plan's cards only ----
 
 def _in_plan(dids):
     ids = ",".join(str(int(d)) for d in dids) or "0"
     return f"cid IN (SELECT id FROM cards WHERE did IN ({ids}) OR odid IN ({ids}))"
 
 
-def _team_facts(q, dids, today, td):
+def _team_facts(q, dids, today, td, deck_tree=None):
     """bingo.facts for one plan: my answers on its deck's cards, new cards
     from it, and the days its deck was seen with nothing due / no new left
     (`td`, kept per plan in bingo.json)."""
@@ -213,7 +213,7 @@ def _team_facts(q, dids, today, td):
         f"(SELECT 1 FROM revlog x WHERE x.cid = r.cid AND x.ease > 0 AND x.id < r.id) GROUP BY 1",
         cutoff - 1, (cutoff - 8 * 86400) * 1000, cutoff * 1000) or []}
     if times.get(today) and (today not in td["zero"] or today not in td["newdone"]):
-        node = _node(mw.col.sched.deck_due_tree(), int(dids[0]))
+        node = _node((deck_tree or mw.col.sched.deck_due_tree)(), int(dids[0]))
         if node is not None:
             if node.review_count + node.learn_count == 0 and today not in td["zero"]:
                 td["zero"].append(today)
@@ -233,7 +233,7 @@ def _node(node, did):
     return None
 
 
-def for_team(c, pid, dids):
+def for_team(c, pid, dids, deck_tree=None):
     """My play on a plan's team this week, from the plan's cards only, or
     None (no card this week, or paused). Main thread."""
     if not mw.col or c.get("paused") or not dids:
@@ -246,7 +246,7 @@ def for_team(c, pid, dids):
         d = _week(wk)
         teams = d.setdefault("team", {})
         td = teams.setdefault(pid, {"zero": [], "newdone": []})
-        f = _team_facts(q, list(dids), today, td)
+        f = _team_facts(q, list(dids), today, td, deck_tree)
         cd = card()
         cd = cd if cd and cd.get("wk") == wk else None
         if not cd:
