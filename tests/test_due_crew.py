@@ -2173,6 +2173,11 @@ def test_together_v210():
           "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-knows'))" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-room-bottom'))" in rm.BAR_BALANCE)
+    kj = crew_cards.chip_js({"text": "x", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
+    check("bottom bar: the chip's words end in an ellipsis (never under its button), the cells are measured unwrapped",
+          "text-overflow:ellipsis" in kj and "flex:none" in kj and "s.title = D.title || D.text" in kj
+          and "sum +=" in rm.BAR_BALANCE and "paddingLeft) - parseFloat" in rm.BAR_BALANCE
+          and "x.style.display = 'none'" in rm.BAR_BALANCE)
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj

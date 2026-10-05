@@ -211,7 +211,7 @@ BAR_BALANCE = r"""
     var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
     l.style.width = r.style.width = '';
     var t0 = document.getElementById('dc-knows-t');
-    if (t0 && t0.style.maxWidth) { t0.style.maxWidth = '24vw'; }  // as drawn (cards._CHIP_JS); shrunk again below if need be
+    if (t0) { t0.style.maxWidth = '24vw'; [].forEach.call(t0.parentNode.querySelectorAll('span'), function (x) { x.style.display = 'inline-block'; }); }  // as drawn (cards._CHIP_JS); shrunk again below if need be
     // another add-on can draw its button over the bar (positioned, out of
     // the row), so ours would sit underneath it: step past anything that does
     function clear(el) {
@@ -236,13 +236,13 @@ BAR_BALANCE = r"""
     }
     clear(document.getElementById('dc-knows'));
     clear(document.getElementById('dc-room-bottom'));
-    function w(c) {   // what the cell's own elements need
-      var a = Infinity, z = -Infinity, cs = getComputedStyle(c);
+    function w(c) {   // what the cell's own elements need on one line (summed: a cell already squeezed has wrapped)
+      var n = 0, sum = 0, cs = getComputedStyle(c);
       for (var k = 0; k < c.children.length; k++) {
-        var b = c.children[k].getBoundingClientRect();
-        if (b.width > 0) { a = Math.min(a, b.left); z = Math.max(z, b.right); }
+        var b = c.children[k].getBoundingClientRect(), ks = getComputedStyle(c.children[k]);
+        if (b.width > 0) { n++; sum += b.width + parseFloat(ks.marginLeft) + parseFloat(ks.marginRight); }
       }
-      return Math.ceil((z > a ? z - a : 0) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight));
+      return Math.ceil(sum + 5 * Math.max(0, n - 1) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight));
     }
     var side = Math.max(w(l), w(r)) + 16, over = 2 * side + w(m) - t.clientWidth, txt = document.getElementById('dc-knows-t');
     // the chip's text gives way first (it ends in an ellipsis, the whole in its tooltip)
@@ -252,8 +252,14 @@ BAR_BALANCE = r"""
       txt.style.maxWidth = Math.max(60, tw - Math.ceil(over / 2)) + 'px';
       side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
     }
+    // still too wide: the chip keeps its button (Ask, Tip, This helped), its words go to its tooltip
+    if (over > 0 && txt && txt.parentNode.querySelector('b')) {
+      [].forEach.call(txt.parentNode.querySelectorAll('span'), function (x) { x.style.display = 'none'; });
+      side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
+    }
     if (over > 0) { return; }
-    l.style.width = r.style.width = side + 'px';
+    // a cell's width leaves its padding out
+    [l, r].forEach(function (c) { var cs = getComputedStyle(c); c.style.width = side - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) + 'px'; });
   };
   if (!window.dcBarResize) { window.dcBarResize = true; window.addEventListener('resize', function () { window.dcBarBalance(); }); }
   window.dcBarBalance();
