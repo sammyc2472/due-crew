@@ -662,6 +662,14 @@ add-on.
   everywhere); behind leaves out the new siblings Anki buries for an older
   note's review (`DeckIndex.buried_today`); the plan page no longer fails to
   open on a named date with no tag or subdeck in the deck's tree.
+- 3.7.5: the Today box counts now (`schedule.today_view`'s `seen_now`):
+  behind is what's still short of yesterday's quota, so catching up today
+  clears it, and cards seen today fill the oldest dates first; today asks
+  what wasn't seen by the morning, as the day's details and Due count. The
+  ask chip beside Edit keeps the answer buttons centred (`BAR_BALANCE`
+  sums each cell, leaves padding out) and, narrow, says who in short
+  (`short`: "Ameya +1", "Ameya's tip"); a crewmate's ask shows their line;
+  once I've asked, it says Asked.
 
 ## Releasing
 
