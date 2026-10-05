@@ -658,6 +658,10 @@ add-on.
   watch link), Ask (Team with the topic in the box). On the site a
   follower's plan page is Calendar · Team, the authors' newest post above
   the tabs until closed (per browser); authors keep Updates.
+- 3.7.4: a plan team's bingo is the squads' card (one play, stamped
+  everywhere); behind leaves out the new siblings Anki buries for an older
+  note's review (`DeckIndex.buried_today`); the plan page no longer fails to
+  open on a named date with no tag or subdeck in the deck's tree.
 
 ## Releasing
 

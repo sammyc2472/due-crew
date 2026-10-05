@@ -199,6 +199,16 @@ async function builder(id) {
     const w = Tags.word(pathOf(key).split("::").pop());
     return placedBelow(key, placed).length ? `${w} · the rest` : w;
   };
+  const searchN = (u) => (u.search || []).reduce((a, q) => a + (u.sn?.[q] || 0), 0);
+  // (defined before autoName: the first names are worked out as the page opens)
+  // E1: note ids and card ids pasted onto a date; `idn` is what they found in an author's Anki
+  // 3.6.5: and notes by guid (`notes`); `idr` is the server's, from the author's Anki
+  const idsLen = (u) => (u.nids || []).length + (u.cids || []).length + (u.notes || []).length;
+  const hasIds = (u) => idsLen(u) > 0;
+  const idsN = (u) => (hasIds(u) ? u.idn ?? idsLen(u) : 0);
+  // one number, never notes vs cards (a novice doesn't know the difference);
+  // what they come to in cards shows once an author's Anki has counted them
+  const idsText = (u) => `${idsLen(u).toLocaleString()} added by ID`;
   const autoName = (u) => {
     const ks = srcs(u);
     if (!ks.length) return (u.search || []).length ? "Search" : hasIds(u) ? idsText(u) : (u.cards || []).length ? `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}` : "?";
@@ -221,15 +231,6 @@ async function builder(id) {
     const ids = new Set(doc.units.map((u) => u.id));
     if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
   };
-  const searchN = (u) => (u.search || []).reduce((a, q) => a + (u.sn?.[q] || 0), 0);
-  // E1: note ids and card ids pasted onto a date; `idn` is what they found in an author's Anki
-  // 3.6.5: and notes by guid (`notes`); `idr` is the server's, from the author's Anki
-  const idsLen = (u) => (u.nids || []).length + (u.cids || []).length + (u.notes || []).length;
-  const hasIds = (u) => idsLen(u) > 0;
-  const idsN = (u) => (hasIds(u) ? u.idn ?? idsLen(u) : 0);
-  // one number, never notes vs cards (a novice doesn't know the difference);
-  // what they come to in cards shows once an author's Anki has counted them
-  const idsText = (u) => `${idsLen(u).toLocaleString()} added by ID`;
   function takeIds(u) { delete u.nids; delete u.cids; delete u.notes; delete u.idn; delete u.idr; }
   // F1: events: named days (a lecture, a quiz, the exam) that dates prep for
   const events = () => doc.events || [];
