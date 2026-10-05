@@ -334,7 +334,7 @@ main:not(.wide) .calmenu .calpop { left: 0; right: auto; }
 .phone-only { display: none; }
 @media (max-width: 700px) { .phone-only { display: block; } .wide-only { display: none !important; } }
 nav .wide-only { display: inline-flex; gap: 16px; }
-nav .navme { display: none; position: relative; }
+nav .navme { display: none; position: relative; white-space: nowrap; }  /* the initial and its ▾ on one line */
 @media (max-width: 700px) { nav .navme { display: block; } }
 nav .navme summary { list-style: none; width: 26px; height: 26px; border-radius: 50%; background: var(--well); display: grid; place-items: center; font-weight: 700; font-size: 12px; cursor: pointer; }
 nav .navme summary::-webkit-details-marker { display: none; }
