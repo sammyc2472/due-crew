@@ -486,6 +486,11 @@ def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
+    if _state.get("team_bingo_open"):
+        from . import team_flow  # 3.9: a plan team's card in its place
+        pid = _state["team_bingo_open"]
+        tv = (_state.get("team_view") or {}).get(pid) or {}
+        return board.bingo_html(team_flow.bingo_view(pid), c, loading=tv.get("state") == "fetching", team=True)
     if _state.get("bingo_open"):
         return board.bingo_html(_bingo_view(c), c,  # 3.6: the squad's card in its place
                                 loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()))
@@ -616,6 +621,13 @@ def _on_sync_done(full=False, light=False, fetch=None):
         extras = crew_cards.for_sync(c, light=light)  # 3.2: cards I know and I'm stuck on, my log
     except Exception:
         traceback.print_exc()
+    try:
+        from . import team_flow
+        team = team_flow.for_sync(c)  # 3.9: showed up today, and my squares, per plan team
+        if team:
+            extras = dict(extras or {}, team=team)
+    except Exception:
+        traceback.print_exc()
     refresh_board(upload_stats=stats, backfill=week, shared_decks=decks,
                   heatmap=heat, squad_row=row, full=full, fetch=fetch, plans=plan_prog, extras=extras)
 
@@ -684,6 +696,7 @@ def _on_js(handled, message, context):
         _bingo_cmd(cmd)
     elif cmd == "period" and len(parts) > 2 and parts[2] in board.PERIODS:
         _state["bingo_open"] = False
+        _state["team_bingo_open"] = None
         c["period"] = parts[2]
         save_cfg(c)
         _swap(c)

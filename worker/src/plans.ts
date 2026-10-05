@@ -386,7 +386,7 @@ async function authorOnly(env: Env, id: string, s: Session): Promise<Plan> {
   return p;
 }
 
-async function role(env: Env, p: Plan, uid: string): Promise<"owner" | "editor" | "follower" | "reader"> {
+export async function role(env: Env, p: Plan, uid: string): Promise<"owner" | "editor" | "follower" | "reader"> {
   if (p.owner === uid) return "owner";
   if (await isEditor(env, p.id, uid)) return "editor";
   // a squad plan's follower is a member still (mayRead): leaving ends it
@@ -809,7 +809,7 @@ export async function notes(s: Session, env: Env, [id]: string[]): Promise<Respo
 }
 
 /** The owner and co-authors. */
-async function authorUids(env: Env, p: Plan): Promise<Set<string>> {
+export async function authorUids(env: Env, p: Plan): Promise<Set<string>> {
   const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ?").bind(p.id).all<{ uid: string }>();
   return new Set([p.owner, ...eds.results.map((e) => e.uid)]);
 }
@@ -939,6 +939,8 @@ export async function remove(s: Session, env: Env, [id]: string[]): Promise<Resp
     env.DB.prepare("DELETE FROM plan_notes WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plan_log WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plan_posts WHERE plan = ?").bind(id),
+    env.DB.prepare("DELETE FROM plan_team WHERE plan = ?").bind(id),  // 3.9
+    env.DB.prepare("DELETE FROM plan_asks WHERE plan = ?").bind(id),
     env.DB.prepare("DELETE FROM plans WHERE id = ?").bind(id),
   ]);
   return json({ ok: true });
@@ -1094,7 +1096,10 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
 export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Response> {
-  await env.DB.prepare("DELETE FROM plan_follows WHERE plan = ? AND uid = ?").bind(id, s.uid).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM plan_follows WHERE plan = ? AND uid = ?").bind(id, s.uid),
+    env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(id, s.uid),  // 3.9: off its team too
+  ]);
   return json({ ok: true });
 }
 

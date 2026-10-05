@@ -1723,6 +1723,116 @@ async function builder(id) {
       } }, "Remove") : h("span")))));
   }
 
+  /** 3.9: the plan's team. Opt-in: who showed up today (answered one of the
+   *  plan's cards), questions to the team and their answers, the team's
+   *  bingo. Never anyone's numbers. Each click is one request. */
+  let team = null;          // GET /plans/{id}/team, loaded when the tab opens
+  let replyTo = null;       // the thread whose reply box is open
+  let bingoOpen = false;
+  const wkOf = (d) => {
+    const x = parseIso(d); const dow = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - dow + 3);
+    const y = x.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
+    return `${y}-W${String(1 + Math.round(((x - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
+  };
+  const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d`; };
+  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  const CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
+  /** "3 of 9 · one away from bingo" (team.py bingo_line: change one, change both). */
+  function bingoLine(ev) {
+    const done = (c) => (c === 4 ? ev.middle.done : ev.squares[CELLS.indexOf(c)].done);
+    const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
+    const left = Math.min(...LINES.map((l) => l.filter((c) => !done(c)).length));
+    const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
+      : left === 1 ? "one away from bingo" : `${left} away from bingo`;
+    return `${stamps} of 9 · ${state}`;
+  }
+  function teamTab() {
+    if (!team) {
+      api("GET", `/plans/${id}/team?wk=${wkOf(today())}`).then((r) => { team = r; draw(); }).catch(() => { team = { failed: true }; draw(); });
+      return h("p", { class: "muted" }, "Loading…");
+    }
+    const st = h("span", { class: "status", role: "status" });
+    const again = (p, bad = "That didn't work. Try again.") => p.then(() => { team = null; draw(); }).catch((err) => {
+      st.className = "status bad"; st.textContent = err.status === 429 ? "That's a lot of questions today. Try tomorrow." : bad; });
+    if (team.failed) return h("p", { class: "muted" }, "Couldn't load the team. ", h("button", { class: "linkish", onclick: () => { team = null; draw(); } }, "Try again"));
+    if (!team.on) {
+      return h("div", { class: "panel", style: "max-width:560px" },
+        h("h4", {}, h("span", {}, team.count ? `${team.count.toLocaleString()} on the team` : "No team yet")),
+        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers. Never your numbers."),
+        h("div", { class: "row" }, h("button", { onclick: (e) => { e.target.disabled = true; again(api("POST", `/plans/${id}/team`)); } }, "Join the team"), st));
+    }
+    const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the team" });
+    const send = () => { const text = ask.value.trim(); if (text) again(api("POST", `/plans/${id}/asks`, { text })); };
+    ask.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    const who = (x) => (x.mine ? "You" : [x.emoji ? `${x.emoji} ` : "", h("b", {}, x.name)]);
+    const thread = (a) => {
+      const reps = a.replies.map((r) => h("div", { class: "rep" }, h("b", {}, r.mine ? "You" : r.name), r.author ? " (author)" : "", `: ${r.text}`,
+        a.mine && !r.mine ? h("button", { class: "linkish", onclick: () => again(api("POST", `/plans/${id}/asks/${r.id}/helped`, { on: !r.helped })) }, r.helped ? "Helped ✓" : "That helped")
+          : r.helped ? h("span", { class: "ok" }, " ✓ helped") : null,
+        r.remove ? h("button", { class: "linkish", onclick: () => again(api("DELETE", `/plans/${id}/asks/${r.id}`)) }, "Remove") : null));
+      const bits = [a.topic, a.replies.length ? `${a.replies.length} repl${a.replies.length === 1 ? "y" : "ies"}` : ""].filter(Boolean).join(" · ");
+      let box = null;
+      if (replyTo === a.id) {
+        const r = h("input", { placeholder: "Your answer…", maxlength: 280, "aria-label": "Your answer" });
+        const go = () => { const text = r.value.trim(); if (text) { replyTo = null; again(api("POST", `/plans/${id}/asks`, { text, parent: a.id })); } };
+        r.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+        requestAnimationFrame(() => r.focus());
+        box = h("div", { class: "ask3" }, r, h("button", { onclick: go }, "Reply"));
+      }
+      return h("div", { class: "tq" },
+        h("div", { class: "t" }, a.guid ? h("span", {}, who(a), " on a card") : h("span", {}, who(a), `: ${a.text}`), h("span", { class: "m" }, ago(a.act || a.at))),
+        a.guid ? h("div", {}, `“${a.text}”`) : null, ...reps, box,
+        h("div", { class: "t" }, h("span", { class: "card" }, bits), h("span", { class: "m" },
+          h("button", { class: "linkish", onclick: () => { replyTo = replyTo === a.id ? null : a.id; draw(); } }, a.guid ? "Answer" : "Reply"),
+          a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
+    };
+    const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
+      h("span", { class: "e" }, f.emoji || "👤"), h("b", {}, f.uid === me.uid ? "You" : f.name))),
+      team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
+    const b = team.bingo;
+    let bingo = null;
+    if (b) {
+      const cell = (c) => (c === 4 ? b.ev.middle.done : b.ev.squares[CELLS.indexOf(c)].done);
+      const sq = (c) => (c === 4 ? b.card.middle : b.card.squares[CELLS.indexOf(c)]);
+      bingo = h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Team bingo"), h("span", { class: "muted small", style: "font-weight:500" }, bingoLine(b.ev).split(" · ")[0])),
+        h("div", { class: "bgrow" }, h("span", { class: "bgmini" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("i", { class: cell(c) ? "on" : "" }))),
+          h("span", { class: "small" }, bingoLine(b.ev).split(" · ")[1]), h("span", { style: "flex:1" }),
+          h("button", { class: "linkish", onclick: () => { bingoOpen = !bingoOpen; draw(); } }, bingoOpen ? "Close" : "Open")),
+        bingoOpen ? h("div", { class: "bggrid" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("div", { class: cell(c) ? "on" : "" },
+          h("span", {}, sq(c).icon || ""), h("b", {}, c === 4 ? sq(c).name : sq(c).title),
+          h("small", {}, c === 4 ? `${b.ev.middle.have} of ${b.ev.middle.goal}` : sq(c).rule || "")))) : null);
+    }
+    return h("div", { class: "wb" },
+      h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Ask the team")),
+        h("div", { class: "ask3" }, ask, h("button", { onclick: send }, "Ask")), st,
+        team.asks.length ? team.asks.map(thread) : h("p", { class: "muted small", style: "margin:0" }, "No questions yet.")),
+      h("div", { class: "rail" },
+        h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Showed up today"),
+          h("span", { class: "muted small", style: "font-weight:500" }, `${team.shown} of ${team.count}${team.streak > 1 ? ` · ${team.streak} days` : ""}`)), faces),
+        bingo,
+        h("div", {}, h("button", { class: "quiet", onclick: () => { if (confirm("Leave the team? Your questions and answers stay.")) again(api("DELETE", `/plans/${id}/team`)); } }, "Leave the team"))));
+  }
+
+  /** 3.9: a follower sees the authors' newest post above the tabs until they
+   *  close it (Updates is the authors' tab now). Per browser. */
+  let postNote = undefined;
+  function postLine() {
+    if (author || !plan.following) return null;
+    if (postNote === undefined) {
+      postNote = null;
+      api("GET", `/plans/${id}/posts`).then((r) => { postNote = (r.posts || [])[0] || null; if (postNote) draw(); }).catch(() => {});
+      return null;
+    }
+    if (!postNote) return null;
+    const key = `dc-post-${id}`;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(key)) || 0; } catch { /* private window: shown */ }
+    if (postNote.id <= seen) return null;
+    return h("div", { class: "postnote" }, h("b", {}, postNote.name), h("span", { class: "muted small" }, ago(postNote.at)),
+      h("span", {}, postNote.text), h("span", { style: "flex:1" }),
+      h("button", { class: "linkish", onclick: () => { try { localStorage.setItem(key, String(postNote.id)); } catch { /* none */ } postNote = null; draw(); } }, "Close"));
+  }
+
   /** Someone looking at a plan they don't follow (from its code or the
    *  library): follow it here, or copy it into a plan of their own. */
   let copying = false;
@@ -1754,11 +1864,12 @@ async function builder(id) {
       if (window.ResizeObserver) { let w = 0; new ResizeObserver(() => { if (t.clientWidth !== w) { w = t.clientWidth; fit(); } }).observe(t); }
       return t;
     }
-    const tabs = author ? [["calendar", "Calendar"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean)
-      : plan.following ? [["calendar", "Calendar"], ["updates", "Updates"]] : [];
+    // 3.9: followers: Calendar and Team (the authors' posts show above the tabs); authors keep Updates
+    const tabs = author ? [["calendar", "Calendar"], ["team", "Team"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean)
+      : plan.following ? [["calendar", "Calendar"], ["team", "Team"]] : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
     const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab()
-      : tab === "updates" ? updatesTab() : calendarTab();
+      : tab === "updates" ? updatesTab() : tab === "team" ? teamTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
         h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
@@ -1767,6 +1878,7 @@ async function builder(id) {
       !author && plan.following ? onTrack(plan, false) : null,
       !author && plan.following ? finished() : null,
       !author && !plan.following ? readerActions() : null,
+      postLine(),
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
       author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status,

@@ -298,6 +298,11 @@ def reviewer_menu(reviewer, menu):
         from . import cards as crew_cards
         action = menu.addAction("Due Crew: ask my crew about this…")
         action.triggered.connect(lambda: crew_cards.ask(card))
+    # 3.9: a card in a plan whose team I'm on can go to the team too
+    from . import team_flow
+    if team_flow.plan_for_card(card):
+        team = menu.addAction("Due Crew: ask the team about this…")
+        team.triggered.connect(lambda: team_flow.ask_card(card))
 
 
 _NOTES = {"key": None, "rows": {}}

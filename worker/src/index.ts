@@ -11,6 +11,7 @@ import * as L from "./library";
 import * as N from "./notices";
 import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
+import * as T from "./team";
 import * as People from "./people";
 import * as AS from "./adminsquads";
 import * as Q from "./squads";
@@ -149,6 +150,13 @@ authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.remov
 authed("GET", r(`/plans/${ID}/posts`), (_q, s, env, p) => P.posts(s, env, p));         // 3.8
 authed("POST", r(`/plans/${ID}/posts`), P.addPost);
 authed("DELETE", r(`/plans/${ID}/posts/(\\d{1,12})`), (_q, s, env, p) => P.removePost(s, env, p));
+// 3.9: a plan's team
+authed("GET", r(`/plans/${ID}/team`), T.get);
+authed("POST", r(`/plans/${ID}/team`), T.join);
+authed("DELETE", r(`/plans/${ID}/team`), (_q, s, env, p) => T.leave(s, env, p));
+authed("POST", r(`/plans/${ID}/asks`), T.ask);
+authed("DELETE", r(`/plans/${ID}/asks/(\\d{1,12})`), (_q, s, env, p) => T.removeAsk(s, env, p));
+authed("POST", r(`/plans/${ID}/asks/(\\d{1,12})/helped`), T.helped);
 
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);

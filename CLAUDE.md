@@ -634,6 +634,30 @@ add-on.
   in N of M followers' Anki" (`seen_version`, written when a board carries
   it). A date that opened is never closed again by an update.
 
+- 3.9 a plan's team and Insights (mocks "Plan Team and Insights", rounds
+  1–6): the plan card has three tabs, Plan · Team · Insights
+  (`_state["plan_sub"]`, per session). Team is opt-in per plan (migration
+  0020, `worker/src/team.ts`, `team_flow.py` glue, `team.py` pure): joining
+  shares that I showed up today (answered one of the plan's cards, my Anki
+  day; `team` on the sync, rows I hold only), my questions and answers, and
+  my bingo squares from the plan's cards only (`bingo_flow.for_team`);
+  never a number, never weak spots. The board carries counts (`teams`:
+  shown, of, streak, faces, act, last) for the Plan tab's line and the
+  badge (unread: `team_seen` in plans.json); the tab is one request when it
+  opens (`GET /plans/{id}/team`), each click one more. Card questions carry
+  guid + card number, never text; each reader's Anki says "on a card you
+  have down" itself (`cards.i_know`), from the reviewer's "ask the team
+  about this…". Team bingo: the week's squares, the team's own middle
+  (asks, answers, 3 days), counts never who; `team.bingo_line` =
+  `bingoLine` in builder.js. Insights are mine alone and Anki only
+  (`team.insights`): the plan's topics (a tag's last part as words, merged
+  across resources) I pressed Again on in review or relearning in 14 days,
+  missed of reviewed (cards, 5+), the trend against the 14 before (10
+  points), Study (a filtered deck of those cards), Re-watch (the date's
+  watch link), Ask (Team with the topic in the box). On the site a
+  follower's plan page is Calendar · Team, the authors' newest post above
+  the tabs until closed (per browser); authors keep Updates.
+
 ## Releasing
 
 1. Bump `due_crew/manifest.json` version.

@@ -8,6 +8,7 @@ import * as B from "./bingo";
 import * as C from "./cards";
 import * as N from "./notices";
 import * as P from "./plans";
+import * as T from "./team";
 import * as V from "./validate";
 import { ankiDay, Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -149,6 +150,11 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     const card = await B.forMember(env, s.uid, params.get("wk"));
     if (card) out.bingo = card;
   }
+  // 3.9: the teams I'm on: counts for the Plan tab and the Team badge
+  if (!keep) {
+    const teams = await T.forBoard(env, s.uid);
+    if (teams) out.teams = teams;
+  }
   // 3.5, H: only the site's home asks (the add-on never sends feed=1)
   if (keep && params.get("feed") === "1") out.feed = await feed(env, s.uid);
   await touchSeen(env, s.uid);
@@ -187,7 +193,7 @@ export async function getHeatmap(s: Session, env: Env, [uid]: string[]): Promise
 export async function sync(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) {
-    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log"].includes(k)) throw V.bad("sync");
+    if (!["profile", "week", "decks", "heatmap", "squads", "settings", "plans", "knows", "stuck", "log", "team"].includes(k)) throw V.bad("sync");
   }
   // validate everything before writing anything
   const profile = "profile" in body ? V.profile(body.profile) : null;
@@ -199,6 +205,7 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
   const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
   const log = "log" in body ? C.logPart(body.log) : null;
+  const team = "team" in body ? T.teamPart(body.team) : null;               // 3.9
   let squads: { row: ReturnType<typeof V.memberRow>; ids: string[] } | null = null;
   if ("squads" in body) {
     const sq = body.squads;
@@ -313,6 +320,11 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
       ankiDay(now, profile?.tz ?? have.tz, profile?.rollover ?? have.rollover));
     wrote.plans = pw.length > 0;
     writes.push(...pw);
+  }
+  if (team) {
+    const tw = await T.teamWrites(env, s.uid, team);
+    wrote.team = tw.length > 0;
+    writes.push(...tw);
   }
   if (knows && knows.add.length) {
     // a ceiling on what one person keeps: past it, new ones aren't taken

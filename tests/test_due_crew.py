@@ -2980,7 +2980,7 @@ def test_every_board_command_has_a_handler():
                    r'"(?:cmd|actcmd)":\s*f?"([a-z]+)'):
             emitted |= set(re.findall(rx, text))
     handled = set()
-    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py"):
+    for name in ("__init__.py", "plan_flow.py", "rooms.py", "cards.py", "due_flow.py", "team_flow.py"):
         text = src[os.path.join(REPO, "due_crew", name)]
         handled |= set(re.findall(r'cmd == "([a-z0-9]+)"', text))
         for group in re.findall(r'cmd in \(([^)]*)\)', text) + re.findall(r'SETTINGS_CMDS = \(([^)]*)\)', text):
@@ -6103,6 +6103,135 @@ def test_plan_updates_v38():
         F.mw.state = saved_state
         dc.plan_flow.app.swap = saved_swap
         _state["plan_updates"], _state["plans_midday"] = {}, False
+
+
+def test_plan_team_v39():
+    """3.9: a plan's team (opt-in; who showed up today, questions and
+    answers, the team's bingo) and Insights (mine alone: the topics I
+    missed most in 14 days). The sync carries the showed-up day only for
+    teams I'm on; the board escapes everyone's words; every click reaches
+    its handler."""
+    import due_crew as dc
+    from urllib.parse import quote
+    from due_crew import plan_flow as F, team as T, team_flow as TF, app as appmod
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    # ---- pure: topics and the table ----
+    topics = T.topic_list({"units": [
+        {"id": "a", "name": "A", "opens": _day(0), "tags": ["Big::#Video_Series::05_Complement", "Big::#Path_Book_2::Complement"]},
+        {"id": "b", "name": "B", "opens": _day(1), "tags": ["Big::#Path_Book_2::Chronic_inflammation"],
+         "todo": [{"k": "watch", "t": "Lecture 3", "url": "https://example.com/v"}]}]})
+    check("insights: one topic per name, across resources", [(t[1], t[2]) for t in topics]
+          == [("Complement", ["Video Series", "Path Book 2"]), ("Chronic inflammation", ["Path Book 2"])], topics)
+    cards = {"Big::#Video_Series::05_Complement": {1, 2, 3}, "Big::#Path_Book_2::Complement": {3, 4, 5, 6},
+             "Big::#Path_Book_2::Chronic_inflammation": {10, 11, 12, 13, 14}}
+    ans = [(c, 1, 3) for c in (1, 2, 3, 4, 5, 6)] + [(1, 2, 1), (2, 3, 1), (2, 5, 1), (3, 13, 1)]  # 3 missed of 6
+    ans += [(c, 20, 3) for c in (1, 2, 3, 4, 5)]                                                  # before: 0 of 5
+    ans += [(c, 2, 1 if c == 10 else 3) for c in (10, 11, 12, 13)]                                # 4 cards only
+    units = {"b": {"todo": [{"k": "watch", "t": "Lecture 3", "url": "https://example.com/v"}]}}
+    rows = T.insights(topics, lambda t: cards.get(t, set()), ans, todo_of=lambda u: (units.get(u) or {}).get("todo"))
+    check("insights: missed of reviewed, cards not presses; worse against the 14 before; a thin topic stays out",
+          [(r["name"], r["missed"], r["of"], r["trend"], r["cids"]) for r in rows] == [("Complement", 3, 6, "worse", [1, 2, 3])], rows)
+    ans += [(14, 2, 3)]
+    rows = T.insights(topics, lambda t: cards.get(t, set()), ans, todo_of=lambda u: (units.get(u) or {}).get("todo"))
+    check("insights: worst share first; Re-watch is the date's watch link; no trend without enough before",
+          [(r["name"], r["trend"], r["url"]) for r in rows] == [("Complement", "worse", ""), ("Chronic inflammation", "", "https://example.com/v")], rows)
+    check("team: unread is threads that moved since I looked", T.unread({"act": [30, 20, 10]}, 15) == 2 and T.unread(None, 0) == 0)
+    ev = {"squares": [{"done": i in (0, 1)} for i in range(8)], "middle": {"done": False}, "lines": 0}
+    check("team bingo: the line in words", T.bingo_line(ev) == "2 of 9 · one away from bingo", T.bingo_line(ev))
+    # ---- the board: tabs, the team, Insights; everyone's words escaped ----
+    bad = "<img src=x onerror=alert(1)>"
+    v = {"on": True, "count": 3, "shown": 2, "streak": 4, "more": 0,
+         "faces": [{"uid": "kai", "name": bad, "emoji": "🐙", "shown": True}, {"uid": "maya", "name": "Maya", "emoji": "", "shown": False}],
+         "asks": [{"id": 7, "uid": "kai", "name": bad, "emoji": "", "text": bad, "at": 1, "act": 1, "topic": bad, "guid": "g1", "ord": 0,
+                   "mine": False, "remove": False, "author": False,
+                   "replies": [{"id": 8, "uid": "maya", "name": "Maya", "emoji": "", "text": bad, "at": 1, "helped": True,
+                                "author": False, "mine": True, "remove": True}]}]}
+    html = board._team_html("p1", {"team": v, "team_state": "ok", "me": "maya", "known": {"down": ["g1"], "have": ["g1"]}})
+    check("team: everyone's words escaped", "<img" not in html and html.count("&lt;img") >= 4, html)
+    check("team: faces lit or not, You for me, the streak",
+          "Showed up today &middot; 2 of 3 &middot; 4 days running" in html and ">You</b>" in html and 'class="face away"' in html)
+    check("team: a card question I have down says so, with Answer and See the card",
+          "on a card you have down" in html and "duecrew:planteamreply:p1:7" in html
+          and "duecrew:planteamcard:p1:7" in html and "duecrew:planteamreport:p1:7" in html)
+    check("team: my own answer can go; Leave the team is there",
+          "duecrew:planteamremove:p1:8" in html and "duecrew:planteamleave:p1" in html)
+    join = board._team_html("p1", {"team": {"on": False, "count": 5}, "team_state": "ok"})
+    check("team: not on it, Join the team says what it shares", "5 on the team" in join and "duecrew:planteamjoin:p1" in join
+          and "Never your numbers" in join)
+    tabs = board._plan_tabs("p1", {"sub": "plan", "unread": 3})
+    check("tabs: Plan, Team with its badge, Insights", ">Plan</a>" in tabs and "Team<i>3</i>" in tabs and "Insights" in tabs
+          and "duecrew:plansub:p1:ins" in tabs)
+    ins = board._insights_html("p1", [{"key": "a<b", "name": "A<b", "sub": "R", "missed": 3, "of": 6, "trend": "worse", "cids": [1], "url": ""}])
+    check("insights: the table under Last 14 days, Study and Ask, no Re-watch without a link, escaped",
+          "Last 14 days" in ins and "Missed" in ins and "&uarr; worse" in ins and "A&lt;b" in ins
+          and "duecrew:planinsstudy:p1:0" in ins and "planinswatch" not in ins and "duecrew:planinsask:p1:0" in ins)
+    # ---- the client against the fake Worker, and the glue ----
+    store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
+    store.today = _day(0)
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya, kai = new_client(store, "maya", "Maya"), new_client(store, "kai", "Kai")
+    labels = [_day(-i) for i in range(7)]
+    col = _plan_col()
+    saved = (appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip)
+    try:
+        appmod._bg = TF._bg = lambda job, done=None: done(job()) if done else job()
+        TF.tooltip = lambda *a, **k: None
+        appmod.sync = lambda **k: None
+        with _PlanGlue({"A": maya}, {"A": col}):
+            TF.client = lambda: maya
+            plan, _ = maya.follow_plan(code)
+            kai.follow_plan(code)
+            F.open_schedule = _skip_schedule
+            F.on_followed(plan, 10, None, "open")
+            maya.fetch_board(labels, with_decks=True)
+            check("team: none until I join; the sync sends no team part",
+                  not maya.session.get("teams") and TF.for_sync({}) is None)
+            dc._on_js(False, f"duecrew:plansub:{pid}:team", DeckBrowser())
+            tv = _state["team_view"][pid]
+            check("team: opening the tab fetches it once (one request)", _state["plan_sub"][pid] == "team"
+                  and tv["data"] == {"on": False, "count": 0}, tv)
+            dc._on_js(False, f"duecrew:planteamjoin:{pid}", DeckBrowser())
+            check("team: Join puts me on it", (pid, "maya") in store.team and pid in maya.session["teams"])
+            kai.team_join(pid)
+            kai.team_ask(pid, "Does Friday's quiz include complement?")
+            dc._on_js(False, f"duecrew:planteamask:{pid}:" + quote("Same question: does it? <b>"), DeckBrowser())
+            asked = [a["text"] for a in store.team_asks]
+            check("team: Ask sends the box's words (a colon in them too)", asked[-1] == "Same question: does it? <b>", asked)
+            maya.fetch_board(labels)
+            check("team: the board carries the counts, the newest question from someone else",
+                  maya.session["teams"][pid]["of"] == 2 and maya.session["teams"][pid]["last"]["name"] == "Kai")
+            # today, one of the plan's cards answered: showed up rides the sync, once
+            cut = fakes.day_cutoff_for(TODAY)
+            fakes.add_review(col.db.conn, (cut - 3600) * 1000, ease=1, rtype=1, cid=8)
+            part = TF.for_sync({})
+            check("team: answered a plan card today: the sync says I showed up", part == {pid: {"day": _day(0)}}, part)
+            maya.push(labels, {}, team=part)
+            check("team: the fake Worker kept the day", store.team[(pid, "maya")]["days"] == [_day(0)])
+            maya.push(labels, {}, team=part)
+            check("team: the same part again isn't sent", maya.session.get("team_hash") and store.team[(pid, "maya")]["days"] == [_day(0)])
+            check("team: an older server's retry drops the team part", "team" not in maya._without_32({"team": part, "week": {}}))
+            # Insights, worked out here from my reviews of the plan's cards
+            saved_min = T.MIN_CARDS
+            T.MIN_CARDS = 1
+            try:
+                dc._on_js(False, f"duecrew:plansub:{pid}:ins", DeckBrowser())
+                rows = TF.insights(pid)
+            finally:
+                T.MIN_CARDS = saved_min
+            check("insights: the plan's topic I missed, from my own revlog", [(r["name"], r["missed"], r["of"]) for r in rows] == [("Renal", 1, 1)], rows)
+            _state["labels"] = labels
+            card = F.board_view({})["cards"][0]
+            check("insights: the plan's card carries its tab", card["tabs"]["sub"] == "ins")
+            dc._on_js(False, f"duecrew:planinsask:{pid}:0", DeckBrowser())
+            check("insights: Ask goes to Team with the topic in the box", _state["plan_sub"][pid] == "team"
+                  and _state["team_draft"][pid] == "Renal: ")
+    finally:
+        appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip = saved
+        TF._bg = saved[0]
+        for k in ("plan_sub", "team_view", "team_draft", "insights"):
+            _state[k] = {}
+        _state["labels"] = []
 
 
 def main():

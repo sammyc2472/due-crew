@@ -1250,6 +1250,12 @@ def board_view(c):
                        undo_ok=undo, session=sess.get(p["id"]),
                        week_offset=(_state.get("plan_week") or {}).get(p["id"], 0))
              for p in plan_list]
+    from . import team_flow
+    for card in cards:
+        try:
+            card["tabs"] = team_flow.card_bits(card["id"])  # 3.9: Plan · Team · Insights
+        except Exception:
+            traceback.print_exc()
     from .squads import _my_squads
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
@@ -1261,6 +1267,9 @@ def board_view(c):
 
 def on_message(cmd, parts):
     """duecrew:plan* from the board. True when handled."""
+    if cmd == "plansub" or cmd.startswith("planteam") or cmd.startswith("planins"):
+        from . import team_flow  # 3.9: the plan's Team and Insights tabs
+        return team_flow.on_message(cmd, parts)
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "planundo":
         undo_morning()
