@@ -602,13 +602,15 @@ def _later(iso, days):
         return iso
 
 
-def my_doc(doc, shift=0, skipped=()):
+def my_doc(doc, shift=0, skipped=(), moved=None):
     """G3, G4: the plan as this follower runs it: every date `shift` days
     later (their due dates, checkpoints, review days and end with them),
-    the dates they skip left out. Events are fixed days: they never move.
-    The plan itself never changes."""
+    the dates they skip left out, and (3.7.6) a date I moved, that many
+    days later again, marked `_moved`. Events are fixed days: they never
+    move. The plan itself never changes."""
     skipped = set(skipped or ())
-    if not shift and not skipped:
+    moved = {k: int(v) for k, v in (moved or {}).items() if isinstance(v, int) and v > 0}
+    if not shift and not skipped and not moved:
         return doc
     out = dict(doc or {})
     us = []
@@ -616,10 +618,13 @@ def my_doc(doc, shift=0, skipped=()):
         if u["id"] in skipped:
             continue
         v = dict(u)
-        if shift:
+        by = shift + moved.get(u["id"], 0)
+        if by:
             for k in ("opens", "due", "check"):
                 if v.get(k):
-                    v[k] = _later(v[k], shift)
+                    v[k] = _later(v[k], by)
+        if moved.get(u["id"]):
+            v["_moved"] = moved[u["id"]]
         us.append(v)
     out["units"] = us
     if shift:
@@ -678,6 +683,7 @@ def week_view(doc, prog, today, start, skipped=()):
                      else "done" if int(t) and int(s) >= int(t) else "open")
             rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
+                         "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topics(u)})  # P7
         live = [r for r in rows if r["state"] != "skip"]
         dd = first + datetime.timedelta(days=i)
@@ -717,6 +723,28 @@ def prep_for(doc, today):
 
 def opened_by_date(doc, today):
     return [u for u in units(doc) if str(u.get("opens") or "9999") <= today]
+
+
+def late_start(doc, today):
+    """3.7.6, following after dates have passed: {passed: [unit ids before
+    today], shift: days my dates would run later to start at the first,
+    ends: my last date then, after: (event name, day) that last date falls
+    after, or None}. Pure."""
+    us = units(doc)
+    passed = [u["id"] for u in us if str(u.get("opens") or "9999") < today]
+    first = min((str(u["opens"]) for u in us if u.get("opens")), default=None)
+    if not passed or not first:
+        return {"passed": [], "shift": 0, "ends": None, "after": None}
+    shift = (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(first)).days
+    last = max(str(u.get("due") or u["opens"]) for u in us if u.get("opens"))
+    ends = _later(last, shift)
+    evs = [(str(e.get("name") or "the exam"), str(e["day"])) for e in (doc or {}).get("events") or []
+           if isinstance(e, dict) and e.get("day")]
+    end = (doc or {}).get("end")
+    if end:
+        evs.append(("the plan's end", str(end)))
+    after = max((x for x in evs if x[1] < ends and x[1] >= last), key=lambda x: x[1], default=None)
+    return {"passed": passed, "shift": shift, "ends": ends, "after": after}
 
 
 def next_unit(doc, today):

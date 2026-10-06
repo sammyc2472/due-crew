@@ -1001,8 +1001,8 @@ class ApiClient:
 
     def set_days(self, plan_id, **fields):
         """G3, G4: PATCH my follow's own days (any of paused, shift, until,
-        since, skipped). The follow as the server has it, or None."""
-        body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped")}
+        since, skipped, and 3.7.6's moved). The follow as the server has it, or None."""
+        body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped", "moved")}
         status, data = self._call("PATCH", f"/plans/{plan_id}/follow", body)
         if status != 200:
             return None

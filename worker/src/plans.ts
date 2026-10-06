@@ -353,7 +353,7 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 // a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
-const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist, team_ask";
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist, team_ask, moved";
 
 /** 3.7.6: a plan's team and sharing my progress are one choice: on the
  *  team, my progress counts go to its authors; off it, they don't. */
@@ -387,9 +387,11 @@ async function following(env: Env, plan: string, uid: string) {
 }
 
 /** My follow's own days, as the add-on and the site read them. */
-function followDays(f: { shift?: number | null; pause_until?: string | null; pause_since?: string | null; skipped?: string | null }) {
+function followDays(f: { shift?: number | null; pause_until?: string | null; pause_since?: string | null; skipped?: string | null;
+                         moved?: string | null }) {
   return { shift: f.shift ?? 0, until: f.pause_until ?? null, since: f.pause_since ?? null,
-    skipped: f.skipped ? JSON.parse(f.skipped) as string[] : [] };
+    skipped: f.skipped ? JSON.parse(f.skipped) as string[] : [],
+    moved: f.moved ? JSON.parse(f.moved) as Record<string, number> : {} };  // 3.7.6: one date later, days
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -429,6 +431,7 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
 
 type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
   shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null;
+  moved?: string | null;
   team_ask?: number };
 type Editor = { uid: string; name: string; emoji: string };
 
@@ -1093,17 +1096,22 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   return json({ ...(await view(env, p, s.uid)), ...(full ? { teamFull: true } : {}) });
 }
 
-/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?}.
+/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?, moved?}.
  *  G3, G4: my own days: how many days my dates run later than the plan's
- *  (0-365), a pause's first and last day, the dates I skip (unit ids). */
+ *  (0-365), a pause's first and last day, the dates I skip (unit ids).
+ *  3.7.6: `moved` {unit id: 1-365 days later}, one date at a time on top
+ *  of the shift. Reset to default is one PATCH of all of them. */
 export async function patchFollow(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped"].includes(k)) throw V.bad("follow");
+  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved"].includes(k)) throw V.bad("follow");
   if (body.early !== undefined && !V.isInt(body.early, 0, 7)) throw V.bad("follow");
   if (body.shift !== undefined && !V.isInt(body.shift, 0, 365)) throw V.bad("follow");
   for (const k of ["until", "since"]) if (body[k] !== undefined && body[k] !== null && !V.isDate(body[k])) throw V.bad("follow");
   if (body.skipped !== undefined && (!Array.isArray(body.skipped) || body.skipped.length > UNITS_MAX
       || !body.skipped.every((u) => typeof u === "string" && UNIT_ID.test(u)))) throw V.bad("follow");
+  if (body.moved !== undefined && (!body.moved || typeof body.moved !== "object" || Array.isArray(body.moved)
+      || Object.keys(body.moved).length > UNITS_MAX
+      || !Object.entries(body.moved).every(([u, n]) => UNIT_ID.test(u) && V.isInt(n, 1, 365)))) throw V.bad("follow");
   const f = await following(env, id, s.uid);
   if (!f) throw new HttpError(404, "not_following");
   // 3.7.6: share is the team: true joins it (or stays as is when it's full), false leaves it
@@ -1120,15 +1128,18 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
   const until = body.until !== undefined ? (body.until as string | null) : f.pause_until;
   const since = body.since !== undefined ? (body.since as string | null) : f.pause_since;
   const skipped = body.skipped !== undefined ? ((body.skipped as string[]).length ? JSON.stringify([...new Set(body.skipped as string[])]) : null) : f.skipped;
+  const moved = body.moved !== undefined
+    ? (Object.keys(body.moved as object).length ? JSON.stringify(Object.fromEntries(Object.entries(body.moved as Record<string, number>).sort())) : null)
+    : f.moved ?? null;
   if (paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0) || shift !== (f.shift ?? 0)
-      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped) {
+      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped || moved !== (f.moved ?? null)) {
     await env.DB.prepare(
-      `UPDATE plan_follows SET paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?
+      `UPDATE plan_follows SET paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?, moved = ?
         WHERE plan = ? AND uid = ?`,
-    ).bind(paused, sj, early, shift, until, since, skipped, id, s.uid).run();
+    ).bind(paused, sj, early, shift, until, since, skipped, moved, id, s.uid).run();
   }
   return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early,
-    ...followDays({ shift, pause_until: until, pause_since: since, skipped }) });
+    ...followDays({ shift, pause_until: until, pause_since: since, skipped, moved }) });
 }
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
@@ -1256,7 +1267,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
  *  moves at every sync. A short hash; one read. */
 export async function planStamp(env: Env, uid: string): Promise<string> {
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped,
+    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved,
             (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
        FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ? ORDER BY p.id`,
   ).bind(uid).raw();
@@ -1272,7 +1283,7 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
     `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.team_ask, f.paused, f.sched, f.early,
-            f.shift, f.pause_until, f.pause_since, f.skipped, u.name AS owner_name
+            f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
             OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,

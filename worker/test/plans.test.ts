@@ -109,7 +109,7 @@ describe("plans: following", () => {
     expect(f.status).toBe(200);
     // 3.7.6: following alone shares nothing; sharing is being on its team
     expect(f.body.following).toEqual({ share: false, paused: false, sched: null, early: 0, progress: null,
-      shift: 0, until: null, since: null, skipped: [], hist: {} });  // G3, G4: my own days, none yet; 3.5, L: my history
+      shift: 0, until: null, since: null, skipped: [], moved: {}, hist: {} });  // G3, G4: my own days, none yet; 3.5, L: my history; 3.7.6 moved
     const light = await maya.call("GET", "/board");
     expect(light.body.plans).toBeUndefined();  // not on every refresh
     const first = await maya.call("GET", "/board?decks=1");

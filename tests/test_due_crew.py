@@ -2180,10 +2180,13 @@ def test_together_v210():
           and "clear(document.getElementById('dc-knows'))" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-room-bottom'))" in rm.BAR_BALANCE)
     kj = crew_cards.chip_js({"text": "x", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
-    check("bottom bar: the chip's words end in an ellipsis (never under its button), the cells are measured unwrapped",
+    check("bottom bar: the chip's words end in an ellipsis (never under its button); the answer buttons slide to the middle",
           "text-overflow:ellipsis" in kj and "flex:none" in kj and "s.title = D.title || D.text" in kj
-          and "sum +=" in rm.BAR_BALANCE and "paddingLeft) - parseFloat" in rm.BAR_BALANCE
+          and "translateX(" in rm.BAR_BALANCE and ".style.width = side" not in rm.BAR_BALANCE
           and "data-short" in rm.BAR_BALANCE and "data-short" in kj and "data-full" in rm.BAR_BALANCE)
+    check("bottom bar: beside More when there's room, else Edit's side; rebalanced when the bar changes, not by its own moves",
+          "fits(r) ? r : fits(l) ? l" in rm.BAR_BALANCE and "MutationObserver" in rm.BAR_BALANCE
+          and "n === chip" in rm.BAR_BALANCE and "chip.contains(x.target)" in rm.BAR_BALANCE)
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
@@ -4138,6 +4141,108 @@ def test_plans_follower_days_g():
           and f"plancatch:{pid}" in html and "Skip it" in in_week(_day(7)), html[:400])
 
 
+def test_your_own_days_376():
+    """3.7.6: one date moved later on my copy, Reset to default, and the
+    three ways to start a plan that began before I followed."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import plan_flow as F
+    from due_crew import plans as P
+    from due_crew import board
+    doc = {"deck": "Step 1", "units": _plan_units(), "events": [{"id": "q", "day": _day(5), "name": "Quiz"}]}
+    mine = P.my_doc(doc, 1, (), {"ar": 2})
+    ar = next(u for u in mine["units"] if u["id"] == "ar")
+    check("moved: that date runs its days later again, on top of the shift; the rest only the shift",
+          ar["opens"] == _day(3) and ar["due"] == _day(9) and ar.get("_moved") == 2
+          and next(u for u in mine["units"] if u["id"] == "ex")["opens"] == _day(4) and doc["units"][1]["opens"] == _day(0))
+    week = P.week_view(mine, {}, _day(0), P.week_start(_day(3)))
+    check("moved: the week marks it", any(u.get("moved") for d in week for u in d["units"] if u["uid"] == "ar"))
+    ls = P.late_start(dict(doc, end=_day(16)), _day(0))
+    check("late: the passed dates, how far back the start is, where it would end and what it runs past",
+          ls["passed"] == ["hf"] and ls["shift"] == 7 and ls["ends"] == _day(21) and ls["after"] == ("the plan's end", _day(16)), ls)
+    check("late: nothing passed, nothing to ask", P.late_start({"units": _plan_units()[1:]}, _day(0))["passed"] == [])
+    check("reset: says exactly what goes back, and nothing when nothing changed",
+          F.reset_lines({"doc": doc, "shift": 3, "skipped": ["ex"], "moved": {"ar": 2}, "until": _day(4)})
+          == ["Your dates run 3 days later: back on time", "1 skipped date comes back: Extras",
+              "1 moved date goes back: Arrhythmia", "Your pause ends"]
+          and F.reset_lines({"doc": doc}) == [])
+
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    col = _plan_col()
+    labels = [_day(-i) for i in range(7)]
+    saved = (F._bg, F.confirm if hasattr(F, "confirm") else None)
+    with _PlanGlue({"A": maya}, {"A": col}):
+        F._bg = lambda job, done=None: done(job()) if done else job()
+        try:
+            plan, _ = maya.follow_plan(code)
+            F.on_followed(plan, 10, None, "skip:hf")
+            check("late, where everyone is: the passed date is skipped on my follow, so behind nowhere",
+                  store.follows[(pid, "maya")].get("skipped") == ["hf"] and 1 not in _open(col) and 3 in _open(col),
+                  (store.follows[(pid, "maya")], _open(col)))
+            maya.fetch_board(labels, with_decks=True)
+            card = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], {}, _day(0))
+            html = board._plan_card_html(dict(card, id=pid))
+            check("move: a date from today on has Move…", f"planmove:{pid}:ar" in html, html[:300])
+            dc._on_js(False, f"duecrew:planskip:{pid}:ex", DeckBrowser())  # a command the board sends, for the handler list
+            F.move_date(pid, "cz", 2)
+            check("move: kept on my follow; the plan itself unchanged",
+                  store.follows[(pid, "maya")].get("moved") == {"cz": 2} and store.plans[pid]["doc"]["units"][3]["opens"] == _day(7))
+            card = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], {}, _day(0),
+                               week_offset=(datetime.date.fromisoformat(P.week_start(_day(9))) - datetime.date.fromisoformat(P.week_start(_day(0)))).days // 7)
+            html = board._plan_card_html(dict(card, id=pid))
+            check("move: on its new day, marked moved, with Put it back", "&middot; moved" in html and f"planmoveback:{pid}:cz" in html)
+            dc._on_js(False, f"duecrew:planmoveback:{pid}:cz", DeckBrowser())
+            check("move: Put it back (sent as the board does) takes it off", not store.follows[(pid, "maya")].get("moved"))
+            F.move_date(pid, "cz", 2)
+            maya.set_days(pid, shift=3)
+            asked = []
+            F.confirm = lambda *a: asked.append(a[2]) or True
+            from due_crew import ui as UI
+            real_confirm, UI.confirm = UI.confirm, F.confirm
+            try:
+                dc._on_js(False, f"duecrew:planreset:{pid}", DeckBrowser())
+            finally:
+                UI.confirm = real_confirm
+            f = store.follows[(pid, "maya")]
+            check("reset to default: one question saying what goes back, then all of it at once",
+                  asked and "Reset to default?" in asked[0] and "Your dates run 3 days later" in asked[0]
+                  and f.get("shift", 0) == 0 and not f.get("skipped") and not f.get("moved"), (asked, f))
+        finally:
+            F._bg = saved[0]
+    store2 = world({"dre": "Dre", "kai": "Kai"})
+    pid2, code2 = store2.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    kai = new_client(store2, "kai", "Kai")
+    col2 = _plan_col()
+    with _PlanGlue({"B": kai}, {"B": col2}):
+        F._bg = lambda job, done=None: done(job()) if done else job()
+        try:
+            plan, _ = kai.follow_plan(code2)
+            F.on_followed(plan, 10, None, "begin:7")
+            check("late, from the beginning: my dates run that many days later; the first opens today",
+                  store2.follows[(pid2, "kai")]["shift"] == 7 and 1 in _open(col2) and 3 not in _open(col2), str(_open(col2)))
+        finally:
+            F._bg = saved[0]
+    store3 = world({"dre": "Dre", "lu": "Lu"})
+    pid3, code3 = store3.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    lu = new_client(store3, "lu", "Lu")
+    col3 = _plan_col()
+    with _PlanGlue({"C": lu}, {"C": col3}):
+        F._bg = lambda job, done=None: done(job()) if done else job()
+        try:
+            plan, _ = lu.follow_plan(code3)
+            F.on_followed(plan, 10, None, "catch:1:14")
+            st = F._state_cfg()[pid3]
+            check("late, catch up: the passed date opens and a week's catch-up runs (+2 a day)",
+                  1 in _open(col3) and st.get("catch", {}).get("extra") == 2 and st["catch"]["until"] == _day(6), st.get("catch"))
+            card = F.card_view(next(x for x in F.followed() if x["id"] == pid3), st, {"hf": [2, 0, 2]}, _day(0))
+            box, behind = board._today_box(dict(card, session={"kind": "study", "target": 3, "done": 0, "behind": 2}), pid3)
+            check("late, catch up: what it's catching up on isn't called behind", not behind and "behind" not in box, box)
+        finally:
+            F._bg = saved[0]
+
+
 def test_plans_fresh_after_cached_morning_v311():
     """3.1.1: the morning at the sync can run on yesterday's cached plans;
     the day's fresh ones, arriving after, still get their look."""
@@ -5112,7 +5217,7 @@ def test_plans_tab_v341():
     check("week: a unit's state, done, open or later, with its counts",
           [u["state"] for u in by["2026-10-05"]["units"]] == ["done"] and by["2026-10-06"]["units"][0]["state"] == "open"
           and {k: v for k, v in by["2026-10-08"]["units"][0].items() if k != "what"}
-          == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False})
+          == {"uid": "d", "name": "Metab", "total": 38, "seen": 0, "state": "later", "prep": False, "moved": False})
     check("week: a date's count before it opens (author's n, cards, searches, ids)",
           P.unit_total(doc["units"][1]) == 8 and P.unit_total(doc["units"][3]) == 38)
     check("week: rest days are the plan's off days with nothing opening; prep and events marked",

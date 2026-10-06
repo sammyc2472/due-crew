@@ -162,7 +162,7 @@ def mine(p):
     `plan_doc` is the plan itself (what the author's changes compare to)."""
     if p.get("_mine"):
         return p
-    return dict(p, doc=P.my_doc(p["doc"], int(p.get("shift") or 0), p.get("skipped") or ()),
+    return dict(p, doc=P.my_doc(p["doc"], int(p.get("shift") or 0), p.get("skipped") or (), p.get("moved")),
                 plan_doc=p["doc"], _mine=True)
 
 
@@ -588,7 +588,9 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
     today_names = [str(u.get("name") or "?") for u in today_units]
     if not today_names and now_id and any(u["id"] == now_id and u.get("due") and u["due"] >= today for u in open_units):
         today_names = [str(u.get("name") or "?") for u in open_units if u["id"] == now_id]
-    skipped_units = [dict(u, opens=P._later(u["opens"], shift)) if shift else u
+    moved = plan.get("moved") or {}
+    skipped_units = [dict(u, opens=P._later(u["opens"], shift + int(moved.get(u["id"]) or 0)))
+                     if shift or moved.get(u["id"]) else u
                      for u in P.units(_plan_doc(plan)) if u["id"] in skipped]
     week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units)
     nxt_view = ({"name": str(nxt.get("name") or "?"), "uid": nxt["id"], "day": P.weekday_or_day(nxt["opens"], today),
@@ -1285,6 +1287,12 @@ def on_message(cmd, parts):
         browse_date(arg, parts[3])
     elif cmd == "planputback" and arg:
         open_put_off(arg)
+    elif cmd == "planmove" and arg and len(parts) > 3:
+        move_menu(arg, parts[3])
+    elif cmd == "planmoveback" and arg and len(parts) > 3:
+        move_date(arg, parts[3], 0)
+    elif cmd == "planreset" and arg:
+        reset_days(arg)
     elif cmd == "planskip" and arg and len(parts) > 3:
         set_skip(arg, parts[3], True)
     elif cmd == "planunskip" and arg and len(parts) > 3:
@@ -1497,6 +1505,104 @@ def set_skip(pid, uid, on):
         app.swap(cfg())
 
     _bg(lambda: cl.set_days(pid, skipped=skipped), done)
+
+
+def move_menu(pid, uid):
+    """3.7.6: move one date later on my copy: the next seven days after it.
+    A day on or after the event it preps for says so."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    u = next((x for x in P.units((p or {}).get("doc")) if x["id"] == uid), None)
+    if p is None or u is None or not u.get("opens"):
+        return
+    raw = _raw(pid) or {}
+    have = int((raw.get("moved") or {}).get(uid) or 0)
+    ev = next((e for e in (p["doc"].get("events") or []) if isinstance(e, dict) and u.get("for") and e.get("name") == u.get("for")), None)
+    from aqt.qt import QCursor, QMenu
+    menu = QMenu(mw)
+    head = menu.addAction(f"Move {u.get('name') or 'this date'} to")
+    head.setEnabled(False)
+    for k in range(1, 8):
+        day = P._later(u["opens"], k)
+        late = ev and str(ev.get("day") or "9999") <= day
+        a = menu.addAction(f"{P.fmt_day(day)}" + (f" · after {ev.get('name')}" if late else ""))
+        a.triggered.connect(lambda _=False, n=have + k: move_date(pid, uid, n))
+    menu.exec(QCursor.pos())
+
+
+def move_date(pid, uid, days):
+    """Set how many days later this date runs for me (0: back on its day).
+    Cards already open stay open; a date whose day has come opens."""
+    raw = _raw(pid)
+    if raw is None or not 0 <= int(days) <= 365:
+        return
+    moved = {k: int(v) for k, v in (raw.get("moved") or {}).items() if k != uid}
+    if days:
+        moved[uid] = int(days)
+    cl = client()
+
+    def done(got):
+        if got is None:
+            tooltip("Couldn't reach Due Crew. Check your connection.")
+            return
+        if not got.get("paused"):
+            _open_now([x for x in followed() if x["id"] == pid], toast=False)
+        u = next((x for x in P.units(raw.get("doc")) if x["id"] == uid), None)
+        if u is not None and days:
+            p = next((x for x in followed() if x["id"] == pid), None)
+            mu = next((x for x in P.units((p or {}).get("doc")) if x["id"] == uid), None)
+            if mu:
+                tooltip(f"{html.escape(str(u.get('name') or 'It'))} moved to {P.fmt_day(mu['opens'])}.")
+        app.swap(cfg())
+
+    _bg(lambda: cl.set_days(pid, moved=moved), done)
+
+
+def reset_lines(p):
+    """3.7.6: what Reset to default puts back, as lines; [] when nothing."""
+    out = []
+    shift = int(p.get("shift") or 0)
+    if shift:
+        out.append(f"Your dates run {shift} day{'s' if shift != 1 else ''} later: back on time")
+    names = {u["id"]: str(u.get("name") or "?") for u in P.units(p.get("doc"))}
+    sk = [names.get(u, "?") for u in p.get("skipped") or [] if u in names]
+    if sk:
+        out.append(f"{len(sk)} skipped date{'s come' if len(sk) != 1 else ' comes'} back: " + ", ".join(sk[:3])
+                   + (f" and {len(sk) - 3} more" if len(sk) > 3 else ""))
+    mv = [names.get(u, "?") for u in (p.get("moved") or {}) if u in names]
+    if mv:
+        out.append(f"{len(mv)} moved date{'s go' if len(mv) != 1 else ' goes'} back: " + ", ".join(mv[:3])
+                   + (f" and {len(mv) - 3} more" if len(mv) > 3 else ""))
+    if p.get("paused") or p.get("until") or p.get("since"):
+        out.append("Your pause ends")
+    return out
+
+
+def reset_days(pid):
+    """3.7.6, Plan ▾ › Reset to default: my shift, skips, moved dates and
+    pause back to the plan's, after saying exactly what. Cards already
+    open stay open; dates that come back and have passed count as behind."""
+    raw = _raw(pid)
+    if raw is None:
+        return
+    lines = reset_lines(raw)
+    if not lines:
+        return
+    from .ui import confirm
+    if not confirm(mw, "Reset to default", "Reset to default?\n\n" + "\n".join("\u2022 " + x for x in lines)
+                   + "\n\nCards already open stay open. Dates that come back and have passed count as behind.",
+                   "Reset"):
+        return
+    cl = client()
+
+    def done(got):
+        if got is None:
+            tooltip("Couldn't reach Due Crew. Check your connection.")
+            return
+        _open_now([x for x in followed() if x["id"] == pid], toast=False)
+        tooltip("Back to the plan's days.")
+        app.swap(cfg())
+
+    _bg(lambda: cl.set_days(pid, shift=0, skipped=[], moved={}, paused=False, until=None, since=None), done)
 
 
 def pause_until(pid):
@@ -1715,6 +1821,8 @@ def plan_menu(pid):
     skip.setEnabled(bool(ahead))
     menu.addAction("Push my dates back…").triggered.connect(lambda: set_shift(pid))  # G4, G7
     menu.addAction("Change deck…").triggered.connect(lambda: change_deck(pid))
+    if reset_lines(_raw(pid) or {}):  # 3.7.6: only once something's changed
+        menu.addAction("Reset to default…").triggered.connect(lambda: reset_days(pid))
     menu.addSeparator()
     if p.get("paused"):
         menu.addAction("Resume").triggered.connect(lambda: back(pid) if p.get("since") else set_paused(pid, False))
@@ -1979,7 +2087,11 @@ def open_follow(code=""):
 
 def on_followed(plan, deck_id, swap, late, hold=False):
     """Main thread, after POST /plans/follow: this computer runs it on
-    `deck_id`; late is "open" (open what has opened) or "skip". Following
+    `deck_id`; late is "open" (open what has opened) or "skip". 3.7.6:
+    "skip:a,b" starts where everyone is (the passed dates skipped on my
+    follow, so they're behind nowhere), "catch:W:N" opens them and catches
+    up N cards over W weeks (G5's today-only limit), "begin:D" runs my
+    dates D days later so the first is today. Following
     again keeps what this computer already applied: only the deck changes.
     hold (3.3, asked for at Follow): later dates' active, never-studied
     cards are suspended now, one undo step, and remembered so stopping
@@ -2003,16 +2115,32 @@ def on_followed(plan, deck_id, swap, late, hold=False):
     c["plans"] = state
     _psave(c)
 
-    def finish():
+    pid = plan["id"]
+    kind, _, rest = str(late).partition(":")
+
+    def finish(_got=None):
         c2 = cfg()
         c2["period"] = "plans"  # 3.3: where it lives now
         save_cfg(c2)
-        fresh = next((x for x in followed() if x["id"] == plan["id"]), plan)
-        res = _open_now([fresh], mode=late)
-        if res is not None and not res["n"]:
+        fresh = next((x for x in followed() if x["id"] == pid), plan)
+        # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
+        res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
+        if kind == "catch":
+            weeks, _, cards = rest.partition(":")
+            days = 7 * max(1, min(3, int(weeks or 2)))
+            if int(cards or 0):
+                start_catch(pid, days, -(-int(cards) // days))
+        elif res is not None and not res["n"]:
             tooltip(f"Following {html.escape(plan.get('name') or 'the plan')}.")
         app.swap(cfg())
-    finish()  # 3.3: the plan's days are the schedule; nothing to ask
+
+    cl = client()
+    if kind == "skip" and rest:
+        _bg(lambda: cl.set_days(pid, skipped=[u for u in rest.split(",") if u]), finish)
+    elif kind == "begin" and rest.isdigit() and int(rest):
+        _bg(lambda: cl.set_days(pid, shift=min(365, int(rest))), finish)
+    else:
+        finish()  # 3.3: the plan's days are the schedule; nothing to ask
 
 
 def open_make():

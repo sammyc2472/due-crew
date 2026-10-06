@@ -142,7 +142,9 @@ leaving clears it and `teamAsk`, which migration 0021 set for followers who
 shared before; `POST /plans/follow {team: true}` follows onto it, `share`
 alone does nothing now, and `PATCH .../follow {share}` joins or leaves;
 progress is kept either way for my own views, and counts for authors and
-the crew only while sharing), `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
+the crew only while sharing), and `moved` {unit id: 1-365 days later} on
+the follow (3.7.6, migration 0022), on top of `shift`; Reset to default
+is one PATCH of shift, skipped, moved and the pause, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
 streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,
 or `{on: false, count}` off the team. Showed up: a member answered one of
 the plan's cards on their own Anki day; it rides the sync as `team:

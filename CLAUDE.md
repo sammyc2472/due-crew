@@ -679,6 +679,18 @@ add-on.
   alone (older add-ons' box) no longer shares. Followers who shared before
   are asked once on the plan card (`teamAsk`: Join, or No thanks,
   `planteamno`) and count for nobody until they join.
+  Your own days (mock "Your Own Days", migration 0022): Move… on a date
+  from today on (`moved` on my follow: {unit: days later}, on top of
+  `shift`; `plans.my_doc` marks it `_moved`; Put it back), Plan ▾ › Reset
+  to default (shift, skips, moves and pause in one PATCH, after saying
+  what; also on the site's plan page). Following late (`plans.late_start`):
+  Start where everyone is (the passed dates skipped on my follow, so behind
+  nowhere), Catch up over 1–3 weeks (G5's limit), or Start from the
+  beginning (`shift`, warned when it runs past the plan's end or an
+  event). While a catch-up runs, the Today box doesn't call it behind.
+  The bottom bar's answer buttons are slid to its middle (measured,
+  `translateX`, re-run when the bar changes), and the ask chip sits beside
+  More, else Edit, whichever has room.
 
 ## Releasing
 

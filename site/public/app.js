@@ -1317,9 +1317,11 @@ function duePanel(followed, set, t) {
     const prog = p.following?.progress || {};
     const shift = p.following?.shift || 0;
     const skipped = new Set(p.following?.skipped || []);
+    const moved = p.following?.moved || {};  // 3.7.6: one date later again
     for (const u of Sched.units(p.doc)) {
       if (skipped.has(u.id)) continue;
-      const day = shift ? addDays(u.opens, shift) : u.opens;
+      const by = shift + (moved[u.id] || 0);
+      const day = by ? addDays(u.opens, by) : u.opens;
       if (day === tm) tomorrow.push(u.name);
       if (day !== t) continue;
       const pr = prog[u.id];
