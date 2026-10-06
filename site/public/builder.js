@@ -1627,7 +1627,7 @@ async function builder(id) {
     byOpens();
     return h("div", {},
       classHints(pr),
-      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress.`),
+      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} are on the team; these counts are theirs.`),
       h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
         doc.units.flatMap((u) => {
           const c = pr.units[u.id] || { opened: 0, done: 0 };
@@ -1760,7 +1760,7 @@ async function builder(id) {
     if (!team.on) {
       return h("div", { class: "panel", style: "max-width:560px" },
         h("h4", {}, h("span", {}, team.count ? `${team.count.toLocaleString()} on the team` : "No team yet")),
-        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers. Never your numbers."),
+        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers; your progress counts for the plan\u2019s authors. Never your numbers."),
         h("div", { class: "row" }, h("button", { onclick: (e) => { e.target.disabled = true; again(api("POST", `/plans/${id}/team`)); } }, "Join the team"), st));
     }
     const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the team" });

@@ -3724,7 +3724,7 @@ def test_plans_glue_v31():
     F.app.swap = lambda c: None
     labels = [_day(-i) for i in range(7)]
     try:
-        plan, _ = maya.follow_plan(code)
+        plan, _ = maya.follow_plan(code, team=True)  # 3.7.6: on its team, so her progress counts
         # followed here before its first date, and Anki not opened since
         box["cfg"]["plans"] = {pid: F.new_state(col, plan)}
         n = len(store.log)
@@ -3754,14 +3754,16 @@ def test_plans_glue_v31():
               len(store.log) - n == 2 and "plans" in sent[0] and "plans" not in sent[1])
         check("progress: the server keeps it", json.loads(store.follows[(pid, "maya")]["progress"])["hf"] == [2, 0, 2])
         kai = new_client(store, "kai", "Kai")
-        kai.follow_plan(code)
+        kai.follow_plan(code, team=True)
         store.follows[(pid, "kai")]["progress"] = json.dumps({"hf": [2, 2, 2]})
         board_plan = maya.fetch_board(labels, with_decks=True)["plans"][0]
         check("crew: followers and units done, counts only",
               board_plan["followers"] == 2 and board_plan["crewDone"] == {"hf": 1, "rn": 1}, str(board_plan))
         maya.set_follow(pid, share=False)
-        check("sharing off: my stored progress goes", store.follows[(pid, "maya")]["progress"] is None)
-        check("sharing off: and the sync carries none", F.for_sync() == {})
+        check("sharing off (3.7.6: off the team): out of everyone's counts, still mine for my own views",
+              store.follows[(pid, "maya")]["progress"] is not None and (pid, "maya") not in store.team
+              and maya.fetch_board(labels, with_decks=True)["plans"][0]["crewDone"] == {"hf": 1})
+        check("sharing off: the sync still carries it, for my own views", pid in F.for_sync())
         maya.set_follow(pid, share=True)
         maya.push(labels, {}, plans=F.for_sync())
         check("sharing back on: the next sync sends it whole",
@@ -6238,8 +6240,26 @@ def test_plan_team_v39():
             tv = _state["team_view"][pid]
             check("team: opening the tab fetches it once (one request)", _state["plan_sub"][pid] == "team"
                   and tv["data"] == {"on": False, "count": 0}, tv)
+            check("3.7.6: following alone shares nothing", not store.follows[(pid, "maya")]["share"]
+                  and [b for m, pa, b in store.bodies if pa == "/plans/follow"][0].get("team") is False)
             dc._on_js(False, f"duecrew:planteamjoin:{pid}", DeckBrowser())
             check("team: Join puts me on it", (pid, "maya") in store.team and pid in maya.session["teams"])
+            check("3.7.6: and shares my progress, here and on the server",
+                  store.follows[(pid, "maya")]["share"] and next(p for p in maya.session["plans"] if p["id"] == pid)["share"])
+            # someone who shared before the merge is asked once on the plan card
+            store.follows[(pid, "kai")]["teamAsk"] = True
+            kplan = next(x for x in kai.fetch_board(labels, with_decks=True)["plans"] if x["id"] == pid)
+            kcard = F.card_view(kplan, F.new_state(col, kplan), {}, _day(0))
+            khtml = "".join(board._plan_notes(kcard, pid))
+            check("3.7.6: the ask: Join this plan's team?, with Join and No thanks",
+                  kcard["team_ask"] and "Join this plan&rsquo;s team?" in khtml
+                  and f"duecrew:planteamjoin:{pid}" in khtml and f"duecrew:planteamno:{pid}" in khtml, khtml[:400])
+            TF.client = lambda: kai
+            dc._on_js(False, f"duecrew:planteamno:{pid}", DeckBrowser())
+            TF.client = lambda: maya
+            check("3.7.6: No thanks ends the ask without a question, and shares nothing",
+                  not store.follows[(pid, "kai")].get("teamAsk") and not store.follows[(pid, "kai")]["share"]
+                  and (pid, "kai") not in store.team)
             kai.team_join(pid)
             kai.team_ask(pid, "Does Friday's quiz include complement?")
             dc._on_js(False, f"duecrew:planteamask:{pid}:" + quote("Same question: does it? <b>"), DeckBrowser())

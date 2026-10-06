@@ -512,9 +512,11 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
 
 
 def to_send(plan_list, prog):
-    """What the sync carries: progress on the plans I share it on, at most 50."""
-    share = {p["id"] for p in plan_list if p.get("share")}
-    return dict([(pid, units) for pid, units in sorted(prog.items()) if pid in share and units][:50])
+    """What the sync carries: progress on the plans I follow, at most 50.
+    3.7.6: kept for my own views on the site; only a plan whose team I'm
+    on (`share`) counts it for anyone else."""
+    mine_ = {p["id"] for p in plan_list}
+    return dict([(pid, units) for pid, units in sorted(prog.items()) if pid in mine_ and units][:50])
 
 
 def _short_day(iso, today):
@@ -602,6 +604,7 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
             # 3.7.3: what an author's update adds to today and earlier, waiting for Open; their posts
             "update": (_state.get("plan_updates") or {}).get(plan["id"]) if mw else None,
             "posts": unread_posts(plan) if mw else [],
+            "team_ask": bool(plan.get("teamAsk")),  # 3.7.6: shared before the merge: asked once
             "owner_name": str(plan.get("ownerName") or ""),
             "session": None if no_deck or plan.get("paused") else session,
             "today": P.fmt_day(today), "sched": bool(plan.get("sched")),

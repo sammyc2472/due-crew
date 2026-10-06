@@ -219,7 +219,7 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre builds three dates (one opening today, one yesterday, one next week), publishes, offers it to the squad.
 - [ ] Dre: Browse → select three cards (one of them c2 of a cloze) → right-click → Due Crew: add to a plan… → the plan, "With <date>" → Add. The site shows 3 single cards on that date. Again with "On its own date": a new date appears.
 - [ ] Maya: the Decks and Squads tabs show "Dre offered <squad> a plan: <name>" with Look and ×. Look opens Follow a plan with the code filled in; × hides it for good.
-- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", Share my progress checked. Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
+- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", "Join this plan's team" unchecked (its tooltip says what it shares). Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
 - [ ] A copy whose tags start differently (rename the top tag in Maya's collection first): "Your tags start differently … Use X::". Use it: the dates match.
 - [ ] Follow again on a fresh profile with Start from the next unit: nothing opens now; the next date opens on its morning.
 - [ ] The Decks tab: "<name> · Dre's plan", "week X of Y · N following", a row per opened date (You: seen, Crew: done, "N of M"), the next date's "opens …", "✓ Opened … this morning: N cards" with Undo. Review a card: Undo goes (Anki has a newer step).
@@ -227,7 +227,8 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre moves a date later and one earlier, adds a date: Maya's card says "Dre moved … and added …" with OK. Nothing that was open closes. The date moved earlier opens the next morning, not before.
 - [ ] Plan ▾ → Open everything now: every date opens, one undo step. Change deck…: pick another deck; its cards for the opened dates open. Pause: no mornings; the card says paused. Resume: asks "N units opened while paused" with Open them now / Start from the next unit.
 - [ ] Plan ▾ → Stop following: "Stop following <name>? Nothing gets suspended…", Stop. The card goes; every open card stays open; Dre's progress page stops counting Maya.
-- [ ] Share my progress off (follow with it unchecked): Dre's progress page doesn't count Maya; the Crew: done bars on other followers' cards don't include her.
+- [ ] Follow with "Join this plan's team" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join the team from the Team tab: she counts; Leave the team (its question says progress stops counting): she doesn't.
+- [ ] 3.7.6: a follower who shared before the update sees "Join this plan's team?" once on the plan card; Join puts them on the team; No thanks makes it go without a question.
 - [ ] A plan or date name with <b>markup</b>: shown as text on the card, in the dialogs, and in the toast.
 - [ ] `wrangler tail`: a normal day is still one GET /board and one POST /sync per refresh and sync; the plans ride the day's first refresh (`decks=1`).
 

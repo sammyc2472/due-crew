@@ -174,8 +174,11 @@ class FollowDialog(QDialog):
         self.hold.setChecked(True)
         self.hold.setVisible(False)
         root.addWidget(self.hold)
-        self.share = QCheckBox("Share my progress with the crew")
-        self.share.setChecked(True)
+        # 3.7.6: one choice: on the team, my progress counts for its authors
+        self.share = QCheckBox("Join this plan's team")
+        self.share.setToolTip("The team sees your name and the days you show up, and your progress counts for "
+                              "the plan's authors. Never your numbers. You can leave any time.")
+        self.share.setChecked(False)
         root.addWidget(self.share)
         self.about = QLabel("Each morning, that day's cards open.")
         self.about.setWordWrap(True)
@@ -347,7 +350,10 @@ class FollowDialog(QDialog):
                 self.status.setText("That plan is for a squad you're not in." if status == 404
                                     else "Couldn't follow. Check your connection.")
                 return
-            got = dict(got, share=share, paused=False, following=True)
+            if share and not got.get("share"):
+                from aqt.utils import tooltip
+                tooltip("Following. The plan's team is full.")
+            got = dict(got, paused=False, following=True)
             if self.on_followed:
                 self.on_followed(got, did, swap, late, hold)
             self.accept()

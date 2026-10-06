@@ -190,9 +190,10 @@ def join(pid):
     _bg(lambda: cl.team_join(pid, wk), done)
 
 
-def leave(pid):
+def leave(pid, ask=True):
     from aqt.utils import askUser
-    if not askUser("Leave the team? Your questions and answers stay."):
+    if ask and not askUser("Leave the team? Your progress stops counting for the plan's authors; "
+                           "your questions and answers stay."):
         return
     gen, cl = app.generation, client()
 
@@ -203,7 +204,10 @@ def leave(pid):
             tooltip("Couldn't leave just now.")
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": {"on": False, "count": 0}, "state": "ok"}
-        fetch(pid, force=True)
+        if ask:
+            fetch(pid, force=True)
+        else:
+            app.swap(cfg())  # No thanks: the ask goes, nothing to fetch
     _bg(lambda: cl.team_leave(pid), done)
 
 
@@ -490,6 +494,8 @@ def on_message(cmd, parts):
         join(arg)
     elif cmd == "planteamleave" and arg:
         leave(arg)
+    elif cmd == "planteamno" and arg:
+        leave(arg, ask=False)  # 3.7.6: No thanks to the one-time ask
     elif cmd == "planteamask" and arg:
         ask(arg, ":".join(parts[3:]))
     elif cmd == "planteamreply" and arg and x.isdigit():

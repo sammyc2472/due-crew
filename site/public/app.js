@@ -1665,7 +1665,7 @@ function onTrack(p, compact) {
   const total = Object.values(prog).reduce((n, t) => n + t[2], 0);
   const want = Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, today()), 0);
   const gap = want - seen;
-  const words = !total ? "Your progress shows once you share it (in Anki: Plan ▾)." :
+  const words = !total ? "Your progress shows once Anki syncs." :
     gap > 0 ? `${gap.toLocaleString()} behind` : "on track";
   if (compact) {
     return h("div", { class: "prow" }, link(`/plans/${p.id}`, p.name), h("span", { class: "bar" }, h("i", { style: `width:${total ? Math.round((100 * seen) / total) : 0}%` })),

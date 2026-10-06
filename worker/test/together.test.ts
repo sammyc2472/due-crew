@@ -144,7 +144,7 @@ describe("3.3: a class through Step (C1–C5)", () => {
     const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", end: "2026-12-01", units } });
     await dre.call("PUT", `/plans/${p.id}/ids`, { units: { hf: [UNITS[0].tags, [], ["g1"]] } });
     await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
-    await maya.call("POST", "/plans/follow", { code: p.code });
+    await maya.call("POST", "/plans/follow", { code: p.code, team: true });
     const [row] = (await maya.call("GET", "/plans/mine")).body.plans;
     expect(row.doc).toEqual({ deck: "Step 1", end: "2026-12-01", units: [
       { id: "hf", name: "Heart failure", opens: "2026-10-05", tags: UNITS[0].tags, decks: [], search: ["tag:x"] },

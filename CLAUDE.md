@@ -672,7 +672,13 @@ add-on.
   once I've asked, it says Asked.
 - 3.7.6: `rooms.will_answer` takes Anki's filter shape, `((proceed, ease),
   reviewer, card)`; 3.7.2's took four arguments, so the first answer of a
-  session raised and Anki dropped the break's guard.
+  session raised and Anki dropped the break's guard. A plan's team and
+  sharing my progress are one choice (migration 0021): on the team, my
+  progress counts for its authors and the crew; off it, it's kept for my
+  own views only. Follow's box is "Join this plan's team", unticked; `share`
+  alone (older add-ons' box) no longer shares. Followers who shared before
+  are asked once on the plan card (`teamAsk`: Join, or No thanks,
+  `planteamno`) and count for nobody until they join.
 
 ## Releasing
 

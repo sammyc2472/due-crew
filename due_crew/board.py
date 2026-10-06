@@ -1355,7 +1355,8 @@ def _team_html(pid, tabs):
     if not v.get("on"):
         n = int(v.get("count") or 0)
         return (f'<div class="tjoin"><b>{f"{n} on the team" if n else "No team yet"}</b>'
-                '<span class="k">The team sees that you showed up today, and your questions and answers. Never your numbers.</span>'
+                '<span class="k">The team sees that you showed up today, and your questions and answers; '
+                'your progress counts for the plan&rsquo;s authors. Never your numbers.</span>'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join the team</a></div>')
     me = tabs.get("me")
     faces = ""
@@ -1653,6 +1654,12 @@ def _plan_notes(card, pid, skip_waiting=False):
         out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
                    f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+    if card.get("team_ask"):
+        # 3.7.6: shared progress before the team and sharing were one choice: asked once
+        out.append('<div class="pn"><span>Join this plan&rsquo;s team? The others on it see your name and the days you '
+                   'show up, and your progress counts for its authors.</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planteamjoin:" + pid)}">Join</a>'
+                   f'<a href="#" onclick="{_pycmd("planteamno:" + pid)}">No thanks</a></span></div>')
     for post in (card.get("posts") or [])[:1]:
         # 3.7.3: the authors' words to followers, the newest unread
         out.append(f'<div class="pn post"><span><b>{e(str(post.get("name") or "?"))}</b>: {e(str(post.get("text") or ""))}</span>'

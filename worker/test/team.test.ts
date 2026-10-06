@@ -167,4 +167,39 @@ describe("a plan's team (3.7.3)", () => {
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_asks").first("n")).toBe(0);
     expect(await db().prepare("SELECT COUNT(*) AS n FROM plan_team").first("n")).toBe(0);
   });
+
+  it("3.7.6: on the team is sharing my progress; one choice", async () => {
+    const { dre, sam, kai, p } = await setup();
+    const shared = async () => (await dre.call("GET", `/plans/${p.id}/progress`)).body.sharing;
+    const team = async () => (await dre.call("GET", `/plans/${p.id}/team`)).body.count ?? 0;
+    await dre.call("POST", `/plans/${p.id}/team`);  // the author, to read the count
+    for (const x of [sam, kai]) await x.call("POST", "/sync", { plans: { [p.id]: { a: [1, 1, 2] } } });
+    expect(await shared()).toBe(0);  // following alone shares nothing
+    // joining the team shares; leaving stops both, and progress stays hers
+    expect((await sam.call("POST", `/plans/${p.id}/team`)).status).toBe(200);
+    expect([await shared(), await team()]).toEqual([1, 2]);
+    expect((await sam.call("GET", "/board?decks=1")).body.plans[0].share).toBe(true);
+    await sam.call("DELETE", `/plans/${p.id}/team`);
+    expect([await shared(), await team()]).toEqual([0, 1]);
+    expect((await sam.call("GET", `/plans/${p.id}`)).body.following.progress).toEqual({ a: [1, 1, 2] });
+    // following with team: true joins at once; share alone (an older add-on's box) doesn't
+    const ann = await person("ann");
+    const f = await ann.call("POST", "/plans/follow", { code: p.code, team: true });
+    expect(f.body.following.share).toBe(true);
+    expect(await team()).toBe(2);
+    await kai.call("POST", "/plans/follow", { code: p.code, share: true });
+    expect(await team()).toBe(2);
+  });
+
+  it("3.7.6: someone who shared before the merge is asked once; Join or No thanks ends it", async () => {
+    const { sam, kai, p } = await setup();
+    await db().prepare("UPDATE plan_follows SET team_ask = 1").run();  // as migration 0021 leaves them
+    const ask = async (x: typeof sam) => (await x.call("GET", "/board?decks=1")).body.plans[0].teamAsk;
+    expect(await ask(sam)).toBe(true);
+    await sam.call("POST", `/plans/${p.id}/team`);
+    expect(await ask(sam)).toBeUndefined();
+    await kai.call("DELETE", `/plans/${p.id}/team`);  // No thanks
+    expect(await ask(kai)).toBeUndefined();
+    expect((await kai.call("GET", "/board?decks=1")).body.plans[0].share).toBe(false);
+  });
 });
