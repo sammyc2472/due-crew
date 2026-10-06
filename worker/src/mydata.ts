@@ -31,7 +31,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q(`SELECT q.name, m.joined_at, m.day, m.reviews, m.study_time_ms, m.accuracy, m.streak, m.week, m.new_cards, m.play
        FROM members m JOIN squads q ON q.id = m.squad WHERE m.uid = ?1 ORDER BY m.joined_at`),
     q("SELECT id, code, name, line, audience, doc, version, created_at, updated_at, listed FROM plans WHERE owner = ?1"),
-    q(`SELECT p.name, f.share, f.paused, f.progress, f.at, f.sched, f.shift, f.pause_until, f.pause_since, f.skipped, f.hist
+    q(`SELECT p.name, f.share, f.paused, f.progress, f.at, f.sched, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.hist
        FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1`),
     q("SELECT p.name AS plan, n.day, n.text, n.at FROM plan_notes n JOIN plans p ON p.id = n.plan WHERE n.uid = ?1"),
     q("SELECT guid, text, at FROM tips WHERE uid = ?1"),
@@ -76,7 +76,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     crew: rows(7).map((f) => ({ name: f.name ?? "(deleted)", mutual: f.mutual === 1, since: when(f.at) })),
     squads: rows(8).map((m) => ({ ...m, joined_at: when(m.joined_at), week: parse(m.week), play: parse(m.play) })),
     plansMade: rows(9).map((p) => ({ ...p, doc: parse(p.doc), created_at: when(p.created_at), updated_at: when(p.updated_at) })),
-    plansFollowed: rows(10).map((f) => ({ ...f, progress: parse(f.progress), sched: parse(f.sched), skipped: parse(f.skipped), hist: parse(f.hist), at: when(f.at) })),
+    plansFollowed: rows(10).map((f) => ({ ...f, progress: parse(f.progress), sched: parse(f.sched), skipped: parse(f.skipped), moved: parse(f.moved), hist: parse(f.hist), at: when(f.at) })),
     planNotes: rows(11).map((n) => ({ ...n, at: when(n.at) })),
     tips: rows(12).map((t) => ({ ...t, at: when(t.at) })),
     cardsYouHaveDown: rows(13).map((k) => k.guid),

@@ -156,7 +156,8 @@ add-on.
   subdecks and single cards (`[note guid, card ord]`) for one deck. The
   plans I follow and squad offers ride the day's first `GET /board`
   (`decks=1`) and are cached in the session; progress per unit
-  (`[opened, seen, total]`, only for plans I share it on) rides `POST
+  (`[opened, seen, total]`; since 3.7.6 for every plan I follow, for my
+  own views, counted for others only while I'm on its team) rides `POST
   /sync` when it changed (`plans_hash`). Follow, pause, stop, the deck's
   tree, the site link and adding cards are one request each, on a click.
   `plans.py` is pure (matching, progress, the undo step); `plan_flow.py`
@@ -670,6 +671,27 @@ add-on.
   sums each cell, leaves padding out) and, narrow, says who in short
   (`short`: "Ameya +1", "Ameya's tip"); a crewmate's ask shows their line;
   once I've asked, it says Asked.
+- 3.7.6: `rooms.will_answer` takes Anki's filter shape, `((proceed, ease),
+  reviewer, card)`; 3.7.2's took four arguments, so the first answer of a
+  session raised and Anki dropped the break's guard. A plan's team and
+  sharing my progress are one choice (migration 0021): on the team, my
+  progress counts for its authors and the crew; off it, it's kept for my
+  own views only. Follow's box is "Join this plan's team", unticked; `share`
+  alone (older add-ons' box) no longer shares. Followers who shared before
+  are asked once on the plan card (`teamAsk`: Join, or No thanks,
+  `planteamno`) and count for nobody until they join.
+  Your own days (mock "Your Own Days", migration 0022): Move… on a date
+  from today on (`moved` on my follow: {unit: days later}, on top of
+  `shift`; `plans.my_doc` marks it `_moved`; Put it back), Plan ▾ › Reset
+  to default (shift, skips, moves and pause in one PATCH, after saying
+  what; also on the site's plan page). Following late (`plans.late_start`):
+  Start where everyone is (the passed dates skipped on my follow, so behind
+  nowhere), Catch up over 1–3 weeks (G5's limit), or Start from the
+  beginning (`shift`, warned when it runs past the plan's end or an
+  event). While a catch-up runs, the Today box doesn't call it behind.
+  The bottom bar's answer buttons are slid to its middle (measured,
+  `translateX`, re-run when the bar changes), and the ask chip sits beside
+  More, else Edit, whichever has room.
 
 ## Releasing
 

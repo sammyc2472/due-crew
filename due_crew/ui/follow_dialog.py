@@ -8,6 +8,8 @@ Decks are read on the main thread; the peek and the follow are one
 request each, in the background. Every plan and unit name is the
 author's: escaped wherever it's rich text."""
 
+import html
+
 from aqt.qt import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
     QGridLayout, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget, Qt,
@@ -28,9 +30,11 @@ def late_counts(idx, doc, today, swap=None):
     return len(opened), len(cids)
 
 
-def late_label(n_units, n_cards, while_paused=False):
+def late_label(n_units, n_cards, while_paused=False, passed=False):
     if while_paused:
         return f"{n_units} date{'s' if n_units != 1 else ''} opened while paused ({n_cards:,} cards)"
+    if passed:  # 3.7.6
+        return f"It started before today: {n_units} date{'s have' if n_units != 1 else ' has'} passed ({n_cards:,} cards)."
     return (f"{n_units} date{'s have' if n_units != 1 else ' has'} already opened "
             f"({n_cards:,} cards)")
 
@@ -156,26 +160,48 @@ class FollowDialog(QDialog):
         self.found.setWordWrap(True)
         root.addWidget(self.found)
 
+        # 3.7.6: starting late: where everyone is, catch up over weeks, or from the beginning
         self.late_label = QLabel("")
         root.addWidget(self.late_label)
-        lrow = QHBoxLayout()
-        self.late_open = QRadioButton("Open them now")
-        self.late_open.setChecked(True)
-        self.late_skip = QRadioButton("Start from the next date")
+        self.late_skip = QRadioButton("Start where everyone is")
+        self.late_skip.setChecked(True)
+        self.late_skip_note = QLabel("")
+        self.late_open = QRadioButton("Catch up over")
+        self.late_weeks = QComboBox()
+        for w in (1, 2, 3):
+            self.late_weeks.addItem(f"{w} week{'s' if w != 1 else ''}", w)
+        self.late_weeks.setCurrentIndex(1)
+        self.late_open_note = QLabel("")
+        self.late_begin = QRadioButton("Start from the beginning")
+        self.late_begin_note = QLabel("")
         group = QButtonGroup(self)
-        group.addButton(self.late_open)
-        group.addButton(self.late_skip)
-        lrow.addWidget(self.late_open)
-        lrow.addWidget(self.late_skip)
-        lrow.addStretch()
-        root.addLayout(lrow)
+        for b in (self.late_skip, self.late_open, self.late_begin):
+            group.addButton(b)
+        crow = QHBoxLayout()
+        crow.addWidget(self.late_open)
+        crow.addWidget(self.late_weeks)
+        crow.addStretch()
+        root.addWidget(self.late_skip)
+        root.addWidget(self.late_skip_note)
+        root.addLayout(crow)
+        root.addWidget(self.late_open_note)
+        root.addWidget(self.late_begin)
+        root.addWidget(self.late_begin_note)
+        for n in (self.late_skip_note, self.late_open_note, self.late_begin_note):
+            n.setWordWrap(True)
+            n.setStyleSheet("font-size: 12px; margin-left: 22px;")
+        self.late_weeks.currentIndexChanged.connect(lambda _=0: self._late_notes())
+        self._late = None
         # 3.3: cards that are already active can't wait for their day unless held back
         self.hold = QCheckBox("")
         self.hold.setChecked(True)
         self.hold.setVisible(False)
         root.addWidget(self.hold)
-        self.share = QCheckBox("Share my progress with the crew")
-        self.share.setChecked(True)
+        # 3.7.6: one choice: on the team, my progress counts for its authors
+        self.share = QCheckBox("Join this plan's team")
+        self.share.setToolTip("The team sees your name and the days you show up, and your progress counts for "
+                              "the plan's authors. Never your numbers. You can leave any time.")
+        self.share.setChecked(False)
         root.addWidget(self.share)
         self.about = QLabel("Each morning, that day's cards open.")
         self.about.setWordWrap(True)
@@ -198,7 +224,8 @@ class FollowDialog(QDialog):
 
     def _plan_parts(self):
         return (self.title, self.deck_label, self.deck, self.best_hint, self.match, self.found,
-                self.late_label, self.late_open, self.late_skip, self.share, self.about)
+                self.late_label, self.late_skip, self.late_skip_note, self.late_open, self.late_weeks,
+                self.late_open_note, self.late_begin, self.late_begin_note, self.share, self.about)
 
     def _clear(self):
         self.plan = None
@@ -304,18 +331,17 @@ class FollowDialog(QDialog):
                                "Missing ones are skipped.")
         else:
             self.found.setText(f"<b>{total:,}</b> cards found in your copy. Missing ones are skipped.")
-        n_units, n_cards = late_counts(idx, doc, self.today, swap)
+        ls = P.late_start(doc, self.today)
+        n_units = len(ls["passed"])
+        n_cards = late_counts(idx, dict(doc, units=[u for u in P.units(doc) if u["id"] in ls["passed"]]), self.today, swap)[1]
         late = n_units > 0 and not self.plan.get("following")
-        for w in (self.late_label, self.late_open, self.late_skip):
+        for w in (self.late_label, self.late_skip, self.late_skip_note, self.late_open, self.late_weeks,
+                  self.late_open_note, self.late_begin, self.late_begin_note):
             w.setVisible(late)
+        self._late = dict(ls, cards=n_cards) if late else None
         if late:
-            self.late_label.setText(late_label(n_units, n_cards))
-            nxt = P.next_unit(doc, self.today)
-            self.late_skip.setText(f"Start from the next date, {P.fmt_day(nxt['opens'])}" if nxt
-                                   else "Start from the next date")
-            self.late_skip.setEnabled(bool(nxt))
-            if not nxt:
-                self.late_open.setChecked(True)
+            self.late_label.setText(late_label(n_units, n_cards, passed=True))
+            self._late_notes()
         held = len(P.holdable(idx, doc, self.today, swap)) if not self.plan.get("following") else 0
         self.hold.setVisible(held > 0)
         if held:
@@ -323,6 +349,24 @@ class FollowDialog(QDialog):
         self.follow_btn.setEnabled(bool(total) or not P.units(doc))
         if not total and P.units(doc):
             self.found.setText("None of this plan's cards are in this deck. Pick another.")
+
+    def _late_notes(self):
+        """3.7.6: what each way to start late means, in this plan's numbers."""
+        ls = self._late
+        if not ls:
+            return
+        n, cards = len(ls["passed"]), int(ls["cards"])
+        self.late_skip_note.setText(f"The {n} earlier date{'s wait' if n != 1 else ' waits'} in your calendar, "
+                                    "each with Open now. You're not behind.")
+        weeks = int(self.late_weeks.currentData() or 2)
+        extra = -(-cards // (7 * weeks)) if cards else 0
+        until = P._later(self.today, 7 * weeks - 1)
+        self.late_open_note.setText(f"About {extra:,} extra new card{'s' if extra != 1 else ''} a day on top of each day's own, "
+                                    f"done by {P.fmt_day(until)}.")
+        after = ls.get("after")
+        warn = (f' <span style="color:#b26a00">Ends {P.fmt_day(ls["ends"])}, after {html.escape(after[0])} '
+                f'on {P.fmt_day(after[1])}.</span>') if after else (f" Ends {P.fmt_day(ls['ends'])}." if ls.get("ends") else "")
+        self.late_begin_note.setText(f"Your dates run {ls['shift']} day{'s' if ls['shift'] != 1 else ''} later.{warn}")
 
     # ---- follow ----
 
@@ -332,7 +376,12 @@ class FollowDialog(QDialog):
         if not plan or did is None:
             return
         swap = (self.swaps.get(did) or {}).get("use") if isinstance(self.swaps.get(did), dict) else None
-        late = "skip" if (self.late_skip.isVisible() and self.late_skip.isChecked()) else "open"
+        late = "open"
+        if self._late and self.late_skip.isVisible():
+            # 3.7.6: skip:ids, catch:weeks:cards, or begin:days
+            late = (f"catch:{int(self.late_weeks.currentData() or 2)}:{int(self._late['cards'])}" if self.late_open.isChecked()
+                    else f"begin:{int(self._late['shift'])}" if self.late_begin.isChecked()
+                    else "skip:" + ",".join(self._late["passed"]))
         hold = self.hold.isVisible() and self.hold.isChecked()
         share = self.share.isChecked()
         code = self._code
@@ -347,7 +396,10 @@ class FollowDialog(QDialog):
                 self.status.setText("That plan is for a squad you're not in." if status == 404
                                     else "Couldn't follow. Check your connection.")
                 return
-            got = dict(got, share=share, paused=False, following=True)
+            if share and not got.get("share"):
+                from aqt.utils import tooltip
+                tooltip("Following. The plan's team is full.")
+            got = dict(got, paused=False, following=True)
             if self.on_followed:
                 self.on_followed(got, did, swap, late, hold)
             self.accept()

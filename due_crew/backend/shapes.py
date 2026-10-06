@@ -622,7 +622,8 @@ def clean_plan(p):
             "owner": str(p.get("owner") or ""), "ownerName": clean_note(p.get("ownerName"), 60) or "?",
             "role": p.get("role") if p.get("role") in ("owner", "editor", "follower", "reader") else "",
             "version": _as_int(p.get("version")) or 0, "doc": clean_plan_doc(p.get("doc")),
-            "share": bool(p.get("share", following.get("share", True))),
+            "share": bool(p.get("share", following.get("share", False))),  # 3.7.6: on its team
+            "teamAsk": p.get("teamAsk", following.get("teamAsk")) is True,  # asked once to join (shared before 3.7.6)
             "paused": bool(p.get("paused", following.get("paused", False))),
             "followers": _as_int(p.get("followers")) or 0,
             "crewDone": {str(k): _as_int(v) for k, v in crew.items() if _as_int(v) is not None},
@@ -631,7 +632,7 @@ def clean_plan(p):
             "sched": clean_sched(p.get("sched", following.get("sched"))),
             "early": _early(p.get("early", following.get("early"))),
             "posts": clean_posts(p.get("posts")),  # 3.7.3: the authors' newest posts
-            **clean_days(p if "shift" in p or "skipped" in p else following)}
+            **clean_days(p if "shift" in p or "skipped" in p or "moved" in p else following)}
 
 
 def clean_posts(v):
@@ -653,7 +654,11 @@ def clean_days(v):
     return {"shift": shift if isinstance(shift, int) and not isinstance(shift, bool) and 0 <= shift <= 365 else 0,
             "until": v["until"] if _ISO.fullmatch(str(v.get("until") or "")) else None,
             "since": v["since"] if _ISO.fullmatch(str(v.get("since") or "")) else None,
-            "skipped": [u for u in v.get("skipped") or [] if isinstance(u, str) and u][:200]}
+            "skipped": [u for u in v.get("skipped") or [] if isinstance(u, str) and u][:200],
+            # 3.7.6: one date moved later, {unit id: days}
+            "moved": {str(k): n for k, n in (v.get("moved") or {}).items()
+                      if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 365}
+            if isinstance(v.get("moved"), dict) else {}}
 
 
 def clean_offer(o):

@@ -23,7 +23,7 @@ const REPLIES_MAX = 50;      // a thread's replies
 const THREADS_PER_DAY = 10;  // one person's new questions to one plan, a day
 const TEAMS_PER_SYNC = 20;   // P.FOLLOWS_MAX
 const ACT_ON_BOARD = 20;
-const TEAM_MAX = 500;        // members of one plan's team
+const TEAM_MAX = P.TEAM_MAX;
 
 /** A team row whose member may still see the plan: an author, or a
  *  follower (of a squad's plan, while in the squad). Losing that ends what
@@ -159,15 +159,12 @@ async function bingo(env: Env, wk: string, rows: Member[]) {
 /** POST /plans/{id}/team: join. DELETE: leave (my questions stay). */
 export async function join(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await teamPlan(env, id, s.uid);
-  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_team WHERE plan = ?").bind(id).first<number>("n");
-  if ((n ?? 0) >= TEAM_MAX && !(await onTeam(env, id, s.uid))) throw new HttpError(409, "team_full");
-  await env.DB.prepare("INSERT INTO plan_team (plan, uid, joined_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
-    .bind(id, s.uid, nowSec()).run();
+  if (!(await P.joinTeam(env, id, s.uid))) throw new HttpError(409, "team_full");  // 3.7.6: and shares my progress
   return json(await view(env, p, s.uid, new URL(req.url).searchParams.get("wk")));
 }
 
 export async function leave(s: Session, env: Env, [id]: string[]): Promise<Response> {
-  await env.DB.prepare("DELETE FROM plan_team WHERE plan = ? AND uid = ?").bind(id, s.uid).run();
+  await P.leaveTeam(env, id, s.uid);  // 3.7.6: and stops sharing my progress; also No thanks to the ask
   return json({ ok: true });
 }
 

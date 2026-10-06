@@ -200,16 +200,17 @@ SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;heigh
 
 # Anki's bottom bar is a table of three cells: Edit's, the answer buttons',
 # More's. Whatever widens one side cell (our chip or room, another add-on's
-# button) pushes the buttons off centre, so the side cells keep one width,
-# set on every card (the chip's eval runs at each question and answer);
-# when that wouldn't fit, the table's own layout stays.
+# button) pushes the buttons off centre, so they're slid back to the bar's
+# middle (3.7.6: measured, never by setting widths), as far as the side
+# cells' own buttons allow, at every card, on resize, and whenever the bar
+# changes.
 BAR_BALANCE = r"""
 (function () {
   window.dcBarBalance = function () {
     var t = document.getElementById('innertable'), row = t && t.rows[0];
     if (!row || row.cells.length < 3) { return; }
     var l = row.cells[0], m = row.cells[1], r = row.cells[row.cells.length - 1];
-    l.style.width = r.style.width = '';
+    l.style.width = r.style.width = '';  // what 3.7.5 set, gone
     var t0 = document.getElementById('dc-knows-t');
     if (t0) {
       t0.style.maxWidth = '24vw'; t0.textContent = t0.getAttribute('data-full') || t0.textContent;
@@ -238,41 +239,85 @@ BAR_BALANCE = r"""
         el.style.marginLeft = (parseFloat(getComputedStyle(el).marginLeft) || 0) + push + 'px';
       }
     }
-    clear(document.getElementById('dc-knows'));
     clear(document.getElementById('dc-room-bottom'));
-    function w(c) {   // what the cell's own elements need on one line (summed: a cell already squeezed has wrapped)
-      var n = 0, sum = 0, cs = getComputedStyle(c);
+    // 3.7.6: no cell widths any more. Measure where the answer buttons are and
+    // slide them (a transform, which moves nothing else) to the bar's middle,
+    // as near as the side cells' own buttons allow: another add-on's button,
+    // added whenever, can't throw the arithmetic off
+    function span(c, skip) {   // where a cell's own buttons are, leaving `skip` out
+      var a = Infinity, z = -Infinity;
       for (var k = 0; k < c.children.length; k++) {
-        var b = c.children[k].getBoundingClientRect(), ks = getComputedStyle(c.children[k]);
-        if (b.width > 0) { n++; sum += b.width + parseFloat(ks.marginLeft) + parseFloat(ks.marginRight); }
+        if (c.children[k] === skip) { continue; }
+        var b = c.children[k].getBoundingClientRect();
+        if (b.width > 0) { a = Math.min(a, b.left); z = Math.max(z, b.right); }
       }
-      return Math.ceil(sum + 5 * Math.max(0, n - 1) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight));
+      return z > a ? [a, z] : null;
     }
-    var side = Math.max(w(l), w(r)) + 16, over = 2 * side + w(m) - t.clientWidth, txt = document.getElementById('dc-knows-t');
-    // the chip's text gives way first (it ends in an ellipsis, the whole in its tooltip)
-    for (var i = 0; over > 0 && txt && i < 4; i++) {
-      var tw = txt.getBoundingClientRect().width;
-      if (tw <= 120) { break; }
-      txt.style.maxWidth = Math.max(120, tw - Math.ceil(over / 2)) + 'px';
-      side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
+    [].forEach.call(m.children, function (x) { x.style.transform = ''; });
+    var tb = t.getBoundingClientRect(), mid = tb.left + tb.width / 2, txt = document.getElementById('dc-knows-t');
+    var chip = document.getElementById('dc-knows'), ms0 = span(m);
+    if (!ms0) { return; }
+    var half = (ms0[1] - ms0[0]) / 2, gap = 12;
+    // the chip goes beside More (bottom right, where its card sits too), or
+    // Edit's side when More's has no room beside a centred row of answer
+    // buttons, and gives way there: its words shrink, then its short form
+    function fits(side) {
+      var cw = chip.getBoundingClientRect().width + 10;
+      if (side === l) { var a = span(l, chip); return (a ? a[1] : tb.left) + cw + gap <= mid - half; }
+      var b = span(r, chip); return (b ? b[0] : tb.right) - cw - gap >= mid + half;
     }
-    // still too wide: the short form ("Ameya +1", "Ameya's tip"); a tip's
-    // This helped goes with its words (it's in the tips the chip opens)
-    if (over > 0 && txt) {
-      txt.textContent = txt.getAttribute('data-short') || txt.textContent;
-      txt.style.maxWidth = 'none';
-      [].forEach.call(txt.parentNode.children, function (x) {
-        if (x !== txt && (x.tagName === 'SPAN' || txt.getAttribute('data-tip'))) { x.style.display = 'none'; }
-      });
-      side = Math.max(w(l), w(r)) + 16; over = 2 * side + w(m) - t.clientWidth;
+    function place(side) {
+      chip.style.marginLeft = side === r ? '0' : '10px';
+      chip.style.marginRight = side === r ? '10px' : '';
+      if (chip.parentNode === side) { return; }
+      if (side === r) { r.insertBefore(chip, r.firstChild); } else { l.appendChild(chip); }
     }
-    if (over > 0) { return; }
-    // a cell's width leaves its padding out
-    [l, r].forEach(function (c) { var cs = getComputedStyle(c); c.style.width = side - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) + 'px'; });
+    if (chip && txt) {
+      var side = fits(r) ? r : fits(l) ? l : null;
+      if (!side) {
+        side = (span(l, chip) || [0, tb.left])[1] - tb.left < tb.right - (span(r, chip) || [tb.right])[0] ? l : r;
+        place(side);
+        for (var i = 0; !fits(side) && i < 4; i++) {
+          var tw = txt.getBoundingClientRect().width;
+          if (tw <= 120) { break; }
+          txt.style.maxWidth = '120px';
+        }
+        if (!fits(side)) {
+          txt.textContent = txt.getAttribute('data-short') || txt.textContent;
+          txt.style.maxWidth = 'none';
+          [].forEach.call(chip.children, function (x) {
+            if (x !== txt && (x.tagName === 'SPAN' || txt.getAttribute('data-tip'))) { x.style.display = 'none'; }
+          });
+        }
+      }
+      place(side);
+      clear(chip);  // on its side now: step past another add-on's floating button there
+    }
+    var ms = span(m), ls = span(l), rs = span(r);
+    var dx = mid - (ms[0] + ms[1]) / 2;
+    if (ls && ms[0] + dx < ls[1] + gap) { dx = ls[1] + gap - ms[0]; }        // never under a side's buttons
+    if (rs && ms[1] + dx > rs[0] - gap) { dx = Math.min(dx, rs[0] - gap - ms[1]); }
+    if (Math.abs(dx) >= 1) { [].forEach.call(m.children, function (x) { x.style.transform = 'translateX(' + Math.round(dx) + 'px)'; }); }
   };
-  if (!window.dcBarResize) { window.dcBarResize = true; window.addEventListener('resize', function () { window.dcBarBalance(); }); }
+  if (!window.dcBarResize) {
+    window.dcBarResize = true;
+    window.addEventListener('resize', function () { window.dcBarBalance(); });
+    // anything added to the bar later (another add-on's button, Anki's answer
+    // buttons for the next card) balances it again; our own style changes don't
+    if (window.MutationObserver) {
+      var pend = 0;
+      new MutationObserver(function (recs) {
+        var chip = document.getElementById('dc-knows');  // the chip's own moves and text swaps aren't news
+        if (chip && recs.every(function (x) {
+          var nodes = [].slice.call(x.addedNodes).concat([].slice.call(x.removedNodes));
+          return chip.contains(x.target) || (nodes.length && nodes.every(function (n) { return n === chip; }));
+        })) { return; }
+        clearTimeout(pend);
+        pend = setTimeout(function () { window.dcBarBalance(); }, 30);
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  }
   window.dcBarBalance();
-  // a button another add-on adds a moment later is stepped past too
   clearTimeout(window.dcBarLater);
   window.dcBarLater = setTimeout(function () { window.dcBarBalance(); }, 400);
 })();

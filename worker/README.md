@@ -137,7 +137,14 @@ owner) whose Anki has this version. The home feed (`feed=1`) lists posts
 as `kind: "post"`.
 3.7.3 a plan's team (`team.ts`, migration 0020), opt-in, for anyone in the
 plan (its authors and followers): `POST /plans/{id}/team` joins, `DELETE`
-leaves, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
+leaves (3.7.6: the team is sharing: joining sets my follow's `share`,
+leaving clears it and `teamAsk`, which migration 0021 set for followers who
+shared before; `POST /plans/follow {team: true}` follows onto it, `share`
+alone does nothing now, and `PATCH .../follow {share}` joins or leaves;
+progress is kept either way for my own views, and counts for authors and
+the crew only while sharing), and `moved` {unit id: 1-365 days later} on
+the follow (3.7.6, migration 0022), on top of `shift`; Reset to default
+is one PATCH of shift, skipped, moved and the pause, `GET /plans/{id}/team[?wk=]` is the tab: `{on, count, shown,
 streak, faces: [{uid, name, emoji, shown}] (24, then more), asks, bingo?}`,
 or `{on: false, count}` off the team. Showed up: a member answered one of
 the plan's cards on their own Anki day; it rides the sync as `team:

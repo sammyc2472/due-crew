@@ -928,8 +928,11 @@ class ApiClient:
         status, data = self._call("GET", f"/plans/peek?code={code}")
         return (clean_plan(data) if status == 200 else None), status
 
-    def follow_plan(self, code, share=True, sched=None):
-        body = {"code": normalize_code(code), "share": bool(share)}
+    def follow_plan(self, code, team=False, sched=None):
+        """3.7.6: `team` puts me on the plan's team too, which is what shares
+        my progress with its authors (the reply says share: false when the
+        team was full)."""
+        body = {"code": normalize_code(code), "team": bool(team)}
         if sched is not None:
             body["sched"] = sched  # 3.2: my days and time
         status, data = self._call("POST", "/plans/follow", body)
@@ -998,8 +1001,8 @@ class ApiClient:
 
     def set_days(self, plan_id, **fields):
         """G3, G4: PATCH my follow's own days (any of paused, shift, until,
-        since, skipped). The follow as the server has it, or None."""
-        body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped")}
+        since, skipped, and 3.7.6's moved). The follow as the server has it, or None."""
+        body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped", "moved")}
         status, data = self._call("PATCH", f"/plans/{plan_id}/follow", body)
         if status != 200:
             return None
@@ -1042,14 +1045,14 @@ class ApiClient:
         if status != 200:
             return status  # 409: the team is full
         self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "act": [], "last": None}
-        self._save_session()
+        self._note_follow(plan_id, share=True, teamAsk=False)  # 3.7.6: on the team is sharing
         return clean_team_view(data)
 
     def team_leave(self, plan_id):
         status, _ = self._call("DELETE", f"/plans/{plan_id}/team")
         if status == 200:
             (self.session.get("teams") or {}).pop(plan_id, None)
-            self._save_session()
+            self._note_follow(plan_id, share=False, teamAsk=False)  # and stops sharing; No thanks too
         return status == 200
 
     def team_ask(self, plan_id, text, parent=None, guid=None, ord=0, topic=""):

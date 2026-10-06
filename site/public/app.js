@@ -1317,9 +1317,11 @@ function duePanel(followed, set, t) {
     const prog = p.following?.progress || {};
     const shift = p.following?.shift || 0;
     const skipped = new Set(p.following?.skipped || []);
+    const moved = p.following?.moved || {};  // 3.7.6: one date later again
     for (const u of Sched.units(p.doc)) {
       if (skipped.has(u.id)) continue;
-      const day = shift ? addDays(u.opens, shift) : u.opens;
+      const by = shift + (moved[u.id] || 0);
+      const day = by ? addDays(u.opens, by) : u.opens;
       if (day === tm) tomorrow.push(u.name);
       if (day !== t) continue;
       const pr = prog[u.id];
@@ -1665,7 +1667,7 @@ function onTrack(p, compact) {
   const total = Object.values(prog).reduce((n, t) => n + t[2], 0);
   const want = Sched.units(p.doc).reduce((n, u) => n + Sched.quota(p.doc, u, sched, prog[u.id]?.[2] || 0, today()), 0);
   const gap = want - seen;
-  const words = !total ? "Your progress shows once you share it (in Anki: Plan ▾)." :
+  const words = !total ? "Your progress shows once Anki syncs." :
     gap > 0 ? `${gap.toLocaleString()} behind` : "on track";
   if (compact) {
     return h("div", { class: "prow" }, link(`/plans/${p.id}`, p.name), h("span", { class: "bar" }, h("i", { style: `width:${total ? Math.round((100 * seen) / total) : 0}%` })),

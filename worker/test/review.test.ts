@@ -176,4 +176,23 @@ describe("G3, G4: a follower's own days", () => {
     const back = await maya.call("PATCH", `/plans/${p.id}/follow`, { paused: false, until: null, since: null, skipped: [] });
     expect(back.body).toMatchObject({ paused: false, until: null, since: null, skipped: [], shift: 5 });
   });
+
+  it("3.7.6: one date moved later is mine; Reset to default is one PATCH of everything", async () => {
+    const { p } = await plan();
+    const maya = await person("maya", "Maya");
+    await maya.call("POST", "/plans/follow", { code: p.code });
+    const [a] = p.doc.units;
+    const m = await maya.call("PATCH", `/plans/${p.id}/follow`, { moved: { [a.id]: 3 }, shift: 2 });
+    expect(m.body).toMatchObject({ moved: { [a.id]: 3 }, shift: 2 });
+    for (const bad of [{ moved: { [a.id]: 0 } }, { moved: { [a.id]: 400 } }, { moved: { "NOT OK": 1 } }, { moved: [1] }, { moved: null }]) {
+      expect((await maya.call("PATCH", `/plans/${p.id}/follow`, bad)).status).toBe(400);
+    }
+    expect((await maya.call("GET", "/board?decks=1")).body.plans[0].moved).toEqual({ [a.id]: 3 });
+    expect((await maya.call("GET", `/plans/${p.id}`)).body.following.moved).toEqual({ [a.id]: 3 });
+    expect((await (await import("./helpers")).db().prepare("SELECT version FROM plans WHERE id = ?").bind(p.id).first("version")))
+      .toBe(p.version);  // the plan itself never changes
+    const reset = await maya.call("PATCH", `/plans/${p.id}/follow`,
+      { shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null });
+    expect(reset.body).toMatchObject({ shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null });
+  });
 });

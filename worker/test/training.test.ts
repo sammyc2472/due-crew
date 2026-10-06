@@ -210,7 +210,7 @@ describe("the site's home", () => {
   it("my plan view carries my own progress, and nobody else's", async () => {
     const { put, dre } = await planWith({ units: [{ id: "a", name: "A", opens: "2026-10-05", tags: ["A"] }] });
     const maya = await person("maya");
-    await maya.call("POST", "/plans/follow", { code: put.body.code });
+    await maya.call("POST", "/plans/follow", { code: put.body.code, team: true });
     await maya.call("POST", "/sync", { plans: { [put.body.id]: { a: [3, 2, 5] } } });
     expect((await maya.call("GET", `/plans/${put.body.id}`)).body.following.progress).toEqual({ a: [3, 2, 5] });
     expect((await dre.call("GET", `/plans/${put.body.id}`)).body.following).toBeUndefined();

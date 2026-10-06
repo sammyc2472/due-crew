@@ -1404,9 +1404,33 @@ async function builder(id) {
     const f = !author && plan.following;
     const bits = [whose, with_.length ? `with ${with_.join(", ")}` : null, `${plan.followers} following`, meta.name === plan.doc.deck ? null : plan.doc.deck,
       f && f.shift ? `your dates run ${f.shift} day${f.shift === 1 ? "" : "s"} later` : null,
+      f && Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} date${Object.keys(f.moved).length === 1 ? "" : "s"} moved` : null,
       f && f.paused ? (f.until ? `paused until ${pretty(f.until)}` : "paused") : null,
       plan.basedOn ? credit(plan.basedOn) : null, author && plan.listed === 1 ? "in the library" : null];
     return bits.filter(Boolean).join(" · ");
+  }
+
+  /** 3.7.6: Reset to default, while my own days differ from the plan's:
+   *  asks once with what goes back; cards already open in Anki stay open. */
+  let resetAsk = false;
+  function resetBtn() {
+    const f = !author && plan.following;
+    if (!f || !(f.shift || (f.skipped || []).length || Object.keys(f.moved || {}).length || f.paused || f.until)) return null;
+    if (!resetAsk) return h("span", {}, " · ", h("button", { class: "linkish", onclick: () => { resetAsk = true; draw(); } }, "Reset to default…"));
+    const n = (k) => (f[k] || []).length;
+    const what = [f.shift ? `dates back on time (now ${f.shift} day${f.shift === 1 ? "" : "s"} later)` : null,
+      n("skipped") ? `${n("skipped")} skipped date${n("skipped") === 1 ? "" : "s"} back` : null,
+      Object.keys(f.moved || {}).length ? `${Object.keys(f.moved).length} moved date${Object.keys(f.moved).length === 1 ? "" : "s"} back` : null,
+      f.paused || f.until ? "your pause ends" : null].filter(Boolean).join(", ");
+    return h("span", { class: "resetask" }, h("br"), `Reset to default? ${what}. Cards already open stay open. `,
+      h("button", { class: "linkish", onclick: async () => {
+        try {
+          await api("PATCH", `/plans/${id}/follow`, { shift: 0, skipped: [], moved: {}, paused: false, until: null, since: null });
+          plan = await api("GET", `/plans/${id}`);
+        } catch (e) { if (!e.status) console.error(e); }
+        resetAsk = false; draw();
+      } }, "Reset"), " · ",
+      h("button", { class: "linkish", onclick: () => { resetAsk = false; draw(); } }, "Cancel"));
   }
 
   /** B4: everything about sharing the plan, in one menu. */
@@ -1627,7 +1651,7 @@ async function builder(id) {
     byOpens();
     return h("div", {},
       classHints(pr),
-      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} share their progress.`),
+      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} are on the team; these counts are theirs.`),
       h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
         doc.units.flatMap((u) => {
           const c = pr.units[u.id] || { opened: 0, done: 0 };
@@ -1760,7 +1784,7 @@ async function builder(id) {
     if (!team.on) {
       return h("div", { class: "panel", style: "max-width:560px" },
         h("h4", {}, h("span", {}, team.count ? `${team.count.toLocaleString()} on the team` : "No team yet")),
-        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers. Never your numbers."),
+        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers; your progress counts for the plan\u2019s authors. Never your numbers."),
         h("div", { class: "row" }, h("button", { onclick: (e) => { e.target.disabled = true; again(api("POST", `/plans/${id}/team`)); } }, "Join the team"), st));
     }
     const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the team" });
@@ -1875,7 +1899,7 @@ async function builder(id) {
     page(
       h("div", { class: "bhead" },
         h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
-          h("p", { class: "muted small bsub" }, subline())),
+          h("p", { class: "muted small bsub" }, subline(), resetBtn())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
       !author && plan.following ? onTrack(plan, false) : null,
       !author && plan.following ? finished() : null,

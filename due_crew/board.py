@@ -795,6 +795,7 @@ def _css(cfg):
     #due-crew .pwk .chip.done {{ background: none; color: var(--dc-muted); font-weight: 500; }}
     #due-crew .pwk .chip.skip {{ background: none; color: var(--dc-faded); text-decoration: line-through; font-weight: 500; }}
     #due-crew .pwk .chip.ev {{ background: none; border: 1.3px solid var(--dc-ink); }}
+    #due-crew .pwk .chip.mv {{ background: none; border: 1px dashed var(--dc-accent); }}
     #due-crew .pwk .tag {{ font-size: 9.5px; color: var(--dc-muted); font-weight: 600; }}
     #due-crew .pwk .wbar {{ margin-top: auto; height: 4px; }}
     #due-crew .pwk .pc.past .wbar {{ background: var(--dc-bg); }}
@@ -804,6 +805,7 @@ def _css(cfg):
     #due-crew .pday .r {{ display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }}
     #due-crew .pday .r .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     #due-crew .pday .r .acts, #due-crew .pday > .acts {{ display: flex; gap: 12px; justify-content: flex-end; }}
+    #due-crew .pday .r .mv {{ color: var(--dc-muted); font-size: 12px; }}
     #due-crew .pday a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .pday .wi {{ display: grid; gap: 2px; margin: 1px 0 5px; padding-left: 9px; border-left: 2px solid var(--dc-line);
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
@@ -1355,7 +1357,8 @@ def _team_html(pid, tabs):
     if not v.get("on"):
         n = int(v.get("count") or 0)
         return (f'<div class="tjoin"><b>{f"{n} on the team" if n else "No team yet"}</b>'
-                '<span class="k">The team sees that you showed up today, and your questions and answers. Never your numbers.</span>'
+                '<span class="k">The team sees that you showed up today, and your questions and answers; '
+                'your progress counts for the plan&rsquo;s authors. Never your numbers.</span>'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join the team</a></div>')
     me = tabs.get("me")
     faces = ""
@@ -1485,7 +1488,8 @@ def _today_box(card, pid):
         return (f'<div class="ptoday done"><span class="h">{head}</span>'
                 f'<span class="what">&#10003; <b>Done</b> &middot; {target:,} new'
                 + (f' &middot; {int(due):,} reviews' if due is not None else "") + f'</span>{nxt_line}</div>'), False
-    behind = int(s.get("behind") or 0) or (0 if card.get("catch") else int(card.get("waiting") or 0))
+    # 3.7.6: while a catch-up runs, what's behind is what it's catching up on: not "behind"
+    behind = 0 if card.get("catch") else int(s.get("behind") or 0) or int(card.get("waiting") or 0)
     if s.get("ask"):
         behind = 0  # the missed-days question says it, with its own three ways
     bar = _wbar(min(done, target), target) if target else ""
@@ -1550,7 +1554,7 @@ def _week_html(card, pid):
             mark = f"{new:,}" if new else ""
         cls = ("pc" + (" now" if d["today"] else " past" if d["past"] else "") + (" off" if d["rest"] else "")
                + (" sel" if i == sel else ""))
-        chips = "".join(f'<span class="chip{" done" if u["state"] == "done" else " skip" if u["state"] == "skip" else ""}">'
+        chips = "".join(f'<span class="chip{" done" if u["state"] == "done" else " skip" if u["state"] == "skip" else " mv" if u.get("moved") else ""}">'
                         f'{e(u["name"])}</span>' for u in d["units"])
         chips += "".join(f'<span class="chip ev">{e(n)}</span>' for n in d["events"])
         tag = "rest" if d["rest"] else "prep" if d["prep"] else ""
@@ -1570,17 +1574,24 @@ def _week_html(card, pid):
             rows = ""
             for u in d["units"]:
                 uid = str(u["uid"])
+                # 3.7.6: from today on, a date not done moves later on my copy; a moved one goes back
+                move = (f'<a href="#" onclick="{_pycmd(f"planmove:{pid}:{uid}")}">Move&hellip;</a>'
+                        if not d["past"] and u["state"] in ("later", "open") else "")
+                back_ = (f'<a href="#" onclick="{_pycmd(f"planmoveback:{pid}:{uid}")}">Put it back</a>'
+                         if u.get("moved") else "")
                 if u["state"] == "later":
-                    acts = (f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>'
-                            f'<a href="#" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Skip it</a>')
+                    acts = (f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>{move}'
+                            f'<a href="#" onclick="{_pycmd(f"planskip:{pid}:{uid}")}">Skip it</a>{back_}')
                     num = f'{int(u["total"]):,} new' if int(u["total"]) else ""
                 elif u["state"] == "skip":
                     acts = f'<a href="#" onclick="{_pycmd(f"planunskip:{pid}:{uid}")}">Undo skip</a>'
                     num = "skipped"
                 else:
                     acts = (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
+                    acts += move + back_
                     num = f'{int(u["seen"]):,} / {int(u["total"]):,}' if int(u["total"]) else ""
-                rows += f'<div class="r"><span class="u">{e(u["name"])}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
+                tag = ' <span class="mv">&middot; moved</span>' if u.get("moved") else ""
+                rows += f'<div class="r"><span class="u">{e(u["name"])}{tag}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
                 # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
                 what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}{" &middot; ".join(e(str(x)) for x in xs)}</span>'
                                for g, xs in (u.get("what") or []))
@@ -1653,6 +1664,12 @@ def _plan_notes(card, pid, skip_waiting=False):
         out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
                    f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+    if card.get("team_ask"):
+        # 3.7.6: shared progress before the team and sharing were one choice: asked once
+        out.append('<div class="pn"><span>Join this plan&rsquo;s team? The others on it see your name and the days you '
+                   'show up, and your progress counts for its authors.</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("planteamjoin:" + pid)}">Join</a>'
+                   f'<a href="#" onclick="{_pycmd("planteamno:" + pid)}">No thanks</a></span></div>')
     for post in (card.get("posts") or [])[:1]:
         # 3.7.3: the authors' words to followers, the newest unread
         out.append(f'<div class="pn post"><span><b>{e(str(post.get("name") or "?"))}</b>: {e(str(post.get("text") or ""))}</span>'
@@ -1685,7 +1702,7 @@ def _plan_notes(card, pid, skip_waiting=False):
         out.append(f'<div class="pn"><span>Catching up: +{int(c.get("extra") or 0):,} new a day to {e(str(c.get("until") or ""))}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plancatchstop:" + pid)}">Stop</a></span></div>')
     for kind, segments in card.get("lines") or []:
-        if kind == "behind":
+        if kind == "behind" and not card.get("catch"):
             out.append(f'<div class="pn warn"><span>{_segs(segments)}</span></div>')
     if int(card.get("waiting") or 0) and not card.get("catch") and not skip_waiting:
         w = int(card["waiting"])

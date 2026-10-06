@@ -107,13 +107,14 @@ describe("plans: following", () => {
     const maya = await person("maya");
     const f = await maya.call("POST", "/plans/follow", { code: plan.code });
     expect(f.status).toBe(200);
-    expect(f.body.following).toEqual({ share: true, paused: false, sched: null, early: 0, progress: null,
-      shift: 0, until: null, since: null, skipped: [], hist: {} });  // G3, G4: my own days, none yet; 3.5, L: my history
+    // 3.7.6: following alone shares nothing; sharing is being on its team
+    expect(f.body.following).toEqual({ share: false, paused: false, sched: null, early: 0, progress: null,
+      shift: 0, until: null, since: null, skipped: [], moved: {}, hist: {} });  // G3, G4: my own days, none yet; 3.5, L: my history; 3.7.6 moved
     const light = await maya.call("GET", "/board");
     expect(light.body.plans).toBeUndefined();  // not on every refresh
     const first = await maya.call("GET", "/board?decks=1");
     expect(first.body.plans).toHaveLength(1);
-    expect(first.body.plans[0]).toMatchObject({ id: plan.id, ownerName: "Dre", version: 2, share: true });
+    expect(first.body.plans[0]).toMatchObject({ id: plan.id, ownerName: "Dre", version: 2, share: false });
     expect(await maya.status("GET", `/plans/${plan.id}`)).toBe(200);  // a follower reads it without the code
   });
 
@@ -155,22 +156,24 @@ describe("plans: following", () => {
     const { dre, plan } = await authored();
     const maya = await person("maya");
     const nia = await person("nia");
-    await maya.call("POST", "/plans/follow", { code: plan.code });
-    await nia.call("POST", "/plans/follow", { code: plan.code, share: false });
+    await maya.call("POST", "/plans/follow", { code: plan.code, team: true });
+    await nia.call("POST", "/plans/follow", { code: plan.code, share: true });  // an older add-on's box: shares nothing now
     const prog = { [plan.id]: { hf: [48, 48, 48], arr: [30, 10, 61] } };
     const s1 = await maya.call("POST", "/sync", { plans: prog });
     expect(s1.body.wrote.plans).toBe(true);
     expect((await maya.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(false);
-    expect((await nia.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(false);  // not sharing
+    expect((await nia.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(true);  // kept for her own views, counted for nobody
     const p = await dre.call("GET", `/plans/${plan.id}/progress`);
     expect(p.body).toEqual({ followers: 2, sharing: 1, units: { hf: { opened: 1, done: 1 }, arr: { opened: 1, done: 0 } } });
     const b = (await nia.call("GET", "/board?decks=1")).body.plans[0];
     expect(b).toMatchObject({ followers: 2, crewDone: { hf: 1 } });  // a follower sees counts, never names
     expect(await maya.status("GET", `/plans/${plan.id}/progress`)).toBe(403);
     expect(await maya.status("POST", "/sync", { plans: { [plan.id]: { hf: [49, 1, 48] } } })).toBe(400);
-    // sharing off takes what was stored with it
+    // sharing off (3.7.6: leaving the team) takes it out of the counts; it stays hers
     await maya.call("PATCH", `/plans/${plan.id}/follow`, { share: false });
     expect((await dre.call("GET", `/plans/${plan.id}/progress`)).body.sharing).toBe(0);
+    expect((await maya.call("GET", `/plans/${plan.id}`)).body.following.progress).toEqual(prog[plan.id]);
+    expect((await dre.call("GET", `/plans/${plan.id}/team`)).body.count ?? 0).toBe(0);
   });
 
   it("stop following, or the author deletes: nothing left behind", async () => {

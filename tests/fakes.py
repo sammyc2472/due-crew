@@ -688,12 +688,12 @@ class FakeWorker:
         if "settings" in body:
             self._put_settings(me, body["settings"])
         if progress is not None:
-            # only for plans I follow with sharing on, and only where it changed
+            # 3.7.6: for plans I follow, sharing or not (kept for my own views), only where it changed
             wrote["plans"] = False
             for pid, units in progress.items():
                 f = self.follows.get((pid, me))
                 text = json.dumps(units, sort_keys=True)
-                if f and f["share"] and f["progress"] != text:
+                if f and f["progress"] != text:
                     f["progress"] = text
                     wrote["plans"] = True
                     self._count("plan_follows")
@@ -1308,9 +1308,12 @@ class FakeWorker:
                 raise Bad(404, "no_plan")
             old = self.follows.get((pid, me))
             sched = self._sched(body["sched"]) if "sched" in body else (old or {}).get("sched")
-            self.follows[(pid, me)] = {"share": body.get("share") is not False, "paused": False,
-                                       "progress": old["progress"] if old else None, "sched": sched}
+            self.follows[(pid, me)] = {"share": bool(old and old["share"]), "paused": False,
+                                       "progress": old["progress"] if old else None, "sched": sched,
+                                       "teamAsk": bool(old and old.get("teamAsk"))}
             self._count("plan_follows")
+            if body.get("team") is True:  # 3.7.6: following onto its team; share alone does nothing now
+                self._join_team(pid, me)
             return 200, self._plan_view(pid, me)
         pid = rest[0] if rest else ""
         if rest[1:] == ["follow"] and method == "DELETE":
@@ -1321,24 +1324,26 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped"} or (
+            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved"} or (
                     "early" in body and not _is_int(body["early"], 0, 7)) or (
                     "shift" in body and not _is_int(body["shift"], 0, 365)) or any(
                     body.get(k) is not None and not DATE_RE.fullmatch(str(body[k])) for k in ("until", "since") if k in body) or (
                     "skipped" in body and not (isinstance(body["skipped"], list) and len(body["skipped"]) <= 200
-                                               and all(isinstance(u, str) and u for u in body["skipped"]))):
+                                               and all(isinstance(u, str) and u for u in body["skipped"]))) or (
+                    "moved" in body and not (isinstance(body["moved"], dict)
+                                             and all(_is_int(n, 1, 365) for n in body["moved"].values()))):
                 raise Bad(400, "follow")
             f = self.follows.get((pid, me))
             if not f:
                 raise Bad(404, "not_following")
-            share = body["share"] if isinstance(body.get("share"), bool) else f["share"]
+            if isinstance(body.get("share"), bool) and body["share"] != f["share"]:  # 3.7.6: the team
+                (self._join_team if body["share"] else self._leave_team)(pid, me)
+            share = f["share"]
             paused = body["paused"] if isinstance(body.get("paused"), bool) else f["paused"]
             sched = self._sched(body["sched"]) if "sched" in body else f.get("sched")
             early = body["early"] if "early" in body else f.get("early", 0)
-            if (share, paused, sched, early) != (f["share"], f["paused"], f.get("sched"), f.get("early", 0)):
-                f.update(share=share, paused=paused, sched=sched, early=early)
-                if not share:
-                    f["progress"] = None  # sharing off clears what I shared
+            if (paused, sched, early) != (f["paused"], f.get("sched"), f.get("early", 0)):
+                f.update(paused=paused, sched=sched, early=early)
                 self._count("plan_follows")
             for k in ("shift", "until", "since"):  # G3, G4: my own days
                 if k in body and body[k] != f.get(k):
@@ -1347,8 +1352,12 @@ class FakeWorker:
             if "skipped" in body and list(dict.fromkeys(body["skipped"])) != f.get("skipped", []):
                 f["skipped"] = list(dict.fromkeys(body["skipped"]))
                 self._count("plan_follows")
+            if "moved" in body and dict(body["moved"]) != f.get("moved", {}):  # 3.7.6
+                f["moved"] = dict(body["moved"])
+                self._count("plan_follows")
             return 200, {"share": share, "paused": paused, "sched": sched, "early": early,
-                         "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", [])}
+                         "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
+                         "moved": f.get("moved", {})}
         if rest[1:] == ["ids"] and method == "PUT":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1504,6 +1513,19 @@ class FakeWorker:
                                                  "middle": {"have": 0, "goal": 3, "done": False}, "lines": 0}}
         return out
 
+    def _join_team(self, pid, me):
+        """3.7.6: on the team is sharing my progress."""
+        self.team.setdefault((pid, me), {"joined": int(time.time()), "days": [], "play": None})
+        f = self.follows.get((pid, me))
+        if f:
+            f.update(share=True, teamAsk=False)
+
+    def _leave_team(self, pid, me):
+        self.team.pop((pid, me), None)
+        f = self.follows.get((pid, me))
+        if f:
+            f.update(share=False, teamAsk=False)  # progress stays mine
+
     def _team_route(self, method, me, pid, rest, query, body):
         p = self.plans.get(pid)
         in_plan = p and (p["owner"] == me or (pid, me) in self.follows)
@@ -1514,10 +1536,10 @@ class FakeWorker:
             if method == "GET":
                 return 200, self._team_view(pid, me, query.get("wk"))
             if method == "POST":
-                self.team.setdefault((pid, me), {"joined": now, "days": [], "play": None})
+                self._join_team(pid, me)
                 return 200, self._team_view(pid, me, query.get("wk"))
             if method == "DELETE":
-                self.team.pop((pid, me), None)
+                self._leave_team(pid, me)  # also No thanks to the ask
                 return 200, {"ok": True}
         if (pid, me) not in self.team and not (method == "DELETE"):
             raise Bad(403, "not_on_team")
@@ -1575,8 +1597,10 @@ class FakeWorker:
             plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
-                          "share": f["share"], "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
+                          "share": f["share"], **({"teamAsk": True} if f.get("teamAsk") else {}),
+                          "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
+                          "moved": f.get("moved", {}),
                           "followers": len(rows), "crewDone": done,
                           "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
