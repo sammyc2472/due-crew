@@ -2177,7 +2177,7 @@ def test_together_v210():
           and "window.dcBarBalance = function" not in rm.widget_js("chip", None))
     check("bottom bar: our chip steps past a button another add-on draws over the bar",
           "position" in rm.BAR_BALANCE and "'absolute'" in rm.BAR_BALANCE and "marginLeft" in rm.BAR_BALANCE
-          and "clear(document.getElementById('dc-knows'))" in rm.BAR_BALANCE
+          and "clear(chip)" in rm.BAR_BALANCE
           and "clear(document.getElementById('dc-room-bottom'))" in rm.BAR_BALANCE)
     kj = crew_cards.chip_js({"text": "x", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
     check("bottom bar: the chip's words end in an ellipsis (never under its button); the answer buttons slide to the middle",
@@ -4222,6 +4222,35 @@ def test_your_own_days_376():
             F.on_followed(plan, 10, None, "begin:7")
             check("late, from the beginning: my dates run that many days later; the first opens today",
                   store2.follows[(pid2, "kai")]["shift"] == 7 and 1 in _open(col2) and 3 not in _open(col2), str(_open(col2)))
+        finally:
+            F._bg = saved[0]
+    store4 = world({"dre": "Dre", "bo": "Bo"})
+    pid4, code4 = store4.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    bo = new_client(store4, "bo", "Bo")
+    col4 = _plan_col()
+    with _PlanGlue({"D": bo}, {"D": col4}):
+        F._bg = lambda job, done=None: done(job()) if done else job()
+        try:
+            plan, _ = bo.follow_plan(code4)
+            bo.set_days = lambda *a, **k: None  # offline
+            F.on_followed(plan, 10, None, "skip:hf")
+            check("late, offline: the passed date never opens (skipped here), today's does",
+                  1 not in _open(col4) and 3 in _open(col4), str(_open(col4)))
+        finally:
+            F._bg = saved[0]
+    store5 = world({"dre": "Dre", "cy": "Cy"})
+    pid5, code5 = store5.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    cy = new_client(store5, "cy", "Cy")
+    col5 = _plan_col()
+    col5.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
+    with _PlanGlue({"E": cy}, {"E": col5}):
+        F._bg = lambda job, done=None: done(job()) if done else job()
+        try:
+            plan, _ = cy.follow_plan(code5)
+            F.on_followed(plan, 10, None, "begin:7", hold=True)
+            st5 = F._state_cfg()[pid5]
+            check("late, from the beginning with Hold back: what's later for me (the plan's today) is held",
+                  3 in (st5.get("held") or []) and 1 not in (st5.get("held") or []), st5.get("held"))
         finally:
             F._bg = saved[0]
     store3 = world({"dre": "Dre", "lu": "Lu"})

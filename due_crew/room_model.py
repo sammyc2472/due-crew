@@ -239,7 +239,6 @@ BAR_BALANCE = r"""
         el.style.marginLeft = (parseFloat(getComputedStyle(el).marginLeft) || 0) + push + 'px';
       }
     }
-    clear(document.getElementById('dc-knows'));
     clear(document.getElementById('dc-room-bottom'));
     // 3.7.6: no cell widths any more. Measure where the answer buttons are and
     // slide them (a transform, which moves nothing else) to the bar's middle,
@@ -268,9 +267,10 @@ BAR_BALANCE = r"""
       var b = span(r, chip); return (b ? b[0] : tb.right) - cw - gap >= mid + half;
     }
     function place(side) {
+      chip.style.marginLeft = side === r ? '0' : '10px';
+      chip.style.marginRight = side === r ? '10px' : '';
       if (chip.parentNode === side) { return; }
-      if (side === r) { chip.style.marginLeft = '0'; chip.style.marginRight = '10px'; r.insertBefore(chip, r.firstChild); }
-      else { chip.style.marginRight = ''; chip.style.marginLeft = '10px'; l.appendChild(chip); }
+      if (side === r) { r.insertBefore(chip, r.firstChild); } else { l.appendChild(chip); }
     }
     if (chip && txt) {
       var side = fits(r) ? r : fits(l) ? l : null;
@@ -291,6 +291,7 @@ BAR_BALANCE = r"""
         }
       }
       place(side);
+      clear(chip);  // on its side now: step past another add-on's floating button there
     }
     var ms = span(m), ls = span(l), rs = span(r);
     var dx = mid - (ms[0] + ms[1]) / 2;

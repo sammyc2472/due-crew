@@ -2105,9 +2105,12 @@ def on_followed(plan, deck_id, swap, late, hold=False):
         st.update(deck_id=int(deck_id), swap=list(swap) if swap else None)
     else:
         state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
+    kind, _, rest = str(late).partition(":")
     if hold and mw.col:
         idx = P.DeckIndex(mw.col, deck_id)
-        cids = P.holdable(idx, plan["doc"], _today(), swap, state[plan["id"]].get("applied"))
+        # 3.7.6: from the beginning, "later dates" are my shifted ones
+        hdoc = P.my_doc(plan["doc"], int(rest)) if kind == "begin" and rest.isdigit() else plan["doc"]
+        cids = P.holdable(idx, hdoc, _today(), swap, state[plan["id"]].get("applied"))
         n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {plan.get('name') or 'plan'}")
         if n:
             state[plan["id"]]["held"] = sorted(set(state[plan["id"]].get("held") or []) | set(int(c) for c in cids))
@@ -2116,15 +2119,30 @@ def on_followed(plan, deck_id, swap, late, hold=False):
     _psave(c)
 
     pid = plan["id"]
-    kind, _, rest = str(late).partition(":")
+    saved = kind not in ("skip", "begin") or not rest  # what needs a request has it yet?
 
-    def finish(_got=None):
+    def finish(got=None):
         c2 = cfg()
         c2["period"] = "plans"  # 3.3: where it lives now
         save_cfg(c2)
         fresh = next((x for x in followed() if x["id"] == pid), plan)
+        ok = saved or got is not None
+        if not ok:
+            # a choice that didn't reach the server never opens what has passed:
+            # the passed dates are skipped here only, and today's opens as usual
+            c3 = _pcfg()
+            st3 = _state_cfg(c3).get(pid)
+            if st3 is not None:
+                skip_past(st3, plan, _today())
+                c3["plans"] = _state_cfg(c3)
+                _psave(c3)
         # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
         res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
+        if not ok:
+            tooltip("Following. Couldn't save how you start, so the earlier dates wait here; "
+                    "Plan \u25be \u203a Push my dates back… or Open now on each.", period=7000)
+            app.swap(cfg())
+            return
         if kind == "catch":
             weeks, _, cards = rest.partition(":")
             days = 7 * max(1, min(3, int(weeks or 2)))

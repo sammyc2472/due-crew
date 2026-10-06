@@ -156,7 +156,8 @@ add-on.
   subdecks and single cards (`[note guid, card ord]`) for one deck. The
   plans I follow and squad offers ride the day's first `GET /board`
   (`decks=1`) and are cached in the session; progress per unit
-  (`[opened, seen, total]`, only for plans I share it on) rides `POST
+  (`[opened, seen, total]`; since 3.7.6 for every plan I follow, for my
+  own views, counted for others only while I'm on its team) rides `POST
   /sync` when it changed (`plans_hash`). Follow, pause, stop, the deck's
   tree, the site link and adding cards are one request each, on a click.
   `plans.py` is pure (matching, progress, the undo step); `plan_flow.py`
