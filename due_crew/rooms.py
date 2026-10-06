@@ -300,12 +300,13 @@ def _stop_auto_advance():
                 pass
 
 
-def will_answer(proceed, reviewer, card, ease):
-    """reviewer_will_answer_card: no answer lands under the break, whatever
-    sends it (Auto Advance, another add-on)."""
+def will_answer(ease_tuple, reviewer, card):
+    """reviewer_will_answer_card, a filter: ((proceed, ease), reviewer, card)
+    in, (proceed, ease) out. No answer lands under the break, whatever sends
+    it (Auto Advance, another add-on)."""
     if _state["room_break"]:
-        return (False, ease)
-    return (proceed, ease)
+        return (False, ease_tuple[1])
+    return ease_tuple
 
 
 def swallow(message):

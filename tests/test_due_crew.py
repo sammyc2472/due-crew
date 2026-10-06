@@ -1855,6 +1855,9 @@ def test_study_rooms_v212():
               _state["room_break"] and calls == ["clear"] and any("'break'" in e or '"break"' in e for e in evals))
         check("break: answering from the card's own page is dropped while it's up",
               rooms.swallow("ans") and rooms.swallow("ease3") and not rooms.swallow("edit"))
+        # called as Anki 2.1.50+ calls the filter: ((proceed, ease), reviewer, card)
+        check("break: reviewer_will_answer_card, called as Anki calls it, holds the answer",
+              rooms.will_answer((True, 3), None, None) == (False, 3))
         check("break: one light refresh for the round, to learn who's in", syncs == [{"light": True, "fetch": True}])
         rooms._state["room_break"] = False
         rooms.on_question(None)
@@ -1865,6 +1868,9 @@ def test_study_rooms_v212():
         check("break: the card's timer starts over and its audio plays, so the break isn't study time",
               timers == [1] and replays == [1])
         check("break: answering works again after it", not rooms.swallow("ans"))
+        check("break: and the answer filter lets it through as it came",
+              rooms.will_answer((True, 2), None, None) == (True, 2)
+              and rooms.will_answer((False, 4), None, None) == (False, 4))
         evals.clear(); calls.clear()
         rooms.on_question(None)
         check("break: a skipped break doesn't come back on the next card", calls == [] and not _state["room_break"])

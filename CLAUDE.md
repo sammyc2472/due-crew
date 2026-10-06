@@ -670,6 +670,9 @@ add-on.
   sums each cell, leaves padding out) and, narrow, says who in short
   (`short`: "Ameya +1", "Ameya's tip"); a crewmate's ask shows their line;
   once I've asked, it says Asked.
+- 3.7.6: `rooms.will_answer` takes Anki's filter shape, `((proceed, ease),
+  reviewer, card)`; 3.7.2's took four arguments, so the first answer of a
+  session raised and Anki dropped the break's guard.
 
 ## Releasing
 
