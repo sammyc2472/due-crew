@@ -164,8 +164,8 @@ _st, saved = sam._call("PUT", f"/plans/{made['id']}", {"version": made["version"
 pid, pcode = saved["id"], saved["code"]
 peeked, st = dre.peek_plan(pcode.lower())
 check("plans: peek by code", st == 200 and peeked["doc"]["units"][0]["id"] == "hf" and not peeked["following"], str(peeked))
-followed_plan, st = dre.follow_plan(pcode, share=True)
-check("plans: follow", st == 200 and followed_plan["following"] and followed_plan["share"])
+followed_plan, st = dre.follow_plan(pcode, team=True)  # 3.7.6: on its team is sharing
+check("plans: follow onto its team", st == 200 and followed_plan["following"] and followed_plan["share"])
 ok4, _ = dre.push(labels, cfg, plans={pid: {"hf": [3, 3, 3], "nx": [0, 0, 1]}})
 bp = dre.fetch_board(labels, tomorrow, with_decks=True)["plans"]
 check("plans: on the decks=1 board, with crew counts from my progress",
@@ -184,8 +184,14 @@ check("3.2: stuck: who knows it and the tip come back",
       dre.push(labels, cfg, stuck=["g1", "g9"])[0] and dre.session["cards"].get("g1", {}).get("knows") == [sam.user_id], str(dre.session.get("cards")))
 check("3.2: my log", dre.push(labels, cfg, log={labels[0]: [30, 120, 20, 90.0]})[0]
       and dre._call("GET", "/log")[1]["days"] == {labels[0]: [30, 120, 20, 90.0]})
-check("plans: pause, sharing off", dre.set_follow(pid, paused=True) == {"share": True, "paused": True}
-      and dre.set_follow(pid, share=False) == {"share": False, "paused": True})
+check("plans: pause, sharing off (off the team)", dre.set_follow(pid, paused=True) == {"share": True, "paused": True}
+      and dre.set_follow(pid, share=False) == {"share": False, "paused": True}
+      and dre._call("GET", f"/plans/{pid}/team")[1].get("on") is False)
+# 3.7.6: one date moved later, and Reset to default
+moved = dre.set_days(pid, moved={"hf": 2}, shift=1)
+check("3.7.6: a moved date and a shift are mine", moved and moved["moved"] == {"hf": 2} and moved["shift"] == 1, str(moved))
+back = dre.set_days(pid, shift=0, skipped=[], moved={}, paused=False, until=None, since=None)
+check("3.7.6: reset to default", back and back["moved"] == {} and back["shift"] == 0 and not back["paused"], str(back))
 check("plans: stop following", dre.unfollow_plan(pid) and dre.fetch_board(labels, tomorrow, with_decks=True)["plans"] == [])
 sq2 = sam.create_squad("plans")
 dre.join_squad(sq2["id"], sq2["code"])
