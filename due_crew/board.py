@@ -1344,6 +1344,10 @@ def _team_ago(at, now=None):
     return "yesterday" if d < 2 * 86400 else f"{d // 86400}d"
 
 
+# a teammate with no emoji: the character itself, so escaping leaves it whole
+NO_EMOJI = "\U0001F464"
+
+
 def _team_html(pid, tabs):
     """Who showed up today, the team's bingo, Ask the team and its threads.
     Names, words and topics are other people's: escaped here."""
@@ -1364,7 +1368,7 @@ def _team_html(pid, tabs):
     faces = ""
     for f in v.get("faces") or []:
         name = "You" if f.get("uid") == me else str(f.get("name") or "?")
-        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{e(str(f.get("emoji") or "") or "&#128100;")}</span>'
+        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{e(str(f.get("emoji") or "") or NO_EMOJI)}</span>'
                   f'<b>{e(name)}</b></div>')
     if int(v.get("more") or 0):
         more = int(v["more"])

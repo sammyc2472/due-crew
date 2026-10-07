@@ -6470,6 +6470,16 @@ def test_team_times_377():
     check("team times: the badge counts what's newer than seen", T.unread(summ, now - 3600) == 1)
 
 
+def test_team_faces_no_emoji_378():
+    """3.7.8: a teammate with no emoji shows the 👤 placeholder, not its
+    escaped HTML code ("&#128100;" escaped again showed as text)."""
+    html = board._team_html("p1", {"team": {"on": True, "count": 2, "faces": [
+        {"uid": "u1", "name": "BIG DOG", "emoji": "", "shown": False},
+        {"uid": "u2", "name": "<b>x</b>", "emoji": "", "shown": True}], "asks": []}, "me": "u9"})
+    check("team faces: no emoji shows the placeholder", "\U0001F464" in html and "&amp;#128100;" not in html and "#128100" not in html, html[:300])
+    check("team faces: names still escaped", "&lt;b&gt;x&lt;/b&gt;" in html)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
