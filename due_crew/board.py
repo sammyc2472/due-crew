@@ -798,6 +798,16 @@ def _css(cfg):
     #due-crew .pwk .chip.mv {{ background: none; border: 1px dashed var(--dc-accent); }}
     #due-crew .pwk .tag {{ font-size: 9.5px; color: var(--dc-muted); font-weight: 600; }}
     #due-crew .pwk .wbar {{ margin-top: auto; height: 4px; }}
+    #due-crew .abar {{ display: block; height: 5px; border-radius: 3px; background: var(--dc-you-bg); box-shadow: inset 0 0 0 1px var(--dc-line); overflow: hidden; }}
+    #due-crew .pwk .lm {{ font-size: 10.5px; color: var(--dc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    #due-crew .pwk .lm .late {{ color: var(--dc-hours); font-weight: 700; }}
+    #due-crew .abar i {{ display: block; height: 100%; background: var(--dc-accent); border-radius: 3px; }}
+    #due-crew .abar.late i {{ background: var(--dc-hours); }}
+    #due-crew .pwk .d .late {{ color: var(--dc-hours); font-weight: 700; }}
+    #due-crew .pkey {{ display: flex; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--dc-muted); margin: 4px 0 2px; text-align: left; }}
+    #due-crew .pkey i {{ display: inline-block; width: 14px; height: 5px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }}
+    #due-crew .pkey .kn {{ background: var(--dc-accent); }} #due-crew .pkey .kc {{ background: var(--dc-you-bg); }}
+    #due-crew .pday .abar {{ width: 140px; max-width: 40%; }}
     #due-crew .pwk .pc.past .wbar {{ background: var(--dc-bg); }}
     #due-crew .pday {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 8px 10px; margin-top: 6px;
       display: grid; gap: 5px; font-size: 12px; }}
@@ -1560,10 +1570,18 @@ def _week_html(card, pid):
     sel = next((i for i, d in enumerate(week) if d["today"]), None) if off == 0 else None
     if sel is None:
         sel = next((i for i, x in enumerate(has_any) if x), None)
+    # 3.7.81: plan load: a day's bar is its size (to the week's biggest) filled with what it asks
+    loaded = any(d.get("size") is not None for d in week)
+    of = max([int(d.get("size") or 0) for d in week] + [1])
     for i, d in enumerate(week):
         did = f"dc-pd-{_re.sub(r'[^A-Za-z0-9]', '', pid)}-{i}"
         new, seen = int(d.get("new") or 0), int(d.get("seen") or 0)
-        if d["past"] or d["today"]:
+        size, ask = (int(d["size"]), int(d.get("ask") or 0)) if d.get("size") is not None else (None, 0)
+        if size is not None:
+            mark = (("&#10003;" if not ask else f'<span class="late">{ask:,} behind</span>') if d["past"] and size
+                    else ("&#10003;" if not ask else f"{ask:,} to go") if d["today"] and size
+                    else (f"{ask:,} new" if ask else "nothing new") if size else "")
+        elif d["past"] or d["today"]:
             mark = ("&#10003;" if new and seen >= new else f"{new - seen:,} left" if new and d["past"] else
                     f"{new:,}" if new else "")
         else:
@@ -1574,7 +1592,8 @@ def _week_html(card, pid):
                         f'{e(u["name"])}</span>' for u in d["units"])
         chips += "".join(f'<span class="chip ev">{e(n)}</span>' for n in d["events"])
         tag = "rest" if d["rest"] else "prep" if d["prep"] else ""
-        bar = (_wbar(min(seen, new), new) if new and (d["past"] or d["today"]) else "")
+        bar = ("" if size is not None else _wbar(min(seen, new), new) if new and (d["past"] or d["today"]) else "")
+        top = _abar(size, ask, of, d["past"], f'{d["dow"]} {int(d["num"])}') if size else ""
         has = has_any[i]
         # a click moves the box here and shows the day's details; again closes both
         click = (f' onclick="var w=this.parentNode,o=this.classList.contains(\'sel\'),x=document.getElementById(\'{did}\');'
@@ -1583,8 +1602,10 @@ def _week_html(card, pid):
                  f'if(!o){{this.classList.add(\'sel\');if(x)x.hidden=false;}}return false;"')
         num = (f'<b class="td"><span class="dow">{e(d["dow"])} </span>{int(d["num"])}</b>' if d["today"]
                else f'<b><span class="dow">{e(d["dow"])} </span>{int(d["num"])}</b>')
-        cells += (f'<div class="{cls}"{click}><span class="d">{num}'
-                  f'<span>{mark}</span></span>{chips}'
+        # 3.7.81: with the load, the day's number gets its own line, then its bar
+        head = (f'<span class="d">{num}<span></span></span><span class="lm">{mark}</span>' if size is not None
+                else f'<span class="d">{num}<span>{mark}</span></span>')
+        cells += (f'<div class="{cls}"{click}>{head}{top}{chips}'
                   + (f'<span class="tag">{tag}</span>' if tag else "") + bar + '</div>')
         if has:
             rows = ""
@@ -1606,6 +1627,8 @@ def _week_html(card, pid):
                     acts = (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
                     acts += move + back_
                     num = f'{int(u["seen"]):,} / {int(u["total"]):,}' if int(u["total"]) else ""
+                if u.get("ld") and u["state"] != "skip":
+                    num = _load_words(u["ld"], d["past"] or d["today"])
                 tag = ' <span class="mv">&middot; moved</span>' if u.get("moved") else ""
                 rows += f'<div class="r"><span class="u">{e(u["name"])}{tag}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
                 # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
@@ -1623,7 +1646,29 @@ def _week_html(card, pid):
             details += (f'<div class="pday" id="{did}"{"" if i == sel else " hidden"}><b>{e(d["dow"])} {int(d["num"])} {_mon(d["day"])}'
                         + (' &middot; today' if d["today"] else "") + '</b>'
                         f'{rows}{back}</div>')
-    return out + f'<div class="pwk">{cells}</div>{details}'
+    key = ('<div class="pkey"><span><i class="kn"></i>new to you</span><span><i class="kc"></i>seen or in your Anki by then</span>'
+           '<span>longest = busiest day</span></div>') if loaded else ""
+    return out + f'<div class="pwk">{cells}</div>{key}{details}'
+
+
+def _abar(size, ask, of, late, label):
+    """3.7.81: a day's bar: its size against the week's biggest, filled
+    with what it asks (behind in the warm colour)."""
+    w = max(4, round(100 * int(size) / max(1, int(of))))
+    f = 0 if not size else round(100 * int(ask) / int(size))
+    what = "behind" if late else "to go or new"
+    return (f'<span class="abar{" late" if late and ask else ""}" style="width:{w}%" '
+            f'title="{_html.escape(label)} &middot; {int(size):,} cards &middot; {int(ask):,} {what}"><i style="width:{f}%"></i></span>')
+
+
+def _load_words(ld, now):
+    """A date in its details: today and before, seen of its cards; ahead,
+    what will be new that day and what I'll have seen before it."""
+    s_, o_, l_ = (int(x) for x in ld)
+    tot = s_ + o_ + l_
+    if now:
+        return f"{s_:,} of {tot:,} seen"
+    return f"{l_:,} of {tot:,} new" + (f" &middot; {s_ + o_:,} already seen or in your Anki" if s_ + o_ else "")
 
 
 def _wbar(done, total):

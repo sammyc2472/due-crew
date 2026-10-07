@@ -704,6 +704,14 @@ add-on.
   own day, one number (today to go, ahead what's new to me that day,
   i.e. still locked, past behind) and one bar a day (the day's size,
   filled with what it asks), from the progress Anki already sends.
+- 3.7.81: the plan load in Anki's Plans tab too, more exact than the site's:
+  `plans.load` counts each date's cards on my own days as [seen, open,
+  locked], a card on its earliest date only and a suspended leech never
+  (`plan_flow.loads` at the refresh, `_state["plan_load"]`, the same deck
+  read as the progress). A day: one number (`plans.load_ask`: ahead, still
+  locked; today and before, not seen) and one bar under its date
+  (`board._abar`, the week's biggest is full width); a date's details
+  `board._load_words`. No new requests; the site still reads progress.
 
 ## Releasing
 

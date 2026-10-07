@@ -651,7 +651,42 @@ def week_start(today, offset=0):
     return (d - datetime.timedelta(days=d.weekday()) + datetime.timedelta(weeks=int(offset))).isoformat()
 
 
-def week_view(doc, prog, today, start, skipped=()):
+def load(idx, doc, swap=None):
+    """3.7.81, plan load: {unit id: [seen, open, locked]} for my own dates
+    (doc is my_doc: my days), each card counted on its earliest date only
+    (keeping to the plan, I meet it there first) and a suspended leech left
+    out (the plan never opens one). seen as counts() says it (a new
+    sibling of a started note too); open is unsuspended and not seen, so in
+    my Anki now; locked is still suspended: new to me on its day."""
+    ms = unit_matches(idx, doc, swap)
+    started, nid_of = idx.started(), idx.nid_of
+    before, out = set(), {}
+    for u in sorted(units(doc), key=lambda x: str(x.get("opens") or "")):
+        mine = ms.get(u["id"]) or set()
+        s_ = o_ = l_ = 0
+        for cid in mine - before:
+            queue, ctype = idx.cards[cid]
+            if queue == -1 and cid in idx.leech and ctype == 0:
+                continue
+            if ctype != 0 or (queue != -1 and nid_of.get(cid) in started):
+                s_ += 1
+            elif queue == -1:
+                l_ += 1
+            else:
+                o_ += 1
+        before |= mine
+        out[u["id"]] = [s_, o_, l_]
+    return out
+
+
+def load_ask(ld, day, today):
+    """What a date asks of me on its day: ahead, what's still locked (new to
+    me then); today and before, what I haven't seen."""
+    s_, o_, l_ = ld
+    return l_ if day > today else o_ + l_
+
+
+def week_view(doc, prog, today, start, skipped=(), ld=None):
     """3.5.0, the Plans tab's week: seven days from `start` (a Monday) of
     my own plan (my_doc), each {day, dow, num, today, past, rest, prep,
     events, units, new, seen}. A unit is {uid, name, total, seen, state}:
@@ -685,12 +720,18 @@ def week_view(doc, prog, today, start, skipped=()):
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topics(u)})  # P7
+            if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
+                rows[-1]["ld"] = list(ld[u["id"]])
+                rows[-1]["ask"] = load_ask(ld[u["id"]], d, today)
         live = [r for r in rows if r["state"] != "skip"]
         dd = first + datetime.timedelta(days=i)
         out.append({"day": d, "dow": f"{dd:%a}", "num": dd.day, "today": d == today, "past": d < today,
                     "rest": not pdays[i] and not live, "prep": any(r["prep"] for r in live),
                     "events": evs.get(d, []), "units": rows,
-                    "new": sum(r["total"] for r in live), "seen": sum(r["seen"] for r in live)})
+                    "new": sum(r["total"] for r in live), "seen": sum(r["seen"] for r in live),
+                    # 3.7.81: the day's size and what it asks, when the load is counted
+                    "size": sum(sum(r["ld"]) for r in live if "ld" in r) if any("ld" in r for r in live) else None,
+                    "ask": sum(r["ask"] for r in live if "ask" in r)})
     return out
 
 
