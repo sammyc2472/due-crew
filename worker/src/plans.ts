@@ -1026,9 +1026,9 @@ export async function ics(req: Request, env: Env): Promise<Response> {
     const last = u.even && u.due ? (u.due as string) : (u.opens as string);
     event(u.id as string, u.opens as string, dayAfter(last), `${u.name}${n ? ` · ${n.toLocaleString("en-US")} new` : ""}`);
   }
-  // F1: an event is its own day, with how many dates prep for it
+  // F1: an event is its own day, with how many days prep for it
   for (const ev of doc.events || []) {
-    const prep = doc.units.filter((u) => u.for === ev.id).length;
+    const prep = new Set(doc.units.filter((u) => u.for === ev.id).map((u) => u.opens)).size;  // days, not dates
     event(`e${ev.id}`, ev.day, dayAfter(ev.day), `${ev.name}${prep ? ` · ${prep} day${prep === 1 ? "" : "s"} of prep` : ""}`);
   }
   for (const r of doc.reviews || []) {

@@ -154,6 +154,12 @@ describe("F1: events, and the dates that prep for them", () => {
     expect(again.status).toBe(200);
     const feed = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
     expect(await feed.text()).toContain("SUMMARY:Micro quiz · 2 days of prep");
+    // 3.7.8: days, not dates: a third date on a's day is still 2 days of prep
+    const three = await priya.call("PUT", `/plans/${p.id}`, { version: again.body.version, doc: { deck: "Step 1", events,
+      units: [{ ...a, for: "quiz1" }, { ...b, for: "quiz1" }, { ...a, id: "samedayx", name: "Same day", for: "quiz1" }] } });
+    expect(three.status).toBe(200);
+    const feed2 = await worker.fetch(new Request(`https://api.duecrew.com/plans/ics?code=${p.code}`), { ...env } as any);
+    expect(await feed2.text()).toContain("SUMMARY:Micro quiz · 2 days of prep");
   });
 });
 

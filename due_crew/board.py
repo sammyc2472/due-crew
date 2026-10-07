@@ -828,6 +828,8 @@ def _css(cfg):
     #due-crew .faces {{ display: flex; flex-wrap: wrap; gap: 8px 14px; text-align: left; }}
     #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
     #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
+    #due-crew .ini {{ display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }}
+    #due-crew .ini.sm {{ width: 17px; height: 17px; font-size: 10px; }}
     #due-crew .face.away {{ opacity: .38; }}
     #due-crew .face b {{ color: var(--dc-ink); font-weight: 600; font-size: 11.5px; max-width: 64px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
@@ -1344,6 +1346,20 @@ def _team_ago(at, now=None):
     return "yesterday" if d < 2 * 86400 else f"{d // 86400}d"
 
 
+def initial(name):
+    """A person's first letter or digit, for the circle that stands in for
+    an emoji they haven't picked ("?" when there's none)."""
+    return next((ch.upper() for ch in str(name or "") if ch.isalnum()), "?")
+
+
+def face(emoji, name, small=False):
+    """Someone's emoji, or the first letter of their name in a circle.
+    Escaped here: both are theirs."""
+    if emoji:
+        return _html.escape(str(emoji))
+    return f'<span class="ini{" sm" if small else ""}">{_html.escape(initial(name))}</span>'
+
+
 def _team_html(pid, tabs):
     """Who showed up today, the team's bingo, Ask the team and its threads.
     Names, words and topics are other people's: escaped here."""
@@ -1364,7 +1380,7 @@ def _team_html(pid, tabs):
     faces = ""
     for f in v.get("faces") or []:
         name = "You" if f.get("uid") == me else str(f.get("name") or "?")
-        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{e(str(f.get("emoji") or "") or "&#128100;")}</span>'
+        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{face(f.get("emoji"), f.get("name"))}</span>'
                   f'<b>{e(name)}</b></div>')
     if int(v.get("more") or 0):
         more = int(v["more"])
@@ -1393,7 +1409,7 @@ def _team_html(pid, tabs):
     down, have = set(known.get("down") or []), set(known.get("have") or [])
     for a in v.get("asks") or []:
         aid = int(a["id"])
-        who = "You" if a.get("mine") else f'{e(str(a.get("emoji") or ""))} <b>{e(str(a.get("name") or "?"))}</b>'
+        who = "You" if a.get("mine") else f'{face(a.get("emoji"), a.get("name"), small=True)} <b>{e(str(a.get("name") or "?"))}</b>'
         if a.get("guid"):
             on = " on a card you have down" if a["guid"] in down else " on a card"
             head = f'<span>{who}{on}</span>'

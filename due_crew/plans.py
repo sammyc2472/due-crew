@@ -717,7 +717,8 @@ def prep_for(doc, today):
     if not pick:
         return None
     ev = evs[pick["for"]]
-    left = sum(1 for u in us if u.get("for") == ev["id"] and today < str(u.get("opens") or "") <= ev["day"])
+    # days, not dates: a day can hold several dates
+    left = len({str(u.get("opens")) for u in us if u.get("for") == ev["id"] and today < str(u.get("opens") or "") <= ev["day"]})
     return {"name": ev.get("name") or "?", "day": ev["day"], "left": left, "today": ev["day"] == today}
 
 

@@ -673,7 +673,7 @@ async function account() {
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
   const sec = (title, ...kids) => h("section", { class: "panel acc" }, h("h4", {}, title), ...kids);
   page(
-    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
+    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, face(me.emoji, me.name)),
       h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
     sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
       code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null)),
@@ -1182,7 +1182,8 @@ async function home() {
       h("span", { class: "muted" }, "A plan opens a deck's cards on their days. Paste a plan's code in Got a code?, find one in the library, or make one in Anki: Tools › Due Crew › Make a plan from a deck."),
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
     return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
-      h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true))),
+      h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true),
+      me?.admin && !p.following?.paused ? planLoad(p) : null)),
       h("p", { class: "muted small" }, link("/plans", "All plans ›")));
   }
   // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
@@ -1216,8 +1217,8 @@ async function home() {
     shareItems.push(["My week…", () => weekCard()],
       ["My year…", () => openYearCard(logR.days || {}, t.slice(0, 4), logR.cheers || {})],
       ["All time…", () => openYearCard(logR.days || {}, "all", logR.cheers || {})]);
-    footLeft.replaceChildren(menu("Crew", crewItems), menu("Share", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
-      onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null);
+    footLeft.replaceChildren(...[menu("Crew", crewItems), menu("Share", shareItems), waiting.length ? h("button", { class: "pillw", title: `Waiting for ${waiting.map((f) => f.name).join(", ")} to add you back`,
+      onclick: () => { const i = document.getElementById("anycode"); if (i) i.scrollIntoView({ block: "center" }); } }, `${waiting.length} waiting`) : null].filter(Boolean));
   }
   const share = async (text) => {
     try { await navigator.clipboard.writeText(text); updated.textContent = "Copied"; } catch { updated.textContent = text; }
@@ -1438,7 +1439,7 @@ function sinceYouWereHere(b, crew, t) {
       const sentLine = () => h("small", { class: "muted" }, "Good luck sent ✓");
       const send = luckSent(f.uid, d) ? sentLine() : h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren(),
         () => { markLuck(f.uid, d); send.replaceWith(sentLine()); })) }, "Send good luck");
-      return h("div", { class: "fi" }, h("span", { class: "ic" }, f.emoji || "🍀"),
+      return h("div", { class: "fi" }, h("span", { class: "ic" }, face(f.emoji, f.name)),
         h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
     });
   const earlier = h("div", { class: "stack", hidden: true }, older.map(item));
@@ -1674,6 +1675,131 @@ function onTrack(p, compact) {
       h("small", { class: gap > 0 ? "warn" : "muted" }, total ? words : ""));
   }
   return h("p", { class: gap > 0 ? "warn" : "muted" }, total ? `${seen.toLocaleString()} of ${total.toLocaleString()} seen · ${words}` : words);
+}
+
+/** Plan load (trial, admin only): each of my dates on my own day, its new
+ *  cards split three ways from the progress my Anki sends ([opened, seen,
+ *  total]): seen, open but not seen (already in Anki's new cards, whoever
+ *  unsuspended them), and still suspended (what the plan opens on its
+ *  morning). A suspended card I've seen counts as seen, so open is opened
+ *  less seen, at least 0. The split by video is Anki's: the site never sees
+ *  cards. */
+function myDates(p) {
+  const prog = p.following?.progress || {};
+  const shift = p.following?.shift || 0;
+  const skipped = new Set(p.following?.skipped || []);
+  const moved = p.following?.moved || {};
+  const out = [];
+  for (const u of Sched.units(p.doc)) {
+    if (skipped.has(u.id)) continue;
+    const by = shift + (moved[u.id] || 0);
+    const pr = prog[u.id];
+    const tot = pr ? pr[2] : 0, seen = pr ? Math.min(pr[1], tot) : 0;
+    const open = pr ? Math.max(0, Math.min(pr[0] - seen, tot - seen)) : 0;
+    out.push({ u, day: by ? addDays(u.opens, by) : u.opens, moved: !!moved[u.id], known: !!pr && tot > 0, seen, open, susp: Math.max(0, tot - seen - open) });
+  }
+  return out.sort((a, b) => a.day.localeCompare(b.day));
+}
+/** A date's topics by where they come from, as the plan's Print lists them:
+ *  [[resource, [topic…]]…] ("" for no resource). Names only, from the plan. */
+function loadTopics(u) {
+  const groups = new Map();
+  const put = (g, x) => { if (!groups.has(g)) groups.set(g, []); if (!groups.get(g).includes(x)) groups.get(g).push(x); };
+  for (const t of u.tags || []) {
+    const segs = String(t).split("::");
+    const ri = segs.findIndex((x, i) => i > 0 && /^[#^]/.test(x));
+    const last = Tags.word(segs[segs.length - 1]);
+    put(ri >= 0 && ri < segs.length - 1 ? Tags.word(segs[ri]) : "", last);
+  }
+  for (const d of u.decks || []) put("", Tags.word(String(d).split("::").pop()));
+  const picked = (u.cards || []).length + (u.notes || []).length;
+  if ((u.search || []).length) put("", `${u.search.length} search${u.search.length === 1 ? "" : "es"}`);
+  if (picked) put("", `${picked} picked card${picked === 1 ? "" : "s"}`);
+  return [...groups.entries()];
+}
+const loadSum = (xs) => xs.reduce((a, x) => ({ seen: a.seen + x.seen, open: a.open + x.open, susp: a.susp + x.susp }), { seen: 0, open: 0, susp: 0 });
+/** A date in one number, keeping to the plan: past, what's behind; today,
+ *  what's to go; ahead, what will be new to me that day: the cards still
+ *  locked. One I've studied, or that's unlocked in my Anki now, I'll have
+ *  seen before then. */
+function loadNum(x, t) {
+  const n = (v) => v.toLocaleString(), left = x.open + x.susp;
+  if (x.day > t) return `${n(x.susp)} new`;
+  if (!left) return "✓";
+  return x.day === t ? `${n(left)} to go` : `${n(left)} behind`;
+}
+/** What a date asks of me on its day (the number's count): ahead the
+ *  cards still locked, else what isn't seen. */
+const loadAsk = (x, t) => (x.day > t ? x.susp : x.open + x.susp);
+/** A day's bar: a faint track at the day's size (to the week's scale),
+ *  filled with what it asks. */
+function askBar(tot, ask, of, late, title) {
+  return h("span", { class: `abar${late && ask ? " late" : ""}`, title, style: `width:${Math.max(4, Math.round((100 * tot) / Math.max(1, of)))}%` },
+    h("i", { style: `width:${tot ? Math.round((100 * ask) / tot) : 0}%` }));
+}
+/** Plan load (trial, admin only). */
+function planLoad(p) {
+  const t = today(), ds = myDates(p);
+  if (!ds.some((x) => x.known)) return h("p", { class: "muted small" }, "Shows once your Anki syncs this plan.");
+  let anchor = Sched.monday(t), picked = t;
+  const box = h("div", { class: "pload" });
+  const draw = () => {
+    const td = ds.filter((x) => x.day === t && x.known), tdS = loadSum(td);
+    const behind = loadSum(ds.filter((x) => x.day < t && x.known));
+    const head = h("div", { class: "ltoday" }, h("span", { class: "h" }, "Today"),
+      h("span", {}, td.length ? [h("b", {}, td.map((x) => x.u.name).join(", ")), ` · ${tdS.open + tdS.susp ? `${(tdS.open + tdS.susp).toLocaleString()} to go` : "✓"}`] : "Nothing new today",
+        behind.open + behind.susp ? h("span", { class: "warn" }, ` · ${(behind.open + behind.susp).toLocaleString()} behind`) : null));
+    const nav = h("div", { class: "row lnav" },
+      h("button", { class: "quiet", "aria-label": "Week before", onclick: () => { anchor = addDays(anchor, -7); draw(); } }, "‹"),
+      h("button", { class: anchor === Sched.monday(t) ? "ghost" : "quiet", onclick: () => { anchor = Sched.monday(t); picked = t; draw(); } }, "Today"),
+      h("button", { class: "quiet", "aria-label": "Week after", onclick: () => { anchor = addDays(anchor, 7); draw(); } }, "›"),
+      h("small", { class: "muted" }, `${pretty(anchor)} – ${pretty(addDays(anchor, 6))}`),
+      h("small", { class: "muted lkey" }, h("span", {}, h("i", { class: "kn" }), "new to you"), h("span", {}, h("i", { class: "kc" }), "seen or in your Anki by then"), h("span", {}, "longest = busiest day")));
+    const cells = [];
+    const inView = ds.filter((x) => x.known && x.day >= anchor && x.day <= addDays(anchor, 6));
+    const size = (xs) => xs.reduce((n, x) => n + x.seen + x.open + x.susp, 0);
+    const of = Math.max(1, ...[0, 1, 2, 3, 4, 5, 6].map((i) => size(inView.filter((x) => x.day === addDays(anchor, i)))), ...ds.filter((x) => x.known && x.day === picked).map((x) => size([x])));
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(anchor, i), on = ds.filter((x) => x.day === d), dd = parseIso(d);
+      cells.push(h("button", { class: `lday${d === t ? " t" : ""}${d === picked ? " pk" : ""}`, onclick: () => { picked = d; draw(); } },
+        h("b", {}, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()}`),
+        h("span", { class: "lbartop" }, on.some((x) => x.known) ? (() => {
+          const k = on.filter((x) => x.known), tot = size(k), ask = k.reduce((n, x) => n + loadAsk(x, t), 0);
+          return askBar(tot, ask, of, d < t, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()} · ${tot.toLocaleString()} card${tot === 1 ? "" : "s"} · ${ask.toLocaleString()} ${d > t ? "new to you" : d === t ? "to go" : "behind"}`);
+        })() : null),
+        on.map((x) => h("span", { class: `lu${x.moved ? " mv" : ""}${x.day < t && x.open + x.susp ? " late" : ""}` },
+          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadNum(x, t) : "not counted yet")))));
+    }
+    const pk = ds.filter((x) => x.day === picked);
+    const how = (x) => {
+      const n = (v) => v.toLocaleString(), tot = x.seen + x.open + x.susp, before = x.seen + x.open;
+      if (x.day <= t) return `${n(x.seen)} of ${n(tot)} seen`;
+      return `${n(x.susp)} of ${n(tot)} new` + (before ? ` · ${n(before)} already seen or in your Anki` : "");
+    };
+    const det = h("div", { class: "ldet" }, h("b", {}, pretty(picked)),
+      pk.length ? pk.map((x) => h("div", { class: "lrow" }, h("span", {}, h("b", {}, x.u.name), x.moved ? h("small", { class: "muted" }, " · moved") : null),
+        x.known ? h("span", { class: "lfoot" }, askBar(size([x]), loadAsk(x, t), of, x.day < t)) : null,
+        h("small", { class: "muted nums" }, x.known ? how(x) : "not counted yet"),
+        ...loadMore(p, x)))
+        : h("small", { class: "muted" }, "No plan dates."));
+    box.replaceChildren(head, nav, h("div", { class: "lweek" }, cells), det);
+  };
+  draw();
+  return box;
+}
+/** More about a date in the details: what's in it, the author's lines,
+ *  what it preps for, the plan's own day when mine differs, and the way to
+ *  it on the plan's page. All from the plan already loaded. */
+function loadMore(p, x) {
+  const u = x.u, out = [];
+  const tops = loadTopics(u);
+  if (tops.length) out.push(h("div", { class: "ltops small" }, tops.map(([g, xs]) => h("span", {}, g ? h("b", {}, `${g}: `) : null, xs.join(", ")))));
+  if ((u.todo || []).length) out.push(h("div", { class: "ltodo small" }, u.todo.map((t) => h("span", {},
+    h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[t.k] || "Do"), " · ",
+    t.url && /^https:\/\//.test(t.url) ? h("a", { href: t.url, target: "_blank", rel: "noopener" }, t.t) : t.t))));
+  const ev = u.for ? (p.doc.events || []).find((e) => e.id === u.for) : null;
+  out.push(h("small", { class: "muted" }, ev ? `for ${ev.name} · ` : "", x.day !== u.opens ? `plan's day ${pretty(u.opens)} · ` : "", link(`/plans/${p.id}`, "Plan ›")));
+  return out;
 }
 
 /** Cards seen against my schedule, as a line: the schedule dashed, me as a dot today. */

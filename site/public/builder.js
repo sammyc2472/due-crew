@@ -6,6 +6,11 @@
 /** Readable tag names: "#Step1_v12::#Videos::01_Growth" reads
  *  "Step 1 › Videos › 1 · Growth" (a leading AK_ goes too). The raw tag is
  *  always shown too. */
+/** Someone's emoji, or the first letter of their name in a circle when
+ *  they haven't picked one (board.face in the add-on: change one, change both). */
+const initial = (name) => { const m = /[\p{L}\p{N}]/u.exec(String(name || "")); return m ? m[0].toUpperCase() : "?"; };
+const face = (emoji, name) => (emoji ? emoji : h("span", { class: "ini" }, initial(name)));
+
 const Tags = (() => {
   function word(seg) {
     let s = String(seg).replace(/^[#^$!]+/, "").replace(/^AK_/i, "").replace(/_v\d+$/i, "");
@@ -237,6 +242,8 @@ async function builder(id) {
   const evById = (id) => events().find((x) => x.id === id);
   const evOn = (d) => events().filter((x) => x.day === d);
   const prepOf = (id) => doc.units.filter((u) => u.for === id);
+  /** the days (not dates: a day can hold several) that prep for an event */
+  const prepDays = (id) => [...new Set(prepOf(id).map((u) => u.opens))].sort();
   function addEvent(day, name) {
     const ev = { id: uid8(), day, name: (name || "").trim().slice(0, 60) || "Event" };
     doc.events = [...events(), ev].sort((a, b) => a.day.localeCompare(b.day));
@@ -613,7 +620,7 @@ async function builder(id) {
       const dd = parseIso(d);
       const num = dd.getUTCDate() === 1 || view === "week" ? `${dd.getUTCDate()} ${MONTHS[dd.getUTCMonth()]}` : String(dd.getUTCDate());
       const evs = evOn(d).map((x) => {
-        const k = prepOf(x.id).length;
+        const k = prepDays(x.id).length;
         const el = h("button", { class: "ch evc", title: `${x.name}${k ? ` · ${k} day${k === 1 ? "" : "s"} of prep` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; moving = null; sideTab = "day"; draw(); } },
           h("span", {}, x.name), k ? h("small", {}, `${k} day${k === 1 ? "" : "s"} of prep`) : null);
@@ -826,7 +833,8 @@ async function builder(id) {
   function eventBox(x) {
     const prep = prepOf(x.id).sort((a, b) => a.opens.localeCompare(b.opens));
     const n = prep.reduce((a, u) => a + unitTotal(u), 0);
-    const say = prep.length ? `${prep.length} day${prep.length === 1 ? "" : "s"} of prep: ${prep.slice(0, 4).map((u) => pretty(u.opens)).join(", ")}${prep.length > 4 ? "…" : ""}${n ? ` · ${n.toLocaleString()} cards` : ""}`
+    const days = prepDays(x.id);
+    const say = prep.length ? `${days.length} day${days.length === 1 ? "" : "s"} of prep: ${days.slice(0, 4).map((d) => pretty(d)).join(", ")}${days.length > 4 ? "…" : ""}${n ? ` · ${n.toLocaleString()} cards` : ""}`
       : "No days prep for it yet. Pick it under Prep for on a day.";
     if (!author) return h("div", { class: "evbox" }, h("span", { class: "lbl" }, "Event"), h("b", {}, x.name), h("span", { class: "muted small" }, say));
     const name = h("input", { value: x.name, maxlength: 60, "aria-label": "The event's name", oninput: (e) => { x.name = e.target.value.slice(0, 60); mark(); } });
@@ -1813,7 +1821,7 @@ async function builder(id) {
           a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
     };
     const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
-      h("span", { class: "e" }, f.emoji || "👤"), h("b", {}, f.uid === me.uid ? "You" : f.name))),
+      h("span", { class: "e" }, face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
       team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
     const b = team.bingo;
     let bingo = null;
