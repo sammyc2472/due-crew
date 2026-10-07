@@ -886,4 +886,14 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .ltops, .ltodo { display: grid; gap: 2px; grid-column: 1 / -1; font-size: 12.5px; }
 .lrow > small.muted:last-child { grid-column: 1 / -1; }
 .lu small { font-size: 12px; } .lu.late small { color: var(--warn); }
-.lrow { grid-template-columns: minmax(0, 1fr); }
+/* plan load: a date's bar is its size (faint) filled with what it asks that day */
+.abar { display: block; height: 6px; border-radius: 3px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; margin-top: 4px; }
+.abar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.abar.late i { background: var(--warn); }
+.lrow .abar { margin-top: 0; height: 8px; }
+.astrip { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; margin-top: 6px; max-width: 420px; }
+.astrip .ac { display: grid; gap: 2px; justify-items: center; }
+.astrip .col { display: flex; align-items: flex-end; width: 100%; height: 34px; background: var(--well); border-radius: 3px; overflow: hidden; }
+.astrip .col i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; }
+.astrip small { font-size: 10px; color: var(--muted); }
+.astrip .ac.t small { color: var(--accent); font-weight: 700; }
