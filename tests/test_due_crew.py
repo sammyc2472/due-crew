@@ -6450,6 +6450,26 @@ def test_plan_team_v39():
         _state["labels"] = []
 
 
+def test_team_times_377():
+    """3.7.7: a Team question's time is today's Unix seconds (past 10**9);
+    the cleaner kept 10**9 at most, so every question read "20733d" (since
+    1970) and the Team badge never counted anything as new."""
+    import time as _time
+    from due_crew.backend import shapes as S
+    from due_crew import team as T
+    now = int(_time.time())
+    v = S.clean_team_view({"on": True, "count": 2, "asks": [
+        {"id": 1, "uid": "u" * 28, "name": "Ameya", "text": "why?", "at": now - 7200, "act": now - 3600,
+         "replies": [{"id": 2, "uid": "u" * 28, "name": "Sam", "text": "this", "at": now - 3600}]}]})
+    a = v["asks"][0]
+    check("team times: a question keeps its time and its last activity", a["at"] == now - 7200 and a["act"] == now - 3600, a)
+    check("team times: a reply keeps its time", a["replies"][0]["at"] == now - 3600, a["replies"])
+    check("team times: the row says 1h, not days since 1970", board._team_ago(a["act"], now) == "1h")
+    summ = S.clean_teams({"abcdefghij": {"shown": 1, "of": 2, "act": [now - 60, now - 7200]}})["abcdefghij"]
+    check("team times: the badge's activity times survive", summ["act"] == [now - 60, now - 7200], summ)
+    check("team times: the badge counts what's newer than seen", T.unread(summ, now - 3600) == 1)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
