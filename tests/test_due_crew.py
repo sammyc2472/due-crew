@@ -6485,6 +6485,19 @@ def test_team_faces_no_emoji_378():
     check("initial: no letter or digit is ?", board.initial("  !!") == "?" and board.initial("4chan") == "4" and board.initial("") == "?")
 
 
+def test_prep_days_are_days_378():
+    """3.7.8: "days of prep" counts days, not dates: two dates on one day
+    that prep for the same event are one day."""
+    from due_crew import plans as P
+    doc = {"events": [{"id": "e1", "day": "2026-10-20", "name": "KSA F3-3"}], "units": [
+        {"id": "a", "name": "A", "opens": "2026-10-13", "tags": ["x"], "for": "e1"},
+        {"id": "b", "name": "B", "opens": "2026-10-13", "tags": ["y"], "for": "e1"},
+        {"id": "c", "name": "C", "opens": "2026-10-14", "tags": ["z"], "for": "e1"},
+        {"id": "d", "name": "D", "opens": "2026-10-14", "tags": ["w"], "for": "e1"}]}
+    pf = P.prep_for(doc, "2026-10-12")
+    check("prep: two days left, not four dates", pf and pf["left"] == 2, pf)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:
