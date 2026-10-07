@@ -1721,14 +1721,28 @@ const loadSum = (xs) => xs.reduce((a, x) => ({ seen: a.seen + x.seen, open: a.op
 // a bar's length is its card count against `of` (the week's biggest day), so 1 card is a sliver, not a full bar
 const loadBar = (x, cls = "", of = 0) => h("span", { class: `lbar ${cls}`, "aria-hidden": "true", style: of ? `width:${Math.max(3, Math.round((100 * (x.seen + x.open + x.susp)) / of))}%` : null },
   h("i", { class: "s", style: `flex:${x.seen}` }), h("i", { class: "o", style: `flex:${x.open}` }), h("i", { class: "p", style: `flex:${x.susp}` }));
-function loadWords(x) {
-  const left = x.open + x.susp, n = (v) => v.toLocaleString();
-  if (!left) return "done";
-  if (!x.susp) return `${n(left)} left · all new`;
-  if (!x.open) return `${n(left)} left`;
-  return `${n(left)} left · ${n(x.open)} new`;
+/** A date read from its own day: today, what I've seen and what's to go;
+ *  ahead, what will be new to me that day (still locked) and what I'll have
+ *  seen before then (studied, or unlocked so Anki shows it sooner); past,
+ *  what I haven't seen. */
+function loadWords(x, t) {
+  const n = (v) => v.toLocaleString(), left = x.open + x.susp;
+  if (!left) return x.day > t ? "all seen already" : "done";
+  if (x.day < t) return `${n(left)} not seen`;
+  if (x.day === t) return x.seen ? `${n(x.seen)} seen · ${n(left)} to go` : `${n(left)} to go`;
+  const before = x.seen + x.open;
+  if (!x.susp) return `nothing new · all ${n(before)} before then`;
+  return before ? `${n(x.susp)} new that day · ${n(before)} before` : `${n(x.susp)} new that day`;
 }
-const loadTip = (x, name) => `${name}: ${x.seen.toLocaleString()} seen · ${x.open.toLocaleString()} new · ${x.susp.toLocaleString()} open on their day`;
+function loadTip(x, name, t) {
+  const n = (v) => v.toLocaleString();
+  if (x.day > t) {
+    const how = [x.seen ? `${n(x.seen)} already` : "", x.open ? `${n(x.open)} in your Anki now` : ""].filter(Boolean).join(", ");
+    return `${name}: ${n(x.susp)} new to you that day${how ? ` · ${n(x.seen + x.open)} seen before then (${how})` : ""}`;
+  }
+  if (x.day === t) return `${name}: ${n(x.seen)} seen · ${n(x.open + x.susp)} to go`;
+  return `${name}: ${n(x.seen)} seen · ${n(x.open + x.susp)} not seen`;
+}
 function planLoad(p) {
   const t = today(), ds = myDates(p);
   if (!ds.some((x) => x.known)) return h("p", { class: "muted small" }, "The load shows once your Anki syncs this plan.");
@@ -1740,20 +1754,20 @@ function planLoad(p) {
     const tdS = loadSum(td), bS = loadSum(behind), wS = loadSum(wk);
     // the burden: every card of this plan already in Anki's new cards, whatever its date
     const nowN = ds.reduce((n, x) => n + x.open, 0), nowAhead = ds.filter((x) => x.day > t).reduce((n, x) => n + x.open, 0);
-    const todayLine = td.length ? [h("b", {}, td.map((x) => x.u.name).join(", ")), ` · ${td.length && tdS.open + tdS.susp ? `${(tdS.open + tdS.susp).toLocaleString()} left${tdS.open && tdS.susp ? `, ${tdS.open.toLocaleString()} new` : ""}` : "done"}`]
+    const todayLine = td.length ? [h("b", {}, td.map((x) => x.u.name).join(", ")), ` · ${td.length && tdS.open + tdS.susp ? `${(tdS.open + tdS.susp).toLocaleString()} to go${tdS.seen ? `, ${tdS.seen.toLocaleString()} seen` : ""}` : "done"}`]
       : ["Nothing new today"];
     const head = h("div", { class: "ltoday" }, h("span", { class: "h" }, "Today"), h("span", {}, ...todayLine),
       behind.length ? h("span", { class: "small warn" }, `Behind: ${behind.length === 1 ? behind[0].u.name : `${behind.length} dates`}, ${(bS.open + bS.susp).toLocaleString()} left`) : null,
       h("span", { class: "lnow" }, h("b", {}, nowN.toLocaleString()), ` new card${nowN === 1 ? "" : "s"} from this plan in your Anki now`,
-        nowAhead ? h("small", { class: "muted" }, ` · ${nowAhead.toLocaleString()} of them from dates ahead`) : null),
-      h("span", { class: "small muted" }, wS.susp ? `${wS.susp.toLocaleString()} more open later this week · ` : "Nothing else opens this week · ",
+        nowAhead ? h("small", { class: "muted" }, ` · ${nowAhead.toLocaleString()} from dates ahead, so you\u2019ll have seen them before their day`) : null),
+      h("span", { class: "small muted" }, wS.susp ? `${wS.susp.toLocaleString()} new to you later this week · ` : "Nothing new to you later this week · ",
         h("button", { class: "linkish", onclick: () => { ahead = !ahead; draw(); } }, ahead ? "Next 2 weeks ▴" : "Next 2 weeks ▾")));
     const nav = h("div", { class: "row lnav" },
       h("button", { class: "quiet", "aria-label": "Week before", onclick: () => { anchor = addDays(anchor, -7); draw(); } }, "‹"),
       h("button", { class: anchor === Sched.monday(t) ? "ghost" : "quiet", onclick: () => { anchor = Sched.monday(t); picked = t; draw(); } }, "Today"),
       h("button", { class: "quiet", "aria-label": "Week after", onclick: () => { anchor = addDays(anchor, 7); draw(); } }, "›"),
       h("small", { class: "muted" }, `${pretty(anchor)} – ${pretty(addDays(anchor, 6))}`),
-      h("span", { class: "lkey" }, h("span", {}, h("i", { class: "s" }), "seen"), h("span", {}, h("i", { class: "o" }), "new"), h("span", {}, h("i", { class: "p" }), "opens on its day")));
+      h("span", { class: "lkey" }, h("span", {}, h("i", { class: "s" }), "seen"), h("span", {}, h("i", { class: "o" }), "in your Anki now"), h("span", {}, h("i", { class: "p" }), "new on its day")));
     const cells = [];
     const dayTot = (d) => { const z = loadSum(ds.filter((x) => x.day === d && x.known)); return z.seen + z.open + z.susp; };
     const of = Math.max(1, ...[0, 1, 2, 3, 4, 5, 6].map((i) => dayTot(addDays(anchor, i))), ...ds.filter((x) => x.day === picked && x.known).map((x) => x.seen + x.open + x.susp));
@@ -1764,16 +1778,16 @@ function planLoad(p) {
       cells.push(h("button", { class: `lday${d === t ? " t" : ""}${d === picked ? " pk" : ""}`, onclick: () => { picked = d; draw(); } },
         h("b", {}, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()}`),
         // the day's bar sits under its date, so the week's bars line up
-        h("span", { class: "lfoot ltop", title: all.seen + all.open + all.susp ? loadTip(all, "This day") : null }, all.seen + all.open + all.susp ? loadBar(all, "", of) : null),
-        on.map((x) => h("span", { class: `lu${x.day > t && x.known && !x.susp && x.open ? " early" : ""}${x.moved ? " mv" : ""}`, title: x.known ? loadTip(x, x.u.name) : `${x.u.name}: not counted yet` },
-          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadWords(x) : "not counted yet")))));
+        h("span", { class: "lfoot ltop", title: all.seen + all.open + all.susp ? loadTip({ ...all, day: d }, "This day", t) : null }, all.seen + all.open + all.susp ? loadBar(all, "", of) : null),
+        on.map((x) => h("span", { class: `lu${x.day > t && x.known && !x.susp && x.open ? " early" : ""}${x.moved ? " mv" : ""}`, title: x.known ? loadTip(x, x.u.name, t) : `${x.u.name}: not counted yet` },
+          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadWords(x, t) : "not counted yet")))));
     }
     const pk = ds.filter((x) => x.day === picked);
     const det = h("div", { class: "ldet" }, h("b", {}, pretty(picked)),
       pk.length ? pk.map((x) => h("div", { class: "lrow" }, h("span", {}, h("b", {}, x.u.name), x.moved ? h("small", { class: "muted" }, " · moved") : null,
-        x.day < t && x.open + x.susp ? h("small", { class: "warn" }, " · behind") : x.day > t && x.known && !x.susp && x.open ? h("small", { class: "ok" }, " · opened early") : null),
+        x.day < t && x.open + x.susp ? h("small", { class: "warn" }, " · behind") : x.day > t && x.known && !x.susp && x.open ? h("small", { class: "ok" }, " · in your Anki early") : null),
         x.known ? h("span", { class: "lfoot" }, loadBar(x, "wide", of)) : null,
-        h("small", { class: "muted nums" }, x.known ? `${(x.seen + x.open + x.susp).toLocaleString()} cards: ${x.seen.toLocaleString()} seen · ${x.open.toLocaleString()} new · ${x.susp.toLocaleString()} open${x.day < t ? " with Catch up in Anki" : " on its day"}` : "not counted yet"),
+        h("small", { class: "muted nums" }, x.known ? `${(x.seen + x.open + x.susp).toLocaleString()} cards · ${loadTip(x, "", t).replace(/^: /, "")}` : "not counted yet"),
         ...loadMore(p, x)))
         : h("small", { class: "muted" }, "No plan dates."),
       pk.length ? h("small", { class: "muted" }, "By video, Open now and Study are in Anki's Plans tab.") : null);
@@ -1824,12 +1838,12 @@ function loadAhead(ds, t) {
     if (x.open) g.append(s("rect", { x: x0, y: y(x.open), width: w, height: Math.max(0, y(0) - y(x.open)), rx: x.susp ? 0 : 3, class: "o" }));
     if (x.susp) g.append(s("rect", { x: x0, y: y(x.open + x.susp), width: w, height: Math.max(0, y(x.open) - y(x.open + x.susp) - (x.open ? 2 : 0)), rx: 3, class: "p" }));
     const hit = s("rect", { x: L + i * bw, y: T, width: bw, height: H - T - B, fill: "transparent" });
-    hit.append(s("title", {}, `${pretty(d)}${i === 0 ? " (with what's behind)" : ""}: ${xs.length ? `${xs.map((z) => z.u.name).join(", ")} · ${x.open.toLocaleString()} new, ${x.susp.toLocaleString()} open on the day` : "no plan dates"}`));
+    hit.append(s("title", {}, `${pretty(d)}${i === 0 ? " (with what's behind)" : ""}: ${xs.length ? `${xs.map((z) => z.u.name).join(", ")} · ${x.open.toLocaleString()} in your Anki now, ${x.susp.toLocaleString()} new that day` : "no plan dates"}`));
     g.append(hit, s("text", { x: x0 + w / 2, y: H - B + 14, class: "tick", "text-anchor": "middle" }, DAYS[dd.getUTCDay()]), s("text", { x: x0 + w / 2, y: H - B + 27, class: "tick", "text-anchor": "middle" }, String(dd.getUTCDate())));
     svg.append(g);
   });
   const open = days.reduce((a, [, x]) => a + x.open, 0), susp = days.reduce((a, [, x]) => a + x.susp, 0);
-  return h("div", { class: "lahead" }, svg, h("small", { class: "muted" }, `Next 14 days: ${(open + susp).toLocaleString()} left. ${open.toLocaleString()} are new cards in your Anki now, ${susp.toLocaleString()} open on their days.`));
+  return h("div", { class: "lahead" }, svg, h("small", { class: "muted" }, `Next 14 days: ${(open + susp).toLocaleString()} not seen yet. ${open.toLocaleString()} are in your Anki now; ${susp.toLocaleString()} will be new to you on their days.`));
 }
 
 /** Cards seen against my schedule, as a line: the schedule dashed, me as a dot today. */
