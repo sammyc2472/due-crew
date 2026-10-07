@@ -560,7 +560,7 @@ In Anki (as a follower):
 - [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the team about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
 - [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
 - [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the team (the streak, "Showed up 3 days").
-- [ ] Insights: "Last 14 days", Topic · Missed · Trend. Study opens a filtered deck of the missed cards; Re-watch only where the date has a watch link; Ask goes to Team with the topic in the box.
+- [ ] Insights (3.7.9): the header's % right against the 2 weeks before; with FSRS on and an event within 3 weeks, "N cards Anki won't show you before …" and Study N opens a filtered deck of them; Not sticking yet rows (topic, its source, not right yet / forgot) each with Study; Your week in minutes with today marked; Optimize FSRS opens the deck's options, Not now hides it. A plan with no reviews says "Insights fill in after a week of reviews."
 - [ ] Leave the team: off it, your questions stay. Stopping the plan also takes you off.
 - [ ] duecrew.com, the plan's page as a follower: Calendar · Team, the same team; on a phone the rail stacks under the questions.
 - [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….

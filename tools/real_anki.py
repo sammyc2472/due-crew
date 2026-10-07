@@ -216,7 +216,6 @@ def check(path):
 
     # 3.7.3: Insights, worked out on the main thread when the tab opens, and
     # the team's days on every sync, over the same 400,000 answers
-    from due_crew import team as T
     dids = ",".join(str(d) for d in col.decks.deck_and_child_ids(did))
     # the last four weeks: 300 answers a day (the history above ends months ago)
     recent, rid = [], (cut - 28 * 86400) * 1000
@@ -224,17 +223,26 @@ def check(path):
         rid += random.randint(250000, 326000)
         recent.append((rid, random.choice(studied), -1, random.choice([1, 3, 3, 3, 4]), 10, 5, 2500, 8000, 1))
     col.db.executemany("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)", recent)
-    t = tm()
-    answers = col.db.all(
-        f"SELECT r.cid, CAST((? - r.id / 1000) / 86400 AS INTEGER), r.ease FROM revlog r "
-        f"WHERE r.id >= ? AND r.ease > 0 AND r.type IN (1, 2) "
-        f"AND r.cid IN (SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids}))",
-        cut - 1, (cut - 2 * T.DAYS * 86400) * 1000)
-    idx3 = P.DeckIndex(col, did)
-    rows = T.insights(T.topic_list(doc), lambda tg: idx3.tag_cards(tg), answers)
-    t_ins = tm() - t
-    ok("insights: the plan's topics missed most, from 28 days of answers", 0 < len(rows) <= T.ROWS and t_ins < 0.5,
-       f"{len(answers):,} answers, {len(rows)} rows, {t_ins*1000:.0f} ms")
+    # 3.7.9: the whole Insights tab, as the glue works it out when the tab opens
+    import datetime as _dtm
+    from aqt import mw as _mw
+    from due_crew import team_flow as TF
+    plan_i = {"id": "pI", "name": "Big", "doc": dict(doc, events=[{"id": "e", "day": str(_dtm.date.today() + _dtm.timedelta(days=6)),
+                                                                   "name": "Exam"}])}
+    keep = (TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col)
+    TF._plan = lambda pid: F.mine(plan_i)
+    F._state_cfg = lambda c=None: {"pI": {"deck_id": did}}
+    F._today = lambda: str(_dtm.date.today())
+    F._pcfg = lambda: {}
+    _mw.col = col
+    try:
+        t = tm()
+        view = TF._work_out("pI")
+        t_ins = tm() - t
+    finally:
+        TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col = keep
+    ok("insights: the whole tab (hero, not sticking, week, FSRS line) in one pass", isinstance(view, dict) and "rows" in view
+       and t_ins < 3.0, f"{len(view.get('rows') or [])} rows, hero {len(view.get('hero') or [])}, {t_ins*1000:.0f} ms")
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "

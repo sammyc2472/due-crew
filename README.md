@@ -52,7 +52,8 @@ day's cards each morning. Behind? **Catch up** or **Move my days back**.
 Plans can have co-authors and notes, go in your calendar app, and be
 shared in the library. Join a plan's **Team** to see who showed up today,
 ask and answer questions, and play bingo together; **Insights** shows the
-topics you miss most, worked out in your Anki.
+cards Anki won't show you before your next exam, what isn't sticking yet,
+and your week in time, worked out in your Anki.
 
 **Due**, above the board, is your day: what your plans open, ticking
 itself as you review, the lecture or chapter that goes with it, and your

@@ -866,6 +866,58 @@ def _css(cfg):
     #due-crew .tjoin a.bt {{ justify-self: start; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
     #due-crew .tjoin .k, #due-crew .tq0 {{ color: var(--dc-muted); font-size: 11.5px; text-align: left; }}
     #due-crew .tleave {{ text-align: left; margin-top: 10px; }}
+    #due-crew .dc-ins {{ display: grid; gap: 14px; text-align: left; font-size: 12px; }}
+    #due-crew .dc-ins a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    #due-crew .dc-ins a.q {{ color: var(--dc-muted); font-weight: 500; }}
+    #due-crew .ihd {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }}
+    #due-crew .ihd b {{ font-size: 18px; font-variant-numeric: tabular-nums; }}
+    #due-crew .ihd > span {{ font-size: 12px; }}
+    #due-crew .ihd .m {{ color: var(--dc-muted); }}
+    #due-crew .ispark path {{ fill: none; stroke: var(--dc-accent); stroke-width: 2; stroke-linejoin: round; }}
+    #due-crew .ispark .end {{ fill: var(--dc-accent); stroke: var(--dc-bg); stroke-width: 2; }}
+    #due-crew .ispark .hit, #due-crew .iwk .hit {{ fill: transparent; }}
+    #due-crew .ihero {{ background: var(--dc-you-bg); border-radius: 10px; padding: 11px 13px; display: grid; gap: 4px; justify-items: start; }}
+    #due-crew .ihero .k {{ font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dc-accent); }}
+    #due-crew .ihero .t {{ font-size: 14px; font-weight: 650; color: var(--dc-ink); }}
+    #due-crew .dc-ins a.bt {{ margin-top: 4px; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 5px 13px; font-size: 12px; }}
+    #due-crew .isec {{ display: grid; gap: 2px; border-top: 1px solid var(--dc-line); padding-top: 10px; }}
+    #due-crew .ik {{ display: flex; flex-wrap: wrap; gap: 4px 0; align-items: baseline; font-size: 10.5px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase; color: var(--dc-muted); margin-bottom: 4px; }}
+    #due-crew .ik > span {{ text-transform: none; letter-spacing: 0; color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .ik .ikey {{ margin-left: auto; padding-left: 12px; color: var(--dc-muted); font-weight: 500; display: inline-flex; gap: 5px; align-items: center; }}
+    #due-crew .sw {{ display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin-left: 6px; }}
+    #due-crew .sw.st {{ background: var(--dc-hours); }}
+    #due-crew .sw.fg {{ background: color-mix(in srgb, var(--dc-hours) 40%, var(--dc-bg)); }}
+    #due-crew .sw.pm {{ background: color-mix(in srgb, var(--dc-accent) 35%, var(--dc-bg)); }}
+    #due-crew .sw.hx {{ background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)) 0 2px, color-mix(in srgb, var(--dc-accent) 18%, var(--dc-bg)) 2px 4px); }}
+    #due-crew .irow {{ display: grid; grid-template-columns: minmax(0, 1fr) 120px 56px 64px; gap: 10px; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid var(--dc-line); }}
+    #due-crew .irow:last-child {{ border-bottom: 0; }}
+    #due-crew .irow .n {{ display: grid; min-width: 0; text-align: left; }}
+    #due-crew .irow .n b {{ font-weight: 500; color: var(--dc-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .irow .n span {{ font-size: 10.5px; color: var(--dc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .irow .ib {{ position: relative; height: 9px; border-radius: 5px; background: var(--dc-well); overflow: hidden; }}
+    #due-crew .irow .ib i {{ position: absolute; top: 0; bottom: 0; }}
+    #due-crew .irow .ib .st {{ left: 0; background: var(--dc-hours); }}
+    #due-crew .irow .ib .fg {{ background: color-mix(in srgb, var(--dc-hours) 40%, var(--dc-bg)); }}
+    #due-crew .irow .c {{ text-align: right; color: var(--dc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    #due-crew .irow .c b {{ color: var(--dc-ink); }}
+    #due-crew .irow > a {{ text-align: right; }}
+    #due-crew .iwk {{ overflow-x: auto; }}
+    #due-crew .iwk svg {{ width: 100%; min-width: 460px; height: auto; display: block; overflow: visible; }}
+    #due-crew .iwk .pm {{ fill: color-mix(in srgb, var(--dc-accent) 35%, var(--dc-bg)); }}
+    #due-crew .iwk .h1 {{ fill: color-mix(in srgb, var(--dc-accent) 18%, var(--dc-bg)); }}
+    #due-crew .iwk .h2 {{ fill: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
+    #due-crew .iwk .g {{ stroke: var(--dc-line); stroke-dasharray: 2 3; }}
+    #due-crew .iwk .base {{ stroke: var(--dc-line); }}
+    #due-crew .iwk text {{ fill: var(--dc-muted); font-size: 10px; text-anchor: middle; }}
+    #due-crew .iwk .yl {{ text-anchor: end; font-size: 9px; }}
+    #due-crew .iwk .ax.b {{ fill: var(--dc-ink); font-weight: 700; }}
+    #due-crew .iwk .ax.d {{ font-size: 9px; opacity: .8; }}
+    #due-crew .iwk .ev {{ font-weight: 700; letter-spacing: .04em; }}
+    #due-crew .iline {{ border-top: 1px solid var(--dc-line); padding-top: 10px; color: var(--dc-ink); }}
+    @media (max-width: 560px) {{ #due-crew .irow {{ grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }}
+      #due-crew .irow .ib {{ grid-column: 1 / -1; grid-row: 2; }} }}
     #due-crew .wk2 {{ display: grid; grid-template-columns: minmax(0, 1fr) 64px 76px 150px; gap: 12px; align-items: center;
       font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--dc-line); text-align: left; }}
     #due-crew .wk2:last-child {{ border-bottom: 0; }}
@@ -1301,7 +1353,7 @@ def _plan_card_html(card):
     if tabs.get("sub") == "team":
         return out + _team_html(pid, tabs) + "</div>"
     if tabs.get("sub") == "ins":
-        return out + _insights_html(pid, tabs.get("insights") or []) + "</div>"
+        return out + _insights_html(pid, tabs.get("insights") or {}) + "</div>"
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
@@ -1460,24 +1512,146 @@ def _team_html(pid, tabs):
     return out + f'<div class="tleave"><a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">Leave the team</a></div>'
 
 
-def _insights_html(pid, rows):
-    """3.7.3: this plan's topics I missed most in the last 14 days, mine alone."""
+def _hm(m):
+    m = int(m)
+    return f"{m // 60} h {m % 60:02d}" if m >= 60 else f"{m} min"
+
+
+def _ins_day(iso, today=""):
+    try:
+        d = _dt.date.fromisoformat(str(iso))
+    except ValueError:
+        return "", ""
+    return ("Today" if str(iso) == today else f"{d:%a}"), str(d.day)
+
+
+def _ins_spark(days):
+    """The header's 14 days of right, a line; a day with no reviews is a gap."""
+    pts = [(i, v) for i, v in enumerate(days) if v is not None]
+    if len(pts) < 2:
+        return ""
+    lo = min(v for _i, v in pts)
+    lo = min(lo, 70)
+    xy = [(2 + i * 92 / max(1, len(days) - 1), 22 - (v - lo) / max(1, 100 - lo) * 20) for i, v in pts]
+    path = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in xy)
+    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" class="hit"><title>{len(days) - 1 - i} days ago &middot; {v}% right</title></circle>'
+                   for (x, y), (i, v) in zip(xy, pts))
+    ex, ey = xy[-1]
+    return (f'<svg class="ispark" viewBox="0 0 96 24" width="96" height="24" role="img" aria-label="Right, last 14 days">'
+            f'<path d="{path}"/><circle class="end" cx="{ex:.1f}" cy="{ey:.1f}" r="3"/>{dots}</svg>')
+
+
+def _ins_week(pid, w, aim, today):
+    """Your week in time: the last 7 days as studied, today (done, and what's
+    left), and the plan's next days at my own pace."""
+    past, ahead = w.get("past") or [], w.get("ahead") or []
+    cols = [("p", m, d, f"{_hm(m)} in this deck") for d, m in past]
+    done = int(w.get("today_done") or 0)
+    for i, (d, m, n, r) in enumerate(ahead):
+        tip = f"about {_hm(m)}: {n:,} new and {r:,} reviews, at your pace"
+        if i == 0:
+            cols.append(("t", max(m, done), d, f"{_hm(done)} so far &middot; " + tip))
+        else:
+            cols.append(("f", m, d, tip))
+    top = max([c[1] for c in cols] + [60])
+    W, H, gap = 640, 90, 6
+    bw = (W - gap * (len(cols) - 1)) / max(1, len(cols))
+    hid = "hx" + _re.sub(r"[^A-Za-z0-9]", "", pid)[:20]
+    grid = "".join(f'<line class="g" x1="0" x2="{W}" y1="{H - H * h * 60 / top:.1f}" y2="{H - H * h * 60 / top:.1f}"/>'
+                   f'<text class="yl" x="-5" y="{H - H * h * 60 / top + 3:.1f}">{h} h</text>'
+                   for h in range(1, int(top // 60) + 1))
+    bars = ""
+    for i, (k, m, d, tip) in enumerate(cols):
+        x, hgt = i * (bw + gap), H * m / top
+        wd, dn = _ins_day(d, today)
+        lab = _html.escape(f"{wd} {dn}")
+        bars += f'<g><title>{lab} &middot; {tip}</title><rect class="hit" x="{x:.1f}" y="0" width="{bw:.1f}" height="120"/>'
+        if k == "p":
+            bars += f'<rect class="pm" x="{x:.1f}" y="{H - max(hgt, 1.5):.1f}" width="{bw:.1f}" height="{max(hgt, 1.5):.1f}" rx="3"/>'
+        elif k == "t":
+            hd = H * done / top
+            bars += f'<rect class="pm" x="{x:.1f}" y="{H - hd:.1f}" width="{bw:.1f}" height="{hd:.1f}" rx="3"/>'
+            if hgt - hd > 2:
+                bars += f'<rect fill="url(#{hid})" x="{x:.1f}" y="{H - hgt:.1f}" width="{bw:.1f}" height="{hgt - hd - 2:.1f}" rx="3"/>'
+        else:
+            bars += f'<rect fill="url(#{hid})" x="{x:.1f}" y="{H - hgt:.1f}" width="{bw:.1f}" height="{hgt:.1f}" rx="3"/>'
+        if aim.get("name") and d == aim.get("day"):
+            last = i == len(cols) - 1
+            anchor = ' style="text-anchor:end"' if last else ""
+            bars += (f'<text class="ev" x="{x + (bw if last else bw / 2):.1f}" y="{H - hgt - 6:.1f}"{anchor}>'
+                     f'{_html.escape(str(aim["name"])[:12])}</text>')
+        bars += (f'<text class="ax{" b" if k == "t" else ""}" x="{x + bw / 2:.1f}" y="{H + 14}">{_html.escape(wd)}</text>'
+                 f'<text class="ax d" x="{x + bw / 2:.1f}" y="{H + 25}">{dn}</text></g>')
+    defs = (f'<defs><pattern id="{hid}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+            f'<rect width="6" height="6" class="h1"/><rect width="3" height="6" class="h2"/></pattern></defs>')
+    to = (f" to {_ins_day(aim['day'])[0]}" if aim.get("name") and int(aim.get("in") or 99) <= 6 else " this week")
+    return (f'<div class="isec"><div class="ik">Your week<span>&nbsp;&middot; about {_hm(w["avg"])} a day{to}'
+            f' &middot; the last 7 days: {_hm(w.get("was") or 0)}</span>'
+            f'<span class="ikey"><i class="sw pm"></i>your days <i class="sw hx"></i>what the plan asks</span></div>'
+            f'<div class="iwk"><svg viewBox="-24 0 664 120" role="img" aria-label="Minutes a day in this deck">{defs}{grid}'
+            f'<line class="base" x1="0" x2="{W}" y1="{H}" y2="{H}"/>{bars}</svg></div></div>')
+
+
+def _insights_html(pid, v):
+    """3.7.9 (mock "Insights"): mine alone, worked out in my Anki. The
+    header's right, the cards Anki won't show me before the plan's next
+    event that I'd be under my target on by then, what's not sticking yet,
+    my week in time, Optimize FSRS when my newest cards fall short."""
     e = _html.escape
-    if not rows:
-        return '<div class="tg">Last 14 days</div><div class="tq0">Nothing missed.</div>'
-    out = ('<div class="tg">Last 14 days</div>'
-           '<div class="wk2 hd"><span>Topic</span><span class="n">Missed</span><span class="tr">Trend</span><span></span></div>')
-    words = {"worse": ("up", "&uarr; worse"), "better": ("dn", "&darr; better"), "steady": ("", "steady"), "": ("", "")}
-    for k, r in enumerate(rows):  # by place: a row is what this computer just worked out
-        cls, word = words.get(r.get("trend") or "", ("", ""))
-        acts = f'<a href="#" onclick="{_pycmd(f"planinsstudy:{pid}:{k}")}">Study</a>'
-        if r.get("url"):
-            acts += f'<a href="#" onclick="{_pycmd(f"planinswatch:{pid}:{k}")}">Re-watch</a>'
-        acts += f'<a href="#" onclick="{_pycmd(f"planinsask:{pid}:{k}")}">Ask</a>'
-        out += (f'<div class="wk2"><span><b>{e(str(r["name"]))}</b><span class="sub">{e(str(r.get("sub") or ""))}</span></span>'
-                f'<span class="n">{int(r["missed"])} of {int(r["of"])}</span><span class="tr {cls}">{word}</span>'
-                f'<span class="acts">{acts}</span></div>')
-    return out
+    v = v if isinstance(v, dict) else {}
+    out = ""
+    r = v.get("right") or {}
+    now, before = r.get("now") or [0, 0], r.get("before") or [0, 0]
+    if now[1] >= 50:
+        pct = round(100 * now[0] / now[1])
+        was = (f'<span class="m">{round(100 * before[0] / before[1])}% the 2 weeks before</span>' if before[1] >= 50 else "")
+        out += (f'<div class="ihd" title="This plan&rsquo;s deck, first answer of each card each day: '
+                f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right on reviews{" &middot; " + was if was else ""}</span>'
+                f'{_ins_spark(r.get("days") or [])}</div>')
+    aim = v.get("aim") or {}
+    today = ""
+    w = v.get("week")
+    if w and w.get("ahead"):
+        today = w["ahead"][0][0]
+    hero = v.get("hero") or []
+    if hero:
+        k = int(aim.get("in") or 7)
+        when = _ins_day(aim.get("day"))[0]
+        lab = (f'{e(str(aim["name"]))} &middot; {when} {_ins_day(aim.get("day"))[1]} &middot; {k} day{"s" if k != 1 else ""}'
+               if aim.get("name") else "The next 7 days")
+        out += (f'<div class="ihero"><div class="k">{lab}</div>'
+                f'<div class="t" title="Started cards of this plan that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
+                f'{len(hero):,} card{"s" if len(hero) != 1 else ""} Anki won&rsquo;t show you before {when if aim.get("name") else "next week"}</div>'
+                f'<a class="bt" href="#" onclick="{_pycmd(f"planinsstudy:{pid}:h")}">Study {len(hero):,}</a></div>')
+    if int(v.get("behind") or 0):
+        out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
+                f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></div>')
+    rows = v.get("rows") or []
+    if rows:
+        out += ('<div class="isec"><div class="ik">Not sticking yet<span>&nbsp;&middot; last 2 weeks</span>'
+                '<span class="ikey"><i class="sw st"></i>not right yet <i class="sw fg"></i>forgot</span></div>')
+        for i, x in enumerate(rows):
+            of, st, fg = max(1, int(x["of"])), int(x["stuck"]), int(x["forgot"])
+            tip = f'{x["name"]} &middot; {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
+            out += (f'<div class="irow" title="{e(tip)}"><span class="n"><b>{e(str(x["name"]))}</b>'
+                    f'<span>{e(str(x.get("src") or ""))}</span></span>'
+                    f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
+                    f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
+                    f'<span class="c"><b>{st + fg}</b> of {of}</span>'
+                    f'<a href="#" onclick="{_pycmd(f"planinsstudy:{pid}:{i}")}">Study {st + fg}</a></div>')
+        out += "</div>"
+    if w:
+        out += _ins_week(pid, w, aim, today)
+    f = v.get("fsrs")
+    if f:
+        out += (f'<div class="iline" title="Reviews of cards 1&ndash;3 days since their last review, 4 weeks: '
+                f'{int(f["right"])}% right of {int(f["n"]):,}">Your newest cards come back {int(f["right"])}% right, '
+                f'not the {int(f["target"])}% Anki aims for. '
+                f'<a href="#" onclick="{_pycmd("planinsfsrs:" + pid)}">Optimize FSRS</a> '
+                f'<a class="q" href="#" onclick="{_pycmd("planinsfsrsno:" + pid)}">Not now</a></div>')
+    if not out:
+        return '<div class="tq0">Insights fill in after a week of reviews.</div>'
+    return f'<div class="dc-ins">{out}</div>'
 
 
 def _today_box(card, pid):

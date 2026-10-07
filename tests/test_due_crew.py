@@ -6290,8 +6290,7 @@ def test_plan_updates_v38():
 
 def test_plan_team_v39():
     """3.7.3: a plan's team (opt-in; who showed up today, questions and
-    answers, the team's bingo) and Insights (mine alone: the topics I
-    missed most in 14 days). The sync carries the showed-up day only for
+    answers, the team's bingo) and its Insights tab (3.7.9's own test). The sync carries the showed-up day only for
     teams I'm on; the board escapes everyone's words; every click reaches
     its handler."""
     import due_crew as dc
@@ -6306,19 +6305,6 @@ def test_plan_team_v39():
          "todo": [{"k": "watch", "t": "Lecture 3", "url": "https://example.com/v"}]}]})
     check("insights: one topic per name, across resources", [(t[1], t[2]) for t in topics]
           == [("Complement", ["Video Series", "Path Book 2"]), ("Chronic inflammation", ["Path Book 2"])], topics)
-    cards = {"Big::#Video_Series::05_Complement": {1, 2, 3}, "Big::#Path_Book_2::Complement": {3, 4, 5, 6},
-             "Big::#Path_Book_2::Chronic_inflammation": {10, 11, 12, 13, 14}}
-    ans = [(c, 1, 3) for c in (1, 2, 3, 4, 5, 6)] + [(1, 2, 1), (2, 3, 1), (2, 5, 1), (3, 13, 1)]  # 3 missed of 6
-    ans += [(c, 20, 3) for c in (1, 2, 3, 4, 5)]                                                  # before: 0 of 5
-    ans += [(c, 2, 1 if c == 10 else 3) for c in (10, 11, 12, 13)]                                # 4 cards only
-    units = {"b": {"todo": [{"k": "watch", "t": "Lecture 3", "url": "https://example.com/v"}]}}
-    rows = T.insights(topics, lambda t: cards.get(t, set()), ans, todo_of=lambda u: (units.get(u) or {}).get("todo"))
-    check("insights: missed of reviewed, cards not presses; worse against the 14 before; a thin topic stays out",
-          [(r["name"], r["missed"], r["of"], r["trend"], r["cids"]) for r in rows] == [("Complement", 3, 6, "worse", [1, 2, 3])], rows)
-    ans += [(14, 2, 3)]
-    rows = T.insights(topics, lambda t: cards.get(t, set()), ans, todo_of=lambda u: (units.get(u) or {}).get("todo"))
-    check("insights: worst share first; Re-watch is the date's watch link; no trend without enough before",
-          [(r["name"], r["trend"], r["url"]) for r in rows] == [("Complement", "worse", ""), ("Chronic inflammation", "", "https://example.com/v")], rows)
     check("team: unread is threads that moved since I looked", T.unread({"act": [30, 20, 10]}, 15) == 2 and T.unread(None, 0) == 0)
     ev = {"squares": [{"done": i in (0, 1)} for i in range(8)], "middle": {"done": False}, "lines": 0}
     check("team bingo: the line in words", T.bingo_line(ev) == "2 of 9 · one away from bingo", T.bingo_line(ev))
@@ -6345,10 +6331,6 @@ def test_plan_team_v39():
     tabs = board._plan_tabs("p1", {"sub": "plan", "unread": 3})
     check("tabs: Plan, Team with its badge, Insights", ">Plan</a>" in tabs and "Team<i>3</i>" in tabs and "Insights" in tabs
           and "duecrew:plansub:p1:ins" in tabs)
-    ins = board._insights_html("p1", [{"key": "a<b", "name": "A<b", "sub": "R", "missed": 3, "of": 6, "trend": "worse", "cids": [1], "url": ""}])
-    check("insights: the table under Last 14 days, Study and Ask, no Re-watch without a link, escaped",
-          "Last 14 days" in ins and "Missed" in ins and "&uarr; worse" in ins and "A&lt;b" in ins
-          and "duecrew:planinsstudy:p1:0" in ins and "planinswatch" not in ins and "duecrew:planinsask:p1:0" in ins)
     # ---- the client against the fake Worker, and the glue ----
     store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
     store.today = _day(0)
@@ -6418,19 +6400,10 @@ def test_plan_team_v39():
             maya.push(labels, {}, team=part)
             check("team: the same part again isn't sent", maya.session.get("team_hash") and store.team[(pid, "maya")]["days"] == [_day(-3), _day(0)])
             check("team: an older server's retry drops the team part", "team" not in maya._without_32({"team": part, "week": {}}))
-            # Insights, worked out here from my reviews of the plan's cards
-            saved_min = T.MIN_CARDS
-            T.MIN_CARDS = 1
-            try:
-                dc._on_js(False, f"duecrew:plansub:{pid}:ins", DeckBrowser())
-                rows = TF.insights(pid)
-            finally:
-                T.MIN_CARDS = saved_min
-            check("insights: the plan's topic I missed, from my own revlog", [(r["name"], r["missed"], r["of"]) for r in rows] == [("Renal", 1, 1)], rows)
             _state["labels"] = labels
+            dc._on_js(False, f"duecrew:plansub:{pid}:ins", DeckBrowser())
             card = F.board_view({})["cards"][0]
             check("insights: the plan's card carries its tab", card["tabs"]["sub"] == "ins")
-            dc._on_js(False, f"duecrew:planinsask:{pid}:0", DeckBrowser())
             sq_card = {"wk": "2026-W36", "squares": [], "middle": {"name": "Squad's"}}
             maya.session.pop("bingo", None)
             TF._seed_card({"bingo": {"card": {"wk": "2026-W36", "squares": [], "middle": {"name": "Ask away"}}}})
@@ -6440,8 +6413,6 @@ def test_plan_team_v39():
             check("team bingo: someone in no squad gets the week's card from the team's; a squad's card stays",
                   seeded and seeded["middle"]["name"] == "Ask away" and maya.session["bingo"] is sq_card)
             maya.session.pop("bingo", None)
-            check("insights: Ask goes to Team with the topic in the box", _state["plan_sub"][pid] == "team"
-                  and _state["team_draft"][pid] == "Renal: ")
     finally:
         appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip = saved
         TF._bg = saved[0]
@@ -6535,6 +6506,141 @@ def test_plan_load_3781():
     past = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}]}, {}, "2026-10-08", "2026-10-05", ld=ld)
     hp = board._week_html({"week": past, "week_offset": 0}, "pid1")
     check("load: a past date says behind, in the warm colour", '<span class="late">2 behind</span>' in hp and 'abar late' in hp)
+
+
+def test_insights_379():
+    """3.7.9 (mock "Insights"): mine alone, worked out in my Anki. The hero is
+    the started cards Anki won't show me before the plan's next event that
+    FSRS has under my target by then; Not sticking yet is cards never right in
+    a review yet (as of now) plus those forgotten after being right, for a
+    topic with 20+ reviewed; my week is in minutes at my own pace; Optimize
+    FSRS shows when my newest cards fall 3+ points short with 300+ answers,
+    and Not now puts it away for 30 days. Every click reaches its handler."""
+    import json as _json
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import team as T, team_flow as TF, plan_flow as F
+    from due_crew.app import _state
+    # ---- pure ----
+    check("recall: FSRS's curve, 90% at t = s, and FSRS-6's own decay",
+          abs(T.recall(10, 10) - 0.9) < 1e-9 and abs(T.recall(10, 10, 0.2) - 0.9) < 1e-9 and T.recall(20, 10) < 0.9)
+    ev = [{"day": "2026-09-05", "name": "Quiz"}, {"day": "2026-10-30", "name": "Far"}, {"day": "2026-08-30", "name": "Gone"}]
+    check("aim: the next event in 3 weeks, else a week out", T.aim(ev, "2026-09-01") == ("2026-09-05", "Quiz", 4)
+          and T.aim(ev[1:], "2026-09-01") == ("2026-09-08", "", 7))
+    check("hero: not shown before the aim and under target, least likely first",
+          T.hero({1: (0.95, False), 2: (0.5, False), 3: (0.6, True), 4: (0.7, False)}, 0.9) == [2, 4])
+    check("source: the resource and the part above the topic",
+          T.source(["Big::#B&B::Basic_Pharmacology::General::Pharmacokinetics"]) == "B&B › General"
+          and T.source(["Big::#Bootcamp::Renal"]) == "Bootcamp" and T.source(["Renal"]) == "")
+    topics = [("renal", "Renal", [], ["t:r"], []), ("thin", "Thin", [], ["t:t"], [])]
+    of = {"t:r": set(range(1, 31)), "t:t": set(range(40, 50))}
+    rows = T.not_sticking(topics, lambda t: of[t], set(range(1, 31)) | set(range(40, 50)), {1, 2, 3, 40, 41}, {3, 4, 5})
+    check("not sticking: never right yet, plus forgot (not counted twice); a thin topic stays out",
+          [(r["name"], r["of"], r["stuck"], r["forgot"], r["cids"]) for r in rows] == [("Renal", 30, 3, 2, [1, 2, 3, 4, 5])], rows)
+    w = T.week([("d1", 40), ("d2", 60)], [("d3", 10, 60), ("d4", 0, 0)], 54, 9)
+    check("week: minutes at my pace, the average ahead and before",
+          w["ahead"][0] == ("d3", 18, 10, 60) and w["avg"] == 9 and w["was"] == 50, w)
+    check("week: none without a measured pace or anything new ahead",
+          T.week([], [("d", 5, 0)], None, 9) is None and T.week([], [("d", 0, 9)], 54, 9) is None)
+    check("fsrs: 3+ points short with 300+ answers, else nothing",
+          T.fsrs_gap(255, 300, 0.9) == {"right": 85, "n": 300, "target": 90} and T.fsrs_gap(264, 300, 0.9) is None
+          and T.fsrs_gap(200, 250, 0.9) is None)
+    rd = T.right_days([(1, 0, 3), (1, 0, 1), (2, 0, 1), (3, 20, 3)])
+    check("right: the first answer of each card each day; now and before",
+          rd["now"] == [1, 2] and rd["before"] == [1, 1] and rd["days"][-1] == 50 and rd["days"][0] is None, rd)
+    # ---- the board ----
+    bad = "<img src=x onerror=alert(1)>"
+    view = {"target": 90, "right": {"now": [86, 100], "before": [87, 100], "days": [80, None, 90]},
+            "aim": {"day": "2026-09-04", "name": bad, "in": 3}, "hero": [1, 2, 3], "behind": 12,
+            "rows": [{"name": bad, "src": bad, "of": 27, "stuck": 9, "forgot": 1, "cids": [1]}],
+            "week": {"past": [("2026-08-31", 40)], "ahead": [("2026-09-01", 120, 100, 50), ("2026-09-04", 200, 200, 30)],
+                     "avg": 160, "was": 40, "today_done": 30},
+            "fsrs": {"right": 85, "n": 486, "target": 90}}
+    html = board._insights_html("p1", view)
+    check("insights: the board escapes the plan's words", "<img" not in html and "&lt;img" in html)
+    check("insights: header, hero with Study, behind with Catch up",
+          "<b>86%</b>" in html and "87% the 2 weeks before" in html and "3 cards Anki won&rsquo;t show you before Fri" in html
+          and "duecrew:planinsstudy:p1:h" in html and "12 new cards behind" in html and "duecrew:plancatch:p1" in html, html[:900])
+    check("insights: not sticking yet, one Study a row",
+          "Not sticking yet" in html and "<b>10</b> of 27" in html and "duecrew:planinsstudy:p1:0" in html and "Re-watch" not in html)
+    check("insights: the week in time, today marked, the event named",
+          "about 2 h 40 a day to Fri" in html and "the last 7 days: 40 min" in html and ">Today<" in html)
+    check("insights: Optimize FSRS and Not now",
+          "come back 85% right, not the 90% Anki aims for" in html and "duecrew:planinsfsrs:p1" in html
+          and "duecrew:planinsfsrsno:p1" in html)
+    check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html("p1", {"right": {"now": [1, 2]}}))
+    # ---- the glue, on a collection ----
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    at = lambda days: (cut - days * 86400 - 3600) * 1000  # noqa: E731
+    for i in range(30):  # Renal: 200-209 Anki shows before the quiz; 210-219 weak and not shown; 220-229 strong
+        cid = 200 + i
+        fakes.add_card(conn, cid, did=10, ctype=2, queue=2, ivl=3, tags="Step1::Renal", due=1001 if i < 10 else 1010)
+        conn.execute("UPDATE cards SET data = ? WHERE id = ?", (_json.dumps({"s": 1 if 10 <= i < 20 else 100}), cid))
+        if i < 8:
+            fakes.add_review(conn, at(2), ease=1, cid=cid)                   # never right yet
+        elif 10 <= i < 13:
+            fakes.add_review(conn, at(20), ease=3, cid=cid)                  # right once...
+            fakes.add_review(conn, at(2), ease=1, cid=cid)                   # ...then forgot
+        else:
+            fakes.add_review(conn, at(2), ease=3, cid=cid)
+    for i in range(10):  # other cards in the deck: my newest come back 80% right, 300 answers
+        fakes.add_card(conn, 300 + i, did=10, ctype=2, queue=2, ivl=2, tags="Step1::Other", due=1020)
+    for j in range(300):
+        fakes.add_review(conn, at(1 + j % 6), ease=1 if j % 5 == 0 else 3, cid=300 + j % 10, last_ivl=2, time_ms=9000)
+    for i in range(50):  # new cards started 10 days ago: 3 answers each in their first week
+        fakes.add_card(conn, 400 + i, did=10, ctype=2, queue=2, ivl=10, tags="Step1::Started", due=1030)
+        for d in (10, 9, 8):
+            fakes.add_review(conn, at(d), ease=3, rtype=0 if d == 10 else 1, cid=400 + i, time_ms=18000)
+    for i in range(20):  # tomorrow's date: still locked
+        fakes.add_card(conn, 500 + i, did=10, queue=-1, tags="Step1::Later")
+    col = fakes.FakeCol(conn, cut)
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    col.conf["fsrs"] = True
+    plan = {"id": "pI", "name": "Step", "doc": {"deck": "Step 1",
+            "events": [{"id": "q", "day": _day(3), "name": "Quiz"}],
+            "units": [{"id": "r", "name": "Renal", "opens": _day(-3), "tags": ["Step1::#Videos::Kidney::Renal"]},
+                      {"id": "l", "name": "Later", "opens": _day(1), "tags": ["Step1::Later"]}]}}
+    conn.execute("UPDATE notes SET tags = ' Step1::#Videos::Kidney::Renal ' WHERE id BETWEEN 200 AND 229")
+    pc = {}
+    saved = (TF._plan, F._state_cfg, F._today, F._pcfg, F._psave, F._filtered, mw.col, TF.app.swap)
+    built = []
+    try:
+        TF._plan = lambda pid: F.mine(plan) if pid == "pI" else None
+        F._state_cfg = lambda c=None: {"pI": {"deck_id": 10}}
+        F._today = lambda: _day(0)
+        F._pcfg = lambda: pc
+        F._psave = lambda d: None
+        F._filtered = lambda c, name, cids: built.append((name, sorted(cids))) or False
+        TF.app.swap = lambda c=None: None
+        mw.col = col
+        _state.setdefault("insights", {}).pop("pI", None)
+        v = TF.insights("pI")
+        check("glue: the hero is the weak cards Anki won't show before the quiz", v.get("hero") == list(range(210, 220)), v.get("hero"))
+        check("glue: Renal not sticking: 8 never right, 3 forgot, of 30", [(r["name"], r["of"], r["stuck"], r["forgot"])
+              for r in v.get("rows") or []] == [("Renal", 30, 8, 3)], v.get("rows"))
+        check("glue: Optimize FSRS from my newest cards", v.get("fsrs") == {"right": 80, "n": 300, "target": 90}, v.get("fsrs"))
+        wk = v.get("week") or {}
+        check("glue: the week ahead in minutes: tomorrow's 20 new at my pace (54 s a new card)",
+              [(d, n) for d, _m, n, _r in wk.get("ahead") or []][:2] == [(_day(0), 0), (_day(1), 20)]
+              and wk["ahead"][1][1] == 19, wk)
+        check("glue: not behind", v.get("behind") == 0)
+        dc._on_js(False, "duecrew:planinsstudy:pI:h", DeckBrowser())
+        dc._on_js(False, "duecrew:planinsstudy:pI:0", DeckBrowser())
+        check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew · Before Quiz", list(range(210, 220))),
+              ("Due Crew · Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
+        dc._on_js(False, "duecrew:planinsfsrsno:pI", DeckBrowser())
+        check("glue: Not now puts Optimize FSRS away", pc.get("ins_fsrs_hide") and not TF.insights("pI").get("fsrs"))
+        opened = []
+        sys.modules["aqt.deckoptions"] = types.SimpleNamespace(display_options_for_deck_id=opened.append)
+        dc._on_js(False, "duecrew:planinsfsrs:pI", DeckBrowser())
+        check("glue: Optimize FSRS opens the plan deck's options", opened == [10], opened)
+    finally:
+        (TF._plan, F._state_cfg, F._today, F._pcfg, F._psave, F._filtered, mw.col, TF.app.swap) = saved
+        sys.modules.pop("aqt.deckoptions", None)
+        _state["insights"] = {}
 
 
 def main():

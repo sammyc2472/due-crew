@@ -39,6 +39,7 @@ class FakeDB:
 class FakeSched:
     def __init__(self, day_cutoff, db=None):
         self.day_cutoff = day_cutoff
+        self.today = 1000  # Anki's day number: a review card's due is on this scale
         self.db = db
         self.col = None
         self.due = {}  # 3.6: {deck id: (reviews + learning due, new)} for deck_due_tree
@@ -101,6 +102,10 @@ class FakeCol:
         self.sched.col = self
         self.undo_steps = []
         self.tags = FakeTags(self.db)
+        self.conf = {}  # col.get_config: "fsrs" for 3.7.9's Insights
+
+    def get_config(self, key, default=None):
+        return self.conf.get(key, default)
 
     def add_custom_undo_entry(self, name):
         self.undo_steps.append((name, []))
@@ -127,11 +132,11 @@ def make_collection(conn):
     """The slices of Anki's schema the add-on queries: revlog (with cid, so
     reviews can be credited to a deck), cards, and notes."""
     conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, ease INTEGER, "
-                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0)")
+                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0, lastIvl INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
-                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0)")
+                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '')")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
                  "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it
@@ -140,12 +145,12 @@ def make_collection(conn):
     return conn
 
 
-def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0):
+def add_review(conn, ts_ms, ease=3, time_ms=6000, rtype=1, cid=0, last_ivl=0):
     # revlog ids are epoch-ms and must be unique
     while conn.execute("SELECT 1 FROM revlog WHERE id=?", (ts_ms,)).fetchone():
         ts_ms += 1
-    conn.execute("INSERT INTO revlog (id, ease, time, type, cid) VALUES (?,?,?,?,?)",
-                 (ts_ms, ease, time_ms, rtype, cid))
+    conn.execute("INSERT INTO revlog (id, ease, time, type, cid, lastIvl) VALUES (?,?,?,?,?,?)",
+                 (ts_ms, ease, time_ms, rtype, cid, last_ivl))
     return ts_ms
 
 
