@@ -1701,7 +1701,8 @@ function myDates(p) {
   return out.sort((a, b) => a.day.localeCompare(b.day));
 }
 const loadSum = (xs) => xs.reduce((a, x) => ({ seen: a.seen + x.seen, open: a.open + x.open, susp: a.susp + x.susp }), { seen: 0, open: 0, susp: 0 });
-const loadBar = (x, cls = "") => h("span", { class: `lbar ${cls}`, "aria-hidden": "true" },
+// a bar's length is its card count against `of` (the week's biggest day), so 1 card is a sliver, not a full bar
+const loadBar = (x, cls = "", of = 0) => h("span", { class: `lbar ${cls}`, "aria-hidden": "true", style: of ? `width:${Math.max(3, Math.round((100 * (x.seen + x.open + x.susp)) / of))}%` : null },
   h("i", { class: "s", style: `flex:${x.seen}` }), h("i", { class: "o", style: `flex:${x.open}` }), h("i", { class: "p", style: `flex:${x.susp}` }));
 function loadWords(x) {
   const left = x.open + x.susp, n = (v) => v.toLocaleString();
@@ -1733,19 +1734,23 @@ function planLoad(p) {
       h("small", { class: "muted" }, `${pretty(anchor)} – ${pretty(addDays(anchor, 6))}`),
       h("span", { class: "lkey" }, h("span", {}, h("i", { class: "s" }), "seen"), h("span", {}, h("i", { class: "o" }), "open, not seen"), h("span", {}, h("i", { class: "p" }), "still suspended")));
     const cells = [];
+    const dayTot = (d) => { const z = loadSum(ds.filter((x) => x.day === d && x.known)); return z.seen + z.open + z.susp; };
+    const of = Math.max(1, ...[0, 1, 2, 3, 4, 5, 6].map((i) => dayTot(addDays(anchor, i))), ...ds.filter((x) => x.day === picked && x.known).map((x) => x.seen + x.open + x.susp));
     for (let i = 0; i < 7; i++) {
       const d = addDays(anchor, i), on = ds.filter((x) => x.day === d);
+      const all = loadSum(on.filter((x) => x.known));
       const dd = parseIso(d);
       cells.push(h("button", { class: `lday${d === t ? " t" : ""}${d === picked ? " pk" : ""}`, onclick: () => { picked = d; draw(); } },
         h("b", {}, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()}`),
         on.map((x) => h("span", { class: `lu${x.day > t && x.known && !x.susp && x.open ? " early" : ""}${x.moved ? " mv" : ""}`, title: x.known ? loadTip(x, x.u.name) : `${x.u.name}: not counted yet` },
-          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadWords(x) : "not counted yet"), x.known ? loadBar(x) : null))));
+          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadWords(x) : "not counted yet"))),
+        all.seen + all.open + all.susp ? h("span", { class: "lfoot", title: loadTip(all, "This day") }, loadBar(all, "", of)) : null));
     }
     const pk = ds.filter((x) => x.day === picked);
     const det = h("div", { class: "ldet" }, h("b", {}, pretty(picked)),
       pk.length ? pk.map((x) => h("div", { class: "lrow" }, h("span", {}, h("b", {}, x.u.name), x.moved ? h("small", { class: "muted" }, " · moved") : null,
         x.day < t && x.open + x.susp ? h("small", { class: "warn" }, " · behind") : x.day > t && x.known && !x.susp && x.open ? h("small", { class: "ok" }, " · opened early") : null),
-        x.known ? loadBar(x, "wide") : null,
+        x.known ? h("span", { class: "lfoot" }, loadBar(x, "wide", of)) : null,
         h("small", { class: "muted nums" }, x.known ? `${(x.seen + x.open + x.susp).toLocaleString()} cards: ${x.seen.toLocaleString()} seen · ${x.open.toLocaleString()} open · ${x.susp.toLocaleString()} suspended` : "not counted yet")))
         : h("small", { class: "muted" }, "No plan dates."),
       pk.length ? h("small", { class: "muted" }, "By video, Open now and Study are in Anki's Plans tab.") : null);
