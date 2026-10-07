@@ -863,8 +863,13 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .lfoot.ltop .lbar { margin-top: 0; }
 .lday .lbar { height: 6px; }
 .ldet { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px 12px; display: grid; gap: 8px; font-size: 13.5px; }
-.lrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 160px); gap: 4px 12px; align-items: center; }
-.lrow .nums { grid-column: 1 / -1; font-variant-numeric: tabular-nums; }
+/* a date in the details: its name with its bar on the right, level with it (to the week's scale), then the numbers */
+.lrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 200px); gap: 2px 14px; align-items: center; }
+.lrow .lfoot { margin-top: 0; grid-column: 2; grid-row: 1; }
+.lrow > span:first-child { grid-column: 1; grid-row: 1; }
+.lrow .nums { grid-column: 1 / -1; }
+.lrow .lbar { margin-top: 0; }
+.lrow .nums { font-variant-numeric: tabular-nums; }
 .ldet .ok { color: var(--accent); }
 .lahead { display: grid; gap: 4px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lbar .s, :root:not([data-theme="light"]) .lkey .s { background: #4c4f49; } }
@@ -878,3 +883,5 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .dayp .ch2 > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .dayp .ch2 .raw { display: block; max-width: 100%; }
 .dayp .ch2 > small, .dayp .ch2 > button { flex: none; white-space: nowrap; overflow-wrap: normal; }
+.ltops, .ltodo { display: grid; gap: 2px; grid-column: 1 / -1; }
+.lrow > small.muted:last-child { grid-column: 1 / -1; }
