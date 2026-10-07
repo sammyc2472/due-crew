@@ -1733,8 +1733,8 @@ function loadNum(x, t) {
 const loadAsk = (x, t) => (x.day > t ? x.susp : x.open + x.susp);
 /** A day's bar: a faint track at the day's size (to the week's scale),
  *  filled with what it asks. */
-function askBar(tot, ask, of, late) {
-  return h("span", { class: `abar${late && ask ? " late" : ""}`, "aria-hidden": "true", style: `width:${Math.max(4, Math.round((100 * tot) / Math.max(1, of)))}%` },
+function askBar(tot, ask, of, late, title) {
+  return h("span", { class: `abar${late && ask ? " late" : ""}`, title, style: `width:${Math.max(4, Math.round((100 * tot) / Math.max(1, of)))}%` },
     h("i", { style: `width:${tot ? Math.round((100 * ask) / tot) : 0}%` }));
 }
 /** Plan load (trial, admin only). */
@@ -1754,7 +1754,7 @@ function planLoad(p) {
       h("button", { class: anchor === Sched.monday(t) ? "ghost" : "quiet", onclick: () => { anchor = Sched.monday(t); picked = t; draw(); } }, "Today"),
       h("button", { class: "quiet", "aria-label": "Week after", onclick: () => { anchor = addDays(anchor, 7); draw(); } }, "›"),
       h("small", { class: "muted" }, `${pretty(anchor)} – ${pretty(addDays(anchor, 6))}`),
-      h("small", { class: "muted lkey" }, "New: cards you won\u2019t have seen by that day"));
+      h("small", { class: "muted lkey" }, h("span", {}, h("i", { class: "kn" }), "new to you"), h("span", {}, h("i", { class: "kc" }), "seen or in your Anki by then"), h("span", {}, "longest = busiest day")));
     const cells = [];
     const inView = ds.filter((x) => x.known && x.day >= anchor && x.day <= addDays(anchor, 6));
     const size = (xs) => xs.reduce((n, x) => n + x.seen + x.open + x.susp, 0);
@@ -1763,7 +1763,10 @@ function planLoad(p) {
       const d = addDays(anchor, i), on = ds.filter((x) => x.day === d), dd = parseIso(d);
       cells.push(h("button", { class: `lday${d === t ? " t" : ""}${d === picked ? " pk" : ""}`, onclick: () => { picked = d; draw(); } },
         h("b", {}, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()}`),
-        h("span", { class: "lbartop" }, on.some((x) => x.known) ? askBar(size(on.filter((x) => x.known)), on.filter((x) => x.known).reduce((n, x) => n + loadAsk(x, t), 0), of, d < t) : null),
+        h("span", { class: "lbartop" }, on.some((x) => x.known) ? (() => {
+          const k = on.filter((x) => x.known), tot = size(k), ask = k.reduce((n, x) => n + loadAsk(x, t), 0);
+          return askBar(tot, ask, of, d < t, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()} · ${tot.toLocaleString()} card${tot === 1 ? "" : "s"} · ${ask.toLocaleString()} ${d > t ? "new to you" : d === t ? "to go" : "behind"}`);
+        })() : null),
         on.map((x) => h("span", { class: `lu${x.moved ? " mv" : ""}${x.day < t && x.open + x.susp ? " late" : ""}` },
           h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadNum(x, t) : "not counted yet")))));
     }
