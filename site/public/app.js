@@ -673,7 +673,7 @@ async function account() {
   const where = pl ? [pl.computers ? n(pl.computers, "computer") : null, pl.browsers > 1 ? `this browser and ${n(pl.browsers - 1, "other")}` : "this browser"].filter(Boolean).join(", ") : "";
   const sec = (title, ...kids) => h("section", { class: "panel acc" }, h("h4", {}, title), ...kids);
   page(
-    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, me.emoji || "🙂"),
+    h("div", { class: "phead" }, h("div", { class: "accwho" }, h("span", { class: "em" }, face(me.emoji, me.name)),
       h("div", {}, h("h1", {}, me.name || "Account"), h("p", { class: "muted" }, me.email, " · name and emoji change in Anki")))),
     sec("Your code", h("div", { class: "row" }, code ? h("span", { class: "mono codepill" }, spaced(code)) : h("span", { class: "muted" }, "none yet"),
       code ? h("button", { onclick: (e) => copyInvite(code, e.target) }, "Copy invite") : null)),
@@ -1439,7 +1439,7 @@ function sinceYouWereHere(b, crew, t) {
       const sentLine = () => h("small", { class: "muted" }, "Good luck sent ✓");
       const send = luckSent(f.uid, d) ? sentLine() : h("button", { class: "linkish", onclick: () => box.replaceChildren(luckForm(f, () => box.replaceChildren(),
         () => { markLuck(f.uid, d); send.replaceWith(sentLine()); })) }, "Send good luck");
-      return h("div", { class: "fi" }, h("span", { class: "ic" }, f.emoji || "🍀"),
+      return h("div", { class: "fi" }, h("span", { class: "ic" }, face(f.emoji, f.name)),
         h("div", {}, h("span", {}, h("b", {}, f.name), `'s exam is ${d === t ? "today" : pretty(d)}`), send, box));
     });
   const earlier = h("div", { class: "stack", hidden: true }, older.map(item));

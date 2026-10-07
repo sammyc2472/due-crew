@@ -6,6 +6,11 @@
 /** Readable tag names: "#Step1_v12::#Videos::01_Growth" reads
  *  "Step 1 › Videos › 1 · Growth" (a leading AK_ goes too). The raw tag is
  *  always shown too. */
+/** Someone's emoji, or the first letter of their name in a circle when
+ *  they haven't picked one (board.face in the add-on: change one, change both). */
+const initial = (name) => { const m = /[\p{L}\p{N}]/u.exec(String(name || "")); return m ? m[0].toUpperCase() : "?"; };
+const face = (emoji, name) => (emoji ? emoji : h("span", { class: "ini" }, initial(name)));
+
 const Tags = (() => {
   function word(seg) {
     let s = String(seg).replace(/^[#^$!]+/, "").replace(/^AK_/i, "").replace(/_v\d+$/i, "");
@@ -1813,7 +1818,7 @@ async function builder(id) {
           a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
     };
     const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
-      h("span", { class: "e" }, f.emoji || "👤"), h("b", {}, f.uid === me.uid ? "You" : f.name))),
+      h("span", { class: "e" }, face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
       team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
     const b = team.bingo;
     let bingo = null;

@@ -6471,13 +6471,18 @@ def test_team_times_377():
 
 
 def test_team_faces_no_emoji_378():
-    """3.7.8: a teammate with no emoji shows the 👤 placeholder, not its
-    escaped HTML code ("&#128100;" escaped again showed as text)."""
-    html = board._team_html("p1", {"team": {"on": True, "count": 2, "faces": [
+    """3.7.8: someone with no emoji gets the first letter of their name in a
+    circle (not "&#128100;" escaped twice); names stay escaped."""
+    html = board._team_html("p1", {"team": {"on": True, "count": 3, "faces": [
         {"uid": "u1", "name": "BIG DOG", "emoji": "", "shown": False},
-        {"uid": "u2", "name": "<b>x</b>", "emoji": "", "shown": True}], "asks": []}, "me": "u9"})
-    check("team faces: no emoji shows the placeholder", "\U0001F464" in html and "&amp;#128100;" not in html and "#128100" not in html, html[:300])
-    check("team faces: names still escaped", "&lt;b&gt;x&lt;/b&gt;" in html)
+        {"uid": "u2", "name": "\u00e9va <b>x</b>", "emoji": "", "shown": True},
+        {"uid": "u3", "name": "changster", "emoji": "\U0001F346", "shown": True}], "asks": [
+        {"id": 1, "uid": "u1", "name": "reyrey", "emoji": "", "text": "why?", "at": 1, "act": 1, "replies": []}]}, "me": "u9"})
+    check("team faces: no emoji is the first letter in a circle", '<span class="ini">B</span>' in html and "#128100" not in html, html[:300])
+    check("team faces: a name's first letter, escaped", '<span class="ini">B</span>' in html and '<span class="ini">\u00c9</span>' in html and "&lt;b&gt;x&lt;/b&gt;" in html, html[:400])
+    check("team faces: a picked emoji stays", "\U0001F346" in html)
+    check("team faces: a question's asker too, small", '<span class="ini sm">R</span>' in html)
+    check("initial: no letter or digit is ?", board.initial("  !!") == "?" and board.initial("4chan") == "4" and board.initial("") == "?")
 
 
 def main():
