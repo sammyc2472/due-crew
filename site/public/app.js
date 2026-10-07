@@ -1731,27 +1731,11 @@ function loadNum(x, t) {
 /** What a date asks of me on its day (the number's count): ahead the
  *  cards still locked, else what isn't seen. */
 const loadAsk = (x, t) => (x.day > t ? x.susp : x.open + x.susp);
-/** A date's bar: a faint track at the date's size, filled with what it asks,
- *  both against `of` (the biggest date in view) so heavy days stand out. */
-function askBar(x, t, of) {
-  const tot = x.seen + x.open + x.susp, ask = loadAsk(x, t);
-  return h("span", { class: `abar${x.day < t && ask ? " late" : ""}`, "aria-hidden": "true", style: `width:${Math.max(4, Math.round((100 * tot) / Math.max(1, of)))}%` },
+/** A day's bar: a faint track at the day's size (to the week's scale),
+ *  filled with what it asks. */
+function askBar(tot, ask, of, late) {
+  return h("span", { class: `abar${late && ask ? " late" : ""}`, "aria-hidden": "true", style: `width:${Math.max(4, Math.round((100 * tot) / Math.max(1, of)))}%` },
     h("i", { style: `width:${tot ? Math.round((100 * ask) / tot) : 0}%` }));
-}
-/** The next 14 days as small columns: what each day asks (today: to go). */
-function askStrip(ds, t) {
-  const days = [];
-  for (let i = 0; i < 14; i++) {
-    const d = addDays(t, i), xs = ds.filter((x) => x.day === d && x.known);
-    days.push([d, xs.reduce((n, x) => n + loadAsk(x, t), 0), xs]);
-  }
-  const top = Math.max(1, ...days.map(([, n]) => n));
-  return h("div", { class: "astrip", role: "img", "aria-label": "New to you each of the next 14 days" }, days.map(([d, n, xs], i) => {
-    const dd = parseIso(d);
-    return h("span", { class: `ac${i === 0 ? " t" : ""}`, title: `${pretty(d)}: ${xs.length ? `${n.toLocaleString()} ${i === 0 ? "to go" : "new"} · ${xs.map((x) => x.u.name).join(", ")}` : "no plan dates"}` },
-      h("span", { class: "col" }, h("i", { style: `height:${n ? Math.max(6, Math.round((100 * n) / top)) : 0}%` })),
-      h("small", {}, "MTWTFSS"[(dd.getUTCDay() + 6) % 7]));
-  }));
 }
 /** Plan load (trial, admin only). */
 function planLoad(p) {
@@ -1764,33 +1748,34 @@ function planLoad(p) {
     const behind = loadSum(ds.filter((x) => x.day < t && x.known));
     const head = h("div", { class: "ltoday" }, h("span", { class: "h" }, "Today"),
       h("span", {}, td.length ? [h("b", {}, td.map((x) => x.u.name).join(", ")), ` · ${tdS.open + tdS.susp ? `${(tdS.open + tdS.susp).toLocaleString()} to go` : "✓"}`] : "Nothing new today",
-        behind.open + behind.susp ? h("span", { class: "warn" }, ` · ${(behind.open + behind.susp).toLocaleString()} behind`) : null),
-      askStrip(ds, t));
+        behind.open + behind.susp ? h("span", { class: "warn" }, ` · ${(behind.open + behind.susp).toLocaleString()} behind`) : null));
     const nav = h("div", { class: "row lnav" },
       h("button", { class: "quiet", "aria-label": "Week before", onclick: () => { anchor = addDays(anchor, -7); draw(); } }, "‹"),
       h("button", { class: anchor === Sched.monday(t) ? "ghost" : "quiet", onclick: () => { anchor = Sched.monday(t); picked = t; draw(); } }, "Today"),
       h("button", { class: "quiet", "aria-label": "Week after", onclick: () => { anchor = addDays(anchor, 7); draw(); } }, "›"),
       h("small", { class: "muted" }, `${pretty(anchor)} – ${pretty(addDays(anchor, 6))}`),
-      h("small", { class: "muted lkey" }, "new = new to you that day, keeping to the plan"));
+      h("small", { class: "muted lkey" }, "New: cards you won\u2019t have seen by that day"));
     const cells = [];
     const inView = ds.filter((x) => x.known && x.day >= anchor && x.day <= addDays(anchor, 6));
-    const of = Math.max(1, ...inView.map((x) => x.seen + x.open + x.susp));
+    const size = (xs) => xs.reduce((n, x) => n + x.seen + x.open + x.susp, 0);
+    const of = Math.max(1, ...[0, 1, 2, 3, 4, 5, 6].map((i) => size(inView.filter((x) => x.day === addDays(anchor, i)))), ...ds.filter((x) => x.known && x.day === picked).map((x) => size([x])));
     for (let i = 0; i < 7; i++) {
       const d = addDays(anchor, i), on = ds.filter((x) => x.day === d), dd = parseIso(d);
       cells.push(h("button", { class: `lday${d === t ? " t" : ""}${d === picked ? " pk" : ""}`, onclick: () => { picked = d; draw(); } },
         h("b", {}, `${DAYS[dd.getUTCDay()]} ${dd.getUTCDate()}`),
+        h("span", { class: "lbartop" }, on.some((x) => x.known) ? askBar(size(on.filter((x) => x.known)), on.filter((x) => x.known).reduce((n, x) => n + loadAsk(x, t), 0), of, d < t) : null),
         on.map((x) => h("span", { class: `lu${x.moved ? " mv" : ""}${x.day < t && x.open + x.susp ? " late" : ""}` },
-          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadNum(x, t) : "not counted yet"), x.known ? askBar(x, t, of) : null))));
+          h("span", { class: "nm" }, x.u.name), h("small", {}, x.known ? loadNum(x, t) : "not counted yet")))));
     }
     const pk = ds.filter((x) => x.day === picked);
     const how = (x) => {
-      const n = (v) => v.toLocaleString(), tot = x.seen + x.open + x.susp;
-      if (x.day > t) return `${n(x.susp)} of ${n(tot)} new to you that day` + (x.seen + x.open ? ` · ${n(x.seen + x.open)} seen before then${x.open ? ` (${n(x.open)} in your Anki now)` : ""}` : "");
-      return `${n(x.seen)} of ${n(tot)} seen`;
+      const n = (v) => v.toLocaleString(), tot = x.seen + x.open + x.susp, before = x.seen + x.open;
+      if (x.day <= t) return `${n(x.seen)} of ${n(tot)} seen`;
+      return `${n(x.susp)} of ${n(tot)} new` + (before ? ` · ${n(before)} already seen or in your Anki` : "");
     };
     const det = h("div", { class: "ldet" }, h("b", {}, pretty(picked)),
       pk.length ? pk.map((x) => h("div", { class: "lrow" }, h("span", {}, h("b", {}, x.u.name), x.moved ? h("small", { class: "muted" }, " · moved") : null),
-        x.known ? h("span", { class: "lfoot" }, askBar(x, t, of)) : null,
+        x.known ? h("span", { class: "lfoot" }, askBar(size([x]), loadAsk(x, t), of, x.day < t)) : null,
         h("small", { class: "muted nums" }, x.known ? how(x) : "not counted yet"),
         ...loadMore(p, x)))
         : h("small", { class: "muted" }, "No plan dates."));
