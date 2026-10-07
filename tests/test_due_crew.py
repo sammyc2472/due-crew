@@ -6498,6 +6498,45 @@ def test_prep_days_are_days_378():
     check("prep: two days left, not four dates", pf and pf["left"] == 2, pf)
 
 
+def test_plan_load_3781():
+    """3.7.81: the plan load in Anki's week. Each card counts on its earliest
+    of my dates, a suspended leech never counts, a started note's new sibling
+    is seen; a date ahead asks what's still locked, today and before what
+    isn't seen; a day's bar is its size against the week's biggest."""
+    from due_crew import plans as P
+    class Idx:
+        # cid: (queue, type); 1-3 seen/open/locked on A; 3 also on B; 7 a leech
+        cards = {1: (2, 2), 2: (0, 0), 3: (-1, 0), 4: (-1, 0), 5: (0, 0), 6: (-1, 0), 7: (-1, 0), 8: (0, 0)}
+        leech = {7}
+        nid_of = {8: 80}
+        def started(self):
+            return {80}
+        def match(self, u, swap, deck):
+            return set(u["_c"])
+    doc = {"deck": "Step 1", "units": [
+        {"id": "b", "name": "B", "opens": "2026-10-09", "_c": [3, 4, 5, 6, 7]},
+        {"id": "a", "name": "A", "opens": "2026-10-07", "_c": [1, 2, 3, 8]}]}
+    ld = P.load(Idx(), doc)
+    check("load: earliest date first, sibling seen", ld["a"] == [2, 1, 1], ld)
+    check("load: a card on an earlier date and a suspended leech don't count again", ld["b"] == [0, 1, 2], ld)
+    check("load: ahead asks what's locked; today and before what isn't seen",
+          P.load_ask([0, 1, 2], "2026-10-09", "2026-10-07") == 2 and P.load_ask([2, 1, 1], "2026-10-07", "2026-10-07") == 2)
+    wk = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}, {"id": "b", "name": "B", "opens": "2026-10-09"}]},
+                     {}, "2026-10-07", "2026-10-05", ld=ld)
+    wed, fri = wk[2], wk[4]
+    check("load: the week carries a day's size and ask", (wed["size"], wed["ask"], fri["size"], fri["ask"]) == (4, 2, 3, 2), (wed, fri))
+    check("load: a day without the load stays as it was", wk[0]["size"] is None)
+    html = board._week_html({"week": wk, "week_offset": 0}, "pid1")
+    check("load: today says what's to go, ahead what's new", "2 to go" in html and "2 new" in html, html[:500])
+    check("load: one bar a day on top, to the week's scale, and a key", html.count('class="abar') == 2 and 'width:100%' in html
+          and 'width:75%' in html and "new to you" in html and "longest = busiest day" in html)
+    check("load: a date ahead's details say what's new and what's seen before",
+          "2 of 3 new &middot; 1 already seen or in your Anki" in html and "2 of 4 seen" in html)
+    past = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}]}, {}, "2026-10-08", "2026-10-05", ld=ld)
+    hp = board._week_html({"week": past, "week_offset": 0}, "pid1")
+    check("load: a past date says behind, in the warm colour", '<span class="late">2 behind</span>' in hp and 'abar late' in hp)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

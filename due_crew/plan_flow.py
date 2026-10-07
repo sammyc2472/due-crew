@@ -442,6 +442,18 @@ def progress(col, plan_list, state, idxs=None):
     return out
 
 
+def loads(col, plan_list, state, idxs=None):
+    """3.7.81: {plan id: {unit id: [seen, open, locked]}} on my own days
+    (plans.load), from the deck read the progress already made."""
+    out = {}
+    for p in plan_list:
+        st = state.get(p["id"])
+        if not st or not _deck_ok(col, st.get("deck_id")):
+            continue
+        out[p["id"]] = P.load(_index(col, st, idxs), mine(p)["doc"], _swap(st))
+    return out
+
+
 def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, answered=None):
     """3.2, what the plan card says about today for a plan on my schedule:
     {kind, target, done, share, behind, due, minutes, missed: [iso], ask
@@ -592,7 +604,8 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
     skipped_units = [dict(u, opens=P._later(u["opens"], shift + int(moved.get(u["id"]) or 0)))
                      if shift or moved.get(u["id"]) else u
                      for u in P.units(_plan_doc(plan)) if u["id"] in skipped]
-    week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units)
+    week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units,
+                       ld=(_state.get("plan_load") or {}).get(plan["id"]))
     nxt_view = ({"name": str(nxt.get("name") or "?"), "uid": nxt["id"], "day": P.weekday_or_day(nxt["opens"], today),
                  "n": P.unit_total(nxt)} if nxt else None)
     change = None
@@ -1094,6 +1107,10 @@ def refresh_progress():
         traceback.print_exc()
         return {}
     _state["plan_progress"] = prog
+    try:
+        _state["plan_load"] = loads(mw.col, followed(), _state_cfg(), idxs)  # 3.7.81
+    except Exception:
+        traceback.print_exc()
     try:
         _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today(), idxs)
         _note_recap(_state["plan_session"])

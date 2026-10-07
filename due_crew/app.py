@@ -101,6 +101,7 @@ _state = {
     "settings_pulling": False,
     "settings_failed_ts": 0.0,  # when a pull last failed for want of a network
     "plan_progress": {},   # 3.1: {plan id: {unit id: [opened, seen, total]}}, counted here
+    "plan_load": {},       # 3.7.81: {plan id: {unit id: [seen, open, locked]}}, my days, counted here
     "plan_session": {},    # 3.2: {plan id: today's session}, for plans on my schedule
     "plan_updates": {},    # 3.7.3: {plan id: {n, names, units}}: an update's cards, waiting for Open
     "plans_midday": False, # 3.7.3: an update came while reviewing; it waits for the Decks screen
@@ -191,7 +192,7 @@ def _reset_runtime(keep_sync=False):
                   milestones=[], anki_synced=synced,
                   room_dismissed=set(), room_skip=None, room_break=False,
                   room_refreshed=None, settings_ready=False, settings_pulling=False,
-                  settings_failed_ts=0.0, plan_progress={}, plan_session={}, notice=None,
+                  settings_failed_ts=0.0, plan_progress={}, plan_load={}, plan_session={}, notice=None,
                   plan_updates={}, plans_midday=False,
                   bingo_open=False, bingo_mine=None, squads_left=set(),
                   settings_tab=None, plan_sub={}, team_view={}, team_draft={},
