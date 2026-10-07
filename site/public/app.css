@@ -843,8 +843,11 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .lbar i, .lkey i { display: block; }
 .lkey i { display: inline-block; }
 .lbar .s, .lkey .s { background: #c9cbc2; }
-.lbar .o, .lkey .o { background: var(--accent); } .lbar .p, .lkey .p { background: var(--warn); }
-.lchart .o { fill: var(--accent); } .lchart .p { fill: var(--warn); }
+.lbar .o, .lkey .o { background: var(--accent); }
+/* not open yet is the normal state of a date ahead: a tint of the same green, never the warning colour */
+.lbar .p, .lkey .p { background: color-mix(in srgb, var(--accent) 28%, var(--card)); }
+.lchart .o { fill: var(--accent); } .lchart .p { fill: color-mix(in srgb, var(--accent) 28%, var(--card)); }
+.lnow { font-size: 13.5px; } .lnow b { font-size: 16px; }
 .lweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .lday { all: unset; box-sizing: border-box; cursor: pointer; border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; min-height: 78px; background: var(--card); display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink); min-width: 0; }
 .lday.t { border: 2px solid var(--accent); }
@@ -856,6 +859,8 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .lu.early { background: var(--card); box-shadow: inset 0 0 0 1px var(--accent); }
 .lu.mv { background: transparent; border: 1px dashed var(--accent); }
 .lfoot { display: block; margin-top: auto; }
+.lfoot.ltop { margin-top: 0; width: 100%; height: 6px; flex: none; align-self: stretch; }
+.lfoot.ltop .lbar { margin-top: 0; }
 .lday .lbar { height: 6px; }
 .ldet { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px 12px; display: grid; gap: 8px; font-size: 13.5px; }
 .lrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 160px); gap: 4px 12px; align-items: center; }
