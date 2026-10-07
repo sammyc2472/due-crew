@@ -692,6 +692,9 @@ add-on.
   The bottom bar's answer buttons are slid to its middle (measured,
   `translateX`, re-run when the bar changes), and the ask chip sits beside
   More, else Edit, whichever has room.
+- 3.7.7: times from the server are Unix seconds, past `shapes._nat`'s
+  10**9 cap, so they go through `shapes._when`; Team questions read
+  "20733d" and the Team badge never lit before it.
 
 ## Releasing
 

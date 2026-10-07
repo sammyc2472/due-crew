@@ -681,6 +681,11 @@ def _nat(v, hi=10 ** 9):
     return n if n is not None and 0 <= n <= hi else 0
 
 
+def _when(v):
+    """A Unix time in seconds (today's is past 10**9, so not `_nat`'s cap)."""
+    return _nat(v, 2 ** 32)
+
+
 def clean_teams(v):
     """The board's counts for the teams I'm on: {plan id: {shown, of,
     streak, faces, act, last}}."""
@@ -691,7 +696,7 @@ def clean_teams(v):
         last = t.get("last") if isinstance(t.get("last"), dict) else None
         out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")),
                     "faces": [clean_emoji(e) for e in (t.get("faces") or [])[:4] if isinstance(e, str)],
-                    "act": sorted((_nat(a) for a in (t.get("act") or [])[:20]), reverse=True),
+                    "act": sorted((_when(a) for a in (t.get("act") or [])[:20]), reverse=True),
                     "last": {"name": clean_note(last.get("name"), 60) or "?",
                              "text": clean_note(last.get("text"), TEAM_TEXT_MAX)} if last else None}
         if len(out) >= 20:
@@ -704,13 +709,13 @@ def _clean_ask(a, reply=False):
         return None
     uid = str(a.get("uid") or "")
     out = {"id": _nat(a["id"]), "uid": uid if _UID.fullmatch(uid) else "", "name": clean_note(a.get("name"), 60) or "?",
-           "emoji": clean_emoji(a.get("emoji")), "text": clean_note(a.get("text"), TEAM_TEXT_MAX), "at": _nat(a.get("at")),
+           "emoji": clean_emoji(a.get("emoji")), "text": clean_note(a.get("text"), TEAM_TEXT_MAX), "at": _when(a.get("at")),
            "author": a.get("author") is True, "mine": a.get("mine") is True, "remove": a.get("remove") is True}
     if reply:
         out["helped"] = a.get("helped") is True
         return out
     guid = a.get("guid")
-    out.update({"act": _nat(a.get("act")), "topic": clean_note(a.get("topic"), 80),
+    out.update({"act": _when(a.get("act")), "topic": clean_note(a.get("topic"), 80),
                 "guid": guid[:GUID_MAX] if isinstance(guid, str) and guid else "", "ord": _nat(a.get("ord"), 500),
                 "replies": [r for r in (_clean_ask(x, True) for x in (a.get("replies") or [])[:50]) if r]})
     return out
