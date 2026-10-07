@@ -695,6 +695,15 @@ add-on.
 - 3.7.7: times from the server are Unix seconds, past `shapes._nat`'s
   10**9 cap, so they go through `shapes._when`; Team questions read
   "20733d" and the Team badge never lit before it.
+- 3.7.8: someone with no emoji gets their name's first letter in an accent
+  circle (`board.face`, `face` in builder.js: change one, change both),
+  not the escaped "&#128100;". "Days of prep" counts days, not dates (the
+  plan page, `plans.prep_for`, the .ics feed). The builder's day panel
+  fits its rows (no sideways scroll). Trial, site only, admin only: plan
+  load on Home's Plans tab (`planLoad` in app.js): each of my dates on my
+  own day, one number (today to go, ahead what's new to me that day,
+  i.e. still locked, past behind) and one bar a day (the day's size,
+  filled with what it asks), from the progress Anki already sends.
 
 ## Releasing
 
