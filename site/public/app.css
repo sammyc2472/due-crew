@@ -885,3 +885,5 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .dayp .ch2 > small, .dayp .ch2 > button { flex: none; white-space: nowrap; overflow-wrap: normal; }
 .ltops, .ltodo { display: grid; gap: 2px; grid-column: 1 / -1; font-size: 12.5px; }
 .lrow > small.muted:last-child { grid-column: 1 / -1; }
+.lu small { font-size: 12px; } .lu.late small { color: var(--warn); }
+.lrow { grid-template-columns: minmax(0, 1fr); }
