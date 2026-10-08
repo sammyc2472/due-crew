@@ -1,0 +1,570 @@
+<title>Comeback Characters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600&display=swap">
+<style>
+/* Layout: one column of direction rows; notes on the left, the frames on the right; stacks under 900px.
+   Tokens: the board's own (due_crew/board.py LIGHT/DARK/ACCENTS); --warm is the board's "hours" amber. */
+:root {
+  --page: #f4f4ef; --card: #ffffff; --ink: #333333; --mark: #242424; --muted: #7a7a72;
+  --line: #e2e2da; --well: #f2f2ec; --warm: #b26a00;
+  --accent: #2e7d32; --accent-ink: #ffffff; --cheek: rgb(255 255 255 / 0.28);
+  --display: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #141413; --card: #1c1c1c; --ink: #dfe1dc; --mark: #e6e8e3; --muted: #989c92;
+    --line: #3d403b; --well: #2b2d29; --warm: #dda45c;
+    --accent: #7cc47f; --accent-ink: #122912; --cheek: rgb(221 164 92 / 0.5); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #141413; --card: #1c1c1c; --ink: #dfe1dc; --mark: #e6e8e3; --muted: #989c92;
+  --line: #3d403b; --well: #2b2d29; --warm: #dda45c;
+  --accent: #7cc47f; --accent-ink: #122912; --cheek: rgb(221 164 92 / 0.5); color-scheme: dark;
+}
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 56px; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 600; color: var(--mark); letter-spacing: -0.012em; margin: 0; text-wrap: balance; }
+h1 { font-size: 30px; line-height: 1.15; }
+h2 { font-size: 26px; line-height: 1.1; }
+.head { display: grid; gap: 12px; }
+.head p { margin: 0; max-width: 66ch; color: var(--ink); }
+.head p b { font-weight: 600; }
+
+/* controls */
+.bar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin-top: 4px; }
+.ctl { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+.seg { display: inline-flex; background: var(--well); border-radius: 8px; padding: 2px; }
+.seg button { font: inherit; font-size: 12.5px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); }
+.sw { display: inline-flex; gap: 6px; }
+.sw button { width: 20px; height: 20px; border-radius: 4px; border: 0; padding: 0; cursor: pointer; background: var(--c); }
+.sw button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--ink); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* a direction */
+.dir { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 28px; align-items: start;
+  padding-top: 26px; border-top: 1px solid var(--line); }
+.notes { display: grid; gap: 8px; min-width: 0; }
+.pitch { margin: 0; font-size: 15.5px; color: var(--ink); }
+.notes dl { margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.notes dt { color: var(--muted); }
+.notes dd { margin: 0; }
+.frames { display: grid; gap: 10px; width: var(--fw, 520px); max-width: 100%; }
+
+/* the widget's own box, as it would sit on the board */
+.cb { margin: 0; background: var(--card); border-radius: 10px; padding: 10px 12px 8px; display: grid; gap: 2px; }
+.cb-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.cb-top b { color: var(--ink); font-weight: 600; }
+.cb svg { display: block; width: 100%; height: auto; }
+.minis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.minis figure { margin: 0; background: var(--card); border-radius: 10px; padding: 8px 8px 6px; }
+.minis svg { display: block; width: 100%; height: auto; }
+.minis figcaption { font-size: 12px; color: var(--muted); text-align: center; }
+.foot { border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 13px; max-width: 72ch; }
+.foot code { font-size: 12px; color: var(--ink); }
+
+/* drawing classes: every fill and stroke is a token */
+.a { fill: var(--accent); } .ai { fill: var(--accent-ink); } .ln { fill: var(--line); }
+.ink { fill: var(--ink); } .mu { fill: var(--muted); } .wm { fill: var(--warm); } .cd { fill: var(--card); }
+.s-ai, .s-ink, .s-mu, .s-wm, .s-a, .s-ln { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.s-ai { stroke: var(--accent-ink); } .s-ink { stroke: var(--ink); } .s-mu { stroke: var(--muted); }
+.s-wm { stroke: var(--warm); } .s-a { stroke: var(--accent); } .s-ln { stroke: var(--line); }
+.ck { fill: var(--cheek); }
+.face-t { font: 600 10px var(--sans); fill: var(--accent-ink); }
+
+@media (max-width: 900px) {
+  .dir { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .minis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-top { font-size: 12.5px; }
+}
+</style>
+
+<main class="wrap">
+  <header class="head">
+    <h1>Comeback characters</h1>
+    <p>Four directions for the comeback plan. The big frame in each is <b>Working</b>, halfway through a 5-day comeback: 912 piled up against a usual day of 150, 183 extra a day, 366 won back and 96 of today's 183 done. The small ones are <b>Before you go</b>, <b>Today's done</b> and <b>Caught up</b>.</p>
+    <div class="bar">
+      <div class="ctl"><span id="lbl-theme">Theme</span>
+        <div class="seg" role="group" aria-labelledby="lbl-theme" id="theme">
+          <button type="button" data-v="" aria-pressed="true">Auto</button>
+          <button type="button" data-v="light" aria-pressed="false">Light</button>
+          <button type="button" data-v="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+      <div class="ctl"><span id="lbl-acc">Accent</span>
+        <div class="sw" role="group" aria-labelledby="lbl-acc" id="accent"></div>
+      </div>
+      <div class="ctl"><span id="lbl-w">Width</span>
+        <div class="seg" role="group" aria-labelledby="lbl-w" id="width">
+          <button type="button" data-v="520" aria-pressed="true">520</button>
+          <button type="button" data-v="360" aria-pressed="false">360</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="dir" id="pip">
+    <div class="notes">
+      <h2>Pip</h2>
+      <p class="pitch">Carries your cards home one at a time, into the week.</p>
+      <dl>
+        <dt>Progress</dt><dd>The comeback's days as the logo's squares. Today's fills from the bottom as Pip drops cards in.</dd>
+        <dt>Left</dt><dd>The stack of cards beside Pip, shrinking.</dd>
+        <dt>Missed a day</dt><dd>Pip sits on the stack and waves; the row gains a square.</dd>
+        <dt>21 days</dt><dd>The row wraps into weeks, like the icon.</dd>
+      </dl>
+    </div>
+    <div class="frames">
+      <figure class="cb"><div class="cb-top"><span><b>366 won back</b> · on track</span><span><b>96</b> of today's 183</span></div><div data-draw="pip.main"></div></figure>
+      <div class="minis">
+        <figure><div data-draw="pip.away"></div><figcaption>Before you go</figcaption></figure>
+        <figure><div data-draw="pip.rest"></div><figcaption>Today's done</figcaption></figure>
+        <figure><div data-draw="pip.done"></div><figcaption>Caught up</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="daylings">
+    <div class="notes">
+      <h2>Daylings</h2>
+      <p class="pitch">Each day of the comeback is a little square that wakes up when its day comes.</p>
+      <dl>
+        <dt>Progress</dt><dd>Today's square fills like a glass. Done days smile and lean toward today.</dd>
+        <dt>Left</dt><dd>The days still asleep. No pile at all.</dd>
+        <dt>Missed a day</dt><dd>Everyone wakes and says hi; one more dayling joins the end.</dd>
+        <dt>21 days</dt><dd>Three rows of seven; faces drop to two dots.</dd>
+      </dl>
+    </div>
+    <div class="frames">
+      <figure class="cb"><div class="cb-top"><span><b>366 won back</b> · on track</span><span><b>96</b> of today's 183</span></div><div data-draw="day.main"></div></figure>
+      <div class="minis">
+        <figure><div data-draw="day.away"></div><figcaption>Before you go</figcaption></figure>
+        <figure><div data-draw="day.rest"></div><figcaption>Today's done</figcaption></figure>
+        <figure><div data-draw="day.done"></div><figcaption>Caught up</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="sprout">
+    <div class="notes">
+      <h2>Sprout</h2>
+      <p class="pitch">Grows the comeback back, one pot a day.</p>
+      <dl>
+        <dt>Progress</dt><dd>Today's plant climbs its cane as cards are answered and flowers when today's piece is done.</dd>
+        <dt>Left</dt><dd>The pots still holding seeds.</dd>
+        <dt>Missed a day</dt><dd>A new pot appears at the end. Nothing ever wilts.</dd>
+        <dt>21 days</dt><dd>The bed gets longer and the plants thinner; it gets busy past 10.</dd>
+      </dl>
+    </div>
+    <div class="frames">
+      <figure class="cb"><div class="cb-top"><span><b>366 won back</b> · on track</span><span><b>96</b> of today's 183</span></div><div data-draw="sprout.main"></div></figure>
+      <div class="minis">
+        <figure><div data-draw="sprout.away"></div><figcaption>Before you go</figcaption></figure>
+        <figure><div data-draw="sprout.rest"></div><figcaption>Today's done</figcaption></figure>
+        <figure><div data-draw="sprout.done"></div><figcaption>Caught up</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="dir" id="scout">
+    <div class="notes">
+      <h2>Scout</h2>
+      <p class="pitch">Climbs back one step a day; where it has walked turns green.</p>
+      <dl>
+        <dt>Progress</dt><dd>Each step is one day's piece, so the stairs are the running total. Scout walks across today's step as you answer.</dd>
+        <dt>Left</dt><dd>The grey steps up to the top, where the crew waits.</dd>
+        <dt>Missed a day</dt><dd>Scout waves from the step it's on; the stairs gain a step and get a little shallower.</dd>
+        <dt>21 days</dt><dd>The steps become a gentle ramp; still reads.</dd>
+      </dl>
+    </div>
+    <div class="frames">
+      <figure class="cb"><div class="cb-top"><span><b>366 won back</b> · on track</span><span><b>96</b> of today's 183</span></div><div data-draw="scout.main"></div></figure>
+      <div class="minis">
+        <figure><div data-draw="scout.away"></div><figcaption>Before you go</figcaption></figure>
+        <figure><div data-draw="scout.rest"></div><figcaption>Today's done</figcaption></figure>
+        <figure><div data-draw="scout.done"></div><figcaption>Caught up</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Colours are tokens only: <code>--accent</code>, <code>--accent-ink</code> (the faces, the board's ink-on-accent), <code>--ink</code>, <code>--muted</code>, <code>--line</code>, <code>--card</code> and <code>--warm</code> (the board's hours amber). Flat fills, no gradients, outlines or shadows; every square's corner is 18% of its side. Text stays in HTML above the drawing, so it keeps its size at 360 px while the drawing scales.</p>
+</main>
+
+<script>
+(() => {
+  // ---------- tiny SVG kit ----------
+  const K = 0.18;                       // corner radius: 18% of the shorter side, as in the logo
+  const n = v => +v.toFixed(2);
+  let uid = 0;
+  const rr = (x, y, w, h, c, extra = '') =>
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(w, h) * K)}" class="${c}"${extra}/>`;
+  const rot = (deg, cx, cy, body) => `<g transform="rotate(${n(deg)} ${n(cx)} ${n(cy)})">${body}</g>`;
+  const at = (x, y, body) => `<g transform="translate(${n(x)} ${n(y)})">${body}</g>`;
+  const svg = (w, h, body, label) =>
+    `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}">${body}</svg>`;
+  const capsule = (x, y, len, th, deg, c) => // an arm: a pill from (x,y) along deg
+    rot(deg, x, y, `<rect x="${n(x - th / 2)}" y="${n(y - th / 2)}" width="${n(len + th)}" height="${n(th)}" rx="${n(th / 2)}" class="${c}"/>`);
+  const zz = (x, y, s = 6) =>
+    `<path d="M${n(x)} ${n(y)}h${n(s)}l${n(-s)} ${n(s * 1.1)}h${n(s)}" class="s-mu" stroke-width="${n(s * 0.24)}"/>`;
+  const foot = (x, y, w, h, c = 'a') => `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(h / 2)}" class="${c}"/>`;
+  const confetti = pts => pts.map(([x, y, d, c, s = 5]) => rot(d, x, y, rr(x - s / 2, y - s / 2, s, s, c))).join('');
+
+  // a face: eyes centred on (cx, cy), sized from the body's side s
+  function face(cx, cy, s, o = {}) {
+    const col = o.col || 'ai', ex = s * 0.2, w = s * 0.16;
+    const [lx, ly] = o.look || [0, 0];
+    const sw = n(Math.max(1.3, s * 0.055));
+    let out = '';
+    for (const sx of [-1, 1]) {
+      const x = cx + sx * ex + lx, y = cy + ly;
+      if (o.eyes === 'happy')
+        out += `<path d="M${n(x - w / 2)} ${n(y + w * 0.22)}Q${n(x)} ${n(y - w * 0.6)} ${n(x + w / 2)} ${n(y + w * 0.22)}" class="s-${col}" stroke-width="${sw}"/>`;
+      else if (o.eyes === 'shut')
+        out += `<path d="M${n(x - w / 2)} ${n(y)}Q${n(x)} ${n(y + w * 0.62)} ${n(x + w / 2)} ${n(y)}" class="s-${col}" stroke-width="${sw}"/>`;
+      else
+        out += `<ellipse cx="${n(x)}" cy="${n(y)}" rx="${n(s * 0.064)}" ry="${n(s * 0.092)}" class="${col}"/>`;
+    }
+    if (o.blush) for (const sx of [-1, 1])
+      out += `<ellipse cx="${n(cx + sx * s * 0.33 + lx * 0.5)}" cy="${n(cy + s * 0.12)}" rx="${n(s * 0.075)}" ry="${n(s * 0.045)}" class="ck"/>`;
+    const mx = cx + lx * 0.7, my = cy + s * 0.16 + ly * 0.4;
+    if (o.mouth === 'smile')
+      out += `<path d="M${n(mx - s * 0.075)} ${n(my)}Q${n(mx)} ${n(my + s * 0.075)} ${n(mx + s * 0.075)} ${n(my)}" class="s-${col}" stroke-width="${sw}"/>`;
+    else if (o.mouth === 'grin')
+      out += `<path d="M${n(mx - s * 0.1)} ${n(my - s * 0.015)}Q${n(mx)} ${n(my + s * 0.15)} ${n(mx + s * 0.1)} ${n(my - s * 0.015)}Z" class="${col}"/>`;
+    else if (o.mouth === 'o')
+      out += `<ellipse cx="${n(mx)}" cy="${n(my + s * 0.03)}" rx="${n(s * 0.055)}" ry="${n(s * 0.065)}" class="${col}"/>`;
+    return out;
+  }
+
+  // a day square that fills from the bottom: frac 0..1
+  function fillSquare(x, y, s, frac, base = 'ln') {
+    if (frac >= 1) return rr(x, y, s, s, 'a');
+    let g = rr(x, y, s, s, base);
+    if (frac > 0) {
+      const id = 'k' + (++uid);
+      g += `<clipPath id="${id}">${rr(x, y, s, s, '')}</clipPath>` +
+        `<rect x="${n(x)}" y="${n(y + s * (1 - frac))}" width="${n(s)}" height="${n(s * frac)}" class="a" clip-path="url(#${id})"/>`;
+    }
+    return g;
+  }
+  const row = (x0, y, s, gap, fracs) => fracs.map((f, i) => fillSquare(x0 + i * (s + gap), y, s, f)).join('');
+
+  // ---------- Pip: a day square on two feet ----------
+  // (gx, gy) is the ground under its feet
+  function pip(gx, gy, o = {}) {
+    const s = o.s || 40, lift = o.hop || 0, sit = o.sit;
+    const bodyBot = gy - lift - (sit ? 0 : s * 0.1);
+    const by = bodyBot - s, bx = gx - s / 2;
+    const fw = s * 0.26, fh = s * 0.17, th = s * 0.17;
+    let g = '';
+    // arms go behind the body
+    if (o.arms === 'wave') g += capsule(bx + s - th * 0.6, by + s * 0.5, s * 0.34, th, -58, 'a');
+    if (o.arms === 'up') g += capsule(bx + th * 0.6, by + s * 0.45, s * 0.34, th, -130, 'a') + capsule(bx + s - th * 0.6, by + s * 0.45, s * 0.34, th, -50, 'a');
+    if (o.arms === 'carry') g += capsule(bx + th * 0.5, by + s * 0.42, s * 0.5, th, -98, 'a') + capsule(bx + s - th * 0.5, by + s * 0.42, s * 0.5, th, -82, 'a');
+    if (sit) {
+      g += foot(gx - s * 0.38, bodyBot - fh * 0.75, fw, fh) + foot(gx + s * 0.12, bodyBot - fh * 0.75, fw, fh);
+    } else if (o.walk) {
+      g += foot(gx - s * 0.34, gy - lift - fh, fw, fh) + foot(gx + s * 0.1, gy - lift - fh - s * 0.06, fw, fh);
+    } else {
+      g += foot(gx - s * 0.31, gy - lift - fh, fw, fh) + foot(gx + s * 0.05, gy - lift - fh, fw, fh);
+    }
+    if (o.loaf) {
+      const w = s * 1.22, h = s * 0.74;
+      return rr(gx - w / 2, gy - h, w, h, 'a') + face(gx, gy - h * 0.45, s, o);
+    }
+    g += rr(bx, by, s, s, 'a');
+    g += face(gx, by + s * 0.58, s, o);
+    if (o.card) g += rot(-6, gx, by, rr(gx - s * 0.44, by - s * 0.2, s * 0.9, s * 0.18, 'ln') + rr(gx - s * 0.38, by - s * 0.42, s * 0.9, s * 0.18, 'ln'));
+    return o.tilt ? rot(o.tilt, gx, gy, g) : g;
+  }
+  const stack = (x, gy, count, w = 60, h = 9, step = 12) => {
+    const jit = [0, 4, -3, 2, -2, 3, 0, -3, 2, -1];
+    let g = '';
+    for (let i = 0; i < count; i++) g += rr(x + jit[i % jit.length], gy - (i + 1) * step + (step - h), w, h, 'ln');
+    return g;
+  };
+
+  const PIP = {
+    main() {
+      const gy = 98;
+      return svg(520, 104,
+        stack(22, gy, 4, 66, 10, 13) +
+        pip(148, gy, { s: 46, walk: true, card: true, look: [2.5, -3.5], mouth: 'smile', blush: true }) +
+        row(220, 58, 40, 20, [1, 1, 96 / 183, 0, 0]),
+        'Pip carries a card from the stack toward today\'s square, which is half full');
+    },
+    away() {
+      const gy = 94;
+      // the stack, tied with a band: it will wait
+      let g = stack(14, gy, 3, 54, 9, 12) + rr(37, gy - 36, 7, 36, 'wm');
+      g += pip(112, gy, { arms: 'wave', eyes: 'happy', mouth: 'smile', blush: true, s: 38 });
+      return svg(160, 100, g, 'Pip waves next to a stack of cards tied with a band');
+    },
+    rest() {
+      const gy = 94, s = 32;
+      let g = row(14, gy - s, s, 16, [1, 1, 0]);
+      g += pip(14 + s + 16 + s / 2, gy - s, { loaf: true, eyes: 'shut', mouth: 'smile', blush: true, s: 32 });
+      g += zz(104, 30, 5.5) + zz(114, 18, 4.2);
+      return svg(160, 100, g, 'Pip naps on top of today\'s full square');
+    },
+    done() {
+      const gy = 94;
+      let g = row(17, gy - 18, 18, 9, [1, 1, 1, 1, 1]);
+      g += pip(80, gy - 18, { hop: 9, arms: 'up', eyes: 'happy', mouth: 'grin', blush: true, s: 32 });
+      g += confetti([[28, 22, 20, 'a'], [44, 10, 50, 'wm'], [116, 12, -15, 'a'], [134, 30, 35, 'wm'], [24, 44, -30, 'wm'], [138, 52, 10, 'a', 4]]);
+      return svg(160, 100, g, 'Pip jumps over a full row of squares');
+    },
+  };
+
+  // ---------- Daylings: the days themselves ----------
+  function dayling(x, y, s, kind, o = {}) {
+    const cx = x + s / 2, cy = y + s * 0.6;
+    let g = '';
+    if (o.arm) g += capsule(x + s - s * 0.1, y + s * 0.45, s * 0.3, s * 0.15, -55, kind === 'later' ? 'ln' : 'a');
+    if (kind === 'done') {
+      g += rr(x, y, s, s, 'a') + face(cx, cy, s, { eyes: o.eyes || 'happy', mouth: o.mouth || 'smile', look: o.look, blush: true });
+    } else if (kind === 'today') {
+      const frac = o.frac;
+      g += fillSquare(x, y, s, frac);
+      const f = { eyes: 'open', mouth: 'o', look: [0, -s * 0.05] };
+      // eyes are ink above the waterline and accent-ink below it
+      const id = 'k' + (++uid);
+      g += face(cx, cy, s, { ...f, col: 'ink' }) +
+        `<clipPath id="${id}"><rect x="${n(x)}" y="${n(y + s * (1 - frac))}" width="${n(s)}" height="${n(s * frac)}"/></clipPath>` +
+        `<g clip-path="url(#${id})">${face(cx, cy, s, f)}</g>`;
+    } else {
+      g += rr(x, y, s, s, 'ln') + face(cx, cy, s, { eyes: 'shut', col: 'mu' });
+    }
+    return o.tilt ? rot(o.tilt, cx, y + s, g) : g;
+  }
+  const DAY = {
+    main() {
+      const s = 54, gap = 27, x0 = 71, y = 44;
+      let g = '';
+      g += dayling(x0, y, s, 'done', { tilt: 4, look: [s * 0.03, 0] });
+      g += dayling(x0 + (s + gap), y, s, 'done', { tilt: 4, look: [s * 0.03, 0] });
+      g += dayling(x0 + 2 * (s + gap), y, s, 'today', { frac: 96 / 183 });
+      g += dayling(x0 + 3 * (s + gap), y, s, 'later');
+      g += dayling(x0 + 4 * (s + gap), y, s, 'later');
+      g += zz(x0 + 5 * s + 4 * gap - 6, y - 14, 7) + zz(x0 + 5 * s + 4 * gap + 5, y - 28, 5);
+      return svg(520, 104, g, 'Five day squares with faces: two done and smiling, today half full, two asleep');
+    },
+    away() {
+      const s = 34, y = 94 - s;
+      let g = dayling(14, y, s, 'done', { arm: true, eyes: 'happy', mouth: 'smile' });
+      g += dayling(66, y, s, 'later') + dayling(112, y, s, 'later');
+      g += zz(136, 40, 5) + zz(144, 30, 4);
+      return svg(160, 100, g, 'One day square waves; the days you are away sleep');
+    },
+    rest() {
+      const s = 34, y = 94 - s;
+      let g = dayling(12, y, s, 'done', { tilt: 3 });
+      g += dayling(63, y, s, 'done', { eyes: 'shut', mouth: 'smile' });
+      g += dayling(114, y, s, 'later');
+      g += zz(136, 40, 5) + zz(144, 30, 4);
+      return svg(160, 100, g, 'Today\'s square is full and resting; tomorrow sleeps');
+    },
+    done() {
+      const s = 22, gap = 9, x0 = 6.5, hops = [0, 9, 16, 9, 0];
+      let g = '';
+      hops.forEach((h, i) => { g += dayling(x0 + i * (s + gap), 94 - s - h, s, 'done', { eyes: 'happy', mouth: 'grin', tilt: [-6, -3, 0, 3, 6][i] }); });
+      g += confetti([[22, 26, 20, 'a'], [40, 12, 50, 'wm'], [118, 14, -15, 'a'], [138, 34, 35, 'wm'], [78, 6, 15, 'wm', 4]]);
+      return svg(160, 100, g, 'All the day squares jump, caught up');
+    },
+  };
+
+  // ---------- Sprout: a gardener ----------
+  function sprout(gx, gy, o = {}) {
+    const s = o.s || 38;
+    let g = '';
+    const by = gy - (o.hop || 0) - s * 0.1 - s;
+    // the sprout on its head
+    g += `<path d="M${n(gx)} ${n(by + 2)}V${n(by - s * 0.2)}" class="s-a" stroke-width="${n(s * 0.07)}"/>`;
+    g += rot(-28, gx, by - s * 0.2, `<ellipse cx="${n(gx - s * 0.13)}" cy="${n(by - s * 0.2)}" rx="${n(s * 0.14)}" ry="${n(s * 0.075)}" class="a"/>`);
+    g += rot(28, gx, by - s * 0.2, `<ellipse cx="${n(gx + s * 0.13)}" cy="${n(by - s * 0.2)}" rx="${n(s * 0.14)}" ry="${n(s * 0.075)}" class="a"/>`);
+    g += pip(gx, gy, { ...o, s });
+    if (o.can) g += capsule(gx + s * 0.42, by + s * 0.55, s * 0.18, s * 0.17, -10, 'a') + can(gx + s * 0.6, by + s * 0.42, o.pour ? 26 : 0, s);
+    return g;
+  }
+  function can(x, y, deg, s) { // a watering can, held by its handle at (x, y)
+    const w = s * 0.46, h = s * 0.34;
+    const g = `<path d="M${n(x + w * 0.2)} ${n(y)}q${n(w * 0.3)} ${n(-h * 0.75)} ${n(w * 0.6)} 0" class="s-wm" stroke-width="${n(s * 0.06)}"/>` +
+      rr(x, y, w, h, 'wm') +
+      capsule(x + w * 0.9, y + h * 0.75, w * 0.62, s * 0.075, -40, 'wm') +
+      rot(-40, x + w * 1.38, y + h * 0.2, rr(x + w * 1.3, y + h * 0.08, s * 0.1, s * 0.14, 'wm'));
+    return deg ? rot(deg, x, y, g) : g;
+  }
+  function plant(cx, soil, H, frac, o = {}) {
+    let g = `<rect x="${n(cx + 9)}" y="${n(soil - H)}" width="2.6" height="${n(H)}" rx="1.3" class="ln"/>`; // the cane: today's target
+    if (frac <= 0) return g + `<ellipse cx="${n(cx)}" cy="${n(soil - 1)}" rx="4.5" ry="2.6" class="mu"/>`;
+    const h = H * Math.min(1, frac);
+    g += `<path d="M${n(cx)} ${n(soil)}V${n(soil - h)}" class="s-a" stroke-width="3"/>`;
+    const pairs = Math.max(1, Math.floor(h / 15));
+    for (let i = 0; i < pairs; i++) {
+      const ly = soil - 8 - i * 14, side = i % 2 ? 1 : -1;
+      g += rot(side * -32, cx, ly, `<ellipse cx="${n(cx + side * 7)}" cy="${n(ly)}" rx="7.5" ry="3.6" class="a"/>`);
+      g += rot(side * 32, cx, ly - 4, `<ellipse cx="${n(cx - side * 6)}" cy="${n(ly - 4)}" rx="6" ry="3" class="a"/>`);
+    }
+    if (frac >= 1) {
+      const fy = soil - h - 3;
+      g += [0, 72, 144, 216, 288].map(d => rot(d, cx, fy, `<circle cx="${n(cx)}" cy="${n(fy - 4.2)}" r="3.4" class="wm"/>`)).join('');
+      g += `<circle cx="${n(cx)}" cy="${n(fy)}" r="2.4" class="cd"/>`;
+    } else {
+      g += `<circle cx="${n(cx)}" cy="${n(soil - h - 2)}" r="3" class="a"/>`;
+    }
+    return g;
+  }
+  const bed = (x, y, w) => rr(x, y, w, 12, 'ln');
+
+  const SPROUT = {
+    main() {
+      const soil = 86, cw = 100, x0 = 10, H = 58;
+      const fr = [1, 1, 96 / 183, 0, 0];
+      let g = '';
+      fr.forEach((f, i) => { g += plant(x0 + cw * i + cw / 2 + 10, soil, H, f); });
+      g += sprout(x0 + cw * 2 - 6, 93, { can: true, pour: true, look: [2.5, 1], mouth: 'smile', blush: true, s: 36 });
+      g += bed(x0, soil, cw * 5);
+      return svg(520, 104, g, 'Sprout waters today\'s plant, half way up its cane; two plants have flowered, two pots hold seeds');
+    },
+    away() {
+      let g = '';
+      g += plant(28, 82, 40, 0) + plant(62, 82, 40, 0);
+      g += bed(10, 82, 74);
+      g += can(92, 84, 0, 26);
+      g += sprout(130, 94, { arms: 'wave', eyes: 'happy', mouth: 'smile', blush: true, s: 34 });
+      return svg(160, 100, g, 'Sprout waves; the seeds will keep');
+    },
+    rest() {
+      let g = plant(34, 82, 46, 1) + plant(76, 82, 46, 1);
+      g += bed(10, 82, 92);
+      g += sprout(130, 94, { sit: true, eyes: 'shut', mouth: 'smile', blush: true, s: 32 });
+      g += zz(142, 26, 5) + zz(150, 16, 4);
+      return svg(160, 100, g, 'Today\'s plant has flowered and Sprout rests');
+    },
+    done() {
+      let g = '';
+      [18, 46, 114, 142].forEach(x => { g += plant(x, 82, 46, 1); });
+      g += bed(4, 82, 152);
+      g += sprout(80, 88, { hop: 10, arms: 'up', eyes: 'happy', mouth: 'grin', blush: true, s: 30 });
+      return svg(160, 100, g, 'Every pot has flowered and Sprout jumps');
+    },
+  };
+
+  // ---------- Scout: a climber with a backpack ----------
+  function scout(gx, gy, o = {}) {
+    const s = o.s || 32, w = s * 0.84, lift = o.hop || 0, face_r = o.left ? -1 : 1;
+    const bodyBot = gy - lift - (o.sit ? 0 : s * 0.12);
+    const by = bodyBot - s, bx = gx - w / 2;
+    const fw = s * 0.24, fh = s * 0.17, th = s * 0.17;
+    let g = '';
+    // backpack behind, on the side it walks away from
+    g += rr(gx - face_r * (w / 2 + s * 0.16) - s * 0.2, by + s * 0.2, s * 0.4, s * 0.58, 'wm');
+    if (o.arms === 'wave') g += capsule(bx + w - th * 0.6, by + s * 0.48, s * 0.34, th, -60, 'a');
+    if (o.arms === 'up') g += capsule(bx + th * 0.6, by + s * 0.42, s * 0.34, th, -125, 'a') + capsule(bx + w - th * 0.6, by + s * 0.42, s * 0.34, th, -55, 'a');
+    if (o.sit) g += foot(gx - s * 0.32, bodyBot - fh * 0.7, fw, fh) + foot(gx + s * 0.1, bodyBot - fh * 0.7, fw, fh);
+    else if (o.walk) g += foot(gx - s * 0.3, gy - lift - fh, fw, fh) + foot(gx + s * 0.08, gy - lift - fh - s * 0.07, fw, fh);
+    else g += foot(gx - s * 0.28, gy - lift - fh, fw, fh) + foot(gx + s * 0.04, gy - lift - fh, fw, fh);
+    g += rr(bx, by, w, s, 'a');
+    g += face(gx + face_r * s * 0.06, by + s * 0.56, s * 0.9, o);
+    if (o.mug) g += rr(gx + w * 0.5 - 2, by + s * 0.55, s * 0.26, s * 0.3, 'wm') +
+      `<path d="M${n(gx + w * 0.5 - 2 + s * 0.26)} ${n(by + s * 0.62)}h2.2v${n(s * 0.14)}h-2.2" class="s-wm" stroke-width="1.6"/>`;
+    return g;
+  }
+  function steps(x0, gy, w, gap, rise, fracs) {
+    return fracs.map((f, i) => {
+      const x = x0 + i * (w + gap), h = rise * (i + 1), y = gy - h;
+      if (f >= 1) return rr(x, y, w, h, 'a');
+      let g = rr(x, y, w, h, 'ln');
+      if (f > 0) {
+        const id = 'k' + (++uid);
+        g += `<clipPath id="${id}">${rr(x, y, w, h, '')}</clipPath><rect x="${n(x)}" y="${n(y)}" width="${n(w * f)}" height="${n(h)}" class="a" clip-path="url(#${id})"/>`;
+      }
+      return g;
+    }).join('');
+  }
+  const flag = (x, base, h = 24) =>
+    `<rect x="${n(x)}" y="${n(base - h)}" width="2.4" height="${n(h)}" rx="1.2" class="mu"/>` +
+    `<path d="M${n(x + 2.4)} ${n(base - h)}l14 4.5l-14 4.5z" class="wm"/>`;
+  const friend = (cx, cy, letter, r = 9) =>
+    `<circle cx="${n(cx)}" cy="${n(cy)}" r="${r}" class="a"/><text x="${n(cx)}" y="${n(cy + 3.5)}" text-anchor="middle" class="face-t">${letter}</text>`;
+
+  const SCOUT = {
+    main() {
+      const x0 = 74, w = 68, gap = 8, rise = 14, gy = 98, f = 96 / 183;
+      let g = steps(x0, gy, w, gap, rise, [1, 1, f, 0, 0]);
+      const tx = x0 + 2 * (w + gap);
+      g += scout(tx + w * f, gy - rise * 3, { s: 38, walk: true, look: [2, 0], mouth: 'smile', blush: true });
+      const lx = x0 + 4 * (w + gap), top = gy - rise * 5;
+      g += flag(lx + 12, top) + friend(lx + 48, top - 9, 'M');
+      return svg(520, 104, g, 'Scout walks across today\'s step, half of it green; the crew waits at the top');
+    },
+    away() {
+      let g = steps(70, 94, 26, 4, 10, [0, 0, 0]);
+      g += flag(70 + 2 * 30 + 6, 94 - 30, 18);
+      g += scout(36, 94, { arms: 'wave', eyes: 'happy', mouth: 'smile', blush: true, s: 34 });
+      return svg(160, 100, g, 'Scout waves at the foot of the steps');
+    },
+    rest() {
+      let g = steps(8, 94, 44, 6, 16, [1, 1, 0]);
+      g += scout(8 + 50 + 22, 94 - 32, { sit: true, eyes: 'shut', mouth: 'smile', blush: true, mug: true, s: 30 });
+      g += zz(104, 22, 5) + zz(112, 12, 4);
+      return svg(160, 100, g, 'Scout sits on today\'s finished step with a warm drink');
+    },
+    done() {
+      let g = steps(6, 94, 24, 4, 11, [1, 1, 1, 1, 1]);
+      const top = 94 - 55, lx = 6 + 4 * 28;
+      g += flag(lx + 20, top, 22);
+      g += scout(lx + 9, top, { hop: 4, arms: 'up', eyes: 'happy', mouth: 'grin', blush: true, s: 22 });
+      g += friend(lx - 16, top + 3, 'M', 7.5);
+      g += confetti([[52, 26, 20, 'a'], [74, 12, 50, 'wm'], [28, 46, -25, 'wm'], [96, 30, 15, 'a', 4]]);
+      return svg(160, 100, g, 'Scout at the top with the flag and a friend');
+    },
+  };
+
+  const SETS = { pip: PIP, day: DAY, sprout: SPROUT, scout: SCOUT };
+  document.querySelectorAll('[data-draw]').forEach(el => {
+    const [set, which] = el.dataset.draw.split('.');
+    el.outerHTML = SETS[set][which]();
+  });
+
+  // ---------- controls ----------
+  const root = document.documentElement;
+  const ACC = { // light accent, light ink-on-accent, dark accent, dark ink-on-accent (board.ACCENTS)
+    green: ['#2e7d32', '#ffffff', '#7cc47f', '#122912'], blue: ['#1e5fb4', '#ffffff', '#7fb2f0', '#0b1f3a'],
+    purple: ['#6b3fb5', '#ffffff', '#b89cf0', '#22143d'], teal: ['#0f766e', '#ffffff', '#7dd3c8', '#0b2a28'],
+    amber: ['#a35f00', '#ffffff', '#e0a458', '#2d1d05'], rose: ['#b03052', '#ffffff', '#f08fa8', '#3a1220'],
+  };
+  let accent = 'green';
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const dark = () => root.dataset.theme ? root.dataset.theme === 'dark' : mq.matches;
+  function paint() {
+    const a = ACC[accent], d = dark();
+    root.style.setProperty('--accent', d ? a[2] : a[0]);
+    root.style.setProperty('--accent-ink', d ? a[3] : a[1]);
+    document.querySelectorAll('#accent button').forEach(b => b.style.setProperty('--c', d ? ACC[b.dataset.v][2] : ACC[b.dataset.v][0]));
+  }
+  const sw = document.getElementById('accent');
+  Object.keys(ACC).forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.v = k; b.setAttribute('aria-label', k); b.setAttribute('aria-pressed', String(k === accent));
+    b.onclick = () => { accent = k; sw.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); paint(); };
+    sw.appendChild(b);
+  });
+  function seg(id, apply) {
+    const g = document.getElementById(id);
+    g.querySelectorAll('button').forEach(b => b.onclick = () => {
+      g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      apply(b.dataset.v);
+    });
+  }
+  seg('theme', v => { if (v) root.dataset.theme = v; else delete root.dataset.theme; paint(); });
+  seg('width', v => root.style.setProperty('--fw', v + 'px'));
+  mq.addEventListener('change', paint);
+  paint();
+})();
+</script>

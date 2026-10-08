@@ -1,0 +1,805 @@
+<title>Comeback Character Demo</title>
+<link rel="stylesheet" href="comeback.css">
+<style>
+/* Layout: controls on top, then Anki's Decks screen with the real board (Today tab, the
+   widget in the banner slot), then the three characters side by side at 360 px.
+   Tokens: the board's own palette (due_crew/board.py); --warm is its "hours" amber. */
+:root {
+  --page: #ececea; --board: #ffffff; --ink: #333333; --mark: #242424; --muted: #7a7a72; --line: #e2e2da;
+  --well: #f2f2ec; --faded: #aaaaa2; --warm: #b26a00; --accent: #2e7d32; --accent-ink: #ffffff; --you-bg: #e9f2e9;
+  --cheek: rgb(255 255 255 / 0.28);
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #2a2a2a; --board: #1c1c1c; --ink: #dfe1dc; --mark: #e6e8e3; --muted: #989c92; --line: #3d403b;
+    --well: #2b2d29; --faded: #6d726a; --warm: #dda45c; --accent: #7cc47f; --accent-ink: #122912; --you-bg: #2c372b;
+    --cheek: rgb(221 164 92 / 0.5); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #2a2a2a; --board: #1c1c1c; --ink: #dfe1dc; --mark: #e6e8e3; --muted: #989c92; --line: #3d403b;
+  --well: #2b2d29; --faded: #6d726a; --warm: #dda45c; --accent: #7cc47f; --accent-ink: #122912; --you-bg: #2c372b;
+  --cheek: rgb(221 164 92 / 0.5); color-scheme: dark;
+}
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 22px; }
+.head { display: grid; gap: 6px; max-width: 70ch; }
+h1 { font-size: 22px; line-height: 1.2; margin: 0; color: var(--mark); letter-spacing: -0.01em; }
+h2 { font-size: 13px; margin: 0; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.head p { margin: 0; }
+
+/* controls */
+.panel { display: grid; gap: 10px; background: var(--board); border-radius: 12px; padding: 14px 16px; }
+.prow { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--well); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: 12.5px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--board); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.act { font: inherit; font-size: 12.5px; font-weight: 700; border-radius: 99px; padding: 4px 12px; cursor: pointer;
+  border: 1px solid var(--accent); color: var(--accent); background: none; }
+.act.on { background: var(--accent); color: var(--accent-ink); }
+.act:disabled { opacity: 0.4; cursor: default; }
+.sw { display: inline-flex; gap: 6px; }
+.sw button { width: 20px; height: 20px; border-radius: 4px; border: 0; padding: 0; cursor: pointer; background: var(--c); }
+.sw button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--board), 0 0 0 4px var(--ink); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Anki's Decks screen, as the board meets it: a <center>, and buttons with Anki's own look */
+.anki { border-radius: 12px; background: var(--page); padding-block: 4px 8px; overflow-x: auto; }
+.anki .cap { font-size: 12px; color: var(--muted); text-align: center; }
+center button { margin: 4px 6px; padding: 6px 14px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); min-width: 60px; }
+
+/* the board's tokens, from the page's */
+#due-crew { --dc-bg: var(--board); --dc-ink: var(--ink); --dc-muted: var(--muted); --dc-line: var(--line);
+  --dc-hours: var(--warm); --dc-faded: var(--faded); --dc-well: var(--well); --dc-accent: var(--accent);
+  --dc-accent-ink: var(--accent-ink); --dc-you-bg: var(--you-bg); --dc-fresh: var(--accent); --dc-mark: var(--mark); }
+
+/* the comeback card in the board: the widget's tokens from the board's, as the add-on would set them */
+#due-crew .cb { --card: var(--dc-bg); --ink: var(--dc-ink); --muted: var(--dc-muted); --line: var(--dc-line);
+  --accent: var(--dc-accent); --accent-ink: var(--dc-accent-ink); --warm: var(--dc-hours); }
+#due-crew .cb { border: 1.5px solid var(--dc-line); border-radius: 11px; padding: 8px 12px 6px; margin: 0 0 12px; }
+.cb-len { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 0; font-size: 12px; color: var(--muted); }
+.cb-len .pills { display: inline-flex; }
+.cb-len .pill { font: 700 11px/1.6 var(--sans); padding: 1px 10px; border: 1px solid var(--line); color: var(--muted); background: none; cursor: pointer; }
+.cb-len .pill + .pill { border-left: 0; }
+.cb-len .pill:first-child { border-radius: 99px 0 0 99px; }
+.cb-len .pill:last-child { border-radius: 0 99px 99px 0; }
+.cb-len .pill.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cb-len .step { display: inline-flex; align-items: center; gap: 6px; }
+.cb-len .step button { width: 20px; height: 20px; border-radius: 99px; border: 1px solid var(--line); background: none;
+  color: var(--ink); font: 700 13px/1 var(--sans); cursor: pointer; padding: 0; }
+.cb-len .step b { color: var(--ink); min-width: 46px; text-align: center; }
+.cb-len .sp { flex: 1; }
+.cb-len .go { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
+  border-radius: 99px; padding: 2px 14px; font: 700 12px/1.5 var(--sans); cursor: pointer; }
+
+/* three at 360 */
+.strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 360px)); gap: 12px; justify-content: start; }
+.strip figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.strip figcaption { font-size: 12.5px; color: var(--muted); }
+.strip figcaption b { color: var(--ink); }
+.strip .cb { background: var(--board); border-radius: 12px; padding: 10px 12px 6px; --card: var(--board); }
+.notes { display: grid; gap: 8px; max-width: 76ch; font-size: 13.5px; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.notes code { font-size: 12.5px; }
+.still .cb [class^="k-"] { animation: none !important; }
+</style>
+<style>
+    
+    #due-crew { margin: 18px auto 8px; max-width: 640px; color: var(--dc-ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+    /* 3.5.0: Anki's Decks screen sits in a <center> (the board's older parts
+       have always been centred by it; a new part says text-align: left
+       itself) and gives every button a margin, a shadow and rounded
+       corners, which the board's buttons start without */
+    #due-crew button { -webkit-appearance: none; appearance: none; margin: 0; box-shadow: none;
+      min-width: 0; min-height: 0; text-shadow: none; background-image: none; }
+    /* the board is one rounded card — white by day, near-black by night —
+       and inside it there are no rules and no fills: rows separate by
+       spacing and the you-row highlight alone */
+    #due-crew.dc-frame { background: var(--dc-bg); border-radius: 12px;
+      padding: 16px 18px 10px; }
+    /* the deck screen is shared with Anki's own styles (26.x paints
+       `.fancy table` with a glass fill) and other add-ons' CSS. None of
+       them may redecorate this board: no borders, shadows, radii, or fills
+       on the table — every rule below is scoped to #due-crew, and nothing
+       here touches the page. The table never needs to scroll or be
+       clipped: the name column absorbs the slack and ellipsizes. */
+    #due-crew, #due-crew table, #due-crew tr, #due-crew th, #due-crew td {
+      border: 0 !important; box-shadow: none !important; outline: 0 !important; }
+    #due-crew table, #due-crew tr, #due-crew th, #due-crew td {
+      border-radius: 0 !important; background: transparent !important; }
+    /* the one fill inside the card: your row (re-asserted after the reset) */
+    #due-crew tr.you td { background: var(--dc-you-bg) !important; }
+    #due-crew .dc-head { display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px 10px; margin-bottom: 10px; }
+    /* the pills stay one row; a narrow window puts them under the logo */
+    #due-crew .dc-head > span:last-child { white-space: nowrap; }
+    #due-crew .dc-title { font-size: 15px; font-weight: 700; line-height: 0; }
+    /* 2.10: the logo is the title. Its squares are the board's: the accent,
+       and the line colour for the day off. */
+    #due-crew .dc-mark { display: inline-block; height: 17px; width: auto; vertical-align: middle; }
+    #due-crew .dc-mark .on { fill: var(--dc-accent); }
+    #due-crew .dc-mark .off { fill: var(--dc-line); }
+    #due-crew .dc-mark .wm { fill: var(--dc-mark); }
+    #due-crew .dc-card .dc-mark { display: block; height: 17px; margin: 0 auto 8px; }
+    #due-crew .dc-pill { display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 1px 10px; border: 1px solid var(--dc-line); color: var(--dc-muted); text-decoration: none; }
+    #due-crew .dc-pill.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+    #due-crew .dc-pill:first-child { border-radius: 99px 0 0 99px; }
+    #due-crew .dc-pill:last-child { border-radius: 0 99px 99px 0; }
+    #due-crew .dc-pill + .dc-pill { border-left: none; }
+    /* the row cap: ten rows, then the view scrolls inside the card. A row
+       is the 13px line box (17px in Chromium) plus its padding, the header
+       25px — measured in the preview, not assumed. The half row past the
+       cap is the cue that there is more. The header stays put and needs a
+       fill of its own, since rows slide under it. */
+    #due-crew .dc-scroll { max-height: 329px;
+      overflow-y: auto; position: relative; }
+    #due-crew .dc-scroll th { position: sticky; top: 0; z-index: 1;
+      background: var(--dc-bg) !important; }
+    #due-crew table { width: 100%; border-collapse: collapse; }
+    #due-crew th { padding: 2px 8px 6px; text-align: right; }
+    #due-crew th a { color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    #due-crew th a.on { color: var(--dc-accent); }
+    #due-crew td { padding: 6px 8px; white-space: nowrap; }
+    #due-crew td.nm { width: 100%; max-width: 0; overflow: hidden !important;
+      text-overflow: ellipsis; }
+    #due-crew td.n { text-align: right; font-variant-numeric: tabular-nums; }
+    #due-crew td.rk { width: 30px; color: var(--dc-muted); }
+    #due-crew th.lt { text-align: left; font-weight: 400; }
+    #due-crew th.lt, #due-crew th.sqh { color: var(--dc-muted); font-size: 11px; }
+    #due-crew th.sqh { text-align: center; padding: 2px 3px 6px; font-weight: 700; }
+    #due-crew th.sqh.on { color: var(--dc-accent); }
+    #due-crew td.sqc { text-align: center; padding-left: 3px; padding-right: 3px; width: 18px; }
+    #due-crew .sq { display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+      background: var(--dc-well); vertical-align: middle; }
+    #due-crew .sq.on { background: var(--dc-accent); }
+    #due-crew .sq.away { background: var(--dc-well); box-shadow: inset 0 0 0 2px var(--dc-accent); opacity: 0.5; }
+    #due-crew td.chc { width: 22px; padding-left: 2px; padding-right: 2px; text-align: center; }
+    #due-crew a.dc-cheer { text-decoration: none; opacity: 0.3; font-size: 12px; }
+    #due-crew a.dc-cheer:hover { opacity: 1; }
+    #due-crew tr.you td { background: var(--dc-you-bg); }
+    #due-crew tr.you td.nm { font-weight: 700; }
+    #due-crew tr.dim td { color: var(--dc-faded); }
+    /* Q3: long-quiet friends, folded into one line until it's clicked */
+    #due-crew tr.qh { display: none; }
+    #due-crew table.qopen tr.qh { display: table-row; }
+    #due-crew tr.qfold td { text-align: left; }
+    #due-crew tr.qfold a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .la { font-size: 10px; margin-left: 5px; }
+    #due-crew small.nwh { display: block; height: 5.5px; }
+    #due-crew small.nw { display: block; font-size: 10px; line-height: 1.1;
+                          color: var(--dc-muted); font-weight: 400; }
+    #due-crew .la.fresh { color: var(--dc-fresh); } #due-crew .la.hours { color: var(--dc-hours); }
+    #due-crew .la.faded { color: var(--dc-faded); }
+    #due-crew .dc-foot { display: flex; gap: 10px; font-size: 10.5px; color: var(--dc-muted); padding: 8px 4px 0; }
+    #due-crew .dc-foot .sp { flex: 1; }
+    #due-crew .dc-foot .fl, #due-crew .dc-foot .fr { display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+    #due-crew .dc-foot a.pb { border: 1px solid var(--dc-accent); border-radius: 99px; padding: 1px 9px; }
+    #due-crew .dc-foot a.pb.on { background: var(--dc-accent); color: var(--dc-bg); }
+    #due-crew .dc-foot a.pb.warn { border-color: var(--dc-hours); color: var(--dc-hours); }
+    #due-crew .dc-foot a.ic { color: var(--dc-muted); font-weight: 400; font-size: 13px; }
+    #due-crew .dc-wrap[hidden] { display: none; }
+    #due-crew .dc-wrap a.wn { color: var(--dc-muted); text-decoration: none; font-size: 11px; white-space: nowrap; margin-left: 8px; }
+    #due-crew .dc-empty { border: 1px dashed var(--dc-accent); border-radius: 10px; padding: 12px 14px; margin: 8px 0 2px;
+      display: grid; gap: 8px; font-size: 12px; }
+    #due-crew .dc-empty .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    #due-crew .dc-empty .dc-code { font-size: 18px; letter-spacing: 3px; }
+    #due-crew .dc-empty input { flex: 1 1 160px; font: inherit; padding: 4px 8px; border: 1px solid var(--dc-line);
+      border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); }
+    #due-crew .dc-empty a.bt { border: 1px solid var(--dc-accent); border-radius: 6px; padding: 3px 12px; font-weight: 700;
+      color: var(--dc-accent); text-decoration: none; }
+    #due-crew .dc-empty a.bt.on { background: var(--dc-accent); color: var(--dc-bg); }
+    #due-crew .dc-foot a { color: var(--dc-accent); text-decoration: none; font-weight: 700;
+      white-space: nowrap; }
+    #due-crew .dc-note { font-style: italic; font-size: 11px; }
+    #due-crew a.dc-pl { color: inherit; text-decoration: none;
+      border-bottom: 1px dotted var(--dc-line); }
+    #due-crew a.dc-pl:hover { color: var(--dc-accent); border-bottom-color: var(--dc-accent); }
+    #due-crew .dc-wrap { display: flex; align-items: center; gap: 10px;
+      border: 1px solid var(--dc-accent); border-radius: 10px; padding: 8px 12px;
+      font-size: 12px; margin-bottom: 10px; }
+    #due-crew .dc-wrap .wc { margin-left: auto; color: var(--dc-accent);
+      text-decoration: none; font-weight: 700; font-size: 10.5px; }
+    #due-crew .dc-wrap .wx { color: var(--dc-muted);
+      text-decoration: none; font-weight: 700; }
+    #due-crew .dc-delta { font-size: 10px; font-weight: 700; color: var(--dc-accent);
+      margin-left: 6px; }
+    #due-crew th .hi { display: none; }
+    #due-crew .chip { font-size: 10px; margin-left: 5px; white-space: nowrap; color: var(--dc-muted); }
+    #due-crew .chip.live { color: var(--dc-fresh); font-weight: 700; }
+    #due-crew .chip.exam { color: var(--dc-hours); font-weight: 700; }
+    #due-crew .exb { font-size: 10px; font-weight: 700; color: var(--dc-hours);
+      margin-left: 5px; white-space: nowrap; }
+    #due-crew .bkb { font-size: 10px; font-weight: 700; color: var(--dc-accent);
+      margin-left: 5px; white-space: nowrap; }
+    #due-crew .awb { font-size: 10px; font-weight: 700; color: var(--dc-hours);
+      margin-left: 5px; white-space: nowrap; }
+    #due-crew .dc-stw { position: relative; display: block; max-width: 100%;
+      margin: 2px 0 1px; padding-top: 4px; overflow: hidden; line-height: 0; }
+    #due-crew .dc-stw::before { content: ""; position: absolute; top: 0; left: 9px;
+      border: 4px solid transparent; border-top: 0; border-bottom-color: var(--dc-well); }
+    #due-crew .dc-st { display: inline-block; max-width: 100%; box-sizing: border-box;
+      padding: 2px 8px; border-radius: 10px; background: var(--dc-well);
+      color: var(--dc-muted); font-size: 11px; font-weight: 400; line-height: 1.4;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+    #due-crew tr.you .dc-stw::before { border-bottom-color: var(--dc-bg); }
+    #due-crew tr.you .dc-st { background: var(--dc-bg); font-weight: 400; }
+    #due-crew .dc-wrap.eve { border-color: var(--dc-hours); }
+    /* 2.12: study rooms */
+    #due-crew .dc-room { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+      border: 1px solid var(--dc-accent); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+    #due-crew .dc-room .rg { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      background: conic-gradient(var(--dc-accent) calc(var(--p) * 360deg), var(--dc-line) 0); }
+    #due-crew .dc-room .rg.brk { background: conic-gradient(var(--dc-hours) calc(var(--p) * 360deg), var(--dc-line) 0); }
+    #due-crew .dc-room .rg b { width: 31px; height: 31px; border-radius: 50%; background: var(--dc-bg);
+      display: grid; place-items: center; font-size: 12px; }
+    #due-crew .dc-room .rt { display: grid; gap: 4px; min-width: 0; font-size: 12.5px; }
+    #due-crew .dc-room .rt small { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .dc-room .rb { display: flex; gap: 3px; align-items: center; }
+    #due-crew .dc-room .rb i { height: 6px; border-radius: 3px; background: var(--dc-line); display: block; position: relative; overflow: hidden; }
+    #due-crew .dc-room .rb i u { position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); display: block; }
+    #due-crew .dc-room .rb em { height: 3px; border-radius: 2px; background: var(--dc-hours); opacity: .45; display: block; }
+    #due-crew .dc-room .rw { display: flex; gap: 8px; align-items: center; }
+    #due-crew .dc-room .fc { display: inline-flex; }
+    #due-crew .dc-room .fc i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+      font-style: normal; font-size: 11px; font-weight: 700; color: var(--dc-accent); border: 2px solid var(--dc-bg);
+      background: var(--dc-you-bg); margin-left: -6px; }
+    #due-crew .dc-room .fc i:first-child { margin-left: 0; }
+    #due-crew .dc-room .go { background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px;
+      padding: 4px 12px; font-weight: 700; text-decoration: none; font-size: 12px; }
+    #due-crew .dc-room .lv { color: var(--dc-muted); text-decoration: none; font-size: 12px; }
+    #due-crew .dc-wrap .rdot { width: 8px; height: 8px; border-radius: 50%; background: var(--dc-accent); flex: none; }
+    #due-crew .dc-foot .warn { color: var(--dc-hours); }
+    #due-crew .dg { margin-bottom: 12px; }
+    #due-crew .dgh { font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }
+    #due-crew .dr { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }
+    #due-crew .dr.me .dn { font-weight: 700; }
+    #due-crew .dn { width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
+    #due-crew .dtrack { position: relative; flex: 1; min-width: 70px; height: 12px; background: var(--dc-well);
+      border: 1px solid var(--dc-line); border-radius: 2px; overflow: hidden; }
+    #due-crew .dtrack i { position: absolute; left: 0; top: 0; bottom: 0; display: block; }
+    #due-crew .dtrack .fo, #due-crew .dkey .fo { opacity: 0.5; background: repeating-linear-gradient(
+      135deg, var(--dc-accent) 0 1.5px, transparent 1.5px 5px); }
+    #due-crew .dtrack .fs, #due-crew .dkey .fs { background: var(--dc-accent); opacity: 0.35; }
+    #due-crew .dtrack .fm, #due-crew .dkey .fm { background: var(--dc-accent); }
+    #due-crew .dkey i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: 0; }
+    #due-crew .dkey i:first-child { margin-left: 0; }
+    #due-crew .dc-count { min-width: 118px; flex-shrink: 0; display: flex;
+      flex-direction: column; align-items: flex-end; line-height: 1.25;
+      white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px;
+      color: var(--dc-muted); }
+    #due-crew .dc-count .dc-delta { margin-left: 0; }
+    #due-crew .dc-line { font-size: 11.5px; color: var(--dc-muted); padding: 6px 0; }
+    #due-crew .dc-line a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .dc-live { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
+      vertical-align: 1px; }
+    #due-crew .dc-plan { display: inline-block; width: 36px; height: 4px; border-radius: 2px;
+      background: var(--dc-line); overflow: hidden; vertical-align: middle; margin: 0 4px 0 1px; }
+    #due-crew .dc-plan i { display: block; height: 100%; background: var(--dc-accent); }
+    #due-crew .dc-flag { font-size: 12px; padding: 6px 10px; margin-bottom: 10px; border-radius: 8px;
+      background: var(--dc-well); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    #due-crew .dc-flag a { margin-left: auto; color: var(--dc-accent); font-weight: 700;
+      text-decoration: none; white-space: nowrap; }
+    #due-crew .dc-flag, #due-crew .dc-flag-h { text-align: left; }
+    #due-crew .dc-flag { align-items: center; }
+    #due-crew .dc-flag small { display: block; color: var(--dc-muted); font-size: 11px; }
+    #due-crew .dc-flag-h { font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--dc-muted); margin: 2px 0 4px; }
+    #due-crew .dc-ask-st + a { margin-left: 0; }
+    #due-crew .dc-ask-st { margin-left: auto; align-self: center; font-size: 10.5px; font-weight: 700;
+      border-radius: 5px; padding: 1px 6px; background: var(--dc-line); white-space: nowrap; }
+    #due-crew .dc-ask-st.on { color: var(--dc-accent); }
+    #due-crew .dc-code { font-family: Menlo, Consolas, monospace; font-weight: 700;
+      letter-spacing: 1.5px; color: var(--dc-ink); }
+    /* a narrow window: headers keep their icons, the last-active chips go
+       (a quiet row keeps its: that chip is the whole story), and the name
+       gets the room. Until 2.9 every name shrank to three letters. */
+    @media (max-width: 560px) {
+      #due-crew th .hl { display: none; } #due-crew th .hi { display: inline; }
+      #due-crew td, #due-crew th { padding-left: 4px; padding-right: 4px; }
+      #due-crew tr:not(.dim) .la { display: none; }
+      #due-crew .dc-head .dc-mark { height: 14px; }
+      #due-crew .dc-room { grid-template-columns: auto 1fr; }
+      #due-crew .dc-room .rw { grid-column: 1 / -1; justify-content: flex-end; }
+    }
+    #due-crew .dc-sw { font-size: 11.5px; padding: 2px 0 8px; }
+    #due-crew .dc-sw a { color: var(--dc-muted); text-decoration: none; margin-right: 12px; }
+    #due-crew .dc-sw a.on { color: var(--dc-ink); font-weight: 700;
+      border-bottom: 1px dotted currentColor; }
+    #due-crew .dc-sw a.add { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .dc-card { padding: 16px; text-align: center;
+      border-radius: 12px; background: var(--dc-bg); }
+    #due-crew .dc-card b { font-size: 15px; display: block; margin-bottom: 5px; }
+    #due-crew .dc-card span { font-size: 12px; color: var(--dc-muted); }
+    #due-crew .dc-card a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    /* 3.1: a plan I follow, on the Decks tab */
+    #due-crew .dc-pc { margin-bottom: 14px; }
+    #due-crew .dc-pc .pk { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 2px 0 6px; }
+    #due-crew .dc-pc .pk b { font-size: 12.5px; }
+    #due-crew .dc-pc .pk span { font-size: 11px; color: var(--dc-muted); }
+    #due-crew .dc-pc .pk .acts { margin-left: auto; display: flex; gap: 12px; }
+    #due-crew .dc-pc .pk .acts a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; }
+    #due-crew .dc-pc .u3 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px 58px;
+      gap: 10px; align-items: center; font-size: 12px; padding: 3px 0; }
+    #due-crew .dc-pc .u3 .u { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #due-crew .dc-pc .u3.hd { color: var(--dc-muted); font-size: 10.5px; font-weight: 700; }
+    #due-crew .dc-pc .u3.now .u { font-weight: 700; }
+    #due-crew .dc-pc .u3.later { color: var(--dc-faded); }
+    #due-crew .dc-pc .u3.skip { color: var(--dc-faded); }
+    #due-crew .dc-pc .u3.skip .u { text-decoration: line-through; }
+    #due-crew .dc-pc .bar { display: block; height: 8px; background: var(--dc-well); border-radius: 2px;
+      overflow: hidden; position: relative; }
+    #due-crew .dc-pc .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); }
+    #due-crew .dc-pc .bar i.part { opacity: 0.35; }
+    #due-crew .dc-pc .miss { color: var(--dc-hours); font-size: 11px; }
+    #due-crew .dc-pc .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
+      white-space: nowrap; font-size: 11px; }
+    #due-crew .dc-pc .pn { font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--dc-well);
+      display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    #due-crew .dc-pc .pn.warn { color: var(--dc-hours); }
+    #due-crew .dc-pc .u3 a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11px; text-align: right; }
+    #due-crew .dc-pc .pn a, #due-crew .dc-pc .pl a { margin-left: auto; color: var(--dc-accent); font-weight: 700;
+      text-decoration: none; white-space: nowrap; }
+    #due-crew .dc-pc .pl { display: flex; gap: 10px; }
+    /* 3.2: today's session, the week's recap */
+    #due-crew .dc-pc .ss { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
+    #due-crew .dc-pc .ss div { background: var(--dc-well); border-radius: 8px; padding: 6px 9px; display: grid; }
+    #due-crew .dc-pc .ss b { font-size: 16px; font-variant-numeric: tabular-nums; }
+    #due-crew .dc-pc .ss b small { font-size: 11px; color: var(--dc-muted); font-weight: 400; }
+    #due-crew .dc-pc .ss span { font-size: 10.5px; color: var(--dc-muted); }
+    #due-crew .dc-pc .pn .acts { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }
+    #due-crew .dc-pc .pn .acts a { margin-left: 0; }
+    /* 3.5.0: the Plans tab's Today box and week (Anki centres the Decks
+       screen's text; the tab reads left to right) */
+    #due-crew .dc-pc, #due-crew .dc-pways { text-align: left; }
+    #due-crew .ptoday { border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 2px 0 10px; }
+    #due-crew .ptoday > * { min-width: 0; }
+    #due-crew .ptoday .h { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-accent); }
+    #due-crew .ptoday.rest { border-color: var(--dc-line); }
+    #due-crew .ptoday.rest .h { color: var(--dc-muted); }
+    #due-crew .ptoday.behind { border-color: var(--dc-hours); }
+    #due-crew .ptoday.behind .h { color: var(--dc-hours); }
+    #due-crew .ptoday .what { font-size: 14px; }
+    #due-crew .ptoday .next { font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .ptoday .next b { color: var(--dc-ink); }
+    #due-crew .ptoday .next a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .ptoday .nums { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .ptoday .nums b { color: var(--dc-ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+    #due-crew .ptoday .nums .ok { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .wbar { display: block; height: 5px; background: var(--dc-well); border-radius: 3px; overflow: hidden; }
+    #due-crew .wbar i { display: block; height: 100%; background: var(--dc-accent); }
+    #due-crew .ptoday .wbar { max-width: 320px; }
+    #due-crew .ptoday .btns { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    #due-crew .ptoday .btns a { color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }
+    #due-crew .ptoday .btns a.q { color: var(--dc-muted); font-weight: 500; }
+    #due-crew .ptoday .btns a.bt.on { background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }
+    #due-crew .pwh { display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 2px 0 6px; }
+    #due-crew .pwh .nav { display: flex; align-items: center; gap: 8px; }
+    #due-crew .pwh .nav a { font-size: 15px; line-height: 20px; }
+    #due-crew .pwh a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .pwh .site { margin-left: auto; font-weight: 600; }
+    #due-crew .pwk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    #due-crew .pwk .pc { border: 1px solid var(--dc-line); border-radius: 8px; padding: 4px 5px 5px; min-height: 64px;
+      display: flex; flex-direction: column; gap: 3px; cursor: default; min-width: 0; text-align: left; }
+    #due-crew .pwk .pc[onclick] { cursor: pointer; }
+    #due-crew .pwh .nav .tb { padding: 0 2px; font-size: 12px; font-weight: 700; }
+    #due-crew .pwh .nav .tb.here { color: var(--dc-muted); font-weight: 500; }
+    #due-crew .pwk .d b.td { background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 99px; padding: 0 6px; white-space: nowrap; }
+    #due-crew .pwk .d b.td .dow { color: inherit; }
+    #due-crew .pwk .pc.past { background: var(--dc-well); }
+    #due-crew .pwk .pc.sel { border: 2px solid var(--dc-accent); padding: 3px 4px 4px; }
+    #due-crew .pwk .pc.off { opacity: .6; }
+    #due-crew .pwk .d { display: flex; justify-content: space-between; gap: 4px; font-size: 10.5px; color: var(--dc-muted); }
+    #due-crew .pwk .d b { color: var(--dc-ink); }
+    #due-crew .pwk .d .dow { font-weight: 500; color: var(--dc-muted); }
+    #due-crew .pwk .chip { background: var(--dc-well); border-radius: 5px; padding: 1px 4px; font-size: 10.5px; font-weight: 600;
+      white-space: normal; text-align: left;
+      line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow-wrap: anywhere; }
+    #due-crew .pwk .pc.past .chip { background: var(--dc-bg); }
+    #due-crew .pwk .chip.done { background: none; color: var(--dc-muted); font-weight: 500; }
+    #due-crew .pwk .chip.skip { background: none; color: var(--dc-faded); text-decoration: line-through; font-weight: 500; }
+    #due-crew .pwk .chip.ev { background: none; border: 1.3px solid var(--dc-ink); }
+    #due-crew .pwk .chip.mv { background: none; border: 1px dashed var(--dc-accent); }
+    #due-crew .pwk .tag { font-size: 9.5px; color: var(--dc-muted); font-weight: 600; }
+    #due-crew .pwk .wbar { margin-top: auto; height: 4px; }
+    #due-crew .abar { display: block; height: 5px; border-radius: 3px; background: var(--dc-you-bg); box-shadow: inset 0 0 0 1px var(--dc-line); overflow: hidden; }
+    #due-crew .pwk .lm { font-size: 10.5px; color: var(--dc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #due-crew .pwk .lm .late { color: var(--dc-hours); font-weight: 700; }
+    #due-crew .abar i { display: block; height: 100%; background: var(--dc-accent); border-radius: 3px; }
+    #due-crew .abar.late i { background: var(--dc-hours); }
+    #due-crew .pwk .d .late { color: var(--dc-hours); font-weight: 700; }
+    #due-crew .pkey { display: flex; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--dc-muted); margin: 4px 0 2px; text-align: left; }
+    #due-crew .pkey i { display: inline-block; width: 14px; height: 5px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+    #due-crew .pkey .kn { background: var(--dc-accent); } #due-crew .pkey .kc { background: var(--dc-you-bg); }
+    #due-crew .pday .abar { width: 140px; max-width: 40%; }
+    #due-crew .pwk .pc.past .wbar { background: var(--dc-bg); }
+    #due-crew .pday { border: 1px solid var(--dc-line); border-radius: 10px; padding: 8px 10px; margin-top: 6px;
+      display: grid; gap: 5px; font-size: 12px; }
+    #due-crew .pday[hidden] { display: none; }
+    #due-crew .pday .r { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+    #due-crew .pday .r .u { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #due-crew .pday .r .acts, #due-crew .pday > .acts { display: flex; gap: 12px; justify-content: flex-end; }
+    #due-crew .pday .r .mv { color: var(--dc-muted); font-size: 12px; }
+    #due-crew .pday a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .pday .wi { display: grid; gap: 2px; margin: 1px 0 5px; padding-left: 9px; border-left: 2px solid var(--dc-line);
+                           font-size: 11.5px; color: var(--dc-muted); text-align: left; }
+    #due-crew .pday .wi b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .pday .wi .acts { display: flex; gap: 12px; }
+    #due-crew .ptoday .tw { display: block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    #due-crew .pcrew { font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }
+    #due-crew .pcrew a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    /* 3.7.3: the plan's tabs, Team and Insights */
+    #due-crew .psub { display: flex; gap: 16px; align-items: baseline; font-size: 12px; margin: 0 0 8px;
+      border-bottom: 1px solid var(--dc-line); text-align: left; }
+    #due-crew .psub a { color: var(--dc-muted); font-weight: 700; text-decoration: none; padding: 3px 0 5px; margin-bottom: -1px; }
+    #due-crew .psub a.on { color: var(--dc-ink); box-shadow: inset 0 -2px var(--dc-accent); }
+    #due-crew .psub a i { font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
+      background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }
+    #due-crew .tg { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); margin: 12px 0 4px; text-align: left; }
+    #due-crew .tg:first-child { margin-top: 2px; }
+    #due-crew .faces { display: flex; flex-wrap: wrap; gap: 8px 14px; text-align: left; }
+    #due-crew .face { display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }
+    #due-crew .face .e { font-size: 20px; line-height: 24px; }
+    #due-crew .ini { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }
+    #due-crew .ini.sm { width: 17px; height: 17px; font-size: 10px; }
+    #due-crew .face.away { opacity: .38; }
+    #due-crew .face b { color: var(--dc-ink); font-weight: 600; font-size: 11.5px; max-width: 64px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #due-crew .face.more b { color: var(--dc-muted); }
+    #due-crew .tqa { display: flex; gap: 6px; align-items: center; margin: 2px 0 6px; }
+    #due-crew .tqa input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink); background: var(--dc-bg);
+      border: 1px solid var(--dc-line); border-radius: 7px; padding: 5px 8px; }
+    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a, #due-crew .tleave a {
+      color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; white-space: nowrap; }
+    #due-crew .tq { border: 1px solid var(--dc-line); border-radius: 10px; padding: 7px 10px; margin-top: 6px;
+      display: grid; gap: 3px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }
+    #due-crew .tq .t { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    #due-crew .tq .t .m { margin-left: auto; color: var(--dc-muted); font-size: 11px; white-space: nowrap; }
+    #due-crew .tq .t .acts { display: flex; gap: 10px; }
+    #due-crew .tq .t .acts a.q { color: var(--dc-muted); font-weight: 500; }
+    #due-crew .tq .card { font-size: 11px; color: var(--dc-muted); }
+    #due-crew .tq .rep { border-left: 2px solid var(--dc-line); padding-left: 8px; font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .tq .rep b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .tq .rep .ok { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .tq .rep a { margin-left: 8px; font-size: 11px; }
+    #due-crew .tq .rep a.q { color: var(--dc-muted); font-weight: 500; }
+    #due-crew .tjoin { border: 1px solid var(--dc-line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px;
+      text-align: left; font-size: 12px; }
+    #due-crew .tjoin a.bt { justify-self: start; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }
+    #due-crew .tjoin .k, #due-crew .tq0 { color: var(--dc-muted); font-size: 11.5px; text-align: left; }
+    #due-crew .tleave { text-align: left; margin-top: 10px; }
+    #due-crew .dc-ins { display: grid; gap: 14px; text-align: left; font-size: 12px; }
+    #due-crew .dc-ins a { color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }
+    #due-crew .dc-ins a.q { color: var(--dc-muted); font-weight: 500; }
+    #due-crew .ihd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }
+    #due-crew .ihd b { font-size: 18px; font-variant-numeric: tabular-nums; }
+    #due-crew .ihd > span { font-size: 12px; }
+    #due-crew .ihd .m { color: var(--dc-muted); }
+    #due-crew .ispark path { fill: none; stroke: var(--dc-accent); stroke-width: 2; stroke-linejoin: round; }
+    #due-crew .ispark .end { fill: var(--dc-accent); stroke: var(--dc-bg); stroke-width: 2; }
+    #due-crew .ispark .hit, #due-crew .iwk .hit { fill: transparent; }
+    #due-crew .ihero { background: var(--dc-you-bg); border-radius: 10px; padding: 11px 13px; display: grid; gap: 4px; justify-items: start; }
+    #due-crew .ihero .k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dc-accent); }
+    #due-crew .ihero .t { font-size: 14px; font-weight: 650; color: var(--dc-ink); }
+    #due-crew .dc-ins a.bt { margin-top: 4px; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 5px 13px; font-size: 12px; }
+    #due-crew .isec { display: grid; gap: 2px; border-top: 1px solid var(--dc-line); padding-top: 10px; }
+    #due-crew .ik { display: flex; flex-wrap: wrap; gap: 4px 0; align-items: baseline; font-size: 10.5px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase; color: var(--dc-muted); margin-bottom: 4px; }
+    #due-crew .ik > span { text-transform: none; letter-spacing: 0; color: var(--dc-ink); font-weight: 600; }
+    #due-crew .ik .ikey { margin-left: auto; padding-left: 12px; color: var(--dc-muted); font-weight: 500; display: inline-flex; gap: 5px; align-items: center; }
+    #due-crew .sw { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin-left: 6px; }
+    #due-crew .sw.st { background: var(--dc-hours); }
+    #due-crew .sw.fg { background: color-mix(in srgb, var(--dc-hours) 40%, var(--dc-bg)); }
+    #due-crew .sw.pm { background: color-mix(in srgb, var(--dc-accent) 35%, var(--dc-bg)); }
+    #due-crew .sw.hx { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)) 0 2px, color-mix(in srgb, var(--dc-accent) 18%, var(--dc-bg)) 2px 4px); }
+    #due-crew .irow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 56px 64px; gap: 10px; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid var(--dc-line); }
+    #due-crew .irow:last-child { border-bottom: 0; }
+    #due-crew .irow .n { display: grid; min-width: 0; text-align: left; }
+    #due-crew .irow .n b { font-weight: 500; color: var(--dc-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #due-crew .irow .n span { font-size: 10.5px; color: var(--dc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #due-crew .irow .ib { position: relative; height: 9px; border-radius: 5px; background: var(--dc-well); overflow: hidden; }
+    #due-crew .irow .ib i { position: absolute; top: 0; bottom: 0; }
+    #due-crew .irow .ib .st { left: 0; background: var(--dc-hours); }
+    #due-crew .irow .ib .fg { background: color-mix(in srgb, var(--dc-hours) 40%, var(--dc-bg)); }
+    #due-crew .irow .c { text-align: right; color: var(--dc-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .irow .c b { color: var(--dc-ink); }
+    #due-crew .irow > a { text-align: right; }
+    #due-crew .iwk { overflow-x: auto; }
+    #due-crew .iwk svg { width: 100%; min-width: 460px; height: auto; display: block; overflow: visible; }
+    #due-crew .iwk .pm { fill: color-mix(in srgb, var(--dc-accent) 35%, var(--dc-bg)); }
+    #due-crew .iwk .h1 { fill: color-mix(in srgb, var(--dc-accent) 18%, var(--dc-bg)); }
+    #due-crew .iwk .h2 { fill: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }
+    #due-crew .iwk .g { stroke: var(--dc-line); stroke-dasharray: 2 3; }
+    #due-crew .iwk .base { stroke: var(--dc-line); }
+    #due-crew .iwk text { fill: var(--dc-muted); font-size: 10px; text-anchor: middle; }
+    #due-crew .iwk .yl { text-anchor: end; font-size: 9px; }
+    #due-crew .iwk .ax.b { fill: var(--dc-ink); font-weight: 700; }
+    #due-crew .iwk .ax.d { font-size: 9px; opacity: .8; }
+    #due-crew .iwk .ev { font-weight: 700; letter-spacing: .04em; }
+    #due-crew .iline { border-top: 1px solid var(--dc-line); padding-top: 10px; color: var(--dc-ink); }
+    @media (max-width: 560px) { #due-crew .irow { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }
+      #due-crew .irow .ib { grid-column: 1 / -1; grid-row: 2; } }
+    #due-crew .wk2 { display: grid; grid-template-columns: minmax(0, 1fr) 64px 76px 150px; gap: 12px; align-items: center;
+      font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--dc-line); text-align: left; }
+    #due-crew .wk2:last-child { border-bottom: 0; }
+    #due-crew .wk2 .sub { display: block; font-size: 11px; color: var(--dc-muted); }
+    #due-crew .wk2 .n { text-align: right; color: var(--dc-muted); font-variant-numeric: tabular-nums; }
+    #due-crew .wk2 .tr { font-size: 11px; }
+    #due-crew .wk2 .tr.up { color: var(--dc-hours); }
+    #due-crew .wk2 .tr.dn { color: var(--dc-accent); }
+    #due-crew .wk2 .acts { display: flex; gap: 10px; }
+    #due-crew .wk2.hd { font-size: 10.5px; color: var(--dc-muted); font-weight: 700; padding-bottom: 3px; }
+    #due-crew .dc-pways { display: grid; gap: 10px; margin: 4px 0 8px; }
+    #due-crew .dc-pways .t { font-size: 14px; }
+    #due-crew .dc-pways .ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    #due-crew .dc-pways .way { border: 1px solid var(--dc-line); border-radius: 10px; padding: 9px 10px; display: grid;
+      gap: 6px; align-content: start; font-size: 12px; }
+    #due-crew .dc-pways .way b { font-size: 13px; }
+    #due-crew .dc-pways .way a { color: var(--dc-accent); font-weight: 700; text-decoration: none; }
+    #due-crew .dc-pways input { font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
+      border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }
+    @media (max-width: 560px) {
+      #due-crew .dc-pc .u3 { grid-template-columns: minmax(0, 1fr) 70px; }
+      #due-crew .dc-pc .u3 .n { grid-column: 1 / -1; text-align: left; }
+      #due-crew .wk2 { grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }
+      #due-crew .wk2 .acts { grid-column: 1 / -1; }
+      #due-crew .wk2.hd span:last-child { display: none; }
+      /* the week as a list */
+      #due-crew .pwk { grid-template-columns: 1fr; }
+      #due-crew .pwk .pc { min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+      #due-crew .pwk .d { width: 100%; }
+      #due-crew .pwk .wbar { width: 100%; }
+      #due-crew .dc-pways .ways { grid-template-columns: 1fr; }
+      #due-crew .pwh .site { margin-left: 0; }
+      #due-crew .pwh { flex-wrap: wrap; }
+    }
+    </style>
+    <style>
+    #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
+      padding: 9px 12px 10px; margin: 0 0 14px; display: grid; gap: 6px; }
+    #due-crew .du > * { min-width: 0; }
+    #due-crew .du a { text-decoration: none; }
+    #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #due-crew .du-h .sp { flex: 1; }
+    #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
+    #due-crew .du-fold { font-size: 12px; font-weight: 700; color: var(--dc-accent); border: 1px solid var(--dc-line);
+      border-radius: 99px; padding: 2px 10px; white-space: nowrap; flex: none; }
+    #due-crew .du-tm { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+    #due-crew .du-tabs { display: inline-flex; white-space: nowrap; }
+    #due-crew .du-tabs a { font-size: 11px; font-weight: 700; padding: 1px 10px; border: 1px solid var(--dc-line);
+      color: var(--dc-muted); }
+    #due-crew .du-tabs a + a { border-left: 0; }
+    #due-crew .du-tabs a:first-child { border-radius: 99px 0 0 99px; }
+    #due-crew .du-tabs a:last-child { border-radius: 0 99px 99px 0; }
+    #due-crew .du-tabs a.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+    #due-crew .du-r { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; align-items: start;
+      padding: 5px 0 4px; border-top: 1px solid var(--dc-line); }
+    #due-crew .du-r .t { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+    #due-crew .du-r .t small, #due-crew .du-m { color: var(--dc-muted); font-size: 11.5px; }
+    #due-crew .du-r.done .t > b, #due-crew .du-r.done .t > span.x { color: var(--dc-muted); text-decoration: line-through; }
+    #due-crew .du-r .end { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 11.5px; }
+    #due-crew .du-r .end .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
+    #due-crew .du-go { color: var(--dc-accent); font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+    #due-crew .du-tag { color: var(--dc-muted); font-size: 11px; border: 1px solid var(--dc-line); border-radius: 6px;
+      padding: 0 6px; white-space: nowrap; }
+    #due-crew .du-bx { box-sizing: border-box; width: 14px; height: 14px; border: 1.5px solid var(--dc-faded);
+      border-radius: 4px; margin-top: 2px; display: block; position: relative; }
+    #due-crew a.du-bx { cursor: pointer; }
+    #due-crew .du-bx.auto { border-style: dashed; }
+    #due-crew .du-bx.part { background: linear-gradient(90deg, var(--dc-you-bg) 50%, transparent 50%); border-color: var(--dc-accent); }
+    #due-crew .du-bx.on { background: var(--dc-accent); border: 1.5px solid var(--dc-accent); }
+    #due-crew .du-bx.on::after { content: ""; position: absolute; left: 3.5px; top: 0.5px; width: 3px; height: 7px;
+      border: solid var(--dc-accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    #due-crew .du-sub { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 7px; align-items: center;
+      font-size: 11.5px; color: var(--dc-muted); }
+    #due-crew .du-sub b { color: var(--dc-ink); font-weight: 600; }
+    #due-crew .du-sub .du-bx { width: 11px; height: 11px; margin: 0; border-radius: 3px; }
+    #due-crew .du-sub .du-bx.on::after { left: 2.5px; top: -0.5px; width: 2.5px; height: 6px; }
+    #due-crew .du-sub .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .du .wbar { margin-top: 3px; }
+    #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--dc-muted); padding-top: 4px; }
+    #due-crew .du-sec.warn { color: #c77700; }
+    #due-crew .du-bh { display: grid; gap: 0; }
+    #due-crew .du-line { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font-size: 12px;
+      border-radius: 8px; padding: 5px 9px; background: var(--dc-you-bg); }
+    #due-crew .du-line.ev { color: #c77700; font-weight: 700; background: transparent; padding: 0; }
+    #due-crew .du-line .acts { display: flex; gap: 12px; }
+    #due-crew .du-line a, #due-crew .du-sg a { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
+      padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
+    #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
+    #due-crew .du-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-top: 3px; }
+    #due-crew .du-add input[type=text] { flex: 1 1 160px; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink);
+      background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 4px 8px; }
+    #due-crew .du-add select, #due-crew .du-add input[type=date] { font: inherit; font-size: 12px; color: var(--dc-ink);
+      background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 7px; padding: 3px 4px; color-scheme: light dark; }
+    #due-crew .du-said { font-size: 11.5px; color: var(--dc-accent); font-weight: 700; white-space: nowrap; }
+    #due-crew .du-said a { color: var(--dc-muted); font-weight: 400; margin-left: 4px; }
+    #due-crew .du-dh { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; font-weight: 700;
+      padding-top: 6px; border-top: 1px solid var(--dc-line); }
+    #due-crew .du-dh.today { color: var(--dc-accent); }
+    #due-crew .du-dh small { color: var(--dc-muted); font-weight: 400; }
+    #due-crew .du-dh .plus { color: var(--dc-accent); font-weight: 700; margin-left: 8px; }
+    #due-crew .du-ln { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
+      padding: 2px 0; align-items: start; }
+    #due-crew .du-ln .n { color: var(--dc-muted); font-size: 11px; white-space: nowrap; }
+    #due-crew .du-ln.done > span:nth-child(2) { color: var(--dc-muted); text-decoration: line-through; }
+    #due-crew .du-q { color: var(--dc-faded); font-size: 11.5px; padding: 3px 0 3px 25px; }
+    #due-crew .du-evl { color: #c77700; font-weight: 700; font-size: 12px; padding-left: 25px; }
+    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 7px 12px; white-space: nowrap; }
+    #due-crew .du-one > * { flex: none; }
+    #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; }
+    #due-crew .du-one .sp { flex: 1 1 0; }
+    #due-crew .du-one .sp { flex: 1; }
+    #due-crew .du-one > a:first-child b { color: var(--dc-accent); font-size: 12.5px; }
+    #due-crew .du-one .du-go { flex: 0 1 auto; min-width: 0; max-width: 260px; display: inline-flex; }
+    #due-crew .du-one .du-go .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* what's next when the day's done: the one part that gives way (else it
+       ran past the box and took Show with it) */
+    #due-crew .du-one .du-tm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    /* narrow: the bar goes and "Study ›" keeps its words (it was squeezed to
+       nothing and Show spilled out of the box) */
+    @media (max-width: 480px) { #due-crew .du-one .du-go .nm { display: none; }
+      #due-crew .du-one .wbar { display: none; } #due-crew .du-one .du-go { min-width: auto; } }
+    /* narrower still, there's more than one line holds: it wraps */
+    @media (max-width: 400px) { #due-crew .du-one { flex-wrap: wrap; } }
+    #due-crew .du-sub a { color: var(--dc-accent); }
+    #due-crew .du-empty { color: var(--dc-muted); font-size: 12px; padding: 4px 0; }
+</style>
+
+<main class="wrap">
+  <header class="head">
+    <h1>Comeback, in the board</h1>
+    <p>Pip, Daylings and Scout, live. A 5-day comeback of 912 cards (183 extra a day) by default. Press <b>Review 40 cards</b> to watch today's piece fill; when it's done the character rests, and <b>Next day</b> moves on.</p>
+  </header>
+
+  <section class="panel" aria-label="Demo controls">
+    <div class="prow">
+      <div class="ctl"><span id="l-kind">Character</span><div class="seg" id="kind" role="group" aria-labelledby="l-kind"></div></div>
+      <div class="ctl"><span id="l-len">Plan</span><div class="seg" id="len" role="group" aria-labelledby="l-len"></div></div>
+    </div>
+    <div class="prow">
+      <div class="ctl"><span id="l-state">State</span><div class="seg" id="state" role="group" aria-labelledby="l-state"></div></div>
+    </div>
+    <div class="prow">
+      <div class="ctl">
+        <button type="button" class="act on" id="review">Review 40 cards</button>
+        <button type="button" class="act" id="next">Next day</button>
+        <button type="button" class="act" id="cheer">A crewmate cheers</button>
+      </div>
+      <div class="ctl"><span id="l-theme">Theme</span><div class="seg" id="theme" role="group" aria-labelledby="l-theme"></div></div>
+      <div class="ctl"><span id="l-acc">Accent</span><div class="sw" id="accent" role="group" aria-labelledby="l-acc"></div></div>
+      <div class="ctl"><span id="l-mo">Motion</span><div class="seg" id="motion" role="group" aria-labelledby="l-mo"></div></div>
+    </div>
+  </section>
+
+  <section class="anki" aria-label="Anki's Decks screen">
+    <center>
+<div id="due-crew" class="dc-frame"><div class="dc-head"><span class="dc-title"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 76" class="dc-mark" role="img" aria-label="Due Crew"><title>Due Crew</title><g transform="translate(0.3 0)"><g transform="translate(0 76)"><rect x="0" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><rect x="72.45" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><rect x="144.9" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><rect x="217.35" y="-48.3" width="48.3" height="48.3" rx="8.69" class="off"/><rect x="289.8" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><rect x="362.25" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><rect x="434.7" y="-48.3" width="48.3" height="48.3" rx="8.69" class="on"/><g transform="translate(509 0)"><path d="M26.2 1Q19.5 1 14.2 -2.3Q8.9 -5.6 5.85 -11.3Q2.8 -17 2.8 -24.1Q2.8 -31.3 5.85 -37Q8.9 -42.7 14.15 -46Q19.4 -49.3 26.2 -49.3Q31.4 -49.3 35.55 -47.2Q39.7 -45.1 42.25 -41.35Q44.8 -37.6 45 -32.9V-15.7Q44.8 -11 42.3 -7.2Q39.8 -3.4 35.6 -1.2Q31.4 1 26.2 1ZM28.4 -11.1Q32.1 -11.1 34.85 -12.75Q37.6 -14.4 39.15 -17.35Q40.7 -20.3 40.7 -24.2Q40.7 -28 39.15 -30.95Q37.6 -33.9 34.85 -35.55Q32.1 -37.2 28.5 -37.2Q24.8 -37.2 22.05 -35.5Q19.3 -33.8 17.75 -30.9Q16.2 -28 16.2 -24.2Q16.2 -20.3 17.75 -17.35Q19.3 -14.4 22.1 -12.75Q24.9 -11.1 28.4 -11.1ZM53 0H40V-13L42.1 -24.8L39.9 -36.4V-72.3H53ZM84 1Q77.6 1 72.65 -1.7Q67.7 -4.4 64.9 -9.2Q62.1 -14 62.1 -20.3V-48.3H75.3V-20.6Q75.3 -17.6 76.3 -15.45Q77.3 -13.3 79.3 -12.2Q81.3 -11.1 84 -11.1Q88.1 -11.1 90.4 -13.6Q92.7 -16.1 92.7 -20.6V-48.3H105.8V-20.3Q105.8 -13.9 103.05 -9.1Q100.3 -4.3 95.35 -1.65Q90.4 1 84 1ZM138.1 1Q130.5 1 124.6 -2.25Q118.7 -5.5 115.25 -11.2Q111.8 -16.9 111.8 -24.2Q111.8 -31.4 115.15 -37.05Q118.5 -42.7 124.3 -46.05Q130.1 -49.4 137.2 -49.4Q144.2 -49.4 149.55 -46.25Q154.9 -43.1 157.95 -37.65Q161 -32.2 161 -25.3Q161 -24 160.85 -22.65Q160.7 -21.3 160.3 -19.6L119.7 -19.5V-29.3L154.2 -29.4L148.9 -25.3Q148.7 -29.6 147.35 -32.5Q146 -35.4 143.45 -36.95Q140.9 -38.5 137.2 -38.5Q133.3 -38.5 130.4 -36.75Q127.5 -35 125.95 -31.85Q124.4 -28.7 124.4 -24.4Q124.4 -20 126.05 -16.75Q127.7 -13.5 130.8 -11.75Q133.9 -10 138 -10Q141.7 -10 144.7 -11.25Q147.7 -12.5 149.9 -15L157.6 -7.3Q154.1 -3.2 149.05 -1.1Q144 1 138.1 1ZM209 1Q201.6 1 195.7 -2.3Q189.8 -5.6 186.4 -11.3Q183 -17 183 -24.1Q183 -31.3 186.4 -37Q189.8 -42.7 195.75 -46.05Q201.7 -49.4 209 -49.4Q214.7 -49.4 219.5 -47.3Q224.3 -45.2 227.8 -41.3L219.4 -32.8Q217.5 -34.9 214.85 -36Q212.2 -37.1 209 -37.1Q205.4 -37.1 202.55 -35.45Q199.7 -33.8 198.05 -30.95Q196.4 -28.1 196.4 -24.2Q196.4 -20.4 198.05 -17.45Q199.7 -14.5 202.55 -12.85Q205.4 -11.2 209 -11.2Q212.3 -11.2 214.95 -12.35Q217.6 -13.5 219.5 -15.7L228 -7.2Q224.3 -3.2 219.5 -1.1Q214.7 1 209 1ZM234.2 0V-48.3H247.3V0ZM247.3 -26.7 242.2 -30.1Q243.1 -39 247.4 -44.15Q251.7 -49.3 259.8 -49.3Q263.3 -49.3 266.1 -48.15Q268.9 -47 271.2 -44.4L263 -35Q261.9 -36.2 260.35 -36.8Q258.8 -37.4 256.8 -37.4Q252.6 -37.4 249.95 -34.75Q247.3 -32.1 247.3 -26.7ZM299.5 1Q291.9 1 286 -2.25Q280.1 -5.5 276.65 -11.2Q273.2 -16.9 273.2 -24.2Q273.2 -31.4 276.55 -37.05Q279.9 -42.7 285.7 -46.05Q291.5 -49.4 298.6 -49.4Q305.6 -49.4 310.95 -46.25Q316.3 -43.1 319.35 -37.65Q322.4 -32.2 322.4 -25.3Q322.4 -24 322.25 -22.65Q322.1 -21.3 321.7 -19.6L281.1 -19.5V-29.3L315.6 -29.4L310.3 -25.3Q310.1 -29.6 308.75 -32.5Q307.4 -35.4 304.85 -36.95Q302.3 -38.5 298.6 -38.5Q294.7 -38.5 291.8 -36.75Q288.9 -35 287.35 -31.85Q285.8 -28.7 285.8 -24.4Q285.8 -20 287.45 -16.75Q289.1 -13.5 292.2 -11.75Q295.3 -10 299.4 -10Q303.1 -10 306.1 -11.25Q309.1 -12.5 311.3 -15L319 -7.3Q315.5 -3.2 310.45 -1.1Q305.4 1 299.5 1ZM342.2 0 324.1 -48.3H337.3L349.1 -13.2L345.1 -13.1L357.2 -48.3H366.7L378.8 -13.1L374.8 -13.2L386.6 -48.3H399.8L381.8 0H372.3L360.1 -33.4H363.8L351.6 0Z" class="wm"/></g></g></g></svg></span><span><a class="dc-pill on" href="#" onclick="pycmd('duecrew:period:today'); return false;">Today</a><a class="dc-pill" href="#" onclick="pycmd('duecrew:period:week'); return false;">Week</a><a class="dc-pill" href="#" onclick="pycmd('duecrew:period:decks'); return false;">Decks</a><a class="dc-pill" href="#" onclick="pycmd('duecrew:period:squads'); return false;">Squads</a><a class="dc-pill" href="#" onclick="pycmd('duecrew:period:plans'); return false;">Plans</a></span></div><div id="cb-board"></div><table><tr><th></th><th></th><th><a class="on" href="#" onclick="pycmd('duecrew:sort:reviews'); return false;"><span class="hi">&#128218;</span><span class="hl">Reviews</span> &#9662;</a></th><th><a class="" href="#" onclick="pycmd('duecrew:sort:time'); return false;"><span class="hi">&#9201;</span><span class="hl">Time</span></a></th><th><a class="" href="#" onclick="pycmd('duecrew:sort:retention'); return false;"><span class="hi">&#127919;</span><span class="hl">Retention</span></a></th><th><a class="" href="#" onclick="pycmd('duecrew:sort:streak'); return false;"><span class="hi">&#128293;</span><span class="hl">Streak</span></a></th><th></th></tr><tr class=""><td class="rk">&#129351;</td><td class="nm"><a class="dc-pl" href="#" title="Open profile" onclick="pycmd('duecrew:profile:dre'); return false;" oncontextmenu="pycmd('duecrew:rowmenu:dre'); return false;">Dre</a></td><td class="n">700</td><td class="n">2h 04m</td><td class="n">93.1%</td><td class="n">41</td><td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" onclick="pycmd('duecrew:cheerpick:dre'); return false;">&#127881;</a></td></tr><tr class=""><td class="rk">&#129352;</td><td class="nm"><a class="dc-pl" href="#" title="Open profile" onclick="pycmd('duecrew:profile:marisa'); return false;" oncontextmenu="pycmd('duecrew:rowmenu:marisa'); return false;">Marisa K.</a> <span class="chip exam">exam Fri</span><div class="dc-stw"><span class="dc-st" title="Step 2 in 30 days">Step 2 in 30 days</span></div></td><td class="n">640</td><td class="n">1h 37m</td><td class="n">88.4%</td><td class="n">17</td><td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" onclick="pycmd('duecrew:cheerpick:marisa'); return false;">&#127881;</a></td></tr><tr class="you"><td class="rk">&#129353;</td><td class="nm"><a class="dc-pl" href="#" title="See what your crew sees" onclick="pycmd('duecrew:profile:sam'); return false;">Sammy</a></td><td class="n">246</td><td class="n">38m</td><td class="n">89.4%</td><td class="n">1</td><td class="chc"></td></tr><tr class=""><td class="rk">#4</td><td class="nm"><a class="dc-pl" href="#" title="Open profile" onclick="pycmd('duecrew:profile:noah'); return false;" oncontextmenu="pycmd('duecrew:rowmenu:noah'); return false;">Noah</a> <span class="chip">back today</span></td><td class="n">118</td><td class="n">22m</td><td class="n">88.0%</td><td class="n">1</td><td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" onclick="pycmd('duecrew:cheerpick:noah'); return false;">&#127881;</a></td></tr><tr class=""><td class="rk">&mdash;</td><td class="nm"><a class="dc-pl" href="#" title="Open profile" onclick="pycmd('duecrew:profile:priya'); return false;" oncontextmenu="pycmd('duecrew:rowmenu:priya'); return false;">Priya</a> <span class="chip">away · back Sep 6</span></td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" onclick="pycmd('duecrew:cheerpick:priya'); return false;">&#127881;</a></td></tr><tr class="dim"><td class="rk">&mdash;</td><td class="nm"><a class="dc-pl" href="#" title="Open profile" onclick="pycmd('duecrew:profile:theo'); return false;" oncontextmenu="pycmd('duecrew:rowmenu:theo'); return false;">Theo</a> <span class="dc-note">&middot; on a break</span></td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" onclick="pycmd('duecrew:cheerpick:theo'); return false;">&#127881;</a></td></tr></table><div class="dc-foot"><span class="fl"><a class="pb on" href="#" title="A dot by your name for the next hour" onclick="pycmd('duecrew:live'); return false;">I&rsquo;m studying</a><a class="pb" href="#" title="Rounds and breaks with your crew" onclick="pycmd('duecrew:roomopen'); return false;">Open a room</a><a href="#" title="Friends" onclick="pycmd('duecrew:crewmenu'); return false;">Crew &#9662;</a><a href="#" title="As text or a picture" onclick="pycmd('duecrew:sharemenu'); return false;">Share &#9662;</a></span><span class="sp"></span><span class="fr">Updated just now<a class="ic" href="#" title="Refresh" onclick="pycmd('duecrew:refresh'); return false;">&#8635;</a><a class="ic" href="#" title="Settings" onclick="pycmd('duecrew:settings'); return false;">&#9881;&#xFE0E;</a></span></div></div>
+    </center>
+    <p class="cap">Anki › Decks, under the deck list. The board and its rows are the add-on's own markup.</p>
+  </section>
+
+  <section class="grid2" aria-labelledby="h-strip" style="display:grid;gap:10px">
+    <h2 id="h-strip">All three at 360 px</h2>
+    <div class="strip">
+      <figure><div id="w-pip"></div><figcaption><b>Pip</b> carries your cards home, one at a time.</figcaption></figure>
+      <figure><div id="w-daylings"></div><figcaption><b>Daylings</b>: each day wakes up when it comes.</figcaption></figure>
+      <figure><div id="w-scout"></div><figcaption><b>Scout</b> climbs back one step a day.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="notes" aria-labelledby="h-notes">
+    <h2 id="h-notes">How it behaves</h2>
+    <ul>
+      <li>Idle motion is CSS only: breathing, a blink every 6 s, a slow wave, Zs while resting. JS runs only while progress moves, then stops.</li>
+      <li>In Anki the board sits on the Decks screen, so progress made while reviewing plays back when you return: the character catches up to the new count.</li>
+      <li>A missed day is a low, flat day before today (the logo's day off), and the end moves a day later. Nothing turns warm or red.</li>
+      <li>Reduced motion (the system setting, or the switch above) shows one still frame per state that still tells the story.</li>
+      <li>Port: <code>comeback.js</code> and <code>comeback.css</code>. <code>Comeback.mount(el, model)</code> returns <code>set</code>, <code>review(n)</code> and <code>cheer(who)</code>; <code>draw(model)</code> and <code>words(model)</code> are pure.</li>
+    </ul>
+  </section>
+</main>
+
+<script src="comeback.js"></script>
+<script>
+(() => {
+  const root = document.documentElement;
+  const $ = id => document.getElementById(id);
+  const ACC = { // light accent, ink on it, you-row, then the same for dark (board.ACCENTS)
+    green: ['#2e7d32', '#ffffff', '#e9f2e9', '#7cc47f', '#122912', '#2c372b'],
+    blue: ['#1e5fb4', '#ffffff', '#e8f0fb', '#7fb2f0', '#0b1f3a', '#263244'],
+    purple: ['#6b3fb5', '#ffffff', '#f0eafb', '#b89cf0', '#22143d', '#322a46'],
+    teal: ['#0f766e', '#ffffff', '#e5f4f2', '#7dd3c8', '#0b2a28', '#22383a'],
+    amber: ['#a35f00', '#ffffff', '#fbf1e2', '#e0a458', '#2d1d05', '#3d3323'],
+    rose: ['#b03052', '#ffffff', '#fbe9ee', '#f08fa8', '#3a1220', '#3f2a31'],
+  };
+  const PRESETS = {
+    away: { state: 'away', day: 0, done: 0, off: 0, cheers: [] },
+    start: { state: 'start', day: 0, done: 0, off: 0, cheers: [] },
+    work: { state: 'work', day: 2, done: 0, off: 0, cheers: [] },
+    rest: { state: 'rest', day: 2, off: 0, cheers: [] },
+    missed: { state: 'missed', day: 3, done: 0, off: 1, cheers: [] },
+    caught: { state: 'caught', day: 20, off: 0, cheers: [{ who: 'D' }, { who: 'M' }] },
+  };
+  const STATES = [['away', 'Before you go'], ['start', 'Starting'], ['work', 'Working'], ['rest', "Today's done"], ['missed', 'Missed a day'], ['caught', 'Caught up']];
+  const KINDS = [['pip', 'Pip'], ['daylings', 'Daylings'], ['scout', 'Scout']];
+  const CREW = ['D', 'M', 'N'];
+  let kind = 'pip', accent = 'green', still = false, crew = 0;
+  let base = { total: 912, usual: 150, days: 5 };
+
+  function seg(id, items, current, pick) {
+    const g = $(id);
+    g.innerHTML = items.map(([v, t]) => `<button type="button" data-v="${v}" aria-pressed="${v === current}">${t}</button>`).join('');
+    g.onclick = e => { const b = e.target.closest('button'); if (b) { mark(id, b.dataset.v); pick(b.dataset.v); } };
+  }
+  const mark = (id, v) => $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+
+  // the length picker under the drawing while starting
+  function lengthPicker(m, el) {
+    if (m.state !== 'start') { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="cb-len"><span class="pills">${[3, 5, 10].map(d =>
+      `<button type="button" class="pill${m.days === d ? ' on' : ''}" data-d="${d}">${d} days</button>`).join('')}</span>
+      <span class="step"><button type="button" data-step="-1" aria-label="One day fewer">&minus;</button><b>${m.days} days</b><button type="button" data-step="1" aria-label="One day more">+</button></span>
+      <span>on top of your usual ${m.usual}</span><span class="sp"></span><button type="button" class="go">Start</button></div>`;
+    el.onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.d) setDays(+b.dataset.d);
+      else if (b.dataset.step) setDays(Math.max(3, Math.min(21, m.days + +b.dataset.step)));
+      else if (b.classList.contains('go')) apply({ state: 'work', day: 0, done: 0, off: 0 });
+    };
+  }
+
+  const opts = { still: () => still, actions: lengthPicker };
+  const W = {
+    board: Comeback.mount($('cb-board'), { kind, ...base, ...PRESETS.work }, opts),
+    pip: Comeback.mount($('w-pip'), { kind: 'pip', ...base, ...PRESETS.work }, opts),
+    daylings: Comeback.mount($('w-daylings'), { kind: 'daylings', ...base, ...PRESETS.work }, opts),
+    scout: Comeback.mount($('w-scout'), { kind: 'scout', ...base, ...PRESETS.work }, opts),
+  };
+  const all = f => Object.values(W).forEach(f);
+  const sync = () => {
+    const m = W.board.model;
+    mark('state', m.state);
+    mark('len', String(m.days));
+    $('review').disabled = !/^(work|missed)$/.test(m.state);
+    $('next').disabled = m.state !== 'rest';
+  };
+  function apply(patch) { all(w => w.set(patch)); sync(); }
+  function setDays(d) { base.days = d; apply({ days: d }); }
+
+  seg('kind', KINDS, kind, v => { kind = v; W.board.set({ kind }); });
+  seg('len', [['3', '3 days'], ['5', '5'], ['10', '10'], ['21', '21']], '5', v => setDays(+v));
+  seg('state', STATES, 'work', v => apply(Object.assign({}, PRESETS[v])));
+  $('review').onclick = () => all(w => w.review(40, sync));
+  $('next').onclick = () => { const m = W.board.model; apply({ state: 'work', day: m.day + 1, done: 0 }); };
+  $('cheer').onclick = () => { const who = CREW[crew++ % CREW.length]; all(w => w.cheer(who)); };
+
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const dark = () => (root.dataset.theme ? root.dataset.theme === 'dark' : mq.matches);
+  function paint() {
+    const a = ACC[accent], d = dark() ? 3 : 0;
+    root.style.setProperty('--accent', a[d]); root.style.setProperty('--accent-ink', a[d + 1]); root.style.setProperty('--you-bg', a[d + 2]);
+    $('accent').querySelectorAll('button').forEach(b => b.style.setProperty('--c', ACC[b.dataset.v][d]));
+  }
+  $('accent').innerHTML = Object.keys(ACC).map(k => `<button type="button" data-v="${k}" aria-label="${k}" aria-pressed="${k === accent}"></button>`).join('');
+  $('accent').onclick = e => { const b = e.target.closest('button'); if (b) { accent = b.dataset.v; mark('accent', accent); paint(); } };
+  seg('theme', [['', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], '', v => { if (v) root.dataset.theme = v; else delete root.dataset.theme; paint(); });
+  seg('motion', [['on', 'On'], ['off', 'Reduced']], 'on', v => { still = v === 'off'; document.body.classList.toggle('still', still); });
+  mq.addEventListener('change', paint);
+  window.pycmd = () => false;   // the board's own links talk to Anki; here they do nothing
+  document.querySelector('#due-crew').addEventListener('click', e => { if (e.target.closest('a[href="#"]')) e.preventDefault(); });
+  paint(); sync();
+})();
+</script>

@@ -1,0 +1,49 @@
+/* Comeback: the widget's own styles. The host sets the colour tokens on .cb
+   (or an ancestor): --accent, --accent-ink, --ink, --muted, --line, --card,
+   --warm, --cheek. In the add-on they map onto the board's --dc-* tokens. */
+.cb { display: grid; gap: 2px; text-align: left; }
+.cb-top { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap;
+  font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.cb-top b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.cb-art svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cb-act:empty { display: none; }
+
+/* fills and strokes: tokens only */
+.cb .a { fill: var(--accent); } .cb .ai { fill: var(--accent-ink); } .cb .ln { fill: var(--line); }
+.cb .ink { fill: var(--ink); } .cb .mu { fill: var(--muted); } .cb .wm { fill: var(--warm); }
+.cb .cd { fill: var(--card); } .cb .ck { fill: var(--cheek, transparent); }
+.cb .s-ai, .cb .s-ink, .cb .s-mu, .cb .s-wm { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.cb .s-ai { stroke: var(--accent-ink); } .cb .s-ink { stroke: var(--ink); }
+.cb .s-mu { stroke: var(--muted); } .cb .s-wm { stroke: var(--warm); }
+.cb .cb-who { fill: var(--accent-ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 700; }
+
+/* idle loops: slow, and every period divides 12 s, so a redraw can resume
+   them in phase (mount sets --cb-t to minus the clock, mod 12 s) */
+.cb .k-breathe { animation: cb-breathe 4s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.cb .k-blink { animation: cb-blink 6s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+.cb .k-wave { animation: cb-wave 1.5s ease-in-out infinite alternate; }
+.cb .k-sway { animation: cb-sway 6s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.cb .k-hop { animation: cb-hop 1.5s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.cb .k-z { animation: cb-z 3s ease-in-out infinite; }
+.cb .k-fall { animation: cb-fall 3s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+.cb .k-flag { animation: cb-flag 2s ease-in-out infinite alternate; }
+.cb .k-bob { animation: cb-bob 3s ease-in-out infinite; }
+.cb .k-pop { animation: cb-pop 0.6s cubic-bezier(.3, 1.6, .5, 1) both; transform-box: fill-box; transform-origin: 50% 100%; }
+.cb [class^="k-"]:not(.k-pop) { animation-delay: calc(var(--cb-t, 0s) - var(--d, 0s)); }
+
+@keyframes cb-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 0.97); } }
+@keyframes cb-blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
+@keyframes cb-wave { from { transform: rotate(-12deg); } to { transform: rotate(16deg); } }
+@keyframes cb-sway { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+@keyframes cb-hop { 0%, 100% { transform: translateY(0) scale(1.04, 0.95); } 12% { transform: translateY(0) scale(1, 1); }
+  45% { transform: translateY(-9px) scale(0.98, 1.03); } 80% { transform: translateY(0) scale(1, 1); } }
+@keyframes cb-z { 0% { transform: translate(0, 3px); opacity: 0; } 30%, 60% { opacity: 1; } 100% { transform: translate(2px, -5px); opacity: 0; } }
+@keyframes cb-fall { 0% { transform: translateY(-6px) rotate(0deg); opacity: 0; } 20%, 70% { opacity: 1; }
+  100% { transform: translateY(14px) rotate(160deg); opacity: 0; } }
+@keyframes cb-flag { from { transform: scaleX(1); } to { transform: scaleX(0.82); } }
+@keyframes cb-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes cb-pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* still: one frame that tells the whole story */
+.cb.still [class^="k-"] { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .cb [class^="k-"] { animation: none !important; } }
