@@ -440,14 +440,22 @@ def _work_out(pid):
     ld = P.load(idx, doc, swap)
     units = P.units(doc)
 
-    # the hero: started cards Anki won't show me before the aim, under my target by then (FSRS only)
-    day, name, k = T.aim(doc.get("events"), today)
-    out["aim"] = {"day": day, "name": name, "in": k}
-    if _fsrs(col) and plan and sday:
-        last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({_in(plan)}) GROUP BY cid"))
+    # the hero: started cards Anki won't show me before the aim, under my target by then (FSRS only).
+    # The dates that prep for the event, when it has some (its name on the box); else the
+    # whole plan, and the box goes by the day
+    day, name, k, eid = T.aim(doc.get("events"), today)
+    prep = T.prep_units(units, eid)
+    aimed = plan
+    if prep:
+        aimed = set()
+        for uid in prep:
+            aimed |= set(ms.get(uid) or ())
+    out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep)}
+    if _fsrs(col) and aimed and sday:
+        last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({_in(aimed)}) GROUP BY cid"))
         cards = {}
         for cid, ctype, queue, due, ivl, data in col.db.all(
-                f"SELECT id, type, queue, due, ivl, data FROM cards WHERE id IN ({_in(plan)}) AND type != 0 AND queue != -1"):
+                f"SELECT id, type, queue, due, ivl, data FROM cards WHERE id IN ({_in(aimed)}) AND type != 0 AND queue != -1"):
             if cid not in last:
                 continue
             try:
@@ -530,7 +538,14 @@ def study(pid, key):
     view = ((_state.get("insights") or {}).get(pid) or {}).get("view") or {}
     if key == "h":
         cids, aim = view.get("hero") or [], view.get("aim") or {}
-        title = f"Before {aim['name']}" if aim.get("name") else "This week"
+        if aim.get("scoped") and aim.get("name"):
+            title = f"Before {aim['name']}"
+        else:
+            try:
+                d = datetime.date.fromisoformat(str(aim.get("day")))
+                title = f"Before {d:%a} {d.day}"
+            except ValueError:
+                title = "This week"
     else:
         rows = view.get("rows") or []
         r = rows[int(key)] if str(key).isdigit() and int(key) < len(rows) else None

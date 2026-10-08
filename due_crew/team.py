@@ -59,14 +59,20 @@ def recall(t, s, decay=0.5):
 
 
 def aim(events, today):
-    """(day, name, days to it) the hero aims at: the plan's next event in
-    AIM_DAYS, else (today + 7, "", 7)."""
+    """(day, name, days to it, event id) the hero aims at: the plan's next
+    event in AIM_DAYS, else (today + 7, "", 7, "")."""
     t = S.d(today)
-    soon = sorted((str(e.get("day") or ""), str(e.get("name") or "")) for e in events or []
+    soon = sorted((str(e.get("day") or ""), str(e.get("name") or ""), str(e.get("id") or "")) for e in events or []
                   if isinstance(e, dict) and today < str(e.get("day") or "") <= S.iso(t + datetime.timedelta(days=AIM_DAYS)))
     if soon:
-        return soon[0][0], soon[0][1], (S.d(soon[0][0]) - t).days
-    return S.iso(t + datetime.timedelta(days=7)), "", 7
+        return soon[0][0], soon[0][1], (S.d(soon[0][0]) - t).days, soon[0][2]
+    return S.iso(t + datetime.timedelta(days=7)), "", 7, ""
+
+
+def prep_units(units, eid):
+    """The ids of the dates that prep for the event (a date's `for`); the
+    hero counts only their cards when there are any."""
+    return [u["id"] for u in units if eid and u.get("for") == eid]
 
 
 def right_days(answers):

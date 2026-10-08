@@ -718,6 +718,9 @@ add-on.
   plan's started cards Anki won't show me before its next event (in 21
   days, else a week out) that FSRS has under my target by then
   (`team.recall`, the card's `s` and `decay`), with Study; FSRS on only.
+  When dates prep for that event (`for`), only their cards, and the box
+  wears its name; else the whole plan, and the box goes by the day
+  ("Before Tue 13"), since the cards aren't all for it.
   Not sticking yet: per topic (20+ reviewed in 14 days), cards never right
   in a review yet, as of now, plus those forgotten after being right, the
   source from the tags (`team.source`), Study; no links. Behind: a line

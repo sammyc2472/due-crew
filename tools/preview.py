@@ -182,7 +182,7 @@ sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.rend
 # 3.7.9: Insights, with the numbers of Sam's own snapshot (Wed 7 Oct)
 _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                                 "days": [84, 80, 88, 89, 85, 75, 94, 79, 82, 88, 91, 84, 94, 88][::-1]},
-        "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6}, "hero": list(range(53)), "behind": 0,
+        "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6, "scoped": True}, "hero": list(range(53)), "behind": 0,
         "rows": [{"name": "Direct Sympathomimetics", "src": "Bootcamp › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
                  {"name": "Sympathomimetics", "src": "SketchyPharm › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
                  {"name": "Cholinomimetics", "src": "SketchyPharm › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
@@ -195,6 +195,9 @@ _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
         "fsrs": {"right": 85, "n": 486, "target": 90}}
 sections.append("<h3>3.7.9: Insights (Sam's numbers)</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": _INS})], "offers": []}))
+sections.append("<h3>3.7.9: Insights, an event no date preps for (by the day)</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": dict(
+        _INS, aim=dict(_INS["aim"], scoped=False))})], "offers": []}))
 sections.append("<h3>3.7.9: Insights, nothing yet</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": {}})], "offers": []}))
 sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.render(

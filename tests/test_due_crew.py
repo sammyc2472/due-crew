@@ -6525,9 +6525,13 @@ def test_insights_379():
     # ---- pure ----
     check("recall: FSRS's curve, 90% at t = s, and FSRS-6's own decay",
           abs(T.recall(10, 10) - 0.9) < 1e-9 and abs(T.recall(10, 10, 0.2) - 0.9) < 1e-9 and T.recall(20, 10) < 0.9)
-    ev = [{"day": "2026-09-05", "name": "Quiz"}, {"day": "2026-10-30", "name": "Far"}, {"day": "2026-08-30", "name": "Gone"}]
-    check("aim: the next event in 3 weeks, else a week out", T.aim(ev, "2026-09-01") == ("2026-09-05", "Quiz", 4)
-          and T.aim(ev[1:], "2026-09-01") == ("2026-09-08", "", 7))
+    ev = [{"id": "q", "day": "2026-09-05", "name": "Quiz"}, {"id": "f", "day": "2026-10-30", "name": "Far"},
+          {"id": "g", "day": "2026-08-30", "name": "Gone"}]
+    check("aim: the next event in 3 weeks, else a week out", T.aim(ev, "2026-09-01") == ("2026-09-05", "Quiz", 4, "q")
+          and T.aim(ev[1:], "2026-09-01") == ("2026-09-08", "", 7, ""))
+    check("aim: the dates that prep for it, none without an event",
+          T.prep_units([{"id": "a", "for": "q"}, {"id": "b"}, {"id": "c", "for": "f"}], "q") == ["a"]
+          and T.prep_units([{"id": "a", "for": "q"}], "") == [])
     check("hero: not shown before the aim and under target, least likely first",
           T.hero({1: (0.95, False), 2: (0.5, False), 3: (0.6, True), 4: (0.7, False)}, 0.9) == [2, 4])
     check("source: the resource and the part above the topic",
@@ -6552,7 +6556,7 @@ def test_insights_379():
     # ---- the board ----
     bad = "<img src=x onerror=alert(1)>"
     view = {"target": 90, "right": {"now": [86, 100], "before": [87, 100], "days": [80, None, 90]},
-            "aim": {"day": "2026-09-04", "name": bad, "in": 3}, "hero": [1, 2, 3], "behind": 12,
+            "aim": {"day": "2026-09-04", "name": bad, "in": 3, "scoped": True}, "hero": [1, 2, 3], "behind": 12,
             "rows": [{"name": bad, "src": bad, "of": 27, "stuck": 9, "forgot": 1, "cids": [1]}],
             "week": {"past": [("2026-08-31", 40)], "ahead": [("2026-09-01", 120, 100, 50), ("2026-09-04", 200, 200, 30)],
                      "avg": 160, "was": 40, "today_done": 30},
@@ -6569,6 +6573,10 @@ def test_insights_379():
     check("insights: Optimize FSRS and Not now",
           "come back 85% right, not the 90% Anki aims for" in html and "duecrew:planinsfsrs:p1" in html
           and "duecrew:planinsfsrsno:p1" in html)
+    loose = board._insights_html("p1", dict(view, aim={"day": "2026-09-04", "name": "Quiz", "in": 3, "scoped": False}))
+    check("insights: an event no date preps for: the box goes by the day, not the event's name",
+          "Before Fri 4 &middot; 3 days" in loose and "Quiz &middot;" not in loose
+          and "3 cards Anki won&rsquo;t show you before Fri" in loose, loose[:700])
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html("p1", {"right": {"now": [1, 2]}}))
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")
@@ -6629,8 +6637,21 @@ def test_insights_379():
         check("glue: not behind", v.get("behind") == 0)
         dc._on_js(False, "duecrew:planinsstudy:pI:h", DeckBrowser())
         dc._on_js(False, "duecrew:planinsstudy:pI:0", DeckBrowser())
-        check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew · Before Quiz", list(range(210, 220))),
+        check("glue: no date preps for the quiz: the whole plan, the box by the day", v["aim"]["scoped"] is False)
+        check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew · Before Fri 4", list(range(210, 220))),
               ("Due Crew · Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
+        # the quiz's prep dates: only their cards, the box by the event's name
+        plan["doc"]["units"][1]["for"] = "q"  # Later: nothing started, so nothing to study before it
+        _state["insights"].pop("pI", None)
+        v2 = TF.insights("pI")
+        check("glue: an event with prep dates counts only theirs", v2["aim"]["scoped"] and not v2.get("hero"), v2.get("hero"))
+        plan["doc"]["units"][0]["for"] = "q"
+        _state["insights"].pop("pI", None)
+        v3 = TF.insights("pI")
+        built.clear()
+        dc._on_js(False, "duecrew:planinsstudy:pI:h", DeckBrowser())
+        check("glue: Renal preps for the quiz too: its weak cards, the deck by the event's name",
+              v3.get("hero") == list(range(210, 220)) and built == [("Due Crew · Before Quiz", list(range(210, 220)))], built)
         dc._on_js(False, "duecrew:planinsfsrsno:pI", DeckBrowser())
         check("glue: Not now puts Optimize FSRS away", pc.get("ins_fsrs_hide") and not TF.insights("pI").get("fsrs"))
         opened = []

@@ -1616,12 +1616,15 @@ def _insights_html(pid, v):
     hero = v.get("hero") or []
     if hero:
         k = int(aim.get("in") or 7)
-        when = _ins_day(aim.get("day"))[0]
-        lab = (f'{e(str(aim["name"]))} &middot; {when} {_ins_day(aim.get("day"))[1]} &middot; {k} day{"s" if k != 1 else ""}'
-               if aim.get("name") else "The next 7 days")
+        when, dn = _ins_day(aim.get("day"))
+        days = f'{k} day{"s" if k != 1 else ""}'
+        # 3.7.9: named for the event only when its prep dates are what's counted; else by the day
+        scoped = bool(aim.get("scoped") and aim.get("name"))
+        lab = f'{e(str(aim["name"]))} &middot; {when} {dn} &middot; {days}' if scoped else f'Before {when} {dn} &middot; {days}'
+        whose = "this plan&rsquo;s prep dates for it" if scoped else "this plan"
         out += (f'<div class="ihero"><div class="k">{lab}</div>'
-                f'<div class="t" title="Started cards of this plan that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
-                f'{len(hero):,} card{"s" if len(hero) != 1 else ""} Anki won&rsquo;t show you before {when if aim.get("name") else "next week"}</div>'
+                f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
+                f'{len(hero):,} card{"s" if len(hero) != 1 else ""} Anki won&rsquo;t show you before {when}</div>'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"planinsstudy:{pid}:h")}">Study {len(hero):,}</a></div>')
     if int(v.get("behind") or 0):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
