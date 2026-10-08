@@ -95,7 +95,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json`, `known.json`. A plan's team shares only
+  checkpoint scores, `wrap.json`. A plan's team shares only
   that I showed up, my questions and answers, and bingo stamps; never a
   number, never weak spots.
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
