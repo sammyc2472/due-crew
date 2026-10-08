@@ -8,11 +8,13 @@ rows: the week's one card); never a number. The board's refresh carries a few co
 (`session["teams"]`); the tab itself is one request when it opens, and each
 click is one more. Showed-up days and squares ride the sync (`for_sync`).
 
-Insights are mine alone: worked out here from my reviews of the plan's
-cards (team.insights), never sent. Study builds Anki's filtered deck of the
-cards I missed in a topic; Re-watch opens the author's watch link; Ask goes
-to Team with the topic filled in."""
+Insights are mine alone (3.7.9): worked out here from my reviews of the
+plan's cards and Anki's own memory model, never sent. Study builds Anki's
+filtered deck of the hero's cards or a topic's; Optimize FSRS opens the
+deck's options; the line can be put away for 30 days."""
 
+import datetime
+import json
 import time
 import traceback
 from urllib.parse import unquote
@@ -22,6 +24,7 @@ from aqt.utils import tooltip
 
 from . import app
 from . import plans as P
+from . import schedule as S
 from . import team as T
 from .app import _bg, _state, cfg, client
 from .backend.shapes import TransportError
@@ -374,57 +377,184 @@ def open_bingo(pid, on=True):
 # ---- Insights ----
 
 def insights(pid):
-    """The table, worked out at most every ten minutes. Main thread."""
+    """What the Insights tab draws, worked out at most every ten minutes. Main thread."""
     have = (_state.get("insights") or {}).get(pid)
     if have and time.time() - have["at"] < INSIGHTS_FRESH:
-        return have["rows"]
-    rows = []
+        return have["view"]
+    view = {}
     try:
-        rows = _work_out(pid)
+        view = _work_out(pid)
     except Exception:
         traceback.print_exc()
-    _state.setdefault("insights", {})[pid] = {"at": time.time(), "rows": rows}
-    return rows
+    _state.setdefault("insights", {})[pid] = {"at": time.time(), "view": view}
+    return view
+
+
+def _in(ids):
+    return ",".join(str(int(c)) for c in ids) or "0"
+
+
+def _target(col, did):
+    try:
+        return float(col.decks.config_dict_for_deck_id(did).get("desiredRetention") or 0.9)
+    except Exception:
+        return 0.9
+
+
+def _fsrs(col):
+    try:
+        return bool(col.get_config("fsrs", False))
+    except Exception:
+        return False
 
 
 def _work_out(pid):
     p = _plan(pid)
     pf = _plans_flow()
     st = pf._state_cfg().get(pid)
-    if not p or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
-        return []
-    idx = P.DeckIndex(mw.col, st["deck_id"])
+    col = mw.col
+    if not p or not st or not col or not pf._deck_ok(col, st.get("deck_id")):
+        return {}
+    did = int(st["deck_id"])
+    idx = P.DeckIndex(col, did)
     swap = pf._swap(st)
-    topics = T.topic_list(p["doc"])
-    if not topics:
-        return []
-    dids = ",".join(str(d) for d in _deck_ids(pid)) or "0"
-    cutoff = int(mw.col.sched.day_cutoff)
-    # review and relearning answers (learning steps aren't a slip), 28 days
-    answers = mw.col.db.all(
-        f"SELECT r.cid, CAST((? - r.id / 1000) / 86400 AS INTEGER), r.ease FROM revlog r "
-        f"WHERE r.id >= ? AND r.ease > 0 AND r.type IN (1, 2) "
-        f"AND r.cid IN (SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids}))",
-        cutoff - 1, (cutoff - 2 * T.DAYS * 86400) * 1000)
-    units = {u["id"]: u for u in P.units(p["doc"])}
-    return T.insights(topics, lambda t: idx.tag_cards(P.swapped(t, swap)), answers,
-                      todo_of=lambda uid: (units.get(uid) or {}).get("todo"))
+    doc = p["doc"]
+    today = pf._today()
+    cutoff = int(col.sched.day_cutoff)
+    sday = int(getattr(col.sched, "today", 0) or 0)
+    target = _target(col, did)
+    deck = _in(idx.cards)
+    since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
+    out = {"target": int(round(100 * target))}
 
+    # the header: right on this deck's reviews, first answer of each card each day
+    out["right"] = T.right_days(col.db.all(
+        f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
+        f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)))
 
-def _row(pid, i):
-    """A row of the table on screen, by its place."""
-    rows = ((_state.get("insights") or {}).get(pid) or {}).get("rows") or []
-    return rows[int(i)] if str(i).isdigit() and int(i) < len(rows) else None
+    # the plan's own cards, and what each date asks of me (plans.load)
+    ms = P.unit_matches(idx, doc, swap)
+    plan = set()
+    for v in ms.values():
+        plan |= set(v)
+    ld = P.load(idx, doc, swap)
+    units = P.units(doc)
+
+    # the hero: started cards Anki won't show me before the aim, under my target by then (FSRS only).
+    # The dates that prep for the event, when it has some (its name on the box); else the
+    # whole plan, and the box goes by the day
+    day, name, k, eid = T.aim(doc.get("events"), today)
+    prep = T.prep_units(units, eid)
+    aimed = plan
+    if prep:
+        aimed = set()
+        for uid in prep:
+            aimed |= set(ms.get(uid) or ())
+    out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep)}
+    if _fsrs(col) and aimed and sday:
+        last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({_in(aimed)}) GROUP BY cid"))
+        cards = {}
+        for cid, ctype, queue, due, ivl, data in col.db.all(
+                f"SELECT id, type, queue, due, ivl, data FROM cards WHERE id IN ({_in(aimed)}) AND type != 0 AND queue != -1"):
+            if cid not in last:
+                continue
+            try:
+                mem = json.loads(data or "{}")
+            except ValueError:
+                mem = {}
+            s = float(mem.get("s") or max(int(ivl), 1))
+            ago = (cutoff - int(last[cid]) // 1000) // 86400
+            shown = queue in (1, 3, 4) or (queue == 2 and int(due) - sday < k)
+            cards[cid] = (T.recall(ago + k, s, mem.get("decay")), shown)
+        out["hero"] = T.hero(cards, target)
+
+    # not sticking yet: this window's reviews, never right yet, or forgotten after being right
+    reviewed, miss_last = set(), {}
+    for cid, rid, ease in col.db.all(f"SELECT cid, id, ease FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
+                                     f"AND cid IN ({deck})", since(T.DAYS)):
+        reviewed.add(cid)
+        if ease == 1:
+            miss_last[cid] = max(miss_last.get(cid, 0), rid)
+    first_right = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE type = 1 AND ease > 1 AND cid IN ({_in(reviewed)}) "
+                                  f"GROUP BY cid")) if reviewed else {}
+    stuck = reviewed - set(first_right)
+    forgot = {c for c, m in miss_last.items() if c in first_right and first_right[c] < m}
+    out["rows"] = T.not_sticking(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), reviewed, stuck, forgot)
+
+    # behind on the plan (the Plan tab's Catch up; nothing while a catch-up runs)
+    catch = st.get("catch") if str((st.get("catch") or {}).get("until") or "") >= today else None
+    out["behind"] = 0 if catch else sum(sum((ld.get(u["id"]) or [0, 0, 0])[1:]) for u in units
+                                       if str(u.get("opens") or "") < today)
+
+    # my week in minutes, at my own pace in this deck
+    t = S.d(today)
+    days = [S.iso(t + datetime.timedelta(days=i)) for i in range(7)]
+    new = {d: 0 for d in days}
+    for u in units:
+        o = str(u.get("opens") or "")
+        if o in new:
+            sn, op, lk = ld.get(u["id"]) or [0, 0, 0]
+            new[o] += (op + lk) if o == today else lk
+    due = {i: 0 for i in range(7)}
+    if sday:
+        for (dd,) in col.db.all(f"SELECT due FROM cards WHERE id IN ({deck}) AND queue = 2"):
+            i = max(int(dd) - sday, 0)
+            if i < 7:
+                due[i] += 1
+    n_ans, ms_ans = col.db.first(f"SELECT count(), total(time) FROM revlog WHERE id >= ? AND type IN (1, 2) AND ease > 0 "
+                                 f"AND cid IN ({deck})", since(T.DAYS)) or (0, 0)
+    firsts = dict(col.db.all(f"SELECT cid, min(id) FROM revlog WHERE cid IN ({deck}) GROUP BY cid "
+                             f"HAVING min(id) >= ? AND min(id) < ?", since(28), since(7)))
+    secs_new = None
+    if len(firsts) >= T.NEW_MIN:
+        spent = 0
+        for cid, rid, ms_ in col.db.all(f"SELECT cid, id, time FROM revlog WHERE ease > 0 AND cid IN ({_in(firsts)})"):
+            if 0 <= rid - firsts[cid] < 7 * 86400 * 1000:
+                spent += ms_
+        secs_new = spent / 1000.0 / len(firsts)
+    past = col.db.all(f"SELECT CAST((? - id / 1000) / 86400 AS INTEGER), total(time) FROM revlog "
+                      f"WHERE id >= ? AND ease > 0 AND cid IN ({deck}) GROUP BY 1", cutoff - 1, since(7))
+    mins = {int(a): int(round(m / 60000.0)) for a, m in past}
+    out["week"] = T.week([(S.iso(t - datetime.timedelta(days=a)), mins.get(a, 0)) for a in range(7, 0, -1)],
+                         [(d, new[d], due[i]) for i, d in enumerate(days)],
+                         secs_new, (ms_ans / 1000.0 / n_ans) if n_ans >= 200 else None)
+    if out["week"]:
+        out["week"]["today_done"] = mins.get(0, 0)
+
+    # Optimize FSRS: my newest cards against my target (put away for 30 days)
+    hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
+    if _fsrs(col) and time.time() - hide > T.HIDE_DAYS * 86400:
+        try:
+            right, n = col.db.first(f"SELECT total(ease > 1), count() FROM revlog WHERE id >= ? AND type = 1 AND ease > 0 "
+                                    f"AND lastIvl BETWEEN 1 AND 3 AND cid IN ({deck})", since(28)) or (0, 0)
+            out["fsrs"] = T.fsrs_gap(int(right or 0), int(n or 0), target)
+        except Exception:
+            traceback.print_exc()
+    return out
 
 
 def study(pid, key):
-    """Anki's filtered deck of the cards I missed in that topic, and into it."""
-    r = _row(pid, key)
-    if not r or not r["cids"] or not mw.col:
+    """Anki's filtered deck of the hero's cards ("h") or a topic's, and into it."""
+    view = ((_state.get("insights") or {}).get(pid) or {}).get("view") or {}
+    if key == "h":
+        cids, aim = view.get("hero") or [], view.get("aim") or {}
+        if aim.get("scoped") and aim.get("name"):
+            title = f"Before {aim['name']}"
+        else:
+            try:
+                d = datetime.date.fromisoformat(str(aim.get("day")))
+                title = f"Before {d:%a} {d.day}"
+            except ValueError:
+                title = "This week"
+    else:
+        rows = view.get("rows") or []
+        r = rows[int(key)] if str(key).isdigit() and int(key) < len(rows) else None
+        cids, title = (r["cids"], r["name"]) if r else ([], "")
+    if not cids or not mw.col:
         return
     pf = _plans_flow()
-    name = pf._deck_name(f"Due Crew · {r['name']}")
-    if pf._filtered(mw.col, name, r["cids"]):
+    name = pf._deck_name(f"Due Crew · {title}")
+    if pf._filtered(mw.col, name, cids):
         pf._after_change()
         did = mw.col.decks.id_for_name(name)
         if did:
@@ -432,20 +562,24 @@ def study(pid, key):
             mw.moveToState("overview")
 
 
-def rewatch(pid, key):
-    r = _row(pid, key)
-    if r and r["url"].startswith("https://"):
-        from aqt.utils import openLink
-        openLink(r["url"])
-
-
-def ask_about(pid, key):
-    """Insights' Ask: Team, with the topic in the box."""
-    r = _row(pid, key)
-    if not r:
+def fsrs(pid, open_it=True):
+    """Optimize FSRS: the plan deck's options (Anki's own button is there),
+    or the line put away for 30 days."""
+    pf = _plans_flow()
+    if not open_it:
+        pc = pf._pcfg()
+        pc["ins_fsrs_hide"] = int(time.time())
+        pf._psave(pc)
+        _state.setdefault("insights", {}).pop(pid, None)
+        app.swap(cfg())
         return
-    _state.setdefault("team_draft", {})[pid] = f"{r['name']}: "
-    show(pid, "team")
+    st = pf._state_cfg().get(pid)
+    if st and mw.col and pf._deck_ok(mw.col, st.get("deck_id")):
+        try:
+            from aqt.deckoptions import display_options_for_deck_id
+            display_options_for_deck_id(int(st["deck_id"]))
+        except Exception:
+            traceback.print_exc()
 
 
 # ---- the sync ----
@@ -514,12 +648,12 @@ def on_message(cmd, parts):
         open_bingo(arg)
     elif cmd == "planteambingoback":
         open_bingo(None, on=False)
-    elif cmd == "planinsstudy" and arg and x.isdigit():
+    elif cmd == "planinsstudy" and arg and (x.isdigit() or x == "h"):
         study(arg, x)
-    elif cmd == "planinswatch" and arg and x.isdigit():
-        rewatch(arg, x)
-    elif cmd == "planinsask" and arg and x.isdigit():
-        ask_about(arg, x)
+    elif cmd == "planinsfsrs" and arg:
+        fsrs(arg)
+    elif cmd == "planinsfsrsno" and arg:
+        fsrs(arg, open_it=False)
     else:
         return False
     return True

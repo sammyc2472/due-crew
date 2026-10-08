@@ -179,6 +179,27 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "waiting": 16}
 sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
+# 3.7.9: Insights, with the numbers of Sam's own snapshot (Wed 7 Oct)
+_INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
+                                "days": [84, 80, 88, 89, 85, 75, 94, 79, 82, 88, 91, 84, 94, 88][::-1]},
+        "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6, "scoped": True}, "hero": list(range(53)), "behind": 0,
+        "rows": [{"name": "Direct Sympathomimetics", "src": "Bootcamp › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
+                 {"name": "Sympathomimetics", "src": "SketchyPharm › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
+                 {"name": "Cholinomimetics", "src": "SketchyPharm › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
+                 {"name": "Muscarinic antagonists", "src": "SketchyPharm › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
+        "week": {"past": [("2026-09-30", 0), ("2026-10-01", 14), ("2026-10-02", 0), ("2026-10-03", 50), ("2026-10-04", 66),
+                          ("2026-10-05", 61), ("2026-10-06", 74)],
+                 "ahead": [("2026-10-07", 130, 145, 0), ("2026-10-08", 204, 204, 133), ("2026-10-09", 237, 242, 122),
+                           ("2026-10-10", 210, 220, 79), ("2026-10-11", 217, 228, 74), ("2026-10-12", 231, 246, 63),
+                           ("2026-10-13", 128, 133, 55)], "avg": 204, "was": 38, "today_done": 46},
+        "fsrs": {"right": 85, "n": 486, "target": 90}}
+sections.append("<h3>3.7.9: Insights (Sam's numbers)</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": _INS})], "offers": []}))
+sections.append("<h3>3.7.9: Insights, an event no date preps for (by the day)</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": dict(
+        _INS, aim=dict(_INS["aim"], scoped=False))})], "offers": []}))
+sections.append("<h3>3.7.9: Insights, nothing yet</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": {}})], "offers": []}))
 sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [], "offers": []}))
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways

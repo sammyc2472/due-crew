@@ -453,8 +453,9 @@ add-on.
   You, the Settings dialog, the site's footer) to /admin › Feedback
   (migration 0014; 2,000 characters, 5 a day, kept a year, deleted with
   the account); Reply mails from Due Crew, the address never shown. No
-  plan surface guesses minutes any more (we can't know a person's pace
-  per deck).
+  plan surface guesses minutes (we can't know a person's pace per deck);
+  since 3.7.9 Insights may show time from the person's own measured pace
+  in this deck, and only then.
 - P7 what's in a day (mock "Picks and Previews"): the Plans tab's day
   details list each date's topics as the site's print does
   (`plans.topics`: a tag under the first `#`/`^` part after its root,
@@ -652,11 +653,7 @@ add-on.
   each member's play the same as on their squad rows (one stamp counts
   everywhere), counts never who; `team.bingo_line` =
   `bingoLine` in builder.js. Insights are mine alone and Anki only
-  (`team.insights`): the plan's topics (a tag's last part as words, merged
-  across resources) I pressed Again on in review or relearning in 14 days,
-  missed of reviewed (cards, 5+), the trend against the 14 before (10
-  points), Study (a filtered deck of those cards), Re-watch (the date's
-  watch link), Ask (Team with the topic in the box). On the site a
+  (3.7.9's below). On the site a
   follower's plan page is Calendar · Team, the authors' newest post above
   the tabs until closed (per browser); authors keep Updates.
 - 3.7.4: a plan team's bingo is the squads' card (one play, stamped
@@ -712,6 +709,28 @@ add-on.
   locked; today and before, not seen) and one bar under its date
   (`board._abar`, the week's biggest is full width); a date's details
   `board._load_words`. No new requests; the site still reads progress.
+- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on Sam's own
+  collection with read-only snapshots): mine alone, Anki only, worked out
+  when the tab opens (`team_flow._work_out`, kept 10 minutes, about 0.2 s
+  on a 35,000-card deck), never sent. Text only where it's counted or is
+  Anki's own memory model. The header: right on the deck's reviews (first
+  answer of each card each day) against the 2 weeks before. The hero: the
+  plan's started cards Anki won't show me before its next event (in 21
+  days, else a week out) that FSRS has under my target by then
+  (`team.recall`, the card's `s` and `decay`), with Study; FSRS on only.
+  When dates prep for that event (`for`), only their cards, and the box
+  wears its name; else the whole plan, and the box goes by the day
+  ("Before Tue 13"), since the cards aren't all for it.
+  Not sticking yet: per topic (20+ reviewed in 14 days), cards never right
+  in a review yet, as of now, plus those forgotten after being right, the
+  source from the tags (`team.source`), Study; no links. Behind: a line
+  with Catch up. Your week in minutes: 7 days as studied, today, and the
+  plan's next days at my own pace (seconds an answer; a new card's first
+  week, from 50+ started 7-28 days ago, put on the day it opens). Optimize
+  FSRS: when cards 1-3 days since their last review come back 3+ points
+  under my target with 300+ answers (`lastIvl`); it opens the deck's
+  options, Not now hides it 30 days (`ins_fsrs_hide`). Nothing to say:
+  "Insights fill in after a week of reviews."
 
 ## Releasing
 

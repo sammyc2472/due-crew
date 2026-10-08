@@ -1,14 +1,16 @@
 """3.7.3 a plan's team and its Insights, the pure parts (team_flow.py is the
-glue). Insights: this plan's cards I missed in the last 14 days, by the
-topic they share (a tag under its resource, read as words, as `plans.topics`
-names it), with the 14 days before as the trend. Worked out in my Anki from
-my own reviews; nothing about it leaves this computer."""
+glue). Insights (3.7.9): the cards Anki won't show me before the plan's
+next event that I'd recall under my target by then (FSRS), the topics not
+sticking yet (a tag under its resource, read as words), my week in minutes
+at my own pace, and Optimize FSRS when my newest cards fall short. Worked
+out in my Anki from my own reviews; nothing about it leaves this computer."""
+
+import datetime
 
 from . import plans as P
+from . import schedule as S
 
 DAYS = 14          # the window; the trend compares it with the 14 before
-MIN_CARDS = 5      # a topic shows with this many cards reviewed in the window
-TREND_POINTS = 10  # this many points of share missed, either way, is a trend
 ROWS = 6
 NAME_MAX = 60
 
@@ -37,59 +39,132 @@ def topic_list(doc):
     return [tuple(v) for v in out.values()]
 
 
-def card_windows(answers):
-    """{cid: [reviewed, missed, reviewed before, missed before]} from
-    [(cid, days_ago, ease)] review answers (learning steps left out by the
-    caller). Cards, not presses: a card missed three times is one miss."""
-    out = {}
+# ---- 3.7.9 Insights (mock "Insights", rounds 1-17, drawn on Sam's own
+# collection): only what's counted, or Anki's own memory model, is said.
+
+STUCK_MIN = 20     # a topic shows with this many cards reviewed in the window
+FSRS_GAP = 3       # points under the target, on cards 1-3 days since their last review...
+FSRS_MIN = 300     # ...with this many answers behind it
+AIM_DAYS = 21      # the hero aims at the next event this close, else a week out
+NEW_MIN = 50       # new cards measured over their first week before the week is in time
+HIDE_DAYS = 30     # Optimize FSRS, dismissed, stays away this long
+
+
+def recall(t, s, decay=0.5):
+    """FSRS's forgetting curve: the chance of recall t days after the last
+    review, at stability s (decay 0.5 is FSRS-4.5/5; FSRS-6 stores its own)."""
+    decay = float(decay) if decay and float(decay) > 0 else 0.5
+    factor = 0.9 ** (-1.0 / decay) - 1.0
+    return (1.0 + factor * max(float(t), 0.0) / max(float(s), 0.1)) ** -decay
+
+
+def aim(events, today):
+    """(day, name, days to it, event id) the hero aims at: the plan's next
+    event in AIM_DAYS, else (today + 7, "", 7, "")."""
+    t = S.d(today)
+    soon = sorted((str(e.get("day") or ""), str(e.get("name") or ""), str(e.get("id") or "")) for e in events or []
+                  if isinstance(e, dict) and today < str(e.get("day") or "") <= S.iso(t + datetime.timedelta(days=AIM_DAYS)))
+    if soon:
+        return soon[0][0], soon[0][1], (S.d(soon[0][0]) - t).days, soon[0][2]
+    return S.iso(t + datetime.timedelta(days=7)), "", 7, ""
+
+
+def prep_units(units, eid):
+    """The ids of the dates that prep for the event (a date's `for`); the
+    hero counts only their cards when there are any."""
+    return [u["id"] for u in units if eid and u.get("for") == eid]
+
+
+def right_days(answers):
+    """The header: {now: [right, n], before: [right, n], days: [% or None,
+    oldest first]} over [(cid, days ago, ease)] review answers, the first
+    answer of each card each day; now is the last DAYS days."""
+    first = {}
     for cid, ago, ease in answers:
         ago = int(ago)
-        if ago < 0 or ago >= 2 * DAYS:
+        if 0 <= ago < 2 * DAYS:
+            first.setdefault((ago, int(cid)), int(ease) > 1)
+    now, before, days = [0, 0], [0, 0], {}
+    for (ago, _c), ok in first.items():
+        w = now if ago < DAYS else before
+        w[0] += ok
+        w[1] += 1
+        if ago < DAYS:
+            dd = days.setdefault(ago, [0, 0])
+            dd[0] += ok
+            dd[1] += 1
+    return {"now": now, "before": before,
+            "days": [int(round(100.0 * days[a][0] / days[a][1])) if a in days else None for a in range(DAYS - 1, -1, -1)]}
+
+
+def hero(cards, target):
+    """The cards Anki won't show me before the aim that I'd recall below my
+    target by then, least likely first. cards: {cid: (recall at the aim, shown before it)}."""
+    out = [(r, c) for c, (r, shown) in cards.items() if not shown and r < target]
+    return [c for _r, c in sorted(out)]
+
+
+def source(tags):
+    """A topic's source as its tags say: the resource and the part just above
+    the topic ("Bootcamp › Autonomic System"), from the first tag."""
+    for t in tags or []:
+        segs = [x for x in str(t).split(P._SEP) if x]
+        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+        if ri < 0 or ri >= len(segs) - 1:
             continue
-        w = out.setdefault(int(cid), [0, 0, 0, 0])
-        k = 0 if ago < DAYS else 2
-        w[k] = 1
-        if int(ease) == 1:
-            w[k + 1] = 1
-    return out
+        parts = [P._word(segs[ri])]
+        if len(segs) - 2 > ri:
+            parts.append(P._word(segs[-2]))
+        return " › ".join(p for p in parts if p)
+    return ""
 
 
-def insights(topics, cards_of, answers, todo_of=None):
-    """The table, worst first: [{key, name, sub, missed, of, trend, cids,
-    url}]. topics: topic_list; cards_of(tag) is the set of my cards under a
-    plan tag; answers as card_windows takes them; todo_of(unit id) its
-    author's lines, for Re-watch. trend: "worse", "better", "steady", or ""
-    when either window is too thin to say."""
-    win = card_windows(answers)
+def not_sticking(topics, cards_of, reviewed, stuck, forgot):
+    """Not sticking yet, worst first: [{key, name, src, of, stuck, forgot,
+    cids}]. reviewed: my cards answered in review in the window; stuck: of
+    those, never right in a review yet (as of now, so a row shrinks as cards
+    stick); forgot: missed in the window after having been right. A topic
+    shows with STUCK_MIN cards reviewed, and something to study."""
     rows = []
-    for key, name, res, tags, uids in topics:
+    for key, name, _res, tags, _uids in topics:
         cids = set()
         for t in tags:
             cids |= set(cards_of(t))
-        a_rev = [c for c in cids if c in win and win[c][0]]
-        if len(a_rev) < MIN_CARDS:
+        rev = cids & reviewed
+        if len(rev) < STUCK_MIN:
             continue
-        missed = [c for c in a_rev if win[c][1]]
-        if not missed:
+        st = rev & stuck
+        fg = (rev & forgot) - st
+        if not st and not fg:
             continue
-        b_rev = [c for c in cids if c in win and win[c][2]]
-        trend = ""
-        if len(b_rev) >= MIN_CARDS:
-            now = 100 * len(missed) / len(a_rev)
-            before = 100 * sum(1 for c in b_rev if win[c][3]) / len(b_rev)
-            trend = "worse" if now - before >= TREND_POINTS else "better" if before - now >= TREND_POINTS else "steady"
-        url = ""
-        for uid in reversed(uids):
-            for line in (todo_of(uid) if todo_of else None) or []:
-                if line.get("k") == "watch" and str(line.get("url") or "").startswith("https://"):
-                    url = str(line["url"])
-                    break
-            if url:
-                break
-        rows.append({"key": key, "name": name, "sub": " · ".join(res), "missed": len(missed), "of": len(a_rev),
-                     "trend": trend, "cids": sorted(missed), "url": url})
-    rows.sort(key=lambda r: (-r["missed"] / r["of"], -r["missed"], r["name"].lower()))
+        rows.append({"key": key, "name": name, "src": source(tags), "of": len(rev), "stuck": len(st),
+                     "forgot": len(fg), "cids": sorted(st | fg)})
+    rows.sort(key=lambda r: (-(r["stuck"] + r["forgot"]) / r["of"], -r["stuck"], r["name"].lower()))
     return rows[:ROWS]
+
+
+def week(past, ahead, secs_new, secs_answer):
+    """Your week in minutes: past [(day, minutes)] as studied, ahead
+    [(day, new cards, reviews due)] at my own measured pace (a new card's
+    whole first week counted on the day it opens). None without a measured
+    pace or with nothing ahead."""
+    if not secs_new or not secs_answer or not any(n for _d, n, _r in ahead):
+        return None
+    fut = [(d, int(round((n * secs_new + r * secs_answer) / 60.0)), n, r) for d, n, r in ahead]
+    days = [m for _d, m, _n, _r in fut]
+    seen = [m for _d, m in past]
+    return {"past": list(past), "ahead": fut, "avg": int(round(sum(days) / len(days))),
+            "was": int(round(sum(seen) / len(seen))) if seen else 0}
+
+
+def fsrs_gap(right, n, target):
+    """{right, n, target} when my newest cards (1-3 days since their last
+    review) come back FSRS_GAP points or more under my target, with
+    FSRS_MIN answers behind it; else None."""
+    if n < FSRS_MIN or right is None:
+        return None
+    pct, tgt = int(round(100.0 * right / n)), int(round(100 * target))
+    return {"right": pct, "n": n, "target": tgt} if tgt - pct >= FSRS_GAP else None
 
 
 # ---- the team ----
