@@ -1,12 +1,17 @@
-"""3.7.3 a plan's team and its Insights, the glue (team.py is pure).
+"""3.7.3 a plan's squad (its team, until 3.8.0) and its Insights, the glue
+(team.py is pure).
 
-The Plans tab's plan card has three tabs: Plan, Team and Insights
-(`_state["plan_sub"]`, per session). Team is opt-in per plan: joining
-shares that I showed up today (answered one of the plan's cards), my
-questions and answers, and my bingo squares (the same play as on my squad
-rows: the week's one card); never a number. The board's refresh carries a few counts
-(`session["teams"]`); the tab itself is one request when it opens, and each
-click is one more. Showed-up days and squares ride the sync (`for_sync`).
+The Plans tab's plan card has two tabs, Plan and Insights
+(`_state["plan_sub"]`, per session). 3.8.0: the plan's squad lives on the
+Squads tab, a pill beside my own squads (`plan_squads`, picked as
+`cfg["squad"] = "plan:<id>"`), and the plan card says how many showed up
+with a way there. It's opt-in per plan: joining shares that I showed up
+today (answered one of the plan's cards), my questions and answers, and my
+bingo squares (the same play as on my squad rows: the week's one card);
+never a number. The board's refresh carries a few counts
+(`session["teams"]`); the squad itself is one request when it opens, and
+each click is one more. Showed-up days and squares ride the sync
+(`for_sync`). The server still calls it a team (/plans/<id>/team).
 
 Insights are mine alone (3.7.9): worked out here from my reviews of the
 plan's cards and Anki's own memory model, never sent. Study builds Anki's
@@ -26,7 +31,7 @@ from . import app
 from . import plans as P
 from . import schedule as S
 from . import team as T
-from .app import _bg, _state, cfg, client
+from .app import _bg, _state, cfg, client, save_cfg
 from .backend.shapes import TransportError
 
 FRESH = 60          # seconds a fetched team is shown before the tab asks again
@@ -48,6 +53,62 @@ def on_team(pid):
 
 def _plan(pid):
     return next((p for p in _plans_flow().followed() if p.get("id") == pid), None)
+
+
+PICK = "plan:"  # cfg["squad"] holds this and the plan's id when its squad is the one on screen
+
+
+def plan_squads():
+    """3.8.0: the squads of the plans I follow and am in, as the Squads
+    tab's pills: [{id, pid, name, unread}]. A plan's squad is named for it."""
+    on = teams()
+    if not on:
+        return []
+    return [{"id": PICK + p["id"], "pid": p["id"], "name": str(p.get("name") or "Plan"),
+             "unread": T.unread(on[p["id"]], _seen(p["id"]))}
+            for p in _plans_flow().followed() if p.get("id") in on]
+
+
+def picked(c, ps=None):
+    """The plan squad the Squads tab shows, or None for one of my own: the
+    one picked, or the first when I have no squad of my own."""
+    ps = plan_squads() if ps is None else ps
+    if not ps:
+        return None
+    sel = str(c.get("squad") or "")
+    hit = next((q for q in ps if q["id"] == sel), None)
+    if hit or any(isinstance(q, dict) and q.get("id") for q in c.get("squads") or []):
+        return hit
+    return ps[0]
+
+
+def squad_view(c, ps=None):
+    """What board._plan_squad_html draws when a plan's squad is picked, or None."""
+    hit = picked(c, ps)
+    if not hit:
+        return None
+    pid = hit["pid"]
+    tv = (_state.get("team_view") or {}).get(pid) or {}
+    return {"kind": "plan", "pid": pid, "name": hit["name"], "current": hit["id"],
+            "team": tv.get("data"), "team_state": tv.get("state") or "loading",
+            "draft": (_state.get("team_draft") or {}).get(pid) or "",
+            "known": _known(tv.get("data")), "me": client().user_id}
+
+
+def open_squad(pid):
+    """The plan's squad on the Squads tab: its pill, and the plan card's Open."""
+    if pid not in teams() or not _plan(pid):
+        return
+    c = cfg()
+    from .board import hidden_tabs
+    if "squads" in hidden_tabs(c):
+        tooltip("The Squads tab is hidden. Settings brings it back.")
+        return
+    c["squad"], c["period"] = PICK + pid, "squads"
+    save_cfg(c)
+    _state["bingo_open"], _state["team_bingo_open"] = False, None
+    app.swap(c)
+    fetch(pid)
 
 
 def _deck_ids(pid):
@@ -72,19 +133,14 @@ def _seen(pid):
 
 
 def card_bits(pid):
-    """For the plan's card: its tab, the badge, the Plan tab's team line,
-    and the open tab's view (Team: as last fetched; Insights: worked out)."""
+    """For the plan's card: its tab, the squad line's counts (3.8.0: the
+    squad itself is on the Squads tab), and Insights when that tab is open."""
     sub = (_state.get("plan_sub") or {}).get(pid) or "plan"
+    if sub not in ("plan", "ins"):
+        sub = "plan"
     summ = teams().get(pid)
     out = {"sub": sub, "on": summ is not None, "unread": T.unread(summ, _seen(pid)) if summ else 0, "summary": summ}
-    if sub == "team":
-        tv = (_state.get("team_view") or {}).get(pid) or {}
-        out["team"] = tv.get("data")
-        out["team_state"] = tv.get("state") or "loading"
-        out["draft"] = (_state.get("team_draft") or {}).get(pid) or ""
-        out["known"] = _known(tv.get("data"))
-        out["me"] = client().user_id
-    elif sub == "ins":
+    if sub == "ins":
         out["insights"] = insights(pid)
     return out
 
@@ -107,8 +163,8 @@ def _known(view):
 # ---- the team: fetch, join, leave ----
 
 def fetch(pid, force=False):
-    """The team as its tab shows it: one request, at most once a minute
-    unless something changed it."""
+    """The plan's squad as the Squads tab shows it: one request, at most
+    once a minute unless something changed it."""
     views = _state.setdefault("team_view", {})
     have = views.get(pid) or {}
     if not force and have.get("data") is not None and time.time() - float(have.get("at") or 0) < FRESH:
@@ -167,35 +223,53 @@ def _mark_seen(pid, data):
 
 
 def show(pid, sub):
-    """Plan, Team or Insights on the plan's card."""
-    if sub not in ("plan", "team", "ins") or not _plan(pid):
+    """Plan or Insights on the plan's card. "team" (an older page's link)
+    goes to the plan's squad."""
+    if sub == "team":
+        open_squad(pid)
+        return
+    if sub not in ("plan", "ins") or not _plan(pid):
         return
     _state.setdefault("plan_sub", {})[pid] = sub
     if sub == "ins":
         _state.setdefault("insights", {}).pop(pid, None)  # worked out again when opened
     app.swap(cfg())
-    if sub == "team":
-        fetch(pid)
 
 
-def join(pid):
+JOIN_SAYS = ("The others in it see your name and the days you show up, and your questions and answers; "
+             "your progress counts for the plan's authors. Never your numbers.")
+
+
+def join(pid, ask=False):
+    """ask: from the plan card's "Join its squad", which says what it shares
+    first (the one-time ask and the Follow dialog already said it)."""
+    if ask:
+        from aqt.utils import askUser
+        if not askUser("Join this plan's squad? " + JOIN_SAYS):
+            return
     gen, cl, wk = app.generation, client(), _wk()
 
     def done(data):
         if gen != app.generation:
             return
         if not isinstance(data, dict):
-            tooltip("This team is full." if data == 409 else "Couldn't join just now.")
+            tooltip("This squad is full." if data == 409 else "Couldn't join just now.")
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": data, "state": "ok"}
+        if data.get("on") and pid not in teams():
+            # its pill and the plan card's line now, not at the next refresh
+            cl.session["teams"] = dict(cl.session.get("teams") or {}, **{pid: {
+                "shown": int(data.get("shown") or 0), "of": int(data.get("count") or 1), "faces": [], "act": [], "last": None}})
         app.swap(cfg())
+        if ask:
+            tooltip("You're in. It's on the Squads tab.")
         app.sync(light=True)  # today's showed-up goes now, not at the next sync
     _bg(lambda: cl.team_join(pid, wk), done)
 
 
 def leave(pid, ask=True):
     from aqt.utils import askUser
-    if ask and not askUser("Leave the team? Your progress stops counting for the plan's authors; "
+    if ask and not askUser("Leave this plan's squad? Your progress stops counting for its authors; "
                            "your questions and answers stay."):
         return
     gen, cl = app.generation, client()
@@ -207,10 +281,13 @@ def leave(pid, ask=True):
             tooltip("Couldn't leave just now.")
             return
         _state.setdefault("team_view", {})[pid] = {"at": time.time(), "data": {"on": False, "count": 0}, "state": "ok"}
-        if ask:
-            fetch(pid, force=True)
-        else:
-            app.swap(cfg())  # No thanks: the ask goes, nothing to fetch
+        (cl.session.get("teams") or {}).pop(pid, None)  # its pill goes now
+        c = cfg()
+        if c.get("squad") == PICK + pid:
+            c["squad"] = ""
+            save_cfg(c)
+        _state["team_bingo_open"] = None
+        app.swap(c)
     _bg(lambda: cl.team_leave(pid), done)
 
 
@@ -230,7 +307,7 @@ def _after(pid, msg_ok=None):
         elif status == 429:
             tooltip("That's a lot of questions today. Try again tomorrow.")
         elif status == 403:
-            tooltip("Join the team first.")
+            tooltip("Join its squad first.")
         else:
             tooltip("Couldn't send it just now.")
     return done
@@ -317,14 +394,14 @@ def see_card(pid, ask_id):
 
 
 def ask_card(card):
-    """The reviewer's "Ask the team about this card…": a question with the
-    card as its guid and number (never its text), on the team of the plan
+    """The reviewer's "Ask the squad about this card…": a question with the
+    card as its guid and number (never its text), in the squad of the plan
     whose deck the card is in."""
     pid = plan_for_card(card)
     if not pid:
         return
     from aqt.qt import QInputDialog, QLineEdit
-    text, ok = QInputDialog.getText(mw, "Ask the team", "Your question about this card:", QLineEdit.EchoMode.Normal, "")
+    text, ok = QInputDialog.getText(mw, "Ask the squad", "Your question about this card:", QLineEdit.EchoMode.Normal, "")
     text = " ".join(str(text or "").split())[:280]
     if not ok or not text:
         return
@@ -338,11 +415,11 @@ def ask_card(card):
                 topic = name
                 break
     cl, guid, ordn = client(), note.guid, int(card.ord)
-    _bg(_send(lambda: cl.team_ask(pid, text, guid=guid, ord=ordn, topic=topic)), _after(pid, "Asked the team."))
+    _bg(_send(lambda: cl.team_ask(pid, text, guid=guid, ord=ordn, topic=topic)), _after(pid, "Asked the squad."))
 
 
 def plan_for_card(card):
-    """The plan (on whose team I am) whose deck holds this card, or None."""
+    """The plan (whose squad I'm in) whose deck holds this card, or None."""
     if not card or not teams():
         return None
     did = int(card.odid or card.did)
@@ -352,7 +429,7 @@ def plan_for_card(card):
     return None
 
 
-# ---- team bingo ----
+# ---- the plan squad's bingo ----
 
 def bingo_view(pid):
     """What board.bingo_html draws for the plan's team card, or None."""
@@ -619,13 +696,13 @@ def for_sync(c):
 # ---- the board's commands ----
 
 def on_message(cmd, parts):
-    """The plan tabs' commands (plansub, the team's and Insights'): True when handled."""
+    """The plan tabs' commands (plansub, the plan squad's and Insights'): True when handled."""
     arg = parts[2] if len(parts) > 2 else ""
     x = parts[3] if len(parts) > 3 else ""
     if cmd == "plansub" and arg and x:
         show(arg, x)
     elif cmd == "planteamjoin" and arg:
-        join(arg)
+        join(arg, ask=x == "ask")
     elif cmd == "planteamleave" and arg:
         leave(arg)
     elif cmd == "planteamno" and arg:

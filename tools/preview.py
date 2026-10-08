@@ -179,14 +179,45 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "waiting": 16}
 sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
+# 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
+sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there)</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "plan", "unread": 2, "summary": {
+        "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "last": {"name": "Maya"}}})], "offers": []}))
+sections.append("<h3>3.8.0: a plan I follow, not in its squad</h3>" + board.render(
+    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "plan", "summary": None})], "offers": []}))
+_EV = {"squares": [{"done": i in (0, 2, 5)} for i in range(8)], "middle": {"done": False, "have": 7, "goal": 9}, "lines": 0}
+_TEAM = {"on": True, "count": 12, "shown": 5, "streak": 4, "more": 4, "bingo": {"card": {"wk": "2026-W41"}, "ev": _EV},
+         "faces": [{"uid": "u1", "name": "Maya", "emoji": "\U0001F419", "shown": True},
+                   {"uid": "me", "name": "Sam", "emoji": "\U0001F331", "shown": True},
+                   {"uid": "u2", "name": "Dre", "emoji": "", "shown": True},
+                   {"uid": "u3", "name": "Kai", "emoji": "\U0001F98A", "shown": True},
+                   {"uid": "u4", "name": "Ameya", "emoji": "", "shown": True},
+                   {"uid": "u5", "name": "Jordan", "emoji": "", "shown": False},
+                   {"uid": "u6", "name": "Lee", "emoji": "\U0001F43C", "shown": False},
+                   {"uid": "u7", "name": "Priya", "emoji": "", "shown": False}],
+         "asks": [{"id": 1, "uid": "u1", "name": "Maya", "emoji": "\U0001F419", "text": "Why does isoproterenol drop diastolic pressure?",
+                   "at": int(NOW.timestamp()) - 7200, "act": int(NOW.timestamp()) - 3600, "topic": "Direct Sympathomimetics",
+                   "guid": "g1", "ord": 0, "mine": False, "remove": False, "author": False,
+                   "replies": [{"id": 2, "uid": "u2", "name": "Dre", "emoji": "", "text": "\u03b22 vasodilation in skeletal muscle beds",
+                                "at": int(NOW.timestamp()) - 3600, "helped": False, "author": True, "mine": False, "remove": False}]},
+                  {"id": 3, "uid": "u3", "name": "Kai", "emoji": "\U0001F98A", "text": "Is Friday's quiz open-book for the PK formulas?",
+                   "at": int(NOW.timestamp()) - 18000, "act": int(NOW.timestamp()) - 18000, "topic": "", "guid": "", "ord": 0,
+                   "mine": False, "remove": False, "author": False, "replies": []}]}
+_PSQ = {"kind": "plan", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "current": "plan:p1",
+        "squads": [{"id": "abc", "name": "busm"}, {"id": "def", "name": "MS2"}],
+        "plan_squads": [{"id": "plan:p1", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "unread": 0},
+                        {"id": "plan:p2", "pid": "p2", "name": "Step 1 dedicated", "unread": 3}],
+        "team": _TEAM, "team_state": "ok", "me": "me", "known": {"down": ["g1"], "have": ["g1"]}}
+sections.append("<h3>3.8.0: a plan's squad on the Squads tab</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60, squad_view=_PSQ))
 # 3.7.9: Insights, with the numbers of Sam's own snapshot (Wed 7 Oct)
 _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                                 "days": [84, 80, 88, 89, 85, 75, 94, 79, 82, 88, 91, 84, 94, 88][::-1]},
         "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6, "scoped": True}, "hero": list(range(53)), "behind": 0,
-        "rows": [{"name": "Direct Sympathomimetics", "src": "Bootcamp › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
-                 {"name": "Sympathomimetics", "src": "SketchyPharm › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
-                 {"name": "Cholinomimetics", "src": "SketchyPharm › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
-                 {"name": "Muscarinic antagonists", "src": "SketchyPharm › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
+        "rows": [{"name": "Direct Sympathomimetics", "src": "Video Series › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
+                 {"name": "Sympathomimetics", "src": "Picture Series › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
+                 {"name": "Cholinomimetics", "src": "Picture Series › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
+                 {"name": "Muscarinic antagonists", "src": "Picture Series › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
         "week": {"past": [("2026-09-30", 0), ("2026-10-01", 14), ("2026-10-02", 0), ("2026-10-03", 50), ("2026-10-04", 66),
                           ("2026-10-05", 61), ("2026-10-06", 74)],
                  "ahead": [("2026-10-07", 130, 145, 0), ("2026-10-08", 204, 204, 133), ("2026-10-09", 237, 242, 122),

@@ -1276,7 +1276,7 @@ def board_view(c):
     from . import team_flow
     for card in cards:
         try:
-            card["tabs"] = team_flow.card_bits(card["id"])  # 3.7.3: Plan · Team · Insights
+            card["tabs"] = team_flow.card_bits(card["id"])  # 3.7.3: Plan · Insights, and the squad line
         except Exception:
             traceback.print_exc()
     from .squads import _my_squads
@@ -1291,7 +1291,7 @@ def board_view(c):
 def on_message(cmd, parts):
     """duecrew:plan* from the board. True when handled."""
     if cmd == "plansub" or cmd.startswith("planteam") or cmd.startswith("planins"):
-        from . import team_flow  # 3.7.3: the plan's Team and Insights tabs
+        from . import team_flow  # 3.7.3: the plan's squad and its Insights tab
         return team_flow.on_message(cmd, parts)
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "planundo":

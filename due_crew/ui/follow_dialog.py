@@ -197,9 +197,9 @@ class FollowDialog(QDialog):
         self.hold.setChecked(True)
         self.hold.setVisible(False)
         root.addWidget(self.hold)
-        # 3.7.6: one choice: on the team, my progress counts for its authors
-        self.share = QCheckBox("Join this plan's team")
-        self.share.setToolTip("The team sees your name and the days you show up, and your progress counts for "
+        # 3.7.6: one choice: in its squad (its team until 3.8.0), my progress counts for its authors
+        self.share = QCheckBox("Join this plan's squad")
+        self.share.setToolTip("The squad sees your name and the days you show up, and your progress counts for "
                               "the plan's authors. Never your numbers. You can leave any time.")
         self.share.setChecked(False)
         root.addWidget(self.share)
@@ -398,7 +398,7 @@ class FollowDialog(QDialog):
                 return
             if share and not got.get("share"):
                 from aqt.utils import tooltip
-                tooltip("Following. The plan's team is full.")
+                tooltip("Following. The plan's squad is full.")
             got = dict(got, paused=False, following=True)
             if self.on_followed:
                 self.on_followed(got, did, swap, late, hold)

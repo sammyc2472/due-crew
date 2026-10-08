@@ -692,6 +692,9 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
 .sqsw .linkish { color: var(--muted); font-weight: 600; } .sqsw .linkish.on { color: var(--ink); text-decoration: underline; } .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
+/* 3.8.0: a plan's squad on the Squads tab: who showed up, its bingo, then its questions */
+.psq { display: grid; gap: 12px; text-align: left; max-width: 680px; margin: 0 auto; }
+.psq > * { min-width: 0; }
 .bgcard { border: 1.5px solid var(--accent); border-radius: 10px; padding: 9px 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 10px; }
 .bgcard .bgt { display: grid; gap: 1px; flex: 1 1 180px; min-width: 0; }
 .bgmini { display: grid; grid-template-columns: repeat(3, 9px); gap: 2px; flex: none; }

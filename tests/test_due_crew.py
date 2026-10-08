@@ -6316,21 +6316,32 @@ def test_plan_team_v39():
                    "mine": False, "remove": False, "author": False,
                    "replies": [{"id": 8, "uid": "maya", "name": "Maya", "emoji": "", "text": bad, "at": 1, "helped": True,
                                 "author": False, "mine": True, "remove": True}]}]}
-    html = board._team_html("p1", {"team": v, "team_state": "ok", "me": "maya", "known": {"down": ["g1"], "have": ["g1"]}})
+    html = board._plan_squad_html("p1", {"team": v, "team_state": "ok", "me": "maya", "known": {"down": ["g1"], "have": ["g1"]}})
     check("team: everyone's words escaped", "<img" not in html and html.count("&lt;img") >= 4, html)
     check("team: faces lit or not, You for me, the streak",
           "Showed up today &middot; 2 of 3 &middot; 4 days running" in html and ">You</b>" in html and 'class="face away"' in html)
     check("team: a card question I have down says so, with Answer and See the card",
           "on a card you have down" in html and "duecrew:planteamreply:p1:7" in html
           and "duecrew:planteamcard:p1:7" in html and "duecrew:planteamreport:p1:7" in html)
-    check("team: my own answer can go; Leave the team is there",
-          "duecrew:planteamremove:p1:8" in html and "duecrew:planteamleave:p1" in html)
-    join = board._team_html("p1", {"team": {"on": False, "count": 5}, "team_state": "ok"})
-    check("team: not on it, Join the team says what it shares", "5 on the team" in join and "duecrew:planteamjoin:p1" in join
+    check("squad: my own answer can go; Leave and Open the plan are there",
+          "duecrew:planteamremove:p1:8" in html and "duecrew:planteamleave:p1" in html and "duecrew:period:plans" in html)
+    check("3.8.0: who showed up comes first, then Ask the squad and its threads",
+          html.index("Showed up today") < html.index("Ask the squad") < html.index("on a card you have down"))
+    join = board._plan_squad_html("p1", {"team": {"on": False, "count": 5}, "team_state": "ok"})
+    check("squad: not in it, Join its squad says what it shares", "5 in its squad" in join and "duecrew:planteamjoin:p1" in join
           and "Never your numbers" in join)
     tabs = board._plan_tabs("p1", {"sub": "plan", "unread": 3})
-    check("tabs: Plan, Team with its badge, Insights", ">Plan</a>" in tabs and "Team<i>3</i>" in tabs and "Insights" in tabs
-          and "duecrew:plansub:p1:ins" in tabs)
+    check("3.8.0 tabs: Plan and Insights; the squad isn't a tab", ">Plan</a>" in tabs and "Insights" in tabs
+          and "Team" not in tabs and "plansub:p1:team" not in tabs and "duecrew:plansub:p1:ins" in tabs)
+    line = board._squad_line("p1", {"summary": {"shown": 2, "of": 5, "faces": ["\U0001F419"], "last": {"name": bad}}, "unread": 1})
+    check("3.8.0: the plan card's squad line: who showed up, who asked, the way there",
+          "Squad: 2 of 5 showed up" in line and "duecrew:squadplan:p1" in line and "&lt;img" in line and "<img" not in line, line)
+    check("3.8.0: nothing new, the line says Open", "Open &rsaquo;" in board._squad_line("p1", {"summary": {"shown": 0, "of": 5}, "unread": 0}))
+    check("3.8.0: not in it, no squad line", board._squad_line("p1", {"summary": None}) == "")
+    sw = board._switcher({"squads": [{"id": "s1", "name": "Pod"}], "current": "s1",
+                          "plan_squads": [{"id": "plan:p1", "pid": "p1", "name": bad, "unread": 2}]})
+    check("3.8.0: a plan's squad is a pill beside mine, its name escaped, the badge its new threads",
+          "duecrew:squad:s1" in sw and "duecrew:squadplan:p1" in sw and "<i>2</i>" in sw and "&lt;img" in sw and "<img" not in sw, sw)
     # ---- the client against the fake Worker, and the glue ----
     store = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
     store.today = _day(0)
@@ -6338,10 +6349,13 @@ def test_plan_team_v39():
     maya, kai = new_client(store, "maya", "Maya"), new_client(store, "kai", "Kai")
     labels = [_day(-i) for i in range(7)]
     col = _plan_col()
-    saved = (appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip)
+    saved = (appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip, TF.cfg, TF.save_cfg)
+    conf = {"cfg": {}}
     try:
         appmod._bg = TF._bg = lambda job, done=None: done(job()) if done else job()
         TF.tooltip = lambda *a, **k: None
+        TF.cfg = lambda: conf["cfg"]
+        TF.save_cfg = lambda c: conf.update(cfg=c)
         appmod.sync = lambda **k: None
         with _PlanGlue({"A": maya}, {"A": col}):
             TF.client = lambda: maya
@@ -6352,14 +6366,38 @@ def test_plan_team_v39():
             maya.fetch_board(labels, with_decks=True)
             check("team: none until I join; the sync sends no team part",
                   not maya.session.get("teams") and TF.for_sync({}) is None)
+            _state["labels"] = labels
+            phtml = board._plan_card_html(F.board_view({})["cards"][0])
+            check("3.8.0: not in its squad, the plan card asks before it joins (Join its squad)",
+                  f"duecrew:planteamjoin:{pid}:ask" in phtml and f"plansub:{pid}:team" not in phtml, phtml[-500:])
+            n_log = len(store.log)
             dc._on_js(False, f"duecrew:plansub:{pid}:team", DeckBrowser())
-            tv = _state["team_view"][pid]
-            check("team: opening the tab fetches it once (one request)", _state["plan_sub"][pid] == "team"
-                  and tv["data"] == {"on": False, "count": 0}, tv)
+            check("3.8.0: an older page's Team link, not in its squad: nothing happens, nothing's asked",
+                  len(store.log) == n_log and (_state.get("plan_sub") or {}).get(pid) != "team" and not conf["cfg"].get("squad"))
             check("3.7.6: following alone shares nothing", not store.follows[(pid, "maya")]["share"]
                   and [b for m, pa, b in store.bodies if pa == "/plans/follow"][0].get("team") is False)
-            dc._on_js(False, f"duecrew:planteamjoin:{pid}", DeckBrowser())
+            dc._on_js(False, f"duecrew:planteamjoin:{pid}:ask", DeckBrowser())
             check("team: Join puts me on it", (pid, "maya") in store.team and pid in maya.session["teams"])
+            ps = TF.plan_squads()
+            check("3.8.0: its squad is a pill on the Squads tab at once, named for the plan",
+                  [(q["id"], q["name"]) for q in ps] == [("plan:" + pid, "Step 1")], ps)
+            check("3.8.0: with no squad of my own, it's the one the tab shows", TF.picked(conf["cfg"])["pid"] == pid)
+            pline = board._plan_card_html(F.board_view({})["cards"][0])
+            check("3.8.0: the plan card's line goes to it", f"duecrew:squadplan:{pid}" in pline and "Join its squad" not in pline)
+            n_log = len(store.log)
+            dc._on_js(False, f"duecrew:squadplan:{pid}", DeckBrowser())
+            check("3.8.0: Open picks it on the Squads tab; what the join brought back is fresh, nothing's asked",
+                  conf["cfg"].get("squad") == "plan:" + pid and conf["cfg"].get("period") == "squads"
+                  and _state["team_view"][pid]["data"]["on"] and len(store.log) == n_log, (conf["cfg"], store.log[n_log:]))
+            _state["team_view"].pop(pid)
+            dc._on_js(False, f"duecrew:squadplan:{pid}", DeckBrowser())
+            check("3.8.0: and fetches it when it isn't (one request)",
+                  _state["team_view"][pid]["data"]["on"] and len(store.log) == n_log + 1, store.log[n_log:])
+            sv = dc._squad_view_with_bingo(conf["cfg"])
+            shtml = board._squads_html(sv, conf["cfg"])
+            check("3.8.0: the Squads tab draws it: its pill on, who showed up, Ask the squad",
+                  sv["kind"] == "plan" and "Showed up today" in shtml and "Ask the squad" in shtml
+                  and f"<a class=\"on\" href=\"#\" onclick=\"pycmd('duecrew:squadplan:{pid}')" in shtml, shtml[:600])
             check("3.7.6: and shares my progress, here and on the server",
                   store.follows[(pid, "maya")]["share"] and next(p for p in maya.session["plans"] if p["id"] == pid)["share"])
             # someone who shared before the merge is asked once on the plan card
@@ -6367,8 +6405,8 @@ def test_plan_team_v39():
             kplan = next(x for x in kai.fetch_board(labels, with_decks=True)["plans"] if x["id"] == pid)
             kcard = F.card_view(kplan, F.new_state(col, kplan), {}, _day(0))
             khtml = "".join(board._plan_notes(kcard, pid))
-            check("3.7.6: the ask: Join this plan's team?, with Join and No thanks",
-                  kcard["team_ask"] and "Join this plan&rsquo;s team?" in khtml
+            check("3.7.6: the ask: Join this plan's squad?, with Join and No thanks",
+                  kcard["team_ask"] and "Join this plan&rsquo;s squad?" in khtml
                   and f"duecrew:planteamjoin:{pid}" in khtml and f"duecrew:planteamno:{pid}" in khtml, khtml[:400])
             TF.client = lambda: kai
             dc._on_js(False, f"duecrew:planteamno:{pid}", DeckBrowser())
@@ -6413,8 +6451,13 @@ def test_plan_team_v39():
             check("team bingo: someone in no squad gets the week's card from the team's; a squad's card stays",
                   seeded and seeded["middle"]["name"] == "Ask away" and maya.session["bingo"] is sq_card)
             maya.session.pop("bingo", None)
+            conf["cfg"]["squad"] = "plan:" + pid
+            dc._on_js(False, f"duecrew:planteamleave:{pid}", DeckBrowser())
+            check("3.8.0: Leave takes its pill away, and the Squads tab back to my own",
+                  (pid, "maya") not in store.team and not TF.plan_squads() and not conf["cfg"].get("squad")
+                  and dc._squad_view_with_bingo(conf["cfg"]).get("kind") != "plan")
     finally:
-        appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip = saved
+        appmod._bg, appmod.swap, appmod.sync, TF.client, TF.tooltip, TF.cfg, TF.save_cfg = saved
         TF._bg = saved[0]
         for k in ("plan_sub", "team_view", "team_draft", "insights"):
             _state[k] = {}
@@ -6444,7 +6487,7 @@ def test_team_times_377():
 def test_team_faces_no_emoji_378():
     """3.7.8: someone with no emoji gets the first letter of their name in a
     circle (not "&#128100;" escaped twice); names stay escaped."""
-    html = board._team_html("p1", {"team": {"on": True, "count": 3, "faces": [
+    html = board._plan_squad_html("p1", {"team": {"on": True, "count": 3, "faces": [
         {"uid": "u1", "name": "BIG DOG", "emoji": "", "shown": False},
         {"uid": "u2", "name": "\u00e9va <b>x</b>", "emoji": "", "shown": True},
         {"uid": "u3", "name": "changster", "emoji": "\U0001F346", "shown": True}], "asks": [
@@ -6536,7 +6579,7 @@ def test_insights_379():
           T.hero({1: (0.95, False), 2: (0.5, False), 3: (0.6, True), 4: (0.7, False)}, 0.9) == [2, 4])
     check("source: the resource and the part above the topic",
           T.source(["Big::#B&B::Basic_Pharmacology::General::Pharmacokinetics"]) == "B&B › General"
-          and T.source(["Big::#Bootcamp::Renal"]) == "Bootcamp" and T.source(["Renal"]) == "")
+          and T.source(["Big::#Video_Series::Renal"]) == "Video Series" and T.source(["Renal"]) == "")
     topics = [("renal", "Renal", [], ["t:r"], []), ("thin", "Thin", [], ["t:t"], [])]
     of = {"t:r": set(range(1, 31)), "t:t": set(range(40, 50))}
     rows = T.not_sticking(topics, lambda t: of[t], set(range(1, 31)) | set(range(40, 50)), {1, 2, 3, 40, 41}, {3, 4, 5})

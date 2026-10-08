@@ -219,7 +219,7 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre builds three dates (one opening today, one yesterday, one next week), publishes, offers it to the squad.
 - [ ] Dre: Browse → select three cards (one of them c2 of a cloze) → right-click → Due Crew: add to a plan… → the plan, "With <date>" → Add. The site shows 3 single cards on that date. Again with "On its own date": a new date appears.
 - [ ] Maya: the Decks and Squads tabs show "Dre offered <squad> a plan: <name>" with Look and ×. Look opens Follow a plan with the code filled in; × hides it for good.
-- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", "Join this plan's team" unchecked (its tooltip says what it shares). Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
+- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", "Join this plan's squad" unchecked (its tooltip says what it shares). Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
 - [ ] A copy whose tags start differently (rename the top tag in Maya's collection first): "Your tags start differently … Use X::". Use it: the dates match.
 - [ ] Follow again on a fresh profile with Start from the next unit: nothing opens now; the next date opens on its morning.
 - [ ] The Decks tab: "<name> · Dre's plan", "week X of Y · N following", a row per opened date (You: seen, Crew: done, "N of M"), the next date's "opens …", "✓ Opened … this morning: N cards" with Undo. Review a card: Undo goes (Anki has a newer step).
@@ -227,11 +227,11 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre moves a date later and one earlier, adds a date: Maya's card says "Dre moved … and added …" with OK. Nothing that was open closes. The date moved earlier opens the next morning, not before.
 - [ ] Plan ▾ → Open everything now: every date opens, one undo step. Change deck…: pick another deck; its cards for the opened dates open. Pause: no mornings; the card says paused. Resume: asks "N units opened while paused" with Open them now / Start from the next unit.
 - [ ] Plan ▾ → Stop following: "Stop following <name>? Nothing gets suspended…", Stop. The card goes; every open card stays open; Dre's progress page stops counting Maya.
-- [ ] Follow with "Join this plan's team" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join the team from the Team tab: she counts; Leave the team (its question says progress stops counting): she doesn't.
+- [ ] Follow with "Join this plan's squad" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join its squad from the plan card's line (it asks first, saying what it shares): she counts; Leave in the squad (its question says progress stops counting): she doesn't.
 - [ ] 3.7.6: a date's details from today on have Move…: pick a day; the date shows there dashed with "· moved" and Put it back; the site's plan page says "1 date moved". Plan ▾ › Reset to default… lists what goes back; Reset puts it all back.
 - [ ] 3.7.6: follow a plan whose first dates have passed: Start where everyone is (no behind, the earlier dates skipped with Undo skip), Catch up over 2 weeks (a catch-up note, no "behind"), Start from the beginning (today is its first date).
 - [ ] 3.7.6: on a card with another add-on's button beside Edit (AnkiHub), the answer buttons sit in the middle and the ask chip sits beside More.
-- [ ] 3.7.6: a follower who shared before the update sees "Join this plan's team?" once on the plan card; Join puts them on the team; No thanks makes it go without a question.
+- [ ] 3.7.6: a follower who shared before the update sees "Join this plan's squad?" once on the plan card; Join puts them in it; No thanks makes it go without a question.
 - [ ] A plan or date name with <b>markup</b>: shown as text on the card, in the dialogs, and in the toast.
 - [ ] `wrangler tail`: a normal day is still one GET /board and one POST /sync per refresh and sync; the plans ride the day's first refresh (`decks=1`).
 
@@ -548,19 +548,20 @@ In Anki (as a follower):
 - [ ] The author adds cards to today's date and saves. The follower, on the Decks screen, refreshes: "Dre added N cards to …" with Open and Not today; nothing opened yet. Open: they open in one step (Edit › Undo closes them). Mid-review the line waits until you're back on Decks.
 - [ ] Not today: tomorrow's morning opens them. A later date the author changed redraws on the week at once.
 - [ ] Held back on Follow: a new card added to a later date stays suspended.
-- [ ] "Tell followers…" with a save, and a post on the plan page's Updates tab: the follower's plan card shows the newest one with OK; the site shows it above Calendar · Team until Close.
+- [ ] "Tell followers…" with a save, and a post on the plan page's Updates tab: the follower's plan card shows the newest one with OK; the site shows it above the calendar until Close.
 - [ ] The author's Updates tab: "This version is in N of M followers' Anki" after the follower refreshes.
 
-## 3.7.3: a plan's Team and Insights (two followers, or an author and a follower)
+## 3.7.3: a plan's squad and Insights (two followers, or an author and a follower; 3.8.0: the squad is on the Squads tab)
 
-- [ ] The plan card has Plan · Team · Insights. Team, not joined: "N on the team", the one line about what it shares, Join the team.
-- [ ] Both join. Review one of the plan's cards on one side and sync: the other side's Team shows them lit (others faded); the Plan tab's line says "N of the team showed up".
-- [ ] Ask the team (type, Enter): it shows for the other at their next Team open, with a badge on Team until they open it; your own question never badges you.
+- [ ] The plan card has Plan · Insights. Not in its squad: the crew line ends "Join its squad"; it asks first, saying what it shares; Yes: "You're in. It's on the Squads tab."
+- [ ] Both join. Review one of the plan's cards on one side and sync: on the other side, Squads › the plan's pill shows them lit (others faded); the plan card's line says "Squad: N of M showed up · Open ›", and Open goes to the squad.
+- [ ] Ask the squad (type, Enter): it shows for the other at their next look, with a badge on the plan's pill and "Name asked ›" on the plan card until they open it; your own question never badges you.
+- [ ] Squads with a squad of your own and a plan's squad: both pills; picking one shows it (a plan's: who showed up, then Ask the squad and its threads; "Open the plan · Leave" under it). With no squad of your own, the plan's squad is the one shown. Restart Anki: the pill you picked is still picked.
 - [ ] Reply (Anki asks in a small box; the site opens one under the question); the asker marks That helped; Remove your own; Report someone else's (they're muted for you, their words go).
-- [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the team about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
-- [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
-- [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the team (the streak, "Showed up 3 days").
+- [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the squad about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
+- [ ] Squad bingo in a plan's squad: the small card under the faces, Open shows the full card (‹ Squads goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
+- [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the squad (the streak, "Showed up 3 days").
 - [ ] Insights (3.7.9): the header's % right against the 2 weeks before; with FSRS on, "N cards Anki won't show you before …" and Study N opens a filtered deck of them: an event with prep dates ("for") is named on the box and counts only those dates; an event no date preps for, or none, reads "Before Tue 13" and counts the whole plan; Not sticking yet rows (topic, its source, not right yet / forgot) each with Study; Your week in minutes with today marked; Optimize FSRS opens the deck's options, Not now hides it. A plan with no reviews says "Insights fill in after a week of reviews."
-- [ ] Leave the team: off it, your questions stay. Stopping the plan also takes you off.
-- [ ] duecrew.com, the plan's page as a follower: Calendar · Team, the same team; on a phone the rail stacks under the questions.
+- [ ] Leave (under the plan's squad): its pill goes and the tab shows your own squad; your questions stay. Stopping the plan also takes you out.
+- [ ] duecrew.com, the plan's page as a follower: no Team tab; "You're in its squad. Open it ›" (or what it shares and Join its squad), which lands on Home's Squads tab with the plan's pill picked: who showed up, its bingo, then Ask the squad. Leave there: the pill goes.
 - [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….

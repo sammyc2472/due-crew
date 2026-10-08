@@ -685,3 +685,17 @@ every release that changes how something works.
   under my target with 300+ answers (`lastIvl`); it opens the deck's
   options, Not now hides it 30 days (`ins_fsrs_hide`). Nothing to say:
   "Insights fill in after a week of reviews."
+- 3.8.0 one kind of squad (mock "One kind of squad" on Next Round): a plan's
+  team is that plan's squad, shown on the Squads tab beside my own squads
+  as a pill named for the plan (`team_flow.plan_squads`, picked as
+  `cfg["squad"] = "plan:<id>"`; with no squad of my own, it's the one
+  shown). It shows who showed up today, its bingo, then Ask the squad and
+  its threads, and "Open the plan · Leave" (`board._plan_squad_html`;
+  `PlanSquad.view` in builder.js on the site's Home). The plan card's
+  Team tab is gone: Plan · Insights, and a line "Squad: N of M showed up
+  · Open ›" (or "Name asked ›"), or "Join its squad", which asks first and
+  says what it shares (`planteamjoin:<id>:ask`). The badge rides the pill.
+  The site's plan page lost its Team tab for the same line. The Worker is
+  unchanged (`/plans/<id>/team`, `session["teams"]`), so the requests are
+  the same: the squad is one request when it opens, cached a minute. On
+  the site, being in it is `following.share` without `teamAsk` (3.7.6).

@@ -62,7 +62,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
 - A refresh is one request (`GET /board`: me, my crew, cheers, knocks; on
   the day's first, `decks=1`, shared decks, plans, squads and the bingo
   card), and a sync is one (`POST /sync`: profile, my week, decks, heatmap,
-  squad rows, plan progress, team days). The server writes only what
+  squad rows, plan progress, plan squad days). The server writes only what
   changed. `test_request_budget` pins this: a change there is a change in
   what the add-on costs, and must be deliberate. A new feature rides one
   of the two, or is one request on a click.
@@ -79,7 +79,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
 - A squad row is an UPDATE, never an insert; the join (with its code) is
   the only way in.
 - Card text never leaves the computer: flags, asks, knows, plan picks and
-  team questions carry a note guid and card number, and each reader's Anki
+  plan squad questions carry a note guid and card number, and each reader's Anki
   reads its own copy.
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
   server; an install pulls before it uploads (`account.ensure()`), and the
@@ -95,7 +95,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   deck ids belong to one collection. `plans.py` is pure, `plan_flow.py`
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
-  checkpoint scores, `wrap.json`. A plan's team shares only
+  checkpoint scores, `wrap.json`. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never a
   number, never weak spots.
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
@@ -118,7 +118,8 @@ same commit, each with its test:
 - `due.parse` ↔ `board.DUE_JS` (the add box's preview)
 - `due.line_keys` ↔ `dueLineKeys` in app.js
 - `board.face` ↔ `face` in `site/public/builder.js`
-- `team.bingo_line` ↔ `bingoLine` in builder.js
+- `team.bingo_line` ↔ `bingoLine` in builder.js (`PlanSquad`)
+- `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
 - `room_model.phase` ↔ the room widget's JS
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
@@ -133,7 +134,7 @@ same commit, each with its test:
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | Plans (follow, morning, week, load) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
-| A plan's Team and Insights | `team.py`, `team_flow.py` | `team.ts` |
+| A plan's squad (3.8.0, on the Squads tab; its team on the server) and Insights | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Due | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |

@@ -106,7 +106,7 @@ def hero(cards, target):
 
 def source(tags):
     """A topic's source as its tags say: the resource and the part just above
-    the topic ("Bootcamp › Autonomic System"), from the first tag."""
+    the topic ("Video Series › Autonomic System"), from the first tag."""
     for t in tags or []:
         segs = [x for x in str(t).split(P._SEP) if x]
         ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)

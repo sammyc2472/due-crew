@@ -67,7 +67,13 @@ def _squad_view(c=None):
 
 
 def _fetch_squad(force=False):
-    """Lazy: when the view opens. Cached a few minutes."""
+    """Lazy: when the view opens. Cached a few minutes. 3.8.0: a plan's
+    squad on screen is its own fetch, and mine waits until one is picked."""
+    from . import team_flow
+    hit = team_flow.picked(cfg())
+    if hit:
+        team_flow.fetch(hit["pid"], force=force)
+        return
     cur = _current_squad()
     sq = _state["squad"]
     if cur is None or not mw.col or not client().signed_in:

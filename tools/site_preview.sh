@@ -151,6 +151,9 @@ out.append(f"INSERT INTO notices (text, link, below, created_at, until, taken_at
 # 3.5, L: Dre's history on Maya's plan
 hist = {wk(n): [312 + (20 - n) * 8, 200 + (20 - n) * 6] for n in range(20, -1, -1)}
 out.append(f"UPDATE plan_follows SET hist = {q(json.dumps(hist))} WHERE plan = 'mayaplanpreview1' AND uid = 'dre';")
+# 3.7.6: sharing my progress is being in the plan's squad (its team); 3.8.0 shows it on the Squads tab
+out.append("INSERT INTO plan_team (plan, uid, joined_at) SELECT plan, uid, at FROM plan_follows WHERE share = 1;")
+out.append(f"INSERT INTO plan_team (plan, uid, joined_at, last_day) VALUES ('mayaplanpreview1', 'maya', {now}, {q(real.isoformat())});")
 print("\n".join(out))
 PY
 (cd worker && npx wrangler d1 execute due-crew --local --env="" --persist-to "../$STATE" --file "$SEED" >/dev/null)

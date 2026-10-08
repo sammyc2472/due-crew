@@ -452,9 +452,18 @@ def _bingo_view(c):
 
 
 def _squad_view_with_bingo(c):
-    """The Squads tab's view, with this week's card when there is one (3.6)."""
+    """The Squads tab's view, with this week's card when there is one (3.6).
+    3.8.0: the plans' squads are pills too, and one of them may be picked."""
+    from . import team_flow
     sv = _squad_view(c)
-    if c.get("period") == "squads" and sv.get("state") == "ok":
+    if c.get("period") != "squads":
+        return sv  # only the Squads tab draws it; a plan's squad reads my collection for its card questions
+    ps = team_flow.plan_squads()
+    pv = team_flow.squad_view(c, ps)
+    if pv:
+        return dict(pv, squads=sv.get("squads") or [], plan_squads=ps)
+    sv = dict(sv, plan_squads=ps)
+    if sv.get("state") == "ok":
         bv = bingo_flow.view(sv, c)
         if bv:
             sv = dict(sv, bingo=bv)
@@ -802,6 +811,9 @@ def _on_js(handled, message, context):
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
         _select_squad(parts[2])
+    elif cmd == "squadplan" and len(parts) > 2:
+        from . import team_flow
+        team_flow.open_squad(parts[2])  # 3.8.0: a plan's squad
     elif cmd == "squadadd":
         open_squads()
     elif cmd == "squadinvite":

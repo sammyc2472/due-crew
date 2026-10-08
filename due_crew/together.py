@@ -302,7 +302,7 @@ def reviewer_menu(reviewer, menu):
     # 3.7.3: a card in a plan whose team I'm on can go to the team too
     from . import team_flow
     if team_flow.plan_for_card(card):
-        team = menu.addAction("Due Crew: ask the team about this…")
+        team = menu.addAction("Due Crew: ask the squad about this…")
         team.triggered.connect(lambda: team_flow.ask_card(card))
 
 

@@ -1024,7 +1024,9 @@ const Board = (() => {
     const y = d.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
     return `${y}-W${String(1 + Math.round(((d - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
   };
-  async function squads(showUp, crewUids, pendingUids, onSort, refresh) {
+  /** plans: 3.8.0, the plans whose squad I'm in ({id: "plan:<plan id>", pid,
+   *  name}), pills after my own; onLeft(pid) when I leave one here. */
+  async function squads(showUp, crewUids, pendingUids, onSort, refresh, plans = [], onLeft = () => {}) {
     const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
@@ -1032,14 +1034,17 @@ const Board = (() => {
     }
     const list = squadsGot.list;
     const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
-    if (!list.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
+    if (!list.length && !plans.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
       h("p", { class: "muted small" }, "Join with a code, or make one in Anki."));
     let cur = store("dc-squad");
-    if (!list.some((q) => q.id === cur)) cur = list[0].id;
+    if (!list.some((q) => q.id === cur) && !plans.some((q) => q.id === cur)) cur = (list[0] || plans[0]).id;
+    const pill = (q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name);
+    const sw = h("div", { class: "sqsw" }, list.map(pill), plans.map(pill), joinOrCreate);
+    const plan = plans.find((q) => q.id === cur);
+    if (plan) return h("div", {}, sw, PlanSquad.view(plan.pid, onSort, { left: () => { store("dc-squad", ""); onLeft(plan.pid); } }));
     // only the squad on screen is fetched; another one when it's picked
     if (!(cur in squadsGot.boards)) squadsGot.boards[cur] = await api("GET", `/squads/${cur}?wk=${isoWeek(day)}`).catch(() => null);
     const sq = squadsGot.boards[cur];
-    const sw = h("div", { class: "sqsw" }, list.map((q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name)), joinOrCreate);
     if (!sq) return h("div", {}, sw, h("p", { class: "muted small" }, "Couldn’t load. Check your connection and Refresh."));
     const sort = store("dc-sort") || "reviews";
     const field = { reviews: "reviews", time: "studyTimeMs", retention: "accuracy", streak: "streak", week: "week" }[sort] || "reviews";
@@ -1162,7 +1167,13 @@ async function home() {
     const mins = Math.floor((Date.now() - fetched) / 60000);
     updated.textContent = mins < 1 ? "Updated just now" : `Updated ${mins}m ago`;
     if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t));
-    if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw)); }
+    if (tab === "squads") {
+      // 3.8.0: a plan's squad is a pill too; in it is sharing my progress (3.7.6), unless still asked
+      const mine = followed.filter((p) => p.following.share && !p.following.teamAsk).map((p) => ({ id: `plan:${p.id}`, pid: p.id, name: p.name }));
+      const left = (pid) => { const p = followed.find((x) => x.id === pid); if (p) p.following.share = false; draw(); };
+      panel.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+      return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left));
+    }
     if (tab === "plans") return panel.replaceChildren(plansTab());
     panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw), crew.length ? null : solo()].filter(Boolean));
   }
