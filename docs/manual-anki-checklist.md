@@ -276,7 +276,7 @@ deck both share (Settings › Shared decks).
 - [ ] As text: Copy the prompt, paste it into an AI with a syllabus, paste the answer back, Read it: the preview lists each date; a made-up tag says not found; a "# Pick in Anki" line shows under To pick in Anki. Replace, Save.
 - [ ] On a phone: the week shows as a list of days; What to cover folds.
 
-### 3.3: following, the Plans tab, together
+### 3.3: following, the Plans tab, together (3.8.0: the tab is You › Plans, above the board)
 
 - [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
 - [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
@@ -348,7 +348,7 @@ In Anki (as a follower):
 - [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
 - [ ] Night mode and light mode: the chip and the new headings read clearly.
 
-### 3.5.0: the Plans tab, and codes anywhere
+### 3.5.0: the Plans tab, and codes anywhere (3.8.0: You › Plans; its Today box went to Due's Today)
 
 - [ ] Plans tab with a plan: the Today box names today's date(s), reviews, new and minutes; Study now starts the plan's deck; Put off to tomorrow closes them until tomorrow's morning.
 - [ ] The week: today outlined, past days ticked or "N left", rest days faded, an event outlined. Click a later day: Open now opens it, Skip it skips it (Undo skip on the same day), Move my days back asks how many. ‹ › moves a week and "Today" comes back.
@@ -546,7 +546,7 @@ In Anki (as a follower):
 - [ ] Admin › Today: the Housekeeping line under Needs you.
 
 
-## Due (above the board)
+## Due (above the board; 3.8.0: the box's Today, Upcoming and Later)
 
 - [ ] Due sits above the board on every tab; ▴ folds it to one line (and it stays folded after Anki restarts); the line's Study › opens the plan's deck.
 - [ ] Today: Behind (a plan date from an earlier day not yet seen, an item of yours from yesterday), then Reviews, today's dates with each resource's numbers, your items. Review a date's cards: its box ticks itself at the next refresh.
@@ -569,7 +569,7 @@ In Anki (as a follower):
 
 ## 3.7.3: a plan's squad and Insights (two followers, or an author and a follower; 3.8.0: the squad is on the Squads tab)
 
-- [ ] The plan card has Plan · Insights. Not in its squad: the crew line ends "Join its squad"; it asks first, saying what it shares; Yes: "You're in. It's on the Squads tab."
+- [ ] (3.8.0: no Plan · Insights tabs on the card; Insights is the box's own tab.) Not in its squad: the crew line ends "Join its squad"; it asks first, saying what it shares; Yes: "You're in. It's on the Squads tab."
 - [ ] Both join. Review one of the plan's cards on one side and sync: on the other side, Squads › the plan's pill shows them lit (others faded); the plan card's line says "Squad: N of M showed up · Open ›", and Open goes to the squad.
 - [ ] Ask the squad (type, Enter): it shows for the other at their next look, with a badge on the plan's pill and "Name asked ›" on the plan card until they open it; your own question never badges you.
 - [ ] Squads with a squad of your own and a plan's squad: both pills; picking one shows it (a plan's: who showed up, then Ask the squad and its threads; "Open the plan · Leave" under it). With no squad of your own, the plan's squad is the one shown. Restart Anki: the pill you picked is still picked.
@@ -582,11 +582,26 @@ In Anki (as a follower):
 - [ ] duecrew.com, the plan's page as a follower: no Team tab; "You're in its squad. Open it ›" (or what it shares and Join its squad), which lands on Home's Squads tab with the plan's pill picked: who showed up, its bingo, then Ask the squad. Leave there: the pill goes.
 - [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….
 
-### 3.8.0: Crew, one tab
+### 3.8.0: Crew, one tab (the four pills became two, below)
 
-- [ ] The board's pills are Crew · Decks · Squads · Plans. Under them on Crew, Today and Week are picked as a squad is on the Squads tab; Week shows the week's table as before.
-- [ ] Pick Week, go to Decks, click Crew: it comes back on Week. Restart Anki: still Week.
-- [ ] Settings › Board › tabs: Decks, Squads and Plans can hide; Week isn't listed. Someone who had hidden Week sees it in the picker.
-- [ ] Settings › Privacy › Just show up: one Crew view, no picker.
-- [ ] duecrew.com Home: the same four pills and picker; a saved Today or Week tab opens on Crew with that view picked.
+- [ ] Under Crew, Today, Week and Decks are picked as a squad is on the Squads tab; Week shows the week's table as before.
+- [ ] Pick Week, go to Squads, click Crew: it comes back on Week. Pick Decks, the same. Restart Anki: still the one picked.
+- [ ] Settings › Privacy › Just show up: This week and Decks.
+
+### 3.8.0: You, and your people
+
+- [ ] Open Anki on an install that was on the Plans tab: the board opens on Crew › Today, with the box above it open on Plans. A hidden Week (from 3.7) is gone from Settings and shows in the picker.
+- [ ] The box above the board: Today · Upcoming · Later, a gap, then Plans · Insights. The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
+- [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
+- [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53 · Insights ›") with FSRS on, the week, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
+- [ ] Behind on a plan: its behind line has Catch up…, and the menu ends with Push my dates back…. The day details' link reads Push my dates back… too.
+- [ ] The morning opens cards: Today says "This morning opened N new cards" with Put off to tomorrow, which closes them until tomorrow's morning; review a card and the line goes. With Due off in Settings, the line is on Plans instead.
+- [ ] Following no plan: Plans shows the three ways in. A squad's offer to follow a plan shows on Plans and on Squads.
+- [ ] Insights with a plan's deck picked: as 3.7.9, its leeches at the bottom ("N leeches stay suspended in this deck · See them" opens the browser on them). The plan card no longer mentions leeches.
+- [ ] Insights on a deck with no plan (pick it in Insights' row of decks, or "How it's sticking ›" beside your deck on Crew › Decks): with no exam date, the line offers "Your exam date…" (Settings › Privacy); set one within three weeks and the box reads "Your exam · …" over the whole deck. Not sticking yet names topics from the deck's tags (never "leech"), or its subdecks when the cards have no tags; Study and the name's Browse open the same cards. Your week's key says "what Anki has due".
+- [ ] The deck you picked stays picked after a restart (it's this computer's), and stays in the row after ten minutes.
+- [ ] Settings › Board › Shows: Crew (always), Decks, Squads, Plans, Insights. Hide Plans and Insights with Due off: no box at all. A link to a hidden one (Insights › on a plan, How it's sticking ›) shows it again.
+- [ ] Browse › right-click › Due Crew: show on my plan: the box opens on Plans, that date's week, its details open.
+- [ ] Following a plan (Follow…): the box opens on Plans with the new plan.
+- [ ] duecrew.com Home: Crew · Squads with Today · Week · Decks under Crew; a saved Decks or Plans tab opens on Crew. The rail's Plans panel lists each plan (following none: the library and Your plans). As admin, the plan-load chart is on the Log page under each plan.
 

@@ -368,11 +368,11 @@ class SettingsDialog(QDialog):
         self._check(lay, "show_leaderboard", "Show Due Crew on the Decks screen")
         self._check(lay, "show_stale", "Show yesterday for friends who haven't synced today")
         self._check(lay, "sync_notifications", "Tell me when my crew studies")
-        # 3.5.0: which tabs show (Today always does); per computer
+        # 3.5.0: which tabs show (3.8.0: Crew always does); per computer
         from ..board import HIDEABLE_TABS
         hidden = set(self.config.get("hidden_tabs") or [])
         tabs_row = QHBoxLayout()
-        tabs_row.addWidget(QLabel("Tabs"))
+        tabs_row.addWidget(QLabel("Shows"))
         self.tab_boxes = {}
         for key, label in HIDEABLE_TABS:
             box = QCheckBox(label)
@@ -396,7 +396,7 @@ class SettingsDialog(QDialog):
         self._text(lay, "crew_label", "Crew name in shares", "Crew")
         lay.addSpacing(6)
         lay.addWidget(QLabel("<b>Due</b>"))
-        self._check(lay, "due_show", "Due above the board")
+        self._check(lay, "due_show", "Today, Upcoming, Later")
         self._check(lay, "due_suggest", "Suggestions from my own Anki")
         lee = self._check(lay, "due_leeches", "Recover leeches each morning")
         lee.setToolTip("Each morning, as new cards")

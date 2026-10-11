@@ -110,11 +110,11 @@ _state = {
     "bingo_open": False,   # 3.6: the squad's bingo card is open in the board's place
     "bingo_mine": None,    # 3.6: {wk, play, progress}: my week as worked out at the sync (progress never sent)
     "squads_left": set(),  # 3.6: squads I left this session, which heal_squads never brings back
-    "plan_sub": {},        # 3.7.3: {plan id: "team" | "ins"}: the plan's tab on screen (Plan when absent)
     "team_view": {},       # 3.7.3: {plan id: {at, data, state}}: the team as its tab last fetched it
     "team_draft": {},      # 3.7.3: {plan id: text}: Ask, filled in from Insights
     "team_bingo_open": None,  # 3.7.3: the plan whose team bingo card is open in the board's place
-    "insights": {},        # 3.7.3: {plan id: {at, rows}}: worked out here, never sent
+    "insights": {},        # 3.8.0: {deck id: {at, view, key}}: Insights, worked out here, never sent
+    "you_decks": None,     # 3.8.0: {at, list}: Insights' decks, as its picker shows them
 }
 
 
@@ -196,8 +196,8 @@ def _reset_runtime(keep_sync=False):
                   settings_failed_ts=0.0, plan_progress={}, plan_load={}, plan_session={}, notice=None,
                   plan_updates={}, plans_midday=False, plans_morning=None,
                   bingo_open=False, bingo_mine=None, squads_left=set(),
-                  settings_tab=None, plan_sub={}, team_view={}, team_draft={},
-                  team_bingo_open=None, insights={})
+                  settings_tab=None, team_view={}, team_draft={},
+                  team_bingo_open=None, insights={}, you_decks=None)
     _pending_cheers.clear()
 
 

@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=3" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your friends on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -48,19 +48,20 @@ bingo. Copy the card to your group chat.
 Plan a class's or a crew's studying on a calendar at duecrew.com: pick
 chapters from a deck (Tools → Due Crew → Make a plan from a deck), set a
 pace, mark the exam, and share the code. Everyone following gets that
-day's cards each morning. Behind? **Catch up** or **Move my days back**.
+day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 Plans can have co-authors and notes, go in your calendar app, and be
 shared in the library. Join a plan's **squad** to see who showed up today,
-ask and answer questions, and play bingo together; **Insights** shows the
-cards Anki won't show you before your next exam, what isn't sticking yet,
-and your week in time, worked out in your Anki.
+ask and answer questions, and play bingo together.
 
-**Due**, above the board, is your day: what your plans open, ticking
-itself as you review, the lecture or chapter that goes with it, and your
-own to-dos for any day. Upcoming shows the next two weeks; anything left
-undone waits under Behind.
+Above the board is yours. **Today** is your day: what your plans open,
+ticking itself as you review, the lecture or chapter that goes with it,
+and your own to-dos for any day. **Upcoming** shows the next two weeks;
+anything left undone waits under Behind. **Plans** has each plan's week,
+and **Insights**, for any deck, plan or not, shows the cards Anki won't
+show you before your exam, what isn't sticking yet, and your week in
+time, worked out in your Anki. The board under it is your people.
 
-<img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=2" width="600">
+<img alt="Plans, above the board: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=3" width="600">
 
 ## Install
 

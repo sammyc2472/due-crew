@@ -1,20 +1,19 @@
-"""3.7.3 a plan's squad (its team, until 3.8.0) and its Insights, the glue
+"""3.7.3 a plan's squad (its team, until 3.8.0) and Insights, the glue
 (team.py is pure).
 
-The Plans tab's plan card has two tabs, Plan and Insights
-(`_state["plan_sub"]`, per session). 3.8.0: the plan's squad lives on the
-Squads tab, a pill beside my own squads (`plan_squads`, picked as
-`cfg["squad"] = "plan:<id>"`), and the plan card says how many showed up
-with a way there. It's opt-in per plan: joining shares that I showed up
-today (answered one of the plan's cards), my questions and answers, and my
-bingo squares (the same play as on my squad rows: the week's one card);
-never a number. The board's refresh carries a few counts
+3.8.0: Insights is the You bubble's own tab, a deck's (see below), and
+the plan's squad lives on the Squads tab, a pill beside my own squads
+(`plan_squads`, picked as `cfg["squad"] = "plan:<id>"`), and the plan card
+says how many showed up with a way there. It's opt-in per plan: joining
+shares that I showed up today (answered one of the plan's cards), my
+questions and answers, and my bingo squares (the same play as on my squad
+rows: the week's one card); never a number. The board's refresh carries a few counts
 (`session["teams"]`); the squad itself is one request when it opens, and
 each click is one more. Showed-up days and squares ride the sync
 (`for_sync`). The server still calls it a team (/plans/<id>/team).
 
-Insights are mine alone (3.7.9): worked out here from my reviews of the
-plan's cards and Anki's own memory model, never sent. Study builds Anki's
+Insights are mine alone (3.7.9): worked out here from my reviews of a
+deck's cards and Anki's own memory model, never sent. Study builds Anki's
 filtered deck of the hero's cards or a topic's; Optimize FSRS opens the
 deck's options; the line can be put away for 30 days."""
 
@@ -129,16 +128,10 @@ def _seen(pid):
 
 
 def card_bits(pid):
-    """For the plan's card: its tab, the squad line's counts (3.8.0: the
-    squad itself is on the Squads tab), and Insights when that tab is open."""
-    sub = (_state.get("plan_sub") or {}).get(pid) or "plan"
-    if sub not in ("plan", "ins"):
-        sub = "plan"
+    """For the plan's card: the squad line's counts (3.8.0: the squad itself
+    is on the Squads tab; Insights is the You bubble's own tab)."""
     summ = teams().get(pid)
-    out = {"sub": sub, "on": summ is not None, "unread": T.unread(summ, _seen(pid)) if summ else 0, "summary": summ}
-    if sub == "ins":
-        out["insights"] = insights(pid)
-    return out
+    return {"on": summ is not None, "unread": T.unread(summ, _seen(pid)) if summ else 0, "summary": summ}
 
 
 def _known(view):
@@ -216,20 +209,6 @@ def _mark_seen(pid, data):
         pc = pf._pcfg()
         pc.setdefault("team_seen", {})[pid] = newest
         pf._psave(pc)
-
-
-def show(pid, sub):
-    """Plan or Insights on the plan's card. "team" (an older page's link)
-    goes to the plan's squad."""
-    if sub == "team":
-        open_squad(pid)
-        return
-    if sub not in ("plan", "ins") or not _plan(pid):
-        return
-    _state.setdefault("plan_sub", {})[pid] = sub
-    if sub == "ins":
-        _state.setdefault("insights", {}).pop(pid, None)  # worked out again when opened
-    app.swap(cfg())
 
 
 JOIN_SAYS = ("The others in it see your name and the days you show up, and your questions and answers; "
@@ -447,19 +426,117 @@ def open_bingo(pid, on=True):
         fetch(pid, force=True)
 
 
-# ---- Insights ----
+# ---- Insights (3.8.0: a deck's, for everyone, on the You bubble) ----
+#
+# A deck at a time (you_decks), picked as a squad is. A plan I follow that
+# runs on the deck brings its exam (its next event, over its prep dates) and
+# its topic names; without one the deck's own tags name the topics and my
+# own exam date (Settings) aims the exam box. Mine alone: worked out here,
+# never sent, at most every INSIGHTS_FRESH seconds a deck.
 
-def insights(pid):
-    """What the Insights tab draws, worked out at most every ten minutes. Main thread."""
-    have = (_state.get("insights") or {}).get(pid)
+DECKS_MAX = 5
+
+
+def _since(col, days):
+    return (int(col.sched.day_cutoff) - days * 86400) * 1000
+
+
+def you_decks():
+    """[{did, name, full, pid}] as Insights' picker shows them: the decks of
+    the plans I follow here first, then the deck I picked last (from Crew ›
+    Decks, say), then the top-level decks I've reviewed most in two weeks;
+    DECKS_MAX at most. Main thread."""
+    have = _state.get("you_decks")
     if have and time.time() - have["at"] < INSIGHTS_FRESH:
+        return have["list"]
+    out = []
+    if mw.col:
+        try:
+            out = _you_decks(mw.col, int(cfg().get("ins_deck") or 0))
+        except Exception:
+            traceback.print_exc()
+    _state["you_decks"] = {"at": time.time(), "list": out}
+    return out
+
+
+def _you_decks(col, picked=0):
+    pf = _plans_flow()
+    state = pf._state_cfg()
+    out, seen = [], set()
+
+    def add(did, pid=None):
+        did = int(did)
+        if did in seen or len(out) >= DECKS_MAX or not col.decks.get(did, default=False):
+            return
+        full = str(col.decks.name(did) or "")
+        seen.add(did)
+        out.append({"did": did, "name": full.split("::")[-1] or full, "full": full, "pid": pid})
+    for p in pf.followed():
+        st = state.get(p["id"])
+        if st and pf._deck_ok(col, st.get("deck_id")):
+            add(st["deck_id"], p["id"])
+    if picked:
+        add(picked)
+    roots = {}
+    for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
+                             "JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.ease > 0 GROUP BY 1", _since(col, T.DAYS)):
+        if not col.decks.get(int(did), default=False):
+            continue
+        root = str(col.decks.name(int(did)) or "").split("::")[0]
+        if root:
+            roots[root] = roots.get(root, 0) + int(n)
+    for root, _n in sorted(roots.items(), key=lambda x: (-x[1], x[0].lower())):
+        rid = col.decks.id_for_name(root)
+        if rid:
+            add(rid)
+    return out
+
+
+def you_view(c):
+    """What You › Insights draws: {decks, did, plan, exam, view}. The deck
+    picked (cfg ins_deck, this computer's) or the first. Main thread."""
+    decks = you_decks()
+    if not decks:
+        return {"decks": []}
+    did = int(c.get("ins_deck") or 0)
+    d = next((x for x in decks if x["did"] == did), decks[0])
+    p = _plan(d["pid"]) if d.get("pid") else None
+    exam = str(c.get("exam_date") or "")
+    return {"decks": decks, "did": d["did"], "exam": bool(exam),
+            "plan": {"id": p["id"], "name": P.plan_title(p)} if p else None,
+            "view": insights(d["did"], p["id"] if p else None, exam)}
+
+
+def plan_lines(cards):
+    """3.8.0, You › Plans: each plan's line from Insights (the next exam's
+    cards at risk), card["ins"] = {n, did, name, day}. Main thread."""
+    pf = _plans_flow()
+    state = pf._state_cfg()
+    for card in cards or []:
+        st = state.get(card.get("id"))
+        if card.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
+            continue
+        did = int(st["deck_id"])
+        v = insights(did, card["id"], "")
+        aim = v.get("aim") or {}
+        if v.get("hero"):
+            card["ins"] = {"n": len(v["hero"]), "did": did, "day": aim.get("day"),
+                           "name": aim.get("name") if aim.get("scoped") else ""}
+
+
+def insights(did, pid=None, exam=""):
+    """A deck's Insights, worked out at most every INSIGHTS_FRESH seconds
+    (again when the plan or the exam date changes). Main thread."""
+    key = f"{pid or ''}|{exam}"
+    have = (_state.get("insights") or {}).get(did)
+    if have and have.get("key") == key and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["view"]
     view = {}
     try:
-        view = _work_out(pid)
+        view = _work_out(int(did), pid, exam)
     except Exception:
         traceback.print_exc()
-    _state.setdefault("insights", {})[pid] = {"at": time.time(), "view": view}
+    _state.setdefault("insights", {})[did] = {"at": time.time(), "view": view, "key": key}
     return view
 
 
@@ -481,65 +558,81 @@ def _fsrs(col):
         return False
 
 
-def _work_out(pid):
-    p = _plan(pid)
-    pf = _plans_flow()
-    st = pf._state_cfg().get(pid)
+def _new_per_day(col, did):
+    try:
+        return max(0, int(col.decks.config_dict_for_deck_id(did)["new"]["perDay"]))
+    except Exception:
+        return 0
+
+
+def _work_out(did, pid=None, exam=""):
     col = mw.col
-    if not p or not st or not col or not pf._deck_ok(col, st.get("deck_id")):
+    if not col or not col.decks.get(did, default=False):
         return {}
-    did = int(st["deck_id"])
-    idx = P.DeckIndex(col, did)
-    swap = pf._swap(st)
-    doc = p["doc"]
+    pf = _plans_flow()
+    p = _plan(pid) if pid else None
+    st = pf._state_cfg().get(pid) if p else None
+    if p and not (st and pf._deck_ok(col, st.get("deck_id")) and int(st["deck_id"]) == did):
+        p = st = None  # the plan moved to another deck: this deck's own Insights
     today = pf._today()
     cutoff = int(col.sched.day_cutoff)
     sday = int(getattr(col.sched, "today", 0) or 0)
     target = _target(col, did)
-    deck = _in(idx.cards)
+    if p:
+        idx = P.DeckIndex(col, did)
+        swap, doc = pf._swap(st), p["doc"]
+        deck = _in(idx.cards)
+    else:
+        deck = _deck_sql(col, did)  # a big shared deck's 30,000 ids stay out of the SQL
     since = lambda days: (cutoff - days * 86400) * 1000  # noqa: E731
-    out = {"target": int(round(100 * target))}
+    out = {"target": int(round(100 * target)), "did": did}
 
     # the header: right on this deck's reviews, first answer of each card each day
     out["right"] = T.right_days(col.db.all(
         f"SELECT cid, CAST((? - id / 1000) / 86400 AS INTEGER), ease FROM revlog "
         f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)))
 
-    # the plan's own cards, and what each date asks of me (plans.load)
-    ms = P.unit_matches(idx, doc, swap)
-    plan = set()
-    for v in ms.values():
-        plan |= set(v)
-    ld = P.load(idx, doc, swap)
-    units = P.units(doc)
-
-    # the hero: started cards Anki won't show me before the aim, under my target by then (FSRS only).
-    # The dates that prep for the event, when it has some (its name on the box); else the
-    # whole plan, and the box goes by the day
-    day, name, k, eid = T.aim(doc.get("events"), today)
-    prep = T.prep_units(units, eid)
-    aimed = plan
-    if prep:
-        aimed = set()
-        for uid in prep:
-            aimed |= set(ms.get(uid) or ())
-    out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep)}
+    # the exam box: started cards Anki won't show me before the aim, under my target by then
+    # (FSRS only). A plan aims at its next event (its prep dates' cards when it names them,
+    # else all of the plan's), else a week out; with no plan, my own exam date when it's
+    # within AIM_DAYS, over the whole deck, else a week out
+    if p:
+        ms = P.unit_matches(idx, doc, swap)
+        plan = set()
+        for v in ms.values():
+            plan |= set(v)
+        ld = P.load(idx, doc, swap)
+        units = P.units(doc)
+        day, name, k, eid = T.aim(doc.get("events"), today)
+        prep = T.prep_units(units, eid)
+        aimed = plan
+        if prep:
+            aimed = set()
+            for uid in prep:
+                aimed |= set(ms.get(uid) or ())
+        out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep)}
+        aimed = _in(aimed) if aimed else ""
+    else:
+        mine = [{"day": exam, "name": "Your exam", "id": "exam"}] if exam else []
+        day, name, k, eid = T.aim(mine, today)
+        aimed = deck
+        out["aim"] = {"day": day, "name": name, "in": k, "scoped": False, "kind": "exam" if eid else ""}
     if _fsrs(col) and aimed and sday:
-        last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({_in(aimed)}) GROUP BY cid"))
-        cards = {}
+        last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({aimed}) GROUP BY cid"))
+        mem_of = {}
         for cid, ctype, queue, due, ivl, data in col.db.all(
-                f"SELECT id, type, queue, due, ivl, data FROM cards WHERE id IN ({_in(aimed)}) AND type != 0 AND queue != -1"):
+                f"SELECT id, type, queue, due, ivl, data FROM cards WHERE id IN ({aimed}) AND type != 0 AND queue != -1"):
             if cid not in last:
                 continue
             try:
                 mem = json.loads(data or "{}")
             except ValueError:
                 mem = {}
-            s = float(mem.get("s") or max(int(ivl), 1))
+            s_ = float(mem.get("s") or max(int(ivl), 1))
             ago = (cutoff - int(last[cid]) // 1000) // 86400
             shown = queue in (1, 3, 4) or (queue == 2 and int(due) - sday < k)
-            cards[cid] = (T.recall(ago + k, s, mem.get("decay")), shown)
-        out["hero"] = T.hero(cards, target)
+            mem_of[cid] = (T.recall(ago + k, s_, mem.get("decay")), shown)
+        out["hero"] = T.hero(mem_of, target)
 
     # not sticking yet: this window's reviews, never right yet, or forgotten after being right
     reviewed, miss_last = set(), {}
@@ -552,22 +645,35 @@ def _work_out(pid):
                                   f"GROUP BY cid")) if reviewed else {}
     stuck = reviewed - set(first_right)
     forgot = {c for c, m in miss_last.items() if c in first_right and first_right[c] < m}
-    out["rows"] = T.not_sticking(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), reviewed, stuck, forgot)
+    if p:
+        out["rows"] = T.not_sticking(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), reviewed, stuck, forgot)
+    else:
+        out["rows"] = _deck_rows(col, did, reviewed, stuck, forgot)
 
-    # behind on the plan (the Plan tab's Catch up; nothing while a catch-up runs)
-    catch = st.get("catch") if str((st.get("catch") or {}).get("until") or "") >= today else None
-    out["behind"] = 0 if catch else sum(sum((ld.get(u["id"]) or [0, 0, 0])[1:]) for u in units
-                                       if str(u.get("opens") or "") < today)
+    # behind on the plan (its Catch up; nothing while a catch-up runs)
+    if p:
+        catch = st.get("catch") if str((st.get("catch") or {}).get("until") or "") >= today else None
+        out["behind"] = 0 if catch else sum(sum((ld.get(u["id"]) or [0, 0, 0])[1:]) for u in units
+                                           if str(u.get("opens") or "") < today)
+        out["pid"] = p["id"]
 
-    # my week in minutes, at my own pace in this deck
+    # my week in minutes, at my own pace in this deck: ahead, what the plan
+    # asks, or with no plan, what Anki has due (its new cards a day included)
     t = S.d(today)
     days = [S.iso(t + datetime.timedelta(days=i)) for i in range(7)]
     new = {d: 0 for d in days}
-    for u in units:
-        o = str(u.get("opens") or "")
-        if o in new:
-            sn, op, lk = ld.get(u["id"]) or [0, 0, 0]
-            new[o] += (op + lk) if o == today else lk
+    if p:
+        for u in units:
+            o = str(u.get("opens") or "")
+            if o in new:
+                _sn, op, lk = ld.get(u["id"]) or [0, 0, 0]
+                new[o] += (op + lk) if o == today else lk
+    else:
+        left = int(col.db.scalar(f"SELECT count() FROM cards WHERE id IN ({deck}) AND queue = 0") or 0)
+        per = _new_per_day(col, did)
+        for d in days:
+            new[d] = min(per, left)
+            left -= new[d]
     due = {i: 0 for i in range(7)}
     if sday:
         for (dd,) in col.db.all(f"SELECT due FROM cards WHERE id IN ({deck}) AND queue = 2"):
@@ -593,6 +699,7 @@ def _work_out(pid):
                          secs_new, (ms_ans / 1000.0 / n_ans) if n_ans >= 200 else None)
     if out["week"]:
         out["week"]["today_done"] = mins.get(0, 0)
+        out["week"]["src"] = "plan" if p else "anki"
 
     # Optimize FSRS: my newest cards against my target (put away for 30 days)
     hide = float((pf._pcfg().get("ins_fsrs_hide") or 0))
@@ -603,16 +710,53 @@ def _work_out(pid):
             out["fsrs"] = T.fsrs_gap(int(right or 0), int(n or 0), target)
         except Exception:
             traceback.print_exc()
+
+    # the deck's leeches Anki suspended (from the plan card, 3.8.0)
+    out["leeches"] = len(_leeches(col, deck))
     return out
 
 
-def _pick(pid, key):
-    """(cids, title) of the hero ("h") or a topic's row, as Insights shows them."""
-    view = ((_state.get("insights") or {}).get(pid) or {}).get("view") or {}
+def _deck_sql(col, did):
+    """The deck's cards and its subdecks', as SQL to put in IN (...)."""
+    dids = _in(col.decks.deck_and_child_ids(did))
+    return f"SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids})"
+
+
+def _leeches(col, deck):
+    """The suspended cards tagged leech among `deck` (ids, or _deck_sql, for SQL)."""
+    return col.db.list(f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
+                       f"AND c.queue = -1 AND (' ' || lower(n.tags) || ' ') LIKE '% leech %'")
+
+
+def _deck_rows(col, did, reviewed, stuck, forgot):
+    """Not sticking yet with no plan: topics from the deck's tags (T.deck_topics),
+    or its subdecks when its cards have no tags to say."""
+    if not reviewed:
+        return []
+    ids = _in(reviewed)
+    tags_of = {int(cid): str(tags or "").split() for cid, tags in
+               col.db.all(f"SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({ids})")}
+    topics, groups = T.deck_topics(tags_of, reviewed)
+    rows = T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
+    if rows:
+        return rows
+    root = str(col.decks.name(did) or "")
+    paths = {}
+    for cid, d in col.db.all(f"SELECT id, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({ids})"):
+        name = str(col.decks.name(int(d)) or "")
+        if name.startswith(root + "::"):
+            paths[int(cid)] = [name[len(root) + 2:]]
+    topics, groups = T.deck_topics(paths, reviewed)
+    return T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
+
+
+def _pick(did, key):
+    """(cids, title) of the exam box ("h") or a topic's row, as Insights shows them."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
     if key == "h":
         cids, aim = view.get("hero") or [], view.get("aim") or {}
-        if aim.get("scoped") and aim.get("name"):
-            title = f"Before {aim['name']}"
+        if aim.get("name") and (aim.get("scoped") or aim.get("kind") == "exam"):
+            title = f"Before {aim['name']}" if aim.get("scoped") else "Before your exam"
         else:
             try:
                 d = datetime.date.fromisoformat(str(aim.get("day")))
@@ -626,46 +770,83 @@ def _pick(pid, key):
     return cids, title
 
 
-def study(pid, key):
-    """Anki's filtered deck of the hero's cards ("h") or a topic's, and into it."""
-    cids, title = _pick(pid, key)
+def study(did, key):
+    """Anki's filtered deck of the exam box's cards ("h") or a topic's, and into it."""
+    cids, title = _pick(did, key)
     if not cids or not mw.col:
         return
     pf = _plans_flow()
     name = pf._deck_name(f"Due Crew · {title}")
     if pf._filtered(mw.col, name, cids):
         pf._after_change()
-        did = mw.col.decks.id_for_name(name)
-        if did:
-            mw.col.decks.select(did)
+        fid = mw.col.decks.id_for_name(name)
+        if fid:
+            mw.col.decks.select(fid)
             mw.moveToState("overview")
 
 
-def browse(pid, key):
+def browse(did, key):
     """3.8.0: the same cards in Anki's browser, to look them over or fix them."""
-    cids, _title = _pick(pid, key)
+    cids, _title = _pick(did, key)
     if mw.col:
         _plans_flow()._browse(cids, empty="Nothing to show.")
 
 
-def fsrs(pid, open_it=True):
-    """Optimize FSRS: the plan deck's options (Anki's own button is there),
-    or the line put away for 30 days."""
+def browse_leeches(did):
+    """The deck's suspended leeches in Anki's browser."""
+    col = mw.col
+    if not col or not col.decks.get(did, default=False):
+        return
+    _plans_flow()._browse(_leeches(col, _deck_sql(col, did)), empty="No suspended leeches here.")
+
+
+def fsrs(did, open_it=True):
+    """Optimize FSRS: the deck's options (Anki's own button is there), or the
+    line put away for 30 days."""
     pf = _plans_flow()
     if not open_it:
         pc = pf._pcfg()
         pc["ins_fsrs_hide"] = int(time.time())
         pf._psave(pc)
-        _state.setdefault("insights", {}).pop(pid, None)
+        _state["insights"] = {}  # every deck's line goes
         app.swap(cfg())
         return
-    st = pf._state_cfg().get(pid)
-    if st and mw.col and pf._deck_ok(mw.col, st.get("deck_id")):
+    if mw.col and mw.col.decks.get(did, default=False):
         try:
             from aqt.deckoptions import display_options_for_deck_id
-            display_options_for_deck_id(int(st["deck_id"]))
+            display_options_for_deck_id(int(did))
         except Exception:
             traceback.print_exc()
+
+
+def pick_deck(did):
+    """Insights' picker: a deck of mine, remembered on this computer."""
+    if not any(d["did"] == did for d in you_decks()):
+        return
+    c = cfg()
+    c["ins_deck"] = did
+    save_cfg(c)
+    app.swap(c)
+
+
+def go_insights(did):
+    """You › Insights on a deck (from a plan's line, or Crew › Decks): the
+    bubble opened on it, the deck picked."""
+    c = cfg()
+    c["due_tab"] = "insights"
+    c["due_fold"] = {"day": _today(), "folded": False}
+    if "insights" in (c.get("hidden_tabs") or []):
+        c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != "insights"]
+    if mw.col and mw.col.decks.get(did, default=False):
+        c["ins_deck"] = did
+        if not any(d["did"] == did for d in you_decks()):
+            _state["you_decks"] = None  # a deck the picker didn't list: it joins (you_decks keeps the one picked)
+    save_cfg(c)
+    app.swap(c)
+
+
+def _today():
+    return _state["labels"][0] if _state.get("labels") else ""
 
 
 # ---- the sync ----
@@ -705,12 +886,32 @@ def for_sync(c):
 # ---- the board's commands ----
 
 def on_message(cmd, parts):
-    """The plan tabs' commands (plansub, the plan squad's and Insights'): True when handled."""
+    """The plan squad's commands, and Insights' (3.8.0: ins*, a deck's id in
+    each; youins opens the You bubble on Insights): True when handled."""
     arg = parts[2] if len(parts) > 2 else ""
     x = parts[3] if len(parts) > 3 else ""
-    if cmd == "plansub" and arg and x:
-        show(arg, x)
-    elif cmd == "planteamjoin" and arg:
+    if cmd.startswith("ins") or cmd == "youins":
+        if not arg.isdigit():
+            return True  # a deck's id, nothing else
+        did = int(arg)
+        if cmd == "insdeck":
+            pick_deck(did)
+        elif cmd == "youins":
+            go_insights(did)
+        elif cmd == "insstudy" and (x.isdigit() or x == "h"):
+            study(did, x)
+        elif cmd == "insbrowse" and (x.isdigit() or x == "h"):
+            browse(did, x)
+        elif cmd == "insfsrs":
+            fsrs(did)
+        elif cmd == "insfsrsno":
+            fsrs(did, open_it=False)
+        elif cmd == "insleeches":
+            browse_leeches(did)
+        else:
+            return False
+        return True
+    if cmd == "planteamjoin" and arg:
         join(arg, ask=x == "ask")
     elif cmd == "planteamleave" and arg:
         leave(arg)
@@ -734,14 +935,6 @@ def on_message(cmd, parts):
         open_bingo(arg)
     elif cmd == "planteambingoback":
         open_bingo(None, on=False)
-    elif cmd == "planinsstudy" and arg and (x.isdigit() or x == "h"):
-        study(arg, x)
-    elif cmd == "planinsbrowse" and arg and (x.isdigit() or x == "h"):
-        browse(arg, x)
-    elif cmd == "planinsfsrs" and arg:
-        fsrs(arg)
-    elif cmd == "planinsfsrsno" and arg:
-        fsrs(arg, open_it=False)
     else:
         return False
     return True

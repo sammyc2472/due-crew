@@ -6,7 +6,7 @@ Raw keys, for reference:
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `show_leaderboard` | true/false | Board on the Decks screen |
-| `period` | today / week / decks / squads / plans | Default view |
+| `period` | today / week / decks / squads | The board's view: Crew's Today, Week or Decks, or Squads |
 | `sort` | reviews / time / retention / streak | Default sort |
 | `show_stale` | true/false | Show yesterday for friends who haven't synced today |
 | `sync_notifications` | true/false | Toasts about your crew: studied, streaks, returns, milestones |
@@ -25,7 +25,10 @@ Raw keys, for reference:
 | `exam_date` | ISO date or empty | 📖 by your name for the two weeks before; empty = off |
 | `shared_decks` | deck ids | Set from Tools → Due Crew → Shared decks |
 | `room_chip_side` | right / left | Which end of Anki's top bar the study-room chip sits at |
-| `hidden_tabs` | list of week / decks / squads / plans | Tabs this computer doesn't show (Settings › Board › Tabs); Today always shows |
+| `hidden_tabs` | list of decks / squads / plans / insights | What this computer doesn't show (Settings › Shows); Crew always shows |
+| `due_tab` | today / upcoming / later / plans / insights | The tab open in the box above the board |
+| `due_show` | true/false | Today, Upcoming and Later in that box (Plans and Insights stay) |
+| `ins_deck` | deck id | The deck Insights shows on this computer |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 
 Sign-in state (account, name, tokens) lives in `user_files/<profile>/`,

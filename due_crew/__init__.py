@@ -518,6 +518,8 @@ def _board_html(c):
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
         notice = None
+    due = due_flow.view(c)  # Due: the day's to-do, on top
+    plans = plan_flow.board_view(c)  # 3.3: the plans I follow (3.8.0: You › Plans; offers on Squads too)
     return board.render(_board_data(), c, _state["ts"], notice=notice,
                         wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
@@ -528,9 +530,45 @@ def _board_html(c):
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
-                        room=rooms.board_view(),
-                        plans=plan_flow.board_view(c),  # 3.3: the Plans tab shows while I follow one
-                        due=due_flow.view(c))  # Due: the day's to-do above the board
+                        room=rooms.board_view(), plans=plans,
+                        due=due, you=_you(c, due, plans), sticking=_sticking(c))
+
+
+def _you(c, due, plans):
+    """3.8.0, the You bubble over the board: its tab, folded or not, and the
+    Plans or Insights it draws. Only the one on screen is worked out."""
+    from . import team_flow
+    you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None}
+    if you["folded"]:
+        return you
+    hidden = board.hidden_tabs(c)
+    keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
+    shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)
+    try:
+        if shown == "plans":
+            team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
+            if not due and mw.col:
+                you["opened"] = plan_flow.morning_opened()  # Due off: Put off to tomorrow is here
+        elif shown == "insights":
+            you["insights"] = team_flow.you_view(c)
+    except Exception:
+        traceback.print_exc()
+    return you
+
+
+def _sticking(c):
+    """3.8.0, Crew › Decks: {name: deck id} of the decks I share, for their
+    way to how they're sticking (You › Insights). Main thread."""
+    if c.get("period") != "decks" or not mw.col:
+        return None
+    out = {}
+    for did in c.get("shared_decks") or []:
+        try:
+            if mw.col.decks.get(int(did), default=False):
+                out[str(mw.col.decks.name(int(did))).split("::")[-1]] = int(did)
+        except Exception:
+            continue
+    return out
 
 
 def _on_did_render(deck_browser):
@@ -713,6 +751,9 @@ def _on_js(handled, message, context):
         plan_flow.on_message(cmd, parts)  # 3.1
     elif cmd.startswith("due"):
         due_flow.on_message(cmd, parts)  # Due
+    elif cmd.startswith("ins") or cmd == "youins":
+        from . import team_flow
+        team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
     elif cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
         c["sort"] = parts[2]
         save_cfg(c)
@@ -723,8 +764,8 @@ def _on_js(handled, message, context):
         _state["bingo_open"] = False
         _state["team_bingo_open"] = None
         c["period"] = parts[2]
-        if parts[2] in ("today", "week"):
-            c["crew_view"] = parts[2]  # 3.8.0: the Crew pill comes back to it
+        if parts[2] != "squads":
+            c["crew_view"] = parts[2]  # 3.8.0: Today, Week or Decks: the Crew pill comes back to it
         save_cfg(c)
         _swap(c)
         if parts[2] == "squads":
@@ -1271,6 +1312,7 @@ def _on_profile_open():
     client()                  # rebind to this profile's session
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
+    _settle_tabs()
     refresh_board()           # the board, right away
     # 3.1: a profile that syncs but didn't today still gets its morning
     gen = app.generation
@@ -1278,6 +1320,22 @@ def _on_profile_open():
     # ...and my own numbers a few seconds later, unless Anki's own sync got
     # there first (it pushes on finish, and it may have pulled phone reviews)
     QTimer.singleShot(8000, _push_on_open)
+
+
+def _settle_tabs():
+    """3.8.0: Plans left the board for the You bubble: a saved Plans tab
+    opens there, with Crew's Today under it; a hidden Week (a tab once) goes."""
+    c = cfg()
+    changed = False
+    if c.get("period") == "plans":
+        c["period"], c["due_tab"] = "today", "plans"
+        changed = True
+    hidden = [k for k in (c.get("hidden_tabs") or []) if k in dict(board.HIDEABLE_TABS)]
+    if hidden != list(c.get("hidden_tabs") or []):
+        c["hidden_tabs"] = hidden
+        changed = True
+    if changed:
+        save_cfg(c)
 
 
 def _tools_menu():

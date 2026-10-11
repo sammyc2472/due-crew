@@ -573,7 +573,7 @@ def _short_day(iso, today):
     return f"{d:%a}" if 0 <= (d - t).days < 7 else P.fmt_day(iso)
 
 
-def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, week_offset=0):
+def card_view(plan, st, prog, today, session=None, week_offset=0):
     """What board._plans_html draws for one plan. Strings are raw here;
     the board escapes them."""
     plan = mine(plan)  # G3, G4: my shift, my skips
@@ -588,6 +588,9 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
         sub = f"week {week} of {weeks}"
     if int(plan.get("shift") or 0):
         sub += f" · your dates +{int(plan['shift'])} day{'s' if int(plan['shift']) != 1 else ''}"
+    if int(plan.get("early") or 0) and not plan.get("paused"):
+        n = int(plan["early"])  # 3.3, C2 (on the Today box until 3.8.0)
+        sub += f" · opens {n} day{'s' if n != 1 else ''} early"
     sub += f" · {int(plan.get('followers') or 0):,} following"
     followers = int(plan.get("followers") or 0)
     crew = plan.get("crewDone") or {}
@@ -628,25 +631,17 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
     prep = None if plan.get("paused") else P.prep_for(doc, today)
     if prep:
         prep["when"] = _short_day(prep["day"], today)
-    # 3.5.0, the Plans tab: today's topics, the next one, and a week of the calendar
-    today_units = [u for u in P.units(doc) if u.get("opens") == today]
-    today_names = [str(u.get("name") or "?") for u in today_units]
-    if not today_names and now_id and any(u["id"] == now_id and u.get("due") and u["due"] >= today for u in open_units):
-        today_names = [str(u.get("name") or "?") for u in open_units if u["id"] == now_id]
+    # 3.5.0: a week of the calendar (today's dates are Due's Today since 3.8.0)
     moved = plan.get("moved") or {}
     skipped_units = [dict(u, opens=P._later(u["opens"], shift + int(moved.get(u["id"]) or 0)))
                      if shift or moved.get(u["id"]) else u
                      for u in P.units(_plan_doc(plan)) if u["id"] in skipped]
     week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units,
                        ld=(_state.get("plan_load") or {}).get(plan["id"]))
-    nxt_view = ({"name": str(nxt.get("name") or "?"), "uid": nxt["id"], "day": P.weekday_or_day(nxt["opens"], today),
-                 "n": P.unit_total(nxt)} if nxt else None)
     change = None
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
     return {"id": plan["id"], "title": P.plan_title(plan), "sub": sub, "rows": rows,
-            "opened": ({"names": opened[0], "n": opened[1], "undo": bool(undo_ok)}
-                       if opened and opened[1] else None),
             "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
             # 3.7.3: what an author's update adds to today and earlier, waiting for Open; their posts
@@ -655,15 +650,11 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
             "team_ask": bool(plan.get("teamAsk")),  # 3.7.6: shared before the merge: asked once
             "owner_name": str(plan.get("ownerName") or ""),
             "session": None if no_deck or plan.get("paused") else session,
-            "today": P.fmt_day(today), "sched": bool(plan.get("sched")),
-            "early": int(plan.get("early") or 0),
             "prep": prep,
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
             "aside": aside(plan, st), "aside_ok": list(((_pcfg().get("aside_ok") or {}) if mw else {}).get(plan["id"]) or [0, 0]),
             "put_off": put_off, "waiting": waiting,
-            "today_names": today_names, "today_what": P.topics_line(today_units),
-            "today_topics": P.topic_view(today_units), "today_uids": [u["id"] for u in today_units],  # 3.8.0: each topic a click
-            "next": nxt_view, "week": week, "week_offset": int(week_offset),
+            "week": week, "week_offset": int(week_offset),
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -1300,6 +1291,32 @@ def for_sync():
     return to_send(plan_list, refresh_progress())
 
 
+def show_plans(c, swap=True):
+    """3.8.0: the You bubble open on Plans (once the board's own tab), and
+    Plans shown again if Settings had hidden it."""
+    c["due_tab"] = "plans"
+    c["due_fold"] = {"day": _today(), "folded": False}
+    hidden = [k for k in (c.get("hidden_tabs") or []) if k != "plans"]
+    if hidden != list(c.get("hidden_tabs") or []):
+        c["hidden_tabs"] = hidden
+    save_cfg(c)
+    if swap:
+        app.swap(c)
+
+
+def morning_opened():
+    """3.8.0, Due's line under Today: {n} cards this morning opened, while
+    Anki's latest step is still that one (Put off to tomorrow undoes it);
+    None otherwise. Main thread."""
+    pc = _pcfg()
+    opened = pc.get("plans_opened") if isinstance(pc.get("plans_opened"), dict) else {}
+    today = _today()
+    if not today or opened.get("day") != today or not _undo_ok(opened.get("label")):
+        return None
+    n = sum(int(v[1] or 0) for v in (opened.get("per") or {}).values() if isinstance(v, (list, tuple)) and len(v) > 1)
+    return {"n": n} if n else None
+
+
 def _undo_ok(label):
     try:
         return bool(label) and mw.col.undo_status().undo == label
@@ -1308,23 +1325,18 @@ def _undo_ok(label):
 
 
 def board_view(c):
-    """{cards, offers} for the board, from cache. Main thread (one undo-queue
-    look; no collection reads)."""
+    """{cards, offers} for You › Plans, from cache. Main thread (no
+    collection reads)."""
     plan_list = followed()
     pc = _pcfg()
     state = _state_cfg(pc)
     today = _state["labels"][0] if _state["labels"] else ""
     if not today:
         return {"cards": [], "offers": []}
-    opened = pc.get("plans_opened") if isinstance(pc.get("plans_opened"), dict) else {}
-    fresh_open = opened.get("day") == today
-    undo = fresh_open and _undo_ok(opened.get("label"))
     prog = _state.get("plan_progress") or {}
     here = lambda st: st if st and mw.col and _deck_ok(mw.col, st.get("deck_id")) else None
     sess = _state.get("plan_session") or {}
-    cards = [card_view(p, here(state.get(p["id"])), prog.get(p["id"]), today,
-                       opened=(opened.get("per") or {}).get(p["id"]) if fresh_open else None,
-                       undo_ok=undo, session=sess.get(p["id"]),
+    cards = [card_view(p, here(state.get(p["id"])), prog.get(p["id"]), today, session=sess.get(p["id"]),
                        week_offset=(_state.get("plan_week") or {}).get(p["id"], 0))
              for p in plan_list]
     for card in cards:
@@ -1334,7 +1346,7 @@ def board_view(c):
     from . import team_flow
     for card in cards:
         try:
-            card["tabs"] = team_flow.card_bits(card["id"])  # 3.7.3: Plan · Insights, and the squad line
+            card["tabs"] = team_flow.card_bits(card["id"])  # the squad line
         except Exception:
             traceback.print_exc()
     from .squads import _my_squads
@@ -1348,8 +1360,8 @@ def board_view(c):
 
 def on_message(cmd, parts):
     """duecrew:plan* from the board. True when handled."""
-    if cmd == "plansub" or cmd.startswith("planteam") or cmd.startswith("planins"):
-        from . import team_flow  # 3.7.3: the plan's squad and its Insights tab
+    if cmd.startswith("planteam"):
+        from . import team_flow  # 3.7.3: the plan's squad
         return team_flow.on_message(cmd, parts)
     arg = parts[2] if len(parts) > 2 else ""
     if cmd == "planundo":
@@ -1362,8 +1374,6 @@ def on_message(cmd, parts):
         browse_date(arg, parts[3])
     elif cmd == "planleft" and arg:
         browse_left(arg, [x for x in (parts[3] if len(parts) > 3 else "").split("-") if x])
-    elif cmd == "planleeches" and arg:
-        browse_leeches(arg)
     elif cmd == "plantopic" and arg and len(parts) > 4:
         browse_topic(arg, [x for x in parts[3].split("-") if x], int(parts[4]) if parts[4].isdigit() else -1)
     elif cmd == "planputback" and arg:
@@ -1575,24 +1585,6 @@ def browse_left(pid, uids=()):
         traceback.print_exc()
         return
     _browse(left, empty="Nothing left to see.")
-
-
-def browse_leeches(pid):
-    """3.8.0: Anki's browser on the leeches the plan leaves shut here (the
-    plan card's "N leeches stay suspended")."""
-    got = _plan_idx(pid)
-    if not got:
-        return
-    _p, st, doc, idx = got
-    try:
-        cids = set()
-        for u in P.units(doc):
-            cids |= idx.match(u, _swap(st), doc.get("deck", ""))
-        lee = {c for c in cids if c in idx.leech and idx.cards[c][0] == -1}
-    except Exception:
-        traceback.print_exc()
-        return
-    _browse(lee, empty="No leeches left on this plan.")
 
 
 def browse_topic(pid, uids, i):
@@ -1892,7 +1884,8 @@ def apply_catch():
 
 
 def catch_menu(pid):
-    """G5: catch up over 3, 5 or 7 days."""
+    """G5: catch up over 3, 5 or 7 days; 3.8.0: or push my dates back, the
+    other way to be on time again (Plan ▾ has it too)."""
     prog = (_state.get("plan_progress") or {}).get(pid) or {}
     p = next((x for x in followed() if x["id"] == pid), None)
     if p is None:
@@ -1907,6 +1900,8 @@ def catch_menu(pid):
         extra = -(-n // days)
         a = menu.addAction(f"Over {days} days (+{extra:,} new a day)")
         a.triggered.connect(lambda _=False, d=days, x=extra: start_catch(pid, d, x))
+    menu.addSeparator()
+    menu.addAction("Push my dates back…").triggered.connect(lambda: set_shift(pid))
     menu.exec(QCursor.pos())
 
 
@@ -2299,9 +2294,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
     saved = kind not in ("skip", "begin") or not rest  # what needs a request has it yet?
 
     def finish(got=None):
-        c2 = cfg()
-        c2["period"] = "plans"  # 3.3: where it lives now
-        save_cfg(c2)
+        show_plans(cfg(), swap=False)  # 3.3: where it lives now (3.8.0: You › Plans)
         fresh = next((x for x in followed() if x["id"] == pid), plan)
         ok = saved or got is not None
         if not ok:
@@ -2383,7 +2376,7 @@ def browser_menu(browser, menu):
 
 def show_on_plan(browser):
     """3.8.0: the board on the plan date that has the card picked in the
-    browser: the Plans tab, that date's week, its details open. The first
+    browser: You › Plans, that date's week, its details open. The first
     plan I follow that has it; within it, the date nearest today."""
     try:
         cids = [int(c) for c in (browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards())]
@@ -2413,16 +2406,13 @@ def show_on_plan(browser):
 
 
 def jump_to(pid, day):
-    """The Plans tab on `day`'s week of this plan, the day's details open."""
+    """You › Plans on `day`'s week of this plan, the day's details open."""
     today = _today()
     weeks = (S.d(P.week_start(day)) - S.d(P.week_start(today))).days // 7
     _state.setdefault("plan_week", {})[pid] = max(-26, min(26, weeks))
     _state["plan_focus"] = {pid: day}
-    _state.setdefault("plan_sub", {})[pid] = "plan"
     c = cfg()
-    if c.get("period") != "plans":
-        c["period"] = "plans"
-        save_cfg(c)
+    show_plans(c, swap=False)
     if getattr(mw, "state", "") != "deckBrowser":
         mw.moveToState("deckBrowser")
     app.swap(c)

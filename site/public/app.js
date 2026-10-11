@@ -1156,14 +1156,18 @@ async function home() {
   const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
-  // board.py _head (3.8.0): Crew, Decks, Squads, Plans; Today and Week are
-  // Crew's picker (_crew_picker), and the Crew pill goes back to the last one
-  const tabs = [["crew", "Crew"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]];
+  // board.py _head (3.8.0): the board is your people, Crew and Squads.
+  // Crew's views are its picker (crew_views: Today, Week, Decks; show-up mode
+  // has This week and Decks), and the Crew pill goes back to the last one.
+  // What's mine (Anki's You bubble: Due, Plans) is the rail's.
+  const tabs = [["crew", "Crew"], ["squads", "Squads"]];
+  const views = showUp ? [["today", "This week"], ["decks", "Decks"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"]];
   let tab = Board.store("dc-tab") || "crew";
   let view = Board.store("dc-crew") || "today";
-  if (tab === "today" || tab === "week") { view = tab; tab = "crew"; }  // saved before 3.8.0
-  if (!tabs.some(([k]) => k === tab)) tab = "crew";
-  if (view !== "week") view = "today";
+  if (tab === "today" || tab === "week" || tab === "decks") { view = tab; tab = "crew"; }  // a tab before 3.8.0
+  if (!tabs.some(([k]) => k === tab)) tab = "crew";  // and Plans, now the rail's
+  if (showUp && view === "week") view = "today";  // _crew_on: one view for both
+  if (!views.some(([k]) => k === view)) view = "today";
   const pills = h("span", { class: "pills" });
   const panel = h("div");
   const fetched = Date.now();
@@ -1173,7 +1177,6 @@ async function home() {
     pills.replaceChildren(...tabs.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; Board.store("dc-tab", k); draw(); } }, l)));
     const mins = Math.floor((Date.now() - fetched) / 60000);
     updated.textContent = mins < 1 ? "Updated just now" : `Updated ${mins}m ago`;
-    if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t));
     if (tab === "squads") {
       // 3.8.0: a plan's squad is a pill too; in it is sharing my progress (3.7.6), unless still asked
       const mine = followed.filter((p) => p.following.share && !p.following.teamAsk).map((p) => ({ id: `plan:${p.id}`, pid: p.id, name: p.name }));
@@ -1181,10 +1184,9 @@ async function home() {
       panel.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
       return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left));
     }
-    if (tab === "plans") return panel.replaceChildren(plansTab());
-    // show-up mode has one view, so no picker
-    const picker = showUp ? null : h("div", { class: "sqsw" }, [["today", "Today"], ["week", "Week"]].map(([k, l]) =>
+    const picker = h("div", { class: "sqsw" }, views.map(([k, l]) =>
       h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));
+    if (view === "decks") return panel.replaceChildren(picker, Board.decks(b.me, crew, b.decks || {}, t));
     panel.replaceChildren(...[picker, showUp ? Board.presence(people, t) : Board.table(people, view, t, draw), crew.length ? null : solo()].filter(Boolean));
   }
   // board.py C5: until a friend adds me back, the invite is the board
@@ -1196,16 +1198,14 @@ async function home() {
         b.me.code ? h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null,
         h("button", { class: "linkish", onclick: () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } } }, "Got a code?")));
   }
-  // 3.5.0's Plans tab, as far as the site can show it: each plan I follow,
-  // on track or behind; the day-by-day lives on its page and in Anki
-  function plansTab() {
-    if (!followed.length) return h("div", { class: "solo" }, h("b", {}, "Following no plans"),
-      h("span", { class: "muted" }, "A plan opens a deck's cards on their days. Paste a plan's code in Got a code?, find one in the library, or make one in Anki: Tools › Due Crew › Make a plan from a deck."),
+  // You › Plans (3.8.0), as far as the site can show it, in the rail: each
+  // plan I follow, on track or behind; the day-by-day lives on its page and
+  // in Anki. Following none, the ways in
+  function plansPanel() {
+    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"),
+      h("small", { class: "muted" }, "A plan opens a deck’s cards on their days. Find one in the library, paste its code below, or make one in Anki."),
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
-    return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
-      h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true),
-      me?.admin && !p.following?.paused ? planLoad(p) : null)),
-      h("p", { class: "muted small" }, link("/plans", "All plans ›")));
+    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true)));
   }
   // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
@@ -1296,7 +1296,7 @@ async function home() {
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       duePanel(followed, sett?.settings || {}, t),
       sinceYouWereHere(b, crew, t),
-      followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
+      plansPanel(),
       friends)));
   // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
   const want = new URLSearchParams(location.search).get("card");
@@ -2019,7 +2019,8 @@ async function logPage() {
         h("details", {}, h("summary", { class: "small" }, "By week, 12 weeks"), weeks))),
     h("section", { class: "panel", style: "margin-top:12px" }, h("h4", {}, h("span", {}, "Day by day ", h("span", { class: "muted" }, "last 30 days")), order), table),
     followed.length ? h("h2", {}, "Plans") : null,
-    followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p))));
+    followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p),
+      me?.admin && !p.following?.paused ? planLoad(p) : null)));  // 3.8.0: from the board's Plans tab, room to be read
 }
 
 // ---- 3.5, X: the admin's page: counts and their history ----

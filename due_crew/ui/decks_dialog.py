@@ -71,7 +71,7 @@ class DecksDialog(QDialog):
         self.setMinimumHeight(400)
         root = QVBoxLayout(self)
 
-        intro = QLabel("Share a deck and its progress shows on the Decks tab. Decks "
+        intro = QLabel("Share a deck and its progress shows under Crew › Decks. Decks "
                        "you and your crew both study match automatically. A subdeck "
                        "can be shared on its own.")
         intro.setWordWrap(True)

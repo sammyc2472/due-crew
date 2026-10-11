@@ -229,20 +229,38 @@ def check(path):
     from due_crew import team_flow as TF
     plan_i = {"id": "pI", "name": "Big", "doc": dict(doc, events=[{"id": "e", "day": str(_dtm.date.today() + _dtm.timedelta(days=6)),
                                                                    "name": "Exam"}])}
-    keep = (TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col)
+    keep = (TF._plan, F._state_cfg, F._today, F._pcfg, F.followed, TF.cfg, _mw.col)
     TF._plan = lambda pid: F.mine(plan_i)
     F._state_cfg = lambda c=None: {"pI": {"deck_id": did}}
     F._today = lambda: str(_dtm.date.today())
     F._pcfg = lambda: {}
+    F.followed = lambda: [plan_i]
+    TF.cfg = lambda: {}
     _mw.col = col
     try:
         t = tm()
-        view = TF._work_out("pI")
+        view = TF._work_out(did, "pI")
         t_ins = tm() - t
+        # 3.8.0: the same deck with no plan: my exam date, the deck's own tags, what Anki has due
+        t = tm()
+        bare = TF._work_out(did, None, str(_dtm.date.today() + _dtm.timedelta(days=10)))
+        t_bare = tm() - t
+        t = tm()
+        decks = TF._you_decks(col)
+        t_decks = tm() - t
+        lee = TF._leeches(col, TF._deck_sql(col, did))
     finally:
-        TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col = keep
+        TF._plan, F._state_cfg, F._today, F._pcfg, F.followed, TF.cfg, _mw.col = keep
     ok("insights: the whole tab (hero, not sticking, week, FSRS line) in one pass", isinstance(view, dict) and "rows" in view
        and t_ins < 3.0, f"{len(view.get('rows') or [])} rows, hero {len(view.get('hero') or [])}, {t_ins*1000:.0f} ms")
+    ok("insights, no plan: the deck's tags name its topics, my exam aims the box, in one pass",
+       isinstance(bare, dict) and (bare.get("aim") or {}).get("kind") == "exam" and bare.get("rows") is not None
+       and not any(r["name"].lower() == "leech" for r in bare.get("rows") or []) and t_bare < 3.0,
+       f"{[(r['name'], r['src'], r['of']) for r in (bare.get('rows') or [])[:3]]}, hero {len(bare.get('hero') or [])}, "
+       f"week {'yes' if bare.get('week') else 'no'}, {t_bare*1000:.0f} ms")
+    ok("insights: the decks to pick, the plan's first, Anki's own deck names and ids",
+       decks and decks[0]["did"] == did and decks[0]["pid"] == "pI" and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
+    ok("insights: the deck's suspended leeches", len(lee) >= 1, f"{len(lee)}")
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "

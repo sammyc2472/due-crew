@@ -106,7 +106,9 @@ def hero(cards, target):
 
 def source(tags):
     """A topic's source as its tags say: the resource and the part just above
-    the topic ("Video Series › Autonomic System"), from the first tag."""
+    the topic ("Video Series › Autonomic System"), from the first tag. 3.8.0:
+    with no resource in the tag, the part just above ("Path Book" over a
+    subdeck's "Inflammation")."""
     for t in tags or []:
         segs = [x for x in str(t).split(P._SEP) if x]
         ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
@@ -116,7 +118,60 @@ def source(tags):
         if len(segs) - 2 > ri:
             parts.append(P._word(segs[-2]))
         return " › ".join(p for p in parts if p)
+    for t in tags or []:
+        segs = [x for x in str(t).split(P._SEP) if x]
+        if len(segs) > 1 and not any(x[:1] in "#^" for x in segs[1:]):
+            return P._word(segs[-2])
     return ""
+
+
+ANKI_TAGS = ("leech", "marked")  # Anki's own: never a topic
+
+
+def deck_topics(tags_of, reviewed, min_n=None):
+    """3.8.0, Insights with no plan on the deck: topics from the deck's own
+    tags, as topic_list makes them from a plan's. Each reviewed card counts
+    under its most specific tags (none of them a parent of another of its
+    tags), rolled up the tag's own levels until one has min_n reviewed cards
+    under it; never up to a hierarchy's root, nor to a level that names a
+    resource ("#Path_Book"). tags_of: {cid: [tags]} (a subdeck's path
+    below the deck works the same). (topics, {level: {cids}}): the topics as
+    topic_list gives them, the levels as their tags, for not_sticking."""
+    min_n = STUCK_MIN if min_n is None else min_n
+    leaves = {}
+    for cid in reviewed:
+        tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS]
+        low = [t.lower() for t in tags]
+        leaves[cid] = [t for t, lt in zip(tags, low) if not any(o.startswith(lt + P._SEP) for o in low)]
+    under = {}
+    for cid, ls in leaves.items():
+        seen = set()
+        for t in ls:
+            segs = t.split(P._SEP)
+            for i in range(1, len(segs) + 1):
+                seen.add(P._SEP.join(segs[:i]).lower())
+        for k in seen:
+            under[k] = under.get(k, 0) + 1
+    groups, first = {}, {}
+    for cid in sorted(leaves):
+        for t in leaves[cid]:
+            segs = t.split(P._SEP)
+            for i in range(len(segs), 0, -1):
+                if (len(segs) > 1 and i == 1) or (i > 1 and segs[i - 1][:1] in "#^"):
+                    break  # a hierarchy's root, or a resource: too broad to be a topic
+                level = P._SEP.join(segs[:i])
+                if under.get(level.lower(), 0) >= min_n:
+                    level = first.setdefault(level.lower(), level)  # one spelling per level
+                    groups.setdefault(level, set()).add(cid)
+                    break
+    out = {}
+    for level in sorted(groups):
+        name = P._word(level.split(P._SEP)[-1])[:NAME_MAX]
+        if not name:
+            continue
+        k = out.setdefault(name.lower(), [name.lower(), name, [], [], []])
+        k[3].append(level)
+    return [tuple(v) for v in out.values()], groups
 
 
 def not_sticking(topics, cards_of, reviewed, stuck, forgot):

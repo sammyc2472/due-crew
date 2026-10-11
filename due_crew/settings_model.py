@@ -17,7 +17,7 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right")}
-HIDEABLE = ("decks", "squads", "plans")  # 3.8.0: Week is Crew's picker
+HIDEABLE = ("decks", "squads", "plans", "insights")  # 3.8.0: board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights
 PRIVACY = ("numbers", "showup", "paused")
 LABEL_MAX = 24
 # what Reset board puts back: the Board tab, never anything on Privacy

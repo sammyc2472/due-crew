@@ -772,3 +772,48 @@ every release that changes how something works.
   computer; `dc-crew` on the site, where a saved Today or Week tab reads as
   Crew). Show-up mode keeps its one view, without a picker. Week is no longer
   a tab, so it can't be hidden (`HIDEABLE_TABS`).
+  You, and your people (3.8.0, Sam's call after four rounds of mocks on the
+  design spec): Due and Crew split. Over the board is what's mine, the You
+  bubble (`board.you_html`; `#due-crew.dc-split`, the board its own
+  `.dc-sheet` under it): Today, Upcoming and Later (Due's lists, while Due is
+  on) and, after a gap, Plans and Insights. The board is my people: Crew,
+  with Today · Week · Decks in its picker (`crew_views`; This week and Decks
+  in show-up mode), and Squads. Plans and Insights left the board for the
+  bubble; `due_tab` says which tab it's on (per computer), a link to one
+  opens the bubble on it and shows it again if Settings hid it (`duetab`,
+  `plan_flow.show_plans`, `team_flow.go_insights`). Due off hides only its
+  lists; with Plans and Insights hidden too there's no bubble. Settings ›
+  Shows: Crew always, then Decks, Squads, Plans, Insights. An older install's
+  saved Plans tab opens in the bubble at profile open (`_settle_tabs`).
+  One Today: the plan's Today box is gone; today's dates are Due's Today.
+  What the box said that Today doesn't moved: paused (Resume now), a rest,
+  catch-up or taper day (`board._plan_now`); "This morning opened N" with
+  Put off to tomorrow (`plan_flow.morning_opened`, under Today, or on Plans
+  when Due is off); behind's Catch up on the plan's behind line, whose menu
+  has Push my dates back (the day details' Move my days back has that name
+  too); opened N days early in the plan's line. The leeches line went to
+  Insights (a leech is the deck's, not the plan's); `planleeches` went with
+  it. The plan card's Plan · Insights tabs went (`plansub`, `_plan_tabs`);
+  instead it carries the next exam's cards at risk, from Insights, with
+  Study and Insights › (`card["ins"]`, `team_flow.plan_lines`). Offers to
+  follow a squad's plan show on Squads and You › Plans.
+  Insights for everyone (3.8.0): a deck at a time, picked as a squad is
+  (`team_flow.you_decks`: the decks of plans I follow, the deck I last
+  picked, then the decks I reviewed most in two weeks; five at most;
+  `ins_deck` per computer). With a plan on the deck it's 3.7.9's; without
+  one, my own exam date (Settings › Privacy) aims the box ("Your exam") over
+  the whole deck, the deck's tags name the topics (`team.deck_topics`: each
+  card under its most specific tags, rolled up a tag's own levels to the
+  first with 20 reviewed, never to a hierarchy's root or a resource's level,
+  never Anki's leech or marked), its subdecks when its cards have no tags,
+  and the week ahead is what Anki has due with the deck's new cards a day.
+  A deck's cards are SQL in the queries (`_deck_sql`), never 30,000 ids.
+  Commands carry the deck's id (`ins*`, `youins`, a digit-only argument);
+  Crew › Decks has "How it's sticking ›" on my own decks (`youins`). Cached
+  per deck and per plan/exam (`_state["insights"]`), every ten minutes.
+  On the site (the twin): the board is Crew · Squads with Today · Week ·
+  Decks in Crew's picker; a saved Decks or Plans tab reads as Crew; the
+  board's Plans tab went to the rail's Plans panel (following none, the
+  ways in), and the admin's plan-load chart to the Log page, which has room
+  for it. A stray `.ptab` rule that turned the builder's side tabs into a
+  grid went with the old tab's CSS.

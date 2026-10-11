@@ -192,6 +192,24 @@ def notes():
              "go": "See them"}] if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
+YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
+
+
+def you_tab(c):
+    """The You bubble's tab on this computer (`due_tab`), Today when unknown."""
+    tab = c.get("due_tab")
+    return tab if tab in YOU_TABS else "today"
+
+
+def folded(c, v):
+    """The bubble folded or open: Due's own rule with its lists on (v), else
+    my Hide/Show for today."""
+    if v:
+        return bool(v.get("folded"))
+    choice = c.get("due_fold")
+    return isinstance(choice, dict) and choice.get("day") == _today() and bool(choice.get("folded"))
+
+
 def view(c):
     """due.view for the board, or None when the box is off or there's no day yet."""
     today = _today()
@@ -205,6 +223,7 @@ def view(c):
                    suggestions=suggestions(c, today), notes=notes())
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
+        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
     except Exception:
         traceback.print_exc()
         return None
@@ -496,7 +515,9 @@ def on_message(cmd, parts):
     """The board's Due commands (duetab, dueadd, …). True when handled."""
     c = cfg()
     arg = parts[2] if len(parts) > 2 else ""
-    if cmd == "duetab" and arg in D.TABS:
+    if cmd == "duetab" and arg in YOU_TABS:
+        if arg in (c.get("hidden_tabs") or []):
+            c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != arg]  # a link to it shows it again
         c["due_tab"] = arg
         c["due_fold"] = {"day": _today(), "folded": False}
         save_cfg(c)
@@ -504,8 +525,7 @@ def on_message(cmd, parts):
         _swap(c)
     elif cmd == "duefold":
         # Hide or Show by hand: it holds for today; tomorrow Due decides again
-        v = view(c)
-        c["due_fold"] = {"day": _today(), "folded": not (v or {}).get("folded")}
+        c["due_fold"] = {"day": _today(), "folded": not folded(c, view(c))}
         save_cfg(c)
         _swap(c)
     elif cmd == "dueadd" and len(parts) > 4:

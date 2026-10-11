@@ -690,7 +690,6 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .crew-pop .hd { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 9px 2px; }
 .solo { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 6px; }
 .solo .codepill { background: var(--well); border-radius: 6px; padding: 3px 9px; font-weight: 700; }
-.ptab { display: grid; gap: 10px; } .pcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
 .sqsw .linkish { color: var(--muted); font-weight: 600; } .sqsw .linkish.on { color: var(--ink); text-decoration: underline; } .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }

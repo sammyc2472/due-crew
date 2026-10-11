@@ -176,6 +176,9 @@ class FakeDecks:
     def name(self, did):
         return self.names.get(did, "?")
 
+    def id_for_name(self, name):
+        return next((d for d, n in self.names.items() if n == name), None)
+
     def deck_and_child_ids(self, did):
         root = self.names.get(did, "\0")
         return [d for d, n in self.names.items() if d == did or n.startswith(root + "::")]
