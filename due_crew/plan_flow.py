@@ -729,9 +729,17 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         c = _pcfg()
         state = _state_cfg(c)
         plan_list = followed()
+        today = _today()
+        # 3.8.0: never mid-review. What the morning unsuspends is an undo step,
+        # and on the review screen it would land on top of the last answer
+        # (Undo would suspend the cards again). Off the Decks screen, what
+        # would unsuspend waits for it (`_state["plans_morning"]`), as midday does.
+        here = getattr(mw, "state", "") == "deckBrowser"
         if fresh:
             ids = {p["id"] for p in plan_list}
             gone = [pid for pid in state if pid not in ids]
+            if not here and any((state.get(pid) or {}).get("held") for pid in gone):
+                return _morning_waits(awaiting_sync, fresh)
             for pid in gone:
                 held = (state.pop(pid, None) or {}).get("held") or []
                 if held and mw.col:
@@ -750,13 +758,15 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                 c["plans"] = state
                 _psave(c)
             send_ids()  # 3.3, C5: the plans I write
-        today = _today()
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
         if c.get("plans_day") == today:
             # 3.7.3: plans that came again after today's morning (an author's
             # update, or Anki opened again): asked, not opened
             return midday(plan_list, toast=toast)
+        if not here:
+            return _morning_waits(awaiting_sync, fresh)
+        _state["plans_morning"] = None
         _state["plan_updates"] = {}
         new_here = []
         for p in plan_list:
@@ -789,6 +799,15 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
     except Exception:
         traceback.print_exc()
         return None
+
+
+def _morning_waits(awaiting_sync, fresh):
+    """3.8.0: the morning came off the Decks screen; it runs when Decks next
+    draws (__init__._on_did_render), as this call would have."""
+    was = _state.get("plans_morning") or {}
+    _state["plans_morning"] = {"awaiting": bool(awaiting_sync) and was.get("awaiting", True),
+                               "fresh": bool(fresh) or bool(was.get("fresh"))}
+    return None
 
 
 def midday(plan_list, toast=True):

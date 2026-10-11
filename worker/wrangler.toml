@@ -6,7 +6,7 @@ compatibility_date = "2026-08-20"
 workers_dev = false
 routes = [{ pattern = "api.duecrew.com", custom_domain = true }]
 
-# Workers Logs: what the code logs (errors, the bridge's counts), kept a few
+# Workers Logs: what the code logs (errors, the daily counts), kept a few
 # days in the dashboard. Not each request: URLs carry friend and plan codes,
 # and codes are never logged.
 [observability]
@@ -25,8 +25,7 @@ ADMINS = "FjrvFwUg6HNN3hy1YUmMp7ClR4v1"
 # Where POST /reports mails a report. Unset: reports are only counted in the log.
 # REPORT_TO = "reports@duecrew.com"
 
-# Secrets (wrangler secret put): ADMIN_TOKEN (the one-shot identity import;
-# unset: no admin). ADMIN_UIDS (3.2: comma-separated uids that may open
+# Secrets (wrangler secret put): ADMIN_UIDS (3.2: comma-separated uids that may open
 # duecrew.com/admin; unset: nobody). RESEND_API_KEY only if mail ever moves off the EMAIL
 # binding below.
 
@@ -43,7 +42,7 @@ allowed_sender_addresses = ["codes@duecrew.com"]
 
 # Housekeeping, daily: spent codes, old rate-limit windows, idle sessions.
 [triggers]
-crons = ["17 4 * * *", "*/15 * * * *"]
+crons = ["17 4 * * *"]
 
 # A second Worker and database for trying a client before the crew does:
 # `wrangler deploy --env dev`, served at api-dev.duecrew.com.
@@ -64,7 +63,7 @@ database_id = "693a0afd-6164-4637-9ad9-6f04a97e38a8"
 migrations_dir = "migrations"
 
 [env.dev.triggers]
-crons = ["17 4 * * *", "*/15 * * * *"]
+crons = ["17 4 * * *"]
 
 [[env.dev.send_email]]
 name = "EMAIL"

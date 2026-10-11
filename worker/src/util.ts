@@ -9,9 +9,6 @@ export interface Env {
   DEV_MAIL_LOG?: string;  // "1": with no mail binding, log a sign-in code (local only)
   /** Cloudflare Email Service's send_email binding, when configured. */
   EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
-  ADMIN_TOKEN?: string;
-  /** The 2.x bridge's Google service account key (JSON); unset, the bridge is off. */
-  FIREBASE_SA?: string;
   /** Where reports go (POST /reports). Unset: the log counts them, and they go nowhere. */
   REPORT_TO?: string;
   /** 3.2: comma-separated uids that may read GET /admin/stats. */

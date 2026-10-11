@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person, from2x } from "./helpers";
+import { api, db, person } from "./helpers";
 
 const SITE = { "x-due-crew": "1" };  // what the site's own script sends
 
@@ -310,21 +310,6 @@ describe("limits the audit asked for", () => {
       method: "PUT", body: big, headers: { authorization: `Bearer ${dre.token}` }, duplex: "half",
     } as any), { ...env } as any);
     expect(res.status).toBe(413);
-  });
-
-  it("PUT /friends restores for an imported account, until a week after its first 3.x sync", async () => {
-    const nia = await person("nia");
-    await person("sam");
-    await from2x("nia");
-    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual(["sam"]);
-    await nia.call("POST", "/sync", { profile: { name: "Nia", clientVersion: "3.0.1" } });
-    await nia.call("DELETE", "/friends/sam");
-    // a restore that failed at the first sync can try again that week
-    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual(["sam"]);
-    await nia.call("DELETE", "/friends/sam");
-    await db().prepare("UPDATE users SET from2x = from2x - 8 * 86400 WHERE uid = 'nia'").run();  // a week on
-    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);
-    expect(await db().prepare("SELECT COUNT(*) AS n FROM friends WHERE owner = 'nia'").first("n")).toBe(0);
   });
 
   it("a squad plan closes to someone who leaves the squad, follow or not", async () => {

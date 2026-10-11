@@ -2,14 +2,11 @@
 a deck row or a squad row looks like on the way out and on the way back,
 codes as people type them, notes and emoji. No network here (api.py has
 that), and no Qt.
-
-Until 3.0 these lived in backend/firebase.py, next to the Firestore client.
 """
 
 import datetime
 import hashlib
 import re
-import secrets
 
 from ..room_model import clean_room, is_over
 
@@ -99,8 +96,7 @@ def _first_grapheme(text):
 
 
 def emoji_fits(emoji):
-    """The server caps an emoji at 16 UTF-16 units (what the Firestore rules'
-    size() counted, measured in the emulator, and what the Worker's .length
+    """The server caps an emoji at 16 UTF-16 units (what the Worker's .length
     counts). Too long is refused whole: never truncated into a broken glyph,
     never sent to be rejected."""
     return len(emoji.encode("utf-16-le")) // 2 <= EMOJI_MAX
@@ -357,10 +353,6 @@ def _clean_decks(value):
 SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 SQUAD_CODE_LEN = 8
 SQUAD_NAME_MAX = 24
-
-
-def new_squad_code():
-    return "".join(secrets.choice(SQUAD_ALPHABET) for _ in range(SQUAD_CODE_LEN))
 
 
 def normalize_code(code):

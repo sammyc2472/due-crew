@@ -14,8 +14,8 @@ add-on.
   served at `https://api.duecrew.com` (a dev one at `api-dev.duecrew.com`).
   Consent, shapes, sign-in by emailed code, and sessions all live here;
   `worker/README.md` has the API, `migrations/` the schema.
-  `docs/cloudflare-setup.md` is the one-time setup (Sam's). Nothing runs on
-  Google after the cutover.
+  `docs/cloudflare-setup.md` is the one-time setup (Sam's). The 2.x
+  backend (Firebase) is gone since 3.8.0.
   `worker/` and `site/` are PolyForm Shield 1.0.0 (their LICENSE.md) since
   29 Sep 2026: readable and runnable, not for a competing service. The
   add-on, tests and tools stay MIT (root LICENSE).
@@ -24,10 +24,6 @@ add-on.
   (`site/src/index.ts`) sends `/api/*` to the API by service binding, so
   the site's session is a same-site HttpOnly cookie, and draws a plan
   link's preview (`site/src/og.ts`).
-- `firestore.rules` and `tests/rules/` — the 2.x backend, still live for 2.x
-  clients until the cutover, then read-only, then gone with the Firebase
-  project (anki-leaderboard-f6691). Delete both, the rules CI job and
-  `firebase.json` when it goes.
 - `README.md` — from the tagline down, doubles verbatim as the AnkiWeb
   listing description; keep them in sync when it changes. The logo block
   above the tagline is GitHub-only (AnkiWeb shows its own title).
@@ -47,9 +43,8 @@ add-on.
   model, restating every check of the old rules test. See
   `tests/README.md`. `docs/manual-anki-checklist.md` is the click-test.
 - `.github/workflows/tests.yml` runs on every push: pyflakes, the suite,
-  the offscreen dialog build, the Worker (typecheck + vitest), and, until
-  the cutover, the Firestore rules in the emulator. Green on all of them is
-  the release gate. pyflakes is the only thing that reads most of the glue,
+  the offscreen dialog build, and the Worker (typecheck + vitest). Green on
+  all of them is the release gate. pyflakes is the only thing that reads most of the glue,
   which the suite never imports. A `v*` tag also deploys the Worker, after
   every job is green.
 
@@ -102,9 +97,6 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,
   sign-in/out) and drop their commit when it changed.
-- The 2.x backend (Firestore, `worker/src/bridge.ts`, `firestore.rules`,
-  `tests/rules/`) lives until the cutover ends; then all of it goes, with
-  its cron, the `FIREBASE_SA` secret, the rules CI job and `firebase.json`.
 
 ## Twins: change one, change both
 

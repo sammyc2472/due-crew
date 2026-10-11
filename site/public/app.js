@@ -2012,7 +2012,7 @@ async function logPage() {
     followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p))));
 }
 
-// ---- 3.5, X: the admin's page: counts, their history, the cutover, the bridge ----
+// ---- 3.5, X: the admin's page: counts and their history ----
 
 const svgEl = (tag, attrs, text) => {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -2319,14 +2319,13 @@ function squadPanel(nav) {
 }
 
 /** Today's one list of what's waiting (A2): new feedback, email changes
- *  not yet finished, a bridge run that failed. */
+ *  not yet finished. */
 function needsYou(s, show) {
   const row = (tag, text, label, go, warn) => h("div", { class: "nrow2" }, h("span", { class: `pill${warn ? " w" : ""}` }, tag), h("span", {}, text),
     h("button", { class: "linkish", onclick: go }, label));
   const rows = [];
   if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
   for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
-  if (s.bridge?.error) rows.push(row("System", "The 2.x bridge's last run failed", "Look", () => show("system"), true));
   // Q6: quiet accounts, as the daily job sees them (each deletion is in the audit log)
   const hk = s.housekeeping;
   const house = hk ? h("p", { class: "muted small" }, h("b", {}, "Housekeeping "),
@@ -2517,26 +2516,6 @@ async function adminPage() {
     hbars([["codes sent", c.sent], ["signed in", c.ok], ["wrong code tries", c.wrong], ["ran out of tries or time", c.out], ["held by the rate limit", c.limited]], (l, i) => i > 1),
     h("small", { class: "muted" }, c.sent ? `${Math.round((100 * c.ok) / c.sent)}% of codes end in a sign-in. Counters only: no address, no code.` : "Counters only: no address, no code."));
 
-  // the cutover from 2.x
-  const cu = s.cutover, all = Math.max(1, cu.on3 + cu.active2 + cu.quiet);
-  const seg = (n, cls) => h("i", { class: cls, style: `width:${(100 * n) / all}%` });
-  const cutover = h("section", { class: "panel" }, h("h4", {}, "The cutover", h("span", { class: "muted" }, `of ${s.accounts.toLocaleString()} accounts`)),
-    h("div", { class: "stackbar" }, seg(cu.on3, "a"), seg(cu.active2, "b"), seg(cu.quiet, "c")),
-    h("div", { class: "legend" }, h("span", {}, h("i", { class: "a" }), `on 3.x · ${cu.on3.toLocaleString()}`),
-      h("span", {}, h("i", { class: "b" }), `on 2.x, studied in 7 days · ${cu.active2.toLocaleString()}`),
-      h("span", {}, h("i", { class: "c" }), `quiet · ${cu.quiet.toLocaleString()}`)),
-    h("small", { class: "muted" }, "2.x counts people whose week the bridge brought in during the last 7 days."));
-
-  // the 2.x bridge
-  const b = s.bridge;
-  const bridge = h("section", { class: "panel" }, h("h4", {}, "The 2.x bridge", b ? h("span", { class: b.error ? "warn" : "muted" }, `ran ${ago(b.at)}`) : null),
-    b ? [h("div", { class: "mini3" }, h("div", {}, h("b", {}, b.pulled.toLocaleString()), h("small", {}, "pulled")),
-        h("div", {}, h("b", {}, b.pushed.toLocaleString()), h("small", {}, "pushed")),
-        h("div", {}, h("b", {}, `${(b.ms / 1000).toFixed(1)}s`), h("small", {}, "took"))),
-      h("small", { class: "muted" }, `Today: ${b.runsToday} run${b.runsToday === 1 ? "" : "s"}, ${b.failedToday} failed.`),
-      b.error ? h("p", { class: "warn small" }, `Last error: ${b.error}`) : null]
-      : h("p", { class: "muted small" }, "It hasn't run since this page began keeping track (it runs every 15 minutes while the FIREBASE_SA secret is set)."));
-
   // the library: what's taken out, to put back (Take out is on each card in the library)
   const libList = h("div", { class: "plans" });
   const drawLib = (plans) => libList.replaceChildren(...(plans.length ? plans.map((p) => {
@@ -2610,7 +2589,7 @@ async function adminPage() {
     inbox: ["Inbox", h("div", { class: "apage" }, feedbackPanel(nav))],
     notices: ["Notices", h("div", { class: "apage" }, notices)],
     bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
-    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes, cutover, bridge))],
+    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes))],
     log: ["Audit log", h("div", { class: "apage" }, auditPanel(nav))],
   };
   const side = h("nav", { class: "aside", "aria-label": "Admin" });

@@ -1,6 +1,6 @@
 // Friends, codes, cheers, knocks, and what anyone may see of anyone.
 //
-// Consent, as firestore.rules had it: a friendship is two edges, one per
+// Consent: a friendship is two edges, one per
 // person (friends(owner, friend)). My numbers go only to people I added
 // who added me back. A cheer lands only if its recipient added the sender.
 // A knock needs a squad in common or the recipient's own code.
@@ -70,21 +70,6 @@ export async function getUser(s: Session, env: Env, [uid]: string[]): Promise<Re
 
 // ---- friends ----
 
-/** 3.7.1 review: an account that came from 2.x and hasn't synced from 3.x
- *  yet (users.from2x: the import sets it, a 3.x sync clears it). The
- *  client version alone was anyone's to set. */
-export async function from2x(env: Env, uid: string): Promise<boolean> {
-  const u = await env.DB.prepare("SELECT from2x FROM users WHERE uid = ?").bind(uid).first<{ from2x: number }>();
-  if (!u || !u.from2x) return false;
-  // 1: imported, not synced from 3.x yet. Since the first 3.x sync, the time
-  // of it: the restore stays open a week, so one that failed (a 5xx, a
-  // timeout) tries again at the next sync instead of being lost for good
-  if (u.from2x === 1) return true;
-  return nowSec() - u.from2x < FROM2X_GRACE;
-}
-
-const FROM2X_GRACE = 7 * 86400;
-
 async function addEdge(env: Env, me: string, fid: string) {
   await env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
     .bind(me, fid, nowSec()).run();
@@ -106,48 +91,6 @@ export async function putFriend(req: Request, s: Session, env: Env, [fid]: strin
   await addEdge(env, s.uid, fid);
   await env.DB.prepare("DELETE FROM knocks WHERE to_uid = ? AND from_uid = ?").bind(s.uid, fid).run();
   return json({ uid: fid, ...u, mutual: await mutual(env, s.uid, fid) });
-}
-
-/** PUT /friends {ids}: 3.0's first sync re-adds the crew by uid, once.
- *  Add-only; unknown uids are skipped. */
-export async function restoreFriends(req: Request, s: Session, env: Env): Promise<Response> {
-  const body = await readJson(req);
-  const ids = body.ids;
-  if (!Array.isArray(ids) || ids.length > 500) throw V.bad("ids");
-  const want = [...new Set(ids.filter((x): x is string => typeof x === "string" && UID_RE.test(x) && x !== s.uid))];
-  if (!want.length) return json({ added: [] });
-  // 3.0's first sync brings back a 2.x crew, once: only before this account
-  // has synced from 3.x, and rarely. Otherwise it would let anyone knock
-  // anyone, again and again, with no code and no squad in common.
-  if (!(await from2x(env, s.uid))) return json({ added: [] });
-  await limitOrThrow(env, `restore:${s.uid}`, 3, 86400);
-  // D1 binds at most 100 parameters a query and runs at most 1,000 queries
-  // a request: 90 at a time keeps a 500-friend restore well inside both
-  const ok: string[] = [];
-  for (let i = 0; i < want.length; i += 90) {
-    const part = want.slice(i, i + 90);
-    const found = await env.DB.prepare(`SELECT uid FROM users WHERE uid IN (${part.map(() => "?").join(",")})`)
-      .bind(...part).all<{ uid: string }>();
-    ok.push(...found.results.map((r) => r.uid));
-  }
-  const now = nowSec();
-  for (let i = 0; i < ok.length; i += 90) {
-    const part = ok.slice(i, i + 90);
-    // each one I add back who hasn't added me gets a knock, so a computer
-    // that forgot its list sees "added you" and adds back in one click; one
-    // who already added me is crew now, and their knock to me is done
-    await env.DB.batch(part.flatMap((fid) => [
-      env.DB.prepare("INSERT INTO friends (owner, friend, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(s.uid, fid, now),
-      env.DB.prepare(
-        `INSERT INTO knocks (to_uid, from_uid, squad, at) SELECT ?1, ?2, NULL, ?3
-         WHERE NOT EXISTS (SELECT 1 FROM friends WHERE owner = ?1 AND friend = ?2)
-         ON CONFLICT(to_uid, from_uid) DO NOTHING`).bind(fid, s.uid, now),
-      env.DB.prepare(
-        `DELETE FROM knocks WHERE to_uid = ?2 AND from_uid = ?1
-         AND EXISTS (SELECT 1 FROM friends WHERE owner = ?1 AND friend = ?2)`).bind(fid, s.uid),
-    ]));
-  }
-  return json({ added: ok.sort() });
 }
 
 /** DELETE /friends/{uid}: my edge goes; so do their reads, at once. */
@@ -187,33 +130,11 @@ function drawCode(): string {
   return out;
 }
 
-/** POST /codes [{code}]: a new friend code for me, and the old one stops
- *  working. `code` asks for a particular one: 3.0's first sync keeps the
- *  code a person already handed out, when it's free. */
-export async function newCode(req: Request, s: Session, env: Env): Promise<Response> {
-  const text = await readText(req);
-  let want: string | null = null;
-  if (text) {
-    let body: unknown;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      throw new HttpError(400, "bad_json");
-    }
-    if (V.isObj(body) && body.code !== undefined) {
-      if (typeof body.code !== "string" || !CODE_RE.test(body.code)) throw V.bad("code");
-      want = body.code;
-    }
-  }
-  const old = await env.DB.prepare("SELECT code FROM users WHERE uid = ?").bind(s.uid).first<string>("code");
-  // a wanted code is only for an account without one (the 2.x restore):
-  // it must never undo a code someone chose to change
-  if (want && old) return json({ code: old });
-  // a code someone retired (a new code, a deleted account) is never
-  // handed to a stranger who asks for it by name: only a 2.x account's own
-  if (want && !(await from2x(env, s.uid))) want = null;
+/** POST /codes: a new friend code for me, and the old one stops working.
+ *  The body is ignored (3.0's first sync once asked for its 2.x code back). */
+export async function newCode(_req: Request, s: Session, env: Env): Promise<Response> {
   for (let i = 0; i < 5; i++) {
-    const code = want && i === 0 ? want : drawCode();
+    const code = drawCode();
     const r = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")
       .bind(code, s.uid).run();
     if (!r.meta.changes) continue;  // someone's: another draw

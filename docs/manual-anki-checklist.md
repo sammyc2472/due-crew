@@ -38,11 +38,6 @@ installing — add-ons load at launch).
 ## Accent colors
 - [ ] Settings → Appearance → Accent: each of the six recolors the pills, links, your-row highlight, and the profile/stranger cards' buttons; check one in light and one in dark mode.
 
-## Rules deployment (maintainer)
-- [ ] Rules published in the console BEFORE the add-on release; after it, no v2.0 client shows "server catching up" in the footer.
-- [ ] Console: delete the retired `server_board`, `server_names`, and `servers` collections once v1.x clients are gone.
-- [ ] Firebase budget alert is set.
-
 ## 2.5: emoji, squads week, block, Refresh
 - [ ] Your card → "Pick an emoji" → 🦊: it shows before your name on Today, on your card, in the Friends list, in the crew week share, and (after a sync) on the squad board.
 - [ ] Squads pill: a "Week" column shows N/7 for each member and sorts; the crew's Today/Week tables ignore that sort.
@@ -344,7 +339,7 @@ In Anki (as a follower):
 - [ ] Home: the strip says what opens today, what's waiting, the next event, and today so far; the year shows under the board; "Since you were here" lists crew added back, notes and plan changes (a second visit shows only what's new).
 - [ ] Home: a crewmate with an exam in the next two weeks: Send good luck › a line › Send. On their exam morning, their Anki shows it with the others.
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
-- [ ] Admin: tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
+- [ ] Admin: tiles with lines (only accounts has a line the first day), sign-in codes, notices with Take down and Post again.
 
 ### 3.5.0: asking about a card (K1–K3)
 

@@ -1,6 +1,6 @@
 // Quiet accounts ("The next round", Q1-Q6). Activity is the newest of a
-// sync or a board read (users.last_seen), a week the 2.x bridge brought
-// in, and the account's creation. Three steps, each undone by coming back:
+// sync or a board read (users.last_seen), the week's last write, and the
+// account's creation. Three steps, each undone by coming back:
 // after 90 days crewmates' boards fold the person into one line (the
 // clients do that, from when they last synced); after 6 months only what
 // a sync rebuilds goes (shared decks, the heatmap, a plan's deck tree,

@@ -31,8 +31,8 @@ def _device():
 
 
 class AuthDialog(QDialog):
-    def __init__(self, parent, client, join=None):
-        """join: kept for callers from 2.x; one flow signs in and joins."""
+    def __init__(self, parent, client):
+        """One flow signs in and joins."""
         super().__init__(parent)
         self.client = client
         self.user = None

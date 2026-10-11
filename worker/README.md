@@ -1,7 +1,7 @@
 # Due Crew API (3.0)
 
 One Cloudflare Worker with D1 underneath, served at `https://api.duecrew.com`.
-Every consent rule that `firestore.rules` holds today lives in this code.
+Every consent rule lives in this code.
 JSON in and out. Errors are `{error: "<code>"}` with a status, and 429s also
 carry `retryAfter` (seconds) and a `retry-after` header.
 
@@ -14,8 +14,8 @@ npx wrangler dev    # local; with DEV_MAIL_LOG=1 in .dev.vars and no mail, codes
 
 ## Endpoints
 
-Everything but `/version`, `/auth/code`, `/auth/verify` and the admin
-import takes `Authorization: Bearer <token>`.
+Everything but `/version`, `/auth/code` and `/auth/verify` takes
+`Authorization: Bearer <token>`.
 
 ### Sign-in and account
 
@@ -31,7 +31,6 @@ import takes `Authorization: Bearer <token>`.
 | `DELETE /account/todos` | 3.7.1, D2: my Due to-dos and ticks, under a fresh save time; each add-on takes it at its next refresh (`settingsAt`). |
 | `DELETE /log` | 3.7.1, D2: my log and my cheers counted. Days older than 8 days before the delete are never taken again (`cut`, first in the log's JSON), and every sync reply says `logCut` so the add-on's history import stops. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
-| `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
 **Sign-in details**
 - Codes and tokens are stored as SHA-256 hashes; tokens are 32 random bytes, base64url.
@@ -75,7 +74,7 @@ import takes `Authorization: Bearer <token>`.
 - At most 9 days.
 - A flagged card (`tricky`) is `{guid, deck, at}`. Any `text` is dropped on the way in; crewmates read the text from their own copy of the note.
 - A flag with a tip still waiting for me is dropped on the way in, so a sync before I've read the tip doesn't put it back up.
-- 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to Firestore.
+- 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to anyone else.
 
 ### People
 
@@ -84,8 +83,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /users/{uid}` | `{uid, name, emoji}`, and nothing more, and since 3.7.1 (D5) only to someone connected: a crew edge or a knock either way, or a squad or a plan in common. Anyone else gets `404 no_user`, as for no such account. |
 | `PUT /friends/{uid}` | Add someone (an add-back, a knock's Add). Clears their knock. `{uid, name, emoji, mutual}`. |
 | `DELETE /friends/{uid}` | Their reads of my numbers end with this request. |
-| `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
-| `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
+| `POST /codes` | A new friend code; the old one stops working. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
 | `POST /invites` | 3.5.0: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
 | `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
@@ -226,9 +224,8 @@ only) adds `feed`: who added me back, notes on days of plans I'm in, and
 others' saves to those plans (`summary`), the last 14 days, 20 at most,
 none from someone I muted. My follow carries `hist` (`{date: [opened,
 seen]}`, 120 days, kept with each progress write) on `following`.
-`/admin/stats` adds `cutover {on3, active2, quiet}`, `codes {sent, ok,
-wrong, out, limited}` (the last 7 days), `bridge` (its last run and
-today's runs) and the library's `listed`/`takenOut`; `GET
+`/admin/stats` adds `codes {sent, ok, wrong, out, limited}` (the last 7
+days) and the library's `listed`/`takenOut`; `GET
 /admin/trends?days=30|90|365` is each kept count by day (the daily cron
 keeps them in `admin_days`; accounts come from `created_at`). `GET
 /admin/notices?all=1` is the last 20 with their `state`; taking one down
@@ -241,14 +238,13 @@ keeps its row.
 | `POST /squads {name}` | `{id, code, name, founder, open}`; I'm the founder and a member. |
 | `GET /squads/peek?code=` | The join preview, with `founderName` since 3.7.1. 60 an hour. |
 | `POST /squads/{id}/join {code}` | The only way in: the squad's code (since 3.6.2 always; an id alone is not a join), the door open, I mustn't be blocked, and it holds at most 500. |
-| `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
 | `GET /squads/{id}[?wk=2026-W40]` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. 3.6: each row has `joined` (a date) and `play`; with `wk`, `bingo` is that week's card. |
 | `PUT /squads/{id}/row` | My numbers, as an update. Never a join. |
 | `DELETE /squads/{id}/members/{uid}` | Leave, or (founder) remove. |
 | `POST /squads/{id}/block/{uid}` | Founder: out, and can't rejoin. |
 | `PATCH /squads/{id} {open?, founder?}` | Founder. A squad passes only to a member. |
 
-Squad ids are 2.x's (`sha1("due-crew-squad:" + code)[:24]`), so squads in a 2.x config keep their ids.
+Squad ids are `sha1("due-crew-squad:" + code)[:24]`, as in 2.x.
 
 3.6, squad bingo (migration 0011, `src/bingo.ts`): every squad plays the
 same 3×3 card each week. The server draws it the first time anyone asks
@@ -283,8 +279,8 @@ add-on whose config lost them puts them back.
 
 ## Tests
 
-- `test/consent.test.ts` restates every check of `tests/rules/emulator_rules_test.py` (the 2.x Firestore rules) against the Worker, in its order and under its label.
-- `test/auth.test.ts` and `test/account.test.ts` cover sign-in, sessions, limits, deletion and the import.
+- `test/consent.test.ts` restates every check of the 2.x rules test against the Worker, in its order and under its label.
+- `test/auth.test.ts` and `test/account.test.ts` cover sign-in, sessions, limits and deletion.
 - `test/board.test.ts` covers the board, sync, codes and squads.
 - `test/bingo.test.ts` covers squad bingo: weeks, the draw, the kept card, play on rows, a squad's card from its rows, the admin's pool and the daily counts.
 

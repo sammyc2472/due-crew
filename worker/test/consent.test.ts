@@ -1,8 +1,8 @@
-// The consent model. Every check of tests/rules/emulator_rules_test.py
-// (the Firestore rules, 2.x), in its order and under its label, restated
-// against the Worker. Where a check was about Firestore machinery (a
-// listing, a batch's access-call cap, a rules marker), the 3.0 statement of
-// the same promise stands in its place, and says so.
+// The consent model. Every check the 2.x rules test made (its labels, like
+// rules-v8, are kept), in its order, restated against the Worker. Where a
+// check was about the old database's machinery (a listing, a batch's
+// access-call cap, a rules marker), the 3.0 statement of the same promise
+// stands in its place, and says so.
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { WEEK, api, befriend, db, person } from "./helpers";
@@ -252,11 +252,13 @@ describe("a code knocks its owner (v2.9)", () => {
   it("New Code (2.10)", async () => {
     await db().prepare("INSERT INTO codes VALUES ('BOB123', 'bob')").run();
     await db().prepare("UPDATE users SET code = 'BOB123' WHERE uid = 'bob'").run();
-    // 3.x draws new codes on the server; asking for a particular one only
-    // works for an account that has none (the 2.x restore)
-    const fresh = (await bob.call("POST", "/codes", {})).body.code;
-    expect(fresh, "new code: a fresh code is claimed by its maker").not.toBe("BOB123");
-    expect((await bob.call("POST", "/codes", { code: "BOB999" })).body.code, "new code: a wanted code can't replace one I have").toBe(fresh);
+    // 3.x draws new codes on the server; nobody picks one (3.8.0: the 2.x
+    // restore that once asked for its old code is gone)
+    const first = (await bob.call("POST", "/codes", {})).body.code;
+    expect(first, "new code: a fresh code is claimed by its maker").not.toBe("BOB123");
+    const fresh = (await bob.call("POST", "/codes", { code: "BOB999" })).body.code;
+    expect(fresh, "new code: a wanted code is never given; a fresh one is").not.toBe("BOB999");
+    expect(fresh).not.toBe(first);
     const theirs = (await carol.call("POST", "/codes", { code: fresh })).body.code;
     expect(theirs, "new code: someone else's code can't be repointed at me").not.toBe(fresh);
     expect(await db().prepare("SELECT uid FROM codes WHERE code = ?").bind(fresh).first("uid"), "new code: nor retired by anyone but its owner").toBe("bob");

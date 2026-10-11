@@ -285,14 +285,11 @@ describe("admin counts", () => {
 });
 
 describe("the week's 3.2 extras", () => {
-  it("carries a recap, and it never goes to Firestore", async () => {
-    const { outbound } = await import("../src/bridge");
+  it("carries a recap", async () => {
     const { sam, dre } = await crew();
     const recap = { name: "Step 1", n: 3, day: "2026-10-26" };
     expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), recap } })).toBe(200);
     expect((await dre.call("GET", "/board")).body.friends.find((f: any) => f.uid === "sam").week.recap).toEqual(recap);
-    const doc = await db().prepare("SELECT doc FROM weeks WHERE uid = 'sam'").first<string>("doc");
-    expect(outbound(doc!, 1)).not.toHaveProperty("recap");
     expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), recap: { name: "", n: 0, day: "x" } } })).toBe(400);
   });
 });

@@ -107,6 +107,17 @@ def _morning(awaiting_sync, **kw):
     return plan_flow.maybe_morning(awaiting_sync, **kw)
 
 
+def _morning_now(waiting):
+    """3.8.0, on the Decks screen: the morning that waited for it, then the
+    board redrawn with what it opened."""
+    if _state.get("plans_morning") is not waiting:
+        return  # ran already, or a newer one is waiting
+    _state["plans_morning"] = None
+    _morning(bool(waiting.get("awaiting")) and _awaiting_phone(), fresh=bool(waiting.get("fresh")))
+    if _state["board_shown"] and mw.state == "deckBrowser":
+        _swap(cfg())
+
+
 def _after_push(pushed, labels, gone=(), gen=None):
     """Main thread. An upload that skipped the fetch: my own row follows
     what was just written, and the footer learns whether it went."""
@@ -433,7 +444,7 @@ def _on_render(deck_browser, content):
         if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
             content.stats += board.signed_out_card(c, expired=client().session_dead,
-                                                   moved=client().was_on_2x, gone=client().deleted_quiet)
+                                                   gone=client().deleted_quiet)
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)
@@ -529,6 +540,11 @@ def _on_did_render(deck_browser):
         # 3.7.3: an update that came while reviewing waits for the Decks screen
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: plan_flow.midday(plan_flow.followed()))
+    waiting = _state.get("plans_morning")
+    if waiting and not _closing:
+        # 3.8.0: so does the morning (it came while reviewing, or before Decks first drew)
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: _morning_now(waiting))
     together.show_luck_card()
     rooms.refresh_widgets()
 
@@ -752,7 +768,7 @@ def _on_js(handled, message, context):
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
-        open_auth(join=(parts[2] == "join") if len(parts) > 2 else None)
+        open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
     elif cmd == "rowmenu" and len(parts) > 2:
@@ -872,13 +888,13 @@ def _swap(c, focus=None):
     mw.web.eval(js)
 
 
-def open_auth(join=None):
-    """join: open the dialog on Join (True) or Sign In (False); None lets it
-    choose. A new account gets the welcome screen before its first upload,
-    so what the crew will see is said before any of it is shared."""
+def open_auth():
+    """One flow signs in and joins. A new account gets the welcome screen
+    before its first upload, so what the crew will see is said before any
+    of it is shared."""
     global _fetching
     from .ui.auth_dialog import AuthDialog
-    dlg = AuthDialog(mw, client(), join=join)
+    dlg = AuthDialog(mw, client())
     if dlg.exec() and dlg.user:
         _uid, name = dlg.user
         _reset_runtime(keep_sync=True)

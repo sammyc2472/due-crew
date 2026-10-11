@@ -36,7 +36,9 @@ FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
 API_BASE = "https://api.duecrew.com"
 # session.json keys that belong to one account on this computer, and go
 # when a different account signs in
-_LEGACY_AUTH = ("id_token", "refresh_token", "auth_dead", "auth_gone", "rules_check", "rules_stale_hint")
+# what sessions from before 3.8.0 kept and nothing reads now (2.x sign-in, its restore)
+_LEGACY_AUTH = ("id_token", "refresh_token", "auth_dead", "auth_gone", "rules_check", "rules_stale_hint",
+                "needs_restore", "restored_to")
 
 
 def _version_tuple(text):
@@ -113,12 +115,6 @@ class ApiClient:
             return bool(r.status_code == 200 and (r.json() or {}).get("gone"))
         except Exception:
             return False
-
-    @property
-    def was_on_2x(self):
-        """A session.json from before 3.0: signed in with Firebase, never
-        with a code. The board asks for one sign-in, once."""
-        return bool(self.session.get("refresh_token")) and not self.signed_in
 
     @property
     def user_id(self):
@@ -204,9 +200,8 @@ class ApiClient:
             raise AuthError(str(data.get("error") or "bad_email"))
 
     def verify_code(self, email, code, device=""):
-        """{uid, name, new}. The session becomes this account's; a session
-        from before 3.0 for the same account keeps what it knew (friends,
-        squads' state, seen cheers), and remembers to bring it back."""
+        """{uid, name, new}. The session becomes this account's; signing in
+        again to the same account keeps what it knew (squads' state, seen cheers)."""
         try:
             status, data = self._call("POST", "/auth/verify",
                                       {"email": email, "code": code, "device": device[:60]}, auth=False)
@@ -218,11 +213,6 @@ class ApiClient:
             raise AuthError(str(data.get("error") or "wrong_code"))
         uid = str(data["uid"])
         same = self.session.get("user_id") == uid
-        # what this computer knew comes back once per server: from 2.x, and
-        # again on a server it hasn't restored to (a dev Worker, then the real one)
-        from_2x = same and (bool(self.session.get("refresh_token"))
-                            or (bool(self.session.get("friend_ids") or self.session.get("friend_code"))
-                                and self.session.get("restored_to") != self.base))
         if not same:
             self.session = {}  # another account: nothing carries over
         for k in _LEGACY_AUTH:
@@ -230,12 +220,6 @@ class ApiClient:
         name = str(data.get("name") or "") or (self.session.get("display_name", "") if same else "")
         self.session.update(user_id=uid, email=email.strip().lower(), token=data["token"],
                             display_name=name)
-        if from_2x:
-            self.session["needs_restore"] = True
-        elif not self.session.get("needs_restore"):
-            # a 3.x session: what it remembers came from this server, and
-            # bringing it back after a 401 would undo removals made elsewhere
-            self.session["restored_to"] = self.base
         self._save_session()
         return {"uid": uid, "name": name, "new": bool(data.get("new")) or not name}
 
@@ -337,17 +321,14 @@ class ApiClient:
                            "note": clean_note(c.get("note")), "luck": c.get("luck") is True,
                            "guid": str(c.get("guid") or "")[:40]})
         friends = [str(f.get("uid")) for f in data.get("friends") or [] if f.get("uid")]
-        # until the restore has sent it, the list this computer remembers from
-        # 2.x is the only copy: 3.0.0 replaced it here and lost most crews
-        if not self.session.get("needs_restore") and (
-                friends != self.session.get("friend_ids") or not self.session.get("restored_to")):
-            # the list is this server's now: a later sign-in isn't a 2.x one
+        if friends != self.session.get("friend_ids"):
             self.session["friend_ids"] = friends
-            self.session.setdefault("restored_to", self.base)
             self._save_session()
         # 3.1: plans ride the day's first refresh; 3.7.3: and any refresh whose
-        # stamp moved (an author saved, posted, or my own days changed on the site)
-        plans_came = with_decks or isinstance(data.get("plans"), list)
+        # stamp moved (an author saved, posted, or my own days changed on the site).
+        # 3.8.0: only a list counts: a refresh without one isn't "following nothing"
+        # (the morning would forget every plan and unsuspend what Hold back kept)
+        plans_came = isinstance(data.get("plans"), list)
         if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
@@ -509,11 +490,6 @@ class ApiClient:
         days, sent when they changed. 3.7.3: team, {plan id: {day?, play?}}
         for the plans whose team I'm on, sent when it changed.
         Raises TransportError."""
-        if self.session.get("needs_restore"):
-            try:
-                self.restore_from_2x(cfg)
-            except TransportError:
-                pass  # offline or the server's trouble: the next sync tries again
         body = {}
         profile = {"name": self.display_name or "Me"}
         emoji = clean_emoji(cfg.get("emoji"))
@@ -660,46 +636,6 @@ class ApiClient:
                     t["helped"] = bool(helped)
             self._save_session()
         return status == 200
-
-    # ---- 3.0's first sync: bring back what 2.x had ----
-
-    def restore_from_2x(self, cfg):
-        """Once, the first time an account from before 3.0 syncs: my code
-        (when this computer knew it), my crew by uid, and my squads by their
-        codes. Friendships re-form as each side updates; until then the
-        other side reads as pending. Idempotent. No answer (offline, a 5xx)
-        raises, and the next sync tries again; a refusal (a squad locked by
-        whoever got there first, a name the server won't take) won't change
-        by asking twice, so it's done."""
-        # the code this computer knew, else keep whatever the account has
-        # (the cutover import carried it); only an account with none gets one.
-        # POST /codes without a code always makes a new one and retires the
-        # old: 3.0.0 did that here, and everyone's imported code was lost.
-        # A code the account already has always stays: a 2.x friend_code on
-        # this computer may be one the account has since regenerated.
-        code = friend_code_from(self.session.get("friend_code") or "")
-        statuses = []
-        status, data = self._call("GET", "/friends")
-        statuses.append(status)
-        if status == 200 and not data.get("code"):
-            statuses.append(self._call("POST", "/codes", {"code": code} if code else {})[0])
-        ids = [f for f in self.session.get("friend_ids") or [] if isinstance(f, str)]
-        if ids:
-            statuses.append(self._call("PUT", "/friends", {"ids": ids[:500]})[0])
-        for sq in cfg.get("squads") or []:
-            if not isinstance(sq, dict) or not sq.get("code"):
-                continue
-            statuses.append(self._call("POST", "/squads/restore", {
-                "code": sq["code"], "name": clean_note(sq.get("name"), 24) or "squad",
-                "founder": sq.get("founder") or ""})[0])
-        if any(s >= 500 or s == 429 for s in statuses):
-            # the server's trouble, not a refusal: the next sync tries again
-            # (the server keeps the restore open a week after the first 3.x sync)
-            return False
-        self.session.pop("needs_restore", None)
-        self.session["restored_to"] = self.base
-        self._save_session()
-        return True
 
     # ---- settings (2.13) ----
 

@@ -732,3 +732,22 @@ every release that changes how something works.
   first card didn't count and a cloze-heavy day could read as missed. A
   new sibling of a started note now counts on its note's first day, as
   `counts` already calls it seen.
+  The morning waits for Decks (3.8.0, Spring Clean): a sync that landed
+  mid-review could open the day's cards under the reviewer, and its undo
+  step then sat in the middle of my answers. The morning now opens only
+  on the Decks screen (`mw.state == "deckBrowser"`); anywhere else it
+  waits (`_state["plans_morning"]`) and runs at the next Decks render
+  (`_morning_now`). A plan whose held cards went with it waits the same way.
+  Firebase is gone (3.8.0, Spring Clean): the 2.x bridge and its quarter-hour
+  cron, the identity import, `PUT /friends {ids}`, `POST /squads/restore`,
+  `POST /codes {code}` (a code is always drawn), the admin's cutover and
+  bridge panels, `firestore.rules`, `tests/rules/`, `firebase.json`, the
+  rules CI job, the add-on's restore path and the import/restore tools.
+  `ADMIN_TOKEN` and `FIREBASE_SA` are unused; deleting them and the Google
+  project is Sam's (`docs/cloudflare-setup.md`). A 3.x add-on that still
+  owes a restore gets a 404 there and counts it done. `bridge_last` and
+  `users.from2x` stay until a later migration: migrations apply before the
+  Worker deploys, and the old Worker still reads them in between.
+  A refresh's plans: the add-on keeps its plans only when the board's
+  `plans` is a list (`plans_came`), so a board without them never reads
+  as "I follow nothing".

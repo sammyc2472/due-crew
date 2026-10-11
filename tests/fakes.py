@@ -234,7 +234,7 @@ class Bad(Exception):
 class FakeWorker:
     """The Worker's API in memory: worker/src restated in Python, so the
     client suite needs nothing but the standard library. It's a model of
-    the Worker, as the old fake was of the Firestore rules; worker/test is
+    the Worker; worker/test is
     what proves the real one (in workerd, with D1).
 
     Every request is logged as (method, path, status): the request budget
@@ -798,19 +798,9 @@ class FakeWorker:
                                       "emoji": self.users[f]["emoji"] or "", "mutual": self.mutual(me, f)}
                                      for o, f in sorted(self.friends) if o == me and f in self.users],
                          "knocks": self._knocks_of(me)}
-        if method == "PUT" and not rest:
-            ids = (body or {}).get("ids")
-            if not isinstance(ids, list):
-                raise Bad(400, "bad_ids")
-            added = sorted({i for i in ids if i in self.users and i != me})
-            for f in added:
-                self.friends.add((me, f))
-                if (f, me) in self.friends:
-                    self.knocks.pop((me, f), None)
-                else:
-                    self.knocks.setdefault((f, me), {"squad": "", "at": _now()})
-            return 200, {"added": added}
         fid = rest[0] if rest else ""
+        if not fid:
+            raise Bad(404, "not_found")  # 3.8.0: PUT /friends {ids}, the 2.x restore, is gone
         if method == "PUT":
             if fid == me:
                 raise Bad(400, "self")
@@ -827,12 +817,9 @@ class FakeWorker:
 
     def _codes(self, method, me, rest, body):
         if method == "POST" and not rest:
-            want = (body or {}).get("code")
-            old = self.users[me]["code"]
-            if want and want == old:
-                return 200, {"code": old}
+            # a new code, always drawn (3.8.0: the body is ignored; the 2.x restore once asked for its old one)
             n = 0
-            code = want if want and want not in self.codes else None
+            code = None
             while code is None:
                 n += 1
                 cand = f"C{abs(hash((me, n, len(self.codes)))) % 10**5:05d}"
@@ -1030,14 +1017,6 @@ class FakeWorker:
                 raise Bad(404, "no_squad")
             fu = self.users.get(self.squads[sid]["founder"]) or {}
             return 200, dict(self._info(sid, code), founderName=fu.get("name") or "")
-        if method == "POST" and rest == ["restore"]:
-            code = "".join(ch for ch in str(body.get("code", "")).upper() if ch in SQUAD_ALPHABET)
-            sid = self.squad_id(code)
-            if sid not in self.squads:
-                founder = body.get("founder") if body.get("founder") in self.users else me
-                self.squads[sid] = {"name": body.get("name") or "squad", "founder": founder, "open": True}
-            st, info = self._squad("POST", me, [sid, "join"], {}, {"code": code})
-            return st, dict(info, code=code)
         sid = rest[0] if rest else ""
         if sid not in self.squads:
             raise Bad(404, "no_squad")

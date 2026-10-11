@@ -2964,20 +2964,14 @@ def _card(cfg, title, body_html):
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False, moved=False, gone=False):
-    """moved: signed in on 2.x, which used passwords. 3.0 signs in with an
-    emailed code, so everyone signs in once more, and nothing is lost.
-    gone (Q4): the account was deleted after 12 months without activity."""
+def signed_out_card(cfg, expired=False, gone=False):
+    """gone (Q4): the account was deleted after 12 months without activity."""
     if gone:
         return _card(cfg, "Welcome back",
                      f'Your Due Crew account was deleted after 12 months without activity, '
                      f'as the listing says. Your Anki and its cards are untouched. '
                      f'<a href="#" onclick="{_pycmd("setup")}">Start again with your email</a>; '
                      f'your crew can add you with your new code.')
-    if moved:
-        return _card(cfg, "Due Crew",
-                     f'Due Crew now signs in with a code by email, no password. '
-                     f'<a href="#" onclick="{_pycmd("setup")}">Sign in</a> once to carry on.')
     if expired:
         return _card(cfg, "Due Crew",
                      f'Your sign-in expired. '

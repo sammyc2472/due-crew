@@ -1,6 +1,6 @@
-// Shapes. What firestore.rules checked field by field is checked here, and
-// what the client used to coerce on read is coerced here on write, so the
-// board only ever returns clean data.
+// Shapes. Every field is checked here, and what the client used to coerce
+// on read is coerced here on write, so the board only ever returns clean
+// data.
 
 import { HttpError } from "./util";
 

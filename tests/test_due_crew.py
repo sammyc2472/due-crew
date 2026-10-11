@@ -2483,8 +2483,9 @@ def test_new_cards_v213():
 
 def test_sign_in_v30():
     """3.0: an email, then the six-digit code it gets. A new address is a
-    new account, asked for a name. The same account from 2.x keeps what
-    this computer knew about it; another account starts clean."""
+    new account, asked for a name. Signing in again keeps what this
+    computer knew about the account; another account starts clean. 3.8.0:
+    what a 2.x session kept is cleared, and nothing is restored."""
     store = world({"sam": "Sammy"})
     tmp = tempfile.mkdtemp()
     cl = api.ApiClient(os.path.join(tmp, "session.json"))
@@ -2508,110 +2509,26 @@ def test_sign_in_v30():
           and store.users[got["uid"]]["name"] == "Newbie" and cl.display_name == "Newbie")
     check("sign-out: here at once", (cl.sign_out(), cl.signed_in)[1] is False)
 
-    # the same account, from a 2.x session.json
+    # the same account signing in again keeps what it knew; a 2.x session's keys go
     old = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
     old.session = {"user_id": "sam", "email": "sam@example.com", "display_name": "Sammy",
-                   "id_token": "x", "refresh_token": "r", "friend_ids": ["dre"], "cheers_seen": {"dre": "t"}}
-    check("2.x: signed out, and the board knows why", not old.signed_in and old.was_on_2x)
+                   "id_token": "x", "refresh_token": "r", "friend_ids": ["dre"], "cheers_seen": {"dre": "t"},
+                   "needs_restore": True, "restored_to": "x"}
+    check("an old session: signed out", not old.signed_in)
     old.request_code("sam@example.com")
     got = old.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("2.x: the same uid, no name asked, what it knew is kept, and the restore is due",
-          got == {"uid": "sam", "name": "Sammy", "new": False}
-          and old.session["friend_ids"] == ["dre"] and old.session["cheers_seen"] == {"dre": "t"}
-          and old.session.get("needs_restore") is True
-          and "refresh_token" not in old.session and not old.was_on_2x)
+    check("the same account: the same uid, no name asked, what it knew is kept",
+          got == {"uid": "sam", "name": "Sammy", "new": False} and old.session["cheers_seen"] == {"dre": "t"})
+    check("3.8.0: nothing from 2.x is kept or restored",
+          not any(k in old.session for k in ("refresh_token", "id_token", "needs_restore", "restored_to")))
+    n = len(store.log)
     old.push([TODAY.isoformat()], {})
-    check("restore: remembered per server", old.session.get("restored_to") == old.base
-          and "needs_restore" not in old.session)
-    old.request_code("sam@example.com")
-    old.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("restore: signing in again to the same server doesn't repeat it", "needs_restore" not in old.session)
-    old.base = "https://api-dev.duecrew.com"
-    old.request_code("sam@example.com")
-    old.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("restore: a server it hasn't restored to gets it once (a dev Worker, then the real one)",
-          old.session.get("needs_restore") is True)
+    check("3.8.0: the first sync is just a sync", [p for _m, p, _s in store.log[n:]] == ["/sync"], str(store.log[n:]))
     other = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
     other.session = {"user_id": "someone-else", "refresh_token": "r", "friend_ids": ["x"]}
     other.request_code("sam@example.com")
     other.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("another account: nothing carries over", "friend_ids" not in other.session
-          and not other.session.get("needs_restore"))
-
-
-def test_restore_from_2x():
-    """3.0's first sync brings back what a 2.x install knew: its code (when
-    this computer had it), its crew by uid, its squads by their codes. Then
-    it's done, and never runs again."""
-    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"dre": ["sam"]})
-    sam = new_client(store, "sam", "Sammy")
-    sam.session.update(needs_restore=True, friend_ids=["dre", "eve", "ghost"], friend_code="SAM123")
-    cfg = {"squads": [{"id": shapes.squad_id("ABCD2345"), "code": "ABCD2345", "name": "busm", "founder": "dre"}]}
-    ok, _gone = sam.push([TODAY.isoformat()], cfg)
-    sid = shapes.squad_id("ABCD2345")
-    check("restore: my code comes back as it was", store.codes.get("SAM123") == "sam")
-    store.add_user("kai", "Kai", code="KAI777")  # imported with its code, which this computer never knew
-    kai = new_client(store, "kai", "Kai")
-    kai.session["needs_restore"] = True
-    kai.push([TODAY.isoformat()], {})
-    check("restore: a code the import carried stays, when this computer didn't know it",
-          store.codes.get("KAI777") == "kai" and store.users["kai"]["code"] == "KAI777")
-    store.add_user("lee", "Lee")
-    lee = new_client(store, "lee", "Lee")
-    lee.session["needs_restore"] = True
-    lee.push([TODAY.isoformat()], {})
-    check("restore: an account with no code at all gets one", bool(store.users["lee"]["code"]))
-    check("restore: my crew comes back by uid; who added me back is crew at once",
-          ("sam", "dre") in store.friends and ("sam", "eve") in store.friends and store.mutual("sam", "dre")
-          and not store.mutual("sam", "eve"))
-    check("restore: someone re-added who hasn't added me back is knocked, so a forgetful computer can add back",
-          ("eve", "sam") in store.knocks and ("dre", "sam") not in store.knocks)
-    check("restore: my squad comes back under its old id, with its founder, and me in it",
-          store.squads.get(sid, {}).get("founder") == "dre" and (sid, "sam") in store.members)
-    check("restore: done, once", ok and "needs_restore" not in sam.session)
-    n = len(store.log)
-    sam.push([TODAY.isoformat()], cfg)
-    check("restore: the next sync is just a sync", [p for _m, p, _s in store.log[n:]] == ["/sync"])
-    zed = new_client(store, "dre", "Dre")
-    zed.session["needs_restore"] = True
-    store.down = True
-    try:
-        zed.push([TODAY.isoformat()], cfg)
-    except shapes.TransportError:
-        pass
-    store.down = False
-    check("restore: offline, it waits for the next sync", zed.session.get("needs_restore") is True)
-    store.fail_status = 503
-    try:
-        zed.push([TODAY.isoformat()], cfg)
-    except shapes.TransportError:
-        pass
-    store.fail_status = None
-    check("restore: a server in trouble doesn't count as done either", zed.session.get("needs_restore") is True)
-    dre = zed
-    dre.push([TODAY.isoformat()], cfg)
-    check("restore: the founder coming back joins the squad the first member brought back",
-          (sid, "dre") in store.members and store.squads[sid]["founder"] == "dre"
-          and store.codes and "dre" in store.codes.values())
-
-
-
-def test_refresh_before_restore_keeps_the_crew():
-    """3.0.0: the board refresh at sign-in ran before the first sync, and
-    replaced the crew this computer remembered from 2.x with the server's
-    empty list, so the restore had nobody to bring back."""
-    store = world({"sam": "Sammy", "dre": "Dre", "eve": "Eve"}, {"dre": ["sam"]})
-    sam = new_client(store, "sam", "Sammy")
-    sam.session.update(needs_restore=True, friend_ids=["dre", "eve"])
-    sam.fetch_board([TODAY.isoformat()])
-    check("restore: a refresh first leaves the remembered crew alone",
-          sam.session.get("friend_ids") == ["dre", "eve"])
-    sam.push([TODAY.isoformat()], {})
-    check("restore: and the first sync still brings all of it back",
-          ("sam", "dre") in store.friends and ("sam", "eve") in store.friends)
-    sam.fetch_board([TODAY.isoformat()])
-    check("restore: after that, the board's list is the one kept",
-          sorted(sam.session.get("friend_ids")) == ["dre", "eve"])
+    check("another account: nothing carries over", "friend_ids" not in other.session)
 
 
 def test_tip_clears_flag_v301():
@@ -4517,37 +4434,6 @@ def test_plan_search_is_the_decks_v34():
               g.F._deck_name("Checkpoint · Renal::Pharm") == "Checkpoint · Renal: Pharm")
 
 
-def test_restore_only_from_2x_v311():
-    """3.1.1: a 3.x session that signs in again (a 401) isn't a 2.x one: the
-    restore would re-add people removed elsewhere and rejoin squads. And a
-    code this computer remembers from 2.x never replaces the account's."""
-    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
-    fresh = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
-    fresh.request_code("sam@example.com")
-    fresh.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("3.x: a first sign-in here counts as restored", fresh.session.get("restored_to") == fresh.base)
-    old3 = new_client(store, "sam", "Sammy")  # signed in before 3.1.1: no restored_to
-    old3.fetch_board([TODAY.isoformat()])
-    check("3.x: a board fetch marks the session this server's",
-          old3.session.get("friend_ids") == ["dre"] and old3.session.get("restored_to") == old3.base)
-    store.tokens.clear()
-    try:
-        old3.fetch_board([TODAY.isoformat()])
-    except shapes.TransportError:
-        pass
-    old3.request_code("sam@example.com")
-    old3.verify_code("sam@example.com", store.otp["sam@example.com"])
-    check("3.x: signing in again after a 401 doesn't rerun the 2.x restore",
-          not old3.session.get("needs_restore") and old3.session_dead is False)
-
-    store.add_user("kai", "Kai", code="NEW777")  # regenerated since 2.x
-    kai = new_client(store, "kai", "Kai")
-    kai.session.update(needs_restore=True, friend_code="OLD999")
-    kai.push([TODAY.isoformat()], {})
-    check("restore: a remembered 2.x code doesn't replace the account's",
-          store.users["kai"]["code"] == "NEW777" and store.codes.get("OLD999") != "kai")
-
-
 def test_sign_in_keeps_anki_synced_v311():
     """3.1.1: signing in or out mid-session doesn't forget that AnkiWeb has
     synced (it's about the collection); the plans' morning isn't held back."""
@@ -4658,6 +4544,65 @@ def test_morning_not_while_closing_v311():
     finally:
         dc.plan_flow.maybe_morning = saved
         dc._closing = False
+
+
+def test_morning_waits_for_decks_v380():
+    """3.8.0: the morning never unsuspends on the review screen (its undo
+    step would sit on top of the last answer). It waits for the Decks
+    screen, which runs it as the call would have."""
+    import sys as _sys
+    import due_crew as dc
+    from due_crew import plan_flow as F
+    from due_crew.app import _state
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    col = _plan_col()
+    box = {"cfg": {}}
+    saved = {k: getattr(F, k) for k in ("cfg", "save_cfg", "_pcfg", "_psave", "client", "_today", "tooltip")}
+    saved_col, saved_swap, saved_state = F.mw.col, F.app.swap, F.mw.state
+    saved_dc = {k: getattr(dc, k) for k in ("_awaiting_phone", "_swap", "client")}
+    qt = _sys.modules["aqt.qt"]
+    saved_timer = qt.QTimer
+    F.cfg = F._pcfg = lambda: box["cfg"]
+    F.save_cfg = F._psave = lambda c: box.update(cfg=c)
+    F.client = dc.client = lambda: maya
+    F._today = lambda: _day(0)
+    F.tooltip = lambda text, **kw: None
+    F.mw.col = col
+    F.app.swap = lambda c: None
+    try:
+        plan, _ = maya.follow_plan(code)
+        box["cfg"]["plans"] = {pid: F.new_state(col, plan)}
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.mw.state = "review"
+        F.maybe_morning(False)  # what the 3-minute fallback calls
+        check("morning: not on the review screen: nothing unsuspends, no undo step",
+              _open(col) == {8} and not col.undo_steps and "plans_day" not in box["cfg"])
+        check("morning: it waits for the Decks screen, as called",
+              _state["plans_morning"] == {"awaiting": False, "fresh": False}, str(_state["plans_morning"]))
+        F.maybe_morning(True, fresh=True)  # a refresh while still reviewing, before any AnkiWeb sync
+        check("morning: a later call still waiting for AnkiWeb leaves the waiting morning as it was",
+              _state["plans_morning"] == {"awaiting": False, "fresh": False} and _open(col) == {8},
+              str(_state["plans_morning"]))
+        F.mw.state = "deckBrowser"
+        qt.QTimer = type("QTimer", (), {"singleShot": staticmethod(lambda ms, fn: fn())})
+        dc._awaiting_phone = lambda: True  # still no AnkiWeb sync: the fallback's word stands
+        dc._swap = lambda c: None
+        dc._on_did_render(None)
+        check("morning: the Decks screen runs it, in one undo step",
+              _open(col) == {1, 2, 3, 8} and len(col.undo_steps) == 1 and box["cfg"]["plans_day"] == _day(0)
+              and _state["plans_morning"] is None, str(_open(col)))
+        dc._on_did_render(None)
+        check("morning: once", len(col.undo_steps) == 1)
+    finally:
+        for k, v in saved.items():
+            setattr(F, k, v)
+        for k, v in saved_dc.items():
+            setattr(dc, k, v)
+        qt.QTimer = saved_timer
+        F.mw.col, F.app.swap, F.mw.state = saved_col, saved_swap, saved_state
+        _state["plans_morning"] = None
 
 
 def test_plain_prompts_v311():
