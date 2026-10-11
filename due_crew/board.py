@@ -128,8 +128,7 @@ def _ago(ts_str):
 
 QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number
 # Q2: said where people read it (here, the Settings dialog, the site's Account, the README)
-KEEP_LINE = ("Kept while you use it: after 12 months with no activity (24 when paused), "
-             "your account is deleted with everything in it. Opening Anki counts.")
+KEEP_LINE = "Unused for 12 months (24 when paused), an account is deleted with everything in it."
 
 
 def _long_quiet(ts_str, now=None):
@@ -694,8 +693,8 @@ def _css(cfg):
     }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
-    #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700;
-      border-bottom: 1px dotted currentColor; }}
+    #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; box-shadow: inset 0 -2px var(--dc-accent);
+      padding-bottom: 2px; }}
     #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
     #due-crew .dc-sw a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
       background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
@@ -804,7 +803,7 @@ def _css(cfg):
       border: 1px solid var(--dc-line); border-radius: 7px; padding: 5px 8px; }}
     #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a {{
       color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; white-space: nowrap; }}
-    #due-crew .tq {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 7px 10px; margin-top: 6px;
+    #due-crew .tq {{ border-top: 1px solid var(--dc-line); padding: 7px 0; margin-top: 0;  /* 3.8.0: rows, not boxes */
       display: grid; gap: 3px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }}
     #due-crew .tq .t {{ display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }}
     #due-crew .tq .t .m {{ margin-left: auto; color: var(--dc-muted); font-size: 11px; white-space: nowrap; }}
@@ -889,8 +888,7 @@ def _css(cfg):
     #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
     #due-crew .dc-pways .t {{ font-size: 14px; }}
     #due-crew .dc-pways .ways {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }}
-    #due-crew .dc-pways .way {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 9px 10px; display: grid;
-      gap: 6px; align-content: start; font-size: 12px; }}
+    #due-crew .dc-pways .way {{ display: grid; gap: 6px; align-content: start; font-size: 12px; }}
     #due-crew .dc-pways .way b {{ font-size: 13px; }}
     #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
@@ -1327,7 +1325,7 @@ def _plans_empty_html():
     return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
-            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">Library on duecrew.com &#8599;</a></div>'
+            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
             f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planmake")}">Pick a deck&hellip;</a></div>'
             f'</div></div>')
 
@@ -1572,15 +1570,16 @@ def _you_insights(ins):
         f'onclick="{_pycmd("insdeck:" + str(int(d["did"])))}">{e(str(d["name"]))}</a>' for d in decks) + "</div>")
     plan = ins.get("plan")
     if plan:  # its exam and its topics
-        ctx = (f'From your plan <a href="#" onclick="{_pycmd("duetab:plans")}">'
+        ctx = (f'<a href="#" title="The plan on this deck" onclick="{_pycmd("duetab:plans")}">'
                f'{e(str(plan.get("name") or "Plan"))} &rsaquo;</a>')
     elif ins.get("exam"):
-        ctx = "From this deck&rsquo;s tags and your exam date."
+        ctx = ""
     else:
-        ctx = (f'From this deck&rsquo;s tags. '
-               f'<a href="#" onclick="{_pycmd("settings:privacy")}">Add your exam date&hellip;</a>')
-    # 3.8.0: the decks and where the topics come from, one row
-    return f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>' + _insights_html(did, ins.get("view") or {})
+        ctx = f'<a href="#" onclick="{_pycmd("settings:privacy")}">Exam date&hellip;</a>'
+
+    # 3.8.0: the decks, and the plan on this one (or a way to my exam date), one row
+    head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>' if pick or ctx else ""
+    return head + _insights_html(did, ins.get("view") or {})
 
 
 def _ins_week(did, w, aim, today):
@@ -1699,14 +1698,14 @@ def _insights_html(did, v):
     f = v.get("fsrs")
     if f:
         out += (f'<div class="iline" title="Reviews of cards 1&ndash;3 days since their last review, 4 weeks: '
-                f'{int(f["right"])}% right of {int(f["n"]):,}">Your newest cards come back {int(f["right"])}% right, '
-                f'not the {int(f["target"])}% Anki aims for. '
+                f'{int(f["right"])}% right of {int(f["n"]):,}">Newest cards {int(f["right"])}% right, '
+                f'Anki aims for {int(f["target"])}% &middot; '
                 f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
     lee = int(v.get("leeches") or 0)
     if lee:
         # 3.8.0: from the plan card; a leech is the deck's
-        out += (f'<div class="iline">{lee:,} leech{"es stay" if lee != 1 else " stays"} suspended in this deck. '
+        out += (f'<div class="iline">{lee:,} suspended leech{"es" if lee != 1 else ""} &middot; '
                 f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>')
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
@@ -1819,7 +1818,7 @@ def _week_html(card, pid):
                         + (' &middot; today' if d["today"] else "") + '</b>'
                         f'{rows}{back}</div>')
     key = ('<div class="pkey"><span><i class="kn"></i>new to you</span><span><i class="kc"></i>seen or in your Anki by then</span>'
-           '<span>longest = busiest day</span></div>') if loaded else ""
+           '</div>') if loaded else ""
     return out + f'<div class="pwk">{cells}</div>{key}{details}'
 
 
@@ -2026,8 +2025,7 @@ def _decks_body(data, deltas=None, sticking=None):
     groups, extras = build_deck_groups(data["entries"])
     if not groups and not extras:
         return ('<div class="dc-line">No shared decks yet. '
-                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a> '
-                '&mdash; matching decks pair up on their own.</div>')
+                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
     html = ""
     for g in groups:
         label = _html.escape(str(g["label"]))
@@ -2084,8 +2082,7 @@ def _squads_html(view, cfg):
         return sw + _plan_squad_html(str(view.get("pid") or ""), view)
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return (sw + '<div class="dc-line">A private board '
-                'for any group. Join with a code, or create one.</div>')
+        return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
     if state == "loading":
         return sw + '<div class="dc-line">Fetching&hellip;</div>'
     if state == "error":
@@ -2220,7 +2217,8 @@ BINGO_CSS = """
     /* the whole card's frame is #due-crew.bg-full itself: its rules say so */
     #due-crew .bg-card, #due-crew.bg-full, #due-crew .bg-row, #due-crew .bg-bar, #due-crew .bg-info { text-align: left; }
     #due-crew [hidden] { display: none !important; }
-    #due-crew .bg-card { border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 12px; margin: 2px 0 10px;
+    #due-crew .bg-card { border-top: 1px solid var(--dc-line); border-bottom: 1px solid var(--dc-line); padding: 9px 0;
+      margin: 2px 0 10px;  /* 3.8.0: a row between rules, no box */
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; }
     #due-crew .bg-card .bg-t { display: grid; gap: 1px; flex: 1 1 180px; min-width: 0; }
     #due-crew .bg-card .bg-t span, #due-crew .bg-q { color: var(--dc-muted); }
@@ -2794,8 +2792,7 @@ def _settings_you(view):
             + '</div>')
     # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
     out += ('<div class="st-box">'
-            + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>',
-                      "What's working and what isn't")
+            + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>')
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
@@ -2832,10 +2829,9 @@ def _settings_board(cfg):
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
             + '</div><div class="st-h">Due</div><div class="st-box">'
-            + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"),
-                      "Your plans' dates and your own to-dos, on top")
+            + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
-                      "From your own Anki: today's misses, new leeches")
+                      "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
             + '</div>'
@@ -2872,8 +2868,8 @@ def _settings_privacy(cfg):
     return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
             + radio("numbers", "My numbers") + nums
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
-            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting. "
-                    "A paused account is kept 24 months without activity; opening Anki counts.")
+            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;; your streak keeps counting. "
+                    "Kept 24 months without activity.")
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
@@ -2896,8 +2892,7 @@ def settings_html(view, cfg):
                     for k, t in SETTINGS_TABS)
     body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
-    foot = ("Privacy, dates, status and accent are saved to your account. The rest stays on this computer."
-            if view.get("signed_in") else "")
+    foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
             f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b></div>'
@@ -3510,8 +3505,8 @@ def profile_overlay_js(profile):
 # ---- Due: the day's to-do, above the board ----
 
 DUE_CSS = """
-    #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
-      padding: 9px 12px 10px; margin: 0 0 14px; display: grid; gap: 6px; }
+    #due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px; margin: 0 0 14px;
+      display: grid; gap: 6px; }
     #due-crew .du > * { min-width: 0; }
     #due-crew .du a { text-decoration: none; }
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -3556,7 +3551,7 @@ DUE_CSS = """
     #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); padding-top: 4px; }
     #due-crew .du-sec.warn { color: #c77700; }
-    #due-crew .du-bh { display: grid; gap: 0; }
+    #due-crew .du-bh { display: grid; gap: 0; padding-bottom: 8px; }
     #due-crew .du-line { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font-size: 12px;
       padding: 5px 0 1px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); }
     #due-crew .du-line b { color: var(--dc-ink); font-weight: 600; }
@@ -3585,7 +3580,7 @@ DUE_CSS = """
     #due-crew .du-ln.done > span:nth-child(2) { color: var(--dc-muted); text-decoration: line-through; }
     #due-crew .du-q { color: var(--dc-faded); font-size: 11.5px; padding: 3px 0 3px 25px; }
     #due-crew .du-evl { color: #c77700; font-weight: 700; font-size: 12px; padding-left: 25px; }
-    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 7px 12px; white-space: nowrap; }
+    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 10px 18px; white-space: nowrap; }
     #due-crew .du-one > * { flex: none; }
     #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; }
     #due-crew .du-one .sp { flex: 1 1 0; }
@@ -3821,7 +3816,7 @@ def _due_behind(v):
     out += "".join(_due_mine(r) for r in v["behind_mine"])
     if v["behind_more"]:
         out += f'<div class="du-q">and {int(v["behind_more"])} more</div>'
-    return out + '<div class="du-sec">Today</div></div>' if v["tab"] == "today" else out + "</div>"
+    return out + "</div>"
 
 
 def _due_add(v, default):
@@ -3945,7 +3940,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
             if dd.get("quiet"):
                 body += f'<div class="du-q">{e(dd["label"])} &middot; nothing due</div>'
                 continue
-            what = "review day" if dd["review"] and not dd["n"] else (f'{dd["n"]} thing{"s" if dd["n"] != 1 else ""}' if dd["n"] else "")
+            what = "review day" if dd["review"] and not dd["n"] else ""  # 3.8.0: its rows are the count
             plus = (f'<a href="#" class="plus" title="Add a to-do for this day" '
                     f'onclick="dcDue.plus(\'{e(dd["day"])}\');return false;">+</a>')
             body += (f'<div class="du-dh{" today" if dd["today"] else ""}"><span>{e(dd["head"])}</span>'
@@ -3957,6 +3952,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         if v["later"]:
             body += "".join(_due_mine(r) for r in v["later"])
         else:
-            body += '<div class="du-empty">Nothing here. A to-do with no day waits here until you give it one.</div>'
+            body += '<div class="du-empty">Nothing here.</div>'
         body += _due_add(v, "later")
     return f'<div class="du" data-today="{today}">{head}{toast}{body}</div>'

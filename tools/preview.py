@@ -426,7 +426,7 @@ stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>
 <style>
-  body {{ margin: 0; padding: 24px 12px 60px; background: #ffffff;
+  body {{ margin: 0; padding: 24px 12px 60px; background: #f5f5f5;  /* Anki's canvas (26.x) */
          font-family: -apple-system, sans-serif; }}
   body.nightMode {{ background: #2c2c2c; color: #d7d7d7; }}
   /* Anki 26.x deck screen: every table gets a translucent glass fill */

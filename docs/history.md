@@ -831,3 +831,18 @@ every release that changes how something works.
   Insights' decks and where its topics come from share a row ("From your
   plan …", "From this deck's tags"). The footer keeps one pill, I'm
   studying; Open a room and "N waiting" are words, on the site too.
+  Simpler (3.8.0, Sam: "the due section has a border, but the crew
+  doesn't"; trust the person over explaining): Anki paints the Decks
+  screen #f5f5f5 (26.x), so the box and the board are the same white card,
+  and the box lost its accent border (the preview draws on that grey now,
+  so it shows what Anki shows). One underline for every word tab: the Crew
+  picker, a squad's, Insights' decks (was dotted). Boxes inside cards went:
+  Plans' three ways in, a plan squad's questions, the bingo card (rows
+  between rules now). Words cut: Insights says nothing about where its
+  topics come from (the plan's name links to it; with no exam date set,
+  "Exam date…"); "Newest cards 85% right, Anki aims for 90%"; "3 suspended
+  leeches"; no "Today" label under the Today tab, no "3 things" on a day
+  that lists them, "Nothing here." on an empty Later; "No squads yet." and
+  "No shared decks yet. Pick decks to share"; the week key's "longest =
+  busiest day"; Settings' captions that restated their row, a shorter
+  account line (KEEP_LINE) and save line.

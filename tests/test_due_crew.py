@@ -5904,6 +5904,12 @@ def test_you_bubble_v380():
     foot = bh.split('class="dc-foot"')[1]
     check("refined: one pill in the footer, I'm studying; Open a room and who's waiting are words",
           foot.count('class="pb') == 1 and ">Open a room</a>" in foot and 'class="warn"' in foot and "1 waiting" in foot)
+    css = board.render(data, {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
+    check("simpler: the box is a card like the board's, no border of its own; one underline for every word tab",
+          "#due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px;" in css
+          and "border: 1.5px solid var(--dc-accent)" not in css.split("DUE_CSS")[0].split("#due-crew .du {")[1][:120]
+          and "box-shadow: inset 0 -2px var(--dc-accent)" in css and "1px dotted currentColor" not in css)
+    check("simpler: Behind, then today's rows, no Today label under the Today tab", 'du-sec">Today<' not in th)
     # the glue: only the tab on screen is worked out
     calls = []
     saved = (team_flow.plan_lines, team_flow.you_view, plan_flow.morning_opened, dc.mw.col, due_flow._today)
@@ -6938,7 +6944,7 @@ def test_plan_load_3781():
     html = board._week_html({"week": wk, "week_offset": 0}, "pid1")
     check("load: today says what's to go, ahead what's new", "2 to go" in html and "2 new" in html, html[:500])
     check("load: one bar a day on top, to the week's scale, and a key", html.count('class="abar') == 2 and 'width:100%' in html
-          and 'width:75%' in html and "new to you" in html and "longest = busiest day" in html)
+          and 'width:75%' in html and "new to you" in html and "busiest" not in html)
     check("load: a date ahead's details say what's new and what's seen before",
           "2 of 3 new &middot; 1 already seen or in your Anki" in html and "2 of 4 seen" in html)
     past = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}]}, {}, "2026-10-08", "2026-10-05", ld=ld)
@@ -7028,10 +7034,10 @@ def test_insights_379():
     check("insights: the week in time, today marked, the event named",
           "about 2 h 40 a day to Fri" in html and "the last 7 days: 40 min" in html and ">Today<" in html)
     check("insights: Optimize FSRS and Not now",
-          "come back 85% right, not the 90% Anki aims for" in html and "duecrew:insfsrs:10" in html
+          "Newest cards 85% right, Anki aims for 90%" in html and "duecrew:insfsrs:10" in html
           and "duecrew:insfsrsno:10" in html)
     check("insights: 3.8.0, the deck's leeches, from the plan card, with See them",
-          "2 leeches stay suspended in this deck." in html and "duecrew:insleeches:10" in html)
+          "2 suspended leeches &middot;" in html and "duecrew:insleeches:10" in html)
     check("insights: no plan, no behind line", "behind" not in board._insights_html(10, dict(view, pid=None)))
     loose = board._insights_html(10, dict(view, aim={"day": "2026-09-04", "name": "Quiz", "in": 3, "scoped": False}))
     check("insights: an event no date preps for: the box goes by the day, not the event's name",
@@ -7049,12 +7055,13 @@ def test_insights_379():
           'class="dc-sw"' in yh and '<a class="on" href="#" title="Step 1" onclick="pycmd(\'duecrew:insdeck:10\')' in yh
           and "duecrew:insdeck:20" in yh and "<img" not in yh, yh[:600])
     check("you › insights: with a plan on the deck, it says so, with the way to it",
-          "From your plan <a" in yh and "&lt;img" in yh and "duecrew:duetab:plans" in yh)
+          "&lt;img" in yh and "<img" not in yh and "duecrew:duetab:plans" in yh and "From" not in yh)
     lone = board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None))
     check("you › insights: one deck, no picker; no plan and no exam date, the way to set one",
-          'class="dc-sw"' not in lone and "From this deck&rsquo;s tags." in lone and "duecrew:settings:privacy" in lone)
-    check("you › insights: no plan, my exam date set", "From this deck&rsquo;s tags and your exam date." in
-          board._you_insights(dict(ins, plan=None, exam=True)))
+          'class="dc-sw"' not in lone and "Exam date&hellip;</a>" in lone and "duecrew:settings:privacy" in lone)
+    check("you › insights: no plan, my exam date set: the decks alone", 'class="ictx"></span>' in
+          board._you_insights(dict(ins, plan=None, exam=True)) and 'class="ihead"' not in
+          board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None, exam=True)))
     check("you › insights: no decks reviewed yet", "Insights fill in" in board._you_insights({"decks": []}))
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")
