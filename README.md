@@ -55,7 +55,7 @@ ask and answer questions, and play bingo together.
 
 Above the board is yours. **Today** is your day: what your plans open,
 ticking itself as you review, the lecture or chapter that goes with it,
-and your own to-dos for any day. **Upcoming** shows the next two weeks;
+and your own to-dos, for a day or every Monday. **Upcoming** shows the next two weeks;
 anything left undone waits under Behind. **Plans** has each plan's week,
 and **Insights**, for any deck, plan or not, shows the cards Anki won't
 show you before your exam, what isn't sticking yet, and your week in

@@ -592,7 +592,7 @@ In Anki (as a follower):
 
 - [ ] Open Anki on an install that was on the Plans tab: the board opens on Crew › Today, with the box above it open on Plans. A hidden Week (from 3.7) is gone from Settings and shows in the picker.
 - [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
-- [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; one line at the bottom says what's tomorrow and the next exam, with Upcoming ›. Behind shows on Today, not on Upcoming.
+- [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; the list ends with the add line (no Tomorrow line; Upcoming has it). Behind shows on Today, not on Upcoming. Later's tab shows only while Later holds something; add one there ("Call home later") and the toast's Show opens it.
 - [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
 - [ ] Plans: a day's details open on its click (none open by default; Browse › Show on my plan opens its day); "Month ↗" opens the month on duecrew.com.
 - [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53 · Insights ›") with FSRS on, the week, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
@@ -600,10 +600,19 @@ In Anki (as a follower):
 - [ ] The morning opens cards: Today says "This morning opened N new cards" with Put off to tomorrow, which closes them until tomorrow's morning; review a card and the line goes. With Due off in Settings, the line is on Plans instead.
 - [ ] Following no plan: Plans shows the three ways in. A squad's offer to follow a plan shows on Plans and on Squads.
 - [ ] Insights with a plan's deck picked: as 3.7.9, its leeches at the bottom ("N leeches stay suspended in this deck · See them" opens the browser on them). The plan card no longer mentions leeches.
-- [ ] Insights on a deck with no plan (pick it in Insights' row of decks, or "How it's sticking ›" beside your deck on Crew › Decks): with no exam date, the line offers "Your exam date…" (Settings › Privacy); set one within three weeks and the box reads "Your exam · …" over the whole deck. Not sticking yet names topics from the deck's tags (never "leech"), or its subdecks when the cards have no tags; Study and the name's Browse open the same cards. Your week's key says "what Anki has due".
+- [ ] Insights on a deck with no plan (pick it in Insights' row of decks, or "How it's sticking ›" beside your deck on Crew › Decks): Exam and a date field sit in its head; set a date within three weeks there and the box reads "Your exam · …" over the whole deck, and Settings › Privacy shows the same date; clear the field and it's gone from both. Not sticking yet names topics from the deck's tags (never "leech"), or its subdecks when the cards have no tags; Study and the name's Browse open the same cards. Your week's key says "what Anki has due".
 - [ ] The deck you picked stays picked after a restart (it's this computer's), and stays in the row after ten minutes.
 - [ ] Settings › Board › Shows: Crew (always), Decks, Squads, Plans, Insights. Hide Plans and Insights with Due off: no box at all. A link to a hidden one (Insights › on a plan, How it's sticking ›) shows it again.
 - [ ] Browse › right-click › Due Crew: show on my plan: the box opens on Plans, that date's week, its details open.
 - [ ] Following a plan (Follow…): the box opens on Plans with the new plan.
 - [ ] duecrew.com Home: Crew · Squads with Today · Week · Decks under Crew; a saved Decks or Plans tab opens on Crew. The rail's Plans panel lists each plan (following none: the library and Your plans). As admin, the plan-load chart is on the Log page under each plan.
+
+### 3.8.0: five small ones, repeating to-dos, no jumps
+
+- [ ] Filtered decks: Study a plan date (a "Due Crew · …" deck), finish every card in it; the next morning it's gone from the Decks screen, and Edit › Undo right after the morning still offers the morning's step (Put off to tomorrow works). A Due Crew deck with cards left stays. A filtered deck you made yourself stays.
+- [ ] Learning back: review until only learning cards are left with steps of 10 min or more: Reviews says "N back at H:MM" (your clock) and isn't ticked; the box doesn't fold for the day until they're done.
+- [ ] Sync now: with an AnkiWeb login, after the morning opens cards the line reads "This morning opened N new cards. Sync now · Put off to tomorrow"; Sync now runs Anki's sync, and once synced the link goes. Not logged in to AnkiWeb: no Sync now.
+- [ ] Hard: on a deck where you press Hard on a fifth of reviews, Insights says "You press Hard on N% of reviews. Anki counts Hard as remembered." Not now hides it on every deck (for 30 days).
+- [ ] Repeating to-dos: add "Practice block every tue" (the add box previews "→ every Tue"; × keeps the words). On a Tuesday it's on Today with "every Tue ▾"; tick it, and Upcoming shows next Tuesday's (no tick on that one). Its ▾ has Edit…, Stop repeating (a one-off today), Delete. "every mon: X", "X daily", "X weekdays", "X mondays" work too. duecrew.com's Due panel shows it on its days.
+- [ ] No jumps: with the pointer on the box, flick Today → Insights → Later: the board under it stays put while the pointer stays on Due Crew; move it off and the box eases to its size. Squads while fetching keeps its height. Hide still folds at once.
 

@@ -846,3 +846,41 @@ every release that changes how something works.
   "No shared decks yet. Pick decks to share"; the week key's "longest =
   busiest day"; Settings' captions that restated their row, a shorter
   account line (KEEP_LINE) and save line.
+  Smaller (3.8.0, Sam): Today ends with its list (the "Tomorrow: … ·
+  Upcoming ›" line went; Upcoming says it), and Later has no tab while it
+  holds nothing (a saved Later reads as Today; adding one shows it).
+  Five small ones (3.8.0, from the dream list). The morning clears the
+  filtered decks Due Crew built once they're empty (`plan_flow.tidy_decks`,
+  `plans.tidy`): ours are the ids `_filtered` built (plans.json `built`, the
+  last 200) or a filtered deck named "Due Crew · …" from before; one with
+  cards in it stays (a checkpoint not done, a date half studied); it runs
+  before the morning unsuspends, so Put off to tomorrow still undoes the
+  morning. Reviews says "4 back at 9:42" while intraday learning cards come
+  back later today, past Anki's learn-ahead (`collapseTime`), and stays
+  open until they're done (`due_flow._reviews`: back, at). The morning's
+  line has Sync now (Anki's own Sync) while this Anki signs in to AnkiWeb
+  and the collection changed since its last sync (`col.mod` > `ls`, both
+  ms). Insights takes my exam date in its head when no plan is on the deck
+  (`setexam`, as Settings; the crew sees it for the two weeks before).
+  Insights says when Hard is 15% or more of 200+ review answers in four
+  weeks ("Anki counts Hard as remembered"), with Not now for 30 days
+  (`team.hard_habit`, `ins_hard_hide`); said, never changed.
+  Repeating to-dos (3.8.0, D10): "every mon", "every mon and thu",
+  "weekdays", "daily", "mondays" at the end of a to-do, or "every mon:"
+  first (`due.parse_repeat`, twin of the add box's preview, node parity
+  test). The item keeps `r` (its weekdays, Monday "0") and `done` as the
+  last day ticked; it's on Today on its days, once in Upcoming (today's, or
+  its next day once today's is ticked; a day ahead has no tick), never
+  Behind or Later, never pruned, always open; its menu has Stop repeating
+  (a one-off today). The site's Due panel puts it on its days too
+  (`dueOnDay`). An add-on before 3.8.0 drops `r` when it next saves the
+  list, and prunes a repeat a week after its last tick; both computers on
+  3.8.0 keep it. The site's Your data counted ticked to-dos as open; fixed.
+  No jumps (3.8.0, Sam: "things really drastically change size"): measured,
+  the You box ran 35–633 px across its tabs and Squads 122 px while
+  fetching, so a click moved everything under it. A redraw while the
+  pointer is on Due Crew never makes the box or the board shorter
+  (`board.swap_js`, which `_swap` draws through): each holds its height
+  until the pointer leaves, then eases back; a part still fetching
+  (`.dc-wait`) holds either way; Hide folds at once. The board sits under
+  Anki's deck list, so the decks never moved.
