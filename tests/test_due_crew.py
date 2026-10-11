@@ -3845,7 +3845,7 @@ def test_plans_glue_v31():
         check("card: the crew line; no Today box (Due's Today has today), names escaped",
               "Crew: 1 done with" in html and "ptoday" not in html and "planstudy:" not in html
               and "<b>failure" not in html, re.sub(r"<style.*?</style>", "", html, flags=re.S)[-2500:])
-        check("morning: what it opened, while it's still Anki's latest step", F.morning_opened() == {"n": 3}, F.morning_opened())
+        check("morning: what it opened, while it's still Anki's latest step", F.morning_opened()["n"] == 3, F.morning_opened())
         from due_crew import due as DUE
         dv = dict(DUE.view(_day(0), [], [], {}), opened=F.morning_opened())
         dh = board.you_html({}, dv, {"tab": "today", "plans": view})
@@ -3855,6 +3855,37 @@ def test_plans_glue_v31():
         check("morning: with Due on, not again on Plans", "plannottoday" not in ph)
         ph = board.you_html({}, None, {"tab": "plans", "plans": view, "opened": F.morning_opened()})
         check("morning: with Due off, on Plans", "This morning opened 3 new cards." in ph and "duecrew:plannottoday" in ph)
+        check("morning: no Sync now while AnkiWeb has it all", "plansync" not in dh)
+        mw = F.mw
+        sv_pm, sv_col = getattr(mw, "pm", None), mw.col
+        synced = []
+        try:
+            mw.pm = types.SimpleNamespace(sync_auth=lambda: object())
+            mw.col = types.SimpleNamespace(mod=2000, db=types.SimpleNamespace(scalar=lambda q: 1000))
+            ahead = F._unsynced()
+            mw.col = types.SimpleNamespace(mod=2000, db=types.SimpleNamespace(scalar=lambda q: 2000))
+            even = F._unsynced()
+            mw.pm = types.SimpleNamespace(sync_auth=lambda: None)
+            mw.col = types.SimpleNamespace(mod=2000, db=types.SimpleNamespace(scalar=lambda q: 0))
+            nologin = F._unsynced()
+            check("morning: Sync now only with an AnkiWeb login and changes since its last sync",
+                  ahead is True and even is False and nologin is False, (ahead, even, nologin))
+            mw.col = sv_col
+            sh = board.you_html({}, dict(dv, opened={"n": 3, "sync": True}), {"tab": "today", "plans": view})
+            check("morning: Sync now beside Put off to tomorrow", "duecrew:plansync" in sh and "Sync now</a>" in sh
+                  and sh.index("plansync") < sh.index("plannottoday"))
+            mw.on_sync_button_clicked = lambda: synced.append(1)
+            import due_crew as dc
+            from aqt.deckbrowser import DeckBrowser
+            dc._on_js(False, "duecrew:plansync", DeckBrowser())
+            check("morning: Sync now is Anki's own Sync", synced == [1], synced)
+        finally:
+            mw.col = sv_col
+            if sv_pm is None:
+                mw.__dict__.pop("pm", None)
+            else:
+                mw.pm = sv_pm
+            mw.__dict__.pop("on_sync_button_clicked", None)
         col.undo_steps.append(("Edit note", []))
         check("morning: no Put off to tomorrow once Anki has done something since", F.morning_opened() is None)
         today["d"] = _day(1)
@@ -6329,6 +6360,14 @@ def test_due_folds_itself_when_done():
     check("fold: the line says done and what's next, with Show",
           "Done for today" in h and "Tomorrow: Next one" in h and "Show &#9662;" in h, h)
     check("fold: open, Hide says what it does", "Hide &#9652;" in board._due_html(dict(left, folded=False)))
+    bk = D.view(T, [], [], {}, reviews={"due": 0, "done": 30, "back": 4, "at": "9:42"})
+    hb = board._due_html(bk)
+    check("fold: learning cards back later today keep Reviews open, with their time",
+          D.fold_state(None, bk, T) is False and bk["rows"][0]["done"] is False and "4 back at 9:42" in hb
+          and "all done" not in hb and bk["total_n"] == 1 and bk["done_n"] == 0, hb[:1200])
+    check("fold: none back, Reviews done",
+          D.view(T, [], [], {}, reviews={"due": 0, "done": 30, "back": 0, "at": ""})["rows"][0]["done"] is True
+          and "back" not in board._due_html(dict(bk, rows=[dict(bk["rows"][0], due=7)])).split("Reviews")[1][:80])
     css = board.DUE_CSS
     check("fold: a long 'Tomorrow' gives way (ellipsis, the whole in its tooltip) so Show stays in the box",
           "#due-crew .du-one .du-tm { flex: 0 1 auto; min-width: 0;" in css
@@ -7054,6 +7093,12 @@ def test_insights_379():
     check("insights: 3.8.0, no plan, my own exam date names the box", "Your exam &middot; Fri 4 &middot; 3 days" in mine, mine[:700])
     check("insights: 3.8.0, the hero's count and each topic's name open their cards in Browse",
           "duecrew:insbrowse:10:h" in html and "duecrew:insbrowse:10:0" in html, html)
+    hh = board._insights_html(10, {"hard": {"pct": 22, "n": 640}})
+    check("insights: the Hard habit said, with Not now", "You press Hard on 22% of reviews. Anki counts Hard as remembered." in hh
+          and "duecrew:inshardno:10" in hh and "640 reviews in 4 weeks" in hh, hh)
+    from due_crew import team as T
+    check("insights: the Hard habit needs 15% of 200 answers or more",
+          T.hard_habit(30, 200) == {"pct": 15, "n": 200} and T.hard_habit(29, 200) is None and T.hard_habit(100, 199) is None)
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))
     ins = {"decks": [{"did": 10, "name": "Step 1", "full": "Step 1"}, {"did": 20, "name": bad, "full": bad}],
            "did": 10, "exam": False, "plan": {"id": "p1", "name": bad}, "view": view}
@@ -7064,11 +7109,13 @@ def test_insights_379():
     check("you › insights: with a plan on the deck, it says so, with the way to it",
           "&lt;img" in yh and "<img" not in yh and "duecrew:duetab:plans" in yh and "From" not in yh)
     lone = board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None))
-    check("you › insights: one deck, no picker; no plan and no exam date, the way to set one",
-          'class="dc-sw"' not in lone and "Exam date&hellip;</a>" in lone and "duecrew:settings:privacy" in lone)
-    check("you › insights: no plan, my exam date set: the decks alone", 'class="ictx"></span>' in
-          board._you_insights(dict(ins, plan=None, exam=True)) and 'class="ihead"' not in
-          board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None, exam=True)))
+    check("you › insights: one deck, no picker; no plan, my exam date set right here",
+          'class="dc-sw"' not in lone and 'aria-label="Exam date"' in lone and 'value=""' in lone
+          and "duecrew:setexam:" in lone and "this.value||" in lone and "settings:privacy" not in lone)
+    mine = board._you_insights(dict(ins, plan=None, exam="2026-11-30"))
+    check("you › insights: no plan, my exam date shows in it; a plan's deck has the plan instead",
+          'value="2026-11-30"' in mine and 'class="dc-sw"' in mine and "setexam" not in yh
+          and 'value=""' in board._you_insights(dict(ins, plan=None, exam='"><img x>')))
     check("you › insights: no decks reviewed yet", "Insights fill in" in board._you_insights({"decks": []}))
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")
@@ -7215,6 +7262,14 @@ def test_insights_379():
               and 30 in [d["did"] for d in TF.you_decks()], conf)
         _state["you_decks"] = None
         check("youins: the deck picked stays listed when the list is worked out again", 30 in [d["did"] for d in TF.you_decks()])
+        check("glue: no Hard habit on this deck", not TF.insights(10, "pI").get("hard"))
+        for j in range(120):
+            fakes.add_review(conn, at(4), ease=2, cid=400 + j % 50, time_ms=5000)
+        _state["insights"] = {}
+        h = TF.insights(10, "pI").get("hard")
+        check("glue: the Hard habit, the deck's review answers in 4 weeks", bool(h) and h["pct"] >= 15 and h["n"] >= 200, h)
+        dc._on_js(False, "duecrew:inshardno:10", DeckBrowser())
+        check("glue: Not now puts the Hard habit away for a while", pc.get("ins_hard_hide") and not TF.insights(10, "pI").get("hard"))
         dc._on_js(False, "duecrew:insfsrsno:10", DeckBrowser())
         check("glue: Not now puts Optimize FSRS away, on every deck", pc.get("ins_fsrs_hide") and not TF.insights(10, "pI").get("fsrs")
               and not TF.insights(10).get("fsrs"))
@@ -7222,11 +7277,57 @@ def test_insights_379():
         sys.modules["aqt.deckoptions"] = types.SimpleNamespace(display_options_for_deck_id=opened.append)
         dc._on_js(False, "duecrew:insfsrs:10", DeckBrowser())
         check("glue: Optimize FSRS opens the deck's options", opened == [10], opened)
+        dc._on_js(False, "duecrew:setexam:2026-11-30", DeckBrowser())
+        check("youins: the exam date set in Insights is my exam date, there too",
+              conf.get("exam_date") == "2026-11-30" and TF.you_view(conf)["exam"] == "2026-11-30", conf.get("exam_date"))
+        dc._on_js(False, "duecrew:setexam:off", DeckBrowser())
+        check("youins: cleared there, it's gone", conf.get("exam_date") == "")
     finally:
         (TF._plan, F._state_cfg, F.followed, F._today, F._pcfg, F._psave, F._filtered, F._browse, mw.col, TF.app.swap,
          TF.cfg, TF.save_cfg, dc.cfg, dc.save_cfg) = saved
         sys.modules.pop("aqt.deckoptions", None)
         _state["insights"], _state["you_decks"], _state["labels"] = {}, None, []
+
+
+def test_tidy_filtered_v380():
+    """3.8.0: the morning clears the filtered decks Due Crew built once
+    they're empty; a deck with cards, or one it didn't build, stays."""
+    from due_crew import plans as P, plan_flow as F
+    rows = [(1, "Due Crew · Renal", 0), (2, "Due Crew · today's misses", 3), (3, "Checkpoint · Cardio", 0),
+            (4, "My cram", 0), (5, "Checkpoint · Pulm", 4)]
+    check("tidy: ours and empty go; with cards, or not ours, stay",
+          P.tidy(rows, [3, 5]) == [1, 3])
+    check("tidy: nothing built, only the old Due Crew names", P.tidy(rows, []) == [1])
+
+    class Decks:
+        def __init__(self):
+            self.d = {1: ("Due Crew · Renal", True), 2: ("Due Crew · today's misses", True), 3: ("Checkpoint · Cardio", True),
+                      4: ("My cram", True), 9: ("Big Step 1", False)}
+            self.removed = []
+
+        def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
+            return [types.SimpleNamespace(id=k, name=n) for k, (n, dyn) in self.d.items() if include_filtered or not dyn]
+
+        def remove(self, ids):
+            self.removed += ids
+            for i in ids:
+                self.d.pop(i, None)
+
+    cards = {2: 3}
+    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, did: cards.get(did, 0)))
+    pc = {"built": [3, 2, 77, "x"]}
+    saved = (F._pcfg, F._psave)
+    try:
+        F._pcfg, F._psave = (lambda: pc), (lambda c: None)
+        n = F.tidy_decks(col)
+        check("tidy: one step, the empty ones of ours; the list forgets what's gone",
+              n == 2 and col.decks.removed == [1, 3] and pc["built"] == [2], (n, col.decks.removed, pc))
+        check("tidy: again, nothing to do", F.tidy_decks(col) == 0 and col.decks.removed == [1, 3])
+        F._note_built(5)
+        F._note_built(2)
+        check("tidy: a deck built is remembered once, newest last", pc["built"] == [5, 2], pc)
+    finally:
+        F._pcfg, F._psave = saved
 
 
 def main():

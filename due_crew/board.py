@@ -640,6 +640,9 @@ def _css(cfg):
     #due-crew .ihead .dc-sw + .ictx {{ margin-left: auto; }}
     #due-crew .ictx b {{ color: var(--dc-ink); }}
     #due-crew .ictx a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .iexam {{ display: inline-flex; align-items: baseline; gap: 6px; }}
+    #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
+      border-radius: 6px; padding: 1px 4px; margin: 0; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
     #due-crew .dr.me .dn {{ font-weight: 700; }}
     #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
@@ -1307,9 +1310,12 @@ def _opened_line(op):
     n = int((op or {}).get("n") or 0)
     if not n:
         return ""
+    # 3.8.0: Sync now while AnkiWeb hasn't had them (a phone gets them from there)
+    sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
+            if op.get("sync") else "")
     return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}.</span>'
-            f'<a href="#" title="They open again tomorrow morning" onclick="{_pycmd("plannottoday")}">'
-            f'Put off to tomorrow</a></div>')
+            f'<span class="acts">{sync}<a href="#" title="They open again tomorrow morning" onclick="{_pycmd("plannottoday")}">'
+            f'Put off to tomorrow</a></span></div>')
 
 
 def _segs(segments):
@@ -1554,7 +1560,7 @@ def _ins_spark(days):
 def _you_insights(ins):
     """3.8.0, You › Insights: for everyone, a deck at a time, picked as a
     squad is. ins: team_flow.you_view: {decks: [{did, name, full}], did,
-    plan: {id, name} or None, exam: my exam date set, view: the deck's
+    plan: {id, name} or None, exam: my exam date or "", view: the deck's
     Insights}. A plan I follow on the deck brings its exam and its topic
     names; without one, the deck's tags name the topics and my own exam
     date aims the exam box. Names are mine (decks) or authors' (plans): escaped."""
@@ -1572,10 +1578,13 @@ def _you_insights(ins):
     if plan:  # its exam and its topics
         ctx = (f'<a href="#" title="The plan on this deck" onclick="{_pycmd("duetab:plans")}">'
                f'{e(str(plan.get("name") or "Plan"))} &rsaquo;</a>')
-    elif ins.get("exam"):
-        ctx = ""
     else:
-        ctx = f'<a href="#" onclick="{_pycmd("settings:privacy")}">Exam date&hellip;</a>'
+        # 3.8.0: my exam date, set right here (Settings has the same one)
+        ex = str(ins.get("exam") or "")
+        ex = ex if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", ex) else ""
+        ctx = (f'<label class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">Exam '
+               f'<input type="date" value="{e(ex)}" aria-label="Exam date" '
+               f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));"></label>')
 
     # 3.8.0: the decks, and the plan on this one (or a way to my exam date), one row
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>' if pick or ctx else ""
@@ -1702,6 +1711,12 @@ def _insights_html(did, v):
                 f'Anki aims for {int(f["target"])}% &middot; '
                 f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
                 f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
+    h = v.get("hard")
+    if h:
+        # 3.8.0: the Hard habit, said once a month at most
+        out += (f'<div class="iline" title="{int(h["n"]):,} reviews in 4 weeks">You press Hard on {int(h["pct"])}% of reviews. '
+                f'Anki counts Hard as remembered. '
+                f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
     lee = int(v.get("leeches") or 0)
     if lee:
         # 3.8.0: from the plan card; a leech is the deck's
@@ -3906,9 +3921,11 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":
-                if not r["due"] and not r["done"]:
+                back = int(r.get("back") or 0)
+                if not r["due"] and not r["done"] and not back:
                     continue
-                n = "all done" if r["done"] else f'{int(r["due"]):,} due'
+                n = ("all done" if r["done"] else f'{int(r["due"]):,} due' if r["due"]
+                     else f'{back:,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
                 body += (f'<div class="du-r{" done" if r["done"] else ""}">{_due_box("on" if r["done"] else "")}'
                          f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
             elif r["kind"] == "plan":

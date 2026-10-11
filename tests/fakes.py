@@ -183,8 +183,8 @@ class FakeDecks:
         root = self.names.get(did, "\0")
         return [d for d, n in self.names.items() if d == did or n.startswith(root + "::")]
 
-    def all_names_and_ids(self):
-        return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]
+    def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
+        return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]  # none filtered
 
 
 # ------------------------------------------------------------ fake worker

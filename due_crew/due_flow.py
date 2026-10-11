@@ -123,8 +123,9 @@ def plan_dates(today):
 
 
 def _reviews():
-    """{due, done}: reviews and learning due now across my decks, and
-    whether I've reviewed today. Cached a little: the board redraws often."""
+    """{due, done, back, at}: reviews and learning due now across my decks,
+    whether I've reviewed today, and the learning cards back later today
+    (how many, the first one's time). Cached a little: the board redraws often."""
     hit = _state.get("due_reviews")
     if hit and time.time() - hit[0] < REVIEWS_FRESH:
         return hit[1]
@@ -134,7 +135,13 @@ def _reviews():
         due = sum(int(n.review_count) + int(n.learn_count) for n in tree.children)
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
-        out = {"due": due, "done": done}
+        # 3.8.0: learning cards that come back later today (past Anki's learn-ahead)
+        now = int(time.time())
+        ahead = int(mw.col.get_config("collapseTime", 1200) or 0)
+        back, first = mw.col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
+                                      now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
+        t = time.localtime(int(first)) if back and first else None
+        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else ""}
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)

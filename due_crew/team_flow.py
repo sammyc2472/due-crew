@@ -493,7 +493,7 @@ def _you_decks(col, picked=0):
 
 
 def you_view(c):
-    """What You › Insights draws: {decks, did, plan, exam, view}. The deck
+    """What You › Insights draws: {decks, did, plan, exam (my date, or ""), view}. The deck
     picked (cfg ins_deck, this computer's) or the first. Main thread."""
     decks = you_decks()
     if not decks:
@@ -502,7 +502,7 @@ def you_view(c):
     d = next((x for x in decks if x["did"] == did), decks[0])
     p = _plan(d["pid"]) if d.get("pid") else None
     exam = str(c.get("exam_date") or "")
-    return {"decks": decks, "did": d["did"], "exam": bool(exam),
+    return {"decks": decks, "did": d["did"], "exam": exam,
             "plan": {"id": p["id"], "name": P.plan_title(p)} if p else None,
             "view": insights(d["did"], p["id"] if p else None, exam)}
 
@@ -711,6 +711,15 @@ def _work_out(did, pid=None, exam=""):
         except Exception:
             traceback.print_exc()
 
+    # the Hard habit (3.8.0): Hard is a pass; put away for 30 days as Optimize is
+    if time.time() - float(pf._pcfg().get("ins_hard_hide") or 0) > T.HIDE_DAYS * 86400:
+        try:
+            hard, n = col.db.first(f"SELECT total(ease = 2), count() FROM revlog WHERE id >= ? AND type = 1 AND ease > 0 "
+                                   f"AND cid IN ({deck})", since(28)) or (0, 0)
+            out["hard"] = T.hard_habit(int(hard or 0), int(n or 0))
+        except Exception:
+            traceback.print_exc()
+
     # the deck's leeches Anki suspended (from the plan card, 3.8.0)
     out["leeches"] = len(_leeches(col, deck))
     return out
@@ -803,13 +812,8 @@ def browse_leeches(did):
 def fsrs(did, open_it=True):
     """Optimize FSRS: the deck's options (Anki's own button is there), or the
     line put away for 30 days."""
-    pf = _plans_flow()
     if not open_it:
-        pc = pf._pcfg()
-        pc["ins_fsrs_hide"] = int(time.time())
-        pf._psave(pc)
-        _state["insights"] = {}  # every deck's line goes
-        app.swap(cfg())
+        _put_away("ins_fsrs_hide")
         return
     if mw.col and mw.col.decks.get(did, default=False):
         try:
@@ -883,6 +887,16 @@ def for_sync(c):
     return out or None
 
 
+def _put_away(key):
+    """An Insights line's Not now: gone for 30 days, on every deck."""
+    pf = _plans_flow()
+    pc = pf._pcfg()
+    pc[key] = int(time.time())
+    pf._psave(pc)
+    _state["insights"] = {}
+    app.swap(cfg())
+
+
 # ---- the board's commands ----
 
 def on_message(cmd, parts):
@@ -906,6 +920,8 @@ def on_message(cmd, parts):
             fsrs(did)
         elif cmd == "insfsrsno":
             fsrs(did, open_it=False)
+        elif cmd == "inshardno":
+            _put_away("ins_hard_hide")
         elif cmd == "insleeches":
             browse_leeches(did)
         else:

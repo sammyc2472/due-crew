@@ -47,7 +47,9 @@ FSRS_GAP = 3       # points under the target, on cards 1-3 days since their last
 FSRS_MIN = 300     # ...with this many answers behind it
 AIM_DAYS = 21      # the hero aims at the next event this close, else a week out
 NEW_MIN = 50       # new cards measured over their first week before the week is in time
-HIDE_DAYS = 30     # Optimize FSRS, dismissed, stays away this long
+HIDE_DAYS = 30     # Optimize FSRS (or the Hard habit), dismissed, stays away this long
+HARD_SHARE = 15    # % of review answers on Hard before Insights says so (3.8.0)...
+HARD_MIN = 200     # ...with this many answers behind it
 
 
 def recall(t, s, decay=0.5):
@@ -220,6 +222,17 @@ def fsrs_gap(right, n, target):
         return None
     pct, tgt = int(round(100.0 * right / n)), int(round(100 * target))
     return {"right": pct, "n": n, "target": tgt} if tgt - pct >= FSRS_GAP else None
+
+
+def hard_habit(hard, n):
+    """3.8.0: {pct, n} when Hard is HARD_SHARE% or more of my review answers
+    (4 weeks), with HARD_MIN answers behind it; else None. Anki counts Hard
+    as remembered, so a Hard that meant "forgot" schedules it as known.
+    Said, never changed: my history stays as it is."""
+    if n < HARD_MIN:
+        return None
+    pct = int(round(100.0 * hard / n))
+    return {"pct": pct, "n": n} if pct >= HARD_SHARE else None
 
 
 # ---- the team ----

@@ -786,6 +786,8 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         c["plans"] = state
         c["plans_day"] = today
         _psave(c)
+        if tidy_decks(mw.col):
+            _after_change()
         line = opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
         if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today):
             _after_change()  # 3.7.3: what an author added to later dates waits, for whoever chose Hold back
@@ -1099,10 +1101,48 @@ def _filtered(col, name, cids):
         term.order = 4  # most lapses
         deck.config.reschedule = True
         col.sched.add_or_update_filtered_deck(deck)
+        _note_built(col.decks.id_for_name(name))
         return True
     except Exception:
         traceback.print_exc()
         return False
+
+
+BUILT_KEEP = 200  # filtered decks remembered for the morning's tidy
+
+
+def _note_built(did):
+    """3.8.0: a filtered deck Due Crew built, remembered (plans.json, this
+    profile's) so the morning clears it once it's empty."""
+    if not did:
+        return
+    c = _pcfg()
+    ids = [x for x in c.get("built") or [] if isinstance(x, int) and x != int(did)]
+    c["built"] = (ids + [int(did)])[-BUILT_KEEP:]
+    _psave(c)
+
+
+def tidy_decks(col):
+    """3.8.0, the morning, before it unsuspends (its undo step stays the
+    latest): the filtered decks Due Crew built that are empty now go, in
+    one step (Anki's Delete Deck). Returns how many."""
+    try:
+        normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
+        rows = [(int(d.id), d.name, col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
+                for d in col.decks.all_names_and_ids(include_filtered=True) if int(d.id) not in normal]
+        c = _pcfg()
+        built = [x for x in c.get("built") or [] if isinstance(x, int)]
+        gone = P.tidy(rows, built)
+        keep = [x for x in built if x in {r[0] for r in rows} and x not in gone]
+        if keep != built:
+            c["built"] = keep
+            _psave(c)
+        if gone:
+            col.decks.remove(gone)
+        return len(gone)
+    except Exception:
+        traceback.print_exc()
+        return 0
 
 
 def build_checks(plan_list):
@@ -1314,7 +1354,17 @@ def morning_opened():
     if not today or opened.get("day") != today or not _undo_ok(opened.get("label")):
         return None
     n = sum(int(v[1] or 0) for v in (opened.get("per") or {}).values() if isinstance(v, (list, tuple)) and len(v) > 1)
-    return {"n": n} if n else None
+    return {"n": n, "sync": _unsynced()} if n else None
+
+
+def _unsynced():
+    """3.8.0: this Anki signs in to AnkiWeb, and the collection changed
+    since its last sync (both in ms): the morning's cards aren't on the
+    phone yet."""
+    try:
+        return bool(mw.pm.sync_auth()) and int(mw.col.mod or 0) > int(mw.col.db.scalar("SELECT ls FROM col") or 0)
+    except Exception:
+        return False
 
 
 def _undo_ok(label):
@@ -1368,6 +1418,11 @@ def on_message(cmd, parts):
         undo_morning()
     elif cmd == "plannottoday":
         undo_morning(put_off_too=True)
+    elif cmd == "plansync":
+        try:
+            mw.on_sync_button_clicked()  # Anki's own Sync, as its top bar's button
+        except Exception:
+            traceback.print_exc()
     elif cmd == "plannow" and arg and len(parts) > 3:
         open_date(arg, parts[3])
     elif cmd == "planbrowse" and arg and len(parts) > 3:

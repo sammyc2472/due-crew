@@ -361,7 +361,7 @@ def behind(dates, items, ticks, today):
 
 def view(today, dates, items, ticks, tab="today", events=(), review_days=(), reviews=None,
          suggestions=(), notes=(), folded=False):
-    """What board._due_html draws. `reviews`: {due, done} or None (not
+    """What board._due_html draws. `reviews`: {due, done, back, at} or None (not
     counted here); `suggestions`: [{key, text, go}]; `notes`: one-line
     notices (recovered leeches). Strings raw; the board escapes."""
     tab = tab if tab in TABS else "today"
@@ -372,9 +372,11 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
     today_rows = [_date_row(x, ticks, today) for x in todays]
     today_rows += [_item_row(it, today) for it in items if it["d"] == today]
     if reviews is not None:
-        today_rows.insert(0, {"kind": "reviews", "due": int(reviews.get("due") or 0),
-                              "done": not int(reviews.get("due") or 0) and bool(reviews.get("done"))})
-    counted = [r for r in today_rows if r["kind"] != "reviews" or r["due"] or r["done"]]
+        # 3.8.0: learning cards back later today keep the row open
+        due_r, back = int(reviews.get("due") or 0), int(reviews.get("back") or 0)
+        today_rows.insert(0, {"kind": "reviews", "due": due_r, "back": back, "at": str(reviews.get("at") or ""),
+                              "done": not due_r and not back and bool(reviews.get("done"))})
+    counted = [r for r in today_rows if r["kind"] != "reviews" or r["due"] or r["back"] or r["done"]]
     done_n = sum(1 for r in counted if r["done"])
     # Upcoming: today in short, then each day ahead with something on it
     by_day = {}
