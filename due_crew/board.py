@@ -3555,8 +3555,6 @@ DUE_CSS = """
     #due-crew .du-line { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font-size: 12px;
       padding: 5px 0 1px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); }
     #due-crew .du-line b { color: var(--dc-ink); font-weight: 600; }
-    #due-crew .du-line.du-next { border-top: 0; padding-top: 2px; }
-    #due-crew .du-ev { color: #c77700; font-weight: 700; white-space: nowrap; }
     #due-crew .du-line .acts { display: flex; gap: 12px; }
     #due-crew .du-line a, #due-crew .du-sg a { color: var(--dc-accent); font-weight: 700; }
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
@@ -3881,10 +3879,14 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                 f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Show the whole list" '
                 f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
     tab = more_tab if more_tab in dict(more) else v["tab"]
+    # 3.8.0: Later shows only when it holds something; adding one shows it
+    lists = (("today", "Today"), ("upcoming", "Upcoming")) + (
+        (("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}'),) if v["later"] else ())
+    if tab not in dict(lists) and tab not in dict(more):
+        tab = "today"
     tabs = "".join(
         f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
-        for k, lb in (("today", "Today"), ("upcoming", "Upcoming"),
-                      ("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}')))
+        for k, lb in lists)
     if more:
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
@@ -3921,20 +3923,6 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         if not v["rows"] and not v["suggestions"] and not v["notes"]:
             body += '<div class="du-empty">Nothing due today.</div>'
         body += _due_add(v, "today")
-        # 3.8.0: what's next and the exam, one quiet line under the list
-        ev = (f'<span class="du-ev">&#9733; {e(v["event"]["name"])} '
-              f'{"today" if v["event"]["when"] == "Today" else e(v["event"]["when"])}</span>' if v["event"] else "")
-        nxt = ", ".join(e(x) for x in v["tomorrow"][:3]) + (f" and {len(v['tomorrow']) - 3} more" if len(v["tomorrow"]) > 3 else "")
-        lead = "Done for today &middot; tomorrow" if total_n and done_n == total_n else "Tomorrow"
-        if nxt:
-            what = f'<b>{lead}:</b> {nxt}'
-        elif v["next"]:
-            what = f'<b>Next:</b> {", ".join(e(x) for x in v["next"]["names"][:2])} &middot; {e(v["next"]["day"])}'
-        else:
-            what = ""
-        if what or ev:
-            go = f'<a href="#" onclick="{_pycmd("duetab:upcoming")}">Upcoming &rsaquo;</a>' if what else ""
-            body += (f'<div class="du-line du-next"><span>{what}{" &middot; " if what and ev else ""}{ev}</span>{go}</div>')
     elif tab == "upcoming":
         for dd in v["days"]:  # 3.8.0: Behind is Today's alone
             if dd.get("quiet"):

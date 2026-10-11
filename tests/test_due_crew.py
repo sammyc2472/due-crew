@@ -5857,7 +5857,7 @@ def test_you_bubble_v380():
     tabs = lambda h: re.findall(r"duecrew:duetab:([a-z]+)", h.split('class="dc-sheet"')[0])
     html = board.render(data, {"period": "today"}, 0, plans=plans, due=dv, you={"tab": "today", "plans": plans})
     check("you: over the board, Due's lists then Plans and Insights",
-          tabs(html) == ["today", "upcoming", "later", "plans", "insights"] and 'class="du-tabs du-more"' in html
+          tabs(html) == ["today", "upcoming", "plans", "insights"] and 'class="du-tabs du-more"' in html
           and html.index('class="du"') < html.index('class="dc-sheet"') and "dc-split" in html, tabs(html))
     check("you: Today's list, escaped; the board under it is Crew and Squads",
           "Read &lt;b&gt;ch 3&lt;/b&gt;" in html and "<b>ch 3" not in html and "period:squads" in html
@@ -5868,7 +5868,7 @@ def test_you_bubble_v380():
     hid = board.render(data, {"period": "today", "hidden_tabs": ["plans"]}, 0, plans=plans, due=dv,
                        you={"tab": "plans", "plans": plans})
     check("you: a tab hidden in Settings is gone, and a saved one falls back to Today",
-          tabs(hid) == ["today", "upcoming", "later", "insights"] and "Block &lt;b&gt;" not in hid and "Read &lt;b&gt;" in hid)
+          tabs(hid) == ["today", "upcoming", "insights"] and "Block &lt;b&gt;" not in hid and "Read &lt;b&gt;" in hid)
     off = board.render(data, {"period": "today", "due_show": False}, 0, plans=plans, due=None, you={"tab": "today", "plans": plans})
     check("you: Due off, Plans and Insights still there, Plans first", tabs(off) == ["plans", "insights"]
           and "Block &lt;b&gt;" in off and "Hide &#9652;" in off)
@@ -5893,10 +5893,17 @@ def test_you_bubble_v380():
     check("refined: a date's topics on their resource's row; what has no resource stays on its own line",
           "<b>Video Series</b> &middot; <a class=\"tp\"" in th and "Kidney &lt;b&gt;</a>" in th and "<b>Kidney" not in th
           and "duecrew:plantopic:p1:u1:1" in th and "Search: <a" in th and "Video Series: <a" not in th, th[:3000])
-    check("refined: what's next and the exam on one line, the exam escaped",
-          th.count('class="du-line du-next"') == 1 and "<b>Tomorrow:</b> Heart" in th and "Quiz &lt;q&gt;" in th
-          and "duecrew:duetab:upcoming" in th)
     up = board._due_html(dict(dv2, tab="upcoming"))
+    check("simpler: Today ends with its list; tomorrow and the exam are Upcoming's, the exam escaped",
+          "du-next" not in th and "Tomorrow:" not in th and "Quiz" not in th and "Upcoming &rsaquo;" not in th
+          and "Heart" in up and "Quiz &lt;q&gt;" in up and "Quiz <q>" not in up)
+    check("simpler: no Later tab while Later is empty; a saved Later falls back to Today",
+          "duetab:later" not in th and "duetab:later" not in board._due_html(dict(dv2, tab="later"))
+          and 'class="on" onclick="pycmd(\'duecrew:duetab:today\')' in board._due_html(dict(dv2, tab="later")))
+    dv3 = DUE.view(lb0, dates, [{"id": "item01", "t": "Some day", "d": "", "done": False}], {}, tab="later")
+    l3 = board._due_html(dv3)
+    check("simpler: Later shows, with its count, once it holds something",
+          ">Later 1</a>" in l3 and "Some day" in l3 and 'class="on" onclick="pycmd(\'duecrew:duetab:later\')' in l3, l3[:1500])
     check("refined: Behind is Today's alone", "du-sec warn" in th and "du-sec warn" not in up and "Old" not in up)
     bh = board.render(dict(data, pending=["Jules"]), {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
     check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
