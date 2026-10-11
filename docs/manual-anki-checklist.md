@@ -488,6 +488,20 @@ In Anki (as a follower):
       the same cards as the date's own count; a subdeck, search or picked
       cards open by id. A topic none of whose cards are in your deck says
       so in a tooltip.
+- [ ] 3.8.0: a past day's "16 left" in its cell opens Browse on just those
+      unseen cards (the day itself doesn't open); its details show "Browse
+      42 cards · 24 left". The Today box's "16 new behind" and Due's
+      Behind "N cards to see" open the unseen cards of earlier dates. Due's
+      plan rows: each topic opens its cards. Insights: a topic's name and
+      the hero's "53 cards" open the same cards Study would. "3 leeches
+      stay suspended" › See them.
+- [ ] 3.8.0: Browse › select a card on a plan you follow › right-click ›
+      Due Crew: show on my plan. Anki's main window comes forward on the
+      Plans tab, that date's week, its details open; a tooltip names the
+      date. A card on no plan says so. ‹ › lets go of that day.
+- [ ] 3.8.0, the site: a date's panel (in the builder) › Copy search on a
+      tag; paste it into Anki's Browse: it finds that tag's cards, in your
+      copy's version of the deck too.
 
 ### The admin page, grown up (duecrew.com/admin)
 

@@ -710,3 +710,19 @@ every release that changes how something works.
   when the plan's is swapped), when Anki finds exactly the plan's cards with
   it, so the search bar reads as the tag; otherwise the cards by id. A
   search run here; nothing is sent.
+  More ways to the cards (3.8.0, Sam's picks 1-5 and 7): what's left of a
+  day ("16 left", "2 behind", "3 to go" in its cell, which no longer opens
+  the day when you click the number; "24 left" by Browse in its details),
+  the Today box's "16 new behind" and Due's Behind "N cards to see" open
+  Browse on those cards not seen yet (`planleft:<plan>[:<dates>]`,
+  `browse_left`; behind is every date before today, opened cards only, by
+  `DeckIndex.unseen`, which is `counts`' seen turned round). Due's plan rows
+  link their topics as the Plans tab does. Insights: a topic's name and the
+  hero's count open the same cards Study would (`planinsbrowse`). The plan
+  card's "N leeches stay suspended" has See them (`planleeches`). In Anki's
+  browser, right-click › "Due Crew: show on my plan" opens the board on the
+  date that has the card: the Plans tab, its week, its details open
+  (`show_on_plan`, `jump_to`; `_state["plan_focus"]`, let go when the week
+  moves). The site's day panel has Copy search on each tag, subdeck and
+  search (`Tags.ankiSearch`: `"tag:…"` with `_`, `*`, `"` escaped, a
+  versioned root as `_v*` so any copy's version matches).

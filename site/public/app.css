@@ -258,6 +258,8 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .ch2 { display: inline-flex; gap: 8px; align-items: center; border-radius: 8px; padding: 4px 6px 4px 9px; font-size: 13px; }
 .ch2 .raw { max-width: 260px; }
 .ch2 small { color: var(--muted); }
+.ch2 .cps { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }  /* 3.8.0: Copy search */
+.ch2 .cps:hover { color: var(--accent); }
 .ch2 .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
 .linkish { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 600; font-size: 12.5px; }
 label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; }

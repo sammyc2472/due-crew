@@ -106,7 +106,7 @@ def plan_dates(today):
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
                           "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
-                          "what": P.topics_line([u]),
+                          "what": P.topics_line([u]), "topics": P.topic_view([u]),  # 3.8.0: each a link
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's

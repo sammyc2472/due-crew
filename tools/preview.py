@@ -177,7 +177,7 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "today_topics": PL.topic_view([_PDOC["units"][1], _PDOC["units"][2]]), "today_uids": ["b", "c"],  # 3.8.0: each a link
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
-             "waiting": 16}
+             "waiting": 16, "aside": [3, 0, 0], "aside_ok": [0, 0]}  # 3.8.0: the leeches line, with See them
 sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
     DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
 # 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
@@ -256,7 +256,8 @@ _DATES = [
     {"pid": "p1", "uid": "u1", "plan": "Big Step 1 · F3", "name": "F3-1 SLGs 1-3 · Absorption, distribution, elimination",
      "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
      "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
-     "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2"},
+     "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2",
+     "topics": [["Video Series", [["Pharmacokinetics", 0]]], ["Path Book", [["Drug elimination", 1]]]]},  # 3.8.0: links
     {"pid": "p1", "uid": "u2", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 5 · Clinical trial phases", "opens": _T, "seen": 24, "total": 24},
     {"pid": "p1", "uid": "u3", "plan": "Big Step 1 · F3", "name": "F3-2 SLGs 6a–6b · Drug interactions", "opens": _d(1), "seen": 0, "total": 129},
     {"pid": "p1", "uid": "u4", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 7 · Autonomic drugs", "opens": _d(2), "seen": 0, "total": 96,

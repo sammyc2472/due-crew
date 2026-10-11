@@ -610,8 +610,8 @@ def _work_out(pid):
     return out
 
 
-def study(pid, key):
-    """Anki's filtered deck of the hero's cards ("h") or a topic's, and into it."""
+def _pick(pid, key):
+    """(cids, title) of the hero ("h") or a topic's row, as Insights shows them."""
     view = ((_state.get("insights") or {}).get(pid) or {}).get("view") or {}
     if key == "h":
         cids, aim = view.get("hero") or [], view.get("aim") or {}
@@ -627,6 +627,12 @@ def study(pid, key):
         rows = view.get("rows") or []
         r = rows[int(key)] if str(key).isdigit() and int(key) < len(rows) else None
         cids, title = (r["cids"], r["name"]) if r else ([], "")
+    return cids, title
+
+
+def study(pid, key):
+    """Anki's filtered deck of the hero's cards ("h") or a topic's, and into it."""
+    cids, title = _pick(pid, key)
     if not cids or not mw.col:
         return
     pf = _plans_flow()
@@ -637,6 +643,13 @@ def study(pid, key):
         if did:
             mw.col.decks.select(did)
             mw.moveToState("overview")
+
+
+def browse(pid, key):
+    """3.8.0: the same cards in Anki's browser, to look them over or fix them."""
+    cids, _title = _pick(pid, key)
+    if mw.col:
+        _plans_flow()._browse(cids, empty="Nothing to show.")
 
 
 def fsrs(pid, open_it=True):
@@ -727,6 +740,8 @@ def on_message(cmd, parts):
         open_bingo(None, on=False)
     elif cmd == "planinsstudy" and arg and (x.isdigit() or x == "h"):
         study(arg, x)
+    elif cmd == "planinsbrowse" and arg and (x.isdigit() or x == "h"):
+        browse(arg, x)
     elif cmd == "planinsfsrs" and arg:
         fsrs(arg)
     elif cmd == "planinsfsrsno" and arg:

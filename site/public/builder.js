@@ -26,7 +26,15 @@ const Tags = (() => {
     return segs.some((s) => s.startsWith("^")) ? "system" : segs.some((s) => s.startsWith("#")) ? "resource" : "other";
   };
   const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-  return { word, name, kind, natural };
+  /** 3.8.0: a tag or subdeck as a search to paste into Anki's Browse. A
+   *  versioned root (…_v12) matches any version: copies of a deck differ. */
+  const ankiSearch = (kind, path) => {
+    const esc = (x) => x.replace(/[\\"*_]/g, (c) => `\\${c}`);
+    if (kind === "deck") return `"deck:${esc(path)}"`;
+    const segs = path.split("::");
+    return `"tag:${[esc(segs[0]).replace(/\\_v\d+$/i, "\\_v*"), ...segs.slice(1).map(esc)].join("::")}"`;
+  };
+  return { word, name, kind, natural, ankiSearch };
 })();
 
 /** Due: a date's lines to tick by hand ({k, t, url}), as the Worker keeps
@@ -814,8 +822,15 @@ async function builder(id) {
       : c.ids && c.n > 0 ? h("small", {}, `${c.n.toLocaleString()} card${c.n === 1 ? "" : "s"}`)
       : c.search && c.n == null ? h("small", {}, "counted in your Anki soon")
       : (c.search || c.ids) && c.n === 0 ? h("small", { class: "w" }, "finds nothing") : c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
+    // 3.8.0: a tag, subdeck or search, copied as a search for Anki's Browse
+    const copySearch = (q) => h("button", { class: "linkish cps", title: `Copy ${q} to paste into Anki's Browse`, onclick: async (ev) => {
+      const b = ev.currentTarget;
+      try { await navigator.clipboard.writeText(q); b.textContent = "Copied"; } catch { b.textContent = q; }
+      setTimeout(() => { b.textContent = "Copy search"; }, 2000);
+    } }, "Copy search");
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
       h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), count(c),
+      c.search ? copySearch(c.search) : c.key && !c.cards && !c.ids ? copySearch(Tags.ankiSearch(kindOf(c.key), pathOf(c.key))) : null,
       author && !c.cards && !c.search && !c.ids ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
         if (c.cards) u.cards = []; else if (c.ids) takeIds(u); else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);

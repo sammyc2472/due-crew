@@ -359,6 +359,11 @@ class DeckIndex:
             self._started = {nid_of[c] for c, (_q, t) in self.cards.items() if t != 0}
         return self._started
 
+    def unseen(self, cids):
+        """3.8.0: the cards counts() doesn't call seen: what's left to see."""
+        started, nid_of = self.started(), self.nid_of
+        return {c for c in cids if self.cards[c][1] == 0 and not (self.cards[c][0] != -1 and nid_of.get(c) in started)}
+
     def counts(self, cids):
         """[opened, seen, total]: opened = not suspended, seen = answered at
         least once (Anki's own "not new"), or a new sibling of a card that
@@ -865,6 +870,13 @@ def hold_cards(col, cids, label):
         except Exception:
             pass
     return len(ids)
+
+
+def dates_with(idx, doc, cids, swap=None):
+    """3.8.0, Browse › Show on my plan: the dates of a plan (my days) whose
+    cards include any of `cids`, in plan order."""
+    want = {int(c) for c in cids}
+    return [u for u in units(doc) if want & idx.match(u, swap, (doc or {}).get("deck", ""))]
 
 
 def note_ids(idx, unit, plan_deck=""):

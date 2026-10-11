@@ -1275,6 +1275,10 @@ def board_view(c):
                        undo_ok=undo, session=sess.get(p["id"]),
                        week_offset=(_state.get("plan_week") or {}).get(p["id"], 0))
              for p in plan_list]
+    for card in cards:
+        day = (_state.get("plan_focus") or {}).get(card["id"])
+        if day:
+            card["focus"] = day  # 3.8.0: Browse › Show on my plan
     from . import team_flow
     for card in cards:
         try:
@@ -1304,6 +1308,10 @@ def on_message(cmd, parts):
         open_date(arg, parts[3])
     elif cmd == "planbrowse" and arg and len(parts) > 3:
         browse_date(arg, parts[3])
+    elif cmd == "planleft" and arg:
+        browse_left(arg, [x for x in (parts[3] if len(parts) > 3 else "").split("-") if x])
+    elif cmd == "planleeches" and arg:
+        browse_leeches(arg)
     elif cmd == "plantopic" and arg and len(parts) > 4:
         browse_topic(arg, [x for x in parts[3].split("-") if x], int(parts[4]) if parts[4].isdigit() else -1)
     elif cmd == "planputback" and arg:
@@ -1325,6 +1333,7 @@ def on_message(cmd, parts):
     elif cmd == "planweek" and arg and len(parts) > 3:
         # 3.5.0: the Plans tab's week, back and on (0: this week again); not saved
         weeks = _state.setdefault("plan_week", {})
+        _state.pop("plan_focus", None)  # moving on lets go of a jumped-to day
         step = parts[3]
         weeks[arg] = 0 if step == "0" else max(-26, min(26, int(weeks.get(arg, 0)) + (1 if step == "next" else -1)))
         app.swap(cfg())
@@ -1469,12 +1478,69 @@ def browse_date(pid, uid):
     except Exception:
         traceback.print_exc()
         return
+    _browse(cids)
+
+
+def _browse(cids, q=None, empty="None of its cards are in your deck."):
+    """Anki's browser on these cards: `q` when given (a search that finds
+    just them), else by id. A search run here; nothing is sent."""
     if not cids:
-        tooltip("None of its cards are in your deck.")
+        tooltip(empty)
         return
     import aqt
     browser = aqt.dialogs.open("Browser", mw)
-    browser.search_for("cid:" + ",".join(str(c) for c in sorted(cids)))
+    browser.search_for(q or "cid:" + ",".join(str(int(c)) for c in sorted(cids)))
+
+
+def _plan_idx(pid):
+    """(plan, its state, my doc, DeckIndex) for a plan I follow whose deck is
+    here, else None."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    st = _state_cfg().get(pid)
+    if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return None
+    return p, st, mine(p)["doc"], P.DeckIndex(mw.col, st["deck_id"])
+
+
+def browse_left(pid, uids=()):
+    """3.8.0: Anki's browser on what's left to see: a day's dates' cards I
+    haven't seen ("16 left"), or with no dates, the opened cards of every
+    date before today I haven't seen ("16 new behind")."""
+    got = _plan_idx(pid)
+    if not got:
+        return
+    _p, st, doc, idx = got
+    today = _today()
+    us = [u for u in P.units(doc) if (u["id"] in uids if uids else str(u.get("opens") or "") < today)]
+    try:
+        cids = set()
+        for u in us:
+            cids |= idx.match(u, _swap(st), doc.get("deck", ""))
+        left = idx.unseen(cids)
+        if not uids:
+            left = {c for c in left if idx.cards[c][0] != -1}  # behind: opened, so waiting in my Anki now
+    except Exception:
+        traceback.print_exc()
+        return
+    _browse(left, empty="Nothing left to see.")
+
+
+def browse_leeches(pid):
+    """3.8.0: Anki's browser on the leeches the plan leaves shut here (the
+    plan card's "N leeches stay suspended")."""
+    got = _plan_idx(pid)
+    if not got:
+        return
+    _p, st, doc, idx = got
+    try:
+        cids = set()
+        for u in P.units(doc):
+            cids |= idx.match(u, _swap(st), doc.get("deck", ""))
+        lee = {c for c in cids if c in idx.leech and idx.cards[c][0] == -1}
+    except Exception:
+        traceback.print_exc()
+        return
+    _browse(lee, empty="No leeches left on this plan.")
 
 
 def browse_topic(pid, uids, i):
@@ -1497,13 +1563,7 @@ def browse_topic(pid, uids, i):
     except Exception:
         traceback.print_exc()
         return
-    if not cids:
-        tooltip("None of its cards are in your deck.")
-        return
-    q = _tag_search(mw.col, st["deck_id"], src, _swap(st), cids) or "cid:" + ",".join(str(c) for c in sorted(cids))
-    import aqt
-    browser = aqt.dialogs.open("Browser", mw)
-    browser.search_for(q)
+    _browse(cids, _tag_search(mw.col, st["deck_id"], src, _swap(st), cids) if cids else None)
 
 
 def _tag_search(col, deck_id, src, swap, cids):
@@ -2264,6 +2324,61 @@ def browser_menu(browser, menu):
     copy.triggered.connect(lambda: copy_selector(browser))
     out = menu.addAction("Due Crew: export for my AI…")
     out.triggered.connect(lambda: export_selected(browser))
+    if followed():
+        where = menu.addAction("Due Crew: show on my plan")
+        where.triggered.connect(lambda: show_on_plan(browser))
+
+
+def show_on_plan(browser):
+    """3.8.0: the board on the plan date that has the card picked in the
+    browser: the Plans tab, that date's week, its details open. The first
+    plan I follow that has it; within it, the date nearest today."""
+    try:
+        cids = [int(c) for c in (browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards())]
+    except Exception:
+        cids = []
+    if not cids or not mw.col:
+        tooltip("Pick a card first.")
+        return
+    today = _today()
+    for p in followed():
+        got = _plan_idx(p["id"])
+        if not got:
+            continue
+        _p, st, doc, idx = got
+        try:
+            us = P.dates_with(idx, doc, cids, _swap(st))
+        except Exception:
+            traceback.print_exc()
+            continue
+        if not us:
+            continue
+        u = min(us, key=lambda x: abs((S.d(str(x["opens"])) - S.d(today)).days))
+        jump_to(p["id"], str(u["opens"]))
+        tooltip(f"{html.escape(P.plan_title(p))}: {html.escape(str(u.get('name') or '?'))}, {P.fmt_day(u['opens'])}")
+        return
+    tooltip("It isn't on a plan you follow.")
+
+
+def jump_to(pid, day):
+    """The Plans tab on `day`'s week of this plan, the day's details open."""
+    today = _today()
+    weeks = (S.d(P.week_start(day)) - S.d(P.week_start(today))).days // 7
+    _state.setdefault("plan_week", {})[pid] = max(-26, min(26, weeks))
+    _state["plan_focus"] = {pid: day}
+    _state.setdefault("plan_sub", {})[pid] = "plan"
+    c = cfg()
+    if c.get("period") != "plans":
+        c["period"] = "plans"
+        save_cfg(c)
+    if getattr(mw, "state", "") != "deckBrowser":
+        mw.moveToState("deckBrowser")
+    app.swap(c)
+    try:
+        mw.activateWindow()
+        mw.raise_()
+    except Exception:
+        pass
 
 
 def open_export():

@@ -3580,6 +3580,87 @@ def test_plans_what_in_a_day_p7():
           asked == [("p1", ["a", "b"], 1), ("p1", ["a"], -1)], str(asked))
 
 
+def test_browse_from_the_board_380():
+    """3.8.0: what's left on a day, what's behind, a plan's leeches, a topic,
+    and Browse › Show on my plan, each finding its own cards here, from the
+    board's click (or the browser's menu)."""
+    from due_crew import plans as P, plan_flow as F, board, due as DUE
+    from due_crew.app import _state
+    import due_crew as dc
+    from aqt import mw
+    from aqt.deckbrowser import DeckBrowser
+    col = _plan_col()
+    conn = col.db.conn
+    conn.execute("UPDATE cards SET queue = 0 WHERE id = 1")  # Heart failure: 1 opened, 2 still shut
+    fakes.add_card(conn, 10, did=10, ctype=2, queue=-1, tags="Step1::Cardio::Heart_failure leech")  # a leech Anki set aside
+    plan = {"id": "pB", "name": "Step", "doc": {"deck": "Step 1", "units": [
+        {"id": "a", "name": "Heart", "opens": _day(-1), "tags": ["Step1::Cardio::Heart_failure"]},
+        {"id": "b", "name": "Renal", "opens": _day(-2), "tags": ["Step1::Renal"]},
+        {"id": "c", "name": "Rhythm", "opens": _day(4), "tags": ["Step1::Cardio::Arrhythmia"]}]}}
+    shown, said = [], []
+    saved = (F.followed, F._state_cfg, F._today, F._browse, F.tooltip, F.app.swap, F.save_cfg, mw.col)
+    try:
+        F.followed = lambda: [plan]
+        F._state_cfg = lambda c=None: {"pB": {"deck_id": 10}}
+        F._today = lambda: _day(0)
+        F._browse = lambda cids, q=None, empty="": shown.append((sorted(cids), q)) if cids else said.append(empty)
+        F.tooltip = lambda msg, **k: said.append(msg)
+        F.app.swap = lambda c=None: None
+        F.save_cfg = lambda c: None
+        mw.col = col
+        dc._on_js(False, "duecrew:planleft:pB:a", DeckBrowser())
+        check("left: a date's cards I haven't seen, shut ones too (its \"left\" counts them); a seen leech isn't left",
+              shown[-1][0] == [1, 2], shown)
+        dc._on_js(False, "duecrew:planleft:pB:a-b", DeckBrowser())
+        check("left: a day's two dates together; a seen card isn't left", 8 not in shown[-1][0] and 1 in shown[-1][0], shown)
+        dc._on_js(False, "duecrew:planleft:pB", DeckBrowser())
+        check("behind: every date before today, what's opened and not seen", shown[-1][0] == [1], shown)
+        dc._on_js(False, "duecrew:plantopic:pB:c:0", DeckBrowser())
+        check("topic: a date ahead's topic finds its cards", shown[-1][0] == [3], shown)
+        n = len(shown)
+        dc._on_js(False, "duecrew:planleft:pB:zz", DeckBrowser())
+        check("left: a date that isn't there finds nothing, and says so", len(shown) == n and said[-1] == "Nothing left to see.", said)
+        dc._on_js(False, "duecrew:planleeches:pB", DeckBrowser())
+        check("leeches: the plan's suspended leeches", shown[-1][0] == [10], shown)
+        browser = types.SimpleNamespace(selected_cards=lambda: [3])
+        F.show_on_plan(browser)
+        week = (datetime.date.fromisoformat(P.week_start(_day(4))) - datetime.date.fromisoformat(P.week_start(_day(0)))).days // 7
+        check("show on my plan: the Plans tab on that date's week, the day open",
+              _state["plan_week"].get("pB") == week and _state["plan_focus"] == {"pB": _day(4)} and "Rhythm" in said[-1], said[-1])
+        F.show_on_plan(types.SimpleNamespace(selected_cards=lambda: [7]))
+        check("show on my plan: a card in no plan I follow says so", said[-1] == "It isn't on a plan you follow.", said[-1])
+        wk = P.week_view(F.mine(plan)["doc"], {}, _day(0), P.week_start(_day(4)))
+        html = board._week_html({"week": wk, "week_offset": week, "focus": _day(4)}, "pB")
+        i = next(k for k, d in enumerate(wk) if d["day"] == _day(4))
+        check("show on my plan: the board opens that day's details", f'id="dc-pd-pB-{i}"' in html
+              and f'id="dc-pd-pB-{i}" hidden' not in html, html[-600:])
+        dc._on_js(False, "duecrew:planweek:pB:0", DeckBrowser())
+        check("show on my plan: moving the week lets go of the day", "plan_focus" not in _state)
+    finally:
+        (F.followed, F._state_cfg, F._today, F._browse, F.tooltip, F.app.swap, F.save_cfg, mw.col) = saved
+        _state.pop("plan_focus", None)
+        _state.get("plan_week", {}).pop("pB", None)
+    # the board: a date's details say what's left, the Today box's behind, the leeches line, Due's rows
+    week = [{"day": _day(0), "dow": "Sat", "num": 3, "today": True, "past": False, "rest": False, "prep": False, "events": [],
+             "new": 40, "seen": 10, "units": [{"uid": "a", "name": "Heart", "total": 40, "seen": 10, "state": "open", "prep": False,
+                                               "what": [["", [["Heart failure", 0]]]]}]}]
+    card = {"id": "pB", "title": "Plan", "sub": "", "rows": [], "lines": [], "change": None, "no_deck": False, "paused": False,
+            "today": "Sat 3 Oct", "sched": False, "today_names": ["Heart"], "week": week, "week_offset": 0, "waiting": 16,
+            "aside": [3, 0, 0], "aside_ok": [0, 0], "session": {"kind": "study", "target": 40, "done": 10, "due": 0, "behind": 0}}
+    h = board._plan_card_html(card)
+    check("details: Browse 40 cards and the 30 left", "duecrew:planbrowse:pB:a" in h and "duecrew:planleft:pB:a" in h and "30 left</a>" in h, h)
+    check("today: its new behind opens them", "duecrew:planleft:pB&#x27;" not in h and "pycmd('duecrew:planleft:pB')" in h
+          and "16 new behind</a>" in h, h)
+    check("leeches: See them beside OK", "duecrew:planleeches:pB" in h and "See them" in h, h)
+    dv = DUE.view(_day(0), [{"pid": "pB", "uid": "a", "plan": "Step", "name": "Heart", "opens": _day(0), "seen": 1, "total": 4,
+                             "counted": True, "what": "Heart failure", "topics": [["", [["Heart failure", 0]]]]},
+                            {"pid": "pB", "uid": "b", "plan": "Step", "name": "Renal", "opens": _day(-2), "seen": 1, "total": 9,
+                             "counted": True, "what": "Renal", "topics": []}], [], {})
+    dh = board._due_html(dv)
+    check("due: a date's topics open their cards; Behind's cards to see open what's behind",
+          "duecrew:plantopic:pB:a:0" in dh and "pycmd('duecrew:planleft:pB')" in dh and "8 cards to see</a>" in dh, dh)
+
+
 def test_topic_items_380():
     """3.8.0: what each topic name stands for, so its click finds its cards:
     the same names and order as topics(), merged across dates by group and
@@ -6593,7 +6674,9 @@ def test_plan_load_3781():
           "2 of 3 new &middot; 1 already seen or in your Anki" in html and "2 of 4 seen" in html)
     past = P.week_view({"units": [{"id": "a", "name": "A", "opens": "2026-10-07"}]}, {}, "2026-10-08", "2026-10-05", ld=ld)
     hp = board._week_html({"week": past, "week_offset": 0}, "pid1")
-    check("load: a past date says behind, in the warm colour", '<span class="late">2 behind</span>' in hp and 'abar late' in hp)
+    check("load: a past date says behind, in the warm colour; 3.8.0: it opens those cards in Browse, not the day",
+          '<span class="late"><a class="tp"' in hp and '2 behind</a></span>' in hp and 'abar late' in hp
+          and "event.stopPropagation();pycmd('duecrew:planleft:pid1:a')" in hp, hp)
 
 
 def test_insights_379():
@@ -6652,7 +6735,7 @@ def test_insights_379():
     html = board._insights_html("p1", view)
     check("insights: the board escapes the plan's words", "<img" not in html and "&lt;img" in html)
     check("insights: header, hero with Study, behind with Catch up",
-          "<b>86%</b>" in html and "87% the 2 weeks before" in html and "3 cards Anki won&rsquo;t show you before Fri" in html
+          "<b>86%</b>" in html and "87% the 2 weeks before" in html and "3 cards</a> Anki won&rsquo;t show you before Fri" in html
           and "duecrew:planinsstudy:p1:h" in html and "12 new cards behind" in html and "duecrew:plancatch:p1" in html, html[:900])
     check("insights: not sticking yet, one Study a row",
           "Not sticking yet" in html and "<b>10</b> of 27" in html and "duecrew:planinsstudy:p1:0" in html and "Re-watch" not in html)
@@ -6664,7 +6747,9 @@ def test_insights_379():
     loose = board._insights_html("p1", dict(view, aim={"day": "2026-09-04", "name": "Quiz", "in": 3, "scoped": False}))
     check("insights: an event no date preps for: the box goes by the day, not the event's name",
           "Before Fri 4 &middot; 3 days" in loose and "Quiz &middot;" not in loose
-          and "3 cards Anki won&rsquo;t show you before Fri" in loose, loose[:700])
+          and "3 cards</a> Anki won&rsquo;t show you before Fri" in loose, loose[:700])
+    check("insights: 3.8.0, the hero's count and each topic's name open their cards in Browse",
+          "duecrew:planinsbrowse:p1:h" in html and "duecrew:planinsbrowse:p1:0" in html, html)
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html("p1", {"right": {"now": [1, 2]}}))
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")
@@ -6728,6 +6813,15 @@ def test_insights_379():
         check("glue: no date preps for the quiz: the whole plan, the box by the day", v["aim"]["scoped"] is False)
         check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew · Before Fri 4", list(range(210, 220))),
               ("Due Crew · Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
+        shown, saved_b = [], F._browse
+        F._browse = lambda cids, q=None, empty="": shown.append(sorted(cids))
+        try:
+            dc._on_js(False, "duecrew:planinsbrowse:pI:h", DeckBrowser())
+            dc._on_js(False, "duecrew:planinsbrowse:pI:0", DeckBrowser())
+        finally:
+            F._browse = saved_b
+        check("glue: 3.8.0, Browse shows the same cards Study would", shown == [list(range(210, 220)),
+              [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212]], shown)
         # the quiz's prep dates: only their cards, the box by the event's name
         plan["doc"]["units"][1]["for"] = "q"  # Later: nothing started, so nothing to study before it
         _state["insights"].pop("pI", None)
