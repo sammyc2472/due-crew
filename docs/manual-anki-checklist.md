@@ -481,6 +481,13 @@ In Anki (as a follower):
       after), searches and picked cards as one line each, and Browse N
       cards opens Anki's browser on exactly those cards. The Today box
       has one line of today's topics, cut with … when long.
+- [ ] 3.8.0: each topic there (and in the Today box's line) is underlined
+      with dots; a click opens Anki's browser on that topic's cards. A
+      tag reads as "deck:<your deck>" tag:<the tag> in the search bar
+      (your copy's tag when the plan's deck is another version) and finds
+      the same cards as the date's own count; a subdeck, search or picked
+      cards open by id. A topic none of whose cards are in your deck says
+      so in a tooltip.
 
 ### The admin page, grown up (duecrew.com/admin)
 

@@ -628,7 +628,9 @@ def card_view(plan, st, prog, today, opened=None, undo_ok=False, session=None, w
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
             "aside": aside(plan, st), "aside_ok": list(((_pcfg().get("aside_ok") or {}) if mw else {}).get(plan["id"]) or [0, 0]),
             "put_off": put_off, "waiting": waiting,
-            "today_names": today_names, "today_what": P.topics_line(today_units), "next": nxt_view, "week": week, "week_offset": int(week_offset),
+            "today_names": today_names, "today_what": P.topics_line(today_units),
+            "today_topics": P.topic_view(today_units), "today_uids": [u["id"] for u in today_units],  # 3.8.0: each topic a click
+            "next": nxt_view, "week": week, "week_offset": int(week_offset),
             "catch": {"extra": int(catch.get("extra") or 0), "until": _short_day(catch["until"], today)} if catch else None}
 
 
@@ -1302,6 +1304,8 @@ def on_message(cmd, parts):
         open_date(arg, parts[3])
     elif cmd == "planbrowse" and arg and len(parts) > 3:
         browse_date(arg, parts[3])
+    elif cmd == "plantopic" and arg and len(parts) > 4:
+        browse_topic(arg, [x for x in parts[3].split("-") if x], int(parts[4]) if parts[4].isdigit() else -1)
     elif cmd == "planputback" and arg:
         open_put_off(arg)
     elif cmd == "planmove" and arg and len(parts) > 3:
@@ -1471,6 +1475,50 @@ def browse_date(pid, uid):
     import aqt
     browser = aqt.dialogs.open("Browser", mw)
     browser.search_for("cid:" + ",".join(str(c) for c in sorted(cids)))
+
+
+def browse_topic(pid, uids, i):
+    """3.8.0: Anki's browser on one topic of a date, or of today's dates (i,
+    its place in P.topic_items of those dates): its tag as the search when
+    that finds just its cards here, else its cards by id. A search run
+    here; nothing is sent."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    st = _state_cfg().get(pid)
+    if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return
+    pm = mine(p)
+    by_id = {u["id"]: u for u in P.units(pm["doc"])}
+    items = P.topic_items([by_id[x] for x in uids if x in by_id])
+    if not 0 <= i < len(items):
+        return
+    src = items[i][2]
+    try:
+        cids = P.DeckIndex(mw.col, st["deck_id"]).match(src, _swap(st), pm["doc"].get("deck", ""))
+    except Exception:
+        traceback.print_exc()
+        return
+    if not cids:
+        tooltip("None of its cards are in your deck.")
+        return
+    q = _tag_search(mw.col, st["deck_id"], src, _swap(st), cids) or "cid:" + ",".join(str(c) for c in sorted(cids))
+    import aqt
+    browser = aqt.dialogs.open("Browser", mw)
+    browser.search_for(q)
+
+
+def _tag_search(col, deck_id, src, swap, cids):
+    """A topic's tags as Anki's own search, kept to the plan's deck, when it
+    finds exactly the cards the plan means (the search bar then reads as
+    the tag); None otherwise."""
+    if set(src) != {"tags"}:
+        return None
+    try:
+        from anki.collection import SearchNode
+        tags = col.group_searches(*[SearchNode(tag=P.swapped(t, swap)) for t in src["tags"]], joiner="OR")
+        q = col.build_search_string(SearchNode(deck=col.decks.name(int(deck_id))), tags)
+        return q if {int(c) for c in col.find_cards(q)} == set(cids) else None
+    except Exception:
+        return None
 
 
 def open_date(pid, uid):

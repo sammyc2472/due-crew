@@ -174,6 +174,7 @@ PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of
              "week": PL.week_view(_PDOC, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT)),
              "week_offset": 0, "opened": {"names": ["Path Book 2 · Inflammation"], "n": 42, "undo": True},
              "today_what": PL.topics_line([_PDOC["units"][1], _PDOC["units"][2]]),  # two dates: long enough to need its "…"
+             "today_topics": PL.topic_view([_PDOC["units"][1], _PDOC["units"][2]]), "today_uids": ["b", "c"],  # 3.8.0: each a link
              "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
              "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
              "waiting": 16}

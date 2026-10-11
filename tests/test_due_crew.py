@@ -3544,15 +3544,19 @@ def test_plans_what_in_a_day_p7():
     from due_crew import board
     week = [{"day": "2026-10-03", "dow": "Sat", "num": 3, "today": True, "past": False, "rest": False, "prep": False, "events": [],
              "new": 109, "seen": 0, "units": [{"uid": "a", "name": "SLGs <1-3>", "total": 85, "seen": 0, "state": "open",
-                                               "prep": False, "what": [["V&B", ["Pharma<b>"]]]}]}]
+                                               "prep": False, "what": [["V&B", [["Pharma<b>", 0]]]]}]}]
     card = {"id": "p1", "title": "Plan", "sub": "", "rows": [], "lines": [], "change": None, "no_deck": False, "paused": False,
             "today": "Sat 3 Oct", "sched": False, "today_names": ["SLGs <1-3>"], "today_what": "V&B: Pharma<b>",
+            "today_topics": [["V&B", [["Pharma<b>", 0], ["Renal", 1]]]], "today_uids": ["a", "b"],
             "week": week, "week_offset": 0, "session": {"kind": "study", "target": 109, "done": 0, "due": 0, "behind": 0}}
     h = board._plan_card_html(card)
     check("day: what's in a block, escaped, with Browse sent as planbrowse",
-          '<span class="g"><b>V&amp;B</b> &middot; Pharma&lt;b&gt;</span>' in h and "duecrew:planbrowse:p1:a" in h
-          and "Browse 85 cards" in h and "<b>Pharma" not in h)
-    check("today: one line of what it covers, escaped", 'class="tw"' in h and "V&amp;B: Pharma&lt;b&gt;" in h)
+          '<span class="g"><b>V&amp;B</b> &middot; <a class="tp"' in h and "Pharma&lt;b&gt;</a></span>" in h
+          and "duecrew:planbrowse:p1:a" in h and "Browse 85 cards" in h and "<b>Pharma" not in h)
+    check("day: 3.8.0, each topic opens its cards (plan, date, its place)", "duecrew:plantopic:p1:a:0" in h, h)
+    check("today: one line of what it covers, escaped, each topic a link for today's dates",
+          'class="tw"' in h and "V&amp;B: <a" in h and "Pharma&lt;b&gt;</a>, <a" in h
+          and "duecrew:plantopic:p1:a-b:1" in h and 'title="V&amp;B: Pharma&lt;b&gt;"' in h, h)
     import due_crew as dc
     from due_crew import plan_flow as F
     from aqt.deckbrowser import DeckBrowser
@@ -3565,6 +3569,47 @@ def test_plans_what_in_a_day_p7():
     finally:
         F.browse_date = saved
     check("browse: the board's click reaches it", asked == [("p1", "a")], str(asked))
+    asked, saved = [], F.browse_topic
+    F.browse_topic = lambda pid, uids, i: asked.append((pid, uids, i))
+    try:
+        dc._on_js(False, "duecrew:plantopic:p1:a-b:1", DeckBrowser())
+        dc._on_js(False, "duecrew:plantopic:p1:a:x", DeckBrowser())
+    finally:
+        F.browse_topic = saved
+    check("topic: the board's click reaches it, its dates and its place; a bad place is no place",
+          asked == [("p1", ["a", "b"], 1), ("p1", ["a"], -1)], str(asked))
+
+
+def test_topic_items_380():
+    """3.8.0: what each topic name stands for, so its click finds its cards:
+    the same names and order as topics(), merged across dates by group and
+    name, each with its own sources (unit-shaped, for DeckIndex.match)."""
+    from due_crew import plans as P
+    a = {"id": "a", "tags": ["#Big::#V&B::05_Biostats::07_Clinical_Trials", "Step1::Renal", "#Big::#Lectures::Pharm::02_Drug_Elimination"],
+         "decks": ["Big Step 1::03_Extras"], "search": ["tag:x"], "notes": ["g1"], "nids": [5], "idr": [["g1", 0]], "cards": [["g", 0]]}
+    b = {"id": "b", "tags": ["#Big::#V&B::05_Biostats::07_Clinical_Trials::01_Bias", "#Big::#V&B::02_Pharm::03_Kinetics"]}
+    items = P.topic_items([a, b])
+    names = [(g, x) for g, x, _s in items]
+    check("topic items: one per group and name, in first-seen order",
+          names == [("V&B", "Clinical Trials"), ("", "Renal"), ("Lectures", "Drug Elimination"), ("", "Extras"),
+                    ("Search", "tag:x"), ("Picked by ID", "2 notes"), ("Picked", "1 single card"), ("V&B", "Bias"),
+                    ("V&B", "Kinetics")], names)
+    src = {(g, x): s for g, x, s in items}
+    check("topic items: each with what it stands for",
+          src[("", "Renal")] == {"tags": ["Step1::Renal"]} and src[("", "Extras")] == {"decks": ["Big Step 1::03_Extras"]}
+          and src[("Search", "tag:x")] == {"search": ["tag:x"]}
+          and src[("Picked by ID", "2 notes")] == {"notes": ["g1"], "nids": [5], "idr": [["g1", 0]]}
+          and src[("Picked", "1 single card")] == {"cards": [["g", 0]]}, src)
+    view = P.topic_view([a, b])
+    check("topic view: grouped for the page, each name with its place in the items",
+          view[0] == ["V&B", [["Clinical Trials", 0], ["Bias", 7], ["Kinetics", 8]]] and ["", [["Renal", 1], ["Extras", 3]]] in view, view)
+    check("topics and the Today line read as before",
+          P.topics(a)[0] == ["V&B", ["Clinical Trials"]]
+          and P.topics_line([a, b]).startswith("V&B: Clinical Trials, Bias, Kinetics · Renal, Extras · Lectures: Drug Elimination"),
+          P.topics_line([a, b]))
+    idx = P.DeckIndex(_plan_col(), 10)
+    got = [idx.match(s) for _g, _x, s in P.topic_items([{"id": "u", "tags": ["Step1::Cardio::Heart_failure", "Step1::Renal"]}])]
+    check("topic items: each finds just its own cards here (children too, this deck only)", got == [{1, 2}, {8}], got)
 
 
 def test_plans_matching_v31():

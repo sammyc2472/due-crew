@@ -719,7 +719,7 @@ def week_view(doc, prog, today, start, skipped=(), ld=None):
             rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
-                         "what": topics(u)})  # P7
+                         "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
                 rows[-1]["ld"] = list(ld[u["id"]])
                 rows[-1]["ask"] = load_ask(ld[u["id"]], d, today)
@@ -889,32 +889,57 @@ def _word(seg):
     return (m.group(1) if m else s) or str(seg)
 
 
-def topics(unit):
-    """3.6.5, P7: [[group, [topic]]] for a date, as the site's print list
-    groups them: each tag under the first #/^ part after its root (a video
+def topic_items(us):
+    """3.8.0: the topics of one date or several (the Today box), each with
+    what it stands for: [[group, name, sources]], one per group and name,
+    in the order the names first appear. Groups as the site's print list
+    has them: each tag under the first #/^ part after its root (a video
     series, a book), named readably; subdecks by name; searches, picked
-    notes and single cards as counts. Names and counts only."""
-    groups = {}
+    notes and single cards as counts. sources is unit-shaped (tags, decks,
+    search, the picks), so a click on a name finds its cards here with
+    DeckIndex.match."""
+    items, at = [], {}
 
-    def put(g, x):
-        items = groups.setdefault(g, [])
-        if x not in items:
-            items.append(x)
-    for t in unit.get("tags") or []:
-        segs = str(t).split(_SEP)
-        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
-        put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]))
-    for d in unit.get("decks") or []:
-        put("", _word(str(d).split(_SEP)[-1]))
-    for q in unit.get("search") or []:
-        put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""))
-    notes = len(unit.get("notes") or []) + len(unit.get("nids") or [])
-    if notes:
-        put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}")
-    singles = len(unit.get("cids") or []) + len(unit.get("cards") or [])
-    if singles:
-        put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}")
+    def put(g, x, src):
+        if (g, x) not in at:
+            at[(g, x)] = len(items)
+            items.append([g, x, {}])
+        have = items[at[(g, x)]][2]
+        for k, v in src.items():
+            got = have.setdefault(k, [])
+            got += [y for y in v if y not in got]
+    for u in us:
+        for t in u.get("tags") or []:
+            segs = str(t).split(_SEP)
+            ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+            put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]), {"tags": [t]})
+        for d in u.get("decks") or []:
+            put("", _word(str(d).split(_SEP)[-1]), {"decks": [d]})
+        for q in u.get("search") or []:
+            put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
+        notes = len(u.get("notes") or []) + len(u.get("nids") or [])
+        if notes:
+            put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}",
+                {k: list(u[k]) for k in ("notes", "nids", "idr") if u.get(k)})
+        singles = len(u.get("cids") or []) + len(u.get("cards") or [])
+        if singles:
+            put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}",
+                {k: list(u[k]) for k in ("cards", "cids") if u.get(k)})
+    return items
+
+
+def topic_view(us):
+    """[[group, [[name, i]]]]: topic_items grouped for the page, each name
+    with its place in topic_items, which the board's click sends."""
+    groups = {}
+    for i, (g, x, _src) in enumerate(topic_items(us)):
+        groups.setdefault(g, []).append([x, i])
     return [[g, xs] for g, xs in groups.items()]
+
+
+def topics(unit):
+    """3.6.5, P7: [[group, [topic]]] for a date (topic_items, names only)."""
+    return [[g, [x for x, _i in xs]] for g, xs in topic_view([unit])]
 
 
 def parts(idx, unit, swap=None, plan_deck=""):
@@ -943,12 +968,7 @@ def parts(idx, unit, swap=None, plan_deck=""):
 
 def topics_line(us):
     """P7: one line for the Today box, today's dates' topics together."""
-    merged = {}
-    for u in us:
-        for g, xs in topics(u):
-            items = merged.setdefault(g, [])
-            items += [x for x in xs if x not in items]
-    return " · ".join((f"{g}: " if g else "") + ", ".join(xs) for g, xs in merged.items())
+    return " · ".join((f"{g}: " if g else "") + ", ".join(x for x, _i in xs) for g, xs in topic_view(us))
 
 
 def search_counts(idx, lean_doc):

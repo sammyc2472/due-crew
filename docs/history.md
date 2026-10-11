@@ -699,3 +699,14 @@ every release that changes how something works.
   unchanged (`/plans/<id>/team`, `session["teams"]`), so the requests are
   the same: the squad is one request when it opens, cached a minute. On
   the site, being in it is `following.share` without `teamAsk` (3.7.6).
+  Topics as links (3.8.0, asked for by Sam): each topic in a date's
+  details on the Plans tab, and in the Today box's line, opens Anki's
+  browser on that topic's cards in my copy (`plantopic:<plan>:<dates>:<i>`,
+  i its place in `plans.topic_items` of those dates; `plan_flow.browse_topic`).
+  `topic_items` keeps what each readable name stands for (its tags, subdeck,
+  search or picks, merged by group and name), and `topics`/`topics_line`
+  read from it, so the names and their clicks can't drift. The search is
+  the tag itself, kept to the plan's deck (`"deck:X" tag:Y`, my copy's root
+  when the plan's is swapped), when Anki finds exactly the plan's cards with
+  it, so the search bar reads as the tag; otherwise the cards by id. A
+  search run here; nothing is sent.

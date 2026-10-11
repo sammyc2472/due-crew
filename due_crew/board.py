@@ -823,8 +823,12 @@ def _css(cfg):
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
     #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
     #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
+    #due-crew .pday .wi a.tp, #due-crew .ptoday .tw a.tp {{ color: inherit; font-weight: inherit;
+      text-decoration: underline dotted; text-underline-offset: 2px; }}
+    #due-crew .pday .wi a.tp:hover, #due-crew .ptoday .tw a.tp:hover {{ color: var(--dc-accent); }}
     #due-crew .ptoday .tw {{ display: block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
-                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+                            padding-bottom: 2px; }}  /* room for its topics' underline */
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
     #due-crew .pcrew a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     /* 3.7.3: the plan's tabs (Plan, Insights) and its squad (3.8.0: on the Squads tab) */
@@ -1673,7 +1677,12 @@ def _today_box(card, pid):
     names = [str(n) for n in card.get("today_names") or []]
     what = " &middot; ".join(f"<b>{e(n)}</b>" for n in names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
     # 3.6.5, P7: one line of what today's dates cover
-    if card.get("today_what"):
+    if card.get("today_topics"):  # 3.8.0: each topic opens its cards in Browse
+        uids = "-".join(str(u) for u in card.get("today_uids") or [])
+        line = " &middot; ".join((f"{e(str(g))}: " if g else "") + ", ".join(_topic_a(pid, uids, x, i) for x, i in xs)
+                                 for g, xs in card["today_topics"])
+        what += f'<span class="tw" title="{e(str(card.get("today_what") or ""))}">{line}</span>'
+    elif card.get("today_what"):
         what += f'<span class="tw" title="{e(str(card["today_what"]))}">{e(str(card["today_what"]))}</span>'
     nxt = card.get("next")
     nxt_line = (f'<span class="next">Next: <b>{e(nxt["name"])}</b> &middot; {e(str(nxt["day"]))}'
@@ -1815,7 +1824,9 @@ def _week_html(card, pid):
                 tag = ' <span class="mv">&middot; moved</span>' if u.get("moved") else ""
                 rows += f'<div class="r"><span class="u">{e(u["name"])}{tag}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
                 # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
-                what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}{" &middot; ".join(e(str(x)) for x in xs)}</span>'
+                # 3.8.0: each topic opens its cards in Browse
+                what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}'
+                               + " &middot; ".join(_topic_a(pid, uid, x, i) for x, i in xs) + '</span>'
                                for g, xs in (u.get("what") or []))
                 browse = (f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {int(u["total"]):,} card{"s" if int(u["total"]) != 1 else ""}</a>'
                           if int(u["total"]) and u["state"] != "skip" else "")
@@ -1832,6 +1843,12 @@ def _week_html(card, pid):
     key = ('<div class="pkey"><span><i class="kn"></i>new to you</span><span><i class="kc"></i>seen or in your Anki by then</span>'
            '<span>longest = busiest day</span></div>') if loaded else ""
     return out + f'<div class="pwk">{cells}</div>{key}{details}'
+
+
+def _topic_a(pid, uids, name, i):
+    """3.8.0: a plan's topic as a link to its cards in Anki's browser."""
+    return (f'<a class="tp" href="#" title="Browse its cards" '
+            f'onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
 
 
 def _abar(size, ask, of, late, label):
