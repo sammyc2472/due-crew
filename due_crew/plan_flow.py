@@ -471,6 +471,18 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
     matches = P.unit_matches(idx, doc, _swap(st))
     totals, seen_before, seen_now, new_today = {}, {}, {}, 0
     new_by_day = {}
+    note_ago = {}  # a note's first answer, days ago, from its cards' (Anki buries the rest)
+    for c, ago in first_seen.items():
+        nid = idx.nid_of.get(c)
+        if nid is not None:
+            note_ago[nid] = max(note_ago.get(nid, -1), int(ago))
+    started = idx.started()
+
+    def started_ago(c):
+        queue, ctype = idx.cards[c]
+        nid = idx.nid_of.get(c)
+        return note_ago.get(nid) if ctype == 0 and queue != -1 and nid in started else None
+
     for uid, cids in matches.items():
         totals[uid] = len(cids)
         seen = seen_now[uid] = idx.counts(cids)[1]
@@ -482,6 +494,10 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
         seen_before[uid] = seen - today_n
         for c in cids:
             ago = first_seen.get(c)
+            if ago is None:
+                # a new sibling Anki buried or spaced out (counts calls it seen):
+                # its note's first day, so a cloze-heavy day isn't a missed one
+                ago = started_ago(c)
             if ago is not None:
                 k = S.iso(day - datetime.timedelta(days=ago))
                 new_by_day[k] = new_by_day.get(k, 0) + 1

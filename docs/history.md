@@ -726,3 +726,9 @@ every release that changes how something works.
   moves). The site's day panel has Copy search on each tag, subdeck and
   search (`Tags.ankiSearch`: `"tag:…"` with `_`, `*`, `"` escaped, a
   versioned root as `_v*` so any copy's version matches).
+  Siblings by day (3.8.0): a day's new cards (`session_view`'s
+  `new_by_day`, behind the missed-days question and the weekly recap) came
+  from first answers only, so the siblings Anki buried behind a cloze's
+  first card didn't count and a cloze-heavy day could read as missed. A
+  new sibling of a started note now counts on its note's first day, as
+  `counts` already calls it seen.

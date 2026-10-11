@@ -3263,6 +3263,15 @@ def test_plans_buried_siblings():
     v = F.session_view(plan, {"deck_id": 10}, idx, {5: 0}, _day(0))
     check("behind: a past date's cards seen today (one buried by a note started today) clear it",
           v["done"] == 0 and v["behind"] == 0, v)
+    # 3.8.0: a day's new cards count the siblings Anki buried behind the ones seen,
+    # so a cloze-heavy day isn't a missed one (the missed-days question, the recap)
+    for o in (2, 3, 4):  # a five-card cloze: Anki shows c1, buries c2-c5
+        fakes.add_card(col.db.conn, 60 + o, did=10, queue=-3, nid=50, ord_=o)
+    idx = P.DeckIndex(col, 10)
+    plan2 = {"id": "p", "sched": {"days": [1] * 7, "minutes": 60}, "doc": {"deck": "Step 1", "units": [
+        {"id": "u", "name": "Cloze", "opens": _day(-1), "cards": [["guid000050", o] for o in range(5)]}]}}
+    v2 = F.session_view(plan2, {"deck_id": 10}, idx, {5: 1}, _day(0))
+    check("siblings: a day whose note started then, its buried sibling with it, isn't missed", _day(-1) not in v2["missed"], v2["missed"])
 
 
 def test_bug_squash_oct():
