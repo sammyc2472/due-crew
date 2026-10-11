@@ -6252,6 +6252,22 @@ def _due_js_parity(D, T):
     bad = [(c, w, g) for c, w, g in zip(cases, want, got or [])]
     bad = [x for x in bad if x[1] != x[2]]
     check("due: the add box's preview parses as due.parse does", got is not None and not bad, (bad, out.stderr[:300]))
+    rcases = ["Practice block every mon", "every mon: practice block", "gym daily", "Read ch 3 weekdays",
+              "Call home every sun and wed", "mondays", "Clean mondays", "Every Monday: review", "pick up every thing",
+              "x every we", "x every wed, fri", "x each day", "a: b", "every mon:", "x every tu", "x tuesdays",
+              "  x   every   thu  "]
+    rwant = [list(D.parse_repeat(c)) for c in rcases] + [D.repeat_label(r) for r in ("0", "03", "01234", "0123456", "56")]
+    prog = ("var window = {};" + body + "var cases = " + json.dumps(rcases) + ";"
+            "var out = cases.map(function (c) { var p = parseRepeat(c); return [p.text, p.rule]; });"
+            "['0', '03', '01234', '0123456', '56'].forEach(function (r) { out.push(repeatLabel(r)); });"
+            "console.log(JSON.stringify(out));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(out.stdout)
+    except ValueError:
+        got = None
+    bad = [x for x in zip(rcases + ["labels"] * 5, rwant, got or []) if x[1] != x[2]]
+    check("due: the preview reads a repeat as due.parse_repeat does", got is not None and not bad, (bad, out.stderr[:300]))
 
 
 def test_due_model():
@@ -6269,6 +6285,36 @@ def test_due_model():
     check("due: a weekday on that weekday is next week's", D.when_word("sat", T) == "2026-10-10")
     check("due: digits are 0-9 only, as the preview reads them", D.parse("Read \u0661\u0662 oct", T) == ("Read \u0661\u0662 oct", None))
     _due_js_parity(D, T)
+    check("due: a repeat, said at the end or before a colon",
+          D.parse_repeat("Practice block every mon") == ("Practice block", "0")
+          and D.parse_repeat("every mon and thu: Practice") == ("Practice", "03")
+          and D.parse_repeat("gym daily") == ("gym", "0123456") and D.parse_repeat("Read weekdays") == ("Read", "01234"))
+    check("due: no repeat in a plain line, or alone", D.parse_repeat("pick up every thing") == ("pick up every thing", None)
+          and D.parse_repeat("mondays") == ("mondays", None) and D.parse_repeat("x every we") == ("x every we", None))
+    reps, rp = D.add([], "Practice block", "", T, ident="rrrr1", rule="0")
+    reps, rs = D.add(reps, "Weekly review", "2026-11-01", T, ident="rrrr2", rule="5")
+    check("due: a repeat starts today, whatever day was picked", rp["d"] == T and rp["r"] == "0" and rs["d"] == T)
+    rv = D.view(T, [], reps, {})
+    check("due: a repeat on its day is today's; not on others", [r["text"] for r in rv["rows"]] == ["Weekly review"]
+          and rv["rows"][0]["tag"] == "every Sat" and rv["rows"][0]["done"] is False)
+    up = {dd["day"]: [r["text"] for r in dd["rows"]] for dd in rv["days"] if "day" in dd}
+    check("due: Upcoming has a repeat on each of its days", up.get("2026-10-05") == ["Practice block"]
+          and up.get("2026-10-12") == ["Practice block"] and up.get("2026-10-10") == ["Weekly review"] and up.get(T) == ["Weekly review"], up)
+    tk = D.change(reps, "rrrr2", T, done=True)
+    tv = D.view(T, [], tk, {})
+    nxt = D.view("2026-10-10", [], tk, {})
+    check("due: ticked, a repeat is done today and back next week", tv["rows"][0]["done"] is True and tv["done_n"] == 1
+          and nxt["rows"][0]["done"] is False)
+    check("due: a repeat is never behind, never Later, never pruned, always open",
+          not D.view("2026-10-06", [], reps, {})["behind_mine"] and not rv["later"]
+          and len(D.prune(tk, "2026-12-01")) == 2 and D.open_count(tk) == 2)
+    check("due: a repeat keeps its weekdays through clean; a bad rule is dropped",
+          D.clean_items(tk)[1].get("r") == "5" and "r" not in D.clean_items([dict(rp, r="9x")])[0])
+    stop = D.change(tk, "rrrr2", T, r="")
+    check("due: Stop repeating: a one-off today, its tick kept", "r" not in stop[1] and stop[1]["d"] == T and stop[1]["done"] == T)
+    check("due: a repeat isn't moved to a day", D.change(reps, "rrrr1", T, d="2026-10-20")[0]["d"] == T)
+    rb = board._due_html(rv)
+    check("due board: a repeat's tag says when, and opens its menu", "every Sat &#9662;" in rb and "duecrew:dueitem:rrrr2" in rb)
     check("due: nothing behind today", not D.day_ok("2026-10-02", T) and D.day_ok("", T) and D.day_ok(T, T))
     items, it = D.add([], "  Email   the director ", T, T, ident="aaaa1")
     check("due: add tidies text", it and it["t"] == "Email the director" and it["d"] == T)
@@ -6446,6 +6492,27 @@ def test_due_board_and_clicks():
         check("due fold: Hide holds for today", conf["due_fold"] == {"day": T, "folded": True}, conf.get("due_fold"))
         send("dueshow:later")
         check("due show", conf["due_tab"] == "later")
+        # 3.8.0: a repeat, said in the words; T is a Saturday
+        conf["due_tab"] = "today"
+        send("dueadd:today:0:" + "Practice%20block%20every%20mon")
+        rep = conf["due_items"][-1]
+        check("due add: a repeat said at the end, from today", rep.get("t") == "Practice block" and rep.get("r") == "0"
+              and rep.get("d") == T and (F._toast() or {}).get("text") == "Added, every Mon", (rep, F._toast()))
+        send("dueadd:today:0:" + "every%20sat%3A%20Weekly%20review")
+        sat = conf["due_items"][-1]
+        check("due add: a repeat said first, before a colon; on today, no toast", sat.get("t") == "Weekly review"
+              and sat.get("r") == "5")
+        send("duetick:" + sat["id"])
+        check("due tick: a repeat is done for today only", sat["id"] in [i["id"] for i in conf["due_items"]]
+              and next(i for i in conf["due_items"] if i["id"] == sat["id"])["done"] == T)
+        send("duetick:" + sat["id"])
+        check("due untick: a repeat", next(i for i in conf["due_items"] if i["id"] == sat["id"])["done"] == "")
+        send("dueadd:today:1:" + "Read%20mondays")
+        check("due add: x keeps a repeat's words too", conf["due_items"][-1]["t"] == "Read mondays"
+              and not conf["due_items"][-1].get("r"))
+        F.stop_repeat(conf, sat["id"])
+        one = next(i for i in conf["due_items"] if i["id"] == sat["id"])
+        check("due: Stop repeating leaves a one-off today", "r" not in one and one["d"] == T)
     finally:
         F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_dates = saved
     # recover leeches: tag off, unsuspended, new again, one undo step; the note's other card untouched
@@ -7328,6 +7395,36 @@ def test_tidy_filtered_v380():
         check("tidy: a deck built is remembered once, newest last", pc["built"] == [5, 2], pc)
     finally:
         F._pcfg, F._psave = saved
+
+
+def test_due_repeat_site_twin():
+    """3.8.0: the site's Due panel reads a repeating to-do as due.on_day does
+    (dueRepeats, dueOnDay in app.js). Needs node."""
+    import shutil
+    import subprocess
+    from due_crew import due as D
+    node = shutil.which("node")
+    if not node:
+        print("SKIP due repeat site twin: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    src = js[js.index("const parseIso"):js.index("\n", js.index("const parseIso"))] + "\n" + \
+        js[js.index("function dueRepeats"):js.index("/** Due, as the site can show it")]
+    items = [{"t": "a", "d": "2026-10-03", "r": "0"}, {"t": "b", "d": "2026-10-10", "r": "56"}, {"t": "c", "d": "", "r": "0123456"},
+             {"t": "d", "d": "2026-10-05"}, {"t": "e", "d": "2026-10-05", "r": "9"}, {"t": "f", "d": "2026-10-05", "r": 3}]
+    days = ["2026-10-03", "2026-10-04", "2026-10-05", "2026-10-10", "2026-10-11", "2026-10-12"]
+    want = [[D.on_day(dict(it, done="", id="x", r=D._rule(it.get("r")) or None) if D._rule(it.get("r")) else dict(it, done=""), day)
+             if D._rule(it.get("r")) else False for day in days] for it in items]
+    prog = (src + "var items = " + json.dumps(items) + ", days = " + json.dumps(days) + ";"
+            "console.log(JSON.stringify(items.map(function (x) { return days.map(function (d) { return dueOnDay(x, d); }); })));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(out.stdout)
+    except ValueError:
+        got = None
+    check("due: the site puts a repeat on the days due.on_day does", got == want, (got, want, out.stderr[:300]))
+    check("due: the site counts a repeat open, and a ticked one not",
+          "(x) => x && (dueRepeats(x) || !x.done)" in js and "!(set.due_ticks || {})[x.id]" not in js)
 
 
 def main():

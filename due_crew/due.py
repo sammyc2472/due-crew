@@ -50,8 +50,10 @@ def _ok_day(s):
 # ---- my own items ----
 
 def clean_items(items):
-    """The account's items, coerced: [{id, t, d, done, at}]. `d` a day or ""
-    (Later), `done` the day I ticked it or ""."""
+    """The account's items, coerced: [{id, t, d, done, at, r}]. `d` a day or ""
+    (Later), `done` the day I ticked it or "". 3.8.0: `r`, the weekdays a
+    repeating one falls on (Monday "0"), from `d` on; its `done` is the
+    last day I ticked it."""
     out, seen = [], set()
     for it in items if isinstance(items, list) else []:
         if not isinstance(it, dict):
@@ -61,14 +63,38 @@ def clean_items(items):
         if not re.fullmatch(r"[a-z0-9]{4,16}", i) or not t or i in seen:
             continue
         seen.add(i)
+        r = _rule(it.get("r"))
         out.append({"id": i, "t": t,
                     "d": it["d"] if _ok_day(it.get("d")) else "",
                     "done": it["done"] if _ok_day(it.get("done")) else "",
                     "at": it["at"] if _ok_day(it.get("at")) else ""})
+        if r:
+            out[-1]["r"] = r
     # every open one, and the newest ticked ones: the settings doc stays small
-    done = sorted((it for it in out if it["done"]), key=lambda it: it["done"], reverse=True)[:MAX_OPEN]
+    done = sorted((it for it in out if not is_open(it)), key=lambda it: it["done"], reverse=True)[:MAX_OPEN]
     keep = {it["id"] for it in done}
-    return [it for it in out if not it["done"] or it["id"] in keep][:MAX_OPEN * 2]
+    return [it for it in out if is_open(it) or it["id"] in keep][:MAX_OPEN * 2]
+
+
+def _rule(r):
+    """A repeat's weekdays, sorted, or "" (none, or not one)."""
+    r = str(r or "")
+    return "".join(sorted(set(r))) if re.fullmatch(r"[0-6]{1,7}", r) else ""
+
+
+def is_open(it):
+    """Not done: a repeating item always is (it comes again)."""
+    return bool(it.get("r")) or not it["done"]
+
+
+def on_day(it, day):
+    """3.8.0: a repeating item falls on `day`: one of its weekdays, from its start."""
+    return bool(it.get("r")) and str(d(day).weekday()) in it["r"] and (not it["d"] or day >= it["d"])
+
+
+def done_on(it, day):
+    """Ticked for `day`: a repeating item only on the day I ticked it."""
+    return it["done"] == day if it.get("r") else bool(it["done"])
 
 
 def clean_ticks(ticks):
@@ -82,13 +108,13 @@ def clean_ticks(ticks):
 
 
 def prune(items, today):
-    """Ticked items go KEEP_DONE days after their tick."""
+    """Ticked items go KEEP_DONE days after their tick; a repeating one stays."""
     cut = iso(d(today) - datetime.timedelta(days=KEEP_DONE))
-    return [it for it in items if not it["done"] or it["done"] > cut]
+    return [it for it in items if is_open(it) or it["done"] > cut]
 
 
 def open_count(items):
-    return sum(1 for it in items if not it["done"])
+    return sum(1 for it in items if is_open(it))
 
 
 _DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -147,6 +173,61 @@ def when_word(phrase, today):
     return None
 
 
+def repeat_word(phrase):
+    """3.8.0: a repeat said in words: "daily", "every day", "weekdays",
+    "every mon", "every mon and thu", "mondays". The weekdays (Monday "0"),
+    or None when it isn't one. Only this short list; no guessing."""
+    w = " ".join(str(phrase).lower().replace(",", " ").split())
+    if w in ("daily", "every day", "each day"):
+        return "0123456"
+    if w in ("weekdays", "every weekday", "each weekday"):
+        return "01234"
+    if w.endswith("s") and w[:-1] in _LONG:
+        return str(_LONG.index(w[:-1]))
+    m = re.fullmatch(r"(?:every|each) ([a-z ]+)", w)
+    if not m:
+        return None
+    days = set()
+    for name in m.group(1).split():
+        if name == "and":
+            continue
+        k = next((i for i, x in enumerate(_LONG) if len(name) >= 3 and x.startswith(name)), None)
+        if k is None:
+            return None
+        days.add(str(k))
+    return "".join(sorted(days)) or None
+
+
+def parse_repeat(text):
+    """(text, weekdays): a repeat said at the end of what I typed ("Practice
+    block every mon"), or at the start before a colon ("every mon: practice
+    block"), comes off it. weekdays is None when there's none, and the text
+    is never left empty."""
+    t = " ".join(str(text).split())
+    m = re.fullmatch(r"([^:]{3,40}):\s*(.+)", t)
+    if m:
+        r = repeat_word(m.group(1))
+        if r:
+            return m.group(2), r
+    words = t.split(" ")
+    for n in range(min(6, len(words) - 1), 0, -1):
+        r = repeat_word(" ".join(words[-n:]))
+        if r:
+            rest = " ".join(words[:-n]).rstrip(" ,-·:")
+            if rest:
+                return rest, r
+    return t, None
+
+
+def repeat_label(r):
+    """"every day", "weekdays", "every Mon", "every Mon, Thu"."""
+    if r == "0123456":
+        return "every day"
+    if r == "01234":
+        return "weekdays"
+    return "every " + ", ".join(_DAYS[int(k)].capitalize() for k in r)
+
+
 def parse(text, today):
     """(text, day): a day said at the end of what I typed comes off it
     ("Book the room fri" -> ("Book the room", Friday)). day is None when
@@ -173,24 +254,34 @@ def new_id():
     return uuid.uuid4().hex[:10]
 
 
-def add(items, text, day, today, ident=None):
-    """(items, item) with a new item; (items, None) when it can't go in."""
+def add(items, text, day, today, ident=None, rule=None):
+    """(items, item) with a new item; (items, None) when it can't go in.
+    3.8.0: `rule`, a repeat's weekdays: it starts today."""
     t = " ".join(str(text or "").split())[:MAX_TEXT]
+    r = _rule(rule)
+    if r:
+        day = today
     if not t or not day_ok(day, today) or open_count(items) >= MAX_OPEN:
         return items, None
     it = {"id": ident or new_id(), "t": t, "d": day, "done": "", "at": today}
+    if r:
+        it["r"] = r
     return items + [it], it
 
 
 def change(items, ident, today, **kw):
-    """Tick (done=True/False), move (d=day or ""), or retext (t=...) one item."""
+    """Tick (done=True/False), move (d=day or ""), or retext (t=...) one item.
+    3.8.0: r="" stops a repeat (a one-off today, ticked if today's was)."""
     out = []
     for it in items:
         if it["id"] == ident:
             it = dict(it)
+            if "r" in kw and not kw["r"] and it.get("r"):
+                it.pop("r")
+                it["d"], it["done"] = today, it["done"] if it["done"] == today else ""
             if "done" in kw:
                 it["done"] = today if kw["done"] else ""
-            if "d" in kw and day_ok(kw["d"], today):
+            if "d" in kw and day_ok(kw["d"], today) and not it.get("r"):
                 it["d"] = kw["d"]
             if "t" in kw:
                 t = " ".join(str(kw["t"] or "").split())[:MAX_TEXT]
@@ -336,16 +427,26 @@ def _date_row(x, ticks, today, short=False):
             "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0)}
 
 
-def _item_row(it, today):
+def _item_row(it, today, day=None):
+    """One of my items, on `day` (a repeat's; today's when None)."""
+    if it.get("r"):
+        return {"kind": "mine", "id": it["id"], "text": it["t"], "day": day or today, "done": done_on(it, day or today),
+                "tag": repeat_label(it["r"]), "rep": True}
     return {"kind": "mine", "id": it["id"], "text": it["t"], "day": it["d"], "done": bool(it["done"]),
             "tag": (since(it["d"], today) if it["d"] and it["d"] < today else
                     fmt_day(it["d"], today) if it["d"] else "Later")}
 
 
+def _once(items):
+    """My items that don't repeat."""
+    return [it for it in items if not it.get("r")]
+
+
 def behind(dates, items, ticks, today):
     """What isn't done from earlier days: my own items one by one, and each
-    plan's dates as one line (how many, how many cards left)."""
-    mine = [_item_row(it, today) for it in items if it["d"] and it["d"] < today and not it["done"]]
+    plan's dates as one line (how many, how many cards left). A repeat is
+    never behind: it comes again."""
+    mine = [_item_row(it, today) for it in _once(items) if it["d"] and it["d"] < today and not it["done"]]
     mine.sort(key=lambda r: r["day"])
     plans = {}
     for x in dates:
@@ -370,7 +471,7 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
     behind_plans, behind_mine = behind(dates, items, ticks, today)
     todays = [x for x in dates if x["opens"] == today]
     today_rows = [_date_row(x, ticks, today) for x in todays]
-    today_rows += [_item_row(it, today) for it in items if it["d"] == today]
+    today_rows += [_item_row(it, today) for it in items if (on_day(it, today) if it.get("r") else it["d"] == today)]
     if reviews is not None:
         # 3.8.0: learning cards back later today keep the row open
         due_r, back = int(reviews.get("due") or 0), int(reviews.get("back") or 0)
@@ -383,7 +484,7 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
     for x in dates:
         if today <= x["opens"] <= end:
             by_day.setdefault(x["opens"], []).append(_date_row(x, ticks, today, short=True))
-    for it in items:
+    for it in _once(items):
         if it["d"] and today <= it["d"] <= end:
             by_day.setdefault(it["d"], []).append(_item_row(it, today))
     evs, revs = {}, {}
@@ -400,6 +501,12 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
             days.append({"quiet": [quiet[0], quiet[-1]],
                          "label": fmt_range(quiet[0], quiet[-1])})
             quiet.clear()
+    for it in items:
+        if it.get("r"):  # 3.8.0: a repeat on each of its days
+            for i in range(AHEAD + 1):
+                day = iso(t + datetime.timedelta(days=i))
+                if on_day(it, day):
+                    by_day.setdefault(day, []).append(_item_row(it, today, day))
     for i in range(AHEAD + 1):
         day = iso(t + datetime.timedelta(days=i))
         rows, ev, rv = by_day.get(day, []), evs.get(day, []), revs.get(day, [])
@@ -410,12 +517,12 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
         days.append({"day": day, "head": heading(day, today), "today": i == 0, "rows": rows, "events": ev,
                      "review": bool(rv), "n": len(rows)})
     flush()
-    later = [_item_row(it, today) for it in items if not it["d"]]
+    later = [_item_row(it, today) for it in _once(items) if not it["d"]]
     later.sort(key=lambda r: r["done"])
     nxt = [x for x in dates if x["opens"] > today]
     tomorrow = iso(t + datetime.timedelta(days=1))
     tom = [x.get("name") or "?" for x in dates if x["opens"] == tomorrow]
-    tom += [it["t"] for it in items if it["d"] == tomorrow and not it["done"]]
+    tom += [it["t"] for it in items if (on_day(it, tomorrow) if it.get("r") else it["d"] == tomorrow and not it["done"])]
     next_up = None
     if not tom and nxt:
         first = min(x["opens"] for x in nxt)

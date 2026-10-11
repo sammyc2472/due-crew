@@ -353,22 +353,30 @@ def add(c, when, text, raw=False):
         return
     text = " ".join(unquote(text).split())
     day = today if when == "today" else "" if when == "later" else when
+    rule = None
     if not raw:
-        text, said = D.parse(text, today)
-        if said is not None:
-            day = said
+        text, rule = D.parse_repeat(text)  # 3.8.0: "every mon" first
+        if not rule:
+            text, said = D.parse(text, today)
+            if said is not None:
+                day = said
     if not D.day_ok(day, today):
         day = today
     items = D.prune(_items(c), today)
-    items, it = D.add(items, text, day, today)
+    items, it = D.add(items, text, day, today, rule=rule)
     if not it:
         tooltip("That's 60 open. Tick or delete some first." if D.open_count(items) >= D.MAX_OPEN else "Nothing to add.")
         return
     _save(c, items=items)
     tab = c.get("due_tab", "today")
-    shown = (tab == "later" and not day) or (tab == "today" and day == today) or (
-        tab == "upcoming" and day and day <= D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD)))
-    if not shown:
+    if it.get("r"):
+        shown = tab == "upcoming" or (tab == "today" and D.on_day(it, today))
+        if not shown:
+            _state["due_toast"] = (time.time(), {"text": "Added, " + D.repeat_label(it["r"]), "tab": "upcoming"})
+    else:
+        shown = (tab == "later" and not day) or (tab == "today" and day == today) or (
+            tab == "upcoming" and day and day <= D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD)))
+    if not shown and not it.get("r"):
         _state["due_toast"] = (time.time(), {"text": "Added to " + (D.long_day(day, today) if day else "Later"),
                                              "tab": "later" if not day else "upcoming"})
     _swap(c)
@@ -384,6 +392,14 @@ def item_menu(c, ident):
         return
     m = QMenu(mw)
     tomorrow = D.iso(D.d(today) + datetime.timedelta(days=1))
+    if it.get("r"):
+        # 3.8.0: a repeat has no day to move to; it stops instead
+        m.addAction("Edit…").triggered.connect(lambda: _edit(ident))
+        m.addAction("Stop repeating").triggered.connect(lambda: stop_repeat(cfg(), ident))
+        m.addSeparator()
+        m.addAction("Delete").triggered.connect(lambda: delete(cfg(), ident))
+        m.exec(QCursor.pos())
+        return
 
     def move(day):
         c2 = cfg()
@@ -444,11 +460,18 @@ def delete(c, ident):
     _swap(c)
 
 
+def stop_repeat(c, ident):
+    """3.8.0: a repeat becomes a one-off today."""
+    _save(c, items=D.change(_items(c), ident, _today(), r=""))
+    _swap(c)
+
+
 def tick(c, ident):
     items = _items(c)
     it = next((x for x in items if x["id"] == ident), None)
     if it:
-        _save(c, items=D.change(items, ident, _today(), done=not it["done"]))
+        today = _today()
+        _save(c, items=D.change(items, ident, today, done=not D.done_on(it, today)))
         _swap(c)
 
 

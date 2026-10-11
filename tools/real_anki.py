@@ -144,10 +144,42 @@ def check(path):
         col.update_card(card)
     idx3 = P.DeckIndex(col, did)
     pick = F.check_cards(col, idx3, idx3.match(units[5], None, doc["deck"]), 9999)
+    pstore = {}
+    keep_p = (F._pcfg, F._psave)
+    F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
     built = F._filtered(col, "Due Crew · " + units[5]["name"], pick)
     fdid = col.decks.id_for_name("Due Crew · " + units[5]["name"])
     in_deck = len(col.find_cards(f'deck:"Due Crew · {units[5]["name"]}"')) if fdid else 0
     ok("Study: Anki's filtered deck of the date's seen cards", built and in_deck == len(pick) > 0, f"{in_deck} cards")
+    ok("…remembered as built here", pstore.get("built") == [fdid], pstore)
+
+    # 3.8.0: the morning's tidy: a filtered deck of ours goes once it's empty; one with cards stays
+    F._filtered(col, "Checkpoint · Empty one", pick[:3])
+    edid = col.decks.id_for_name("Checkpoint · Empty one")
+    mine = col.decks.id("Mine, not Due Crew's")
+    t = tm(); n_none = F.tidy_decks(col); t_tidy = tm() - t
+    ok("tidy: decks with cards in them stay", n_none == 0 and col.decks.get(fdid, default=False) and col.decks.get(edid, default=False),
+       f"{t_tidy*1000:.0f} ms")
+    col.sched.empty_filtered_deck(edid)
+    n_one = F.tidy_decks(col)
+    ok("tidy: our empty one goes, as one undo step; a normal deck stays",
+       n_one == 1 and not col.decks.get(edid, default=False) and col.decks.get(fdid, default=False)
+       and col.decks.get(mine, default=False) and pstore.get("built") == [fdid], (n_one, pstore, col.undo_status().undo))
+    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in pick[:3])} deck:\"Step Deck\"")) == 3)
+    F._pcfg, F._psave = keep_p
+
+    # 3.8.0: learning cards back later today, past Anki's learn-ahead
+    import time as _t
+    lc = col.get_card(pick[0])
+    lc.type, lc.queue, lc.due = 1, 1, int(_t.time()) + 3 * 3600
+    col.update_card(lc)
+    cut = int(col.sched.day_cutoff)
+    ahead = int(col.get_config("collapseTime", 1200) or 0)
+    back, first = col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
+                               int(_t.time()) + ahead, cut) or (0, None)
+    ok("learning back: an intraday learning card due later today is counted, with its time",
+       (back >= 1 and first == lc.due) or lc.due >= cut, f"{back} back, first {first}, cutoff {cut}")
+    ok("sync: the collection's mod and last sync are both ms", col.mod > 10**12 and col.db.scalar("SELECT ls FROM col") == 0)
 
     # how long a refresh's plan work takes, the second time (tags kept)
     t = tm(); i4 = P.DeckIndex(col, did); P.progress(i4, doc); t1 = tm() - t

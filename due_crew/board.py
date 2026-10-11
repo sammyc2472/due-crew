@@ -3677,6 +3677,48 @@ DUE_JS = r"""
     }
     return { text: words.join(' '), day: null };
   }
+  // due.repeat_word and due.parse_repeat (3.8.0), restated: change one, change both
+  var WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  function repeatWord(w) {
+    w = w.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (w === 'daily' || w === 'every day' || w === 'each day') { return '0123456'; }
+    if (w === 'weekdays' || w === 'every weekday' || w === 'each weekday') { return '01234'; }
+    if (w.slice(-1) === 's' && WEEK.indexOf(w.slice(0, -1)) >= 0) { return String(WEEK.indexOf(w.slice(0, -1))); }
+    var m = w.match(/^(?:every|each) ([a-z ]+)$/);
+    if (!m) { return null; }
+    var on = {}, names = m[1].split(' ');
+    for (var i = 0; i < names.length; i++) {
+      if (names[i] === 'and') { continue; }
+      var k = -1;
+      for (var j = 0; j < 7; j++) { if (names[i].length >= 3 && WEEK[j].indexOf(names[i]) === 0) { k = j; break; } }
+      if (k < 0) { return null; }
+      on[k] = 1;
+    }
+    var out = '';
+    for (var x = 0; x < 7; x++) { if (on[x]) { out += x; } }
+    return out || null;
+  }
+  function parseRepeat(text) {
+    var t = text.replace(/\s+/g, ' ').trim();
+    var m = t.match(/^([^:]{3,40}):\s*(.+)$/);
+    if (m) { var r0 = repeatWord(m[1]); if (r0) { return { text: m[2], rule: r0 }; } }
+    var words = t.split(' ');
+    for (var n = Math.min(6, words.length - 1); n >= 1; n--) {
+      var r = repeatWord(words.slice(-n).join(' '));
+      if (r) {
+        var rest = words.slice(0, -n).join(' ').replace(/[ ,\-·:]+$/, '');
+        if (rest) { return { text: rest, rule: r }; }
+      }
+    }
+    return { text: t, rule: null };
+  }
+  function repeatLabel(r) {
+    if (r === '0123456') { return 'every day'; }
+    if (r === '01234') { return 'weekdays'; }
+    var out = [];
+    for (var i = 0; i < r.length; i++) { var n = WEEK[+r.charAt(i)]; out.push(n.charAt(0).toUpperCase() + n.slice(1, 3)); }
+    return 'every ' + out.join(', ');
+  }
   function label(d, today) {
     if (d === '') { return 'Later'; }
     if (d === today) { return 'Today'; }
@@ -3691,9 +3733,10 @@ DUE_JS = r"""
     preview: function () {
       var box = document.querySelector('#due-crew .du'), inp = el('du-in'), said = el('du-said');
       if (!box || !inp || !said) { return; }
-      var p = parse(inp.value, box.getAttribute('data-today'));
-      if (p.day === null || this.raw) { said.innerHTML = ''; return; }
-      said.innerHTML = '&rarr; ' + label(p.day, box.getAttribute('data-today')) +
+      var rp = parseRepeat(inp.value);
+      var p = rp.rule ? null : parse(inp.value, box.getAttribute('data-today'));
+      if ((!rp.rule && p.day === null) || this.raw) { said.innerHTML = ''; return; }
+      said.innerHTML = '&rarr; ' + (rp.rule ? repeatLabel(rp.rule) : label(p.day, box.getAttribute('data-today'))) +
         '<a href="#" title="Keep the words as text" onclick="dcDue.raw=true;dcDue.preview();return false;">&times;</a>';
     },
     pick: function () {

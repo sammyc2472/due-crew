@@ -697,7 +697,7 @@ function yourData(lg, set) {
   const days = { length: lg?.n || 0 }, first = lg?.first || "";
   const items = Array.isArray(set.due_items) ? set.due_items : [];
   const ticks = set.due_ticks && typeof set.due_ticks === "object" ? Object.keys(set.due_ticks).length : 0;
-  const open = items.filter((x) => x && !(set.due_ticks || {})[x.id]).length;
+  const open = items.filter((x) => x && (dueRepeats(x) || !x.done)).length;
   const when = (d) => { const p = parseIso(d); return `${MONTHS[p.getUTCMonth()]} ${p.getUTCFullYear()}`; };
   const row = (title, line, ...act) => h("div", { class: "drow" }, h("div", {}, h("b", {}, title), h("p", { class: "muted small" }, line)), h("div", { class: "row" }, ...act));
   const dl = h("button", { class: "ghost", onclick: async () => {
@@ -1324,6 +1324,11 @@ function dueLineKeys(pid, uid, todo) {
   });
 }
 
+/** 3.8.0: a repeating to-do's weekdays (Monday "0"), as due.py keeps them, or "". */
+function dueRepeats(x) { return typeof x?.r === "string" && /^[0-6]{1,7}$/.test(x.r) ? x.r : ""; }
+/** due.on_day: a repeat falls on `d` (one of its weekdays, from its start). */
+function dueOnDay(x, d) { const r = dueRepeats(x); return !!r && r.includes(String((parseIso(d).getUTCDay() + 6) % 7)) && (!x.d || d >= x.d); }
+
 /** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
  *  and my own to-dos from my settings. Ticking and adding happen in Anki,
@@ -1358,12 +1363,13 @@ function duePanel(followed, set, t) {
         h("small", { class: "muted" }, pr && pr[2] ? `${pr[1].toLocaleString()} / ${pr[2].toLocaleString()}` : "")));
     }
   }
-  for (const x of items.filter((x) => x.d === t)) {
-    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${x.done ? " on" : ""}`, "aria-hidden": "true" }),
-      h("span", { class: x.done ? "muted" : "" }, x.t), h("small", {}, "")));
+  for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, t) : x.d === t))) {
+    const done = dueRepeats(x) ? x.done === t : !!x.done;  // a repeat is done for the day it was ticked
+    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${done ? " on" : ""}`, "aria-hidden": "true" }),
+      h("span", { class: done ? "muted" : "" }, x.t), h("small", {}, "")));
   }
-  for (const x of items.filter((x) => x.d === tm && !x.done)) tomorrow.push(x.t);
-  const behind = items.filter((x) => x.d && x.d < t && !x.done).length;
+  for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, tm) : x.d === tm && !x.done))) tomorrow.push(x.t);
+  const behind = items.filter((x) => !dueRepeats(x) && x.d && x.d < t && !x.done).length;
   if (!rows.length && !behind && !tomorrow.length) return null;
   return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
     behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
