@@ -165,19 +165,6 @@ def main(out):
             traceback.print_exc()
             failures.append(f"{label}: {e}")
 
-    def settings():
-        from due_crew.ui.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, emoji="\U0001F98A"), noop, noop, noop,
-                             noop, noop, noop, edit_emoji=noop, edit_status=noop)
-        tabs = dlg.findChild(QtWidgets.QTabWidget)
-        for i in range(tabs.count()):
-            tabs.setCurrentIndex(i)
-            shoot(dlg, os.path.join(out, f"settings-{i}-{tabs.tabText(i).lower()}.png"))
-        # Just show up chosen: the numbers stay set underneath, greyed out
-        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, show_up=True), noop, noop, noop,
-                             noop, noop, noop, tab="privacy")
-        shoot(dlg, os.path.join(out, "settings-privacy-showup.png"))
-
     def friends():
         from due_crew.ui.friends_dialog import FriendsDialog
         dlg = FriendsDialog(None, CLIENT, muted=[], on_mute=noop)
@@ -427,12 +414,19 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Send feedback…"]
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Show on the Decks screen",
+                "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
+        # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
+        acts = {a.text(): a for a in subs[0].actions()}
+        if acts["Study what’s next"].shortcut().toString() != "Ctrl+Shift+S":
+            raise RuntimeError("tools menu: Study what's next has no Ctrl+Shift+S")
+        if not acts["Show on the Decks screen"].isCheckable():
+            raise RuntimeError("tools menu: Show on the Decks screen isn't a check")
 
-    for label, build in (("tools menu", tools_menu), ("settings", settings), ("friends", friends), ("decks", decks),
+    for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule)):

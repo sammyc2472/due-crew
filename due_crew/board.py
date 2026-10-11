@@ -2766,6 +2766,8 @@ SETTINGS_CSS = """
     #due-crew .st-sw button { width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
       box-shadow: 0 0 0 2px var(--dc-bg); }
     #due-crew .st-sw button.on { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-ink); }
+    #due-crew .st-kbd { font: 11px Menlo, Consolas, monospace; border: 1px solid var(--dc-line); border-radius: 5px;
+      padding: 1px 6px; color: var(--dc-ink); white-space: nowrap; }
     #due-crew .st-in { font: inherit; font-size: 12.5px; border: 1px solid var(--dc-line); border-radius: 6px;
       padding: 2px 7px; background: var(--dc-bg); color: var(--dc-ink); color-scheme: light dark; }
     #due-crew .st-in:disabled { color: var(--dc-faded); }
@@ -2870,7 +2872,7 @@ def _settings_board(cfg):
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">What it shows</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
-                      "Tools › Due Crew › Settings turns it back on")
+                      "Tools › Due Crew › Show on the Decks screen brings it back")
             + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
             + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
             + _st_row("Shows", f'<span class="st-pills">{pills}</span>')
@@ -2888,6 +2890,11 @@ def _settings_board(cfg):
                       "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
+            + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
+            + _st_row("Study what&rsquo;s next", '<kbd class="st-kbd">Ctrl+Shift+S</kbd>', "From any Anki screen")
+            + _st_row("Ask the squad about this card", '<kbd class="st-kbd">Ctrl+Shift+Q</kbd>', "While reviewing")
+            + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
+                      "Off if another add-on uses these keys")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
@@ -3935,6 +3942,9 @@ def _due_add(v, default):
             f'<a href="#" class="du-go" onclick="dcDue.send();return false;">Add</a></div>')
 
 
+STUDY_TIP = "Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses (Ctrl+Shift+S)"
+
+
 def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
     """The You bubble (3.8.0; Due above the board until then): Due's lists,
     Today, Upcoming and Later, when Due is on (v: due.view, from
@@ -3963,9 +3973,9 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:
         bar = _wbar(done_n, total_n) if total_n else ""
-        st = v.get("start")
-        go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
-              f'Study &rsaquo;&nbsp;<span class="nm">{e(st["name"])}</span></a>' if st else "")
+        # 3.8.0: Study today walks the day (the plans' decks first), as the box's
+        go = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">'
+              f'Study today &rsaquo;</a>' if v.get("study") else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
         if v.get("done"):
             # the day's done: what's next, in place of the bar
@@ -3991,8 +4001,10 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
             f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
+    study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;</a>'
+             if tab == "today" and v.get("study") else "")
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
-            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>'
+            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{study}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
     if tab in dict(more):
         return f'<div class="du" data-today="{today}">{head}{more_body}</div>'

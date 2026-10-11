@@ -437,6 +437,11 @@ def _rerender():
 def _on_render(deck_browser, content):
     try:
         c = cfg()
+        if _state.get("settings_tab"):
+            # 3.8.0: Settings shows whatever else is so (signed out, the board off)
+            _state["board_shown"] = True
+            content.stats += board.settings_html(_settings_view(), c)
+            return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
             return
@@ -1176,12 +1181,14 @@ def _apply_settings(changed, focus=None):
     if changed.get("show_leaderboard") is False:
         _state["settings_tab"] = None
         _rerender()
-        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Settings brings it back.")
+        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Show on the Decks screen brings it back.")
     else:
         # the focus names the command sent; after a toggle it's the opposite one
         _swap(c, focus=_flip(focus))
     if chip:
         rooms.refresh_widgets()
+    if "shortcuts" in changed:
+        _apply_keys()
     if push:
         _share_push["n"] += 1
         n = _share_push["n"]
@@ -1244,41 +1251,36 @@ def open_feedback():
 
 def open_settings(tab=None):
     """tab: "you", "board", or "privacy" (your card's Privacy… opens that
-    one; until 2.9 it landed on Account). 3.5.0: in the board when it's on
-    screen; the dialog otherwise (the board turned off, signed out, or
-    another screen)."""
-    if _board_on_screen():
-        from .settings_model import TABS
-        _state["settings_tab"] = tab if tab in TABS else "you"
+    one). 3.8.0, one Settings: the board's, on the Decks screen, from
+    anywhere (Tools › Due Crew › Settings…, the add-on's Config button);
+    signed out or with the board turned off it shows too, since Settings
+    is how the board comes back."""
+    from .settings_model import TABS
+    _state["settings_tab"] = tab if tab in TABS else "you"
+    _close_addons_dialog()
+    if mw.state != "deckBrowser":
+        mw.moveToState("deckBrowser")  # its draw shows Settings
+    elif _board_on_screen():
         _swap(cfg())
-        return
-    from .ui.settings_dialog import SettingsDialog
-    dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_auth, open_friends, _on_signed_out, open_decks,
-                         open_squads, edit_emoji=_edit_emoji, edit_status=_edit_status,
-                         tab=tab, open_feedback=open_feedback if client().signed_in else None)
-    dlg.exec()
+    else:
+        _rerender()
+
+
+def _close_addons_dialog():
+    """The add-on's Config button opens Settings on the Decks screen: the
+    Add-ons window in front of it closes."""
+    try:
+        import aqt
+        inst = (getattr(aqt.dialogs, "_dialogs", {}).get("AddonsDialog") or [None, None])[1]
+        if inst:
+            inst.close()
+    except Exception:
+        pass
 
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
               "share_heatmap", "paused", "exam_date",
               "away_from", "away_to")
-
-
-def _on_settings_saved(changed):
-    """`changed` holds only the keys the dialog owns — never a stale
-    snapshot of the whole config."""
-    c = cfg()
-    push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
-    chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
-    c.update(changed)
-    save_cfg(c)
-    _rerender()
-    if chip:
-        rooms.refresh_widgets()  # 3.0.1: the room chip moves now
-    if push:
-        # sharing choices apply now, not at whenever the next sync happens
-        _on_sync_done()
 
 
 def _on_signed_out():
@@ -1329,18 +1331,25 @@ def _settle_tabs():
         save_cfg(c)
 
 
+STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", "Ctrl+Shift+Q"  # 3.8.0: clear of Anki's own
+
+
 def _tools_menu():
-    """Tools › Due Crew (3.1: a submenu, for plans)."""
-    from aqt.qt import QMenu
+    """Tools › Due Crew (3.1: a submenu, for plans). 3.8.0: Study what's
+    next on top (Ctrl+Shift+S), Settings… opens the board's, and Show on
+    the Decks screen is the way back when the board is off."""
+    from aqt.qt import QMenu, QShortcut, QKeySequence
     if getattr(mw, "_due_crew_menu", None) is not None:
         return  # a second profile open: the submenu is already there
     menu = QMenu("Due Crew", mw)
-    for item in (("Friends…", open_friends),
+    for item in (("Study what’s next", due_flow.study_today), None,
+                 ("Friends…", open_friends),
                  ("Squads…", open_squads), None,
                  ("Make a plan from a deck…", plan_flow.open_make),
                  ("Follow a plan…", plan_flow.open_follow),
                  ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings),
+                 ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:
             menu.addSeparator()
@@ -1349,8 +1358,46 @@ def _tools_menu():
         action = QAction(label, mw)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)
+        if fn is _toggle_board:
+            action.setCheckable(True)
+            menu.aboutToShow.connect(lambda a=action: a.setChecked(bool(cfg().get("show_leaderboard", True))))
+        if fn is due_flow.study_today:
+            mw._due_crew_study = action
+    ask = QShortcut(QKeySequence(ASK_KEY), mw)
+    ask.activated.connect(_ask_this_card)
+    mw._due_crew_ask = ask
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
+    _apply_keys()
+
+
+def _ask_this_card():
+    from . import team_flow
+    team_flow.ask_this_card()
+
+
+def _apply_keys():
+    """Settings › Board › Shortcuts: both keys on, or both off (per computer)."""
+    on = bool(cfg().get("shortcuts", True))
+    try:
+        from aqt.qt import QKeySequence
+        study = getattr(mw, "_due_crew_study", None)
+        if study is not None:
+            study.setShortcut(QKeySequence(STUDY_KEY if on else ""))
+        ask = getattr(mw, "_due_crew_ask", None)
+        if ask is not None:
+            ask.setEnabled(on)
+    except Exception:
+        traceback.print_exc()
+
+
+def _toggle_board():
+    """Tools › Due Crew › Show on the Decks screen."""
+    c = cfg()
+    c["show_leaderboard"] = not c.get("show_leaderboard", True)
+    save_cfg(c)
+    _state["settings_tab"] = None
+    _rerender()
 
 
 def _morning_fallback(gen=None):
@@ -1447,6 +1494,7 @@ gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
 if hasattr(gui_hooks, "reviewer_will_answer_card"):
     gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
 gui_hooks.state_did_change.append(rooms.on_state)
+gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 

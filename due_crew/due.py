@@ -541,6 +541,9 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
             "event": ({"name": ev_soon[0].get("name") or "?", "when": fmt_day(ev_soon[0]["day"], today),
                        "plan": ev_soon[0].get("plan") or ""} if ev_soon else None),
             "start": ({"pid": start["pid"], "uid": start["uid"], "name": start["name"]} if start else None),
+            # 3.8.0: Study today has something to walk: reviews due, or a plan's date not done
+            "study": any((r["kind"] == "reviews" and r["due"]) or (r["kind"] == "plan" and not r["done"])
+                         for r in today_rows),
             "suggestions": list(suggestions)[:2], "notes": list(notes),
             "full": open_count(items) >= MAX_OPEN}
 
@@ -570,3 +573,26 @@ def empty(v):
     """Nothing at all to show: no plan dates, items, reviews or suggestions."""
     return not (v["rows"] or v["behind_n"] or any(not x.get("quiet") and (x["rows"] or x["events"]) for x in v["days"])
                 or v["later"] or v["suggestions"] or v["notes"])
+
+
+# ---- 3.8.0: Study today, one button through the day ----
+
+STUDY_STEPS = 30  # a walk never takes more steps than this
+
+
+def study_next(plan_decks, due_now, misses, misses_done):
+    """The walk's next step: ("deck", did) or ("misses", n) or None (done).
+    plan_decks: the decks of the plans I follow, in plan order; due_now:
+    {did: cards Anki would show now} for each of those and every top deck
+    (a deck's count takes in its subdecks', within its limits); misses: how
+    many I missed today. Plans' decks first, then the deck with the most
+    due, then today's misses once."""
+    for did in plan_decks:
+        if int(due_now.get(did) or 0) > 0:
+            return ("deck", did)
+    rest = [(n, did) for did, n in due_now.items() if did not in plan_decks and int(n or 0) > 0]
+    if rest:
+        return ("deck", max(rest, key=lambda x: (x[0], -int(x[1])))[1])
+    if misses and not misses_done:
+        return ("misses", int(misses))
+    return None

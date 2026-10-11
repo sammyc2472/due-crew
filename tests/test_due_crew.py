@@ -7449,6 +7449,119 @@ def test_no_jumps_v380():
     check("no jumps: Squads' Fetching is marked as waiting", "dc-wait" in html and "Fetching&hellip;" in html)
 
 
+def test_one_settings_keys_study_v380():
+    """3.8.0: one Settings (the board's, from anywhere), the two keys and
+    their switch, and Study today's walk through the day."""
+    import due_crew as dc
+    from due_crew import due as D, due_flow as F, team_flow as TF, settings_model as SM
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    mw = dc.mw
+    saved = (dc._board_on_screen, dc._swap, dc._rerender, getattr(mw, "moveToState", None), mw.state, dc.cfg, dc.save_cfg,
+             _state.get("settings_tab"), dc._apply_keys, TF.tooltip, F.tooltip)
+    calls = []
+    conf = {}
+    try:
+        dc.cfg, dc.save_cfg = (lambda: conf), (lambda c, **k: conf.update(c))
+        dc._swap = lambda c, focus=None: calls.append("swap")
+        dc._rerender = lambda: calls.append("rerender")
+        mw.moveToState = lambda st: calls.append("move:" + st)
+        # one Settings: on the board when it's there; else the Decks screen draws it
+        dc._board_on_screen = lambda: True
+        mw.state = "deckBrowser"
+        dc.open_settings("privacy")
+        check("one settings: on the board, in place, on the tab asked", _state["settings_tab"] == "privacy" and calls == ["swap"], calls)
+        calls.clear()
+        mw.state = "review"
+        dc.open_settings()
+        check("one settings: from another screen, the Decks screen opens on it", calls == ["move:deckBrowser"]
+              and _state["settings_tab"] == "you", calls)
+        calls.clear()
+        mw.state, dc._board_on_screen = "deckBrowser", (lambda: False)
+        dc.open_settings("board")
+        check("one settings: the board off or signed out, the screen redraws with it", calls == ["rerender"])
+        content = types.SimpleNamespace(stats="")
+        conf.update(show_leaderboard=False)
+        dc._on_render(None, content)
+        check("one settings: drawn even with the board off (it's how it comes back)", 'class="st-bar"' in content.stats
+              and "Shortcuts" in content.stats)
+        dc._toggle_board()
+        check("one settings: Tools › Show on the Decks screen turns it back on, Settings closed",
+              conf.get("show_leaderboard") is True and _state["settings_tab"] is None)
+        init_src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+        check("one settings: no Qt window left", "settings_dialog" not in init_src
+              and not os.path.exists(os.path.join(REPO, "due_crew", "ui", "settings_dialog.py")))
+        # the keys: listed, one switch, and it applies at once
+        st = board.settings_html({"tab": "board", "signed_in": True}, conf)
+        check("keys: Settings › Board lists both, with one switch", "Ctrl+Shift+S" in st and "Ctrl+Shift+Q" in st
+              and "duecrew:set:shortcuts:0" in st)
+        check("keys: the switch is a setting, on by default", SM.change(["set", "shortcuts", "0"], {}) == {"shortcuts": False}
+              and SM.BOARD_DEFAULTS["shortcuts"] is True and "shortcuts" not in __import__("due_crew.account", fromlist=["x"]).ACCOUNT_KEYS)
+        applied = []
+        dc._apply_keys = lambda: applied.append(1)
+        _state["settings_tab"] = "board"
+        dc._on_js(False, "duecrew:set:shortcuts:0", DeckBrowser())
+        check("keys: turning them off applies at once", conf.get("shortcuts") is False and applied == [1], (conf, applied))
+        said = []
+        TF.tooltip = lambda m, **k: said.append(m)
+        mw.state = "deckBrowser"
+        TF.ask_this_card()
+        check("keys: Ctrl+Shift+Q off the review screen says what it's for", said and "reviewing" in said[0], said)
+        # Study today: the walk's order
+        check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}, 12, False) == ("deck", 3))
+        check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}, 12, False) == ("deck", 9))
+        check("study: then today's misses, once", D.study_next([5], {5: 0, 9: 0}, 12, False) == ("misses", 12)
+              and D.study_next([5], {5: 0}, 12, True) is None and D.study_next([], {}, 0, False) is None)
+        # the walk, through Anki's screens
+        sel = []
+        F.tooltip = lambda m, **k: said.append(m)
+        due = {"n": {3: 4, 9: 0}}
+        counts = {"left": (0, 0, 0)}
+        mw.col = types.SimpleNamespace(
+            decks=types.SimpleNamespace(select=lambda d: sel.append(d), name=lambda d: f"Deck {d}", id_for_name=lambda n: 77),
+            sched=types.SimpleNamespace(counts=lambda: counts["left"]))
+        sv = (F._plan_decks, F._due_now, F._misses_today, F._reviews)
+        F._plan_decks = lambda: [3]
+        F._due_now = lambda col, dids: dict(due["n"])
+        F._misses_today = lambda col: []
+        F._reviews = lambda: {"back": 0, "at": ""}
+        calls.clear()
+        try:
+            dc._on_js(False, "duecrew:duestudy", DeckBrowser())
+            check("study: the button starts on the plan's deck, in Anki's review", sel == [3] and calls == ["move:review"]
+                  and _state.get("study_walk"), (sel, calls))
+            due["n"] = {3: 0, 9: 6}
+            F.on_state("overview", "review")  # the deck ran out (the timer is a fake: step by hand)
+            check("study: a deck that runs out keeps the walk", _state.get("study_walk") is not None)
+            F.study_step()
+            check("study: on to the next deck, said", sel == [3, 9] and "Next: Deck 9" in said[-1], (sel, said))
+            counts["left"] = (2, 0, 5)
+            F.on_state("overview", "review")
+            check("study: leaving a deck with cards left ends the walk", _state.get("study_walk") is None)
+            due["n"] = {3: 0, 9: 0}
+            F.study_today()
+            check("study: nothing due, it says so and stays put", "Nothing due now." in said[-1] and _state.get("study_walk") is None)
+        finally:
+            F._plan_decks, F._due_now, F._misses_today, F._reviews = sv
+            mw.col = None
+        T0 = "2026-10-03"
+        v = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5}], [], {},
+                   reviews={"due": 10, "done": 0})
+        h = board._due_html(v)
+        check("study: Today's head has Study today", "duecrew:duestudy" in h and "Study today &rsaquo;" in h)
+        check("study: the folded line's Study is the same walk", "duecrew:duestudy" in board._due_html(dict(v, folded=True)))
+        nothing = D.view(T0, [], [], {}, reviews={"due": 0, "done": 5})
+        check("study: nothing to walk, no button", "duestudy" not in board._due_html(nothing))
+    finally:
+        (dc._board_on_screen, dc._swap, dc._rerender, ms, mw.state, dc.cfg, dc.save_cfg,
+         _state["settings_tab"], dc._apply_keys, TF.tooltip, F.tooltip) = saved
+        if ms is None:
+            mw.__dict__.pop("moveToState", None)
+        else:
+            mw.moveToState = ms
+        _state["study_walk"] = None
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

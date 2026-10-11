@@ -393,6 +393,19 @@ def ask_card(card):
     _bg(_send(lambda: cl.team_ask(pid, text, guid=guid, ord=ordn, topic=topic)), _after(pid, "Asked the squad."))
 
 
+def ask_this_card():
+    """3.8.0, Ctrl+Shift+Q: the reviewer's Ask the squad, for the card on
+    screen; said in a line when there's nothing to ask about."""
+    card = getattr(getattr(mw, "reviewer", None), "card", None) if getattr(mw, "state", "") == "review" else None
+    if not card:
+        tooltip("Ctrl+Shift+Q asks your squad about the card you're reviewing.")
+        return
+    if not plan_for_card(card):
+        tooltip("This card isn't on a plan whose squad you're in.")
+        return
+    ask_card(card)
+
+
 def plan_for_card(card):
     """The plan (whose squad I'm in) whose deck holds this card, or None."""
     if not card or not teams():

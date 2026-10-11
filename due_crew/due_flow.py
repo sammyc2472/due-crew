@@ -574,6 +574,8 @@ def on_message(cmd, parts):
         open_link(":".join(parts[2:5]))
     elif cmd == "duego" and arg:
         go(arg)
+    elif cmd == "duestudy":
+        study_today()  # 3.8.0
     elif cmd == "duex" and arg:
         dismiss(arg)
     elif cmd == "dueshow" and arg in D.TABS:
@@ -584,3 +586,114 @@ def on_message(cmd, parts):
     else:
         return False
     return True
+
+
+# ---- 3.8.0: Study today, one button through the day ----
+
+def _plan_decks():
+    """The decks of the plans I follow (not paused), in plan order."""
+    pf = _pf()
+    st = pf._state_cfg()
+    out = []
+    for p in pf.followed():
+        did = (st.get(p["id"]) or {}).get("deck_id")
+        if p.get("paused") or not did or not pf._deck_ok(mw.col, did) or int(did) in out:
+            continue
+        out.append(int(did))
+    return out
+
+
+def _due_now(col, dids):
+    """{deck id: cards Anki would show now} for these decks and every top
+    deck, from Anki's deck tree (its limits, its subdecks)."""
+    out = {}
+
+    def walk(node, top):
+        if top or int(node.deck_id) in dids:
+            out[int(node.deck_id)] = int(node.review_count) + int(node.learn_count) + int(node.new_count)
+        for ch in node.children:
+            walk(ch, False)
+    for ch in col.sched.deck_due_tree().children:
+        walk(ch, True)
+    return out
+
+
+def _misses_today(col):
+    start = (col.sched.day_cutoff - 86400) * 1000
+    return [int(x) for x in col.db.list("SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)]
+
+
+def study_today():
+    """Study today › (the box, its folded line, Ctrl+Shift+S): the walk
+    starts. Plans' decks first, then the deck with the most due, then
+    today's misses, each in Anki's own review; it goes on when a deck runs
+    out and ends when I leave the review."""
+    if not mw.col:
+        return
+    _state["study_walk"] = {"misses": False, "steps": 0}
+    study_step(first=True)
+
+
+def study_step(first=False):
+    w = _state.get("study_walk")
+    if not w or not mw.col:
+        return
+    w["steps"] += 1
+    step = None
+    if w["steps"] <= D.STUDY_STEPS:
+        try:
+            plan = _plan_decks()
+            misses = _misses_today(mw.col)
+            step = D.study_next(plan, _due_now(mw.col, set(plan)),
+                                len(misses) if len(misses) >= AGAIN_MIN else 0, w["misses"])
+        except Exception:
+            traceback.print_exc()
+    if step and step[0] == "misses":
+        w["misses"] = True
+        pf = _pf()
+        name = "Due Crew · today's misses"
+        if pf._filtered(mw.col, name, _misses_today(mw.col)[:500]):
+            pf._after_change()
+            did = mw.col.decks.id_for_name(name)
+            if did:
+                return _study_deck(did, first, "today's misses")
+        step = None
+    if step:
+        return _study_deck(step[1], first)
+    _state["study_walk"] = None
+    r = _reviews() or {}
+    back = int(r.get("back") or 0)
+    tooltip(f"Done for now · {back:,} learning card{'s' if back != 1 else ''} back at {r.get('at')}"
+            if back and r.get("at") else "Nothing due now." if first else "Done for today.")
+    if not first and getattr(mw, "state", "") != "deckBrowser":
+        mw.moveToState("deckBrowser")
+
+
+def _study_deck(did, first, label=None):
+    try:
+        mw.col.decks.select(int(did))
+        if not first:
+            tooltip("Next: " + (label or mw.col.decks.name(int(did))), period=2500)
+        _state["study_walk"]["deck"] = int(did)
+        mw.moveToState("review")
+    except Exception:
+        traceback.print_exc()
+        _state["study_walk"] = None
+
+
+def on_state(new, old):
+    """Anki's screen changed: a walk goes on when its deck runs out (Anki's
+    review hands over to the deck's overview with nothing left), and ends
+    when I leave it any other way."""
+    if not _state.get("study_walk") or new == "review":
+        return
+    if new == "overview" and old == "review" and mw.col:
+        try:
+            left = sum(int(x) for x in mw.col.sched.counts())
+        except Exception:
+            left = 1
+        if not left:
+            from aqt.qt import QTimer
+            QTimer.singleShot(0, study_step)
+            return
+    _state["study_walk"] = None
