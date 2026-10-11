@@ -2851,10 +2851,11 @@ def test_settings_in_board_v341():
           and "coffee &quot;&amp;&quot; cards" in you and "3 in your crew" in you and "<i>BUSM" not in you
           and "duecrew:setclose" in you and "Delete account" in you, you[-600:])
     bd = board.settings_html(dict(view, tab="board"), {"crew_label": 'a"><script>', "accent": "teal",
-                                                         "hidden_tabs": ["week"], "compact": True})
+                                                         "hidden_tabs": ["decks"], "compact": True})
     check("settings: Board, its switches and tabs as set, the crew name escaped",
           'value="a&quot;&gt;&lt;script&gt;"' in bd and "<script>" not in bd
-          and "duecrew:settabs:week:1" in bd and "duecrew:settabs:plans:0" in bd
+          and "duecrew:settabs:decks:1" in bd and "duecrew:settabs:plans:0" in bd
+          and "settabs:week" not in bd
           and "duecrew:set:compact:0" in bd and 'aria-label="Teal" aria-pressed="true"' in bd)
     pv = board.settings_html(dict(view, tab="privacy"), {"show_up": True, "exam_date": "2026-10-14",
                                                            "away_from": "", "away_to": ""})
@@ -4997,11 +4998,13 @@ def test_plans_tab_v33():
     check("plans tab: following nothing, the tab is there with three ways in",
           "period:plans" in none and "Follow a plan" in none and "planlibrary" in none and "planmake" in none
           and "dc-plancode" in none)
-    hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "week"]}, 0, plans={"cards": [card], "offers": []})
-    check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Today",
-          "period:plans" not in hidden and "period:week" not in hidden and "period:decks" in hidden
+    hidden = board.render(data, {"period": "plans", "hidden_tabs": ["plans", "decks"]}, 0, plans={"cards": [card], "offers": []})
+    check("tabs: hidden in Settings, gone, and a saved Plans period falls back to Crew's Today",
+          "period:plans" not in hidden and "period:decks" not in hidden and "period:squads" in hidden
           and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in hidden)
-    check("tabs: Today can't be hidden", "period:today" in board.render(data, {"hidden_tabs": ["today"]}, 0))
+    old = board.render(data, {"hidden_tabs": ["today", "week"]}, 0)
+    check("tabs: Crew can't be hidden, nor Week (Crew's picker since 3.8.0)",
+          "period:today" in old and "period:week" in old)
 
 
 def test_even_split_v33():
@@ -5742,6 +5745,50 @@ def test_bingo_end_to_end():
     finally:
         dc._swap, dc.cfg, dc.save_cfg, dc._fetch_squad, dc.copy_text, dc._bingo_view, bingo_flow.seen = saved
         dc._state["bingo_open"] = False
+
+
+def test_crew_picker_v380():
+    """3.8.0 (Sam): Today and Week are one Crew tab with a picker, as a squad
+    is picked on the Squads tab. The Crew pill goes back to the last one
+    picked; show-up mode has one view and no picker."""
+    import re as _re
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    data = {"entries": [{"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "",
+                         "days": {labels[0]: {"reviews": 5, "studied": True}}}], "labels": labels, "tomorrow": ""}
+    pills = lambda h: _re.findall(r'<a class="dc-pill[^"]*"[^>]*period:([a-z]+)[^>]*>([^<]+)</a>', h)
+    today = board.render(data, {"period": "today"}, 0)
+    week = board.render(data, {"period": "week"}, 0)
+    check("crew: four pills, Crew on for Today and for Week",
+          [x[1] for x in pills(today)] == ["Crew", "Decks", "Squads", "Plans"]
+          and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:today' in today
+          and 'dc-pill on" href="#" onclick="pycmd(\'duecrew:period:week' in week, pills(today))
+    pick = lambda h: _re.search(r'<div class="dc-sw">(.*?)</div>', h).group(1)
+    check("crew: the picker, Today picked, then Week picked",
+          '<a class="on" href="#" onclick="pycmd(\'duecrew:period:today\'); return false;">Today</a>' in pick(today)
+          and '<a href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in pick(today)
+          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in pick(week))
+    decks = board.render(data, {"period": "decks", "crew_view": "week"}, 0)
+    check("crew: from another tab, the Crew pill goes back to the last view picked",
+          ("week", "Crew") in pills(decks) and 'class="dc-sw"' not in decks.split("dc-foot")[0].split("dc-head")[1][:400])
+    mode = board.render(data, {"period": "week", "show_up": True}, 0)
+    check("crew: show-up mode, one view, no picker", "period:week'); return false;\">Week</a>" not in mode
+          and ">Today</a>" not in mode and ">Crew</a>" in mode)
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    conf = {"period": "today"}
+    saved = (dc._swap, dc.cfg, dc.save_cfg)
+    dc._swap = lambda c, focus=None: None
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: None
+    try:
+        dc._on_js(False, "duecrew:period:week", DeckBrowser())
+        week_set = (conf.get("period"), conf.get("crew_view"))
+        dc._on_js(False, "duecrew:period:plans", DeckBrowser())
+        check("crew: the picker's click reaches its handler and is remembered; another tab keeps it",
+              week_set == ("week", "week") and conf.get("period") == "plans" and conf.get("crew_view") == "week",
+              (week_set, conf))
+    finally:
+        dc._swap, dc.cfg, dc.save_cfg = saved
 
 
 def test_bingo_pool_plays():

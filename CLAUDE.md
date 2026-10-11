@@ -119,7 +119,7 @@ same commit, each with its test:
 
 | Feature | Add-on | Worker, site |
 |---|---|---|
-| Crew board, Today/Week tabs | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
+| Crew board (Today · Week picker) | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | Cheers, status, profile card | `social.py`, `wrap.py` | `social.ts` |
 | Settings | `settings_model.py`, `account.py`, `board.settings_html`, `ui/settings_dialog.py` | `GET/PUT /settings` |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |

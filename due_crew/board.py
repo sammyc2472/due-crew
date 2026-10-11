@@ -59,7 +59,9 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
 PERIODS = ("today", "week", "decks", "squads", "plans")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
-HIDEABLE_TABS = (("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
+# 3.8.0: Week is Crew's picker now, not a tab, so it doesn't hide
+HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
+CREW_VIEWS = (("today", "Today"), ("week", "Week"))
 
 
 def hidden_tabs(cfg):
@@ -950,22 +952,29 @@ def _pycmd(cmd):
     return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_-]', '', str(cmd))}'); return false;"
 
 
-def _head(period, show_up=False, hidden=frozenset()):
-    if show_up:
-        # one crew view: today is the last square of the week
-        keys = (("today", "Crew"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
-        on = "today" if period in ("today", "week") else period
-    else:
-        keys = (("today", "Today"), ("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
-        on = period
+def _head(period, show_up=False, hidden=frozenset(), crew="today"):
+    """3.8.0: Crew, Decks, Squads, Plans. Today and Week are Crew's picker
+    (_crew_picker); the Crew pill goes back to whichever was last picked."""
+    crew = crew if crew in dict(CREW_VIEWS) else "today"
+    keys = (("crew", "Crew"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
+    on = "crew" if period in dict(CREW_VIEWS) else period
     keys = tuple((k, label) for k, label in keys if k not in hidden)
     pills = ""
     for key, label in keys:
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
-                  f'onclick="{_pycmd("period:" + key)}">{label}</a>')
+                  f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
     return (f'<div class="dc-head"><span class="dc-title">{board_mark()}</span>'
             f'<span>{pills}</span></div>')
+
+
+def _crew_picker(period):
+    """3.8.0: Today and Week, picked as a squad is (the Squads tab's .dc-sw).
+    Show-up mode has one view, so no picker."""
+    on = ' class="on"'
+    return ('<div class="dc-sw">' + "".join(
+        f'<a{on if period == k else ""} href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
+        for k, t in CREW_VIEWS) + "</div>")
 
 
 def _chip(row):
@@ -2542,7 +2551,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             else _plans_html(plans) if period == "plans"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
-            else _table_html(data, cfg, period))
+            else ("" if show_up else _crew_picker(period)) + _table_html(data, cfg, period))
     # 3.4 review, H6: one banner at a time, the most time-bound first; the
     # rest wait behind "1 of N ›". The admin's notice and my own room stay.
     bans = []
@@ -2651,7 +2660,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
     return (f'<div id="due-crew" class="dc-frame">'
-            f'{_css(cfg)}<style>{DUE_CSS}</style>{_due_html(due)}{_head(period, show_up, hidden)}{body}{foot}</div>')
+            f'{_css(cfg)}<style>{DUE_CSS}</style>{_due_html(due)}{_head(period, show_up, hidden, cfg.get("crew_view") or period)}{body}{foot}</div>')
 
 
 # ---- 3.5.0: Settings, in the board ----

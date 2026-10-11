@@ -581,3 +581,12 @@ In Anki (as a follower):
 - [ ] Leave (under the plan's squad): its pill goes and the tab shows your own squad; your questions stay. Stopping the plan also takes you out.
 - [ ] duecrew.com, the plan's page as a follower: no Team tab; "You're in its squad. Open it ›" (or what it shares and Join its squad), which lands on Home's Squads tab with the plan's pill picked: who showed up, its bingo, then Ask the squad. Leave there: the pill goes.
 - [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….
+
+### 3.8.0: Crew, one tab
+
+- [ ] The board's pills are Crew · Decks · Squads · Plans. Under them on Crew, Today and Week are picked as a squad is on the Squads tab; Week shows the week's table as before.
+- [ ] Pick Week, go to Decks, click Crew: it comes back on Week. Restart Anki: still Week.
+- [ ] Settings › Board › tabs: Decks, Squads and Plans can hide; Week isn't listed. Someone who had hidden Week sees it in the picker.
+- [ ] Settings › Privacy › Just show up: one Crew view, no picker.
+- [ ] duecrew.com Home: the same four pills and picker; a saved Today or Week tab opens on Crew with that view picked.
+

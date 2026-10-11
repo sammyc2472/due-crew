@@ -1156,10 +1156,14 @@ async function home() {
   const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
-  // board.py _head: the add-on's tabs, Plans included
-  const tabs = showUp ? [["today", "Crew"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]];
-  let tab = Board.store("dc-tab") || "today";
-  if (!tabs.some(([k]) => k === tab)) tab = "today";
+  // board.py _head (3.8.0): Crew, Decks, Squads, Plans; Today and Week are
+  // Crew's picker (_crew_picker), and the Crew pill goes back to the last one
+  const tabs = [["crew", "Crew"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]];
+  let tab = Board.store("dc-tab") || "crew";
+  let view = Board.store("dc-crew") || "today";
+  if (tab === "today" || tab === "week") { view = tab; tab = "crew"; }  // saved before 3.8.0
+  if (!tabs.some(([k]) => k === tab)) tab = "crew";
+  if (view !== "week") view = "today";
   const pills = h("span", { class: "pills" });
   const panel = h("div");
   const fetched = Date.now();
@@ -1178,7 +1182,10 @@ async function home() {
       return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left));
     }
     if (tab === "plans") return panel.replaceChildren(plansTab());
-    panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw), crew.length ? null : solo()].filter(Boolean));
+    // show-up mode has one view, so no picker
+    const picker = showUp ? null : h("div", { class: "sqsw" }, [["today", "Today"], ["week", "Week"]].map(([k, l]) =>
+      h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));
+    panel.replaceChildren(...[picker, showUp ? Board.presence(people, t) : Board.table(people, view, t, draw), crew.length ? null : solo()].filter(Boolean));
   }
   // board.py C5: until a friend adds me back, the invite is the board
   function solo() {

@@ -723,6 +723,8 @@ def _on_js(handled, message, context):
         _state["bingo_open"] = False
         _state["team_bingo_open"] = None
         c["period"] = parts[2]
+        if parts[2] in ("today", "week"):
+            c["crew_view"] = parts[2]  # 3.8.0: the Crew pill comes back to it
         save_cfg(c)
         _swap(c)
         if parts[2] == "squads":

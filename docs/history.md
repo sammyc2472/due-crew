@@ -765,3 +765,10 @@ every release that changes how something works.
   Dead code out (3.8.0): `board._full_crew_days`, `_exam_badge`, `_pbar`
   and their CSS, `bingo.FAMILY_NAMES`, `SHARE_WORDS`, `team_flow.on_team`,
   `cards.ts TIP_MAX`.
+  Crew, one tab (3.8.0, Sam's call): Today and Week are one Crew tab, picked
+  under the pills as a squad is on the Squads tab (`board._crew_picker`, the
+  same `.dc-sw`; `sqsw` on the site). The tabs are Crew · Decks · Squads ·
+  Plans; the Crew pill goes back to the view last picked (`crew_view`, per
+  computer; `dc-crew` on the site, where a saved Today or Week tab reads as
+  Crew). Show-up mode keeps its one view, without a picker. Week is no longer
+  a tab, so it can't be hidden (`HIDEABLE_TABS`).
