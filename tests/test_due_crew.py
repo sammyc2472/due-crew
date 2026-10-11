@@ -5417,18 +5417,23 @@ def test_plans_tab_v341():
           'class="ptoday' not in h and "planstudy:p1" not in h and "~48" not in h and "</b> min" not in h
           and "<b>MS2 &lt;b&gt;Block&lt;/b&gt;</b>" in h)
     tidx = next(i for i, d in enumerate(week) if d["today"])
-    check("week: the site's calendar look; names escaped; today open, its date filled; a day opens its details",
+    check("week: the site's calendar look; names escaped; today's date filled; 3.8.0, every day's details shut "
+          "until its click (today's are the box's Today)",
           'class="pwk"' in h and "V&amp;B &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", "")
-          and 'class="pc now sel"' in h and h.count(" sel\"") == 1 and '<b class="td">' in h
-          and f'id="dc-pd-p1-{tidx}">' in h and "Cardio quiz" in h and "plansite:p1" in h
+          and 'class="pc now"' in h and " sel\"" not in h and '<b class="td">' in h
+          and f'id="dc-pd-p1-{tidx}" hidden>' in h and h.count('class="pday"') == h.count('" hidden>')
+          and "onclick=\"var w=this.parentNode" in h and "Cardio quiz" in h and "plansite:p1" in h and "Month &#8599;" in h
           and "planweek:p1:next" in h and "planweek:p1:prev" in h and 'class="tb here"' in h)
+    seen_day = board._plan_card_html(dict(base, focus=week[tidx + 1]["day"]))
+    check("week: Show on my plan's day opens, the box on it", f'id="dc-pd-p1-{tidx + 1}">' in seen_day
+          and seen_day.count(" sel\"") == 1)
     check("week: a later day offers Open now, Skip it and Push my dates back",
           "plannow:p1:d" in h and "planskip:p1:d" in h and "planshift:p1" in h and "Push my dates back" in h and "Undo skip" in h)
     check("crew: in words", "Crew: 5 done with Path Book 1" in h)
     moved = board._plan_card_html(dict(base, week_offset=1))
-    check("week: moved, it says which, Today between the arrows, the details on its first day with plans",
+    check("week: moved, it says which, Today between the arrows, the details shut",
           "Week of 5 Oct" in moved and 'class="tb" onclick' in moved and "planweek:p1:0" in moved
-          and moved.count(" sel\"") == 1 and moved.count('class="pday"') - moved.count('" hidden>') == 1)
+          and " sel\"" not in moved and moved.count('class="pday"') == moved.count('" hidden>'))
     rest = board._plan_card_html(dict(base, session={"kind": "rest", "due": 212}))
     check("now: a rest day says no new cards", "Today is a rest day: reviews, and no new cards." in rest)
     taper = board._plan_card_html(dict(base, session={"kind": "taper", "due": 212}))
@@ -5874,6 +5879,31 @@ def test_you_bubble_v380():
                         you={"tab": "plans", "plans": plans})
     check("you: Due off and both hidden, no bubble", "duetab" not in none and "duefold" not in none)
     check("you: the old render (no you) is Due alone", "duetab:plans" not in board.render(data, {"period": "today"}, 0, due=dv))
+    # 3.8.0, refined: calmer, nothing lost
+    lb0 = labels[0]
+    tm = (TODAY + datetime.timedelta(days=1)).isoformat()
+    dates = [{"pid": "p1", "uid": "u1", "plan": "Big Step 1", "name": "Renal <1>", "opens": lb0, "seen": 3, "total": 9, "counted": True,
+              "parts": [["Video Series", 1, 4], ["Path Book", 2, 5]],
+              "topics": [["Video Series", [["Acid base", 0]]], ["Path Book", [["Kidney <b>", 1]]], ["Search", [["tag:x", 2]]]]},
+             {"pid": "p1", "uid": "u0", "plan": "Big Step 1", "name": "Old", "opens": (TODAY - datetime.timedelta(days=2)).isoformat(),
+              "seen": 0, "total": 4, "counted": True},
+             {"pid": "p1", "uid": "u2", "plan": "Big Step 1", "name": "Heart", "opens": tm, "seen": 0, "total": 6}]
+    dv2 = DUE.view(lb0, dates, [], {}, events=[{"day": tm, "name": "Quiz <q>", "plan": "Big Step 1"}])
+    th = board._due_html(dv2)
+    check("refined: a date's topics on their resource's row; what has no resource stays on its own line",
+          "<b>Video Series</b> &middot; <a class=\"tp\"" in th and "Kidney &lt;b&gt;</a>" in th and "<b>Kidney" not in th
+          and "duecrew:plantopic:p1:u1:1" in th and "Search: <a" in th and "Video Series: <a" not in th, th[:3000])
+    check("refined: what's next and the exam on one line, the exam escaped",
+          th.count('class="du-line du-next"') == 1 and "<b>Tomorrow:</b> Heart" in th and "Quiz &lt;q&gt;" in th
+          and "duecrew:duetab:upcoming" in th)
+    up = board._due_html(dict(dv2, tab="upcoming"))
+    check("refined: Behind is Today's alone", "du-sec warn" in th and "du-sec warn" not in up and "Old" not in up)
+    bh = board.render(dict(data, pending=["Jules"]), {"period": "today"}, 0, due=dv2, plans=plans, you={"tab": "today", "plans": plans})
+    check("refined: the box's tabs are words, Hide a word", 'class="du-tabs du-more"' in bh and "border: 1px solid var(--dc-line);\n"
+          "      border-radius: 99px; padding: 2px 10px" not in bh and ">Hide &#9652;</a>" in bh)
+    foot = bh.split('class="dc-foot"')[1]
+    check("refined: one pill in the footer, I'm studying; Open a room and who's waiting are words",
+          foot.count('class="pb') == 1 and ">Open a room</a>" in foot and 'class="warn"' in foot and "1 waiting" in foot)
     # the glue: only the tab on screen is worked out
     calls = []
     saved = (team_flow.plan_lines, team_flow.you_view, plan_flow.morning_opened, dc.mw.col, due_flow._today)
@@ -7019,11 +7049,11 @@ def test_insights_379():
           'class="dc-sw"' in yh and '<a class="on" href="#" title="Step 1" onclick="pycmd(\'duecrew:insdeck:10\')' in yh
           and "duecrew:insdeck:20" in yh and "<img" not in yh, yh[:600])
     check("you › insights: with a plan on the deck, it says so, with the way to it",
-          "With your plan <b>&lt;img" in yh and "duecrew:duetab:plans" in yh)
+          "From your plan <a" in yh and "&lt;img" in yh and "duecrew:duetab:plans" in yh)
     lone = board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None))
     check("you › insights: one deck, no picker; no plan and no exam date, the way to set one",
-          'class="dc-sw"' not in lone and "its tags name the topics" in lone and "duecrew:settings:privacy" in lone)
-    check("you › insights: no plan, my exam date set", "the exam is yours from Settings" in
+          'class="dc-sw"' not in lone and "From this deck&rsquo;s tags." in lone and "duecrew:settings:privacy" in lone)
+    check("you › insights: no plan, my exam date set", "From this deck&rsquo;s tags and your exam date." in
           board._you_insights(dict(ins, plan=None, exam=True)))
     check("you › insights: no decks reviewed yet", "Insights fill in" in board._you_insights({"decks": []}))
     # ---- the glue, on a collection ----

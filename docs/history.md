@@ -817,3 +817,17 @@ every release that changes how something works.
   ways in), and the admin's plan-load chart to the Log page, which has room
   for it. A stray `.ptab` rule that turned the builder's side tabs into a
   grid went with the old tab's CSS.
+  Calmer (3.8.0, Sam: "still looks busy in places"), nothing taken away: the
+  box's tabs are words, the one on screen underlined, Plans and Insights
+  after a thin rule, and Hide a quiet word (the board's pills stay the
+  buttons); its info lines lost their fill, and what's next and the exam
+  are one line under Today ("Tomorrow: … · ★ Quiz Sat · Upcoming ›").
+  A plan date's topics sit on their resource's row (P.parts groups as
+  P.topics does), so its separate topics line is only for what has no
+  resource. Behind is Today's alone (Upcoming repeated it). A to-do's day
+  button is a word. On Plans, a note is a plain line under a rule, every
+  day's details wait for a click (today's are Today's; Browse › Show on my
+  plan still opens its day), and "Month on duecrew.com" is "Month ↗".
+  Insights' decks and where its topics come from share a row ("From your
+  plan …", "From this deck's tags"). The footer keeps one pill, I'm
+  studying; Open a room and "N waiting" are words, on the site too.

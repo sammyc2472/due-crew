@@ -591,8 +591,10 @@ In Anki (as a follower):
 ### 3.8.0: You, and your people
 
 - [ ] Open Anki on an install that was on the Plans tab: the board opens on Crew › Today, with the box above it open on Plans. A hidden Week (from 3.7) is gone from Settings and shows in the picker.
-- [ ] The box above the board: Today · Upcoming · Later, a gap, then Plans · Insights. The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
+- [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
+- [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; one line at the bottom says what's tomorrow and the next exam, with Upcoming ›. Behind shows on Today, not on Upcoming.
 - [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
+- [ ] Plans: a day's details open on its click (none open by default; Browse › Show on my plan opens its day); "Month ↗" opens the month on duecrew.com.
 - [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53 · Insights ›") with FSRS on, the week, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
 - [ ] Behind on a plan: its behind line has Catch up…, and the menu ends with Push my dates back…. The day details' link reads Push my dates back… too.
 - [ ] The morning opens cards: Today says "This morning opened N new cards" with Put off to tomorrow, which closes them until tomorrow's morning; review a card and the line goes. With Due off in Settings, the line is on Plans instead.
