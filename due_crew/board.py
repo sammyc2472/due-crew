@@ -644,7 +644,7 @@ def _css(cfg):
     #due-crew .ictx a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .iexam {{ display: inline-flex; align-items: baseline; gap: 6px; }}
     #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
-      border-radius: 6px; padding: 1px 4px; margin: 0; }}
+      border-radius: 6px; padding: 1px 4px; margin: 0; color-scheme: light dark; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
     #due-crew .dr.me .dn {{ font-weight: 700; }}
     #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
@@ -3564,6 +3564,7 @@ DUE_CSS = """
     #due-crew .du > * { min-width: 0; }
     #due-crew .du a { text-decoration: none; }
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 460px) { #due-crew .du-h > .du-n { display: none; } }  /* Hide stays on the tabs' line */
     #due-crew .du-h .sp { flex: 1; }
     #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
     #due-crew .du-fold { font-size: 11.5px; font-weight: 600; color: var(--dc-muted); white-space: nowrap; flex: none;
@@ -3821,6 +3822,8 @@ def _due_tick(cmd, on, label):
 def _due_mine(r, short=False):
     e = _html.escape
     tick = _due_tick("duetick:" + r["id"], r["done"], "Done" if not r["done"] else "Not done")
+    if r.get("ahead"):
+        tick = '<span class="du-bx"></span>'  # 3.8.0: a repeat's next day ticks on that day
     tag = f'<a href="#" class="du-tag" title="Move, edit or delete" onclick="{_pycmd("dueitem:" + r["id"])}">{e(r["tag"])} &#9662;</a>'
     if short:
         return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span>{e(r["text"])}</span>'

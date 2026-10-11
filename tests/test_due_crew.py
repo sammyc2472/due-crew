@@ -6298,13 +6298,17 @@ def test_due_model():
     check("due: a repeat on its day is today's; not on others", [r["text"] for r in rv["rows"]] == ["Weekly review"]
           and rv["rows"][0]["tag"] == "every Sat" and rv["rows"][0]["done"] is False)
     up = {dd["day"]: [r["text"] for r in dd["rows"]] for dd in rv["days"] if "day" in dd}
-    check("due: Upcoming has a repeat on each of its days", up.get("2026-10-05") == ["Practice block"]
-          and up.get("2026-10-12") == ["Practice block"] and up.get("2026-10-10") == ["Weekly review"] and up.get(T) == ["Weekly review"], up)
+    check("due: Upcoming has a repeat once: today's, else its next day", up.get("2026-10-05") == ["Practice block"]
+          and "2026-10-12" not in up and "2026-10-10" not in up and up.get(T) == ["Weekly review"], up)
+    nx = board._due_html(dict(rv, tab="upcoming"))
+    check("due board: a repeat's next day has no tick yet", "duecrew:duetick:rrrr1" not in nx and "duecrew:duetick:rrrr2" in nx)
     tk = D.change(reps, "rrrr2", T, done=True)
     tv = D.view(T, [], tk, {})
     nxt = D.view("2026-10-10", [], tk, {})
-    check("due: ticked, a repeat is done today and back next week", tv["rows"][0]["done"] is True and tv["done_n"] == 1
-          and nxt["rows"][0]["done"] is False)
+    tup = {dd["day"]: [r["text"] for r in dd["rows"]] for dd in tv["days"] if "day" in dd}
+    check("due: ticked, a repeat is done today and back next week; Upcoming shows that next day too",
+          tv["rows"][0]["done"] is True and tv["done_n"] == 1 and nxt["rows"][0]["done"] is False
+          and tup.get(T) == ["Weekly review"] and tup.get("2026-10-10") == ["Weekly review"], tup)
     check("due: a repeat is never behind, never Later, never pruned, always open",
           not D.view("2026-10-06", [], reps, {})["behind_mine"] and not rv["later"]
           and len(D.prune(tk, "2026-12-01")) == 2 and D.open_count(tk) == 2)

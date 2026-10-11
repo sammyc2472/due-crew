@@ -181,6 +181,8 @@ _ITEMS = [
     {"id": "i0003", "t": "Practice exam 3", "d": _d(1), "done": "", "at": _T},
     {"id": "i0004", "t": "Return library books", "d": "", "done": "", "at": _T},
     {"id": "i0005", "t": "Ask Dre about the renal deck", "d": "", "done": "", "at": _T},
+    # 3.8.0: a repeat, on today's weekday (TODAY is a Tuesday)
+    {"id": "i0006", "t": "Practice block", "d": _T, "done": "", "at": _T, "r": "13"},
 ]
 _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
               review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
@@ -292,6 +294,15 @@ for _tab in ("today", "upcoming", "later"):
     sections.append(f"<h3>You: {_tab}</h3>" + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS,
                                                             due=dict(_DV, tab=_tab, opened={"n": 42} if _tab == "today" else None),
                                                             you=_YOU(_tab)).replace('id="du-', f'id="du{_tab}-'))
+# 3.8.0: reviews done but learning cards back later; the morning's line with Sync now
+_DV2 = _D.view(_T, _DATES[:2], _ITEMS, {}, reviews={"due": 0, "done": 120, "back": 4, "at": "9:42"})
+sections.append("<h3>3.8.0: learning back at 9:42, a repeat, the morning's Sync now</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV2, opened={"n": 42, "sync": True}),
+    you=_YOU("today")).replace('id="du-', 'id="dub-'))
+sections.append("<h3>3.8.0: Insights, no plan, the exam date in its head; the Hard habit</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, hard={"pct": 22, "n": 640})})))
 sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
                                                        plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(

@@ -431,7 +431,7 @@ def _item_row(it, today, day=None):
     """One of my items, on `day` (a repeat's; today's when None)."""
     if it.get("r"):
         return {"kind": "mine", "id": it["id"], "text": it["t"], "day": day or today, "done": done_on(it, day or today),
-                "tag": repeat_label(it["r"]), "rep": True}
+                "tag": repeat_label(it["r"]), "rep": True, "ahead": bool(day and day > today)}
     return {"kind": "mine", "id": it["id"], "text": it["t"], "day": it["d"], "done": bool(it["done"]),
             "tag": (since(it["d"], today) if it["d"] and it["d"] < today else
                     fmt_day(it["d"], today) if it["d"] else "Later")}
@@ -502,11 +502,13 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
                          "label": fmt_range(quiet[0], quiet[-1])})
             quiet.clear()
     for it in items:
-        if it.get("r"):  # 3.8.0: a repeat on each of its days
+        if it.get("r"):  # 3.8.0: a repeat once: today's, or (that done) its next day
             for i in range(AHEAD + 1):
                 day = iso(t + datetime.timedelta(days=i))
                 if on_day(it, day):
                     by_day.setdefault(day, []).append(_item_row(it, today, day))
+                    if day != today or not done_on(it, today):
+                        break
     for i in range(AHEAD + 1):
         day = iso(t + datetime.timedelta(days=i))
         rows, ev, rv = by_day.get(day, []), evs.get(day, []), revs.get(day, [])
