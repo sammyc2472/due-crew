@@ -81,7 +81,9 @@ const iso = (d) => d.toISOString().slice(0, 10);
 const parseIso = (s) => new Date(`${s}T00:00:00Z`);
 const addDays = (s, n) => { const d = parseIso(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 const pretty = (s) => { const d = parseIso(s); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
-const today = () => iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000));
+// 3.8.0: my Anki day, which rolls over at the hour my Anki says (/auth/me), not at midnight
+let rollover = 0;
+const today = () => iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000 - rollover * 3600000));
 const nextMonday = () => { let d = today(); while (parseIso(d).getUTCDay() !== 1) d = addDays(d, 1); return d; };
 const spaced = (code) => `${code.slice(0, 4)} ${code.slice(4)}`;
 const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
@@ -156,6 +158,7 @@ let me = null;  // {uid, name} or null
 
 async function whoami() {
   try { me = await api("GET", "/auth/me"); } catch { me = null; }
+  rollover = Math.max(0, Math.min(23, Number(me?.rollover) || 0));
   if (me) wearAccent(me.accent || "green");
   renderNav();
   return me;

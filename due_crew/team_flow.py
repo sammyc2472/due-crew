@@ -47,10 +47,6 @@ def teams():
     return client().session.get("teams") or {}
 
 
-def on_team(pid):
-    return pid in teams()
-
-
 def _plan(pid):
     return next((p for p in _plans_flow().followed() if p.get("id") == pid), None)
 

@@ -3963,6 +3963,36 @@ class _PlanGlue:
         return False
 
 
+def test_plans_file_kept_when_unreadable_v380():
+    """3.8.0: a plans.json that won't read was taken as no plans and written
+    over at the next save, losing the list of cards a plan held back. It's
+    moved aside as plans.json.bad (bad2, ... after that) and said once."""
+    store = world({"maya": "Maya"})
+    maya = new_client(store, "maya", "Maya")
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        F = g.F
+        path = os.path.join(g.dirs["A"], "plans.json")
+        with open(path, "w") as f:
+            f.write('{"plans": {"p1": {"held": [1, 2')
+        g.forget()
+        check("plans file: an unreadable one reads as no plans", g.state() == {})
+        check("plans file: moved aside, said once",
+              os.path.exists(path + ".bad") and not os.path.exists(path)
+              and len([t for t in g.toasts if "plans.json.bad" in t]) == 1, (os.listdir(g.dirs["A"]), g.toasts))
+        g.state()
+        check("plans file: read again from the cache, not said again", len(g.toasts) == 1, g.toasts)
+        F._psave({"plans": {}})
+        with open(path + ".bad") as f:
+            kept = f.read()
+        check("plans file: the next save leaves the old one alone", "held" in kept, kept)
+        with open(path, "w") as f:
+            f.write("not json")
+        g.forget()
+        g.state()
+        check("plans file: a second bad one doesn't replace the first",
+              os.path.exists(path + ".bad2") and "held" in open(path + ".bad").read(), os.listdir(g.dirs["A"]))
+
+
 def test_plans_per_profile_v311():
     """3.1.1: plan state is the profile's, not the add-on's. Profile B's
     fresh board used to prune A's plans (A then reopened every past unit),
@@ -5305,6 +5335,29 @@ def test_schedule_parity_v32():
     check("schedule: the site's arithmetic is the add-on's", out.stdout.strip() == "0", out.stdout + out.stderr)
 
 
+def test_site_today_is_anki_day_v380():
+    """3.8.0: the site's today rolls over at the hour the add-on said
+    (/auth/me's rollover), as Anki's day does, not at midnight. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP site today: no node")
+        return
+    js = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    head = js[js.index("const MONTHS"):js.index("const nextMonday")]
+    prog = head + (
+        "Date.now = () => Date.parse('2026-10-08T02:30:00Z');"
+        "const a = today(); rollover = 4; const b = today(); rollover = 0;"
+        "console.log(a + ' ' + b + ' ' + today());")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60,
+                         env=dict(os.environ, TZ="UTC"))
+    check("site: 02:30 is still yesterday with a 4am rollover",
+          out.stdout.split() == ["2026-10-08", "2026-10-07", "2026-10-08"], out.stdout + out.stderr)
+    check("site: whoami takes the rollover from /auth/me",
+          "rollover = Math.max(0, Math.min(23, Number(me?.rollover) || 0));" in js)
+
+
 def test_plans_tab_v341():
     """3.5.0: the Plans tab. The week of my own plan, a Today box in each
     kind of day, a day's details, the tab with no plan, and names escaped."""
@@ -5897,6 +5950,34 @@ def test_long_quiet_friends_fold():
           and sq.count('<tr class="qh') == 1 and sq.index(">Bo<") < sq.index("qfold"), sq[sq.find("qfold") - 20:sq.find("qfold") + 300])
 
 
+def _due_js_parity(D, T):
+    """3.8.0: board.DUE_JS's parse (the add box's preview) reads every case
+    as due.parse does: change one, change both. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP due parity: no node")
+        return
+    js = board.DUE_JS
+    body = js[js.index("var DAYS"):js.index("  function label")]
+    cases = ["Book the room fri", "Call tom", "a today", "a tomorrow", "a later", "Pay rent next week",
+             "Read 12 oct", "x sept 30", "fri", "x on friday", "x next tue", "x 31 feb", "x 3rd nov",
+             "x nov 3rd", "x, oct 12", "Read \u0661\u0662 oct", "x 12 \u043e\u043a\u0442", "x 007 oct", "x 1 de",
+             "  spaced   out   tmrw ", "x december 1st", "x dec. 25", "x 0 oct", "x 40 oct", "x sometime"]
+    want = [list(D.parse(c, T)) for c in cases]
+    prog = ("var window = {};" + body + "var cases = " + json.dumps(cases) + ";"
+            "console.log(JSON.stringify(cases.map(function (c) { var p = parse(c, " + json.dumps(T) + "); return [p.text, p.day]; })));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(out.stdout)
+    except ValueError:
+        got = None
+    bad = [(c, w, g) for c, w, g in zip(cases, want, got or [])]
+    bad = [x for x in bad if x[1] != x[2]]
+    check("due: the add box's preview parses as due.parse does", got is not None and not bad, (bad, out.stderr[:300]))
+
+
 def test_due_model():
     """Due (mock "My List"): day words, own items, Behind, the three tabs."""
     from due_crew import due as D
@@ -5910,6 +5991,8 @@ def test_due_model():
           D.parse("Read 12 oct", T)[1] == "2026-10-12" and D.parse("x sept 30", T)[1] == "2027-09-30")
     check("due: a day alone stays text", D.parse("fri", T) == ("fri", None))
     check("due: a weekday on that weekday is next week's", D.when_word("sat", T) == "2026-10-10")
+    check("due: digits are 0-9 only, as the preview reads them", D.parse("Read \u0661\u0662 oct", T) == ("Read \u0661\u0662 oct", None))
+    _due_js_parity(D, T)
     check("due: nothing behind today", not D.day_ok("2026-10-02", T) and D.day_ok("", T) and D.day_ok(T, T))
     items, it = D.add([], "  Email   the director ", T, T, ident="aaaa1")
     check("due: add tidies text", it and it["t"] == "Email the director" and it["d"] == T)

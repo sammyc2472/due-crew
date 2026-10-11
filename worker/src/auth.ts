@@ -196,14 +196,16 @@ const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
 
 /** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
-  // 3.5.0: and my accent, from the settings the add-on keeps, so the site wears it too
+  // 3.5.0: and my accent, from the settings the add-on keeps, so the site wears it too;
+  // 3.8.0: and the hour my Anki's day rolls over, so the site's today is Anki's
   const u = await env.DB.prepare(
-    `SELECT u.uid, u.email, u.name, u.emoji, json_extract(t.json, '$.accent') AS accent
+    `SELECT u.uid, u.email, u.name, u.emoji, u.rollover, json_extract(t.json, '$.accent') AS accent
        FROM users u LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`,
-  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; accent: unknown }>();
+  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; rollover: number | null; accent: unknown }>();
   if (!u) throw new HttpError(401, "auth");
   const out = { uid: u.uid, email: u.email, name: u.name, emoji: u.emoji,
-    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green" };
+    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green",
+    ...(u.rollover == null ? {} : { rollover: Number(u.rollover) }) };
   return json(isAdmin(env, u.uid) ? { ...out, admin: true } : out);  // 3.2.1: the site shows Admin
 }
 

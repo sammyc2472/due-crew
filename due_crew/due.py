@@ -119,7 +119,8 @@ def _on_or_after(today, month, day):
 def when_word(phrase, today):
     """A day said in words: "today", "tomorrow", "fri", "next week",
     "12 oct", "oct 12", "later". Returns a day, "" for Later, or None when
-    it isn't one. Only this short list; no guessing."""
+    it isn't one. Only this short list; no guessing. Digits are 0-9 only
+    (Python's \\d takes any script's), as the preview's JS reads them."""
     w = " ".join(str(phrase).lower().replace(",", " ").split())
     t = d(today)
     if w in ("today", "tonight"):
@@ -137,10 +138,10 @@ def when_word(phrase, today):
                 wd = _DAYS.index(name[:3])
                 ahead = (wd - t.weekday()) % 7 or 7  # "fri" on a Friday is next week's
                 return iso(t + datetime.timedelta(days=ahead))
-    m = re.fullmatch(r"(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)", w) or None
+    m = re.fullmatch(r"([0-9]{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)", w) or None
     if m and _month(m.group(2)):
         return _on_or_after(today, _month(m.group(2)), int(m.group(1)))
-    m = re.fullmatch(r"([a-z]{3,9}\.?) (\d{1,2})(?:st|nd|rd|th)?", w)
+    m = re.fullmatch(r"([a-z]{3,9}\.?) ([0-9]{1,2})(?:st|nd|rd|th)?", w)
     if m and _month(m.group(1)):
         return _on_or_after(today, _month(m.group(1)), int(m.group(2)))
     return None

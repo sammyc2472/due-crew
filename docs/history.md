@@ -751,3 +751,17 @@ every release that changes how something works.
   A refresh's plans: the add-on keeps its plans only when the board's
   `plans` is a list (`plans_came`), so a board without them never reads
   as "I follow nothing".
+  The site's day is Anki's (3.8.0, Spring Clean): duecrew.com rolled its
+  day over at midnight, so between midnight and a 4am rollover its today
+  was a day ahead of the add-on's. `/auth/me` carries `rollover` (the hour
+  the add-on last said), and `today()` in app.js counts from it.
+  Due's digits (3.8.0): `due.when_word` read any script's digits (`\d`),
+  the add box's preview (`board.DUE_JS`) only 0-9, so "١٢ oct" was a date
+  in one and text in the other. Both read 0-9, and a parity test runs the
+  JS against `due.parse` in node.
+  An unreadable plans.json (3.8.0): it read as no plans and the next save
+  wrote over it, losing the list of cards a plan held back. It's moved
+  aside as plans.json.bad (bad2, ...) and said once (`plan_flow._set_aside`).
+  Dead code out (3.8.0): `board._full_crew_days`, `_exam_badge`, `_pbar`
+  and their CSS, `bingo.FAMILY_NAMES`, `SHARE_WORDS`, `team_flow.on_team`,
+  `cards.ts TIP_MAX`.

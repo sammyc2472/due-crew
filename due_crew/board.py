@@ -209,15 +209,6 @@ def _showed(doc):
     return bool(doc.get("reviews") or doc.get("studyTimeMs") or "accuracy" in doc)
 
 
-def _full_crew_days(entries, labels):
-    """Days on which every non-paused member studied. 0 for solo boards."""
-    active = [e for e in entries if not e.get("paused")]
-    if len(active) < 2:
-        return 0
-    return sum(1 for lb in labels
-               if all(_showed((e.get("days") or {}).get(lb)) for e in active))
-
-
 def _exam_text(iso, today_label):
     """"exam Fri" within the 14 days before the date; "" otherwise. The text
     is client-built from a parsed date — a friend's doc can never inject."""
@@ -236,13 +227,6 @@ def _exam_text(iso, today_label):
     if delta < 7:
         return f"exam {d.strftime('%a')}"
     return f"exam {d.strftime('%b')} {d.day}"
-
-
-def _exam_badge(iso, today_label):
-    txt = _exam_text(iso, today_label)
-    if not txt:
-        return ""
-    return f' <span class="exb">&#128214; {_html.escape(txt)}</span>'
 
 
 def live_now(until, now=None):
@@ -600,10 +584,6 @@ def _css(cfg):
     #due-crew .chip {{ font-size: 10px; margin-left: 5px; white-space: nowrap; color: var(--dc-muted); }}
     #due-crew .chip.live {{ color: var(--dc-fresh); font-weight: 700; }}
     #due-crew .chip.exam {{ color: var(--dc-hours); font-weight: 700; }}
-    #due-crew .exb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
-      margin-left: 5px; white-space: nowrap; }}
-    #due-crew .bkb {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
-      margin-left: 5px; white-space: nowrap; }}
     #due-crew .awb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
       margin-left: 5px; white-space: nowrap; }}
     #due-crew .dc-stw {{ position: relative; display: block; max-width: 100%;
@@ -722,10 +702,6 @@ def _css(cfg):
     #due-crew .dc-pc .u3.later {{ color: var(--dc-faded); }}
     #due-crew .dc-pc .u3.skip {{ color: var(--dc-faded); }}
     #due-crew .dc-pc .u3.skip .u {{ text-decoration: line-through; }}
-    #due-crew .dc-pc .bar {{ display: block; height: 8px; background: var(--dc-well); border-radius: 2px;
-      overflow: hidden; position: relative; }}
-    #due-crew .dc-pc .bar i {{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); }}
-    #due-crew .dc-pc .bar i.part {{ opacity: 0.35; }}
     #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
     #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
       white-space: nowrap; font-size: 11px; }}
@@ -1330,11 +1306,6 @@ def _plans_html(plans):
 def _segs(segments):
     """[(text, bold)] from plans.py, escaped."""
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
-
-
-def _pbar(done, total, solid=True):
-    pct = 0 if not total else max(0, min(100, round(100 * int(done) / int(total))))
-    return f'<span class="bar"><i class="{"" if solid else "part"}" style="width:{pct}%"></i></span>'
 
 
 def _plans_empty_html():
@@ -3662,9 +3633,9 @@ DUE_JS = r"""
         }
       }
     }
-    var m = w.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)$/);
+    var m = w.match(/^([0-9]{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)$/);
     if (m && month(m[2])) { return onOrAfter(today, month(m[2]), +m[1]); }
-    m = w.match(/^([a-z]{3,9}\.?) (\d{1,2})(?:st|nd|rd|th)?$/);
+    m = w.match(/^([a-z]{3,9}\.?) ([0-9]{1,2})(?:st|nd|rd|th)?$/);
     if (m && month(m[1])) { return onOrAfter(today, month(m[1]), +m[2]); }
     return null;
   }

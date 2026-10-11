@@ -10,7 +10,6 @@ export const KNOWS_PER_SYNC = 2000;
 export const KNOWS_MAX = 100000;  // a person's cards "down": a big shared deck has ~35,000 notes
 export const TIPS_MAX = 5000;     // tips a person keeps on cards
 export const STUCK_MAX = 300;
-export const TIP_MAX = V.NOTE_MAX;
 const CHUNK = 90;           // D1: at most 100 bound parameters a statement
 const LOG_DAYS = 400;      // days one sync carries
 const LOG_KEEP = 15 * 366;  // 3.7.1: days kept, so a year card reaches back (the history import)

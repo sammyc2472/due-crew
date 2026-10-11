@@ -103,6 +103,16 @@ describe("3.5.0: my accent on the site", () => {
   });
 });
 
+describe("3.8.0: the site's today is my Anki day", () => {
+  it("/auth/me carries the hour my day rolls over once my add-on has said it", async () => {
+    const { person } = await import("./helpers");
+    const sam = await person("sam");
+    expect((await sam.call("GET", "/auth/me")).body.rollover).toBeUndefined();
+    expect(await sam.status("POST", "/sync", { profile: { tz: -240, rollover: 4 } })).toBe(200);
+    expect((await sam.call("GET", "/auth/me")).body.rollover).toBe(4);
+  });
+});
+
 describe("where I'm signed in (S6)", () => {
   it("counts computers and browsers, mine only", async () => {
     const maya = await person("maya");

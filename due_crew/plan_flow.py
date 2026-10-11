@@ -67,8 +67,25 @@ def _pcfg():
         _psave(data)
     except Exception:
         data = {}
+        _set_aside(path)
     _store.update(profile=key, data=data)
     return data
+
+
+def _set_aside(path):
+    """3.8.0: a plans.json that won't read is moved aside, not written
+    over: it lists the cards a plan held back, which nothing else does.
+    Said once, when it happens."""
+    bad = path + ".bad"
+    n = 2
+    while os.path.exists(bad):
+        bad, n = f"{path}.bad{n}", n + 1
+    try:
+        os.replace(path, bad)
+    except OSError:
+        return
+    tooltip(f"Due Crew couldn't read this profile's plan file, so it's kept as {os.path.basename(bad)}.",
+            period=8000)
 
 
 def _psave(data):
