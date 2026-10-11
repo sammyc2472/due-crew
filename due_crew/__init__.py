@@ -16,7 +16,6 @@ squad board each fetch their own, when someone looks.
 
 import datetime
 import html
-import json
 import re
 import threading
 import time
@@ -916,15 +915,7 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = """
-    (function() {
-        var el = document.getElementById('due-crew');
-        if (!el) { return; }
-        var tmp = document.createElement('div');
-        tmp.innerHTML = %s;
-        el.parentNode.replaceChild(tmp.firstElementChild, el);
-    })();
-    """ % json.dumps(html_out) + board.keep_me_in_view_js()
+    js = board.swap_js(html_out) + board.keep_me_in_view_js()  # 3.8.0: no jumps under the pointer
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))

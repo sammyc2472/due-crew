@@ -7427,6 +7427,24 @@ def test_due_repeat_site_twin():
           "(x) => x && (dueRepeats(x) || !x.done)" in js and "!(set.due_ticks || {})[x.id]" not in js)
 
 
+def test_no_jumps_v380():
+    """3.8.0: a redraw under the pointer doesn't make the You box or the board
+    shorter (each holds its height until the pointer leaves); a part still
+    fetching holds it either way; Hide folds at once. _swap draws through it."""
+    js = board.swap_js('<div id="due-crew">x</div>')
+    init_src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    check("no jumps: _swap redraws through swap_js", "board.swap_js(html_out)" in init_src and "replaceChild" in js)
+    check("no jumps: held while the pointer is on it, released when it leaves, never a folded box",
+          "matches(':hover')" in js and "mouseleave" in js and "du-one" in js and "boxSizing = 'border-box'" in js
+          and "minHeight = '0px'" in js)
+    check("no jumps: a fetching part holds its height", ".dc-wait" in js)
+    css = board.DUE_CSS
+    check("no jumps: the box's rows stay at the top when it's held", "display: grid; gap: 6px; align-content: start;" in css)
+    html = board.render({"entries": [], "labels": [], "tomorrow": "", "pending": []}, {"period": "squads"}, 0,
+                        squad_view={"state": "loading"})
+    check("no jumps: Squads' Fetching is marked as waiting", "dc-wait" in html and "Fetching&hellip;" in html)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

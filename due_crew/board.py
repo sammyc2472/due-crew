@@ -482,6 +482,8 @@ def _css(cfg):
     #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
     #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
     #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
+    /* 3.8.0: a part held at its height while the pointer is on it (swap_js) eases back after */
+    #due-crew > .du, #due-crew .dc-sheet {{ transition: min-height .2s ease-out; }}
     /* the deck screen is shared with Anki's own styles (26.x paints
        `.fancy table` with a glass fill) and other add-ons' CSS. None of
        them may redecorate this board: no borders, shadows, radii, or fills
@@ -1133,6 +1135,42 @@ def _scroll(html, rows):
     return f'<div class="dc-scroll">{html}</div>' if rows > ROW_CAP else html
 
 
+def swap_js(html_out):
+    """3.8.0: the board redrawn in place, without the jumps. While the
+    pointer is on Due Crew (a tab clicked, a row ticked), neither part (the
+    You box, the board) gets shorter: each keeps its height until the
+    pointer leaves, then eases back. A part still fetching (.dc-wait) keeps
+    its height either way; a box folded by Hide folds at once."""
+    return """
+    (function() {
+        var el = document.getElementById('due-crew');
+        if (!el) { return; }
+        var parts = [':scope > .du', '.dc-sheet'], was = {};
+        var on = el.matches(':hover');
+        parts.forEach(function (s) { var p = el.querySelector(s); if (p) { was[s] = p.getBoundingClientRect().height; } });
+        var tmp = document.createElement('div');
+        tmp.innerHTML = %s;
+        var nu = tmp.firstElementChild;
+        el.parentNode.replaceChild(nu, el);
+        var held = [];
+        parts.forEach(function (s) {
+            var p = nu.querySelector(s);
+            if (!p || !was[s] || p.classList.contains('du-one')) { return; }
+            if ((on || p.querySelector('.dc-wait')) && p.getBoundingClientRect().height < was[s] - 1) {
+                p.style.boxSizing = 'border-box';
+                p.style.minHeight = was[s] + 'px';
+                held.push(p);
+            }
+        });
+        if (held.length) {
+            nu.addEventListener('mouseleave', function () {
+                held.forEach(function (p) { if (!p.querySelector('.dc-wait')) { p.style.minHeight = '0px'; } });
+            });
+        }
+    })();
+    """ % _json.dumps(html_out)
+
+
 def keep_me_in_view_js():
     """Run after the board is drawn or swapped: a capped view starts with
     your own row in view, wherever it ranks. Nothing happens under the
@@ -1446,7 +1484,7 @@ def _plan_squad_html(pid, tabs):
         if st == "failed":
             return (f'<div class="tq0">Couldn&rsquo;t reach Due Crew. '
                     f'<a href="#" onclick="{_pycmd(f"planteamretry:{pid}")}">Try again</a></div>')
-        return '<div class="tq0">Fetching&hellip;</div>'
+        return '<div class="tq0 dc-wait">Fetching&hellip;</div>'
     if not v.get("on"):
         n = int(v.get("count") or 0)
         return (f'<div class="tjoin"><b>{f"{n} in its squad" if n else "No one in its squad yet"}</b>'
@@ -2099,7 +2137,7 @@ def _squads_html(view, cfg):
     if state == "none":
         return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
     if state == "loading":
-        return sw + '<div class="dc-line">Fetching&hellip;</div>'
+        return sw + '<div class="dc-line dc-wait">Fetching&hellip;</div>'
     if state == "error":
         return (sw + '<div class="dc-line">Couldn&rsquo;t '
                 'load. Check your connection and Refresh.</div>')
@@ -2337,7 +2375,8 @@ def bingo_html(bv, cfg, loading=False, team=False):
             else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>')
     if not bv:
         said = "Fetching&hellip;" if loading else "No card this week yet. Refresh brings it."
-        return head + f'<div class="bg-bar">{back}<b>Squad bingo</b></div><div class="bg-q">{said}</div></div>'
+        return head + (f'<div class="bg-bar">{back}<b>Squad bingo</b></div>'
+                       f'<div class="bg-q{" dc-wait" if loading else ""}">{said}</div></div>')
     card, ev = bv["card"], bv["ev"]
     names, me = bv.get("names") or {}, bv.get("me")
     progress = bv.get("progress") or []
@@ -3521,7 +3560,7 @@ def profile_overlay_js(profile):
 
 DUE_CSS = """
     #due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px; margin: 0 0 14px;
-      display: grid; gap: 6px; }
+      display: grid; gap: 6px; align-content: start; }
     #due-crew .du > * { min-width: 0; }
     #due-crew .du a { text-decoration: none; }
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
