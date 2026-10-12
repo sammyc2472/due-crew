@@ -7260,6 +7260,11 @@ def test_insights_379():
     check("you › insights: my exam date shows in it, on every deck",
           'value="2026-11-30"' in mine and 'class="dc-sw"' in mine and "setexam" in yh
           and 'value=""' in board._you_insights(dict(ins, plan=None, exam='"><img x>')))
+    check("you › insights: 3.8.0 (Sam), one deck still says its name; no date, Add exam date opens the picker",
+          '<b class="ideck" title="Step 1">Step 1</b>' in lone and ">Add exam date</a>" in lone and "showPicker()" in lone
+          and "setexam:off" not in lone)
+    check("you › insights: a date set reads as the day, with × to take it off",
+          ">Exam Mon 30 Nov</a>" in mine and "duecrew:setexam:off" in mine and "Add exam date" not in mine, mine[:900])
     check("you › insights: no decks reviewed yet", "Insights fill in" in board._you_insights({"decks": []}))
     # ---- the glue, on a collection ----
     conn = sqlite3.connect(":memory:")

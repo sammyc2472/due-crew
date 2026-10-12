@@ -657,7 +657,12 @@ def _css(cfg):
     #due-crew .tm.s2 {{ background: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
     #due-crew .tm.s1 {{ background: color-mix(in srgb, var(--dc-accent) 25%, var(--dc-bg)); }}
     #due-crew .tm.s0, #due-crew .sw.s0 {{ background: var(--dc-hours); color: var(--dc-bg); }}
-    #due-crew .iexam {{ display: inline-flex; align-items: baseline; gap: 6px; }}
+    #due-crew .iexam {{ position: relative; display: inline-flex; align-items: baseline; gap: 2px; }}
+    #due-crew .iexam .q {{ color: var(--dc-muted); font-weight: 400; padding: 0 2px; }}
+    #due-crew .iexam input.ixd {{ position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0;
+      pointer-events: none; }}
+    #due-crew .ideck {{ font-size: 13px; color: var(--dc-ink); }}
+    #due-crew .ideck + .ictx {{ margin-left: auto; }}
     #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
       border-radius: 6px; padding: 1px 4px; margin: 0; color-scheme: light dark; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
@@ -1634,16 +1639,27 @@ def _you_insights(ins):
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
     did = int(ins.get("did") or decks[0]["did"])
     on = ' class="on"'
-    pick = ("" if len(decks) < 2 else '<div class="dc-sw">' + "".join(
-        f'<a{on if int(d["did"]) == did else ""} href="#" title="{e(str(d.get("full") or d["name"]))}" '
-        f'onclick="{_pycmd("insdeck:" + str(int(d["did"])))}">{e(str(d["name"]))}</a>' for d in decks) + "</div>")
-    # 3.8.0: my exam date, set right here (Settings has the same one); a plan's
-    # event sooner aims the box instead, and says its name
+    cur = next((d for d in decks if int(d["did"]) == did), decks[0])
+    # 3.8.0 (Sam): the deck's name always shows: one deck, its name; more, the picker
+    pick = (f'<b class="ideck" title="{e(str(cur.get("full") or cur["name"]))}">{e(str(cur["name"]))}</b>'
+            if len(decks) < 2 else '<div class="dc-sw">' + "".join(
+                f'<a{on if int(d["did"]) == did else ""} href="#" title="{e(str(d.get("full") or d["name"]))}" '
+                f'onclick="{_pycmd("insdeck:" + str(int(d["did"])))}">{e(str(d["name"]))}</a>' for d in decks) + "</div>")
+    # 3.8.0: my exam date, set right here (Settings has the same one): a link, Add exam
+    # date, that opens the date picker; once set, the day itself, with × to take it off
     ex = str(ins.get("exam") or "")
     ex = ex if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", ex) else ""
-    ctx = (f'<label class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">Exam '
-           f'<input type="date" value="{e(ex)}" aria-label="Exam date" '
-           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));"></label>')
+    try:
+        x = _dt.date.fromisoformat(ex) if ex else None
+    except ValueError:
+        x, ex = None, ""
+    said = f"Exam {x:%a} {x.day} {x:%b}" if x else "Add exam date"
+    off = (f' <a class="q" href="#" title="Take your exam date off" aria-label="Take your exam date off" '
+           f'onclick="{_pycmd("setexam:off")}">&times;</a>' if x else "")
+    ctx = (f'<span class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">'
+           f'<a href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">{said}</a>'
+           f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
+           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));">{off}</span>')
     head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
     return head + _insights_html(did, ins.get("view") or {})
 

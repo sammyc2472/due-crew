@@ -945,6 +945,10 @@ every release that changes how something works.
   event counts its prep dates' cards; my exam, the whole deck), Not
   sticking yet names the plan's dates, the week counts its dates, and
   Behind has Catch up.
+  Its head (Sam: "the exam thing … looks bad"; "the overall deck name
+  doesn't show"): the deck's name always shows (one deck, its name; more,
+  the picker), and the exam date is a link, Add exam date, that opens the
+  date picker; once set it reads "Exam Mon 30 Nov" with × to take it off.
   One Study (3.8.0, Sam: "a ton of study buttons that all do the same
   thing"): the box's Study today, on its folded line too; the Study › on a
   plan's date and on Behind, and the misses suggestion, went (they're the
