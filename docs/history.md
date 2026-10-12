@@ -1014,6 +1014,17 @@ every release that changes how something works.
   7 added up (`board.squad_week`, its twin `squadWeek` in app.js), on
   both sides, in the show-up view too. Totals only: nobody's ahead of
   anybody. Nothing new is sent or fetched: it's the rows' week.
+  The board's head, option B (3.8.0, Sam's pick of four on the spec:
+  "lots of dead white space"): Crew's views (Today · Week · Decks) sit in
+  the table's top-left corner, where the header was empty
+  (`board._corner`), and a squad's names in its table's. What that
+  corner held goes under the table: show-up mode's "N showed up today",
+  a squad's headline, then its week and its bingo card. Decks has no
+  table, so its picker has a line of its own with the key at its right
+  (under the bars when asks come between). With no table (nobody synced,
+  loading, a plan's squad) a squad's names stay on top. The same on the
+  site (`corner` in app.js). Crew and Share in the footer lost their
+  carets (Sam), on both sides.
   A plan's weekly lines (3.8.0, Sam's pick: "every Fri: practice
   questions"): the doc's `every`, a date's line with its weekdays (six at
   most; `plans.ts` todoLine, `fakes.FakeWorker`, `shapes.clean_plan_doc`).

@@ -6190,7 +6190,7 @@ def test_crew_menu_pictures():
         dc._share_menu = saved
         au.openLink = saved_link
     page = board.settings_html({"tab": "privacy", "signed_in": True}, {})
-    check("footer's Share ▾ and Privacy's What Due Crew keeps reach their handlers (3.7.1, D3)",
+    check("footer's Share and Privacy's What Due Crew keeps reach their handlers (3.7.1, D3)",
           got[0] == "share" and got[1].endswith("/privacy") and "duecrew:privacypage" in page, got)
 
 
@@ -7816,6 +7816,100 @@ def test_site_audit_v380():
     idx = open(os.path.join(REPO, "site", "public", "index.html"), encoding="utf-8").read()
     check("site audit: the landing picture has its dark one", 'srcset="/board-dark.png" media="(prefers-color-scheme: dark)"' in idx
           and os.path.exists(os.path.join(REPO, "site", "public", "board-dark.png")))
+
+
+def test_head_row_b_v380():
+    """3.8.0, head row B (Sam's pick, from the spec's four): Crew's views sit
+    in the table's top-left corner, where the header was empty, and a
+    squad's names in its table's; what was in that corner (show-up mode's
+    "N showed up today", a squad's headline) goes under the table, and the
+    bingo card under that. Decks has no table: its picker has a line of its
+    own with the key at the right. The site draws the same (the twin).
+    Crew and Share in the footer lose their carets (Sam)."""
+    import re as _re
+    T0 = TODAY.isoformat()
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    me = {"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "",
+          "days": {T0: {"reviews": 5, "studied": True}},
+          "decks": [{"name": "Step <1>", "sig": ["a", "b"], "total": 100, "seen": 40, "mature": 20}]}
+    dre = {"user_id": "dre", "name": "Dre", "you": False, "paused": False, "last_updated": "",
+           "days": {T0: {"reviews": 9, "studied": True}},
+           "decks": [{"name": "Step 1", "sig": ["a"], "total": 100, "seen": 60, "mature": 30}]}
+    data = {"entries": [me, dre], "labels": labels, "tomorrow": ""}
+    corner = '<th class="lt dc-corner" colspan="2"><div class="dc-sw">'
+    today = board.render(data, {"period": "today"}, 0)
+    check("head row B: Crew's views in the header's corner, not a line above the table",
+          corner + '<a class="on" href="#" onclick="pycmd(\'duecrew:period:today\'); return false;">Today</a>' in today
+          and today.index(corner) > today.index("<table>") and "<th></th><th></th>" not in today
+          and today.count('<div class="dc-sw">') == 1)
+    week = board.render(data, {"period": "week"}, 0)
+    check("head row B: Week too, Week picked", corner in week
+          and '<a class="on" href="#" onclick="pycmd(\'duecrew:period:week\'); return false;">Week</a>' in week)
+    mode = board.render(data, {"period": "today", "show_up": True}, 0)
+    check("head row B: show-up mode's corner is the picker; who showed up today goes under the table",
+          corner in mode and '<div class="dc-line dc-sum">2 showed up today</div>' in mode
+          and mode.index("showed up today") > mode.index("</table>"), mode[-900:])
+    alone = board._presence_html([], [], labels, [])
+    check("head row B: with no picker the count keeps the corner",
+          '<th class="lt" colspan="2">0 showed up today</th>' in alone and "dc-sum" not in alone)
+    decks = board.render(data, {"period": "decks"}, 0)
+    line = _re.search(r'<div class="dc-pline">(.*?)</span></div>', decks)
+    check("head row B: Decks, the picker on a line of its own with the key at its right, the key once",
+          line is not None and "period:decks'); return false;\">Decks</a>" in line.group(1)
+          and '<span class="dkey">' in line.group(1) and decks.count('class="dkey"') == 1
+          and decks.index("dc-pline") < decks.index('class="dg"'))
+    pick = board._crew_picker("decks")
+    asks = board._decks_body(data, None, None, pick, '<div class="dc-flag">an ask</div>')
+    check("head row B: with asks between, the key stays under the bars",
+          '<div class="dc-pline">' + pick + "</div>" in asks and asks.count('class="dkey"') == 1
+          and asks.index("dkey") > asks.index('class="dg"') > asks.index("an ask"))
+    none = board._decks_body(dict(data, entries=[dict(me, decks=[])]), None, None, pick)
+    check("head row B: no shared decks, the picker and the way in, no key",
+          none.startswith('<div class="dc-pline">' + pick + "</div>") and "No shared decks yet" in none
+          and "dkey" not in none)
+    check("head row B: the old ways still draw (no picker)",
+          "dc-pline" not in board._decks_body(data) and 'class="dkey"' in board._decks_body(data)
+          and "<th></th><th></th>" in board._table_html(data, {}, "today"))
+    sq = {"state": "ok", "name": "<b>BUSM", "squads": [{"id": "x", "name": "<i>busm"}, {"id": "y", "name": "MS2"}],
+          "current": "x", "day": T0, "yesterday": "", "people": 2, "reviews": 40, "bingo": {"x": 1},
+          "rows": [{"user_id": "a", "name": "A", "day": T0, "reviews": 30, "week": 5, "you": True},
+                   {"user_id": "b", "name": "B", "day": T0, "reviews": 10, "week": 3}]}
+    saved = board.bingo_card_html
+    board.bingo_card_html = lambda v: '<div class="bg-card">BINGO</div>'
+    try:
+        html = board._squads_html(sq, {})
+        up = board._squads_html(sq, {"show_up": True})
+        empty = board._squads_html(dict(sq, rows=[]), {})
+    finally:
+        board.bingo_card_html = saved
+    check("head row B: a squad's names in its table's corner, escaped",
+          '<th class="lt dc-corner" colspan="2">' + board._switcher(sq) + "</th>" in html
+          and "&lt;i&gt;busm" in html and "<i>busm" not in html and not html.startswith('<div class="dc-sw">'))
+    check("head row B: the squad's headline, its week and its bingo card under the table, in that order",
+          html.index("</table>") < html.index("2 in &lt;b&gt;BUSM &middot; 2 studying today &middot; 40 reviews together")
+          < html.index("Last 7 days") < html.index("BINGO") < html.index("squadinvite"), html[-700:])
+    check("head row B: show-up mode the same, its own headline", "dc-corner" in up
+          and up.index("</table>") < up.index("2 in &lt;b&gt;BUSM &middot; 2 showed up today") and "&#128197; 7 days" in up)
+    check("head row B: no table (nobody synced), the names stay on top",
+          empty.startswith('<div class="dc-sw">') and "dc-corner" not in empty)
+    for st in ("none", "loading", "error"):
+        check(f"head row B: {st}, the names on top",
+              board._squads_html({"state": st, "squads": [{"id": "x", "name": "x"}]}, {}).startswith('<div class="dc-sw">'))
+    check("footer: Crew and Share without carets (Sam)",
+          "duecrew:crewmenu'); return false;\">Crew</a>" in today and "duecrew:sharemenu'); return false;\">Share</a>" in today
+          and "Crew &#9662;" not in today and "Share &#9662;" not in today)
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
+    check("head row B, the site's twin: the corner, the line under, Decks' line, the squads' corner, no carets",
+          'const corner = (picker) => h("th", { class: "lt corner", colspan: 2 }, picker);' in js
+          and 'picker ? corner(picker) : [h("th"), h("th")]' in js
+          and 'picker ? h("p", { class: "muted small sum" }, said) : null' in js
+          and 'h("div", { class: "pline" }, picker, mine.length ? key() : null)' in js
+          and ('h("thead", {}, h("tr", {}, corner(sw), heads)), h("tbody", {}, body))), '
+               'h("p", { class: "muted small sum" }, line), wkLine, bingo, foot)') in js
+          and "Board.decks(b.me, crew, b.decks || {}, t, picker)" in js and "Board.table(people, view, t, draw, picker)" in js
+          and "Board.presence(people, t, picker)" in js and "${label} ▾" not in js and '"Crew ▾"' not in js
+          and ".brdt th.corner {" in css and ".pline {" in css and "p.sum {" in css and "th.sqt" not in css)
 
 
 def test_squad_week_v380():

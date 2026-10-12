@@ -522,7 +522,7 @@ def _css(cfg):
     #due-crew .dc-scroll th {{ position: sticky; top: 0; z-index: 1;
       background: var(--dc-bg) !important; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
-    #due-crew th {{ padding: 2px 8px 6px; text-align: right; }}
+    #due-crew th {{ padding: 2px 8px 6px; text-align: right; white-space: nowrap; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
     #due-crew td {{ padding: {pad}px 8px; white-space: nowrap; }}
@@ -732,6 +732,18 @@ def _css(cfg):
     #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
     #due-crew .dc-sw a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
       background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
+    /* 3.8.0, head row B (Sam's pick): Crew's views, and a squad's names, in
+       the table's top-left corner; what was there goes under the table.
+       Decks has no table: its picker has a line of its own, with the key */
+    #due-crew th.dc-corner {{ text-align: left; white-space: normal; }}
+    #due-crew th.dc-corner .dc-sw {{ padding: 0; position: relative; top: 2px; }}
+    #due-crew th.dc-corner .dc-sw a {{ display: inline-block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted); }}
+    #due-crew th.dc-corner .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; }}
+    #due-crew th.dc-corner .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
+    #due-crew .dc-pline {{ display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 10px; text-align: left; }}
+    #due-crew .dc-pline .dc-sw {{ padding-bottom: 6px; }}
+    #due-crew .dc-pline .dkey {{ margin-left: auto; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .dc-sum {{ text-align: left; padding: 6px 8px 0; }}
     #due-crew .dc-card {{ padding: 16px; text-align: center;
       border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
@@ -993,6 +1005,12 @@ def _crew_picker(period, show_up=False, hidden=frozenset()):
         for k, t in views) + "</div>")
 
 
+def _corner(inner):
+    """3.8.0, head row B (Sam's pick): a picker in the table's top-left
+    corner, over the rank and the name, where the header was empty."""
+    return f'<th class="lt dc-corner" colspan="2">{inner}</th>'
+
+
 def _chip(row):
     """3.4 review, T1: the one thing beside a name, the most time-bound:
     a room or studying now, an exam within two weeks, back today, away,
@@ -1089,11 +1107,12 @@ def _row_html(row, rank, cfg, period="today"):
             f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 
 
-def _table_html(data, cfg, period):
+def _table_html(data, cfg, period, pick=""):
+    """pick: Crew's views (_crew_picker), in the header's corner."""
     sort = sort_key(cfg)
     fresh, dormant = build_rows(data["entries"], data["labels"],
                                 data.get("tomorrow", ""), period, cfg)
-    heads = "<th></th><th></th>"
+    heads = _corner(pick) if pick else "<th></th><th></th>"
     if sort == "week":
         sort = "reviews"
     for key, label in HEADERS:
@@ -1105,7 +1124,7 @@ def _table_html(data, cfg, period):
     if cfg.get("show_up"):
         fresh, dormant = build_rows(data["entries"], data["labels"],
                                     data.get("tomorrow", ""), "today", cfg)
-        return _presence_html(fresh, dormant, data["labels"], data["entries"])
+        return _presence_html(fresh, dormant, data["labels"], data["entries"], pick)
     body = ""
     n = 0  # show-up rows are counted, not ranked
     for row in fresh:
@@ -1281,11 +1300,12 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
             f'<span class="dc-count"><span>{counts}</span>{chip_html}</span></div>')
 
 
-def _presence_html(fresh, dormant, labels, entries):
+def _presence_html(fresh, dormant, labels, entries, pick=""):
     """The board in show-up mode: one view in place of Today and Week — a
     square per day, Monday to today, nothing to rank. Sorted by days showed
     up, then name; today is the last square, so who showed up today reads
-    off the right-hand column."""
+    off the right-hand column. pick: Crew's views, in the header's corner
+    (3.8.0), and "N showed up today" goes under the table."""
     days_of = {e["user_id"]: e.get("days") or {} for e in entries}
     week = list(reversed(week_labels(labels)))  # Monday first
     # sorted by what is on screen: squares lit this week, then name
@@ -1296,7 +1316,8 @@ def _presence_html(fresh, dormant, labels, entries):
     for lb in week:
         cls = "sqh on" if lb == labels[0] else "sqh"
         letters += f'<th class="{cls}">{"MTWTFSS"[datetime.fromisoformat(lb).weekday()]}</th>'
-    heads = f'<th class="lt" colspan="2">{today_n} showed up today</th>{letters}'
+    said = f"{today_n} showed up today"
+    heads = (_corner(pick) if pick else f'<th class="lt" colspan="2">{said}</th>') + letters
     body = ""
     for row in fresh + dormant:
         name = _label(row["name"], row.get("emoji"))
@@ -1320,7 +1341,8 @@ def _presence_html(fresh, dormant, labels, entries):
             for lb in week)
         body += (f'<tr class="{cls.strip()}"><td class="rk"></td>'
                  f'<td class="nm">{name}{note}</td>{cells}</tr>')
-    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+    return (_scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+            + (f'<div class="dc-line dc-sum">{said}</div>' if pick else ""))
 
 
 def _tricky_html(tricky, mine=None):
@@ -1364,8 +1386,8 @@ def _tricky_html(tricky, mine=None):
     return out
 
 
-def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=None):
-    return _tricky_html(tricky, mine) + _decks_body(data, deltas, sticking)
+def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=None, pick=""):
+    return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine))
 
 
 def _plans_html(plans):
@@ -2171,14 +2193,23 @@ def _offer_banners(offers):
     return out
 
 
-def _decks_body(data, deltas=None, sticking=None):
+# 3.7.1, I6: a key drawn like the bars, no words about hovering
+_DKEY = '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span>'
+
+
+def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
+    """Crew › Decks: pick (Crew's views) on a line of its own, the key at its
+    right when the bars come next (3.8.0, head row B); asks, the cards asked
+    about, between them and the bars, with the key under the bars."""
     deltas = deltas or {}
     labels = data.get("labels") or []
     # a friend ahead of my timezone writes my "tomorrow" as their today
     today_labels = tuple(lb for lb in (labels[0] if labels else "", data.get("tomorrow")) if lb)
     groups, extras = build_deck_groups(data["entries"])
+    up = bool(pick) and not asks and bool(groups)
+    top = f'<div class="dc-pline">{pick}{_DKEY if up else ""}</div>' if pick else ""
     if not groups and not extras:
-        return ('<div class="dc-line">No shared decks yet. '
+        return (top + asks + '<div class="dc-line">No shared decks yet. '
                 f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
     html = ""
     for g in groups:
@@ -2193,10 +2224,9 @@ def _decks_body(data, deltas=None, sticking=None):
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
-    html += ('<div class="dc-line" style="padding-top: 2px;">'
-             # 3.7.1, I6: a key drawn like the bars, no words about hovering
-             '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span></div>')
-    return html
+    if groups and not up:
+        html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
+    return top + asks + html
 
 
 SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
@@ -2239,7 +2269,7 @@ def _squad_week_line(rows):
     days, people = squad_week(rows)
     if people < 2:
         return ""
-    return f'<div class="dc-line sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
+    return f'<div class="dc-line dc-sum sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
 
 
 def _squads_html(view, cfg):
@@ -2290,9 +2320,9 @@ def _squads_html(view, cfg):
     if live:
         headline += (f' &middot; {len(live):,} studying today &middot; '
                      f'{int(view.get("reviews") or 0):,} reviews together')
-    # the squad head is rebuilt below when show-up mode is on
-    heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
-             f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
+    # 3.8.0, head row B: the squads' names in the table's corner, the
+    # headline under it (rebuilt below when show-up mode is on)
+    heads = _corner(sw)
     for key, label in SQUAD_HEADERS:
         on = "on" if key == sort else ""
         arrow = " &#9662;" if key == sort else ""
@@ -2302,11 +2332,10 @@ def _squads_html(view, cfg):
     numberless = lambda r: all(r.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if show_up:
         live.sort(key=lambda r: (-(r.get("week") or 0), r["name"].lower()))
-        heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
-                 f'<span style="color: var(--dc-muted); font-size: 11px;">{people:,} in {name}'
-                 + (" &middot; locked" if view.get("open") is False else "")
-                 + (f" &middot; {len(live):,} showed up today" if live else "") + "</span></th>"
-                 '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
+        headline = (f'{people:,} in {name}' + (" &middot; locked" if view.get("open") is False else "")
+                    + (f" &middot; {len(live):,} showed up today" if live else ""))
+        heads = (_corner(sw) + '<th><span style="color: var(--dc-muted); font-size: 11px; '
+                 'font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
     n = 0
     folded = False
@@ -2378,8 +2407,9 @@ def _squads_html(view, cfg):
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
-    return (sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
-            + _squad_week_line(rows) + foot)
+    # the bingo card under the table, the names it's for being in its corner
+    return (_scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
+            + f'<div class="dc-line dc-sum">{headline}</div>' + _squad_week_line(rows) + bingo + foot)
 
 
 # ---- 3.6: squad bingo ----
@@ -2622,14 +2652,14 @@ def _review_banner(kind, info):
 
 
 def crew_menu_items():
-    """The footer's Crew ▾ (3.4 review, H5; 3.7.1, H3): people only, the
-    same on every tab. What you post went to Share ▾."""
+    """The footer's Crew menu (3.4 review, H5; 3.7.1, H3): people only, the
+    same on every tab. What you post went to Share."""
     return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
             ("Shared decks…", "decks")]
 
 
 def share_menu_items(show_up, squad_ok=False):
-    """The footer's Share ▾ (3.7.1, H3), as [(label, command)], a label of
+    """The footer's Share menu (3.7.1, H3), as [(label, command)], a label of
     None being a heading: as text first, then as a picture, the same on
     every tab. Today's numbers aren't offered in just-show-up mode."""
     items = [(None, "As text")]
@@ -2704,10 +2734,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
         period = "today"  # a saved Plans (before 3.8.0) or a hidden view: Crew's Today
     show_up = bool(cfg.get("show_up"))
     pick = "" if period == "squads" else _crew_picker(period, show_up, hidden)
-    body = (pick + _decks_html(data, deltas, tricky, None, asks, sticking) if period == "decks"
+    body = (_decks_html(data, deltas, tricky, None, asks, sticking, pick) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
-            else pick + _table_html(data, cfg, period))
+            else _table_html(data, cfg, period, pick))
     # 3.4 review, H6: one banner at a time, the most time-bound first; the
     # rest wait behind "1 of N ›". The admin's notice and my own room stay.
     bans = []
@@ -2798,9 +2828,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             left += (f'<a href="#" title="Rounds and breaks with your crew" '
                      f'onclick="{_pycmd("roomopen")}">Open a room</a>')  # 3.8.0: one pill in the footer
     left += (f'<a href="#" title="Friends" '
-             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>'
+             f'onclick="{_pycmd("crewmenu")}">Crew</a>'  # 3.8.0 (Sam): no caret
              f'<a href="#" title="As text or a picture" '
-             f'onclick="{_pycmd("sharemenu")}">Share &#9662;</a>')
+             f'onclick="{_pycmd("sharemenu")}">Share</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
         left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '

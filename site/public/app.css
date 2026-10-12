@@ -173,7 +173,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .key .k-plan { border-top: 2px dashed var(--muted); }
 .rail .prow { grid-template-columns: 1fr; gap: 4px; margin-bottom: 10px; }
 .rail .prow .bar { width: 100%; }
-.brdt th.sqt { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); white-space: normal; }  /* a squad's own line; .sqh is a day's letter */
 .sqb + .sqb { margin-top: 18px; }
 @media (max-width: 560px) {
   .brdt td.nm { white-space: normal; overflow: visible; min-width: 100px; }
@@ -703,7 +702,17 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
 .sqsw .linkish { color: var(--muted); font-weight: 600; border-radius: 0; padding-bottom: 3px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sqsw .linkish.on { color: var(--ink); text-decoration: none; box-shadow: inset 0 -2px var(--accent); }  /* board.py .dc-sw, 3.8.0 */ .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
-.sqwk { text-align: center; margin: 8px 0 0; }  /* 3.8.0: the squad's week, totals only */
+.sqwk { margin: 4px 0 0; }  /* 3.8.0: the squad's week, totals only */
+/* 3.8.0, head row B (board.py .dc-corner): Crew's views, and a squad's names, in the
+   table's top-left corner; what was there goes under the table. Decks: a line of its own */
+.brdt th.corner { text-align: left; white-space: normal; font-weight: 400; }
+.brdt th.corner .sqsw { justify-content: flex-start; gap: 4px 14px; margin: 0; font-size: 13px; }
+.brdt th.corner .sqsw .linkish { font-size: 13px; font-weight: 600; }
+.brdt th.corner .sqsw .linkish.on { color: var(--ink); } .brdt th.corner .sqsw .linkish.add { color: var(--accent); }
+.pline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 6px; }
+.pline .sqsw { justify-content: flex-start; margin: 0; }
+.pline .dkey { margin-left: auto; font-size: 12px; color: var(--muted); }
+p.sum { text-align: left; margin: 6px 0 0; padding: 0 8px; }
 /* 3.8.0: a plan's squad on the Squads tab: who showed up, its bingo, then its questions */
 .psq { display: grid; gap: 12px; text-align: left; max-width: 680px; margin: 0 auto; }
 .psq > * { min-width: 0; }

@@ -952,11 +952,13 @@ const Board = (() => {
     return cell;
   }
 
-  function table(people, period, today, onSort) {
+  /** board._corner (3.8.0, head row B): a picker in the header's top-left corner. */
+  const corner = (picker) => h("th", { class: "lt corner", colspan: 2 }, picker);
+  function table(people, period, today, onSort, picker = null) {
     const kept = store("dc-sort") || "reviews";  // "week" is the squads' own column
     const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
     const [fresh, dormant] = rows(people, period, sort, today);
-    const head = h("tr", {}, h("th"), h("th"), HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
+    const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
     let n = 0;
     const tr = (r, rank) => {
@@ -992,8 +994,9 @@ const Board = (() => {
   }
 
   /** show-up mode, as _presence_html: a square a day, Monday to today,
-   *  nothing ranked; sorted by squares lit, then name. */
-  function presence(people, today) {
+   *  nothing ranked; sorted by squares lit, then name. picker: Crew's views
+   *  in the header's corner, "N showed up today" under the table. */
+  function presence(people, today, picker = null) {
     const mon = Sched.monday(today); const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
     const [fresh, dormant] = rows(people, "today", "reviews", today);
     const lit = (r) => wk.filter((l) => showed(dayOf(r.p.week || {}, l))).length;
@@ -1003,18 +1006,23 @@ const Board = (() => {
       : r.quiet ? (ago(r.last)[0] ? h("span", { class: "ago faded" }, ` (${ago(r.last)[0]})`) : null)
       : r.stale ? h("span", { class: "ago faded" }, " · yesterday")
       : r.away ? h("span", { class: "ago faded" }, ` ✈️ ${r.away}`) : null;
-    return h("div", { class: "scrollx" }, h("table", { class: "brdt" },
-      h("thead", {}, h("tr", {}, h("th", { class: "lt", colspan: 2 }, `${todayN} showed up today`), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
+    const said = `${todayN} showed up today`;
+    return h("div", {}, h("div", { class: "scrollx" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, picker ? corner(picker) : h("th", { class: "lt", colspan: 2 }, said), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
       h("tbody", {}, [...fresh, ...dormant].map((r) => h("tr", { class: [r.you ? "you" : "", r.paused || r.quiet || r.stale ? "dim" : ""].join(" ").trim() },
         h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name || "?"}`), note(r)),
-        wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); }))))));
+        wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); })))))),
+      picker ? h("p", { class: "muted small sum" }, said) : null);
   }
 
   /** The Decks tab, as _decks_body: a group per deck I share, my bar and
-   *  each crewmate's with the same deck. */
-  function decks(me, crew, decksBy, today) {
+   *  each crewmate's with the same deck. picker: Crew's views, on a line of
+   *  their own with the key at its right (3.8.0, head row B). */
+  function decks(me, crew, decksBy, today, picker = null) {
     const mine = decksBy[me.uid] || [];
-    if (!mine.length) return h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own.");
+    const key = () => h("span", { class: "dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked");
+    const top = picker ? h("div", { class: "pline" }, picker, mine.length ? key() : null) : null;
+    if (!mine.length) return h("div", {}, top, h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own."));
     const match = (a, b) => { const x = new Set(a.sig || []); return (b.sig || []).some((g) => x.has(g)); };
     const days = [today, addDays(today, 1)];
     const bar = (name, d, isMe) => {
@@ -1027,9 +1035,9 @@ const Board = (() => {
           h("i", { class: "fs", style: `width:${pct(d.seen)}%` }), h("i", { class: "fm", style: `width:${pct(d.mature)}%` })),
         h("span", { class: "n" }, h("span", {}, counts), d.today && days.includes(d.day) ? h("small", { class: "dd" }, `+${Number(d.today).toLocaleString()} today`) : null));
     };
-    return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
+    return h("div", {}, top, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
       bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
-      h("p", { class: "muted small dleg dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked"));
+      top ? null : h("p", { class: "muted small dleg" }, key()));
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
@@ -1139,10 +1147,11 @@ const Board = (() => {
     if (!body.length) return h("div", {}, sw, bingo, h("p", { class: "muted small" }, "No one’s synced yet."), foot);
     // 3.8.0: the squad's week, totals only, as board._squad_week_line
     const [wkDays, wkPeople] = squadWeek(rows);
-    const wkLine = wkPeople >= 2 ? h("p", { class: "muted small sqwk" }, "Last 7 days: ", h("b", {}, wkDays.toLocaleString()),
+    const wkLine = wkPeople >= 2 ? h("p", { class: "muted small sum sqwk" }, "Last 7 days: ", h("b", {}, wkDays.toLocaleString()),
       ` study days between ${wkPeople.toLocaleString()} of you`) : null;
-    return h("div", {}, sw, bingo, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
-      h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))), wkLine, foot);
+    // 3.8.0, head row B: the squads' names in the table's corner, its line under it, then the bingo card
+    return h("div", {}, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, corner(sw), heads)), h("tbody", {}, body))), h("p", { class: "muted small sum" }, line), wkLine, bingo, foot);
   }
 
   function shareText(people, today) {
@@ -1205,8 +1214,8 @@ async function home() {
     }
     const picker = h("div", { class: "sqsw" }, views.map(([k, l]) =>
       h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));
-    if (view === "decks") return panel.replaceChildren(picker, Board.decks(b.me, crew, b.decks || {}, t));
-    panel.replaceChildren(...[picker, showUp ? Board.presence(people, t) : Board.table(people, view, t, draw), crew.length ? null : solo()].filter(Boolean));
+    if (view === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t, picker));
+    panel.replaceChildren(...[showUp ? Board.presence(people, t, picker) : Board.table(people, view, t, draw, picker), crew.length ? null : solo()].filter(Boolean));
   }
   // board.py C5: until a friend adds me back, the invite is the board
   function solo() {
@@ -1225,7 +1234,7 @@ async function home() {
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
     return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true)));
   }
-  // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
+  // board.py's footer: Crew (people) and Share (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
   const footLeft = h("span", { class: "fl" });
   const toCode = () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } };
@@ -1238,7 +1247,7 @@ async function home() {
       pop.style.left = `${btn.offsetLeft}px`;
       e.currentTarget.after(pop);
       setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
-    } }, `${label} ▾`);
+    } }, label);  // 3.8.0 (Sam): no caret, as in Anki
     return btn;
   }
   function drawFoot() {
@@ -1248,7 +1257,7 @@ async function home() {
       if (v === "Copy invite") return;
       updated.textContent = v; setTimeout(() => { updated.textContent = "Updated just now"; }, 2400);
     } })]);
-    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew ▾"; }, 2400); }]);
+    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew"; }, 2400); }]);
     const shareItems = [["As text"]];
     if (!showUp) shareItems.push(["My day", () => share(Board.shareText(people, t))]);
     shareItems.push(["Our week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
