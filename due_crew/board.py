@@ -1343,7 +1343,14 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS + MOTION_JS + FIND_JS
+    """ + DUE_JS + MOTION_JS + FIND_JS + MOTION_DRAWN
+
+
+# 3.8.0, round two: the board remembers what it said, so a draw anew (back
+# from a review, no swap) moves what changed while I was away (motion.js)
+MOTION_DRAWN = """
+try { if (window.dcMotion) { dcMotion.drawn(document.getElementById('due-crew')); } } catch (e) {}
+"""
 
 
 # a deck row without a "+N today" line holds its place, filled when another
@@ -3597,6 +3604,7 @@ def stranger_card_js(info):
             if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
         });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (inner, act_cmd, act_label, act_primary, extras_json)
 
@@ -3668,6 +3676,7 @@ def luck_card_js(name, lines):
         back.appendChild(card);
         back.addEventListener('click', function(e) { if (e.target === back) { back.remove(); } });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (title, items)
 
@@ -3920,6 +3929,7 @@ def profile_overlay_js(profile):
             if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
         });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (inner, act_label, act_primary, act_cmd)
 
@@ -3954,6 +3964,7 @@ DUE_CSS = """
     #due-crew .du-r .end { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 11.5px; }
     #due-crew .du-r .end .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
     #due-crew .du-go { color: var(--dc-accent); font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+    #due-crew .du-go .nm { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
     #due-crew .du-tag { color: var(--dc-muted); font-size: 11px; white-space: nowrap; }
     #due-crew .du-tag:hover { color: var(--dc-ink); }
     #due-crew .du-bx { box-sizing: border-box; width: 14px; height: 14px; border: 1.5px solid var(--dc-faded);
@@ -4327,6 +4338,13 @@ def _due_add(v, default):
 
 # 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
 STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
+def _study_to(v):
+    """3.8.0 (Board in Motion, 35): the deck Study today opens first, named
+    on the button (due_flow works it out from Anki's deck tree)."""
+    to = v.get("study_to")
+    return f' <span class="nm">{_html.escape(str(to))}</span>' if to else ""
+
+
 STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses ({STUDY_KBD})"
 
 
@@ -4360,7 +4378,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         bar = _wbar(done_n, total_n) if total_n else ""
         # 3.8.0: Study today walks the day (the plans' decks first), as the box's
         go = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">'
-              f'Study today &rsaquo;</a>' if v.get("study") else "")
+              f'Study today &rsaquo;{_study_to(v)}</a>' if v.get("study") else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
         if v.get("done"):
             # the day's done: what's next, in place of the bar
@@ -4386,7 +4404,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
-    study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;</a>'
+    study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;{_study_to(v)}</a>'
              if tab == "today" and v.get("study") else "")
     if v.get("done") and tab == "today":
         count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)

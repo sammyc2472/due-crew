@@ -48,7 +48,7 @@ from .stats.queries import StatsQueries
 from .ui import copy_text
 from . import account, bingo_flow, due_flow, plan_flow, rooms, together
 from . import cards as crew_cards
-from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
+from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
 _lock = threading.Lock()
@@ -577,8 +577,18 @@ def _sticking(c):
     return out
 
 
+def _arrive_js():
+    """3.8.0 (Board in Motion, 22): a friend arrives, said to the page once."""
+    try:
+        new = _arrivals(_state.get("entries"), client().user_id)
+    except Exception:
+        traceback.print_exc()
+        return ""
+    return "try{window.dcMotion&&dcMotion.arrive(%s);}catch(e){}" % board._json.dumps(new) if new else ""
+
+
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js())
+    mw.web.eval(board.keep_me_in_view_js() + _arrive_js())
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
@@ -924,7 +934,7 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = board.swap_js(html_out) + board.keep_me_in_view_js()  # 3.8.0: no jumps under the pointer
+    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()  # 3.8.0: no jumps under the pointer
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))

@@ -8385,7 +8385,7 @@ def test_board_motion_v380():
     check("motion: studying now breathes, and ↻ turns, only there", "dcbreathe 2.4s" in breathing and "dcspin" in breathing
           and "animation:" not in css[:css.index("@media (prefers-reduced-motion: no-preference)")].split("dcfall")[0].replace("animation: none", ""))
     sel = " ".join(re.findall(r'sel: "([^"]+)"', js)) + " " + " ".join(re.findall(r"closest\(['\"]([^'\"]+)['\"]\)", js))
-    site_only = {"pills", "sqsw", "bgmini", "bgt", "brd", "foot", "dc-panel", "st-tabs"}
+    site_only = {"pills", "sqsw", "bgmini", "bgt", "brd", "foot", "dc-panel", "st-tabs", "logo-inline"}
     names = sorted({c for c in re.findall(r"\.([a-z][a-z0-9-]*)", sel)} - site_only)
     drawn = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
     missing = [c for c in names if not re.search(r'class="[^"]*\b%s\b|class=\\?"[^"]*\b%s\b|\.%s\b' % (c, c, c), drawn)]
@@ -8404,6 +8404,129 @@ def test_board_motion_v380():
     check("motion: the open box says Done for today, as the folded line does; the foot's Updated is its own span",
           "&#10003; Done for today" in html and '<span class="upd">Updated ' in board.render(
               {"entries": [], "labels": [day], "tomorrow": "", "pending": []}, {}, 0), html[:600])
+
+
+def test_board_motion_round_two_v380():
+    """3.8.0, Board in Motion round two (all eighteen): the rules for what
+    leaves and what comes in, Settings sliding over the board, a profile out
+    of its name, and the memory that lets a board drawn anew (back from a
+    review) move what changed while I was away; the glue's parts: a friend
+    arriving once, Study today's next deck, Copied ✓ on the link itself."""
+    js = open(os.path.join(REPO, "due_crew", "motion.js"), encoding="utf-8").read()
+    for sel in ("th > a.on", ".dc-wrap", ".du-line", ".dc-room .fc > i", ".irow", ".tmap .tm", ".du-bh", ".du-go .nm"):
+        check(f"motion 2: a rule for {sel}", f'sel: "{sel}"' in js)
+    check("motion 2: what leaves comes back for a moment only where it sat, under the same heading, and never twice",
+          "function putBack(root, o, sel)" in js and "sig(p, sel) !== o.pc" in js and '"[data-dc-ghost]"' in js
+          and 'g.style.pointerEvents = "none"' in js and 'removeAttribute("id")' in js)
+    check("motion 2: a topic pushed out by another isn't 'sticking now'; a tab's own lines don't slide in",
+          'rule.leave.fx === "sticking" && fresh.irow' in js and '(x[0] === "wrap" || x[0] === "note" || x[0] === "face")' in js)
+    check("motion 2: the memory moves changes only (no tab, fold, map or enter), the same Anki day, a few hours at most",
+          "var MEMO = { tick: 1, bar: 1, text: 1, due: 1, row: 1, num: 1, pop: 1, stamp: 1, shout: 1, irow: 1, shade: 1 };" in js
+          and "snap.day === day(root) && snap.me === me(root) && Date.now() - snap.t < 3 * 3600 * 1000" in js
+          and "if (!cold && !snap.mem) entered.push" in js and "Date.now() - (M.swapped || 0) > 1000" in js)
+    keep = board.keep_me_in_view_js()
+    check("motion 2: every draw tells the memory, after the motion layer loads, and a fault never stops the board",
+          keep.endswith(board.MOTION_DRAWN) and "try { if (window.dcMotion) { dcMotion.drawn(document.getElementById('due-crew')); } } catch (e) {}"
+          in board.MOTION_DRAWN and keep.index(board.MOTION_JS) < keep.index(board.MOTION_DRAWN))
+    check("motion 2: Settings and the board slide past each other, as a page", 'if (snap.mode && snap.mode !== mode(root)) { turn(root, snap); return; }' in js)
+    for name, card_js in (("profile", board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": [1] * 14, "start": TODAY.isoformat()})),
+                          ("good-luck", board.luck_card_js("Marisa", [("Dre", "Go")])),
+                          ("stranger", board.stranger_card_js({"uid": "u2", "name": "Maya"}))):
+        check(f"motion 2: the {name} card opens through the motion layer (out of the name; every close goes back)",
+              card_js.count("dcMotion.open(back, card)") == 1
+              and card_js.index("document.body.appendChild(back);") < card_js.index("dcMotion.open(back, card)"))
+    check("motion 2: the card's close is its own remove, so ✕, Escape and a click outside all go back into the name",
+          "back.remove = function ()" in js and "Element.prototype.remove.bind(back)" in js)
+    from due_crew import due as D
+    day = TODAY.isoformat()
+    v = D.view(day, [], [], {}, reviews={"due": 30, "done": 5})
+    full = board._due_html(dict(v, study_to="<Cardio>"))
+    one = board._due_html(dict(v, study_to="<Cardio>", folded=True))
+    check("motion 2: Study today names the deck it opens first, escaped, open or folded; none, no name",
+          'Study today &rsaquo; <span class="nm">&lt;Cardio&gt;</span>' in full and '<span class="nm">&lt;Cardio&gt;</span>' in one
+          and 'class="nm"' not in board._due_html(v), full[:400])
+    site = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
+    check("motion 2: duecrew.com's copies say Copied ✓ in place; the code's digits land; a year waves once a page",
+          "if (window.dcMotion) return dcMotion.copied(btn);" in site and "if (window.dcMotion) return dcMotion.copied(b);" in builder
+          and 'status.textContent = "Signed in ✓"' in site and "yearHeat.waved ||= new Set()" in site)
+    check("motion 2: a friend arrives on duecrew.com too, once each in this browser, never the first time",
+          "`dc-seen:${b.me.uid}`" in site and "if (Array.isArray(was))" in site)
+    wave = js[js.index("M.logo = function"):js.index("// 13: a cheer you send")]
+    check("motion 2: the logo does the wave: its studied days only, by a move alone (never a fill or a shape), once at a time",
+          'translateY(-15px)' in wave and "if (!off) anim(d," in wave and "fill" not in wave.split("if (!off) anim(d,")[1].split("i++;")[0]
+          and "setAttribute(\"fill\"" not in wave and ".style.fill" not in wave and 'svg.getAttribute("data-waving")' in wave)
+    check("motion 2: it waves on a hover, with the first board of the day, and when the day's done",
+          'closest("svg.dc-mark, svg.logo-inline")' in js and 'sessionStorage.getItem(MEM + ":logo") !== today' in js
+          and 'sweep(el); M.logo(el.closest("#due-crew, .brd") || document, 500);' in js)
+    check("motion 2: the plan calendar: ‹ › slide it, a moved date settles (its chips keyed by unit and source)",
+          '"data-k": c.u ?' in builder and "slid = k;" in builder
+          and 'M.moved(".cal2 .ch[data-k]", "data-k", was, slid, ".cal2", ".d")' in builder and "(slid || at === `${view}|${anchor}`)" in builder)
+
+
+def test_board_motion_round_two_glue_v380():
+    """3.8.0, Board in Motion round two, the add-on's part: a friend new to
+    this profile's board arrives once (wrap.json); Study today's first deck
+    comes from the deck tree the box already read; a copy tells the page."""
+    wrap = _patched_due_crew()
+    me = {"user_id": "me", "you": True}
+    ents = [me, {"user_id": "dre"}, {"user_id": "maya"}]
+    check("arrive: the first time, everyone's known already: nothing moves, all kept",
+          wrap._arrivals(ents, "me") == [] and wrap._wrap_data()["crew_seen"] == {"uid": "me", "seen": ["dre", "maya"]})
+    check("arrive: someone new, once; then not again", wrap._arrivals(ents + [{"user_id": "noah"}], "me") == ["noah"]
+          and wrap._arrivals(ents + [{"user_id": "noah"}], "me") == [])
+    check("arrive: under another account, it starts over without a fuss", wrap._arrivals(ents, "other") == []
+          and wrap._wrap_data()["crew_seen"]["uid"] == "other")
+    check("arrive: no board yet, or nobody signed in: nothing", wrap._arrivals(None, "me") == [] and wrap._arrivals(ents, "") == [])
+    check("arrive: an empty crew is still a first time, so the first friend arrives",
+          wrap._arrivals([{"user_id": "x", "you": True}], "x") == [] and wrap._arrivals([{"user_id": "x", "you": True}, {"user_id": "p"}], "x") == ["p"])
+    wrap._wrap_data()["crew_seen"] = {"uid": "me", "seen": [f"u{i}" for i in range(wrap.CREW_SEEN_MAX)]}
+    wrap._arrivals(ents, "me")
+    check("arrive: the list is capped, newest kept", len(wrap._wrap_data()["crew_seen"]["seen"]) == wrap.CREW_SEEN_MAX
+          and wrap._wrap_data()["crew_seen"]["seen"][-2:] == ["dre", "maya"])
+    import due_crew as dc
+    saved = (dc._arrivals, dc.client)
+    try:
+        dc._arrivals = lambda e, me: ["dre</script>"]
+        dc.client = lambda: types.SimpleNamespace(user_id="me")
+        got = dc._arrive_js()
+        check("arrive: the page is told by JSON, after the draw and after a swap",
+              got == 'try{window.dcMotion&&dcMotion.arrive(["dre</script>"]);}catch(e){}', got)
+        dc._arrivals = lambda e, me: []
+        check("arrive: nobody new, nothing said", dc._arrive_js() == "")
+    finally:
+        dc._arrivals, dc.client = saved
+    src = open(os.path.join(REPO, "due_crew", "__init__.py"), encoding="utf-8").read()
+    check("arrive: both draws carry it", "board.keep_me_in_view_js() + _arrive_js()" in src
+          and "board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()" in src)
+    from due_crew import due_flow as F
+    node = lambda did, n, kids=(): types.SimpleNamespace(deck_id=did, review_count=n, learn_count=0, new_count=0, children=list(kids))  # noqa: E731
+    tree = types.SimpleNamespace(children=[node(1, 5, [node(11, 3)]), node(2, 40)])
+    names = {1: "Big Step 1", 11: "Big Step 1::Cardio", 2: "Languages::Spanish"}
+    saved = (F._plan_decks, dc_mw().col)
+    try:
+        dc_mw().col = types.SimpleNamespace(decks=types.SimpleNamespace(name=lambda d: names[d]))
+        F._plan_decks = lambda: [11]
+        a = F._next_deck(tree)
+        F._plan_decks = lambda: []
+        b = F._next_deck(tree)
+        tree0 = types.SimpleNamespace(children=[node(1, 0), node(2, 0)])
+        c = F._next_deck(tree0)
+        check("study: the button names a plan's deck first (its last name), else the most due, else nothing",
+              (a, b, c) == ("Cardio", "Spanish", ""), (a, b, c))
+    finally:
+        F._plan_decks, dc_mw().col = saved
+    from due_crew import ui as U
+    said = []
+    saved = (U._clip, getattr(U.mw, "web", None))
+    try:
+        U._clip = lambda t: True
+        U.mw.web = types.SimpleNamespace(eval=said.append)
+        check("copied: a copy tells the page, which says Copied ✓ on the link clicked",
+              U.copy_text("hi") is True and said == ["try{window.dcMotion&&dcMotion.copied();}catch(e){}"], said)
+    finally:
+        U._clip = saved[0]
+        U.mw.web = saved[1]
 
 
 def test_why_not_showing_v380():

@@ -175,7 +175,8 @@ def _reviews():
         back, first = mw.col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
                                       now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
         t = time.localtime(int(first)) if back and first else None
-        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else ""}
+        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "",
+               "next": _next_deck(tree)}
         if back and first:
             _flip_at(int(first) - ahead)
     except Exception:
@@ -289,6 +290,7 @@ def view(c):
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
         v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
+        v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
     except Exception:
         traceback.print_exc()
         return None
@@ -698,7 +700,7 @@ def _plan_decks():
     return out
 
 
-def _due_now(col, dids):
+def _due_now(col, dids, tree=None):
     """{deck id: cards Anki would show now} for these decks and every top
     deck, from Anki's deck tree (its limits, its subdecks)."""
     out = {}
@@ -708,9 +710,21 @@ def _due_now(col, dids):
             out[int(node.deck_id)] = int(node.review_count) + int(node.learn_count) + int(node.new_count)
         for ch in node.children:
             walk(ch, False)
-    for ch in col.sched.deck_due_tree().children:
+    for ch in (tree or col.sched.deck_due_tree()).children:
         walk(ch, True)
     return out
+
+
+def _next_deck(tree):
+    """3.8.0 (Board in Motion, 35): the deck Study today opens first, its
+    last name, for the button; from the tree _reviews already read."""
+    try:
+        plan = _plan_decks()
+        step = D.study_next(plan, _due_now(mw.col, set(plan), tree), 0, True)
+        return str(mw.col.decks.name(int(step[1]))).split("::")[-1] if step else ""
+    except Exception:
+        traceback.print_exc()
+        return ""
 
 
 def _misses_today(col):

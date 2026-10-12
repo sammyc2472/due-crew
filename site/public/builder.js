@@ -754,6 +754,7 @@ async function builder(id) {
   }
   function step(k) {
     anchor = addDays(Sched.monday(anchor), (view === "week" ? 7 : 28) * k);
+    slid = k;
     draw();
   }
   function calTitle() {
@@ -790,6 +791,7 @@ async function builder(id) {
       const you = myLine(d);
       const chips = e.chips.map((c) => {
         const el = h("button", { class: `ch ${c.review ? "rv" : c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
+          "data-k": c.u ? `${c.u.id}:${c.key || c.search || (c.cards ? "cards" : c.ids ? "ids" : "")}` : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; moving = null; sideTab = "day"; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
@@ -867,7 +869,11 @@ async function builder(id) {
     // 3.8.0: a tag, subdeck or search, copied as a search for Anki's Browse
     const copySearch = (q) => h("button", { class: "linkish cps", title: `Copy ${q} to paste into Anki's Browse`, onclick: async (ev) => {
       const b = ev.currentTarget;
-      try { await navigator.clipboard.writeText(q); b.textContent = "Copied"; } catch { b.textContent = q; }
+      try {
+        await navigator.clipboard.writeText(q);
+        if (window.dcMotion) return dcMotion.copied(b);  // 3.8.0: Copied ✓ in place, then back
+        b.textContent = "Copied";
+      } catch { b.textContent = q; }
       setTimeout(() => { b.textContent = "Copy search"; }, 2000);
     } }, "Copy search");
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
@@ -1976,7 +1982,16 @@ async function builder(id) {
       h("p", { class: "muted small" }, "Following opens each date's cards in Anki on its day", plan.code ? ["; or in Anki, Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, plan.code)] : null, "."));
   }
 
+  // 3.8.0 (Board in Motion, 34): ‹ › slide the calendar; a date moved to another day settles there
+  let slid = 0;
   function draw() {
+    const M = window.dcMotion, at = `${view}|${anchor}`, was = M ? M.places(".cal2 .ch[data-k]", "data-k", ".d") : null;
+    drawNow();
+    // the same days on screen: a date moved to another settles; ‹ › slide; another view just draws
+    try { if (M && (slid || at === `${view}|${anchor}`)) M.moved(".cal2 .ch[data-k]", "data-k", was, slid, ".cal2", ".d"); } catch { /* drawn either way */ }
+    slid = 0;
+  }
+  function drawNow() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
     // the plan's name, edited in place: it wraps and grows, so a long name is never cut off
     function titleBox() {

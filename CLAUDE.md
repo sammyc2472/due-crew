@@ -193,7 +193,9 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   there (light, dark, narrow) before calling it done.
   `tools/motion_preview.py` plays each motion on the real board; a
   redraw's motion lives in `motion.js` (only what changed moves, nothing
-  with Reduce motion, no row ever slides past another).
+  with Reduce motion, no row ever slides past another; what leaves is put
+  back inert for a moment, and a full draw compares with the page's
+  session memory). The logo may move, never change: transforms only.
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went

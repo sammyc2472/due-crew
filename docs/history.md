@@ -1054,6 +1054,51 @@ every release that changes how something works.
   line draws in; studying now breathes (CSS, the one that moves on its
   own). Hints expire in 4 s. The site's board wraps its draw the same
   way. `tools/motion_preview.py` plays each one on the real board.
+  Board in Motion, round two (Sam picked all eighteen, and "a fun way to
+  animate the logo"). What leaves now goes visibly: `motion.js` keeps a
+  leaving thing's markup and place (`spot`: its path, its parent's class
+  and heading) and puts it back for a moment after the swap (`putBack`,
+  inert, ids stripped, never counted as there), then it folds and the
+  rest close up: a banner (a knock, a notice), a note under the box's
+  tabs, a face in the room's line (it shrinks out; a face joining comes
+  in from the right), a topic in Not sticking yet (its bars shrink, it
+  says "sticking now ✓", it folds; the last one brings its section back
+  with it; one pushed out by a new topic says nothing), and Behind ("Caught
+  up ✓", then gone). Only under the same tab and deck it left from
+  (`leave.ctx`), so switching tabs never reads as something going.
+  Settings and the board (and a bingo card) slide past each other, the
+  board easing to the new height; a sort washes its column green once;
+  a Streak cell that grew lets a 🔥 rise; a profile's card grows out of
+  the name clicked and goes back into it (the card's script calls
+  `dcMotion.open`, which makes its own `remove` the way back, so ✕,
+  Escape and a click outside all do); a year's squares fill in as a
+  wave, on a profile card and on duecrew.com's year; a plan week's bars
+  grow in when Plans opens; a map tile eases into its new shade, its %
+  counting there; a new note or banner opens into place; a bingo
+  square's rule rises in; a copy says "Copied ✓" on the link itself
+  (`ui.copy_text` tells the page, which knows the link clicked; the
+  site's copy buttons the same); duecrew.com's sign-in code lands digit
+  by digit and says "Signed in ✓"; the builder's calendar slides with ‹ ›
+  and a date dragged to another day settles there (chips keyed by unit
+  and source, `M.places`/`M.moved`). A friend arrives: the crew this
+  profile's board has drawn is kept in wrap.json (`crew_seen`, by
+  account, 300 at most; the first time, everyone's known); one new opens
+  in with a "new" chip for four seconds (`_arrive_js` after a draw or a
+  swap; the site keeps its own in the browser). Study today names the
+  deck it opens first ("Study today › Pharm", `due_flow._next_deck`,
+  from the deck tree the reviews count already read, so no new query).
+  And a memory: Anki draws the Decks screen anew after a review (no
+  swap), so `drawn()` (after every draw, `board.MOTION_DRAWN`) keeps
+  what the board said in the page's session storage, and the next full
+  draw on the same Anki day, within three hours, moves what changed while
+  I was away: ticks, bars, counts, the day done, a topic that started
+  sticking, Behind caught up (`MEMO`), never a tab, a fold or something
+  merely new on screen. The logo: the crew does the wave. Its six studied
+  days hop in turn and the day off sits it out ("a day off is fine"), by
+  a move alone, never a fill or a shape, so it always lands on the
+  artwork. It waves on a hover, with the first board of each Anki day and
+  when the day turns Done for today. All of it still stops with Reduce
+  motion (a Copied ✓ and a "new" chip still say so, without moving).
   One look for a set of cards (Sam: "the linked card sets appear
   differently on plan vs today/upcoming... pick one style and stick with
   it"): every link that opens cards in Browse (`a.tp`: a topic, "16

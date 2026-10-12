@@ -20,6 +20,20 @@ from ..backend.shapes import AuthError, TransportError
 
 
 def copy_text(text):
+    """Put text on the system clipboard (_clip), and say so on the board's
+    link that asked for it (3.8.0, Board in Motion 32: Copied ✓ in place;
+    the page knows which link was clicked, and a copy from a dialog finds
+    none and shows nothing)."""
+    ok = _clip(text)
+    try:
+        if mw.web:
+            mw.web.eval("try{window.dcMotion&&dcMotion.copied();}catch(e){}")
+    except Exception:
+        pass
+    return ok
+
+
+def _clip(text):
     """Put text on the system clipboard, emoji and all.
 
     Qt's macOS pasteboard also offers a legacy "traditional Mac plain text"

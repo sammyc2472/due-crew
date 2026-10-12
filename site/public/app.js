@@ -90,8 +90,11 @@ const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
 const uid8 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 
 async function copy(text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
-  catch { btn.textContent = "Select and copy"; }
+  try {
+    await navigator.clipboard.writeText(text);
+    if (window.dcMotion) return dcMotion.copied(btn);  // 3.8.0: Copied ✓ in place, then back
+    btn.textContent = "Copied";
+  } catch { btn.textContent = "Select and copy"; }
   setTimeout(() => { btn.textContent = "Copy"; }, 1600);
 }
 
@@ -258,11 +261,24 @@ function codeStep(address, next) {
     h("p", { class: "muted" }, "We sent a code to ", h("b", {}, address), ". It expires in 10 minutes."),
     h("label", { for: "code" }, "Code"), code,
     h("div", {}, h("button", { type: "submit" }, "Sign in")), status);
+  // 3.8.0 (Board in Motion, 33): each digit lands as it's typed or pasted; a check when the code's right
+  let digits = 0;
+  code.addEventListener("input", () => {
+    const n = code.value.replace(/\D/g, "").length;
+    if (n > digits) window.dcMotion?.anim(code, [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 140 });
+    digits = n;
+  });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     status.className = "status"; status.textContent = "Checking…";
     try {
       const r = await api("POST", "/auth/verify", { email: address, code: code.value.replace(/\D/g, ""), device: "duecrew.com", web: true });
+      status.className = "status good"; status.textContent = "Signed in ✓";
+      if (window.dcMotion?.ok()) {
+        status.style.display = "inline-block";
+        dcMotion.anim(status, [{ transform: "scale(.7)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: 0.6 }, { transform: "none" }], { duration: 260 });
+        await new Promise((ok) => setTimeout(ok, 420));
+      }
       if (r.new || !r.name) return nameStep(next);
       await whoami();
       go(next);
@@ -1294,6 +1310,12 @@ async function home() {
   };
   const followed = plansR.plans.filter((p) => p.following);
   await draw();
+  // 3.8.0 (Board in Motion, 22): a friend arrives, once each in this browser; the first time, everyone's known
+  try {
+    const k = `dc-seen:${b.me.uid}`, was = JSON.parse(localStorage.getItem(k) || "null"), now = crew.map((f) => f.uid);
+    if (Array.isArray(was)) { const fresh = now.filter((u) => !was.includes(u)); if (fresh.length) window.dcMotion?.arrive(fresh); }
+    localStorage.setItem(k, JSON.stringify([...new Set([...(Array.isArray(was) ? was : []), ...now])].slice(-300)));
+  } catch { /* no storage: nothing to say */ }
   const my = b.me.week?.days || {};
   // K1: my week as a picture; a number my Privacy switches keep home isn't in my week to draw.
   // K7: today's is the same card with today's numbers.
@@ -1672,6 +1694,9 @@ function yearHeat(days, y = null) {
     h("div", { class: "hg" }, cells)),
     h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
   if (!y || y === t.slice(0, 4)) setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
+  // 3.8.0 (Board in Motion, 28): the squares fill in, a quick wave to today, the first time each year shows
+  const seen = (yearHeat.waved ||= new Set());
+  if (!seen.has(y || "now")) { seen.add(y || "now"); requestAnimationFrame(() => window.dcMotion?.wave(wrap.querySelector(".hg"))); }
   // a day's numbers under the squares: on hover with a mouse, on a tap with a finger
   const read = h("div", { class: "hread", "aria-live": "polite" });
   const say = (d) => {

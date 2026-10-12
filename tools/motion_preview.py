@@ -1,4 +1,4 @@
-"""3.8.0, "Board in Motion": each motion on the real board, to look at.
+"""3.8.0, "Board in Motion" (both rounds): each motion on the real board, to look at.
 Draws a board, then swaps in the board after a change, as the add-on
 does (board.swap_js), so motion.js moves what changed.
 
@@ -73,16 +73,55 @@ S = {
                  "addlater"),
     "plans": (R(due=DV_BASE, plans=PV.PLANS, you=you("plans")), None, "day"),
 }
-out = {k: {"a": a, "swap": (B.swap_js(b) + B.keep_me_in_view_js()) if b else "", "hint": h} for k, (a, b, h) in S.items()}
+# round two (each a swap; a profile, a bingo square and the logo are buttons)
+from due_crew import room_model  # noqa: E402
+ins = lambda **kw: R(due=DV_BASE, plans=PV.PLANS, you=you("insights", insights=dict(PV._PLAN_INS, view=dict(PV._PLAN_INS["view"], **kw))))  # noqa: E731
+rows = PV._INS["rows"]
+mp = copy.deepcopy(PV._MAP)
+mp[1]["know"] = 84
+less = dict(PV.DATA, entries=[e for i, e in enumerate(PV.DATA["entries"]) if i != 3])
+
+
+def roomed(ix):
+    ents = [dict(e, room=PV._room) if i in ix or e["you"] else e for i, e in enumerate(PV.DATA["entries"])]
+    return R(dict(PV.DATA, entries=ents), room=room_model.board_view(PV._room, ents))
+
+
+base = R(due=DV_BASE, you=you("today"))
+toast = dict(DV_BASE, toast={"text": "Added for Thursday", "tab": "upcoming"})
+SETTINGS = B.settings_html(dict(PV.SET_VIEW, tab="you"), PV.SET_CFG)
+S.update({
+    "settings": (base, SETTINGS, None), "setback": (SETTINGS, base, None),
+    "sort": (R(cfg={"period": "today", "sort": "reviews"}), R(cfg={"period": "today", "sort": "time"}), None),
+    "streak": (R(), R(bump(PV.DATA, "Dre", streak=42)), None),
+    "arrive": (R(less), R(), "arrive:" + json.dumps([PV.DATA["entries"][3]["user_id"]])),
+    "knockin": (R(), R(knocks=PV.KNOCKS), None), "knockout": (R(knocks=PV.KNOCKS), R(), None),
+    "roomjoin": (roomed((1, 2)), roomed((1, 2, 3)), None), "roomleave": (roomed((1, 2, 3)), roomed((1, 2)), None),
+    "planweek": (base, R(due=DV_BASE, plans=PV.PLANS, you=you("plans")), None),
+    "sticking": (ins(), ins(rows=rows[1:]), None), "sticklast": (ins(rows=rows[:1]), ins(rows=[]), None),
+    "shade": (ins(), ins(map=mp), None),
+    "caught": (base, R(due=dict(DV_BASE, behind_n=0, behind_plans=[], behind_mine=[]), you=you("today")), None),
+    "notein": (base, R(due=toast, you=you("today")), None), "noteout": (R(due=toast, you=you("today")), base, None),
+    "studyto": (R(due=dict(DV_BASE, study_to="Pharm"), you=you("today")), R(due=dict(DV_BASE, study_to="Renal"), you=you("today")), None),
+})
+out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js()) if b else "")
+           + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
 NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for today", "add": "4 A to-do lands (today)",
          "addlater": "4 A to-do lands (another day)", "learn": "5 Learning back, flagged", "fold": "6 Hide", "unfold": "6 Show",
          "duetabs": "7 Tabs: You", "pills": "7 Tabs: Crew to Squads", "views": "7 Tabs: Today to Week",
          "plans": "8 The plan week: a day", "map": "9 The map opens a tile", "nums": "10 Numbers that changed",
          "nothing": "A refresh with nothing new (nothing moves)", "squares": "11 A friend's day fills in",
-         "decks": "12 Decks bars grow in", "upd": "14 Refreshing: Updated", "insights": "16 Insights' line draws in"}
+         "decks": "12 Decks bars grow in", "upd": "14 Refreshing: Updated", "insights": "16 Insights' line draws in",
+         "settings": "18 Settings slides in", "setback": "18 Back to the board", "sort": "19 The column you sort by",
+         "streak": "20 A streak ticks up", "arrive": "22 A friend arrives", "knockin": "23 A knock slides in",
+         "knockout": "23 A knock goes", "roomjoin": "24 Someone joins the room", "roomleave": "24 Someone leaves the room",
+         "planweek": "25 A plan week's bars grow in", "sticking": "26 A topic starts sticking",
+         "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
+         "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck"}
 END, SAFE = "</", "<" + "\\" + "/"  # a script ends at </; inside one it is written <\\/
 init_js = B.keep_me_in_view_js().replace(END, SAFE)
 scen_js = json.dumps(out).replace(END, SAFE)
+profile_js = json.dumps(PV.profile_js).replace(END, SAFE)
 opts = "".join(f'<option value="{k}">{html.escape(NAMES.get(k, k))}</option>' for k in out)
 doc = f"""<!doctype html><html><head><meta charset="utf-8"><title>Board in Motion, on the board</title>
 <style>body{{margin:0;background:#ececE6;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}}
@@ -90,7 +129,8 @@ doc = f"""<!doctype html><html><head><meta charset="utf-8"><title>Board in Motio
 #stage{{max-width:900px;margin:16px auto;padding:0 16px}}</style></head><body>
 <div class="bar"><select id="pick">{opts}</select><button id="play">Play</button>
 <button id="cheer">13 Send Dre a cheer</button><button id="spin">14 Click ↻</button>
-<span style="color:#777">15 bingo and 17 studying now: see tools/dialogs.py and the board itself</span></div>
+<button id="prof">21 + 28 Open Dre</button><button id="logo">The logo does the wave</button>
+<span style="color:#777">15, 31 bingo and 17 studying now: see tools/preview.py and the board itself</span></div>
 <div id="stage"></div>
 <script>window.pycmd = function () {{}};</script>
 <script>{init_js}</script>
@@ -113,6 +153,10 @@ document.getElementById('play').onclick = function () {{
 document.getElementById('cheer').onclick = function () {{ load('nothing'); setTimeout(function () {{ dcMotion.cheer('dre', '🎉'); }}, 300); }};
 document.getElementById('spin').onclick = function () {{ load('nothing'); setTimeout(function () {{
   document.querySelector('.dc-foot a.ic[title="Refresh"]').click(); }}, 300); }};
+document.getElementById('prof').onclick = function () {{ load('nothing'); setTimeout(function () {{
+  document.querySelectorAll('#stage a.dc-pl')[1].dispatchEvent(new MouseEvent('click', {{bubbles: true}})); (0, eval)(PROFILE); }}, 300); }};
+document.getElementById('logo').onclick = function () {{ dcMotion.logo(document.getElementById('stage')); }};
+var PROFILE = {profile_js};
 load(document.getElementById('pick').value);
 </script></body></html>"""
 path = os.path.join(REPO, "tools", "motion_preview.html")
