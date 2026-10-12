@@ -7170,6 +7170,23 @@ def test_insights_379():
     from due_crew import team as T
     check("insights: the Hard habit needs 15% of 200 answers or more",
           T.hard_habit(30, 200) == {"pct": 15, "n": 200} and T.hard_habit(29, 200) is None and T.hard_habit(100, 199) is None)
+    topics = [("a", "Renal", [], ["t:a"], []), ("b", "Cardio", [], ["t:b"], []), ("c", "Tiny", [], ["t:c"], [])]
+    cards = {"t:a": range(0, 30), "t:b": range(30, 80), "t:c": range(80, 85)}
+    know = {c: (0.5 if c < 10 else 0.95) for c in range(85)}
+    tm = T.topic_map(topics, lambda t: cards[t], know)
+    check("map: topics with 20 started cards, biggest first, weakest cards first",
+          [(t["name"], t["n"], t["know"]) for t in tm] == [("Cardio", 50, 95), ("Renal", 30, 80)]
+          and tm[1]["cids"][:10] == list(range(10)), tm)
+    ids = {c: ["Big::#QBank::Step::%d" % (100000 + c), "Big::#Videos::Renal"] for c in range(30)}
+    dt, _g = T.deck_topics(ids, set(range(30)), min_n=20)
+    check("topics: a question bank's ids are never a topic", [x[1] for x in dt] == ["Renal"], dt)
+    check("map: shades at 70, 80, 90", [T.map_shade(k) for k in (69, 70, 85, 90)] == [0, 1, 2, 3])
+    mh = board._ins_map(10, [dict(t, name="<b>" + t["name"]) for t in tm], "fsrs")
+    check("map: tiles sized by cards, shaded, escaped, each opening Browse", 'class="tm s3"' in mh and 'class="tm s2"' in mh
+          and "flex:50 1" in mh and "&lt;b&gt;Cardio" in mh and "<b>Cardio" not in mh
+          and "duecrew:insmap:10:0" in mh and "duecrew:insmap:10:1" in mh and "remember now (FSRS)" in mh)
+    check("map: one tile says nothing", board._ins_map(10, tm[:1], "fsrs") == ""
+          and "right on their last review" in board._ins_map(10, tm, "right"))
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))
     ins = {"decks": [{"did": 10, "name": "Step 1", "full": "Step 1"}, {"did": 20, "name": bad, "full": bad}],
            "did": 10, "exam": False, "plan": {"id": "p1", "name": bad}, "view": view}
@@ -7341,6 +7358,18 @@ def test_insights_379():
         check("glue: the Hard habit, the deck's review answers in 4 weeks", bool(h) and h["pct"] >= 15 and h["n"] >= 200, h)
         dc._on_js(False, "duecrew:inshardno:10", DeckBrowser())
         check("glue: Not now puts the Hard habit away for a while", pc.get("ins_hard_hide") and not TF.insights(10, "pI").get("hard"))
+        # 3.8.0: the topic map
+        vp = TF.insights(10, "pI")
+        check("map: with the plan, its topics with 20 started cards (Renal), what I know now",
+              [(t["name"], t["n"]) for t in vp.get("map") or []] == [("Renal", 30)] and vp.get("map_by") == "fsrs"
+              and 0 <= vp["map"][0]["know"] <= 100, vp.get("map"))
+        vd = TF.insights(10)
+        names = [t["name"] for t in vd.get("map") or []]
+        check("map: with no plan, the deck's own tags name its tiles, biggest first", len(names) >= 2
+              and names[0] == "Started" and "Renal" in names and "leech" not in [n.lower() for n in names], vd.get("map"))
+        shown.clear()
+        dc._on_js(False, "duecrew:insmap:10:0", DeckBrowser())
+        check("map: a tile opens its weakest cards in Browse", shown and shown[-1] and set(shown[-1]) <= set(range(400, 450)), shown)
         dc._on_js(False, "duecrew:insfsrsno:10", DeckBrowser())
         check("glue: Not now puts Optimize FSRS away, on every deck", pc.get("ins_fsrs_hide") and not TF.insights(10, "pI").get("fsrs")
               and not TF.insights(10).get("fsrs"))

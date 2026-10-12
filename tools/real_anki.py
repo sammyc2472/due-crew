@@ -293,6 +293,20 @@ def check(path):
     ok("insights: the decks to pick, the plan's first, Anki's own deck names and ids",
        decks and decks[0]["did"] == did and decks[0]["pid"] == "pI" and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
     ok("insights: the deck's suspended leeches", len(lee) >= 1, f"{len(lee)}")
+    # 3.8.0: the topic map on a big deck's size, and Study today's counts from Anki's tree
+    from due_crew import due_flow as DF
+    t = tm()
+    tiles, by = TF._map(col, did, TF._deck_sql(col, did), None, int(col.sched.day_cutoff))
+    t_map = tm() - t
+    ok("map: the deck's topics as tiles, what I know now, in one pass", isinstance(tiles, list) and t_map < 2.0,
+       f"{[(x['name'], x['n'], x['know']) for x in tiles[:4]]}, by {by}, {t_map*1000:.0f} ms")
+    t = tm()
+    dn = DF._due_now(col, {did})
+    t_due = tm() - t
+    ok("study: Anki's deck tree gives each deck's cards due now", did in dn and t_due < 0.5,
+       f"{dn.get(did)} due, {len(dn)} decks, {t_due*1000:.0f} ms")
+    col.decks.select(did)
+    ok("study: the current deck's counts, as the review hands over", len(col.sched.counts()) == 3, str(col.sched.counts()))
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "

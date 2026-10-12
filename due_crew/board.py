@@ -642,6 +642,19 @@ def _css(cfg):
     #due-crew .ihead .dc-sw + .ictx {{ margin-left: auto; }}
     #due-crew .ictx b {{ color: var(--dc-ink); }}
     #due-crew .ictx a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    /* 3.8.0, the topic map */
+    #due-crew .tmap {{ display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }}
+    #due-crew .tmap .tm {{ display: flex; flex-direction: column; justify-content: space-between; min-height: 44px; min-width: 0;
+      border-radius: 6px; padding: 5px 7px; text-decoration: none; font-size: 11.5px; font-weight: 600; white-space: normal;
+      color: var(--dc-ink); overflow: hidden; }}
+    #due-crew .tmap .tm span {{ overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
+    #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; }}
+    #due-crew .tmap .tm:hover {{ filter: brightness(.94); }}
+    #due-crew .tm.s3, #due-crew .sw.s3 {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .tm.s2 {{ background: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
+    #due-crew .tm.s1 {{ background: color-mix(in srgb, var(--dc-accent) 25%, var(--dc-bg)); }}
+    #due-crew .tm.s0, #due-crew .sw.s0 {{ background: var(--dc-hours); color: var(--dc-bg); }}
     #due-crew .iexam {{ display: inline-flex; align-items: baseline; gap: 6px; }}
     #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
       border-radius: 6px; padding: 1px 4px; margin: 0; color-scheme: light dark; }}
@@ -1740,6 +1753,7 @@ def _insights_html(did, v):
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
                     f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"))
     if w:
         out += _ins_week(did, w, aim, today)
     f = v.get("fsrs")
@@ -1763,6 +1777,27 @@ def _insights_html(did, v):
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
     return f'<div class="dc-ins">{out}</div>'
+
+
+def _ins_map(did, tiles, by):
+    """3.8.0, the topic map: each topic a tile, sized by its started cards,
+    shaded by how much I know now; a click opens its weakest in Browse.
+    Mine alone, from my own Anki. Two tiles at least, or it says nothing."""
+    if len(tiles) < 2:
+        return ""
+    e = _html.escape
+    from .team import map_shade
+    big = max(int(t["n"]) for t in tiles) or 1
+    how = "you&rsquo;d remember now (FSRS)" if by == "fsrs" else "right on their last review"
+    out = ""
+    for i, t in enumerate(tiles):
+        n, k = int(t["n"]), int(t["know"])
+        tip = f'{t["name"]}: {n:,} cards, {k}% {how}. Browse the weakest.'
+        out += (f'<a class="tm s{map_shade(k)}" href="#" style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
+                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}</span><b>{k}%</b></a>')
+    return (f'<div class="isec"><div class="ik">What you know<span>&nbsp;&middot; by topic, now</span>'
+            f'<span class="ikey"><i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+</span></div>'
+            f'<div class="tmap">{out}</div></div>')
 
 
 def _week_html(card, pid):

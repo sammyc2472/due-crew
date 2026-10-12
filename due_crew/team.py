@@ -136,13 +136,16 @@ def deck_topics(tags_of, reviewed, min_n=None):
     under its most specific tags (none of them a parent of another of its
     tags), rolled up the tag's own levels until one has min_n reviewed cards
     under it; never up to a hierarchy's root, nor to a level that names a
-    resource ("#Path_Book"). tags_of: {cid: [tags]} (a subdeck's path
+    resource ("#Path_Book"), nor from a question bank's ids (digits only).
+    tags_of: {cid: [tags]} (a subdeck's path
     below the deck works the same). (topics, {level: {cids}}): the topics as
     topic_list gives them, the levels as their tags, for not_sticking."""
     min_n = STUCK_MIN if min_n is None else min_n
     leaves = {}
     for cid in reviewed:
-        tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS]
+        # 3.8.0: a question bank's id ("…::Step::104523") is never a topic
+        tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS
+                and not str(t).rsplit(P._SEP, 1)[-1].isdigit()]
         low = [t.lower() for t in tags]
         leaves[cid] = [t for t, lt in zip(tags, low) if not any(o.startswith(lt + P._SEP) for o in low)]
     under = {}
@@ -198,6 +201,39 @@ def not_sticking(topics, cards_of, reviewed, stuck, forgot):
                      "forgot": len(fg), "cids": sorted(st | fg)})
     rows.sort(key=lambda r: (-(r["stuck"] + r["forgot"]) / r["of"], -r["stuck"], r["name"].lower()))
     return rows[:ROWS]
+
+
+MAP_MIN = 20     # 3.8.0, the topic map: started cards before a topic gets a tile...
+MAP_TILES = 12   # ...and the biggest this many
+MAP_WEAK = 200   # a tile's Browse: its weakest cards, at most this many
+
+
+def topic_map(topics, cards_of, know):
+    """3.8.0, the topic map: what I know now, by topic, biggest first.
+    topics: as topic_list (or deck_topics) gives them; cards_of(tag): its
+    cards; know: {cid: 0..1} for my started cards (FSRS's recall now, or 1
+    when its last answer was right). [{key, name, n, know (0-100), cids}]:
+    a topic with MAP_MIN started cards, its cids the weakest first. A card
+    in two topics counts in both, as Not sticking yet counts it."""
+    out = []
+    for key, name, _res, tags, _uids in topics:
+        cids = set()
+        for t in tags:
+            cids |= set(cards_of(t))
+        mine = [c for c in cids if c in know]
+        if len(mine) < MAP_MIN:
+            continue
+        mine.sort(key=lambda c: (know[c], c))
+        avg = sum(know[c] for c in mine) / len(mine)
+        out.append({"key": key, "name": name, "n": len(mine), "know": int(round(100 * avg)),
+                    "cids": mine[:MAP_WEAK]})
+    out.sort(key=lambda t: (-t["n"], t["name"].lower()))
+    return out[:MAP_TILES]
+
+
+def map_shade(know):
+    """A tile's shade: 3 at 90% and up, 2 from 80, 1 from 70, 0 under."""
+    return 3 if know >= 90 else 2 if know >= 80 else 1 if know >= 70 else 0
 
 
 def week(past, ahead, secs_new, secs_answer):

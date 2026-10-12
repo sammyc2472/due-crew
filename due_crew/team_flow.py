@@ -663,6 +663,12 @@ def _work_out(did, pid=None, exam=""):
     else:
         out["rows"] = _deck_rows(col, did, reviewed, stuck, forgot)
 
+    # 3.8.0, the topic map: what I know now, by topic
+    try:
+        out["map"], out["map_by"] = _map(col, did, deck, (idx, swap, doc) if p else None, cutoff)
+    except Exception:
+        traceback.print_exc()
+
     # behind on the plan (its Catch up; nothing while a catch-up runs)
     if p:
         catch = st.get("catch") if str((st.get("catch") or {}).get("until") or "") >= today else None
@@ -770,6 +776,67 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
             paths[int(cid)] = [name[len(root) + 2:]]
     topics, groups = T.deck_topics(paths, reviewed)
     return T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
+
+
+def _know(col, deck, cutoff):
+    """({cid: 0..1}, by): how well I know each started card of the deck
+    now. With FSRS, its recall today (stability, days since its last
+    answer: "fsrs"); without, 1 when its last answer was right ("right")."""
+    last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE ease > 0 AND cid IN ({deck}) GROUP BY cid"))
+    if not last:
+        return {}, ""
+    rows = col.db.all(f"SELECT id, ivl, data FROM cards WHERE id IN ({deck}) AND type != 0 AND queue != -1")
+    if _fsrs(col):
+        out = {}
+        for cid, ivl, data in rows:
+            if cid not in last:
+                continue
+            try:
+                mem = json.loads(data or "{}")
+            except ValueError:
+                mem = {}
+            ago = (cutoff - int(last[cid]) // 1000) // 86400
+            out[int(cid)] = T.recall(ago, float(mem.get("s") or max(int(ivl), 1)), mem.get("decay"))
+        return out, "fsrs"
+    ids = ",".join(str(int(last[cid])) for cid, _i, _d in rows if cid in last)
+    if not ids:
+        return {}, ""
+    return {int(c): 1.0 if int(e) > 1 else 0.0
+            for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({ids})")}, "right"
+
+
+def _map(col, did, deck, plan, cutoff):
+    """(tiles, by) for the topic map: the plan's topics; with no plan the
+    deck's tags, else its subdecks (as Not sticking yet finds them)."""
+    know, by = _know(col, deck, cutoff)
+    if not know:
+        return [], by
+    if plan:
+        idx, swap, doc = plan
+        return T.topic_map(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), know), by
+    ids = _in(know)
+    tags_of = {int(cid): str(tags or "").split() for cid, tags in
+               col.db.all(f"SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({ids})")}
+    topics, groups = T.deck_topics(tags_of, set(know), min_n=T.MAP_MIN)
+    tiles = T.topic_map(topics, lambda t: groups.get(t, ()), know)
+    if len(tiles) >= 2:
+        return tiles, by
+    root = str(col.decks.name(did) or "")
+    paths = {}
+    for cid, d in col.db.all(f"SELECT id, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({ids})"):
+        name = str(col.decks.name(int(d)) or "")
+        if name.startswith(root + "::"):
+            paths[int(cid)] = [name[len(root) + 2:]]
+    topics, groups = T.deck_topics(paths, set(know), min_n=T.MAP_MIN)
+    return T.topic_map(topics, lambda t: groups.get(t, ()), know), by
+
+
+def browse_map(did, i):
+    """A topic map tile: its weakest cards in Anki's browser."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    tiles = view.get("map") or []
+    if mw.col and 0 <= i < len(tiles):
+        _plans_flow()._browse(tiles[i]["cids"], empty="Nothing to show.")
 
 
 def _pick(did, key):
@@ -933,6 +1000,8 @@ def on_message(cmd, parts):
             fsrs(did)
         elif cmd == "insfsrsno":
             fsrs(did, open_it=False)
+        elif cmd == "insmap" and x.isdigit():
+            browse_map(did, int(x))
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
         elif cmd == "insleeches":
