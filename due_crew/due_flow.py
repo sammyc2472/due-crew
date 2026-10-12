@@ -142,10 +142,37 @@ def _reviews():
                                       now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
         t = time.localtime(int(first)) if back and first else None
         out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else ""}
+        if back and first:
+            _flip_at(int(first) - ahead)
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
     return out
+
+
+def _flip_at(when):
+    """3.8.0: when the first learning card comes back (inside Anki's
+    learn-ahead), Reviews says it's due: one timer, the earliest, redraws
+    the box while the Decks screen shows it. Gone with the profile."""
+    pending = _state.get("back_timer")
+    if pending and pending[0] <= when and pending[1] == app.generation:
+        return
+    gen = app.generation
+    _state["back_timer"] = (when, gen)
+    delay = max(5, min(when - int(time.time()), 86400)) * 1000 + 2000
+
+    def fire():
+        if _state.get("back_timer") != (when, gen) or app.generation != gen:
+            return
+        _state["back_timer"] = None
+        _state["due_reviews"] = None
+        if getattr(mw, "state", "") == "deckBrowser":
+            _swap(cfg())
+    try:
+        from aqt.qt import QTimer
+        QTimer.singleShot(int(delay), fire)
+    except Exception:
+        traceback.print_exc()
 
 
 def _day_state():
@@ -174,10 +201,7 @@ def suggestions(c, today):
         return list(hit[1])
     out = []
     try:
-        start = (mw.col.sched.day_cutoff - 86400) * 1000
-        n = int(mw.col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease = 1", start) or 0)
-        if n >= AGAIN_MIN and "again" not in gone:
-            out.append({"key": "again", "text": f"Go over today's {n:,} misses", "go": "Study"})
+        # 3.8.0: today's misses are Study today's last step, not a suggestion of their own
         if not c.get("due_leeches"):
             week = (mw.col.sched.day_cutoff - 8 * 86400) * 1000
             lee = int(mw.col.db.scalar(

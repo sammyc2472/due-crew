@@ -868,6 +868,8 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
+    elif cmd == "heatday" and len(parts) > 2:
+        _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
         _settings_cmd(cmd, parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
     elif cmd == "ecard" and len(parts) > 2:
@@ -1264,6 +1266,23 @@ def open_settings(tab=None):
         _swap(cfg())
     else:
         _rerender()
+
+
+def _browse_day(day):
+    """3.8.0: a day on my own year (the profile card): the cards I answered
+    that Anki day, in Browse."""
+    try:
+        d = datetime.date.fromisoformat(str(day))
+        today = datetime.date.fromisoformat(due_flow._today())
+    except (TypeError, ValueError):
+        return
+    ago = (today - d).days
+    if ago < 0 or not mw.col:
+        return
+    end = (int(mw.col.sched.day_cutoff) - ago * 86400) * 1000
+    cids = [int(x) for x in mw.col.db.list(
+        "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND id < ? AND ease > 0", end - 86400 * 1000, end)]
+    plan_flow._browse(cids, empty="No reviews that day.")
 
 
 def _close_addons_dialog():

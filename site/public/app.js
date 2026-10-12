@@ -1199,12 +1199,11 @@ async function home() {
   }
   // board.py C5: until a friend adds me back, the invite is the board
   function solo() {
-    const wait = !waiting.length ? "They show up here once they add you back." : waiting.length <= 2
+    // board.py's words; the code and Got a code? are the Friends panel's, beside it
+    const wait = !waiting.length ? "Send a friend your invite. Once you’ve added each other, they’re here." : waiting.length <= 2
       ? `Waiting for ${waiting.map((f) => f.name).join(" and ")} to add you back.` : `Waiting for ${waiting.length} people to add you back.`;
     return h("div", { class: "solo" }, h("b", {}, "Bring your crew"), h("span", { class: "muted" }, wait),
-      h("div", { class: "row" }, b.me.code ? h("span", { class: "mono codepill" }, spaced(b.me.code)) : null,
-        b.me.code ? h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null,
-        h("button", { class: "linkish", onclick: () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } } }, "Got a code?")));
+      b.me.code ? h("div", { class: "row" }, h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite")) : null);
   }
   // You › Plans (3.8.0), as far as the site can show it, in the rail: each
   // plan I follow, on track or behind; the day-by-day lives on its page and

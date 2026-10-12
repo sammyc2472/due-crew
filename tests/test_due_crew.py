@@ -7469,7 +7469,8 @@ def test_no_jumps_v380():
     check("no jumps: _swap redraws through swap_js", "board.swap_js(html_out)" in init_src and "replaceChild" in js)
     check("no jumps: held while the pointer is on it, released when it leaves, never a folded box",
           "matches(':hover')" in js and "mouseleave" in js and "du-one" in js and "boxSizing = 'border-box'" in js
-          and "minHeight = '0px'" in js)
+          and "minHeight = ''" in js and "addEventListener('resize', free)" in js)
+    check("no jumps: no easing on the release (it lagged behind a window resize)", "transition: min-height" not in board._css({}))
     check("no jumps: a fetching part holds its height", ".dc-wait" in js)
     css = board.DUE_CSS
     check("no jumps: the box's rows stay at the top when it's held", "display: grid; gap: 6px; align-content: start;" in css)
@@ -7581,6 +7582,12 @@ def test_one_settings_keys_study_v380():
         check("study: the folded line's Study is the same walk", "duecrew:duestudy" in board._due_html(dict(v, folded=True)))
         nothing = D.view(T0, [], [], {}, reviews={"due": 0, "done": 5})
         check("study: nothing to walk, no button", "duestudy" not in board._due_html(nothing))
+        one = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5},
+                          {"pid": "p", "uid": "o", "plan": "P", "name": "Old", "opens": "2026-09-30", "seen": 0, "total": 4}], [], {},
+                     reviews={"due": 10, "done": 0})
+        oh = board._due_html(one)
+        check("study: one Study in the box, Study today (no Study on a date or on Behind)",
+              oh.count("Study") == 1 and "planstudy:" not in oh and "plancatch:p" in oh, oh[:2500])
     finally:
         (dc._board_on_screen, dc._swap, dc._rerender, ms, mw.state, dc.cfg, dc.save_cfg,
          _state["settings_tab"], dc._apply_keys, TF.tooltip, F.tooltip) = saved
@@ -7613,9 +7620,82 @@ def test_site_audit_v380():
           "border-radius: 0; padding-bottom: 3px; max-width: 180px" in css and ".brdt tr.dim td { color: var(--muted); }" in css
           and ".ts:only-child { max-width: 300px; }" in css and "nav .navme summary::after { content: none; }" in css
           and "grid-template-rows: auto 1fr auto; }" in css)
+    solo = board.render({"entries": [{"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "", "days": {}}],
+                         "labels": [T0], "tomorrow": "", "pending": [], "my_code": "ABC123"}, {"period": "today"}, 0)
+    check("site audit: the empty crew box says what to do when nobody's added yet, the same on both sides",
+          "Once you’ve added each other, they’re here." in solo and "Once you’ve added each other, they’re here." in js
+          and "They show up here once they add you back." not in js + solo and "codepill\" }, spaced(b.me.code)), \n" not in js)
     idx = open(os.path.join(REPO, "site", "public", "index.html"), encoding="utf-8").read()
     check("site audit: the landing picture has its dark one", 'srcset="/board-dark.png" media="(prefers-color-scheme: dark)"' in idx
           and os.path.exists(os.path.join(REPO, "site", "public", "board-dark.png")))
+
+
+def test_learning_back_flip_v380():
+    """3.8.0: the box flips "4 back at 9:42" to due when they come back:
+    one timer, the earliest, a redraw on the Decks screen; none after the
+    profile closed."""
+    import time as _t
+    from due_crew import due_flow as F, app as A
+    from due_crew.app import _state
+    import aqt.qt as Q
+    timers, swaps = [], []
+    saved = (Q.QTimer, F._swap, F.mw.state, _state.get("back_timer"))
+    Q.QTimer = type("QTimer", (), {"singleShot": staticmethod(lambda ms, fn: timers.append((ms, fn)))})
+    F._swap = lambda c: swaps.append(1)
+    try:
+        _state["back_timer"] = None
+        now = int(_t.time())
+        F._flip_at(now + 600)
+        F._flip_at(now + 900)
+        check("flip: one timer, at the first card's time", len(timers) == 1 and 600000 <= timers[0][0] <= 604000, timers)
+        F._flip_at(now + 300)
+        check("flip: an earlier card moves it up", len(timers) == 2)
+        _state["due_reviews"] = (now, {"due": 0})
+        F.mw.state = "deckBrowser"
+        timers[0][1]()
+        check("flip: the old timer does nothing", swaps == [] and _state["due_reviews"] is not None)
+        timers[1][1]()
+        check("flip: the box counts again and redraws", swaps == [1] and _state["due_reviews"] is None and _state["back_timer"] is None)
+        F._flip_at(now + 60)
+        A.generation += 1
+        timers[-1][1]()
+        check("flip: not after the profile changed", swaps == [1])
+    finally:
+        Q.QTimer, F._swap, F.mw.state, _state["back_timer"] = saved
+
+
+def test_heatmap_day_v380():
+    """3.8.0: on my own card, a day I studied opens its cards in Browse;
+    a friend's card has no clicks."""
+    import due_crew as dc
+    from due_crew import plan_flow as F
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    prof = {"name": "Sam", "you": True, "cells": [0, 3, 12], "start": "2026-09-28", "streak": 2, "last_active": ""}
+    js = board.profile_overlay_js(prof)
+    check("heat: my studied days open Browse; a day with none doesn't", "duecrew:heatday:2026-09-29" in js
+          and "duecrew:heatday:2026-09-30" in js and "duecrew:heatday:2026-09-28" not in js and "12 reviews" in js)
+    check("heat: a friend's card has no clicks", "heatday" not in board.profile_overlay_js(dict(prof, you=False)))
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    cut = fakes.day_cutoff_for(TODAY)
+    for i, ago in enumerate((0, 1, 1, 2)):
+        fakes.add_card(conn, 900 + i, did=10)
+        fakes.add_review(conn, (cut - ago * 86400 - 3600) * 1000, ease=3, cid=900 + i)
+    shown = []
+    saved = (F._browse, dc.mw.col, _state.get("labels"))
+    try:
+        F._browse = lambda cids, q=None, empty="": shown.append(sorted(cids) if cids else empty)
+        dc.mw.col = fakes.FakeCol(conn, cut)
+        _state["labels"] = [TODAY.isoformat()]
+        y = (TODAY - datetime.timedelta(days=1)).isoformat()
+        dc._on_js(False, "duecrew:heatday:" + y, DeckBrowser())
+        check("heat: that Anki day's answered cards, in Browse", shown == [[901, 902]], shown)
+        dc._on_js(False, "duecrew:heatday:nope", DeckBrowser())
+        dc._on_js(False, "duecrew:heatday:" + (TODAY + datetime.timedelta(days=3)).isoformat(), DeckBrowser())
+        check("heat: not a day, or a day ahead: nothing", shown == [[901, 902]])
+    finally:
+        F._browse, dc.mw.col, _state["labels"] = saved
 
 
 def main():

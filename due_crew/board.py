@@ -482,8 +482,6 @@ def _css(cfg):
     #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
     #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
     #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
-    /* 3.8.0: a part held at its height while the pointer is on it (swap_js) eases back after */
-    #due-crew > .du, #due-crew .dc-sheet {{ transition: min-height .2s ease-out; }}
     /* the deck screen is shared with Anki's own styles (26.x paints
        `.fancy table` with a glass fill) and other add-ons' CSS. None of
        them may redecorate this board: no borders, shadows, radii, or fills
@@ -1122,7 +1120,7 @@ def _table_html(data, cfg, period):
                "pycmd('duecrew:addcode:'+v);return false;")
         pending = [str(x) for x in data.get("pending") or []]
         if not pending:
-            wait = "They show up here once they add you back."
+            wait = "Send a friend your invite. Once you’ve added each other, they’re here."
         elif len(pending) <= 2:
             wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
         else:
@@ -1154,7 +1152,8 @@ def swap_js(html_out):
     """3.8.0: the board redrawn in place, without the jumps. While the
     pointer is on Due Crew (a tab clicked, a row ticked), neither part (the
     You box, the board) gets shorter: each keeps its height until the
-    pointer leaves, then eases back. A part still fetching (.dc-wait) keeps
+    pointer leaves (or the window resizes), then lets go at once. A part
+    still fetching (.dc-wait) keeps
     its height either way; a box folded by Hide folds at once."""
     return """
     (function() {
@@ -1178,9 +1177,16 @@ def swap_js(html_out):
             }
         });
         if (held.length) {
-            nu.addEventListener('mouseleave', function () {
-                held.forEach(function (p) { if (!p.querySelector('.dc-wait')) { p.style.minHeight = '0px'; } });
-            });
+            // let go at once when the pointer leaves, the window resizes or loses focus
+            // (an eased release lagged behind a window being resized)
+            var free = function () {
+                held.forEach(function (p) { if (!p.querySelector('.dc-wait')) { p.style.minHeight = ''; } });
+                window.removeEventListener('resize', free);
+                window.removeEventListener('blur', free);
+            };
+            nu.addEventListener('mouseleave', free);
+            window.addEventListener('resize', free);
+            window.addEventListener('blur', free);
         }
     })();
     """ % _json.dumps(html_out)
@@ -3445,20 +3451,31 @@ def profile_overlay_js(profile):
             pad = _date.fromisoformat(str(profile.get("start"))).weekday()
         except (TypeError, ValueError):
             pad = 0
+        try:
+            first = _date.fromisoformat(str(profile.get("start")))
+        except (TypeError, ValueError):
+            first = None
         cols = []
-        week = [-1] * pad
-        for n in cells:
-            week.append(_heat_level(int(n)))
+        week = [(-1, None, 0)] * pad
+        for i, n in enumerate(cells):
+            day = (first + _dt.timedelta(days=i)).isoformat() if first else None
+            week.append((_heat_level(int(n)), day, int(n)))
             if len(week) == 7:
                 cols.append(week)
                 week = []
         if week:
-            cols.append(week + [-1] * (7 - len(week)))
+            cols.append(week + [(-1, None, 0)] * (7 - len(week)))
+
+        def cell(lvl, day, n):
+            # 3.8.0: on my own card, a day I studied opens its cards in Browse
+            if you and day and n > 0:
+                d = _date.fromisoformat(day)
+                return (f'<i class="dchm h{lvl}" title="{d:%a} {d.day} {d:%b} \u00b7 {n:,} review{"s" if n != 1 else ""}. '
+                        f'Browse them" onclick="{_pycmd("heatday:" + day)}"></i>')
+            return f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>'
         col_html = ""
         for col in cols[-26:]:
-            cell_html = "".join(
-                f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>' for lvl in col)
-            col_html += f'<div class="dchc">{cell_html}</div>'
+            col_html += f'<div class="dchc">{"".join(cell(*c) for c in col)}</div>'
         grid = f'<div class="dchg">{col_html}</div>'
 
     lines = ""
@@ -3545,6 +3562,7 @@ def profile_overlay_js(profile):
         var style = document.createElement('style');
         style.textContent = '.dchg{display:flex;gap:2px;margin:12px 0 8px;}' +
             '.dchc{display:flex;flex-direction:column;gap:2px;}' +
+            '.dchm[onclick]{cursor:pointer;}.dchm[onclick]:hover{outline:1px solid ' + accent + ';}' +
             '.dchm{width:8px;height:8px;border-radius:1.5px;display:block;background:' +
             dcWell + ';}' +
             '.dchm.h1{background:' + accent + ';opacity:0.25;}' +
@@ -3926,8 +3944,7 @@ def _due_plan(r):
     else:
         what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
     bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""
-    go = (f'<a href="#" class="du-go" onclick="{_pycmd("planstudy:" + r["pid"])}">Study &rsaquo;</a>'
-          if not r["done"] and r["total"] and r["seen"] < r["total"] else "")
+    go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{e(r["name"])}</b>'
             f'<small>{meta}</small>{what}{subs}{bar}</span><span class="end">{n}{go}</span></div>')
@@ -3953,8 +3970,7 @@ def _due_behind(v):
             f' &middot; <a class="tp" href="#" title="Browse them" onclick="{_pycmd("planleft:" + p["pid"])}">{left:,} cards to see</a>'
             if left else "")
         out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'
-                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("planstudy:" + p["pid"])}">Study &rsaquo;</a>'
-                f'<a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
+                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
     out += "".join(_due_mine(r) for r in v["behind_mine"])
     if v["behind_more"]:
         out += f'<div class="du-q">and {int(v["behind_more"])} more</div>'
