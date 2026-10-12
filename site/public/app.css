@@ -205,7 +205,8 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .tn small { color: var(--muted); font-variant-numeric: tabular-nums; }
 .tn.used .nm { color: var(--faint); }
 /* 3.8.0: the plan's own tags, on top of the deck's */
-.ptags { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.ptags { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.ptags .ptlist { display: grid; gap: 2px; max-height: min(40vh, 340px); overflow-y: auto; overscroll-behavior: contain; }
 .ptags .thead { justify-content: flex-start; flex-wrap: wrap; }
 .ptags .psub { overflow-wrap: anywhere; margin-bottom: 4px; }
 .ptag { padding: 3px 4px; border-radius: 6px; }

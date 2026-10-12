@@ -1277,3 +1277,10 @@ every release that changes how something works.
   named by name. `tools/deploy.sh` deploys production by hand from a
   clean main (migrations, the API, the site, `check_prod.sh`), what the
   tag's job does once its secrets exist.
+  A long tag list (after release, site only; an author's plan had 47
+  SLG tags): the builder's "This plan's tags" sat in the side column,
+  which is sticky, a screen tall and doesn't scroll, so past a dozen tags
+  it pushed the rest of the tags and the deck's tree out of reach. The
+  list scrolls in its own box now (`.ptlist`, at most 40% of the screen),
+  and the side's two lists keep their place through a redraw (`draw()`),
+  so Rename or + on a tag low in the list doesn't jump back to the top.

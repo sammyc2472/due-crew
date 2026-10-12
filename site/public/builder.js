@@ -444,7 +444,8 @@ async function builder(id) {
     return h("div", { class: "ptags" },
       h("div", { class: "thead" }, h("b", {}, "This plan's tags")),
       list.length ? h("small", { class: "muted psub" }, `Everyone following gets them in Anki, under DueCrew › ${tagRootNow()}`) : null,
-      list.length ? rows : h("p", { class: "muted small" }, "Tag cards for your class (SLG 12): in Anki's browser, right-click › Due Crew: tag for a plan…, or with your AI in Text › Tag by objective."));
+      // a long list scrolls in its own box, so the deck's tags below it stay in reach
+      list.length ? h("div", { class: "ptlist" }, rows) : h("p", { class: "muted small" }, "Tag cards for your class (SLG 12): in Anki's browser, right-click › Due Crew: tag for a plan…, or with your AI in Text › Tag by objective."));
   }
   // overlap: a plan tag and another tag, as an Anki search on the picked day
   let ovl = { a: "", op: "and", b: "" };
@@ -2261,7 +2262,10 @@ async function builder(id) {
   let slid = 0;
   function draw() {
     const M = window.dcMotion, at = `${view}|${anchor}`, was = M ? M.places(".cal2 .ch[data-k]", "data-k", ".d") : null;
+    // the side's lists keep their place through a redraw (a click on a tag low in a list)
+    const kept = [".ptags .ptlist", ".tree2 .tlist"].map((q) => [q, document.querySelector(q)?.scrollTop || 0]);
     drawNow();
+    for (const [q, y] of kept) { const el = y && document.querySelector(q); if (el) el.scrollTop = y; }
     // the same days on screen: a date moved to another settles; ‹ › slide; another view just draws
     try { if (M && (slid || at === `${view}|${anchor}`)) M.moved(".cal2 .ch[data-k]", "data-k", was, slid, ".cal2", ".d"); } catch { /* drawn either way */ }
     slid = 0;
