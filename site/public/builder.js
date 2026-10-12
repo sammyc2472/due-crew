@@ -26,7 +26,22 @@ const Tags = (() => {
     return segs.some((s) => s.startsWith("^")) ? "system" : segs.some((s) => s.startsWith("#")) ? "resource" : "other";
   };
   const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-  return { word, name, kind, natural };
+  /** 3.8.0: a tag or subdeck as a search to paste into Anki's Browse. A
+   *  versioned root (…_v12) matches any version: copies of a deck differ. */
+  const ankiSearch = (kind, path) => {
+    const esc = (x) => x.replace(/[\\"*_]/g, (c) => `\\${c}`);
+    if (kind === "deck") return `"deck:${esc(path)}"`;
+    const segs = path.split("::");
+    return `"tag:${[esc(segs[0]).replace(/\\_v\d+$/i, "\\_v*"), ...segs.slice(1).map(esc)].join("::")}"`;
+  };
+  /** 3.8.0: a name as one part of an Anki tag (a plan's own tag, SLG 12):
+   *  plans.ts tagPart, plans.py tag_part; change all three. */
+  const slug = (s) => String(s).replace(/\s+/gu, "_").replace(/["*\\%]/g, "").replace(/:/g, "-")
+    .replace(/_+/g, "_").replace(/^[_-]+|[_-]+$/g, "");
+  const part = (name) => slug(name) || "tag";
+  /** the plan's own part, from its name when its first tag is made (tagRoot, tag_root) */
+  const root = (planName) => slug(planName).slice(0, 60).replace(/[_-]+$/, "") || "plan";
+  return { word, name, kind, natural, ankiSearch, part, root };
 })();
 
 /** Due: a date's lines to tick by hand ({k, t, url}), as the Worker keeps
@@ -45,6 +60,18 @@ const Todo = (() => {
   const clean = (lines) => (lines || []).filter((x) => x && LABEL[x.k] && String(x.t || "").trim())
     .slice(0, MAX).map((x) => (x.url && okUrl(x.url) ? { k: x.k, t: x.t.trim().slice(0, 140), url: x.url } : { k: x.k, t: x.t.trim().slice(0, 140) }));
   return { MAX, LABEL, okUrl, parse, clean };
+})();
+
+/** 3.8.0: the plan's lines every week ({k, t, url, r}: r its weekdays,
+ *  Monday "0"), as the Worker keeps them (plans.ts, EVERY_MAX). */
+const Every = (() => {
+  const MAX = 6;
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  /** what a save sends: lines with words and days, at most MAX */
+  const clean = (lines) => (lines || []).filter((x) => x && /^[0-6]{1,7}$/.test(x.r || "") && Todo.LABEL[x.k] && String(x.t || "").trim())
+    .slice(0, MAX).map((x) => ({ ...Todo.clean([x])[0], r: [...new Set(x.r)].sort().join("") }));
+  const label = (r) => (r === "0123456" ? "every day" : r === "01234" ? "weekdays" : "every " + [...r].map((k) => DAYS[Number(k)]).join(", "));
+  return { MAX, DAYS, clean, label };
 })();
 
 /** Searches about one person's own Anki (due_crew/plans.py, _PERSONAL). */
@@ -79,6 +106,113 @@ const Picks = (() => {
   const notesText = (gs) => `notes:${gs.join(" ")}`;
   const cardsText = (cs) => `cards:${cs.map(([g, o]) => `${g}:${o + 1}`).join(" ")}`;
   return { take, notesText, cardsText };
+})();
+
+/** 3.8.0: a plan's squad (its team until then), as the board's Squads tab
+ *  draws it (board.py _plan_squad_html: change one, change both): who
+ *  showed up today (answered one of the plan's cards), its bingo, then Ask
+ *  the squad and its threads. Opt-in; never anyone's numbers. Each click is
+ *  one request. The server still calls it a team (/plans/{id}/team). */
+const PlanSquad = (() => {
+  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  const CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
+  const wkOf = (d) => {
+    const x = parseIso(d); const dow = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - dow + 3);
+    const y = x.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
+    return `${y}-W${String(1 + Math.round(((x - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
+  };
+  const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d`; };
+  /** "3 of 9 · one away from bingo" (team.py bingo_line: change one, change both). */
+  function bingoLine(ev) {
+    const done = (c) => (c === 4 ? ev.middle.done : ev.squares[CELLS.indexOf(c)].done);
+    const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
+    const left = Math.min(...LINES.map((l) => l.filter((c) => !done(c)).length));
+    const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
+      : left === 1 ? "one away from bingo" : `${left} away from bingo`;
+    return `${stamps} of 9 · ${state}`;
+  }
+  const got = {};  // plan id: {team, busy, replyTo, bingoOpen}, kept while the page lives
+  /** One plan's squad. redraw: the board's; on.left / on.joined: after a
+   *  leave or a join here, so the board's pills follow. */
+  function view(id, redraw, on = {}) {
+    const s = got[id] || (got[id] = { team: null, busy: false, replyTo: null, bingoOpen: false });
+    if (!s.team) {
+      if (!s.busy) {
+        s.busy = true;
+        api("GET", `/plans/${id}/team?wk=${wkOf(today())}`).then((r) => { s.team = r; }).catch(() => { s.team = { failed: true }; })
+          .finally(() => { s.busy = false; redraw(); });
+      }
+      return h("p", { class: "muted small" }, "Loading…");
+    }
+    const team = s.team;
+    const st = h("span", { class: "status", role: "status" });
+    const again = (p, bad = "That didn't work. Try again.") => p.then(() => { s.team = null; redraw(); }).catch((err) => {
+      st.className = "status bad"; st.textContent = err.status === 429 ? "That's a lot of questions today. Try tomorrow."
+        : err.body?.error === "team_full" ? "This squad is full." : bad; });
+    if (team.failed) return h("p", { class: "muted small" }, "Couldn't load the squad. ", h("button", { class: "linkish", onclick: () => { s.team = null; redraw(); } }, "Try again"));
+    if (!team.on) {
+      return h("div", { class: "panel", style: "max-width:560px;margin:0 auto;text-align:left" },
+        h("h4", {}, h("span", {}, team.count ? `${team.count.toLocaleString()} in its squad` : "No one in its squad yet")),
+        h("p", { class: "muted small", style: "margin:0" }, "The squad sees that you showed up today, and your questions and answers; your progress counts for the plan’s authors. Never your numbers."),
+        h("div", { class: "row" }, h("button", { onclick: (e) => { e.target.disabled = true; again(api("POST", `/plans/${id}/team`).then((r) => { on.joined?.(); return r; })); } }, "Join its squad"), st));
+    }
+    const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the squad" });
+    const send = () => { const text = ask.value.trim(); if (text) again(api("POST", `/plans/${id}/asks`, { text })); };
+    ask.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    const who = (x) => (x.mine ? "You" : [x.emoji ? `${x.emoji} ` : "", h("b", {}, x.name)]);
+    const thread = (a) => {
+      const reps = a.replies.map((r) => h("div", { class: "rep" }, h("b", {}, r.mine ? "You" : r.name), r.author ? " (author)" : "", `: ${r.text}`,
+        a.mine && !r.mine ? h("button", { class: "linkish", onclick: () => again(api("POST", `/plans/${id}/asks/${r.id}/helped`, { on: !r.helped })) }, r.helped ? "Helped ✓" : "That helped")
+          : r.helped ? h("span", { class: "ok" }, " ✓ helped") : null,
+        r.remove ? h("button", { class: "linkish", onclick: () => again(api("DELETE", `/plans/${id}/asks/${r.id}`)) }, "Remove") : null));
+      const bits = [a.topic, a.replies.length ? `${a.replies.length} repl${a.replies.length === 1 ? "y" : "ies"}` : ""].filter(Boolean).join(" · ");
+      let box = null;
+      if (s.replyTo === a.id) {
+        const r = h("input", { placeholder: "Your answer…", maxlength: 280, "aria-label": "Your answer" });
+        const go = () => { const text = r.value.trim(); if (text) { s.replyTo = null; again(api("POST", `/plans/${id}/asks`, { text, parent: a.id })); } };
+        r.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+        requestAnimationFrame(() => r.focus());
+        box = h("div", { class: "ask3" }, r, h("button", { onclick: go }, "Reply"));
+      }
+      return h("div", { class: "tq" },
+        h("div", { class: "t" }, a.guid ? h("span", {}, who(a), " on a card") : h("span", {}, who(a), `: ${a.text}`), h("span", { class: "m" }, ago(a.act || a.at))),
+        a.guid ? h("div", {}, `“${a.text}”`) : null, ...reps, box,
+        h("div", { class: "t" }, h("span", { class: "card" }, bits), h("span", { class: "m" },
+          h("button", { class: "linkish", onclick: () => { s.replyTo = s.replyTo === a.id ? null : a.id; redraw(); } }, a.guid ? "Answer" : "Reply"),
+          a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
+    };
+    const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
+      h("span", { class: "e" }, face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
+      team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
+    const b = team.bingo;
+    let bingo = null;
+    if (b) {
+      const cell = (c) => (c === 4 ? b.ev.middle.done : b.ev.squares[CELLS.indexOf(c)].done);
+      const sq = (c) => (c === 4 ? b.card.middle : b.card.squares[CELLS.indexOf(c)]);
+      bingo = h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Squad bingo"), h("span", { class: "muted small", style: "font-weight:500" }, bingoLine(b.ev).split(" · ")[0])),
+        h("div", { class: "bgrow" }, h("span", { class: "bgmini" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("i", { class: cell(c) ? "on" : "" }))),
+          h("span", { class: "small" }, bingoLine(b.ev).split(" · ")[1]), h("span", { style: "flex:1" }),
+          h("button", { class: "linkish", onclick: () => { s.bingoOpen = !s.bingoOpen; redraw(); } }, s.bingoOpen ? "Close" : "Open")),
+        s.bingoOpen ? h("div", { class: "bggrid" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("div", { class: cell(c) ? "on" : "" },
+          h("span", {}, sq(c).icon || ""), h("b", {}, c === 4 ? sq(c).name : sq(c).title),
+          h("small", {}, c === 4 ? `${b.ev.middle.have} of ${b.ev.middle.goal}` : sq(c).rule || "")))) : null);
+    }
+    const leave = h("button", { class: "linkish", onclick: (e) => {
+      if (e.target.dataset.sure !== "1") { e.target.dataset.sure = "1"; e.target.textContent = "Leave? Your questions and answers stay. Click again"; return; }
+      e.target.disabled = true;
+      api("DELETE", `/plans/${id}/team`).then(() => { delete got[id]; on.left?.(); }).catch(() => { e.target.disabled = false; e.target.textContent = "Couldn’t leave. Try again."; });
+    } }, "Leave");
+    return h("div", { class: "psq" },
+      h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Showed up today"),
+        h("span", { class: "muted small", style: "font-weight:500" }, `${team.shown} of ${team.count}${team.streak > 1 ? ` · ${team.streak} days running` : ""}`)), faces),
+      bingo,
+      h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Ask the squad")),
+        h("div", { class: "ask3" }, ask, h("button", { onclick: send }, "Ask")), st,
+        team.asks.length ? team.asks.map(thread) : h("p", { class: "muted small", style: "margin:0" }, "No questions yet.")),
+      h("div", { class: "sqline" }, h("button", { class: "linkish", onclick: () => go(`/plans/${id}`) }, "Open the plan"), " · ", leave));
+  }
+  const forget = (id) => { delete got[id]; };
+  return { view, forget, bingoLine };
 })();
 
 /** The plan's page. Its authors (the owner and co-authors) edit it; anyone
@@ -237,6 +371,112 @@ async function builder(id) {
     if (doc.reviews) { doc.reviews = doc.reviews.filter((r) => ids.has(r.from) && ids.has(r.to)); if (!doc.reviews.length) delete doc.reviews; }
   };
   function takeIds(u) { delete u.nids; delete u.cids; delete u.notes; delete u.idn; delete u.idr; }
+  // 3.8.0: the plan's own tags (SLG 12): made in an author's Anki (Browse ›
+  // Due Crew: tag for a plan…, exact notes) or here (Text, the AI: a tag's,
+  // a subdeck's or a search's cards). Each follower's Anki puts them on its
+  // notes as DueCrew::<tagroot>::<name>, so a date uses one as any tag.
+  const ptags = () => doc.tags || [];
+  const tagRootNow = () => doc.tagroot || Tags.root(meta.name || plan.name);
+  const ptagPath = (t) => `DueCrew::${tagRootNow()}::${Tags.part(t.name)}`;
+  const ptagByName = (name) => { const want = Tags.part(name).toLowerCase(); return ptags().find((t) => Tags.part(t.name).toLowerCase() === want); };
+  const ptagFrom = (t) => [...(t.tags || []).map((x) => `tag:${x}`), ...(t.decks || []).map((x) => `deck:${x}`), ...(t.search || []).map((x) => `search:${x}`)];
+  /** how big: its cards in an author's Anki once it's there (the tree), else its notes */
+  const ptagSize = (t) => { const k = `tag:${ptagPath(t)}`, m = (t.notes || []).length; return count.has(k) ? `${n(k).toLocaleString()} cards` : m ? `${m.toLocaleString()} note${m === 1 ? "" : "s"}` : "counted in your Anki soon"; };
+  /** a plan tag the author's Anki hasn't counted yet: no number, rather than 0 */
+  const uncounted = (k) => !count.has(k) && ptags().some((t) => `tag:${ptagPath(t)}` === k);
+  function putTags(list) { if (list.length) { doc.tagroot = tagRootNow(); doc.tags = list; } else delete doc.tags; }
+  /** a tag renamed (or gone, newPath null): the dates using it follow, as a tag and in their searches */
+  function retag(oldPath, newPath) {
+    const low = oldPath.toLowerCase();
+    const oq = Tags.ankiSearch("tag", oldPath).slice(1, -1);
+    const nq = newPath ? Tags.ankiSearch("tag", newPath).slice(1, -1) : null;
+    for (const u of doc.units) {
+      if ((u.tags || []).some((t) => t.toLowerCase() === low)) {
+        u.tags = newPath ? u.tags.map((t) => (t.toLowerCase() === low ? newPath : t)) : u.tags.filter((t) => t.toLowerCase() !== low);
+      }
+      for (const q of [...(u.search || [])]) {
+        if (!q.includes(oq)) continue;
+        if (!nq) { takeSearch(u, q); continue; }
+        const q2 = q.split(oq).join(nq);
+        u.search = u.search.map((x) => (x === q ? q2 : x));
+        if (u.sn?.[q] != null) { u.sn[q2] = u.sn[q]; delete u.sn[q]; }
+      }
+    }
+    cleanup();
+  }
+  let tagEdit = null;  // the tag being renamed
+  let tagDrop = null;  // the tag whose × asked first
+  function ptagsPanel() {
+    if (!author) return null;
+    const list = ptags();
+    const rows = list.map((t) => {
+      const path = ptagPath(t);
+      const from = ptagFrom(t);
+      let nameEl = h("b", {}, t.name);
+      if (tagEdit === t.id) {
+        nameEl = h("input", { class: "ptname", value: t.name, maxlength: 40, "aria-label": "The tag's name" });
+        let gone = false;
+        const done = (ok) => {
+          if (gone) return;
+          gone = true; tagEdit = null;
+          const v = nameEl.value.trim().slice(0, 40);
+          if (ok && v && v !== t.name) {
+            const clash = ptagByName(v);
+            if (clash && clash !== t) note = `There's a tag called ${clash.name} already.`;
+            else { t.name = v; retag(path, ptagPath(t)); mark(); }
+          }
+          draw();
+        };
+        nameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+        nameEl.addEventListener("blur", () => done(true));
+        requestAnimationFrame(() => { nameEl.focus(); nameEl.select(); });
+      }
+      return h("div", { class: "ptag" },
+        h("div", { class: "pt1" }, nameEl, h("small", { class: "muted" }, ptagSize(t)), h("span", { class: "sp" }),
+          h("button", { class: "add", title: picked ? `Put it on ${pretty(picked)}` : "Put it on the next free day", "aria-label": `Put ${t.name} on ${picked ? pretty(picked) : "the next free day"}`,
+            onclick: () => { const d = picked || firstStudy(lastDay() ? addDays(lastDay(), 1) : start); dropped(d, { key: `tag:${path}` }); } }, "+"),
+          h("button", { class: "linkish", onclick: () => { tagEdit = t.id; tagDrop = null; draw(); } }, "Rename"),
+          tagDrop === t.id
+            ? h("button", { class: "linkish danger", onclick: () => { tagDrop = null; putTags(list.filter((x) => x !== t)); retag(path, null); mark(); draw(); } }, "Delete it")
+            : h("button", { class: "linkish", title: "Delete it (and from the dates that use it)", "aria-label": `Delete ${t.name}`, onclick: () => { tagDrop = t.id; draw(); } }, "\u00d7")),
+        from.length ? h("div", { class: "muted small pfrom" }, `From ${from.join(", ")}`) : null);
+    });
+    return h("div", { class: "ptags" },
+      h("div", { class: "thead" }, h("b", {}, "This plan's tags")),
+      list.length ? h("small", { class: "muted psub" }, `Everyone following gets them in Anki, under DueCrew › ${tagRootNow()}`) : null,
+      list.length ? rows : h("p", { class: "muted small" }, "Tag cards for your class (SLG 12): in Anki's browser, right-click › Due Crew: tag for a plan…, or with your AI in Text › Tag by objective."));
+  }
+  // overlap: a plan tag and another tag, as an Anki search on the picked day
+  let ovl = { a: "", op: "and", b: "" };
+  function overlapBox(d) {
+    if (!author || !ptags().length) return null;
+    const listId = "ovl-tags";
+    const others = [...ptags().map(ptagPath), ...[...count.keys()].filter((k) => kindOf(k) === "tag").slice(0, 3000).map(pathOf)];
+    const dl = h("datalist", { id: listId }, others.map((p) => h("option", { value: p })));
+    const a = h("select", { "aria-label": "The plan's tag", onchange: () => { ovl.a = a.value; } },
+      ptags().map((t) => h("option", { value: t.id, selected: ovl.a === t.id }, t.name)));
+    const b = h("input", { list: listId, value: ovl.b, placeholder: "another tag", "aria-label": "Another tag", oninput: () => { ovl.b = b.value; } });
+    const ops = h("span", { class: "seg", role: "group", "aria-label": "How they meet" }, [["and", "and"], ["not", "but not"], ["or", "or"]].map(([k, t]) =>
+      h("button", { class: ovl.op === k ? "on" : "", "aria-pressed": String(ovl.op === k), onclick: () => { ovl = { a: a.value, op: k, b: b.value }; draw(); } }, t)));
+    const add = h("button", { onclick: () => {
+      const t = ptags().find((x) => x.id === a.value) || ptags()[0];
+      const other = b.value.trim();
+      if (!t || !other) return;
+      const pt = ptagByName(other);
+      const otherPath = pt ? ptagPath(pt) : pathOf(findKey("tag", other.replace(/^tag:/i, "")));
+      const A = Tags.ankiSearch("tag", ptagPath(t)), B = Tags.ankiSearch("tag", otherPath);
+      const q = ovl.op === "and" ? `${A} ${B}` : ovl.op === "not" ? `${A} -${B}` : `(${A} OR ${B})`;
+      const fresh = !doc.units.some((x) => x.opens === d && !x.even);
+      const u = unitOn(d);
+      u.search = [...new Set([...(u.search || []), q])].slice(0, 10);
+      if (fresh) { u.name = `${t.name} ${ovl.op === "not" ? "but not" : ovl.op} ${Tags.word(otherPath.split("::").pop())}`.slice(0, 60); auto.delete(u.id); }
+      ovl = { a: t.id, op: ovl.op, b: "" };
+      renameAll(); mark(); draw();
+    } }, "Add");
+    return h("div", { class: "ovl" }, h("span", { class: "lbl" }, "Overlap"),
+      h("div", { class: "row" }, a, ops, b, dl, add),
+      h("small", { class: "muted" }, "and: in both. but not: the first without the second. or: either one. Counted in your Anki."));
+  }
   // F1: events: named days (a lecture, a quiz, the exam) that dates prep for
   const events = () => doc.events || [];
   const evById = (id) => events().find((x) => x.id === id);
@@ -256,7 +496,14 @@ async function builder(id) {
   }
   let aimFor = null;        // F1: Fill aims at this event (its day before is the finish date)
   /** "Search: Cardio…", by its first tag (3.4 review, N7). */
-  const searchName = (q) => { const m = /tag:"?([^\s"]+)/i.exec(q); const w = m ? Tags.word(m[1].split("::").filter((x) => x.replace(/\*/g, "")).pop() || "").replace(/\*/g, "") : ""; return w ? `Search: ${w}` : "Search"; };
+  /** a search's name from its tags; two of them, as Overlap writes them, read "SLG 12 but not Pharm" */
+  const searchName = (q) => {
+    const ws = [...q.matchAll(/(-?)"?tag:"?((?:\\.|[^\s"])+)/gi)].map((m) => [m[1],
+      Tags.word(m[2].replace(/\\(.)/g, "$1").split("::").filter((x) => x.replace(/\*/g, "")).pop() || "").replace(/\*/g, "")]).filter(([, w]) => w);
+    if (ws.length === 2 && !ws[0][0]) return `${ws[0][1]} ${ws[1][0] ? "but not" : /\sOR\s/.test(q) ? "or" : "and"} ${ws[1][1]}`;
+    const w = ws.find(([neg]) => !neg);
+    return w ? `Search: ${w[1]}` : "Search";
+  };
 
   function unitOn(d) {
     let u = doc.units.find((x) => x.opens === d && !x.even);
@@ -431,7 +678,7 @@ async function builder(id) {
         // a follower's view: the author's count for the date, its names
         for (const k of srcs(u)) e.chips.push({ u, key: k, text: label(k, placed), n: null, raw: pathOf(k) });
         e.load += u.n || 0;
-      } else for (const k of srcs(u)) { const c = eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c; }
+      } else for (const k of srcs(u)) { const c = uncounted(k) ? null : eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c || 0; }
       if ((u.cards || []).length) { e.chips.push({ u, cards: true, text: `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}`, n: u.cards.length }); e.load += u.cards.length; }
       for (const q of u.search || []) { const c = u.sn?.[q] ?? null; e.chips.push({ u, search: q, text: searchName(q), raw: q, n: c }); e.load += c || 0; }
       if (hasIds(u)) { e.chips.push({ u, ids: true, text: idsText(u), n: u.idn ?? null }); e.load += idsN(u); }
@@ -545,6 +792,7 @@ async function builder(id) {
       h("button", { role: "tab", "aria-selected": String(treeView === k), class: treeView === k ? "on" : "", onclick: () => { treeView = k; draw(); } }, t))) : null;
     const tot = coverTotal();
     return h("div", { class: "tree2" },
+      ptagsPanel(),
       h("div", { class: "thead" }, h("small", { class: "muted" }, tot ? `${tot.toLocaleString()} cards ticked` : "Tick what the plan covers.")),
       picked ? h("div", { class: "adding" }, h("b", {}, `Adding to ${pretty(picked)}`), h("span", { class: "muted" }, " · + puts a tag there")) : null,
       seg, q, list);
@@ -588,6 +836,50 @@ async function builder(id) {
       h("span", { class: "pi" }, kind, how));
   }
 
+  /** 3.8.0: lines that come every week ("every Fri: practice questions"),
+   *  from the plan's first date to its last; each follower ticks each
+   *  day's in Due. Authors edit them here; followers see them. */
+  function everyBox() {
+    const lines = doc.every || [];
+    if (!author) {
+      return lines.length ? h("div", { class: "every2" }, h("b", {}, "Every week"),
+        lines.map((x) => h("span", { class: "small" }, h("b", {}, Todo.LABEL[x.k]), ` · ${x.t} · ${Every.label(x.r || "")}`,
+          x.url && Todo.okUrl(x.url) ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
+    }
+    const set = () => { if (lines.length) doc.every = lines; else delete doc.every; mark(); };
+    const rows = lines.map((x, i) => h("div", { class: "todo" },
+      h("select", { "aria-label": "Kind", onchange: (e) => { x.k = e.target.value; set(); } },
+        Object.entries(Todo.LABEL).map(([k, lb]) => h("option", { value: k, selected: x.k === k }, lb))),
+      h("input", { value: x.t, maxlength: 140, placeholder: "Practice questions", "aria-label": "What to do",
+        oninput: (e) => { x.t = e.target.value; set(); } }),
+      h("span", { class: "wdays", role: "group", "aria-label": "Days" }, ["M", "T", "W", "T", "F", "S", "S"].map((l, k) =>
+        h("button", { class: (x.r || "").includes(String(k)) ? "on" : "", "aria-pressed": String((x.r || "").includes(String(k))), title: Every.DAYS[k],
+          onclick: () => { const r = new Set((x.r || "").split("")); if (r.has(String(k))) r.delete(String(k)); else r.add(String(k));
+            if (r.size) { x.r = [...r].sort().join(""); set(); draw(); } } }, l))),
+      h("input", { value: x.url || "", maxlength: 500, placeholder: "https:// (optional)", "aria-label": "A link",
+        onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
+      h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
+    return h("div", { class: "every2" },
+      h("span", { class: "pi" }, h("b", {}, "Every week"), h("small", { class: "muted" }, " lines followers tick in Due on those days, from the first date to the last")),
+      rows,
+      lines.length < Every.MAX ? h("button", { class: "linkish", onclick: () => {
+        doc.every = [...lines, { k: "do", t: "", r: "4" }]; mark(); draw(); } }, "+ Add a line") : null);
+  }
+
+  /** 3.8.0: a follower sees the plan's own tags: their names, where they sit in
+   *  Anki (each follower's Anki adds them with the plan's updates), and a search
+   *  to paste into Browse. */
+  function followTags() {
+    const list = ptags();
+    if (author || !list.length) return null;
+    return h("div", { class: "every2 ptagsf" },
+      h("span", { class: "pi" }, h("b", {}, "This plan's tags"),
+        h("small", { class: "muted" }, ` in your Anki under DueCrew › ${tagRootNow()}, with the plan's updates`)),
+      h("div", { class: "ptf" }, list.map((t) => h("span", { class: "ptf1" }, h("b", {}, t.name),
+        h("button", { class: "linkish cps", title: "Copy a search to paste into Anki's Browse", "aria-label": `Copy a search for ${t.name}`,
+          onclick: (e) => copy(Tags.ankiSearch("tag", ptagPath(t)), e.currentTarget) }, "Copy search")))));
+  }
+
   // ---- the calendar ----
   // 3.3: "Month" is the next five weeks from the week in view, so what's
   // coming is always on screen (a calendar month hides a plan starting on the 28th)
@@ -597,6 +889,7 @@ async function builder(id) {
   }
   function step(k) {
     anchor = addDays(Sched.monday(anchor), (view === "week" ? 7 : 28) * k);
+    slid = k;
     draw();
   }
   function calTitle() {
@@ -633,6 +926,7 @@ async function builder(id) {
       const you = myLine(d);
       const chips = e.chips.map((c) => {
         const el = h("button", { class: `ch ${c.review ? "rv" : c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
+          "data-k": c.u ? `${c.u.id}:${c.key || c.search || (c.cards ? "cards" : c.ids ? "ids" : "")}` : null,
           title: `${c.raw || c.text}${c.n != null ? ` · ${c.n.toLocaleString()} cards` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; moving = null; sideTab = "day"; draw(); } }, h("span", {}, c.text), c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
@@ -705,10 +999,21 @@ async function builder(id) {
     // 3.4, D1: a pasted search is counted by an author's Anki at its next refresh
     const count = (c) => (c.ids && c.n == null ? null
       : c.ids && c.n > 0 ? h("small", {}, `${c.n.toLocaleString()} card${c.n === 1 ? "" : "s"}`)
-      : c.search && c.n == null ? h("small", {}, "counted in your Anki soon")
+      : c.search && c.n == null ? null  // the line under the date says when it's counted
       : (c.search || c.ids) && c.n === 0 ? h("small", { class: "w" }, "finds nothing") : c.n != null ? h("small", {}, c.n.toLocaleString()) : null);
+    // 3.8.0: a tag, subdeck or search, copied as a search for Anki's Browse
+    const copySearch = (q) => h("button", { class: "linkish cps", title: `Copy ${q} to paste into Anki's Browse`, onclick: async (ev) => {
+      const b = ev.currentTarget;
+      try {
+        await navigator.clipboard.writeText(q);
+        if (window.dcMotion) return dcMotion.copied(b);  // 3.8.0: Copied ✓ in place, then back
+        b.textContent = "Copied";
+      } catch { b.textContent = q; }
+      setTimeout(() => { b.textContent = "Copy search"; }, 2000);
+    } }, "Copy search");
     const chipEl = (u, c) => h("span", { class: `ch2 ${c.cards || c.ids ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
       h("span", {}, c.text, c.raw && (c.search || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), count(c),
+      c.search ? copySearch(c.search) : c.key && !c.cards && !c.ids ? copySearch(Tags.ankiSearch(kindOf(c.key), pathOf(c.key))) : null,
       author && !c.cards && !c.search && !c.ids ? h("button", { class: "linkish", onclick: () => { splitting = { u, key: c.key }; draw(); } }, "Split") : null,
       author ? h("button", { class: "x", "aria-label": `Take ${c.text} off`, onclick: () => {
         if (c.cards) u.cards = []; else if (c.ids) takeIds(u); else if (c.search) takeSearch(u, c.search); else takeOut(u, c.key);
@@ -765,6 +1070,7 @@ async function builder(id) {
       author ? h("div", { class: "addc" }, h("span", { class: "lbl" }, "Add cards"), searchBox(d),
         // 3.6.5: a follower's Anki opens a date once; what's added after comes the next morning
         d <= today() && rows.length ? h("small", { class: "muted" }, "This date has opened. Followers who opened it get what you add tomorrow morning.") : null) : null,
+      overlapBox(d),
       moveIn ? h("label", { class: "inline" }, "Move to ", moveIn, h("button", { class: "quiet", onclick: (ev) => { ev.preventDefault(); moving = null; draw(); } }, "Cancel")) : null,
       moveLink || rvLink || makeEv ? h("div", { class: "acts" }, moveLink, rvLink, makeEv) : null,
       rv && !rvLink ? rv : null,
@@ -1032,7 +1338,9 @@ async function builder(id) {
 
   // ---- as text ----
   const CARDS_TEXT = 500;
-  const toText = () => { byOpens(); return [...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
+  // 3.8.0: a plan tag as a line: tag | SLG 12 | tag:…, search:… | notes:…
+  const tagLine = (t) => ["tag", t.name, ptagFrom(t).join(", "), (t.notes || []).length ? Picks.notesText(t.notes) : ""].filter(Boolean).join(" | ");
+  const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.decks || []).map((d) => `deck:${d}`)].join(", "),
     ...(u.search || []).map((q) => `search:${q}`),
     (u.nids || []).length ? `nids:${u.nids.join(",")}` : "", (u.cids || []).length ? `cids:${u.cids.join(",")}` : "",
@@ -1042,7 +1350,7 @@ async function builder(id) {
     (u.cards || []).length > CARDS_TEXT ? `${u.cards.length} single cards` : (u.cards || []).length ? Picks.cardsText(u.cards) : "",
     u.for && evById(u.for) ? `for ${evById(u.for).name}` : "",
     // Due: the author's lines, each one part ("watch: lecture 14 https://…")
-    ...(u.todo || []).map((x) => `${x.k}: ${x.t}${x.url ? ` ${x.url}` : ""}`)].filter(Boolean).join(" | "))].sort().join("\n"); };
+    ...(u.todo || []).map((x) => `${x.k}: ${x.t}${x.url ? ` ${x.url}` : ""}`)].filter(Boolean).join(" | "))].sort()].join("\n"); };
 
   // what an AI (or a person) might write for a tag: the exact path, any
   // case, or its readable name
@@ -1053,6 +1361,16 @@ async function builder(id) {
   function fromText(text) {
     const errors = [];
     const units = [];
+    const tagsIn = [];   // 3.8.0: "tag | SLG 12 | notes:… | tag:…"
+    // the names of the tags this text makes, for a date's tag:SLG 12 before the line that makes it
+    const named = new Set(text.split("\n").map((l) => /^\s*(?:[-*•]\s+)?`?tag\s*\|\s*([^|]+?)\s*(?:\||$)/i.exec(l)).filter(Boolean)
+      .map((m) => Tags.part(m[1].slice(0, 40)).toLowerCase()));
+    const planTagKey = (raw) => {
+      if (raw.includes("::")) return null;
+      const t = ptagByName(raw);
+      if (t) return `tag:${ptagPath(t)}`;
+      return named.has(Tags.part(raw).toLowerCase()) ? `tag:DueCrew::${tagRootNow()}::${Tags.part(raw)}` : null;
+    };
     const notes = [];
     const evs = [];     // F1: "2026-10-15 | event | Micro quiz"
     const forName = new Map();  // unit id -> the event name it's for
@@ -1068,6 +1386,32 @@ async function builder(id) {
       line = line.replace(/`/g, "");
       if (line.startsWith("#")) { (/\bpick\b|\bsingle\b/i.test(line) ? notes : why).push(line.replace(/^#+\s*/, "")); return; }
       const parts = line.split(/\s*\|\s*|\s{2,}/).filter(Boolean);
+      if (parts.length >= 2 && /^tag$/i.test(parts[0])) {
+        const full = parts[1].trim();
+        const tname = full.slice(0, 40).trim();
+        if (full.length > 40) warns.push(`Line ${i + 1}: a tag's name is cut to 40 characters.`);
+        const tg = [], dk = [], sq = [];
+        for (const part of parts.slice(2)) {
+          if (/^search:/i.test(part)) sq.push(part.slice(7).trim());
+          else if (/^(tag|deck):/i.test(part)) {
+            for (const x of part.split(/\s*[,;]\s*(?=(?:tag|deck):)/i)) {
+              const kind = x.slice(0, 4).toLowerCase() === "deck" ? "deck" : "tag";
+              (kind === "tag" ? tg : dk).push(pathOf(findKey(kind, x.slice(x.indexOf(":") + 1).trim())));
+            }
+          } else { errors.push(`Line ${i + 1}: a tag line is tag | its name | notes:…, tag:…, deck:… or search:…`); return; }
+        }
+        if (picks && picks.cards.length) { errors.push(`Line ${i + 1}: a tag holds whole notes (notes:), not single cards.`); return; }
+        if (picks && picks.bad.length) { errors.push(`Line ${i + 1}: "${picks.bad[0].slice(0, 30)}" isn't a note's ID from Anki.`); return; }
+        if (sq.some((q) => PERSONAL.test(q))) { errors.push(`Line ${i + 1}: that search finds different cards in each person's Anki; use tags.`); return; }
+        const gs = picks ? picks.notes : [];
+        if (!tname || (!gs.length && !tg.length && !dk.length && !sq.length)) { errors.push(`Line ${i + 1}: a tag needs a name, and notes:, a tag:, a deck: or a search:.`); return; }
+        if (gs.length > 5000) { errors.push(`Line ${i + 1}: a tag holds up to 5,000 notes.`); return; }
+        const want = Tags.part(tname).toLowerCase();
+        const t = tagsIn.find((x) => Tags.part(x.name).toLowerCase() === want)
+          || (tagsIn[tagsIn.push({ id: ptagByName(tname)?.id || uid8(), name: tname }) - 1]);
+        for (const [k, v] of [["notes", gs], ["tags", tg], ["decks", dk], ["search", sq]]) if (v.length) t[k] = [...new Set([...(t[k] || []), ...v])];
+        return;
+      }
       if (parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && /^event$/i.test(parts[1])) {
         const full = parts.slice(2).join(" ");
         const name = full.slice(0, 60);
@@ -1093,7 +1437,8 @@ async function builder(id) {
         else if (/^(tag|deck):/i.test(part)) {
           for (const x of part.split(/\s*[,;]\s*(?=(?:tag|deck):)/i)) {
             const kind = x.slice(0, 4).toLowerCase() === "deck" ? "deck" : "tag";
-            const key = findKey(kind, x.slice(x.indexOf(":") + 1).trim());
+            const raw = x.slice(x.indexOf(":") + 1).trim();
+            const key = (kind === "tag" && planTagKey(raw)) || findKey(kind, raw);  // 3.8.0: tag:SLG 12, the plan's own
             (kind === "tag" ? tags : decks).push(pathOf(key));
           }
         } else name = name ? `${name} ${part}` : part;
@@ -1132,7 +1477,9 @@ async function builder(id) {
       if (!u.name) { u.name = autoName(u); auto.add(u.id); }
       units.push(u);
     });
-    const missing = units.flatMap((u) => [...u.tags.map((t) => `tag:${t}`), ...u.decks.map((d) => `deck:${d}`)]).filter((k) => count.size && !count.has(k));
+    const ours = `tag:DueCrew::${tagRootNow()}::`.toLowerCase();  // the plan's own tags aren't in the deck until they're made
+    const missing = units.flatMap((u) => [...u.tags.map((t) => `tag:${t}`), ...u.decks.map((d) => `deck:${d}`)])
+      .filter((k) => count.size && !count.has(k) && !k.toLowerCase().startsWith(ours));
     for (const u of units) {
       const n = forName.get(u.id); if (!n) continue;
       const ev = [...evs, ...events()].find((x) => x.name.toLowerCase() === n.toLowerCase());
@@ -1140,7 +1487,8 @@ async function builder(id) {
     }
     // 3.6.5: pasted ids are this Anki's own numbers until the author's Anki sends what they are
     if (localIds) warns.push(`${localIds} date${localIds === 1 ? " uses" : "s use"} nids: or cids:, your Anki's own numbers. Open Anki after you save, and they'll work in everyone's copy.`);
-    return { units, errors, missing, notes, events: evs, warns, why: why.filter(Boolean).slice(0, 60) };
+    if (tagsIn.length + ptags().filter((t) => !tagsIn.some((x) => x.id === t.id)).length > 100) errors.push("A plan holds up to 100 tags.");
+    return { units, errors, missing, notes, events: evs, warns, why: why.filter(Boolean).slice(0, 60), tags: tagsIn };
   }
 
   /** The prompt for your own AI: the plan so far, the format, the deck's tags. */
@@ -1190,6 +1538,7 @@ async function builder(id) {
       "- The first part is the date those cards open: YYYY-MM-DD, or \"week 3\" for the Monday of the plan's third week.",
       "- A tag brings every card under it. A whole chapter is its tag; a smaller part is a deeper tag (a section, a lecture). Copy tags exactly from the list below, the part before the two spaces; never invent one.",
       "- A subdeck works the same way: deck:FULL::DECK::PATH.",
+      ptags().length ? "- This plan's own tags (my course's, like SLG 12) are listed below too; a date uses one by its name: tag:SLG 12. Where it meets a resource, use a search with its full tag: search:tag:DueCrew::… tag:#Video::…" : null,
       "- When a lecture is only part of a tag (two tags at once, or one without another), use an Anki search instead: search:tag:A tag:B -tag:C.",
       "- Several tags can open the same day: separate them with commas on one line.",
       "- Exact notes: notes:ID ID ID brings every card of those notes (every cloze), the IDs separated by spaces. Exact cards: cards:ID:N ID:N brings card N of each note (1 is the first). These IDs can hold any character but a space; copy each exactly. For a plan others follow, use notes: and cards:; numeric nids: and cids: only work in my own Anki. Use only IDs I give you below; never invent, guess or round one. At most 5,000 on a line; split a longer list over dates.",
@@ -1230,6 +1579,8 @@ async function builder(id) {
       "Note IDs or card IDs I have, and what each list is for (in Anki's browser: select them, right-click, Due Crew: copy as plan selector; paste here, or leave this empty):",
       "",
       "",
+      ptags().length ? ["This plan's own tags (its name, its full tag in Anki, how big):",
+        ...ptags().map((t) => `${t.name}  tag:${ptagPath(t)}  (${ptagSize(t)})`), ""] : [],
       `The deck's tags${cover.size ? " for what the plan covers" : ""} (tag or subdeck, card count, readable name)${more > 0 ? `; ${more.toLocaleString()} more aren't listed, ask me for a branch` : ""}:`,
       ...lines,
       doc.units.length ? ["", "Already planned:", toText()] : [],
@@ -1237,6 +1588,44 @@ async function builder(id) {
       doc.units.some((u) => u.pn) ? ["", "What each planned date opens, as my Anki counted it (new to that date, already on an earlier date, picked notes not in my deck):",
         ...doc.units.filter((u) => u.pn).map((u) => `${u.opens} ${u.name}: ${u.pn[0] + (u.cards || []).length} new, ${u.pn[1]} repeat, ${u.pn[2]} not in my deck`)] : [],
     ].flat().filter((x) => x !== null).join("\n");
+  }
+
+  /** 3.8.0: Tag by objective: the person's objectives and their own export
+   *  in, the plan's tags out (tag | NAME | notes:…). Names and counts only. */
+  function tagPrompt() {
+    const tagList = [...count.keys()].filter((k) => kindOf(k) === "tag" && !pathOf(k).startsWith("DueCrew::"))
+      .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)).slice(0, 300)
+      .map((k) => `tag:${pathOf(k)}  (${n(k).toLocaleString()} cards)`);
+    return [
+      `I'm tagging my Anki cards for "${meta.name || plan.name}" on the deck "${doc.deck}" by my course's own objectives. Due Crew puts each tag on the cards of everyone following the plan, in their own Anki.`,
+      "",
+      "For each objective I give, write one line, and nothing else (anything you want to explain goes on a line starting with #):",
+      "",
+      "tag | NAME | notes:ID ID ID",
+      "",
+      "Rules:",
+      "- NAME is the objective's short name as my course writes it (SLG 12, Week 3, Lecture 14), 40 characters at most.",
+      "- The IDs are from the #guid column of the text file I attached (my cards, exported from Anki), copied exactly; they can hold any character but a space. Use only IDs from that file; never invent, guess or round one.",
+      "- Read each card's text to judge whether it serves the objective. A card can be on more than one objective; leave out a card that only touches one in passing.",
+      "- When every card under one of my deck's tags fits an objective, write the tag instead of the IDs: tag | NAME | tag:FULL::TAG::PATH, copied exactly from the list below or the #tags column.",
+      "- At most 5,000 notes on a line; a bigger objective is two names (SLG 12a, SLG 12b).",
+      "- Never quote or copy card text into your answer.",
+      "- After each tag line, one # line: what you took, what you left out, and why.",
+      "- If an objective has no cards in the file, say so on a # line; don't invent any.",
+      ptags().length ? `- This plan has these tags already: ${ptags().map((t) => t.name).join(", ")}. A line with the same name adds to it.` : null,
+      "",
+      "Example:",
+      "tag | SLG 12 | notes:Ab3$kL9qZ1 p&x8Hk!eQ2",
+      "# SLG 12: the receptor-and-effect cards from the video and chapter 5; left out 9 on toxicity (SLG 15).",
+      "tag | SLG 14 | tag:#Book::Pharm::Ch07",
+      "# SLG 14: the whole chapter fits.",
+      "",
+      "My objectives (edit this part):",
+      "",
+      "",
+      "Tags in my deck, for whole-tag answers (tag, card count):",
+      ...tagList,
+    ].filter((x) => x !== null).join("\n");
   }
 
   // 3.6.5: Text opens on Add dates (pasting can't take anything off); Edit
@@ -1253,9 +1642,9 @@ async function builder(id) {
       const r = fromText(ta.value);
       preview.replaceChildren();
       if (r.errors.length) { out.className = "status bad"; out.textContent = r.errors.slice(0, 6).join(" "); return; }
-      if (!r.units.length && !r.events.length && !r.why.length && !r.notes.length) { out.className = "status"; out.textContent = "Nothing to read yet."; return; }
+      if (!r.units.length && !r.events.length && !r.why.length && !r.notes.length && !r.tags.length) { out.className = "status"; out.textContent = "Nothing to read yet."; return; }
       out.className = r.missing.length ? "status bad" : "status";
-      out.textContent = `${r.units.length} date${r.units.length === 1 ? "" : "s"}${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
+      out.textContent = `${r.units.length} date${r.units.length === 1 ? "" : "s"}${r.events.length ? `, ${r.events.length} event${r.events.length === 1 ? "" : "s"}` : ""}${r.tags.length ? `, ${r.tags.length} tag${r.tags.length === 1 ? "" : "s"}` : ""}.${r.missing.length ? ` Not in your deck (they'd find nothing): ${r.missing.slice(0, 5).map((k) => pathOf(k)).join(", ")}${r.missing.length > 5 ? "…" : ""}` : ""}`;
       const placed = new Set(r.units.flatMap(srcs));
       const joins = (u) => adding && doc.units.some((x) => x.id === u.id);
       // P1: a date as it was keeps its count from the author's Anki
@@ -1266,7 +1655,7 @@ async function builder(id) {
       };
       const rows = r.units.slice().sort((a, b) => a.opens.localeCompare(b.opens)).map((u) => h("div", { class: "pvrow" },
         h("span", {}, pretty(u.opens)), h("span", {}, h("b", {}, u.name), joins(u) ? h("span", { class: "muted small" }, " · adds to this date") : null, " ",
-          h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
+          h("span", { class: "muted small" }, srcs(u).map((k) => (count.has(k) || k.toLowerCase().startsWith(`tag:duecrew::${tagRootNow().toLowerCase()}::`) ? label(k, placed) : `${pathOf(k)} (not found)`)).join(", "))),
         h("span", { class: "muted small" }, `${u.due ? `to ${pretty(u.due)}${u.even ? ", evenly" : ""} · ` : ""}${counted(u) || `${unitTotal(u, placed).toLocaleString()} cards`}`)));
       // Add: new dates go on; a line with a date's own day and name adds its picks to it
       const merge = (into, u) => {
@@ -1292,11 +1681,29 @@ async function builder(id) {
         }
         if (replace) doc.units = r.units;
         else for (const u of r.units) { const x = doc.units.find((y) => y.id === u.id); if (x) merge(x, u); else doc.units.push(u); }
+        // 3.8.0: the plan's tags: the whole plan's text says them all; Add dates adds to them
+        if (replace) putTags(r.tags);
+        else if (r.tags.length) {
+          const list = ptags().map((t) => structuredClone(t));
+          for (const t of r.tags) {
+            const x = list.find((y) => y.id === t.id);
+            if (!x) { list.push(t); continue; }
+            for (const k of ["notes", "tags", "decks", "search"]) if ((t[k] || []).length) x[k] = [...new Set([...(x[k] || []), ...t[k]])];
+          }
+          putTags(list);
+        }
         byOpens(); mark(); preview.replaceChildren(); out.className = "status";
         out.textContent = replace ? `Now ${doc.units.length} dates. Save to keep them.` : `Added. Now ${doc.units.length} dates. Save to keep them.`;
         ta.value = replace ? toText() : "";
       };
       const gone = adding ? [] : doc.units.filter((x) => !r.units.some((u) => u.id === x.id));
+      const goneTags = adding ? [] : ptags().filter((t) => !r.tags.some((x) => x.id === t.id));
+      const tagRows = r.tags.map((t) => {
+        const was = ptags().find((x) => x.id === t.id);
+        const what = [(t.notes || []).length ? `${t.notes.length.toLocaleString()} notes` : "", ptagFrom(t).length ? `from ${ptagFrom(t).join(", ")}` : ""].filter(Boolean).join(", ");
+        return h("div", { class: "pvrow" }, h("span", {}, was ? "Tag" : "New tag"), h("span", {}, h("b", {}, t.name), adding && was ? h("span", { class: "muted small" }, " · adds to it") : null),
+          h("span", { class: "muted small" }, what));
+      });
       // 3.6.5: a day over the pace, as it would be after this
       const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
       const after = adding ? [...doc.units.filter((x) => !r.units.some((u) => u.id === x.id)), ...r.units] : r.units;
@@ -1304,8 +1711,9 @@ async function builder(id) {
       for (const u of after) if (!u.even) byDay.set(u.opens, (byDay.get(u.opens) || 0) + unitTotal(u, placed));
       const heavy = cap ? [...byDay].filter(([, n]) => n > cap * 1.25).sort() : [];
       const goneText = gone.slice(0, 6).map((u) => `${pretty(u.opens)}, ${u.name}`).join(" · ") + (gone.length > 6 ? ` and ${gone.length - 6} more` : "");
-      preview.append(h("div", { class: "pv" }, rows,
+      preview.append(h("div", { class: "pv" }, tagRows, rows,
         gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} date${gone.length === 1 ? "" : "s"}: `), goneText) : null,
+        goneTags.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${goneTags.length} tag${goneTags.length === 1 ? "" : "s"}: `), goneTags.map((t) => t.name).join(", ")) : null,
         heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map(([d, n]) => `${pretty(d)}, ${n.toLocaleString()} new`).join(" · "),
           ` (pace ${cap.toLocaleString()} a day)`) : null,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
@@ -1313,8 +1721,8 @@ async function builder(id) {
         r.why.length ? h("details", { class: "small", open: !r.units.length }, h("summary", {}, `The AI's notes (${r.why.length})`),
           h("ul", { class: "muted", style: "margin:4px 0 0;padding-left:20px;text-align:left" }, r.why.map((x) => h("li", {}, x.slice(0, 300))))) : null,
         h("div", { class: "row" },
-          adding ? (r.units.length || r.events.length ? h("button", { onclick: () => use(false) }, "Add to the plan") : null)
-            : h("button", { class: gone.length ? "danger" : "", onclick: () => use(true) }, "Replace the plan's dates"),
+          adding ? (r.units.length || r.events.length || r.tags.length ? h("button", { onclick: () => use(false) }, "Add to the plan") : null)
+            : h("button", { class: gone.length || goneTags.length ? "danger" : "", onclick: () => use(true) }, "Replace the plan's dates"),
           h("button", { class: "quiet", onclick: () => { preview.replaceChildren(); out.textContent = ""; } }, "Cancel"))));
     };
     // N6: Read it turns solid once the text is new
@@ -1332,7 +1740,17 @@ async function builder(id) {
           h("li", {}, "Attach the .txt file to the chat with the prompt. A big course works better a block at a time.")),
         h("p", { class: "muted" }, "On an older Due Crew: in Anki's browser, select the notes, then Notes › Export Notes as Notes in Plain Text, with Include unique identifier ticked. Your cards go only to your AI. Due Crew never sees them.")),
       h("div", { class: "row" }, h("button", { class: "ghost", onclick: (e) => copy(aiPrompt(), e.target) }, "Copy the prompt"),
-        h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, aiPrompt()))));
+        h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, aiPrompt()))),
+      // 3.8.0: tag by objective: the plan's own tags, made by the AI from your export
+      h("div", { class: "aitag" },
+        h("b", {}, "Tag by objective"),
+        h("p", { class: "muted small" }, "Your course's objectives in, the plan's tags out (SLG 12), on everyone's cards who follows it. The AI reads your cards from your own export; Due Crew never sees them."),
+        h("ol", { class: "muted small", style: "margin:4px 0;padding-left:20px;text-align:left" },
+          h("li", {}, "In Anki: Tools › Due Crew › Export cards for my AI."),
+          h("li", {}, "Copy this prompt, add your objectives where it says, and attach the export."),
+          h("li", {}, "Paste the answer into Add dates. The new tags show before anything changes.")),
+        h("div", { class: "row" }, h("button", { class: "ghost", onclick: (e) => copy(tagPrompt(), e.target) }, "Copy the tagging prompt"),
+          h("details", {}, h("summary", { class: "small" }, "See it"), h("pre", { class: "mono small muted aipre" }, tagPrompt())))));
     return h("div", { class: "stack" },
       aiBox,
       h("details", { class: "fmt" }, h("summary", { class: "small" }, "Format"),
@@ -1441,6 +1859,33 @@ async function builder(id) {
       h("button", { class: "linkish", onclick: () => { resetAsk = false; draw(); } }, "Cancel"));
   }
 
+  /** 3.8.0: a follower's "how its cards open": on the plan's dates, or at my own
+   *  pace (my Anki opens the next date when I ask, or once I've seen the last).
+   *  Mine only; the plan never changes. Next is the first date not all open yet,
+   *  by the progress my Anki syncs. */
+  function paceBox() {
+    const f = !author && plan.following;
+    if (!f) return null;
+    const own = f.own || "";
+    const prog = f.progress || {};
+    const skipped = new Set(f.skipped || []);
+    const next = own ? [...(doc.units || [])].filter((u) => !skipped.has(u.id)).sort((a, b) => (a.opens < b.opens ? -1 : a.opens > b.opens ? 1 : 0))
+      .find((u) => { const c = prog[u.id]; return !c || (c[2] > 0 && c[0] < c[2]); }) : null;  // not counted yet: not open yet
+    const sel = h("select", { "aria-label": "How its cards open", onchange: async (e) => {
+      sel.disabled = true;
+      try {
+        await api("PATCH", `/plans/${id}/follow`, { own: e.target.value || null });
+        plan = await api("GET", `/plans/${id}`);
+      } catch (err) { if (!err.status) console.error(err); }
+      draw();
+    } }, [["", "on the plan's dates"], ["ready", "when I'm ready"], ["next", "when I'm ready, the next once I've seen the last"]]
+      .map(([v, t]) => h("option", { value: v, selected: own === v }, t)));
+    return h("div", { class: "pacebox small" },
+      own ? h("div", {}, h("b", {}, "At your pace"), next ? ` · next: ${next.name || "?"}` : " · every date is open",
+        h("span", { class: "muted" }, next ? ". Your Anki opens it from You › Plans." : ".")) : null,
+      h("label", { class: "muted" }, "Cards open ", sel));
+  }
+
   /** B4: everything about sharing the plan, in one menu. */
   function share() {
     const url = `${location.origin}/p/${plan.code}`;
@@ -1522,7 +1967,7 @@ async function builder(id) {
       : sideDay ? calendar()
       : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel());
     const main = h("div", { class: "main2" },
-      paceBox,
+      paceBox, view === "print" ? null : everyBox(), view === "print" ? null : followTags(),
       h("div", { class: "calcard" }, nav, fillRow, view === "text" || view === "print" ? null : heavyNote(), inner));
     if (!author) return main;
     if (sideDay) {
@@ -1659,7 +2104,7 @@ async function builder(id) {
     byOpens();
     return h("div", {},
       classHints(pr),
-      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} are on the team; these counts are theirs.`),
+      h("p", { class: "muted small" }, `${pr.sharing} of ${pr.followers} are in its squad; these counts are theirs.`),
       h("div", { class: "prog" }, h("span", { class: "h" }, "Date"), h("span", { class: "h" }, "Opened"), h("span", { class: "h" }, "Done"), h("span"),
         doc.units.flatMap((u) => {
           const c = pr.units[u.id] || { opened: 0, done: 0 };
@@ -1756,95 +2201,23 @@ async function builder(id) {
       } }, "Remove") : h("span")))));
   }
 
-  /** 3.7.3: the plan's team. Opt-in: who showed up today (answered one of the
-   *  plan's cards), questions to the team and their answers, the team's
-   *  bingo. Never anyone's numbers. Each click is one request. */
-  let team = null;          // GET /plans/{id}/team, loaded when the tab opens
-  let replyTo = null;       // the thread whose reply box is open
-  let bingoOpen = false;
-  const wkOf = (d) => {
-    const x = parseIso(d); const dow = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - dow + 3);
-    const y = x.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
-    return `${y}-W${String(1 + Math.round(((x - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
-  };
   const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : m < 2880 ? "yesterday" : `${Math.round(m / 1440)}d`; };
-  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
-  const CELLS = [0, 1, 2, 3, 5, 6, 7, 8];
-  /** "3 of 9 · one away from bingo" (team.py bingo_line: change one, change both). */
-  function bingoLine(ev) {
-    const done = (c) => (c === 4 ? ev.middle.done : ev.squares[CELLS.indexOf(c)].done);
-    const stamps = ev.squares.filter((q) => q.done).length + (ev.middle.done ? 1 : 0);
-    const left = Math.min(...LINES.map((l) => l.filter((c) => !done(c)).length));
-    const state = ev.lines >= 8 ? "the whole card" : ev.lines ? (ev.lines === 1 ? "BINGO" : `${ev.lines} lines`)
-      : left === 1 ? "one away from bingo" : `${left} away from bingo`;
-    return `${stamps} of 9 · ${state}`;
-  }
-  function teamTab() {
-    if (!team) {
-      api("GET", `/plans/${id}/team?wk=${wkOf(today())}`).then((r) => { team = r; draw(); }).catch(() => { team = { failed: true }; draw(); });
-      return h("p", { class: "muted" }, "Loading…");
+
+  /** 3.8.0: the plan's squad lives on the board's Squads tab. In it: the
+   *  way there. Following, not in it: what it shares, and the way in. */
+  function squadLine() {
+    if (!plan.following) return null;
+    const open = () => { Board.store("dc-tab", "squads"); Board.store("dc-squad", `plan:${id}`); go("/"); };
+    if (plan.following.share && !plan.following.teamAsk) {
+      return h("p", { class: "small", style: "margin:4px 0 10px" }, "You’re in its squad. ", h("button", { class: "linkish", onclick: open }, "Open it ›"));
     }
     const st = h("span", { class: "status", role: "status" });
-    const again = (p, bad = "That didn't work. Try again.") => p.then(() => { team = null; draw(); }).catch((err) => {
-      st.className = "status bad"; st.textContent = err.status === 429 ? "That's a lot of questions today. Try tomorrow."
-        : err.body?.error === "team_full" ? "This team is full." : bad; });
-    if (team.failed) return h("p", { class: "muted" }, "Couldn't load the team. ", h("button", { class: "linkish", onclick: () => { team = null; draw(); } }, "Try again"));
-    if (!team.on) {
-      return h("div", { class: "panel", style: "max-width:560px" },
-        h("h4", {}, h("span", {}, team.count ? `${team.count.toLocaleString()} on the team` : "No team yet")),
-        h("p", { class: "muted small", style: "margin:0" }, "The team sees that you showed up today, and your questions and answers; your progress counts for the plan\u2019s authors. Never your numbers."),
-        h("div", { class: "row" }, h("button", { onclick: (e) => { e.target.disabled = true; again(api("POST", `/plans/${id}/team`)); } }, "Join the team"), st));
-    }
-    const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the team" });
-    const send = () => { const text = ask.value.trim(); if (text) again(api("POST", `/plans/${id}/asks`, { text })); };
-    ask.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-    const who = (x) => (x.mine ? "You" : [x.emoji ? `${x.emoji} ` : "", h("b", {}, x.name)]);
-    const thread = (a) => {
-      const reps = a.replies.map((r) => h("div", { class: "rep" }, h("b", {}, r.mine ? "You" : r.name), r.author ? " (author)" : "", `: ${r.text}`,
-        a.mine && !r.mine ? h("button", { class: "linkish", onclick: () => again(api("POST", `/plans/${id}/asks/${r.id}/helped`, { on: !r.helped })) }, r.helped ? "Helped ✓" : "That helped")
-          : r.helped ? h("span", { class: "ok" }, " ✓ helped") : null,
-        r.remove ? h("button", { class: "linkish", onclick: () => again(api("DELETE", `/plans/${id}/asks/${r.id}`)) }, "Remove") : null));
-      const bits = [a.topic, a.replies.length ? `${a.replies.length} repl${a.replies.length === 1 ? "y" : "ies"}` : ""].filter(Boolean).join(" · ");
-      let box = null;
-      if (replyTo === a.id) {
-        const r = h("input", { placeholder: "Your answer…", maxlength: 280, "aria-label": "Your answer" });
-        const go = () => { const text = r.value.trim(); if (text) { replyTo = null; again(api("POST", `/plans/${id}/asks`, { text, parent: a.id })); } };
-        r.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-        requestAnimationFrame(() => r.focus());
-        box = h("div", { class: "ask3" }, r, h("button", { onclick: go }, "Reply"));
-      }
-      return h("div", { class: "tq" },
-        h("div", { class: "t" }, a.guid ? h("span", {}, who(a), " on a card") : h("span", {}, who(a), `: ${a.text}`), h("span", { class: "m" }, ago(a.act || a.at))),
-        a.guid ? h("div", {}, `“${a.text}”`) : null, ...reps, box,
-        h("div", { class: "t" }, h("span", { class: "card" }, bits), h("span", { class: "m" },
-          h("button", { class: "linkish", onclick: () => { replyTo = replyTo === a.id ? null : a.id; draw(); } }, a.guid ? "Answer" : "Reply"),
-          a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
-    };
-    const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
-      h("span", { class: "e" }, face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
-      team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
-    const b = team.bingo;
-    let bingo = null;
-    if (b) {
-      const cell = (c) => (c === 4 ? b.ev.middle.done : b.ev.squares[CELLS.indexOf(c)].done);
-      const sq = (c) => (c === 4 ? b.card.middle : b.card.squares[CELLS.indexOf(c)]);
-      bingo = h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Team bingo"), h("span", { class: "muted small", style: "font-weight:500" }, bingoLine(b.ev).split(" · ")[0])),
-        h("div", { class: "bgrow" }, h("span", { class: "bgmini" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("i", { class: cell(c) ? "on" : "" }))),
-          h("span", { class: "small" }, bingoLine(b.ev).split(" · ")[1]), h("span", { style: "flex:1" }),
-          h("button", { class: "linkish", onclick: () => { bingoOpen = !bingoOpen; draw(); } }, bingoOpen ? "Close" : "Open")),
-        bingoOpen ? h("div", { class: "bggrid" }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map((c) => h("div", { class: cell(c) ? "on" : "" },
-          h("span", {}, sq(c).icon || ""), h("b", {}, c === 4 ? sq(c).name : sq(c).title),
-          h("small", {}, c === 4 ? `${b.ev.middle.have} of ${b.ev.middle.goal}` : sq(c).rule || "")))) : null);
-    }
-    return h("div", { class: "wb" },
-      h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Ask the team")),
-        h("div", { class: "ask3" }, ask, h("button", { onclick: send }, "Ask")), st,
-        team.asks.length ? team.asks.map(thread) : h("p", { class: "muted small", style: "margin:0" }, "No questions yet.")),
-      h("div", { class: "rail" },
-        h("div", { class: "panel" }, h("h4", {}, h("span", {}, "Showed up today"),
-          h("span", { class: "muted small", style: "font-weight:500" }, `${team.shown} of ${team.count}${team.streak > 1 ? ` · ${team.streak} days` : ""}`)), faces),
-        bingo,
-        h("div", {}, h("button", { class: "quiet", onclick: () => { if (confirm("Leave the team? Your questions and answers stay.")) again(api("DELETE", `/plans/${id}/team`)); } }, "Leave the team"))));
+    const join = h("button", { class: "linkish", onclick: async () => {
+      join.disabled = true;
+      try { await api("POST", `/plans/${id}/team`); PlanSquad.forget(id); open(); }
+      catch (err) { join.disabled = false; st.className = "status bad"; st.textContent = err.body?.error === "team_full" ? "This squad is full." : "That didn't work. Try again."; }
+    } }, "Join its squad");
+    return h("p", { class: "small muted", style: "margin:4px 0 10px" }, "Its squad sees that you showed up today, and your questions and answers; your progress counts for the plan’s authors. Never your numbers. ", join, " ", st);
   }
 
   /** 3.7.3: a follower sees the authors' newest post above the tabs until they
@@ -1884,7 +2257,16 @@ async function builder(id) {
       h("p", { class: "muted small" }, "Following opens each date's cards in Anki on its day", plan.code ? ["; or in Anki, Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, plan.code)] : null, "."));
   }
 
+  // 3.8.0 (Board in Motion, 34): ‹ › slide the calendar; a date moved to another day settles there
+  let slid = 0;
   function draw() {
+    const M = window.dcMotion, at = `${view}|${anchor}`, was = M ? M.places(".cal2 .ch[data-k]", "data-k", ".d") : null;
+    drawNow();
+    // the same days on screen: a date moved to another settles; ‹ › slide; another view just draws
+    try { if (M && (slid || at === `${view}|${anchor}`)) M.moved(".cal2 .ch[data-k]", "data-k", was, slid, ".cal2", ".d"); } catch { /* drawn either way */ }
+    slid = 0;
+  }
+  function drawNow() {
     const tabBtn = (k, t) => h("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => { tab = k; draw(); } }, t);
     // the plan's name, edited in place: it wraps and grows, so a long name is never cut off
     function titleBox() {
@@ -1898,21 +2280,23 @@ async function builder(id) {
       if (window.ResizeObserver) { let w = 0; new ResizeObserver(() => { if (t.clientWidth !== w) { w = t.clientWidth; fit(); } }).observe(t); }
       return t;
     }
-    // 3.7.3: followers: Calendar and Team (the authors' posts show above the tabs); authors keep Updates
-    const tabs = author ? [["calendar", "Calendar"], ["team", "Team"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean)
-      : plan.following ? [["calendar", "Calendar"], ["team", "Team"]] : [];
+    // 3.7.3: followers see the calendar (the authors' posts show above it); authors keep Updates.
+    // 3.8.0: the plan's squad lives on the board's Squads tab; squadLine() goes there
+    const tabs = author ? [["calendar", "Calendar"], ["updates", "Updates"], ["progress", "Progress"], ["history", "History"], owner ? ["settings", "Settings"] : null].filter(Boolean) : [];
     if (!tabs.some(([k]) => k === tab)) tab = "calendar";
     const body = tab === "settings" ? settingsTab() : tab === "progress" ? progressTab() : tab === "history" ? historyTab()
-      : tab === "updates" ? updatesTab() : tab === "team" ? teamTab() : calendarTab();
+      : tab === "updates" ? updatesTab() : calendarTab();
     page(
       h("div", { class: "bhead" },
         h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
           h("p", { class: "muted small bsub" }, subline(), resetBtn())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
-      !author && plan.following ? onTrack(plan, false) : null,
+      !author && plan.following && !plan.following.own ? onTrack(plan, false) : null,  // 3.8.0: at my own pace, no Behind
+      paceBox(),
       !author && plan.following ? finished() : null,
       !author && !plan.following ? readerActions() : null,
       postLine(),
+      squadLine(),
       tabs.length ? h("div", { class: "tabs", role: "tablist" }, tabs.map(([k, t]) => tabBtn(k, t))) : null,
       body,
       author ? h("div", { class: `savebar${dirty || status.classList.contains("bad") || flash ? "" : " clean"}` }, status,
@@ -1936,7 +2320,7 @@ async function builder(id) {
     if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
     if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
     if (changed.length === 1) out.push(`changed ${changed[0].name}`); else if (changed.length) out.push(`changed ${changed.length} dates`);
-    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"], ["events", "the events"]]) {
+    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"], ["events", "the events"], ["every", "the weekly lines"]]) {
       if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null) && !(k === "pace" && out.length)) out.push(`changed ${w}`);
     }
     return (out.join("; ") || "changed the plan").slice(0, 120);
@@ -1954,7 +2338,17 @@ async function builder(id) {
       units = units.filter((x) => x.id !== uid).concat([structuredClone(u)]);
     }
     out.units = units.sort((x, y) => x.opens.localeCompare(y.opens));
-    for (const k of ["pace", "end", "phases", "reviews", "events"]) {
+    // 3.8.0: the plan's tags, by id, as the dates are (Anki's browser may have tagged meanwhile)
+    const bt = new Map((mineBase.tags || []).map((t) => [t.id, t]));
+    const mt = new Map((mine.tags || []).map((t) => [t.id, t]));
+    let tags = out.tags || [];
+    for (const [tid] of bt) if (!mt.has(tid)) tags = tags.filter((t) => t.id !== tid);
+    for (const [tid, t] of mt) {
+      if (bt.has(tid) && same(bt.get(tid), t)) continue;
+      tags = tags.filter((x) => x.id !== tid).concat([structuredClone(t)]);
+    }
+    if (tags.length) { out.tags = tags; out.tagroot = out.tagroot || mine.tagroot; } else delete out.tags;
+    for (const k of ["pace", "end", "phases", "reviews", "events", "every"]) {
       if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
     }
     // a review day of a date one of us took off goes with it
@@ -1987,10 +2381,10 @@ async function builder(id) {
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
       // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
-      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, todo, ...u }) => {
+      const lean = ({ every, ...d }) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, todo, ...u }) => {
         const t = Todo.clean(todo);  // Due: a line with no words yet isn't sent
         return t.length ? { ...u, todo: t } : u;
-      }) });
+      }), ...(Every.clean(every).length ? { every: Every.clean(every) } : {}) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (tell.value.trim()) body.post = tell.value.trim();  // 3.7.3
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;

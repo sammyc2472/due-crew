@@ -8,7 +8,7 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.toml" },
-        miniflare: { bindings: { TEST_MIGRATIONS: migrations, ADMIN_TOKEN: "test-admin", RESEND_API_KEY: "test-resend" } },
+        miniflare: { bindings: { TEST_MIGRATIONS: migrations, RESEND_API_KEY: "test-resend" } },
       }),
     ],
     // A test here is a run of real requests through workerd and D1 (some

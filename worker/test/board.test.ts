@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WEEK, api, befriend, db, person, from2x } from "./helpers";
+import { WEEK, api, befriend, db, person } from "./helpers";
 
 type P = Awaited<ReturnType<typeof person>>;
 let sam: P, dre: P, nia: P;
@@ -160,29 +160,17 @@ describe("friends and codes", () => {
     expect(b).not.toBe(a);
     expect(await db().prepare("SELECT code FROM codes WHERE uid = 'sam'").all().then((r) => r.results)).toEqual([{ code: b }]);
     expect((await sam.call("GET", "/board")).body.me.code).toBe(b);
-    expect((await sam.call("POST", "/codes", { code: b })).body.code).toBe(b);  // asking for mine: no change
+    expect((await sam.call("POST", "/codes", { code: b })).body.code).not.toBe(b);  // a body asks for nothing (3.8.0)
+  });
+
+  it("twenty new codes a day: a click, each writing four rows", async () => {
+    for (let i = 0; i < 20; i++) expect((await sam.call("POST", "/codes")).status).toBe(200);
+    expect((await sam.call("POST", "/codes")).status).toBe(429);
   });
 
   it("thirty code tries an hour", async () => {
     for (let i = 0; i < 30; i++) await dre.call("POST", `/codes/Q${String(i).padStart(5, "0")}/add`);
     expect((await dre.call("POST", "/codes/ZZZZZZ/add")).status).toBe(429);
-  });
-
-  it("the first 3.0 sync re-adds the crew by uid: add-only, unknown uids skipped", async () => {
-    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);  // not from 2.x: nothing
-    await nia.call("POST", "/sync", { profile: { clientVersion: "2.9.0" } });  // and saying so isn't enough
-    expect((await nia.call("PUT", "/friends", { ids: ["sam"] })).body.added).toEqual([]);
-    await from2x("nia", "dre");
-    const r = await nia.call("PUT", "/friends", { ids: ["sam", "dre", "ghost", "nia", "sam"] });
-    expect(r.body.added).toEqual(["dre", "sam"]);
-    expect((await sam.call("GET", "/board")).body.friends.find((f: any) => f.uid === "nia").mutual).toBe(true);
-    expect((await nia.call("PUT", "/friends", { ids: "sam" })).status).toBe(400);
-    // sam added nia before; dre hasn't added nia: dre is knocked, sam isn't
-    expect((await dre.call("GET", "/knocks")).body.knocks.map((k: any) => k.from)).toEqual(["nia"]);
-    expect((await sam.call("GET", "/knocks")).body.knocks).toEqual([]);
-    await dre.call("PUT", "/friends", { ids: ["nia"] });
-    expect((await nia.call("GET", "/knocks")).body.knocks, "restoring back clears nothing it shouldn't").toEqual([]);
-    expect((await dre.call("GET", "/knocks")).body.knocks, "and a restore that makes it mutual clears the knock").toEqual([]);
   });
 
   it("GET /friends: the dialog's view, and it consumes nothing", async () => {
@@ -212,35 +200,14 @@ describe("squads", () => {
     expect((await dre.call("GET", "/squads/peek?code=AAAAAAAA")).status).toBe(404);
   });
 
-  it("the id is 2.x's: sha1 of the code, so config from 2.x still points at it", async () => {
+  it("the id is sha1 of the code, as it always was, so an old config still points at it", async () => {
     const { squadId } = await import("../src/squads");
-    // due_crew.backend.firebase.squad_id("KQ9P2X3A"), computed by 2.x
+    // the id 2.x computed for "KQ9P2X3A"
     expect(await squadId("KQ9P2X3A")).toBe("612af6ba77ba48200974a238");
     expect(await squadId("kq9p-2x3a")).toBe("612af6ba77ba48200974a238");
   });
 
-  it("restore: the first member back recreates it with its founder; the rest join", async () => {
-    expect(await nia.status("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" })).toBe(404);  // not from 2.x
-    await from2x("dre", "sam", "nia");
-    const r1 = await dre.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" });
-    expect(r1.body).toMatchObject({ name: "busm", founder: "sam", open: true, code: "KQ9P2X3A" });
-    const r2 = await sam.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "other name", founder: "dre" });
-    expect(r2.body).toMatchObject({ id: r1.body.id, name: "busm", founder: "sam" });
-    expect((await sam.call("GET", `/squads/${r1.body.id}`)).body.rows.map((r: any) => r.uid).sort()).toEqual(["dre", "sam"]);
-    // a founder nobody knows falls back to whoever restores it
-    const r3 = await nia.call("POST", "/squads/restore", { code: "ABCDEFGH", name: "x", founder: "ghost" });
-    expect(r3.body.founder).toBe("nia");
-    // a locked squad stays locked to a restore
-    await sam.call("PATCH", `/squads/${r1.body.id}`, { open: false });
-    expect((await nia.call("POST", "/squads/restore", { code: "KQ9P2X3A", name: "busm", founder: "sam" })).status).toBe(403);
-  });
-
-  it("restore isn't a way round create's limit, and a squad fills at 500", async () => {
-    await from2x("nia");
-    for (let i = 0; i < 30; i++) {
-      expect(await nia.status("POST", "/squads/restore", { code: `ABCDEF${"23456789"[i % 8]}${"23456789"[Math.floor(i / 8)]}`, name: "x" })).toBe(200);
-    }
-    expect(await nia.status("POST", "/squads/restore", { code: "ZZZZZZZZ", name: "x" })).toBe(429);
+  it("a squad fills at 500", async () => {
     const sq = (await dre.call("POST", "/squads", { name: "big" })).body;
     await db().prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 499)
       INSERT INTO members (squad, uid, name, joined_at) SELECT ?, 'm' || x, 'M', 0 FROM c`).bind(sq.id).run();

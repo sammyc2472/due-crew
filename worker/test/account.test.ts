@@ -69,67 +69,6 @@ describe("delete account", () => {
   });
 });
 
-describe("identity import", () => {
-  const users = [
-    { uid: "fbSam0000000000000000000001", email: "Sam@Example.com", name: "Sammy" },
-    { uid: "fbDre0000000000000000000002", email: "dre@example.com" },
-  ];
-
-  it("is closed without the admin token, and absent when none is set", async () => {
-    expect((await api("POST", "/admin/import-users", { body: { users } })).status).toBe(401);
-    expect((await api("POST", "/admin/import-users", { body: { users }, token: "wrong" })).status).toBe(401);
-    expect((await api("POST", "/admin/import-users", { body: { users }, token: "test-admin", env: { ADMIN_TOKEN: undefined } })).status).toBe(404);
-  });
-
-  it("imports by uid, idempotently; the first 3.0 sign-in lands on the old uid", async () => {
-    const box = mailbox();
-    const r = await api("POST", "/admin/import-users", { body: { users }, token: "test-admin" });
-    expect(r.body).toEqual({ imported: 2, skipped: [], reclaimed: 0 });
-    const again = await api("POST", "/admin/import-users", { body: { users }, token: "test-admin" });
-    expect(again.body).toEqual({ imported: 0, skipped: [], reclaimed: 0 });
-    const sam = await signIn("sam@example.com", box);
-    expect(sam.uid).toBe(users[0].uid);
-    expect(sam.new).toBe(false);
-    expect(sam.name).toBe("Sammy");
-    const dre = await signIn("dre@example.com", box);
-    expect(dre.uid).toBe(users[1].uid);
-    expect(dre.name).toBeNull();
-  });
-
-  it("carries the name and friend code across, when the import has them", async () => {
-    const box = mailbox();
-    const withCodes = [{ ...users[0], code: "SAM123" }, { ...users[1], code: "bad" },
-                       { uid: "fbEve0000000000000000000003", email: "eve@example.com", code: "SAM123" }];
-    expect((await api("POST", "/admin/import-users", { body: { users: withCodes }, token: "test-admin" })).body.imported).toBe(3);
-    const sam = await signIn("sam@example.com", box);
-    expect((await api("GET", "/board", { token: sam.token })).body.me.code).toBe("SAM123");
-    expect(await db().prepare("SELECT code FROM users WHERE uid = ?").bind(withCodes[2].uid).first("code")).toBeNull();
-    expect(await db().prepare("SELECT COUNT(*) AS n FROM codes").first("n")).toBe(1);
-  });
-
-  it("reclaimCodes puts an imported code back after a first sync swapped it", async () => {
-    const box = mailbox();
-    const withCode = [{ ...users[0], code: "SAM123" }];
-    await api("POST", "/admin/import-users", { body: { users: withCode }, token: "test-admin" });
-    const sam = await signIn("sam@example.com", box);
-    await api("POST", "/codes", { token: sam.token, body: {} });  // what 3.0.0's restore did
-    expect((await api("GET", "/board", { token: sam.token })).body.me.code).not.toBe("SAM123");
-    const r = await api("POST", "/admin/import-users", { body: { users: withCode, reclaimCodes: true }, token: "test-admin" });
-    expect(r.body.reclaimed).toBe(1);
-    expect((await api("GET", "/board", { token: sam.token })).body.me.code).toBe("SAM123");
-    expect(await db().prepare("SELECT COUNT(*) AS n FROM codes WHERE uid = ?").bind(sam.uid).first("n")).toBe(1);
-  });
-
-  it("an address that already signed in to 3.0 under a new uid is skipped and reported", async () => {
-    const box = mailbox();
-    const early = await signIn("dre@example.com", box);
-    const r = await api("POST", "/admin/import-users", { body: { users: [...users, { uid: "bad uid!", email: "x@y.com" }] }, token: "test-admin" });
-    expect(r.body.imported).toBe(1);
-    expect(r.body.skipped).toEqual(["bad uid!", users[1].uid]);
-    expect((await signIn("dre@example.com", box)).uid).toBe(early.uid);
-  });
-});
-
 describe("housekeeping", () => {
   it("clears spent codes, old limit windows and idle sessions; nothing live", async () => {
     const { housekeeping } = await import("../src/index");
@@ -161,6 +100,16 @@ describe("3.5.0: my accent on the site", () => {
     expect((await sam.call("GET", "/auth/me")).body.accent).toBe("rose");
     await sam.call("PUT", "/settings", { v: 1, at: "2026-09-28T18:01:00Z", settings: { accent: "</style>" } });
     expect((await sam.call("GET", "/auth/me")).body.accent).toBe("green");
+  });
+});
+
+describe("3.8.0: the site's today is my Anki day", () => {
+  it("/auth/me carries the hour my day rolls over once my add-on has said it", async () => {
+    const { person } = await import("./helpers");
+    const sam = await person("sam");
+    expect((await sam.call("GET", "/auth/me")).body.rollover).toBeUndefined();
+    expect(await sam.status("POST", "/sync", { profile: { tz: -240, rollover: 4 } })).toBe(200);
+    expect((await sam.call("GET", "/auth/me")).body.rollover).toBe(4);
   });
 });
 

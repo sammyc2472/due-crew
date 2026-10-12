@@ -35,15 +35,15 @@ describe("quiet accounts", () => {
     expect(await db().prepare("SELECT COUNT(*) AS n FROM friends").first<number>("n")).toBe(2);
   });
 
-  it("12 months quiet goes, 24 when paused; a recent sync, a 2.x week or an admin keeps it; at most 50 a day", async () => {
-    for (const u of ["old", "pausedold", "pausedolder", "fresh", "bridged", "sam"]) await person(u);
+  it("12 months quiet goes, 24 when paused; a recent sync, a recent week or an admin keeps it; at most 50 a day", async () => {
+    for (const u of ["old", "pausedold", "pausedolder", "fresh", "weekly", "sam"]) await person(u);
     await age("old", 400); await age("pausedold", 400); await age("pausedolder", 800); await age("fresh", 10); await age("sam", 900);
     for (const u of ["pausedold", "pausedolder"]) await db().prepare("INSERT INTO settings (uid, v, at, json) VALUES (?, 1, '', '{\"paused\":true}')").bind(u).run();
-    await age("bridged", 400);
-    await db().prepare("INSERT INTO weeks (uid, doc, updated_at) VALUES ('bridged', '{}', ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at").bind(now - 5 * DAY).run();
+    await age("weekly", 400);
+    await db().prepare("INSERT INTO weeks (uid, doc, updated_at) VALUES ('weekly', '{}', ?) ON CONFLICT(uid) DO UPDATE SET updated_at = excluded.updated_at").bind(now - 5 * DAY).run();
     const r = await Quiet.run({ ...(env as any), ADMIN_UIDS: "sam" }, now);
     const left = (await db().prepare("SELECT uid FROM users ORDER BY uid").all<{ uid: string }>()).results.map((x) => x.uid);
-    expect(left).toEqual(["bridged", "fresh", "pausedold", "sam"]);
+    expect(left).toEqual(["fresh", "pausedold", "sam", "weekly"]);
     expect(r.deleted).toBe(2);
     const log = (await db().prepare("SELECT action FROM admin_actions ORDER BY action").all<{ action: string }>()).results.map((x) => x.action);
     expect(log).toEqual(["deleted, 12 months quiet", "deleted, 24 months quiet (paused)"]);

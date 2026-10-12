@@ -144,10 +144,50 @@ def check(path):
         col.update_card(card)
     idx3 = P.DeckIndex(col, did)
     pick = F.check_cards(col, idx3, idx3.match(units[5], None, doc["deck"]), 9999)
-    built = F._filtered(col, "Due Crew · " + units[5]["name"], pick)
-    fdid = col.decks.id_for_name("Due Crew · " + units[5]["name"])
-    in_deck = len(col.find_cards(f'deck:"Due Crew · {units[5]["name"]}"')) if fdid else 0
-    ok("Study: Anki's filtered deck of the date's seen cards", built and in_deck == len(pick) > 0, f"{in_deck} cards")
+    pstore = {}
+    keep_p = (F._pcfg, F._psave)
+    F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+    built = F._filtered(col, F._deck_name(units[5]["name"]), pick)
+    fdid = col.decks.id_for_name(F._deck_name(units[5]["name"]))
+    in_deck = len(col.find_cards(f'"deck:{F._deck_name(units[5]["name"])}"')) if fdid else 0
+    parent = col.decks.id_for_name("Due Crew")
+    ok("Study: Anki's filtered deck of the date's seen cards, under a Due Crew deck", built and in_deck == len(pick) > 0
+       and parent and not col.decks.get(parent)["dyn"], f"{in_deck} cards")
+    ok("…remembered as built here, with the parent", pstore.get("built") == [fdid, parent], pstore)
+
+    # 3.8.0: the morning's tidy: a filtered deck of ours goes once it's empty; one with cards stays
+    F._filtered(col, F._deck_name("Checkpoint · Empty one"), pick[:3])
+    edid = col.decks.id_for_name("Due Crew::Checkpoint · Empty one")
+    mine = col.decks.id("Mine, not Due Crew's")
+    t = tm(); n_none = F.tidy_decks(col); t_tidy = tm() - t
+    ok("tidy: decks with cards in them stay", n_none == 0 and col.decks.get(fdid, default=False) and col.decks.get(edid, default=False),
+       f"{t_tidy*1000:.0f} ms")
+    col.sched.empty_filtered_deck(edid)
+    n_one = F.tidy_decks(col)
+    ok("tidy: our empty one goes, as one undo step; a normal deck stays",
+       n_one == 1 and not col.decks.get(edid, default=False) and col.decks.get(fdid, default=False)
+       and col.decks.get(mine, default=False) and sorted(pstore.get("built")) == sorted([fdid, parent]),
+       (n_one, pstore, col.undo_status().undo))
+    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in pick[:3])} deck:\"Step Deck\"")) == 3)
+    col.sched.empty_filtered_deck(fdid)
+    n_two = F.tidy_decks(col)
+    ok("tidy: the last one under Due Crew goes with the parent, one undo step",
+       n_two == 2 and not col.decks.get(fdid, default=False) and not col.decks.id_for_name("Due Crew")
+       and col.undo_status().undo == "Delete Deck" and pstore.get("built") == [], (n_two, pstore, col.undo_status().undo))
+    F._pcfg, F._psave = keep_p
+
+    # 3.8.0: learning cards back later today, past Anki's learn-ahead
+    import time as _t
+    lc = col.get_card(pick[0])
+    lc.type, lc.queue, lc.due = 1, 1, int(_t.time()) + 3 * 3600
+    col.update_card(lc)
+    cut = int(col.sched.day_cutoff)
+    ahead = int(col.get_config("collapseTime", 1200) or 0)
+    back, first = col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
+                               int(_t.time()) + ahead, cut) or (0, None)
+    ok("learning back: an intraday learning card due later today is counted, with its time",
+       (back >= 1 and first == lc.due) or lc.due >= cut, f"{back} back, first {first}, cutoff {cut}")
+    ok("sync: the collection's mod and last sync are both ms", col.mod > 10**12 and col.db.scalar("SELECT ls FROM col") == 0)
 
     # how long a refresh's plan work takes, the second time (tags kept)
     t = tm(); i4 = P.DeckIndex(col, did); P.progress(i4, doc); t1 = tm() - t
@@ -229,20 +269,70 @@ def check(path):
     from due_crew import team_flow as TF
     plan_i = {"id": "pI", "name": "Big", "doc": dict(doc, events=[{"id": "e", "day": str(_dtm.date.today() + _dtm.timedelta(days=6)),
                                                                    "name": "Exam"}])}
-    keep = (TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col)
+    keep = (TF._plan, F._state_cfg, F._today, F._pcfg, F.followed, TF.cfg, _mw.col)
     TF._plan = lambda pid: F.mine(plan_i)
     F._state_cfg = lambda c=None: {"pI": {"deck_id": did}}
     F._today = lambda: str(_dtm.date.today())
     F._pcfg = lambda: {}
+    F.followed = lambda: [plan_i]
+    TF.cfg = lambda: {}
     _mw.col = col
     try:
         t = tm()
-        view = TF._work_out("pI")
+        view = TF._work_out(did, "pI")
         t_ins = tm() - t
+        # 3.8.0: the same deck with no plan: my exam date, the deck's own tags, what Anki has due
+        t = tm()
+        bare = TF._work_out(did, None, str(_dtm.date.today() + _dtm.timedelta(days=10)))
+        t_bare = tm() - t
+        t = tm()
+        decks = TF._you_decks(col)
+        t_decks = tm() - t
+        lee = TF._leeches(col, TF._deck_sql(col, did))
     finally:
-        TF._plan, F._state_cfg, F._today, F._pcfg, _mw.col = keep
+        TF._plan, F._state_cfg, F._today, F._pcfg, F.followed, TF.cfg, _mw.col = keep
     ok("insights: the whole tab (hero, not sticking, week, FSRS line) in one pass", isinstance(view, dict) and "rows" in view
        and t_ins < 3.0, f"{len(view.get('rows') or [])} rows, hero {len(view.get('hero') or [])}, {t_ins*1000:.0f} ms")
+    ok("insights, no plan: the deck's tags name its topics, my exam aims the box, in one pass",
+       isinstance(bare, dict) and (bare.get("aim") or {}).get("kind") == "exam" and bare.get("rows") is not None
+       and not any(r["name"].lower() == "leech" for r in bare.get("rows") or []) and t_bare < 3.0,
+       f"{[(r['name'], r['src'], r['of']) for r in (bare.get('rows') or [])[:3]]}, hero {len(bare.get('hero') or [])}, "
+       f"week {'yes' if bare.get('week') else 'no'}, {t_bare*1000:.0f} ms")
+    ok("insights: the decks to pick, by deck, the plan's marked, Anki's own deck names and ids",
+       any(d["did"] == did and d["pid"] == "pI" for d in decks) and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
+    ok("insights: the deck's suspended leeches", len(lee) >= 1, f"{len(lee)}")
+    # 3.8.0: the topic map on a big deck's size, and Study today's counts from Anki's tree
+    from due_crew import due_flow as DF
+    t = tm()
+    tiles, by, _kn, _ways = TF._map(col, did, TF._deck_sql(col, did), int(col.sched.day_cutoff))
+    t_map = tm() - t
+    ok("map: the deck's broad subjects as tiles, what I know now, in one pass", len(tiles) >= 2 and t_map < 2.0,
+       f"{[(x['name'], x['n'], x['know']) for x in tiles[:4]]}, by {by}, {t_map*1000:.0f} ms")
+    kid = next((x for x in tiles if x.get("kids")), None)
+    t = tm()
+    allc = TF._find_cids(col, did, tiles[0]["find"]) if tiles else []
+    t_find = tm() - t
+    ok("map: a subject opens into its parts; its Browse finds all of its cards, new ones too",
+       kid and tiles and len(allc) >= tiles[0]["n"] and t_find < 1.0,
+       f"{kid['name'] if kid else None} › {[(k['name'], k['n']) for k in (kid or {}).get('kids', [])[:4]]}; "
+       f"{tiles[0]['name'] if tiles else ''}: {len(allc):,} cards ({tiles[0]['n'] if tiles else 0} started), {t_find*1000:.0f} ms")
+    t = tm()
+    dn = DF._due_now(col, {did})
+    t_due = tm() - t
+    ok("study: Anki's deck tree gives each deck's cards due now", did in dn and t_due < 0.5,
+       f"{dn.get(did)} due, {len(dn)} decks, {t_due*1000:.0f} ms")
+    col.decks.select(did)
+    ok("study: the current deck's counts, as the review hands over", len(col.sched.counts()) == 3, str(col.sched.counts()))
+    # 3.8.0: Recover leeches on Anki's engine: the tag off, unsuspended, new again, one undo step
+    lc = col.get_card(col.find_cards('tag:leech deck:"Step Deck"')[0])
+    lc.type, lc.queue, lc.lapses, lc.ivl = 2, -1, 9, 5
+    col.update_card(lc)
+    got = DF.recover_leeches(col)
+    back = col.get_card(lc.id)
+    ok("leeches: back as a new card, the tag off, unsuspended, as one undo step",
+       lc.id in got and back.type == 0 and back.queue == 0 and back.lapses == 0
+       and "leech" not in [t.lower() for t in back.note().tags] and col.undo_status().undo == "Due Crew: recover leeches",
+       f"{len(got)} recovered, undo {col.undo_status().undo!r}")
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
@@ -251,6 +341,103 @@ def check(path):
     t_days = tm() - t
     ok("team: the last eight days with a plan card answered, every sync", len(days) == 8 and t_days < 0.05,
        f"{t_days*1000:.0f} ms")
+    # 3.8.0, pick 9: why a card isn't showing, read from Anki's own state, and each fix done by Anki
+    from due_crew import why as W, why_flow as WF
+    new_ids = col.db.list(f"SELECT id FROM cards WHERE did = {did} AND queue = 0 ORDER BY due DESC, id DESC LIMIT 5")
+    c_susp, c_bury, c_rev, c_filt, c_last = new_ids
+    col.sched.suspend_cards([c_susp])
+    col.sched.bury_cards([c_bury], manual=True)
+    col.sched.set_due_date([c_rev], "6")
+    F._filtered(col, "Due Crew::Why check", [c_filt])
+    t = tm()
+    gs = {g["cids"][0]: g for g in W.groups(WF.facts(col, [c_susp, c_bury, c_rev, c_filt, c_last]), WF.context(col))}
+    t_why = tm() - t
+    ok("why: suspended, buried, not due, in a filtered deck, new and far down the line, each in its words",
+       gs[c_susp]["fix"] == ("unsuspend",) and gs[c_bury]["say"] == "Buried by you till tomorrow."
+       and gs[c_rev]["say"].startswith("Not due till") and gs[c_filt]["fix"][0] == "empty"
+       and gs[c_last]["fix"][0] == "more_new" and t_why < 0.5,
+       f"{[g['say'] for g in gs.values()]}, {t_why*1000:.0f} ms")
+    col.sched.unsuspend_cards([c_susp])
+    col.sched.unbury_cards([c_bury])
+    col.sched.set_due_date([c_rev], "0")
+    col.sched.empty_filtered_deck(gs[c_filt]["fix"][1])
+    again = {g["cids"][0]: g for g in W.groups(WF.facts(col, [c_susp, c_bury, c_rev, c_filt]), WF.context(col))}
+    ok("why: after Anki's fixes, none of them is suspended, buried, filtered or not due",
+       all(g["fix"] and g["fix"][0] in ("more_new", "study", "more_rev") for g in again.values()),
+       f"{[g['say'] for g in again.values()]}")
+    from anki.scheduler.base import CustomStudyRequest
+    need = gs[c_last]["fix"][2]
+    before = WF.context(col)["left"](did)["new"]
+    col.sched.custom_study(CustomStudyRequest(deck_id=did, new_limit_delta=need))
+    after = WF.context(col)["left"](did)["new"]
+    ok("why: N more new today raises today's room by N in Anki's own tree", after >= min(before + need, 9999) - 1,
+       f"{before} → {after} (asked {need:,} more)")
+    # 3.8.0, at my own pace and from Browse: open a tag's cards (its children too), first in
+    # Anki's line of new cards, never a leech, as one undo step; Undo shuts them and puts them back in line
+    tag = "#Big_Step1_v12::#Path_Book::02_Chapter_2"
+    t = tm(); tcids = col.find_cards(P.tag_search(tag) + '"'); t_find = tm() - t
+    kids = col.find_cards(P.tag_search(tag) + '::*"')
+    shut = [c for c in tcids if col.get_card(c).queue == -1]
+    counts = P.open_counts(col, tcids)
+    ok("open: a tag's cards, its children's too, counted first",
+       len(tcids) > 0 and set(kids) <= set(tcids) and counts["open"] + counts["leech"] == len(shut),
+       f"{len(tcids):,} cards, {counts}, {t_find*1000:.0f} ms")
+    before = {c: col.get_card(c).due for c in shut}
+    t = tm(); n = P.open_cards(col, tcids, "Due Crew: open 02 Chapter 2", first=True); t_open = tm() - t
+    opened = [c for c in shut if col.get_card(c).queue == 0]
+    lowest = sorted(col.db.list(f"SELECT due FROM cards WHERE did = {did} AND type = 0 AND queue = 0 ORDER BY due LIMIT {len(opened)}"))
+    ok("open: first in line: the opened new cards are the front of the deck's new cards, in their old order",
+       n == counts["open"] and sorted(col.get_card(c).due for c in opened) == lowest
+       and [c for c in sorted(opened, key=lambda c: col.get_card(c).due)] == sorted(opened, key=lambda c: before[c]),
+       f"{n:,} opened, {t_open*1000:.0f} ms")
+    ok("open: one undo step, named", col.undo_status().undo == "Due Crew: open 02 Chapter 2", repr(col.undo_status().undo))
+    col.undo()
+    ok("open: Edit › Undo shuts them and puts them back in line",
+       all(col.get_card(c).queue == -1 and col.get_card(c).due == before[c] for c in shut))
+    P.open_cards(col, tcids, "Due Crew: open 02 Chapter 2", first=True)
+    unseen = {c for c in tcids if col.get_card(c).type == 0 and col.get_card(c).queue == 0}
+    n_back = P.hold_cards(col, unseen, "Due Crew: put back 02 Chapter 2")
+    ok("put back: only the unseen ones shut again, one undo step",
+       n_back == len(unseen) and all(col.get_card(c).queue == -1 for c in unseen)
+       and col.undo_status().undo == "Due Crew: put back 02 Chapter 2")
+    # 3.8.0: plan tags: a follower's Anki puts the plan's own tags on its notes (exact notes by
+    # guid, a tag's notes), renames one, takes notes off, drops one, each sync one undo step;
+    # unfollowing takes them all off; nobody's own tags are touched
+    guids = col.db.list(f"SELECT n.guid FROM notes n WHERE n.id IN (SELECT nid FROM cards WHERE did = {did}) ORDER BY n.id LIMIT 3000")
+    own = col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')
+    own_before = len(own)
+    pt = {"deck": "Step Deck", "tagroot": "MS2_Block_1", "units": units[:2], "tags": [
+        {"id": "t1", "name": "SLG 12", "notes": guids + ["not-in-this-copy"]},
+        {"id": "t2", "name": "SLG 14: receptors", "tags": [lect[0]]},
+        {"id": "t3", "name": "Cardio overlap", "search": [units[-1]["search"][0]]}]}
+    idx7 = P.DeckIndex(col, did)
+    n14 = len(P.tag_notes(idx7, pt, pt["tags"][1])[0])
+    n_s = len(P.tag_notes(idx7, pt, pt["tags"][2])[0])
+    label = "Due Crew: MS2 Block 1's tags"
+    t = tm(); applied, out = P.sync_tags(col, idx7, pt, {}, label); t_tag = tm() - t
+    p12, p14 = "DueCrew::MS2_Block_1::SLG_12", "DueCrew::MS2_Block_1::SLG_14-_receptors"
+    find = lambda path: set(col.find_notes(P.tag_search(path) + '"'))
+    ok("plan tags: each on the notes it holds here, by guid, by tag, by search, in one undo step",
+       len(find(p12)) == 3000 and len(find(p14)) == n14 > 0 and n_s > 0 and out["missing"] == {"SLG 12": 1}
+       and col.undo_status().undo == label and sorted(out["new"]) == ["Cardio overlap", "SLG 12", "SLG 14: receptors"],
+       f"{out['added']:,} notes tagged, {t_tag*1000:.0f} ms")
+    every = set(col.find_notes(P.tag_search("DueCrew::MS2_Block_1") + '::*"'))
+    ok("plan tags: Browse on DueCrew::<plan>::* finds them all", every == find(p12) | find(p14) | find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    t = tm(); again, out2 = P.sync_tags(col, P.DeckIndex(col, did), pt, applied, label); t_again = tm() - t
+    ok("plan tags: the next sync with nothing new writes nothing", out2["added"] == out2["removed"] == 0 and again == applied,
+       f"{t_again*1000:.0f} ms")
+    pt2 = dict(pt, tags=[dict(pt["tags"][0], name="SLG 12 renal", notes=guids[500:])] + pt["tags"][1:2])
+    t = tm(); applied2, out3 = P.sync_tags(col, P.DeckIndex(col, did), pt2, applied, label); t_up = tm() - t
+    p12b = "DueCrew::MS2_Block_1::SLG_12_renal"
+    ok("plan tags: a rename moves it, notes taken off come off, a tag gone goes, one undo step",
+       not find(p12) and len(find(p12b)) == 2500 and out3["removed"] == 500 and not find("DueCrew::MS2_Block_1::Cardio_overlap")
+       and col.undo_status().undo == label, f"{t_up*1000:.0f} ms")
+    col.undo()
+    ok("plan tags: Edit › Undo puts the last update back", len(find(p12)) == 3000 and not find(p12b) and find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    n_drop = P.drop_tags(col, pt, "Due Crew: stop following MS2 Block 1")
+    ok("plan tags: unfollowing takes every one of them off; my own tags stay",
+       n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
+       f"{n_drop:,} notes")
     col.close()
 
 

@@ -109,7 +109,8 @@ for period, wrap in (("today", WRAP), ("week", None), ("decks", None)):
     cfg = {"period": period}
     html_out = board.render(DATA, cfg, now_ts - 180, wrap=wrap, deltas=DELTAS,
                             exam_eve=EVE if period == "today" else None,
-                            rules_stale=(period == "today"))
+                            rules_stale=(period == "today"),
+                            sticking={"Big Step 1": 10} if period == "decks" else None)  # 3.8.0: to Insights
     sections.append(f'<h3>{period}</h3>{html_out}')
 SROWS = [
     {"user_id": "u1", "name": "StepQueen", "day": L[0], "reviews": 1412,
@@ -157,6 +158,40 @@ sections.append("<h3>squad of 18 (the row cap)</h3>" + board.render(
     DATA, {"period": "squads"}, now_ts - 60,
     squad_view=dict(SQUAD_VIEW, rows=SROWS_MANY, people=18, studying=17)))
 # 3.1-3.3: a plan I follow, on my schedule, on the Decks tab
+# Due: Today, Upcoming and Later, the You bubble's lists (3.8.0)
+from due_crew import due as _D
+_T = L[0]
+_d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
+_DATES = [
+    {"pid": "p1", "uid": "u0", "plan": "Big Step 1 · F3", "name": "F2-4 SLGs 6–8", "opens": _d(-2), "seen": 40, "total": 96},
+    {"pid": "p1", "uid": "u1", "plan": "Big Step 1 · F3", "name": "F3-1 SLGs 1-3 · Absorption, distribution, elimination",
+     "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
+     "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
+     "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2",
+     "topics": [["Video Series", [["Pharmacokinetics", 0]]], ["Path Book", [["Drug elimination", 1]]]]},  # 3.8.0: links
+    {"pid": "p1", "uid": "u2", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 5 · Clinical trial phases", "opens": _T, "seen": 24, "total": 24},
+    {"pid": "p1", "uid": "u3", "plan": "Big Step 1 · F3", "name": "F3-2 SLGs 6a–6b · Drug interactions", "opens": _d(1), "seen": 0, "total": 129},
+    {"pid": "p1", "uid": "u4", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 7 · Autonomic drugs", "opens": _d(2), "seen": 0, "total": 96,
+     "todo": [{"k": "watch", "t": "lecture 15"}]},
+    {"pid": "p1", "uid": "u5", "plan": "Big Step 1 · F3", "name": "F4-1 SLGs 1–2 · Cardio phys", "opens": _d(9), "seen": 0, "total": 110},
+]
+_ITEMS = [
+    {"id": "i0001", "t": "Email the course director about the retake", "d": _d(-2), "done": "", "at": _d(-3)},
+    {"id": "i0002", "t": "Book the practice exam room", "d": _T, "done": "", "at": _T},
+    {"id": "i0003", "t": "Practice exam 3", "d": _d(1), "done": "", "at": _T},
+    {"id": "i0004", "t": "Return library books", "d": "", "done": "", "at": _T},
+    {"id": "i0005", "t": "Ask Dre about the renal deck", "d": "", "done": "", "at": _T},
+    # 3.8.0: a repeat, on today's weekday (TODAY is a Tuesday)
+    {"id": "i0006", "t": "Practice block", "d": _T, "done": "", "at": _T, "r": "13"},
+]
+_DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
+              review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
+              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}],
+              # 3.8.0: a plan's lines every week
+              every=[{"pid": "p1", "plan": "Big Step 1", "first": _d(-30), "last": _d(40),
+                      "lines": [{"k": "do", "t": "Practice questions (40)", "r": "0123456"},
+                                {"k": "watch", "t": "Weekly review session", "r": str((_D.d(_T).weekday() + 3) % 7),
+                                 "url": "https://example.com/r"}]}])
 from due_crew import plans as PL  # noqa: E402
 _PT = "2026-10-07"
 _PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
@@ -170,38 +205,115 @@ _PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},
          "events": [{"id": "q", "day": "2026-10-09", "name": "Cardio quiz"}]}
 PLAN_CARD = {"id": "p1", "title": "MS2 Block 1 · Dre's plan", "sub": "week 3 of 9 · 6 following",
              "rows": [{"name": "Path Book 1 · Cell injury", "state": "open", "crew": [5, 6]}],
-             "today_names": ["Path Book 2 · Inflammation"], "next": {"name": "V&B Metabolism 1", "uid": "d", "day": "Thursday", "n": 38},
              "week": PL.week_view(_PDOC, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT)),
-             "week_offset": 0, "opened": {"names": ["Path Book 2 · Inflammation"], "n": 42, "undo": True},
-             "today_what": PL.topics_line([_PDOC["units"][1], _PDOC["units"][2]]),  # two dates: long enough to need its "…"
-             "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
-             "lines": [], "change": None, "no_deck": False, "paused": False, "today": "Wed 7 Oct", "sched": False,
-             "waiting": 16}
-sections.append("<h3>3.5.0: a plan I follow, on the Plans tab</h3>" + board.render(
-    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [PLAN_CARD], "offers": []}))
+             "week_offset": 0, "session": {"kind": "study", "target": 42, "done": 18, "due": 311, "minutes": 48, "behind": 0},
+             "lines": [], "change": None, "no_deck": False, "paused": False,
+             "waiting": 16, "aside": [0, 0, 0], "aside_ok": [0, 0],
+             "ins": {"n": 53, "did": 10, "name": "KSA F3-3", "day": "2026-10-13"}}  # 3.8.0: the next exam's cards, from Insights
+PLANS = {"cards": [PLAN_CARD], "offers": []}
+_YOU = lambda tab, **kw: dict({"tab": tab, "plans": PLANS}, **kw)  # noqa: E731
+sections.append("<h3>3.8.0: You › Plans, a plan I follow (Due on, so its lists first)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans")))
+# 3.8.0: the plan's squad: a line on the plan card, and a pill on the Squads tab
+_SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
+    "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "last": {"name": "Maya"}}})], "offers": []}
+sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there); Due off</h3>" + board.render(
+    DATA, {"period": "week", "due_show": False}, now_ts - 60, plans=_SQ, you=_YOU("plans", plans=_SQ)))
+# 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)
+_OWN = {"mode": "ready", "next": {"uid": "u2", "name": "SLG 13 · Heart failure", "n": 180},
+        "then": ["SLG 14 · Arrhythmias · 96", "SLG 15 · Valves · 122", "SLG 16 · 140"], "more": 29,
+        "at": "The plan's dates are at SLG 14 today.", "pace": "You opened 5 dates in the last two weeks.",
+        "finish": "At that pace you open the last date on Tue 8 Dec, 3 days after Block exam.",
+        "last": "Opened SLG 12 · Cardiac receptors · 214 cards, first in line.", "back": None}
+sections.append("<h3>3.8.0: a plan at my own pace (When I'm ready), just after Open</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
+        PLAN_CARD, sub="at your pace · 6 following", tabs={"summary": None}, ins=None, lines=[], waiting=0, own=_OWN)], "offers": []})))
+sections.append("<h3>3.8.0: at my own pace, later (Put back), every date open</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
+        PLAN_CARD, sub="at your pace · 6 following", tabs={"summary": None}, ins=None, lines=[], waiting=0,
+        own=dict(_OWN, last=None, back={"name": "SLG 13 · Heart failure", "n": 180})),
+        dict(PLAN_CARD, id="p2", title="Micro · Dre's plan", sub="at your pace · 2 following", tabs={"summary": None}, ins=None, lines=[],
+             own=dict(_OWN, next=None, then=[], more=0, last=None, back=None, finish=None, pace=None,
+                      at="The plan's dates ended Fri 4 Dec."))], "offers": []})))
+sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
+        PLAN_CARD, tabs={"summary": None}, ins=None,
+        lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
+_EV = {"squares": [{"done": i in (0, 2, 5)} for i in range(8)], "middle": {"done": False, "have": 7, "goal": 9}, "lines": 0}
+_TEAM = {"on": True, "count": 12, "shown": 5, "streak": 4, "more": 4, "bingo": {"card": {"wk": "2026-W41"}, "ev": _EV},
+         "faces": [{"uid": "u1", "name": "Maya", "emoji": "\U0001F419", "shown": True},
+                   {"uid": "me", "name": "Sam", "emoji": "\U0001F331", "shown": True},
+                   {"uid": "u2", "name": "Dre", "emoji": "", "shown": True},
+                   {"uid": "u3", "name": "Kai", "emoji": "\U0001F98A", "shown": True},
+                   {"uid": "u4", "name": "Ameya", "emoji": "", "shown": True},
+                   {"uid": "u5", "name": "Jordan", "emoji": "", "shown": False},
+                   {"uid": "u6", "name": "Lee", "emoji": "\U0001F43C", "shown": False},
+                   {"uid": "u7", "name": "Priya", "emoji": "", "shown": False}],
+         "asks": [{"id": 1, "uid": "u1", "name": "Maya", "emoji": "\U0001F419", "text": "Why does isoproterenol drop diastolic pressure?",
+                   "at": int(NOW.timestamp()) - 7200, "act": int(NOW.timestamp()) - 3600, "topic": "Direct Sympathomimetics",
+                   "guid": "g1", "ord": 0, "mine": False, "remove": False, "author": False,
+                   "replies": [{"id": 2, "uid": "u2", "name": "Dre", "emoji": "", "text": "\u03b22 vasodilation in skeletal muscle beds",
+                                "at": int(NOW.timestamp()) - 3600, "helped": False, "author": True, "mine": False, "remove": False}]},
+                  {"id": 3, "uid": "u3", "name": "Kai", "emoji": "\U0001F98A", "text": "Is Friday's quiz open-book for the PK formulas?",
+                   "at": int(NOW.timestamp()) - 18000, "act": int(NOW.timestamp()) - 18000, "topic": "", "guid": "", "ord": 0,
+                   "mine": False, "remove": False, "author": False, "replies": []}]}
+_PSQ = {"kind": "plan", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "current": "plan:p1",
+        "squads": [{"id": "abc", "name": "busm"}, {"id": "def", "name": "MS2"}],
+        "plan_squads": [{"id": "plan:p1", "pid": "p1", "name": "MS2 Block 1 \u00b7 Dre's plan", "unread": 0},
+                        {"id": "plan:p2", "pid": "p2", "name": "Step 1 dedicated", "unread": 3}],
+        "team": _TEAM, "team_state": "ok", "me": "me", "known": {"down": ["g1"], "have": ["g1"]}}
+sections.append("<h3>3.8.0: a plan's squad on the Squads tab</h3>" + board.render(
+    DATA, {"period": "squads"}, now_ts - 60, squad_view=_PSQ))
 # 3.7.9: Insights, with the numbers of Sam's own snapshot (Wed 7 Oct)
 _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                                 "days": [84, 80, 88, 89, 85, 75, 94, 79, 82, 88, 91, 84, 94, 88][::-1]},
         "aim": {"day": "2026-10-13", "name": "KSA F3-3", "in": 6, "scoped": True}, "hero": list(range(53)), "behind": 0,
-        "rows": [{"name": "Direct Sympathomimetics", "src": "Bootcamp › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
-                 {"name": "Sympathomimetics", "src": "SketchyPharm › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
-                 {"name": "Cholinomimetics", "src": "SketchyPharm › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
-                 {"name": "Muscarinic antagonists", "src": "SketchyPharm › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
+        "rows": [{"name": "Direct Sympathomimetics", "src": "Video Series › Autonomic System", "of": 27, "stuck": 9, "forgot": 0, "cids": [1]},
+                 {"name": "Sympathomimetics", "src": "Picture Series › Sympathetic", "of": 44, "stuck": 8, "forgot": 2, "cids": [1]},
+                 {"name": "Cholinomimetics", "src": "Picture Series › Parasympathetic", "of": 31, "stuck": 6, "forgot": 0, "cids": [1]},
+                 {"name": "Muscarinic antagonists", "src": "Picture Series › Parasympathetic", "of": 47, "stuck": 4, "forgot": 0, "cids": [1]}],
         "week": {"past": [("2026-09-30", 0), ("2026-10-01", 14), ("2026-10-02", 0), ("2026-10-03", 50), ("2026-10-04", 66),
                           ("2026-10-05", 61), ("2026-10-06", 74)],
                  "ahead": [("2026-10-07", 130, 145, 0), ("2026-10-08", 204, 204, 133), ("2026-10-09", 237, 242, 122),
                            ("2026-10-10", 210, 220, 79), ("2026-10-11", 217, 228, 74), ("2026-10-12", 231, 246, 63),
                            ("2026-10-13", 128, 133, 55)], "avg": 204, "was": 38, "today_done": 46},
         "fsrs": {"right": 85, "n": 486, "target": 90}}
-sections.append("<h3>3.7.9: Insights (Sam's numbers)</h3>" + board.render(
-    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": _INS})], "offers": []}))
-sections.append("<h3>3.7.9: Insights, an event no date preps for (by the day)</h3>" + board.render(
-    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": dict(
-        _INS, aim=dict(_INS["aim"], scoped=False))})], "offers": []}))
-sections.append("<h3>3.7.9: Insights, nothing yet</h3>" + board.render(
-    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [dict(PLAN_CARD, tabs={"sub": "ins", "insights": {}})], "offers": []}))
-sections.append("<h3>3.5.0: the Plans tab, following nothing</h3>" + board.render(
-    DATA, {"period": "plans"}, now_ts - 60, plans={"cards": [], "offers": []}))
+_DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
+def _tile(name, n, kn, kids=(), st=None):
+    t = {"key": name.lower(), "name": name, "n": n, "know": kn, "started": n if st is None else st,
+         "find": {"tags": ["Big::^Systems::" + name]}}
+    return dict(t, kids=list(kids)) if kids else t
+
+
+# 3.8.0: the cards in play split a level down (one block open: Cardio's parts), a bar where some aren't started
+_MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91), _tile("Valves", 132, 79), _tile("ECG", 84, 88),
+                                               _tile("Vessels", 36, 94)]),
+        _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
+        _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
+_PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
+             "view": dict(_INS, did=10, pid="p1", leeches=3, week=dict(_INS["week"], src="plan"), map=_MAP, map_by="fsrs",
+                          map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "B&B", "on": False},
+                                    {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
+sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("insights", insights=_PLAN_INS)))
+_DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,
+                 aim={"day": "2026-10-14", "name": "Your exam", "in": 7, "scoped": False, "kind": "exam"},
+                 rows=[{"name": "Subjunctive", "src": "Grammar", "of": 41, "stuck": 7, "forgot": 3, "cids": [1]},
+                       {"name": "Preterite", "src": "Grammar", "of": 63, "stuck": 5, "forgot": 1, "cids": [1]}],
+                 week=dict(_INS["week"], src="anki"))
+sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
+    you=_YOU("insights", insights=dict(_PLAN_INS, view=dict(_PLAN_INS["view"], map_at=["cardio · physiology"])))))
+sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
+sections.append("<h3>3.8.0: You › Insights, no exam date, nothing yet</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS[1:], "did": 20, "exam": False, "plan": None, "view": {}})))
+sections.append("<h3>3.8.0: You › Plans, following nothing</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, due=_DV, you=_YOU("plans", plans={"cards": [], "offers": []})))
+sections.append("<h3>3.8.0: Due off, folded: Plans and Insights on one line</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS, you=_YOU("plans", folded=True)))
 # 3.5.0: Settings in the board, each tab, and a Decks tab with asks both ways
 SET_VIEW = {"signed_in": True, "name": "Sammy", "emoji": "\U0001F98A", "status": "coffee, then 400 cards",
             "sync": "sam@school.edu · Synced 2m ago · v3.5.0", "crew": 6, "squads": ["BUSM 2028", "Block 3"],
@@ -215,36 +327,21 @@ sections.append("<h3>3.5.0: decks, asked of you and your asks</h3>" + board.rend
              "uid": "m", "index": 0, "known": True}],
     asks=[{"text": "The external iliac artery becomes the femoral artery as it c", "who": [], "state": "open", "index": 0},
           {"text": "Warfarin inhibits vitamin K epoxide reductase", "who": ["Dre"], "state": "answered"}]))
-# Due: above the board on every tab, each of its tabs and folded
-from due_crew import due as _D
-_T = L[0]
-_d = lambda n: (TODAY + datetime.timedelta(days=n)).isoformat()
-_DATES = [
-    {"pid": "p1", "uid": "u0", "plan": "Big Step 1 · F3", "name": "F2-4 SLGs 6–8", "opens": _d(-2), "seen": 40, "total": 96},
-    {"pid": "p1", "uid": "u1", "plan": "Big Step 1 · F3", "name": "F3-1 SLGs 1-3 · Absorption, distribution, elimination",
-     "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
-     "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
-     "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2"},
-    {"pid": "p1", "uid": "u2", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 5 · Clinical trial phases", "opens": _T, "seen": 24, "total": 24},
-    {"pid": "p1", "uid": "u3", "plan": "Big Step 1 · F3", "name": "F3-2 SLGs 6a–6b · Drug interactions", "opens": _d(1), "seen": 0, "total": 129},
-    {"pid": "p1", "uid": "u4", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 7 · Autonomic drugs", "opens": _d(2), "seen": 0, "total": 96,
-     "todo": [{"k": "watch", "t": "lecture 15"}]},
-    {"pid": "p1", "uid": "u5", "plan": "Big Step 1 · F3", "name": "F4-1 SLGs 1–2 · Cardio phys", "opens": _d(9), "seen": 0, "total": 110},
-]
-_ITEMS = [
-    {"id": "i0001", "t": "Email the course director about the retake", "d": _d(-2), "done": "", "at": _d(-3)},
-    {"id": "i0002", "t": "Book the practice exam room", "d": _T, "done": "", "at": _T},
-    {"id": "i0003", "t": "Practice exam 3", "d": _d(1), "done": "", "at": _T},
-    {"id": "i0004", "t": "Return library books", "d": "", "done": "", "at": _T},
-    {"id": "i0005", "t": "Ask Dre about the renal deck", "d": "", "done": "", "at": _T},
-]
-_DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
-              review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
-              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}])
 for _tab in ("today", "upcoming", "later"):
-    sections.append(f"<h3>Due: {_tab}</h3>" + board.render(DATA, {"period": "today"}, now_ts - 60,
-                                                            due=dict(_DV, tab=_tab)).replace('id="du-', f'id="du{_tab}-'))
-sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True)))
+    sections.append(f"<h3>You: {_tab}</h3>" + board.render(DATA, {"period": "today"}, now_ts - 60, plans=PLANS,
+                                                            due=dict(_DV, tab=_tab, opened={"n": 42} if _tab == "today" else None),
+                                                            you=_YOU(_tab)).replace('id="du-', f'id="du{_tab}-'))
+# 3.8.0: reviews done but learning cards back later; the morning's line with Sync now
+_DV2 = _D.view(_T, _DATES[:2], _ITEMS, {}, reviews={"due": 0, "done": 120, "back": 4, "at": "9:42"})
+sections.append("<h3>3.8.0: learning back at 9:42, a repeat, the morning's Sync now</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV2, opened={"n": 42, "sync": True}),
+    you=_YOU("today")).replace('id="du-', 'id="dub-'))
+sections.append("<h3>3.8.0: Insights, no plan, the exam date in its head; the Hard habit</h3>" + board.render(
+    DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
+    you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": "2026-10-14", "plan": None,
+                                   "view": dict(_DECK_INS, hard={"pct": 22, "n": 640})})))
+sections.append("<h3>Due: folded</h3>" + board.render(DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True),
+                                                       plans=PLANS, you=_YOU("today", folded=True)))
 sections.append("<h3>Due: done for today, a long tomorrow</h3>" + board.render(
     DATA, {"period": "week"}, now_ts - 60, due=dict(_DV, folded=True, done=True, behind_n=0, start=None, tomorrow=[
         "F3-1 SLGs 1-3 - Drug delivery and elimination kinetics", "F3-2 SLG 7 - Autonomic wiring and muscarinic antagonists"])))
@@ -377,7 +474,7 @@ stranger_js = board.stranger_card_js({"uid": "u2", "name": "Maya R.",
 page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Due Crew board preview</title>
 <style>
-  body {{ margin: 0; padding: 24px 12px 60px; background: #ffffff;
+  body {{ margin: 0; padding: 24px 12px 60px; background: #f5f5f5;  /* Anki's canvas (26.x) */
          font-family: -apple-system, sans-serif; }}
   body.nightMode {{ background: #2c2c2c; color: #d7d7d7; }}
   /* Anki 26.x deck screen: every table gets a translucent glass fill */

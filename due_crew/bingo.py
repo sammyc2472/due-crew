@@ -15,8 +15,6 @@ import math
 import re
 
 FAMILIES = ("early", "spread", "focus", "volume", "fresh", "often", "clean", "wild")
-FAMILY_NAMES = {"early": "Early", "spread": "Spread out", "focus": "Focus", "volume": "Bigger day",
-                "fresh": "New cards", "often": "Showing up", "clean": "Keeping up", "wild": "Wildcard"}
 DIFF_NAMES = {"e": "easy", "m": "medium", "h": "hard"}
 SQUARE_TYPES = ("window", "minute", "sittings", "parts", "focus", "beat", "rel", "best",
                 "newdays", "newdone", "days", "zero", "samehour")
@@ -38,7 +36,6 @@ LINES = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4
 # a team square's need, or a middle's goal, as a share of the squad (at
 # least 2 of you, never more than there are): worker/src/bingo.ts SHARES
 SHARES = {"half": 1 / 2, "third": 1 / 3, "quarter": 1 / 4}
-SHARE_WORDS = {"half": "half of you", "third": "a third of you", "quarter": "a quarter of you"}
 USUAL_DEFAULT = 50     # "your usual day" until there's a week of history
 USUAL_MIN_DAYS = 7
 _WK = re.compile(r"(\d{4})-W(\d{2})$")

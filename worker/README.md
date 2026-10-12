@@ -1,7 +1,7 @@
 # Due Crew API (3.0)
 
 One Cloudflare Worker with D1 underneath, served at `https://api.duecrew.com`.
-Every consent rule that `firestore.rules` holds today lives in this code.
+Every consent rule lives in this code.
 JSON in and out. Errors are `{error: "<code>"}` with a status, and 429s also
 carry `retryAfter` (seconds) and a `retry-after` header.
 
@@ -14,8 +14,11 @@ npx wrangler dev    # local; with DEV_MAIL_LOG=1 in .dev.vars and no mail, codes
 
 ## Endpoints
 
-Everything but `/version`, `/auth/code`, `/auth/verify` and the admin
-import takes `Authorization: Bearer <token>`.
+Everything takes `Authorization: Bearer <token>` (or the site's session
+cookie) except these, which need no sign-in: `GET /version`,
+`POST /auth/code`, `POST /auth/verify`, `POST /auth/link/redeem`,
+`GET /auth/gone`, `POST /links/email`, `GET /plans/ics`,
+`GET /plans/public` and `GET /invites/{code}`.
 
 ### Sign-in and account
 
@@ -24,14 +27,13 @@ import takes `Authorization: Bearer <token>`.
 | `GET /version` | `{api, minClient}`, no auth. Replaces the rules-marker probe. |
 | `POST /auth/code {email}` | Sends a code: six digits, ten minutes, plain text, no links. The answer is the same whether or not the address has an account. |
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
-| `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.5.0: the accent from my settings, else green; the site wears it). |
+| `GET /auth/me` | `{uid, email, name, emoji, accent, rollover?}` (3.5.0: the accent from my settings, else green; the site wears it. 3.8.0: `rollover`, the hour my Anki's day starts, once an add-on has synced it; the site's day follows it). |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
 | `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `GET /account/data` | 3.7.1, D2: everything kept about me as one JSON file (profile, settings, week, decks, heatmap, log, cheers counted, crew by name, squad rows, plans made and followed, notes, tips, cards I have down, feedback, sign-ins; never a token or anyone else's email). 10 a day. |
 | `DELETE /account/todos` | 3.7.1, D2: my Due to-dos and ticks, under a fresh save time; each add-on takes it at its next refresh (`settingsAt`). |
 | `DELETE /log` | 3.7.1, D2: my log and my cheers counted. Days older than 8 days before the delete are never taken again (`cut`, first in the log's JSON), and every sync reply says `logCut` so the add-on's history import stops. |
 | `DELETE /account` | Everything of mine, in one transaction. A squad I founded passes to its longest-standing member, or goes if I was the last one in it. |
-| `POST /admin/import-users {users: [{uid, email, name?, code?}]}` | The one-shot `firebase auth:export` import (`ADMIN_TOKEN`), with each profile's name and friend code when `tools/import_users.py --firestore` read them. Idempotent by uid; `{imported, skipped}`. |
 
 **Sign-in details**
 - Codes and tokens are stored as SHA-256 hashes; tokens are 32 random bytes, base64url.
@@ -56,7 +58,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?, settingsAt}`. `settingsAt` (3.7.1) is when my settings were last saved: an add-on pulls a save it hasn't seen. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
 | `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each, 100,000 kept a person), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 15 years kept since 3.7.1, mine only; the reply's `logAll` lets the add-on's history import move on). |
 | `POST /tips/helped {guid, from, helped?}` | 3.2: "This helped" on a mutual friend's tip. It orders tips (the most helpful first); nobody sees a count. |
-| `GET /log` | 3.2: my log, for the site, and since 3.7.1 `cheers: {year: n}` (cheers my crew sent me, a sender once a day, tips not counted). Mine only. |
+| `GET /log` | 3.2: my log, for the site, and since 3.7.1 `cheers: {year: n}` (cheers my crew sent me, a sender once a day, tips not counted). Mine only. `?summary=1`: how many days and the first; `?cheers=1` (3.8.0, the add-on's year and all-time pictures): `{cheers}` alone. |
 | `GET` / `POST /admin/notices {text, link?, below?, days?}`, `DELETE /admin/notices/{id}` | 3.2.1: the admin's notice (at most 200 characters, an https link, only to add-ons older than `below`, 14 days unless said). `GET /board` carries the newest live one for the asking add-on's version as `notice: {id, text, link}`. |
 | `GET /admin/stats` | 3.2: counts only (accounts, on 3.x, seen, friendships, squads, plans, tips, versions), for the admin (`ADMINS` in wrangler.toml, and the `ADMIN_UIDS` secret); 404 for everyone else. `GET /auth/me` says `admin: true` for them. |
 | `GET /admin/people?q=` | The admin's account lookup: an exact email, uid or friend code, or up to 10 whose name starts with `q` (3+ characters), emails partly hidden; a squad's code gives `squad`. `GET /admin/people/{uid}`: one account (name, emoji, email, code, joined, last seen, version, tz, how many places signed in, squads with ids, plans made and followed, counts of crew, added-not-back and muted, the per-address sign-in limits, a pending email change, the admin's note and what the admin did there). Never their week, days, heatmap, decks, log, plan progress, settings, or who their crew are. `POST /admin/people/{uid}/signout` ends their sessions; `DELETE /admin/people/{uid} {email}` deletes the account as their own Delete does, with their email typed as confirmation (never the admin's own). 404 for everyone else. |
@@ -75,7 +77,7 @@ import takes `Authorization: Bearer <token>`.
 - At most 9 days.
 - A flagged card (`tricky`) is `{guid, deck, at}`. Any `text` is dropped on the way in; crewmates read the text from their own copy of the note.
 - A flag with a tip still waiting for me is dropped on the way in, so a sync before I've read the tip doesn't put it back up.
-- 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to Firestore.
+- 3.2: a flag may carry `q`, my one line asking whoever has the card down (an ask). `recap: {name, n, day}` is my last plan week done. Neither goes to anyone else.
 
 ### People
 
@@ -84,8 +86,7 @@ import takes `Authorization: Bearer <token>`.
 | `GET /users/{uid}` | `{uid, name, emoji}`, and nothing more, and since 3.7.1 (D5) only to someone connected: a crew edge or a knock either way, or a squad or a plan in common. Anyone else gets `404 no_user`, as for no such account. |
 | `PUT /friends/{uid}` | Add someone (an add-back, a knock's Add). Clears their knock. `{uid, name, emoji, mutual}`. |
 | `DELETE /friends/{uid}` | Their reads of my numbers end with this request. |
-| `PUT /friends {ids}` | 3.0's first sync re-adds the crew by uid. Add-only; unknown uids are skipped. |
-| `POST /codes [{code}]` | A new friend code; the old one stops working. `code` asks for a particular one (the one I already handed out), if it's free. |
+| `POST /codes` | A new friend code; the old one stops working, and so do my invite links. 20 a day. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
 | `POST /invites` | 3.5.0: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
 | `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
@@ -196,9 +197,34 @@ copy, in date order); kept as `pn` the same way as `idr`, while the date's
 Due: a date may carry `todo: [{k, t, url?}]` (up to 8): `k` watch, read
 or do, `t` up to 140 characters, `url` an https link. Followers tick them
 by hand in the add-on; the ticks are theirs (`due_ticks` in their settings).
+3.8.0: the doc may carry `every: [{k, t, url?, r}]` (up to 6), the same
+lines with `r`, their weekdays (Monday "0", kept sorted): on those days
+from the plan's first date to its last, each follower ticks each day's.
+3.8.0 plan tags: the doc may carry `tags: [{id, name, notes?, tags?,
+decks?, search?, n?}]` (up to 100; a name up to 40 characters, unique as
+an Anki tag part; `notes` are guids, 5,000 a tag, counted into the plan's
+50,000; `tags`/`decks`/`search` make a tag from what they find in each
+copy) and `tagroot`, the plan's own part (`tagRoot` of its name, set with
+the first tag and never changed by a save; unique among plans, case aside,
+in `plans.tagroot` (migration 0023): one another plan holds becomes `_2`,
+`_3`, and the doc's dates, plan tags and pace picks naming it follow; a
+copy gets a root of its own the same way). Each follower's Anki writes a
+tag as `DueCrew::<tagroot>::<tagPart(name)>`. `POST /plans/{id}/tags
+{name, add?, remove?, n?}` (the owner and co-authors; guids): puts notes on
+a tag, made if new, or takes them off (`404 no_tag` taking off a tag that
+isn't there; a tag left with nothing goes); `400 too_many` past 5,000; a
+plan version like any save, with a line in the plan's history. The
+board's `authored` (the plans I write or co-author) carries each plan's
+`name`, and its doc `tagroot` and `tags`, so the author's Anki writes them
+too.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
+3.8.0, at my own pace (migration 0024): `POST /plans/follow` and `PATCH
+/plans/{id}/follow` take `own`: null (the plan's dates open its cards, as
+before), "ready" (nothing opens by itself) or "next" (the next date opens
+once I've seen the last); mine only, on the board's plans, on the plan's
+`following`, and in the refresh's plan stamp.
 G3, G4 (migration 0007): `PATCH /plans/{id}/follow` also takes `shift`
 (0-365 days my dates run later), `until` and `since` (a pause's last and
 first day, or null) and `skipped` (unit ids, up to 200). They're mine
@@ -226,9 +252,8 @@ only) adds `feed`: who added me back, notes on days of plans I'm in, and
 others' saves to those plans (`summary`), the last 14 days, 20 at most,
 none from someone I muted. My follow carries `hist` (`{date: [opened,
 seen]}`, 120 days, kept with each progress write) on `following`.
-`/admin/stats` adds `cutover {on3, active2, quiet}`, `codes {sent, ok,
-wrong, out, limited}` (the last 7 days), `bridge` (its last run and
-today's runs) and the library's `listed`/`takenOut`; `GET
+`/admin/stats` adds `codes {sent, ok, wrong, out, limited}` (the last 7
+days) and the library's `listed`/`takenOut`; `GET
 /admin/trends?days=30|90|365` is each kept count by day (the daily cron
 keeps them in `admin_days`; accounts come from `created_at`). `GET
 /admin/notices?all=1` is the last 20 with their `state`; taking one down
@@ -241,14 +266,13 @@ keeps its row.
 | `POST /squads {name}` | `{id, code, name, founder, open}`; I'm the founder and a member. |
 | `GET /squads/peek?code=` | The join preview, with `founderName` since 3.7.1. 60 an hour. |
 | `POST /squads/{id}/join {code}` | The only way in: the squad's code (since 3.6.2 always; an id alone is not a join), the door open, I mustn't be blocked, and it holds at most 500. |
-| `POST /squads/restore {code, name, founder}` | 3.0's first sync: recreates a 2.x squad with the founder its members remember, or joins it if it's back already. Block lists don't come back. 30 a day. |
 | `GET /squads/{id}[?wk=2026-W40]` | Members only: `{id, name, founder, open, banned, rows}`. `banned` is the founder's to see. 3.6: each row has `joined` (a date) and `play`; with `wk`, `bingo` is that week's card. |
 | `PUT /squads/{id}/row` | My numbers, as an update. Never a join. |
 | `DELETE /squads/{id}/members/{uid}` | Leave, or (founder) remove. |
 | `POST /squads/{id}/block/{uid}` | Founder: out, and can't rejoin. |
 | `PATCH /squads/{id} {open?, founder?}` | Founder. A squad passes only to a member. |
 
-Squad ids are 2.x's (`sha1("due-crew-squad:" + code)[:24]`), so squads in a 2.x config keep their ids.
+Squad ids are `sha1("due-crew-squad:" + code)[:24]`, as in 2.x.
 
 3.6, squad bingo (migration 0011, `src/bingo.ts`): every squad plays the
 same 3×3 card each week. The server draws it the first time anyone asks
@@ -283,8 +307,8 @@ add-on whose config lost them puts them back.
 
 ## Tests
 
-- `test/consent.test.ts` restates every check of `tests/rules/emulator_rules_test.py` (the 2.x Firestore rules) against the Worker, in its order and under its label.
-- `test/auth.test.ts` and `test/account.test.ts` cover sign-in, sessions, limits, deletion and the import.
+- `test/consent.test.ts` restates every check of the 2.x rules test against the Worker, in its order and under its label.
+- `test/auth.test.ts` and `test/account.test.ts` cover sign-in, sessions, limits and deletion.
 - `test/board.test.ts` covers the board, sync, codes and squads.
 - `test/bingo.test.ts` covers squad bingo: weeks, the draw, the kept card, play on rows, a squad's card from its rows, the admin's pool and the daily counts.
 

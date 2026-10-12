@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, mailbox, person, from2x } from "./helpers";
+import { api, db, mailbox, person } from "./helpers";
 
 // Mock "Admin, grown up": sign-in help, the note, the audit log (A3, A5)
 // and the squad tools (A4). Admin only; the founder is told; nothing logged
@@ -157,17 +157,14 @@ describe("the admin's squad tools", () => {
     expect(code).toMatch(/^[A-Z2-9]{8}$/);
     expect(r.body.told).toBe(true);
     expect(box.sent.find((m) => m.to === "maya@example.com")!.text).toContain(`${code.slice(0, 4)} ${code.slice(4)}`);
-    // the old code: no peek, no join, no restore that makes the squad again
+    // the old code: no peek, no join
     expect((await zed.call("GET", `/squads/peek?code=${sq.code}`)).status).toBe(404);
     expect((await zed.call("POST", `/squads/${sq.id}/join`, { code: sq.code })).body.error).toBe("wrong_code");
-    await from2x("zed");  // even an account from 2.x, which may bring a squad back
-    expect((await zed.call("POST", "/squads/restore", { code: sq.code, name: "MS2 Squad" })).body.error).toBe("wrong_code");
     expect(await db().prepare("SELECT COUNT(*) AS n FROM squads").first<number>("n")).toBe(1);
     // the new one: peek gives the same id, and the join works
     const peek = await zed.call("GET", `/squads/peek?code=${code}`);
     expect(peek.body.id).toBe(sq.id);
     expect((await zed.call("POST", `/squads/${sq.id}/join`, { code })).status).toBe(200);
-    expect((await zed.call("POST", "/squads/restore", { code, name: "MS2 Squad" })).status).toBe(200);  // a join, as before
     expect((await maya.call("GET", `/squads/${sq.id}`)).body.rows).toHaveLength(4);
     // a second new code retires the first
     const again = (await admin(sam, `/admin/squads/${sq.id}/code`, "POST")).body.code;

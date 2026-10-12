@@ -16,8 +16,8 @@ squad board each fetch their own, when someone looks.
 
 import datetime
 import html
-import json
 import re
+import sys
 import threading
 import time
 import traceback
@@ -34,6 +34,7 @@ from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS
                   save_cfg)
 from .backend.shapes import TransportError, _clean_day, clean_emoji, shared_numbers
 from .shares import _share, dismiss_review, review_banners
+from .shares import picture as share_picture
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer, cheer_allowed, drop_muted, muted_uids, row_menu)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
@@ -47,7 +48,7 @@ from .stats.queries import StatsQueries
 from .ui import copy_text
 from . import account, bingo_flow, due_flow, plan_flow, rooms, together
 from . import cards as crew_cards
-from .wrap import (_deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
+from .wrap import (_arrivals, _deck_deltas, _exam_eve_info, _mute_knocker, _save_wrap, _update_returns,
                    _update_wrap, _wrap_data, _wrap_info)
 
 _lock = threading.Lock()
@@ -105,6 +106,17 @@ def _morning(awaiting_sync, **kw):
     if _closing:
         return None
     return plan_flow.maybe_morning(awaiting_sync, **kw)
+
+
+def _morning_now(waiting):
+    """3.8.0, on the Decks screen: the morning that waited for it, then the
+    board redrawn with what it opened."""
+    if _state.get("plans_morning") is not waiting:
+        return  # ran already, or a newer one is waiting
+    _state["plans_morning"] = None
+    _morning(bool(waiting.get("awaiting")) and _awaiting_phone(), fresh=bool(waiting.get("fresh")))
+    if _state["board_shown"] and mw.state == "deckBrowser":
+        _swap(cfg())
 
 
 def _after_push(pushed, labels, gone=(), gen=None):
@@ -427,13 +439,18 @@ def _rerender():
 def _on_render(deck_browser, content):
     try:
         c = cfg()
+        if _state.get("settings_tab"):
+            # 3.8.0: Settings shows whatever else is so (signed out, the board off)
+            _state["board_shown"] = True
+            content.stats += board.settings_html(_settings_view(), c)
+            return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
             return
         if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
             content.stats += board.signed_out_card(c, expired=client().session_dead,
-                                                   moved=client().was_on_2x, gone=client().deleted_quiet)
+                                                   gone=client().deleted_quiet)
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)
@@ -452,9 +469,18 @@ def _bingo_view(c):
 
 
 def _squad_view_with_bingo(c):
-    """The Squads tab's view, with this week's card when there is one (3.6)."""
+    """The Squads tab's view, with this week's card when there is one (3.6).
+    3.8.0: the plans' squads are pills too, and one of them may be picked."""
+    from . import team_flow
     sv = _squad_view(c)
-    if c.get("period") == "squads" and sv.get("state") == "ok":
+    if c.get("period") != "squads":
+        return sv  # only the Squads tab draws it; a plan's squad reads my collection for its card questions
+    ps = team_flow.plan_squads()
+    pv = team_flow.squad_view(c, ps)
+    if pv:
+        return dict(pv, squads=sv.get("squads") or [], plan_squads=ps)
+    sv = dict(sv, plan_squads=ps)
+    if sv.get("state") == "ok":
         bv = bingo_flow.view(sv, c)
         if bv:
             sv = dict(sv, bingo=bv)
@@ -498,6 +524,8 @@ def _board_html(c):
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):
         notice = None
+    due = due_flow.view(c)  # Due: the day's to-do, on top
+    plans = plan_flow.board_view(c)  # 3.3: the plans I follow (3.8.0: You › Plans; offers on Squads too)
     return board.render(_board_data(), c, _state["ts"], notice=notice,
                         wrap=_wrap_info(), deltas=_deck_deltas(),
                         exam_eve=_exam_eve_info(),
@@ -508,18 +536,69 @@ def _board_html(c):
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
-                        room=rooms.board_view(),
-                        plans=plan_flow.board_view(c),  # 3.3: the Plans tab shows while I follow one
-                        due=due_flow.view(c))  # Due: the day's to-do above the board
+                        room=rooms.board_view(), plans=plans,
+                        due=due, you=_you(c, due, plans), sticking=_sticking(c))
+
+
+def _you(c, due, plans):
+    """3.8.0, the You bubble over the board: its tab, folded or not, and the
+    Plans or Insights it draws. Only the one on screen is worked out."""
+    from . import team_flow
+    you = {"tab": due_flow.you_tab(c), "folded": due_flow.folded(c, due), "plans": plans, "insights": None}
+    if you["folded"]:
+        return you
+    hidden = board.hidden_tabs(c)
+    keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in board.YOU_MORE if k not in hidden]
+    shown = you["tab"] if you["tab"] in keys else (keys[0] if keys else None)
+    try:
+        if shown == "plans":
+            team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
+            if not due and mw.col:
+                you["opened"] = plan_flow.morning_opened()  # Due off: Put off to tomorrow is here
+        elif shown == "insights":
+            you["insights"] = team_flow.you_view(c)
+    except Exception:
+        traceback.print_exc()
+    return you
+
+
+def _sticking(c):
+    """3.8.0, Crew › Decks: {name: deck id} of the decks I share, for their
+    way to how they're sticking (You › Insights). Main thread."""
+    if c.get("period") != "decks" or not mw.col:
+        return None
+    out = {}
+    for did in c.get("shared_decks") or []:
+        try:
+            if mw.col.decks.get(int(did), default=False):
+                out[str(mw.col.decks.name(int(did))).split("::")[-1]] = int(did)
+        except Exception:
+            continue
+    return out
+
+
+def _arrive_js():
+    """3.8.0 (Board in Motion, 22): a friend arrives, said to the page once."""
+    try:
+        new = _arrivals(_state.get("entries"), client().user_id)
+    except Exception:
+        traceback.print_exc()
+        return ""
+    return "try{window.dcMotion&&dcMotion.arrive(%s);}catch(e){}" % board._json.dumps(new) if new else ""
 
 
 def _on_did_render(deck_browser):
-    mw.web.eval(board.keep_me_in_view_js())
+    mw.web.eval(board.keep_me_in_view_js() + _arrive_js())
     _play_cheers()
     if _state.get("plans_midday") and not _closing:
         # 3.7.3: an update that came while reviewing waits for the Decks screen
         from aqt.qt import QTimer
         QTimer.singleShot(0, lambda: plan_flow.midday(plan_flow.followed()))
+    waiting = _state.get("plans_morning")
+    if waiting and not _closing:
+        # 3.8.0: so does the morning (it came while reviewing, or before Decks first drew)
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: _morning_now(waiting))
     together.show_luck_card()
     rooms.refresh_widgets()
 
@@ -688,6 +767,9 @@ def _on_js(handled, message, context):
         plan_flow.on_message(cmd, parts)  # 3.1
     elif cmd.startswith("due"):
         due_flow.on_message(cmd, parts)  # Due
+    elif cmd.startswith("ins") or cmd == "youins":
+        from . import team_flow
+        team_flow.on_message(cmd, parts)  # 3.8.0: You › Insights, a deck's
     elif cmd == "sort" and len(parts) > 2 and parts[2] in board.SORT_KEYS:
         c["sort"] = parts[2]
         save_cfg(c)
@@ -698,6 +780,8 @@ def _on_js(handled, message, context):
         _state["bingo_open"] = False
         _state["team_bingo_open"] = None
         c["period"] = parts[2]
+        if parts[2] != "squads":
+            c["crew_view"] = parts[2]  # 3.8.0: Today, Week or Decks: the Crew pill comes back to it
         save_cfg(c)
         _swap(c)
         if parts[2] == "squads":
@@ -743,7 +827,7 @@ def _on_js(handled, message, context):
     elif cmd == "decks":
         open_decks()
     elif cmd == "setup":
-        open_auth(join=(parts[2] == "join") if len(parts) > 2 else None)
+        open_auth()
     elif cmd == "cheerpick" and len(parts) > 2:
         _cheer_menu(parts[2])
     elif cmd == "rowmenu" and len(parts) > 2:
@@ -796,12 +880,17 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
+    elif cmd == "heatday" and len(parts) > 2:
+        _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
         _settings_cmd(cmd, parts[2:])  # 3.5.0: Settings in the board; parts[2:] are its values
     elif cmd == "ecard" and len(parts) > 2:
         _open_squad_card(parts[2])
     elif cmd == "squad" and len(parts) > 2:
         _select_squad(parts[2])
+    elif cmd == "squadplan" and len(parts) > 2:
+        from . import team_flow
+        team_flow.open_squad(parts[2])  # 3.8.0: a plan's squad
     elif cmd == "squadadd":
         open_squads()
     elif cmd == "squadinvite":
@@ -845,28 +934,20 @@ def _swap(c, focus=None):
         _rerender()
         return
     html_out = _board_html(c)
-    js = """
-    (function() {
-        var el = document.getElementById('due-crew');
-        if (!el) { return; }
-        var tmp = document.createElement('div');
-        tmp.innerHTML = %s;
-        el.parentNode.replaceChild(tmp.firstElementChild, el);
-    })();
-    """ % json.dumps(html_out) + board.keep_me_in_view_js()
+    js = board.swap_js(html_out) + board.keep_me_in_view_js() + _arrive_js()  # 3.8.0: no jumps under the pointer
     if focus:
         js += ("(function(){var f=document.querySelector('#due-crew [data-f=\"%s\"]');"
                "if(f){f.focus({preventScroll:true});}})();" % re.sub(r"[^A-Za-z0-9:_-]", "", focus))
     mw.web.eval(js)
 
 
-def open_auth(join=None):
-    """join: open the dialog on Join (True) or Sign In (False); None lets it
-    choose. A new account gets the welcome screen before its first upload,
-    so what the crew will see is said before any of it is shared."""
+def open_auth():
+    """One flow signs in and joins. A new account gets the welcome screen
+    before its first upload, so what the crew will see is said before any
+    of it is shared."""
     global _fetching
     from .ui.auth_dialog import AuthDialog
-    dlg = AuthDialog(mw, client(), join=join)
+    dlg = AuthDialog(mw, client())
     if dlg.exec() and dlg.user:
         _uid, name = dlg.user
         _reset_runtime(keep_sync=True)
@@ -962,11 +1043,11 @@ def _share_menu(c):
     from aqt.qt import QCursor, QMenu
     run = {"squadshare": lambda: _share_squad(),
            "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek"),
-           # K7: the picture is drawn on duecrew.com, signed in, its sheet open
-           "picturetoday": lambda: plan_flow.open_site("/home?card=today"),
-           "pictureweek": lambda: plan_flow.open_site("/home?card=week"),
-           "pictureyear": lambda: plan_flow.open_site("/home?card=year"),
-           "picturealltime": lambda: plan_flow.open_site("/home?card=alltime")}
+           # 3.8.0: the picture is made here (it opened duecrew.com before)
+           "picturetoday": lambda: share_picture("picturetoday"),
+           "pictureweek": lambda: share_picture("pictureweek"),
+           "pictureyear": lambda: share_picture("pictureyear"),
+           "picturealltime": lambda: share_picture("picturealltime")}
     menu = QMenu(mw)
     for label, key in board.share_menu_items(
             bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):
@@ -1109,17 +1190,22 @@ def _apply_settings(changed, focus=None):
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
+    leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     c.update(changed)
     save_cfg(c)
     if changed.get("show_leaderboard") is False:
         _state["settings_tab"] = None
         _rerender()
-        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Settings brings it back.")
+        tooltip("Due Crew is off the Decks screen. Tools › Due Crew › Show on the Decks screen brings it back.")
     else:
         # the focus names the command sent; after a toggle it's the opposite one
         _swap(c, focus=_flip(focus))
     if chip:
         rooms.refresh_widgets()
+    if "shortcuts" in changed:
+        _apply_keys()
+    if leeches:
+        due_flow.recover_now()  # 3.8.0: now, and said, not at the next refresh
     if push:
         _share_push["n"] += 1
         n = _share_push["n"]
@@ -1182,41 +1268,53 @@ def open_feedback():
 
 def open_settings(tab=None):
     """tab: "you", "board", or "privacy" (your card's Privacy… opens that
-    one; until 2.9 it landed on Account). 3.5.0: in the board when it's on
-    screen; the dialog otherwise (the board turned off, signed out, or
-    another screen)."""
-    if _board_on_screen():
-        from .settings_model import TABS
-        _state["settings_tab"] = tab if tab in TABS else "you"
+    one). 3.8.0, one Settings: the board's, on the Decks screen, from
+    anywhere (Tools › Due Crew › Settings…, the add-on's Config button);
+    signed out or with the board turned off it shows too, since Settings
+    is how the board comes back."""
+    from .settings_model import TABS
+    _state["settings_tab"] = tab if tab in TABS else "you"
+    _close_addons_dialog()
+    if mw.state != "deckBrowser":
+        mw.moveToState("deckBrowser")  # its draw shows Settings
+    elif _board_on_screen():
         _swap(cfg())
+    else:
+        _rerender()
+
+
+def _browse_day(day):
+    """3.8.0: a day on my own year (the profile card): the cards I answered
+    that Anki day, in Browse."""
+    try:
+        d = datetime.date.fromisoformat(str(day))
+        today = datetime.date.fromisoformat(due_flow._today())
+    except (TypeError, ValueError):
         return
-    from .ui.settings_dialog import SettingsDialog
-    dlg = SettingsDialog(mw, client(), cfg(), _on_settings_saved,
-                         open_auth, open_friends, _on_signed_out, open_decks,
-                         open_squads, edit_emoji=_edit_emoji, edit_status=_edit_status,
-                         tab=tab, open_feedback=open_feedback if client().signed_in else None)
-    dlg.exec()
+    ago = (today - d).days
+    if ago < 0 or not mw.col:
+        return
+    end = (int(mw.col.sched.day_cutoff) - ago * 86400) * 1000
+    cids = [int(x) for x in mw.col.db.list(
+        "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND id < ? AND ease > 0", end - 86400 * 1000, end)]
+    plan_flow._browse(cids, empty="No reviews that day.")
+
+
+def _close_addons_dialog():
+    """The add-on's Config button opens Settings on the Decks screen: the
+    Add-ons window in front of it closes."""
+    try:
+        import aqt
+        inst = (getattr(aqt.dialogs, "_dialogs", {}).get("AddonsDialog") or [None, None])[1]
+        if inst:
+            inst.close()
+    except Exception:
+        pass
 
 
 SHARE_KEYS = ("show_up", "share_reviews", "share_time", "share_retention", "share_streak",
               "share_heatmap", "paused", "exam_date",
               "away_from", "away_to")
-
-
-def _on_settings_saved(changed):
-    """`changed` holds only the keys the dialog owns — never a stale
-    snapshot of the whole config."""
-    c = cfg()
-    push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
-    chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
-    c.update(changed)
-    save_cfg(c)
-    _rerender()
-    if chip:
-        rooms.refresh_widgets()  # 3.0.1: the room chip moves now
-    if push:
-        # sharing choices apply now, not at whenever the next sync happens
-        _on_sync_done()
 
 
 def _on_signed_out():
@@ -1241,6 +1339,7 @@ def _on_profile_open():
     client()                  # rebind to this profile's session
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
+    _settle_tabs()
     refresh_board()           # the board, right away
     # 3.1: a profile that syncs but didn't today still gets its morning
     gen = app.generation
@@ -1250,18 +1349,43 @@ def _on_profile_open():
     QTimer.singleShot(8000, _push_on_open)
 
 
+def _settle_tabs():
+    """3.8.0: Plans left the board for the You bubble: a saved Plans tab
+    opens there, with Crew's Today under it; a hidden Week (a tab once) goes."""
+    c = cfg()
+    changed = False
+    if c.get("period") == "plans":
+        c["period"], c["due_tab"] = "today", "plans"
+        changed = True
+    hidden = [k for k in (c.get("hidden_tabs") or []) if k in dict(board.HIDEABLE_TABS)]
+    if hidden != list(c.get("hidden_tabs") or []):
+        c["hidden_tabs"] = hidden
+        changed = True
+    if changed:
+        save_cfg(c)
+
+
+# 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
+# system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
+STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
+
+
 def _tools_menu():
-    """Tools › Due Crew (3.1: a submenu, for plans)."""
-    from aqt.qt import QMenu
+    """Tools › Due Crew (3.1: a submenu, for plans). 3.8.0: Study what's
+    next on top (Ctrl+Shift+S), Settings… opens the board's, and Show on
+    the Decks screen is the way back when the board is off."""
+    from aqt.qt import QMenu, QShortcut, QKeySequence
     if getattr(mw, "_due_crew_menu", None) is not None:
         return  # a second profile open: the submenu is already there
     menu = QMenu("Due Crew", mw)
-    for item in (("Friends…", open_friends),
+    for item in (("Study what’s next", due_flow.study_today), None,
+                 ("Friends…", open_friends),
                  ("Squads…", open_squads), None,
                  ("Make a plan from a deck…", plan_flow.open_make),
                  ("Follow a plan…", plan_flow.open_follow),
                  ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings),
+                 ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:
             menu.addSeparator()
@@ -1270,8 +1394,46 @@ def _tools_menu():
         action = QAction(label, mw)
         action.triggered.connect(lambda _=False, fn=fn: fn())
         menu.addAction(action)
+        if fn is _toggle_board:
+            action.setCheckable(True)
+            menu.aboutToShow.connect(lambda a=action: a.setChecked(bool(cfg().get("show_leaderboard", True))))
+        if fn is due_flow.study_today:
+            mw._due_crew_study = action
+    ask = QShortcut(QKeySequence(ASK_KEY), mw)
+    ask.activated.connect(_ask_this_card)
+    mw._due_crew_ask = ask
     mw.form.menuTools.addMenu(menu)
     mw._due_crew_menu = menu  # kept alive with the window
+    _apply_keys()
+
+
+def _ask_this_card():
+    from . import team_flow
+    team_flow.ask_this_card()
+
+
+def _apply_keys():
+    """Settings › Board › Shortcuts: both keys on, or both off (per computer)."""
+    on = bool(cfg().get("shortcuts", True))
+    try:
+        from aqt.qt import QKeySequence
+        study = getattr(mw, "_due_crew_study", None)
+        if study is not None:
+            study.setShortcut(QKeySequence(STUDY_KEY if on else ""))
+        ask = getattr(mw, "_due_crew_ask", None)
+        if ask is not None:
+            ask.setEnabled(on)
+    except Exception:
+        traceback.print_exc()
+
+
+def _toggle_board():
+    """Tools › Due Crew › Show on the Decks screen."""
+    c = cfg()
+    c["show_leaderboard"] = not c.get("show_leaderboard", True)
+    save_cfg(c)
+    _state["settings_tab"] = None
+    _rerender()
 
 
 def _morning_fallback(gen=None):
@@ -1359,6 +1521,8 @@ gui_hooks.reviewer_did_show_question.append(crew_cards.on_question)
 
 # 3.1: single cards onto a plan's date, from Anki's browser
 gui_hooks.browser_will_show_context_menu.append(plan_flow.browser_menu)
+if hasattr(gui_hooks, "browser_sidebar_will_show_context_menu"):  # 3.8.0: a tag's Due Crew: open its cards…
+    gui_hooks.browser_sidebar_will_show_context_menu.append(plan_flow.sidebar_menu)
 
 
 # 2.12: study rooms. The room follows Anki from screen to screen; the break
@@ -1368,6 +1532,8 @@ gui_hooks.reviewer_did_show_answer.append(rooms.on_answer)
 if hasattr(gui_hooks, "reviewer_will_answer_card"):
     gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
 gui_hooks.state_did_change.append(rooms.on_state)
+gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
+gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 

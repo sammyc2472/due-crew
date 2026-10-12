@@ -46,6 +46,30 @@ def _wrap_data():
     return _wrap["data"]
 
 
+CREW_SEEN_MAX = 300  # a profile's known crew, newest kept
+
+
+def _arrivals(entries, me):
+    """3.8.0 (Board in Motion, 22): the crew new to this profile's board,
+    once each, for their rows to open in. The first time (or under another
+    account) everyone is known already and nothing moves. entries: the
+    board's rows (mine among them), None before the first read."""
+    me = str(me or "")
+    if not entries or not me:
+        return []
+    uids = [str(e.get("user_id")) for e in entries if not e.get("you") and e.get("user_id")]
+    w = _wrap_data()
+    book = w.get("crew_seen")
+    known = (book.get("seen") if isinstance(book, dict) and book.get("uid") == me
+             and isinstance(book.get("seen"), list) else None)
+    new = [u for u in uids if u not in known] if known is not None else []
+    if known is not None and not new:
+        return []
+    w["crew_seen"] = {"uid": me, "seen": ((known if known is not None else []) + (new or uids))[-CREW_SEEN_MAX:]}
+    _save_wrap()
+    return new
+
+
 def _save_wrap():
     """Written whole, then swapped in: a crash mid-write used to leave half a
     file, which loads as nothing and takes the all-time totals with it."""

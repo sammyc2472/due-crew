@@ -1,5 +1,5 @@
-// Due Crew API. One Worker, D1 underneath; every consent rule the Firestore
-// rules used to hold lives in this code now. JSON in, JSON out.
+// Due Crew API. One Worker, D1 underneath; every consent rule lives in
+// this code. JSON in, JSON out.
 
 import * as Ad from "./admin";
 import * as Fb from "./feedback";
@@ -9,7 +9,6 @@ import * as C from "./cards";
 import * as I from "./invites";
 import * as L from "./library";
 import * as N from "./notices";
-import { BRIDGE_CRON, bridge } from "./bridge";
 import * as P from "./plans";
 import * as T from "./team";
 import * as People from "./people";
@@ -36,7 +35,6 @@ const r = (path: string) => new RegExp(`^${path}$`);
 open("GET", r("/version"), async (_q, env) => json({ api: Number(env.API_VERSION), minClient: env.MIN_CLIENT }));
 open("POST", r("/auth/code"), A.requestCode);
 open("POST", r("/auth/verify"), A.verifyCode);
-open("POST", r("/admin/import-users"), A.importUsers);
 open("POST", r("/auth/link/redeem"), A.redeemLink);
 open("GET", r("/plans/ics"), (q, env) => P.ics(q, env));  // 3.4: a calendar app can't sign in
 open("GET", r("/plans/public"), (q, env) => P.publicPeek(q, env));  // a plan's link, before signing in
@@ -58,7 +56,6 @@ authed("PUT", r("/settings"), B.putSettings);
 
 authed("GET", r(`/users/${ID}`), (_q, s, env, p) => S.getUser(s, env, p));
 authed("GET", r("/friends"), (_q, s, env) => S.getFriends(s, env));
-authed("PUT", r("/friends"), S.restoreFriends);
 authed("PUT", r(`/friends/${ID}`), S.putFriend);
 authed("DELETE", r(`/friends/${ID}`), (_q, s, env, p) => S.deleteFriend(s, env, p));
 authed("POST", r("/codes"), S.newCode);
@@ -127,6 +124,7 @@ authed("GET", r(`/plans/${ID}`), P.get);
 authed("PUT", r(`/plans/${ID}`), P.put);
 authed("DELETE", r(`/plans/${ID}`), (_q, s, env, p) => P.remove(s, env, p));
 authed("POST", r(`/plans/${ID}/cards`), P.addCards);
+authed("POST", r(`/plans/${ID}/tags`), P.tagNotes);  // 3.8.0: plan tags, from an author's Anki
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
@@ -161,7 +159,6 @@ authed("POST", r(`/plans/${ID}/asks/(\\d{1,12})/helped`), T.helped);
 authed("POST", r("/squads"), Q.create);
 authed("GET", r("/squads/peek"), Q.peek);
 authed("GET", r("/squads/mine"), (_q, s, env) => Q.mine(s, env));
-authed("POST", r("/squads/restore"), Q.restore);
 authed("GET", r(`/squads/${ID}`), Q.fetchSquad);
 authed("PATCH", r(`/squads/${ID}`), Q.patch);
 authed("POST", r(`/squads/${ID}/join`), Q.join);
@@ -204,20 +201,8 @@ export function ourPage(origin: string | null): boolean {
 
 export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (event.cron === BRIDGE_CRON) {
-      // the 2.x bridge; counts only in the log
-      // 3.5, X: its last run and today's count of runs go on the admin's page
-      const t0 = Date.now();
-      ctx.waitUntil(bridge(env).then(async (r) => {
-        if (!r) return;
-        console.log(`bridge: pulled ${r.pulled}, pushed ${r.pushed}`);
-        await Ad.bridgeRan(env, Date.now() - t0, r);
-      }, async (e) => {
-        console.log(`bridge failed: ${String(e?.message || e).slice(0, 120)}`);
-        await Ad.bridgeRan(env, Date.now() - t0, null, e);
-      }));
-      return;
-    }
+    // the 2.x bridge's cron can fire for a while after a deploy drops it: not housekeeping
+    if (event.cron === "*/15 * * * *") return;
     // 3.5, X: the day's counts, kept; 3.6: bingo's counts per square
     ctx.waitUntil(housekeeping(env).then(() => Ad.snapshot(env)).then(() => Bingo.keepStats(env)));
   },

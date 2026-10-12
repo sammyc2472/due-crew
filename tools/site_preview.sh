@@ -135,22 +135,23 @@ out.append(f"INSERT INTO plan_follows (plan, uid, share, paused, progress, sched
            f"{q(json.dumps({'m1': [312, 250, 312], 'm2': [60, 30, 402], 'm3': [0, 0, 288]}))}, {q(json.dumps(sched))}, {now});")
 log = {wk(n): [40 + (n * 7) % 50, 150 + (n * 37) % 200, 20 + (n * 11) % 40, 85 + (n % 9)] for n in range(0, 200) if n % 6 != 5}
 out.append(f"INSERT INTO logs (uid, json, at) VALUES ('dre', {q(json.dumps({'days': log}))}, {now});")
-# 3.5, X: the admin's history: 90 days of counts, sign-in counters, the bridge, past notices
+# 3.5, X: the admin's history: 90 days of counts, sign-in counters, past notices
 for n in range(90):
     dd = wk(n)
     for key, v in [("on3", 40 + (89 - n)), ("seenDay", 30 + (n * 7) % 19), ("seenWeek", 60 + (89 - n) // 2), ("mutualPairs", 20 + (89 - n) // 3),
-                   ("follows", 5 + (89 - n) // 6), ("memberships", 8 + (89 - n) // 9), ("plans", 3 + (89 - n) // 15), ("squads", 1), ("tips", 0), ("active2", 30 - (89 - n) // 4), ("listed", 3)]:
+                   ("follows", 5 + (89 - n) // 6), ("memberships", 8 + (89 - n) // 9), ("plans", 3 + (89 - n) // 15), ("squads", 1), ("tips", 0), ("listed", 3)]:
         out.append(f"INSERT INTO admin_days (day, key, n) VALUES ({q(dd)}, {q('n.' + key)}, {v});")
     if n < 7:
         for key, v in [("sent", 20), ("ok", 17), ("wrong", 5), ("out", 2), ("limited", n % 2)]:
             out.append(f"INSERT INTO admin_days (day, key, n) VALUES ({q(dd)}, {q('codes.' + key)}, {v});")
-out.append(f"INSERT INTO admin_days (day, key, n) VALUES ({q(wk(0))}, 'bridge.runs', 48);")
-out.append(f"INSERT INTO bridge_last (id, at, ms, pulled, pushed, error) VALUES (1, {now - 360}, 1800, 23, 61, NULL);")
 out.append(f"INSERT INTO notices (text, link, below, created_at, until) VALUES ('Due Crew 3.4 is out: plans on your calendar.', 'https://duecrew.com', '3.4.0', {now - 86400 * 3}, {now + 86400 * 7});")
 out.append(f"INSERT INTO notices (text, link, below, created_at, until, taken_at) VALUES ('Sign-in emails were slow this morning. Fixed.', NULL, NULL, {now - 86400 * 20}, {now - 86400 * 18}, {now - 86400 * 18});")
 # 3.5, L: Dre's history on Maya's plan
 hist = {wk(n): [312 + (20 - n) * 8, 200 + (20 - n) * 6] for n in range(20, -1, -1)}
 out.append(f"UPDATE plan_follows SET hist = {q(json.dumps(hist))} WHERE plan = 'mayaplanpreview1' AND uid = 'dre';")
+# 3.7.6: sharing my progress is being in the plan's squad (its team); 3.8.0 shows it on the Squads tab
+out.append("INSERT INTO plan_team (plan, uid, joined_at) SELECT plan, uid, at FROM plan_follows WHERE share = 1;")
+out.append(f"INSERT INTO plan_team (plan, uid, joined_at, last_day) VALUES ('mayaplanpreview1', 'maya', {now}, {q(real.isoformat())});")
 print("\n".join(out))
 PY
 (cd worker && npx wrangler d1 execute due-crew --local --env="" --persist-to "../$STATE" --file "$SEED" >/dev/null)

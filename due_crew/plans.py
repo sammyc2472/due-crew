@@ -359,6 +359,11 @@ class DeckIndex:
             self._started = {nid_of[c] for c, (_q, t) in self.cards.items() if t != 0}
         return self._started
 
+    def unseen(self, cids):
+        """3.8.0: the cards counts() doesn't call seen: what's left to see."""
+        started, nid_of = self.started(), self.nid_of
+        return {c for c in cids if self.cards[c][1] == 0 and not (self.cards[c][0] != -1 and nid_of.get(c) in started)}
+
     def counts(self, cids):
         """[opened, seen, total]: opened = not suspended, seen = answered at
         least once (Anki's own "not new"), or a new sibling of a card that
@@ -719,7 +724,7 @@ def week_view(doc, prog, today, start, skipped=(), ld=None):
             rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
-                         "what": topics(u)})  # P7
+                         "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
                 rows[-1]["ld"] = list(ld[u["id"]])
                 rows[-1]["ask"] = load_ask(ld[u["id"]], d, today)
@@ -793,11 +798,43 @@ def next_unit(doc, today):
     return next((u for u in units(doc) if str(u.get("opens") or "") > today), None)
 
 
-def open_cards(col, cids, label, dry=False):
+def open_counts(col, cids):
+    """3.8.0, Browse's open sheet: of these cards, {"open": suspended ones that
+    would open, "already": open now, "leech": suspended leeches, which stay}."""
+    out = {"open": 0, "already": 0, "leech": 0}
+    cl = sorted({int(c) for c in cids})
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        for queue, leech in col.db.all(
+                f"SELECT c.queue, (' ' || lower(n.tags) || ' ') LIKE '% leech %' FROM cards c JOIN notes n ON n.id = c.nid "
+                f"WHERE c.id IN ({chunk})"):
+            key = "already" if int(queue) != -1 else "leech" if leech else "open"
+            out[key] += 1
+    return out
+
+
+def first_in_line(col, cids):
+    """3.8.0: these cards' new ones to the front of Anki's line of new cards,
+    in the order they had (Anki's Reposition, shifting the rest along).
+    Inside the caller's undo step. Returns how many moved."""
+    cl = sorted(int(c) for c in cids)
+    rows = []
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        rows += col.db.all(f"SELECT id, due FROM cards WHERE type = 0 AND queue = 0 AND id IN ({chunk})")
+    ids = [int(c) for c, _d in sorted(rows, key=lambda r: (r[1], r[0]))]
+    if not ids or not hasattr(col.sched, "reposition_new_cards"):
+        return 0
+    col.sched.reposition_new_cards(card_ids=ids, starting_from=0, step_size=1, randomize=False, shift_existing=True)
+    return len(ids)
+
+
+def open_cards(col, cids, label, dry=False, first=False):
     """Unsuspend the suspended ones among `cids`, as one undo step named
     `label`. Only queue -1 is touched, and never a leech (Anki suspended it
     for a reason); never suspends. Returns how many opened (0: nothing was
-    suspended, and no undo step is made). dry (3.7.3): how many it would."""
+    suspended, and no undo step is made). dry (3.7.3): how many it would.
+    first (3.8.0): and put them first in Anki's line of new cards."""
     if not cids:
         return 0
     ids = []
@@ -816,6 +853,8 @@ def open_cards(col, cids, label, dry=False):
         except Exception:
             pos = None
     col.sched.unsuspend_cards(ids)
+    if first:
+        first_in_line(col, ids)
     if pos is not None and hasattr(col, "merge_undo_entries"):
         try:
             col.merge_undo_entries(pos)
@@ -824,19 +863,20 @@ def open_cards(col, cids, label, dry=False):
     return len(ids)
 
 
-def holdable(idx, doc, today, swap=None, applied=None):
+def holdable(idx, doc, today, swap=None, applied=None, own=False):
     """3.3, "Hold back later dates until their day": the cards of dates
     that haven't opened yet which are active now and never studied (new,
     not suspended, not a leech). A card that is also on an opened date is
     never held. A date already applied here (opened early, C2) counts as
-    opened. What Follow offers to suspend, once, when asked."""
+    opened. What Follow offers to suspend, once, when asked. own (3.8.0,
+    at my own pace): a date is opened only when I opened it, whatever its day."""
     applied = applied or {}
     opened, later = set(), set()
     for u in units(doc):
         cids = idx.match(u, swap, doc.get("deck", ""))
         have = applied.get(u["id"])
         done = isinstance(have, str) and not have.startswith("skip:")
-        (opened if done or str(u.get("opens") or "") <= today else later).update(cids)
+        (opened if done or (not own and str(u.get("opens") or "") <= today) else later).update(cids)
     return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
 
 
@@ -867,6 +907,13 @@ def hold_cards(col, cids, label):
     return len(ids)
 
 
+def dates_with(idx, doc, cids, swap=None):
+    """3.8.0, Browse › Show on my plan: the dates of a plan (my days) whose
+    cards include any of `cids`, in plan order."""
+    want = {int(c) for c in cids}
+    return [u for u in units(doc) if want & idx.match(u, swap, (doc or {}).get("deck", ""))]
+
+
 def note_ids(idx, unit, plan_deck=""):
     """3.3, C5: the note ids behind a unit's tags and subdecks here, for the
     author's Anki to keep on the plan."""
@@ -889,32 +936,57 @@ def _word(seg):
     return (m.group(1) if m else s) or str(seg)
 
 
-def topics(unit):
-    """3.6.5, P7: [[group, [topic]]] for a date, as the site's print list
-    groups them: each tag under the first #/^ part after its root (a video
+def topic_items(us):
+    """3.8.0: the topics of one date or several (the Today box), each with
+    what it stands for: [[group, name, sources]], one per group and name,
+    in the order the names first appear. Groups as the site's print list
+    has them: each tag under the first #/^ part after its root (a video
     series, a book), named readably; subdecks by name; searches, picked
-    notes and single cards as counts. Names and counts only."""
-    groups = {}
+    notes and single cards as counts. sources is unit-shaped (tags, decks,
+    search, the picks), so a click on a name finds its cards here with
+    DeckIndex.match."""
+    items, at = [], {}
 
-    def put(g, x):
-        items = groups.setdefault(g, [])
-        if x not in items:
-            items.append(x)
-    for t in unit.get("tags") or []:
-        segs = str(t).split(_SEP)
-        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
-        put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]))
-    for d in unit.get("decks") or []:
-        put("", _word(str(d).split(_SEP)[-1]))
-    for q in unit.get("search") or []:
-        put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""))
-    notes = len(unit.get("notes") or []) + len(unit.get("nids") or [])
-    if notes:
-        put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}")
-    singles = len(unit.get("cids") or []) + len(unit.get("cards") or [])
-    if singles:
-        put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}")
+    def put(g, x, src):
+        if (g, x) not in at:
+            at[(g, x)] = len(items)
+            items.append([g, x, {}])
+        have = items[at[(g, x)]][2]
+        for k, v in src.items():
+            got = have.setdefault(k, [])
+            got += [y for y in v if y not in got]
+    for u in us:
+        for t in u.get("tags") or []:
+            segs = str(t).split(_SEP)
+            ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+            put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]), {"tags": [t]})
+        for d in u.get("decks") or []:
+            put("", _word(str(d).split(_SEP)[-1]), {"decks": [d]})
+        for q in u.get("search") or []:
+            put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
+        notes = len(u.get("notes") or []) + len(u.get("nids") or [])
+        if notes:
+            put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}",
+                {k: list(u[k]) for k in ("notes", "nids", "idr") if u.get(k)})
+        singles = len(u.get("cids") or []) + len(u.get("cards") or [])
+        if singles:
+            put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}",
+                {k: list(u[k]) for k in ("cards", "cids") if u.get(k)})
+    return items
+
+
+def topic_view(us):
+    """[[group, [[name, i]]]]: topic_items grouped for the page, each name
+    with its place in topic_items, which the board's click sends."""
+    groups = {}
+    for i, (g, x, _src) in enumerate(topic_items(us)):
+        groups.setdefault(g, []).append([x, i])
     return [[g, xs] for g, xs in groups.items()]
+
+
+def topics(unit):
+    """3.6.5, P7: [[group, [topic]]] for a date (topic_items, names only)."""
+    return [[g, [x for x, _i in xs]] for g, xs in topic_view([unit])]
 
 
 def parts(idx, unit, swap=None, plan_deck=""):
@@ -943,12 +1015,7 @@ def parts(idx, unit, swap=None, plan_deck=""):
 
 def topics_line(us):
     """P7: one line for the Today box, today's dates' topics together."""
-    merged = {}
-    for u in us:
-        for g, xs in topics(u):
-            items = merged.setdefault(g, [])
-            items += [x for x in xs if x not in items]
-    return " · ".join((f"{g}: " if g else "") + ", ".join(xs) for g, xs in merged.items())
+    return " · ".join((f"{g}: " if g else "") + ", ".join(x for x, _i in xs) for g, xs in topic_view(us))
 
 
 def search_counts(idx, lean_doc):
@@ -1099,6 +1166,299 @@ def change_note(owner, old, doc):
         segs += c
     segs.append((".", False))
     return segs
+
+
+# ---- 3.8.0: at my own pace ----
+# A follow's `own`: None, the plan's dates open its cards (as before);
+# "ready", nothing opens by itself and I open the next date (You › Plans,
+# Browse); "next", the same, and once I've seen most of the last one I
+# opened, the next opens the morning after. The plan still gives the order;
+# its dates still show as the plan's. Mine only: the plan never changes.
+
+OWN = ("ready", "next")
+SEEN_ENOUGH = 0.9  # "next": the last date counts as seen at 90% of its open cards
+PACE_DAYS = 14     # "your pace": the dates I opened in the last two weeks
+
+
+def own_pace(plan):
+    return (plan or {}).get("own") in OWN
+
+
+def opened_here(applied, u, prog=None):
+    """A date I opened here: applied, not skipped, and (with progress) not
+    shut again since (Edit › Undo after an Open puts its cards back)."""
+    have = (applied or {}).get(u["id"])
+    if not isinstance(have, str) or have.startswith("skip:"):
+        return False
+    if prog is not None:
+        o, _s, t = (prog.get(u["id"]) or [0, 0, 0])[:3]
+        if int(t) and not int(o):
+            return False
+    return True
+
+
+def up_next(doc, applied, prog=None):
+    """At my own pace, the dates still to open, in the plan's order: not
+    opened here, and not skipped (at a late join, or as one of my own skips)."""
+    out = []
+    for u in units(doc):
+        have = (applied or {}).get(u["id"])
+        if isinstance(have, str) and have.startswith("skip:"):
+            continue
+        if not opened_here(applied, u, prog):
+            out.append(u)
+    return out
+
+
+def own_due(doc, applied, sig):
+    """At my own pace, what a morning opens by itself: only what an author's
+    update adds to dates I've opened. [(unit, "open")]."""
+    out = []
+    for u in units(doc):
+        have = (applied or {}).get(u["id"])
+        if isinstance(have, str) and not have.startswith("skip:") and have != sig(u):
+            out.append((u, "open"))
+    return out
+
+
+def own_last(doc, opened_days):
+    """The date I opened last at my own pace (the latest day; on one day, the
+    later in the plan), or None."""
+    by = {u["id"]: (i, u) for i, u in enumerate(units(doc))}
+    keys = [k for k in (opened_days or {}) if k in by]
+    if not keys:
+        return None
+    return by[max(keys, key=lambda k: (str(opened_days[k]), by[k][0]))][1]
+
+
+def next_by_itself(doc, applied, opened_days, prog):
+    """"next": the date that opens this morning, or None. Only after I've
+    opened one myself, and once I've seen SEEN_ENOUGH of the last one's open
+    cards (one with nothing open counts as seen); one a morning."""
+    last = own_last(doc, opened_days)
+    left = up_next(doc, applied, prog)
+    if last is None or not left:
+        return None
+    o, s, _t = ((prog or {}).get(last["id"]) or [0, 0, 0])[:3]
+    if int(o) and int(s) < SEEN_ENOUGH * int(o):
+        return None
+    return left[0]
+
+
+def plan_at(doc, today):
+    """Where the plan's own dates are today, for someone at their own pace."""
+    us = units(doc)
+    if not us:
+        return ""
+    past = [u for u in us if str(u.get("opens") or "") <= today]
+    if not past:
+        return f"The plan's dates start {fmt_day(us[0]['opens'])}."
+    last = past[-1]
+    end = str(last.get("due") or last.get("opens") or "")
+    if len(past) == len(us) and end < today:
+        return f"The plan's dates ended {fmt_day(end)}."
+    return f"The plan's dates are at {last.get('name') or '?'} today."
+
+
+def recent_opens(opened_days, today, days=PACE_DAYS):
+    """How many dates I opened in the last `days` days."""
+    since = (datetime.date.fromisoformat(today) - datetime.timedelta(days=days - 1)).isoformat()
+    return sum(1 for d in (opened_days or {}).values() if since <= str(d) <= today)
+
+
+def finish_check(doc, left, recent, today, days=PACE_DAYS):
+    """When the plan has an exam (its last event ahead) or an end: the day my
+    pace opens its last date, against it. A line, or None."""
+    if not left or not recent:
+        return None
+    evs = sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and str(e.get("day") or "") >= today),
+                 key=lambda e: e["day"])
+    if evs:
+        day, name = evs[-1]["day"], str(evs[-1].get("name") or "the exam")
+    elif doc.get("end") and str(doc["end"]) >= today:
+        day, name = doc["end"], "the plan's end"
+    else:
+        return None
+    need = -(-left * days // recent)  # days, rounded up
+    done = datetime.date.fromisoformat(today) + datetime.timedelta(days=need)
+    late = (done - datetime.date.fromisoformat(day)).days
+    when = fmt_day(done.isoformat())
+    if late > 0:
+        return f"At that pace you open the last date on {when}, {late} day{'s' if late != 1 else ''} after {name}."
+    return f"At that pace you open the last date on {when}, in time for {name}."
+
+
+# ---- 3.8.0: plan tags ----
+# A plan's own tags (SLG 12): made in an author's Anki (exact notes by guid)
+# or on duecrew.com (a tag's, a subdeck's or a search's cards in each copy).
+# Each follower's Anki puts them on its own notes as DueCrew::<the plan's
+# part>::<the tag's>, as soon as the plan's update is here; a date uses one
+# as any tag. Only those tags are ever touched here, never anyone's own.
+
+TAG_PARENT = "DueCrew"
+TAG_ROOT_MAX = 60
+
+
+def _slug(name):
+    s = re.sub(r"\s+", "_", str(name or ""))
+    s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+    s = re.sub(r"_+", "_", s)
+    return re.sub(r"^[_-]+|[_-]+$", "", s)
+
+
+def tag_part(name):
+    """A name as one part of an Anki tag: spaces are _, the characters a tag
+    or a search can't hold go, a : is a -. The twin of plans.ts tagPart and
+    Tags.part in builder.js: change one, change all three."""
+    return _slug(name) or "tag"
+
+
+def tag_root(plan_name):
+    """The plan's own part, from its name when its first tag is made (then
+    kept in the doc as `tagroot`). plans.ts tagRoot, Tags.root."""
+    return re.sub(r"[_-]+$", "", _slug(plan_name)[:TAG_ROOT_MAX]) or "plan"
+
+
+def plan_tags(doc):
+    """The plan's tags, as its doc carries them (cleaned)."""
+    return [t for t in (doc or {}).get("tags") or [] if isinstance(t, dict) and t.get("id")]
+
+
+def tags_sig(doc):
+    """What the plan's tags are, short: the glue reads the deck again only when it changes."""
+    body = json.dumps({"root": (doc or {}).get("tagroot"), "tags": plan_tags(doc)}, sort_keys=True)
+    return hashlib.sha1(body.encode()).hexdigest()[:16]
+
+
+def tag_base(doc):
+    return f"{TAG_PARENT}{_SEP}{(doc or {}).get('tagroot') or 'plan'}"
+
+
+def tag_path(doc, tag):
+    """DueCrew::MS2_Block_1::SLG_12: the tag as this Anki writes it."""
+    return f"{tag_base(doc)}{_SEP}{tag_part(tag.get('name'))}"
+
+
+def tag_search(path):
+    """An Anki search for one tag, its \\ " _ * read as themselves (Tags.ankiSearch
+    in builder.js escapes a tag the same way); open, so a caller can end it
+    with ::* before the closing quote."""
+    esc = re.sub(r'([\\"*_])', r"\\\1", str(path))
+    return f'"tag:{esc}'
+
+
+def tag_notes(idx, doc, tag, swap=None):
+    """(the note ids the tag holds in this copy, how many of its exact notes
+    this copy doesn't have): its notes by guid, and what its tags, subdecks
+    and searches find, inside the plan's deck."""
+    unit = {"tags": tag.get("tags") or [], "decks": tag.get("decks") or [],
+            "search": tag.get("search") or [], "notes": tag.get("notes") or []}
+    cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
+    missing = sum(1 for g in tag.get("notes") or [] if str(g) not in idx.by_guid)
+    return {idx.nid_of[c] for c in cids if c in idx.nid_of}, missing
+
+
+def _tagged(col, path):
+    """The notes carrying exactly this tag (any case)."""
+    return {int(n) for n in col.db.list(
+        "SELECT id FROM notes WHERE instr(' ' || lower(tags) || ' ', ?) > 0", f" {str(path).lower()} ")}
+
+
+def sync_tags(col, idx, doc, applied, label, swap=None):
+    """Make this copy's notes carry the plan's tags as the plan says, as one
+    undo step `label`: each tag on the notes it holds here and on no others,
+    one renamed in the plan renamed here, one gone taken off. applied: {tag
+    id: the tag as last written here}. Returns (applied now, {added, removed,
+    new: [names new here], missing: {name: exact notes not in this copy}})."""
+    applied = {str(k): str(v) for k, v in (applied or {}).items()}
+    tags = plan_tags(doc)
+    wanted = {}
+    out = {"added": 0, "removed": 0, "new": [], "missing": {}}
+    for t in tags:
+        nids, miss = tag_notes(idx, doc, t, swap)
+        wanted[str(t["id"])] = (tag_path(doc, t), nids, str(t.get("name") or ""))
+        if miss:
+            out["missing"][str(t.get("name") or "")] = miss
+    ours = tag_base(doc).lower() + _SEP
+    steps = []
+    for tid, old in applied.items():
+        if not old.lower().startswith(TAG_PARENT.lower() + _SEP):
+            continue  # never anyone's own tag
+        if tid not in wanted:
+            steps.append(("drop", old))
+        elif wanted[tid][0].lower() != old.lower():
+            steps.append(("rename", old, wanted[tid][0]))
+    plan_moves = []
+    for tid, (path, nids, name) in wanted.items():
+        if not path.lower().startswith(ours):
+            continue
+        have = _tagged(col, path) if tid in applied else set()
+        if tid in applied and any(st[0] == "rename" and st[2] == path for st in steps):
+            have = _tagged(col, applied[tid])  # what the rename will carry over
+        add, take = sorted(nids - have), sorted(have - nids)
+        if add:
+            plan_moves.append(("add", path, add))
+        if take:
+            plan_moves.append(("take", path, take))
+        if tid not in applied and nids:
+            out["new"].append(name)
+    if not steps and not plan_moves:
+        return {tid: w[0] for tid, w in wanted.items()}, out
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    for st in steps:
+        if st[0] == "drop":
+            col.tags.remove(st[1])
+        else:
+            col.tags.rename(st[1], st[2])
+    for kind, path, nids in plan_moves:
+        for i in range(0, len(nids), 5000):
+            part = nids[i:i + 5000]
+            if kind == "add":
+                col.tags.bulk_add(part, path)
+                out["added"] += len(part)
+            else:
+                col.tags.bulk_remove(part, path)
+                out["removed"] += len(part)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return {tid: w[0] for tid, w in wanted.items()}, out
+
+
+def drop_tags(col, doc_or_base, label):
+    """Unfollow: the plan's tags off every note here, as one undo step; and
+    the DueCrew parent too once no note carries anything under it. Returns
+    how many notes carried one."""
+    base = doc_or_base if isinstance(doc_or_base, str) else tag_base(doc_or_base)
+    if not base.lower().startswith(TAG_PARENT.lower() + _SEP):
+        return 0
+    n = int(col.db.scalar("SELECT count() FROM notes WHERE instr(' ' || lower(tags), ?) > 0",
+                          f" {base.lower()}{_SEP}") or 0)
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    col.tags.remove(base)
+    low = TAG_PARENT.lower()
+    left = int(col.db.scalar("SELECT count() FROM notes WHERE instr(' ' || lower(tags), ?) > 0 "
+                             "OR instr(' ' || lower(tags) || ' ', ?) > 0", f" {low}{_SEP}", f" {low} ") or 0)
+    if not left:
+        col.tags.remove(TAG_PARENT)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return n
 
 
 # ---- the browser: which cards ----
@@ -1258,3 +1618,32 @@ def best_deck(col, doc, choices=None):
         if n > best_n:
             best, best_n, best_swap = did, n, swap
     return best, best_swap
+
+
+PARENT = "Due Crew"  # 3.8.0: Due Crew's filtered decks sit under one parent deck
+FILTERED_PREFIX = "Due Crew · "  # before 3.8.0, at the top
+
+
+def our_deck(name):
+    """A filtered deck Due Crew builds: "Due Crew::Renal", under the one
+    parent deck, so they fold away in Anki's deck list. "::" in the name
+    would make another level."""
+    return f"{PARENT}::" + (" ".join(str(name).replace("::", ": ").split())[:120] or "Cards")
+
+
+def tidy(filtered, built, parent=None):
+    """3.8.0: which of the filtered decks Due Crew built go: the empty ones.
+    filtered: [(deck id, name, cards in it)], Anki's filtered decks; built:
+    the ids Due Crew built here. Ours: built here, under "Due Crew::", or
+    named "Due Crew · …" (before the parent, and the list). One with cards
+    in it stays: a checkpoint not done yet, a date half studied. parent:
+    (its id, the decks under it, cards in it): the parent deck, when Due
+    Crew made it, goes too once it's empty with nothing left under it."""
+    built = {int(x) for x in built}
+    gone = [int(d) for d, name, n in filtered
+            if not n and (int(d) in built or str(name).startswith((FILTERED_PREFIX, PARENT + "::")))]
+    if parent:
+        pid, kids, n = parent
+        if int(pid) in built and not n and {int(k) for k in kids} <= set(gone):
+            gone.append(int(pid))
+    return gone

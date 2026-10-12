@@ -2,14 +2,11 @@
 a deck row or a squad row looks like on the way out and on the way back,
 codes as people type them, notes and emoji. No network here (api.py has
 that), and no Qt.
-
-Until 3.0 these lived in backend/firebase.py, next to the Firestore client.
 """
 
 import datetime
 import hashlib
 import re
-import secrets
 
 from ..room_model import clean_room, is_over
 
@@ -99,8 +96,7 @@ def _first_grapheme(text):
 
 
 def emoji_fits(emoji):
-    """The server caps an emoji at 16 UTF-16 units (what the Firestore rules'
-    size() counted, measured in the emulator, and what the Worker's .length
+    """The server caps an emoji at 16 UTF-16 units (what the Worker's .length
     counts). Too long is refused whole: never truncated into a broken glyph,
     never sent to be rejected."""
     return len(emoji.encode("utf-16-le")) // 2 <= EMOJI_MAX
@@ -359,10 +355,6 @@ SQUAD_CODE_LEN = 8
 SQUAD_NAME_MAX = 24
 
 
-def new_squad_code():
-    return "".join(secrets.choice(SQUAD_ALPHABET) for _ in range(SQUAD_CODE_LEN))
-
-
 def normalize_code(code):
     """What a person typed -> the code: uppercase, alphabet only."""
     return "".join(ch for ch in str(code or "").upper() if ch in SQUAD_ALPHABET)
@@ -524,15 +516,36 @@ def _clean_unit(u):
         out["n"] = u["n"]
     if isinstance(u.get("for"), str) and u["for"]:
         out["for"] = u["for"][:12]  # F1: the event it preps for
-    todo = []
-    for x in u.get("todo") or []:  # Due: the author's lines to tick by hand
-        if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and clean_note(x.get("t"), 140):
-            one = {"k": x["k"], "t": clean_note(x["t"], 140)}
-            if isinstance(x.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,500}", x["url"]):
-                one["url"] = x["url"]
-            todo.append(one)
+    todo = _todo_lines(u.get("todo"))  # Due: the author's lines to tick by hand
     if todo:
         out["todo"] = todo[:8]
+    return out
+
+
+def _todo_text(t):
+    """A line's words kept as the server keeps them (plans.ts todoLine: 1 to
+    140 long in JavaScript's count, no control characters), so its tick key
+    is the same here as on duecrew.com (due.line_keys, dueLineKeys); drawn
+    escaped. '' for anything else."""
+    if not isinstance(t, str) or not t.strip() or len(t.encode("utf-16-le")) // 2 > 140 or re.search(r"[\x00-\x1f]", t):
+        return ""
+    return t
+
+
+def _todo_lines(lines, every=False):
+    """Due: lines to tick by hand, {k, t, url?}; with every (3.8.0, a plan's
+    weekly ones) each keeps its weekdays `r` (Monday "0") or is dropped."""
+    out = []
+    for x in lines if isinstance(lines, list) else []:
+        if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and _todo_text(x.get("t")):
+            one = {"k": x["k"], "t": x["t"]}
+            if isinstance(x.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,500}", x["url"]):
+                one["url"] = x["url"]
+            if every:
+                if not isinstance(x.get("r"), str) or not re.fullmatch(r"[0-6]{1,7}", x["r"]):
+                    continue
+                one["r"] = "".join(sorted(set(x["r"])))
+            out.append(one)
     return out
 
 
@@ -554,6 +567,37 @@ def clean_sched(s):
     return out
 
 
+def _clean_plan_tag(t):
+    """3.8.0: one of a plan's tags, {id, name, notes?, tags?, decks?, search?, n?}:
+    names and note guids, never card text. None if it holds nothing."""
+    if not isinstance(t, dict) or not _UNIT_ID.fullmatch(str(t.get("id") or "")):
+        return None
+    name = clean_note(t.get("name"), 40)
+    if not name:
+        return None
+    out = {"id": t["id"], "name": name}
+    for k, cap in (("tags", 50), ("decks", 50), ("search", 10)):
+        got = [x for x in t.get(k) or [] if isinstance(x, str) and x.strip()][:cap]
+        if got:
+            out[k] = got
+    notes = [g for g in t.get("notes") or [] if isinstance(g, str) and g][:5000]
+    if notes:
+        out["notes"] = notes
+    if isinstance(t.get("n"), int) and not isinstance(t.get("n"), bool) and t["n"] >= 0:
+        out["n"] = t["n"]
+    return out if any(k in out for k in ("tags", "decks", "search", "notes")) else None
+
+
+def _own_tags(doc):
+    """3.8.0: {tagroot, tags}: a plan's own tags and the part of the tag they live under."""
+    tags = [t for t in map(_clean_plan_tag, doc.get("tags") or []) if t][:100]
+    root = doc.get("tagroot")
+    if not (isinstance(root, str) and 0 < len(root) <= 60 and not re.search(r'[\s"*\\%:]', root)
+            and not re.match(r"[_-]|.*[_-]$", root)):
+        return {}
+    return {"tagroot": root, **({"tags": tags} if tags else {})}
+
+
 def clean_plan_doc(doc):
     """{deck, units}: units sorted by when they open, as plans.py reads them."""
     doc = doc if isinstance(doc, dict) else {}
@@ -572,6 +616,10 @@ def clean_plan_doc(doc):
               if isinstance(e, dict) and e.get("id") and _ISO.fullmatch(str(e.get("day") or ""))][:200]
     if events:
         out["events"] = sorted(events, key=lambda e: e["day"])  # F1: named days the dates prep for
+    every = _todo_lines(doc.get("every"), every=True)
+    if every:
+        out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
+    out.update(_own_tags(doc))  # 3.8.0: the plan's own tags
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -608,7 +656,8 @@ def clean_authored(a):
                  if isinstance(u.get("notes"), list) else {}),  # 3.6.5
               **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
-    return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
+    return {"id": a["id"], "version": int(a.get("version") or 0), "name": clean_note(a.get("name"), 60) or "Plan",
+            "doc": {"deck": str(d.get("deck") or ""), "units": units, **_own_tags(d)}}  # 3.8.0: and its own tags
 
 
 def clean_plan(p):
@@ -658,7 +707,8 @@ def clean_days(v):
             # 3.7.6: one date moved later, {unit id: days}
             "moved": {str(k): n for k, n in (v.get("moved") or {}).items()
                       if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 365}
-            if isinstance(v.get("moved"), dict) else {}}
+            if isinstance(v.get("moved"), dict) else {},
+            "own": v["own"] if v.get("own") in ("ready", "next") else ""}  # 3.8.0: at my own pace
 
 
 def clean_offer(o):

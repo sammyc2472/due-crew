@@ -51,17 +51,11 @@ it lists in Cloudflare DNS, add a DMARC record (`TXT _dmarc`,
 `v=DMARC1; p=none`), and `npx wrangler secret put RESEND_API_KEY` for each
 environment.
 
-## 4. The admin token (for the identity import)
+## 4. The admin token (gone in 3.8.0)
 
-Any long random string, for example from `openssl rand -base64 32`:
-
-```
-npx wrangler secret put ADMIN_TOKEN --env=""
-```
-
-Keep it somewhere safe until the import at cutover. After that it can be
-deleted (`npx wrangler secret delete ADMIN_TOKEN --env=""`); with no token
-the import endpoint doesn't exist.
+3.0's one-shot import from Firebase needed `ADMIN_TOKEN`; the import went
+with Firebase in 3.8.0. If it's still set, delete it:
+`npx wrangler secret delete ADMIN_TOKEN --env=""`.
 
 ## 5. Deploys from GitHub
 
@@ -116,30 +110,23 @@ attach a custom domain over one.
   day, and D1's free tier (5 million reads, 100,000 writes a day). The $5
   paid plan raises all of it; move when the dashboard says you're near.
 
-## At cutover
+## Firebase is gone (3.8.0)
 
-1. Export the Firebase accounts:
-   `firebase auth:export users.json --format=json --project anki-leaderboard-f6691`.
-2. Feed them to the import (uid, email, and the display name when there
-   is one): `DUE_CREW_ADMIN_TOKEN=... python3 tools/import_users.py
-   users.json --firestore --go` (without `--go` it's a dry run; `--firestore`
-   carries each name and friend code across, with your `gcloud` login).
-3. Tag 3.0.0. The crew updates; the Firebase project stays up read-only
-   for stragglers, then goes.
+3.0 moved the 2.x accounts across; 3.8.0 took out the bridge, the import
+and every 2.x path.
 
-## The 2.x bridge (while people update)
+The Google project (anki-leaderboard-f6691) was shut down on 12 Oct 2026,
+before 3.8.0's Worker went out. Nothing in it can be read (2.x crewmates
+included), and Google deletes it for good 30 days on, Firestore and the
+`due-crew-bridge` service account with it. Don't restore it. Until 3.8.0
+is live, the old Worker's bridge fails every 15 minutes and stops before
+writing anything (no token, or a 403 on its first read), and a deleted
+account's 2.x copies (`forget()`) fail inside a try after D1 has
+deleted the account. Had the project stayed up, Firestore had to be emptied
+right after the deploy, never before: the old bridge would copy 3.x people
+back in, and read an empty Firestore as 2.x heatmaps turned off.
 
-A Google service account the Worker uses to copy weeks between Firestore
-and D1 every 15 minutes (`worker/src/bridge.ts`).
+What's left, any time:
 
-1. console.cloud.google.com, project anki-leaderboard-f6691: IAM & Admin ›
-   Service Accounts › Create. Name it `due-crew-bridge`, give it the role
-   **Cloud Datastore User**, Done.
-2. Open it › Keys › Add key › Create new key › JSON. A file downloads.
-3. From `worker/`: `npx wrangler secret put FIREBASE_SA --env="" < ~/Downloads/<that file>.json`,
-   then delete the file.
-4. `npx wrangler deploy --env=""`. `npx wrangler tail --env=""` shows
-   `bridge: pulled N, pushed M` every quarter hour.
-
-When Firestore goes: `npx wrangler secret delete FIREBASE_SA --env=""`,
-delete the key in Google Cloud, and remove the bridge and its cron.
+1. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
+   it was set there). Without it the old bridge doesn't run at all.

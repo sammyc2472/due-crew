@@ -21,6 +21,7 @@ const IDR_MAX = 20000;   // 3.6.5: the cards those ids are, as note guid + card 
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
 const TODO_MAX = 8;  // Due: a date's lines to tick by hand
+const EVERY_MAX = 6;  // 3.8.0: the plan's lines that come every week ("every Fri: practice questions")
 export const PLAN_BODY_MAX = 1600 * 1024;
 const SOURCES_MAX = 50;
 const PATH_MAX = 200;
@@ -50,11 +51,19 @@ export const PLANS_MAX = 50;
 export const PLAN_BYTES_MAX = 24 * 1024 * 1024;
 const TREES_BYTES = 6 * 1024 * 1024;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
+// 3.8.0, plan tags: the plan's own tags (SLG 12), made in an author's Anki
+// (exact notes, by guid) or from text (a tag's, a subdeck's or a search's
+// cards, found in each follower's copy). Each follower's Anki puts them on
+// its notes as DueCrew::{tagroot}::{the name}; a date uses one as any tag.
+// Names and note guids only, never card text.
+const TAGS_MAX = 100;
+const TAG_NAME_MAX = 40;
+const TAG_ROOT_MAX = 60;
 
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
-  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null };
+  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -84,10 +93,29 @@ function cardRef(v: unknown): [string, number] {
   return [v[0], v[1]];
 }
 
+/** Due: a line to tick by hand, {k, t, url?}; `every` (3.8.0) adds `r`,
+ *  its weekdays (Monday "0"), kept sorted. */
+function todoLine(x: unknown, every = false): Obj {
+  if (!V.isObj(x) || Object.keys(x).some((k) => !["k", "t", "url", ...(every ? ["r"] : [])].includes(k))) throw V.bad("plan");
+  if (!["watch", "read", "do"].includes(x.k as string) || !V.isStr(x.t, 140, 1) || /[\u0000-\u001f]/.test(x.t as string)) throw V.bad("plan");
+  const one: Obj = { k: x.k, t: (x.t as string).trim() };
+  if (x.url !== undefined && x.url !== null && x.url !== "") {
+    if (!V.isStr(x.url, 500, 1) || !/^https:\/\/[^\s"'<>]+$/.test(x.url as string)) throw V.bad("plan");
+    one.url = x.url;
+  }
+  if (!one.t) throw V.bad("plan");
+  if (every) {
+    if (!V.isStr(x.r, 7, 1) || !/^[0-6]+$/.test(x.r as string)) throw V.bad("plan");
+    one.r = [...new Set((x.r as string).split(""))].sort().join("");
+  }
+  return one;
+}
+
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
   for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
-  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  // "every" is taken: a plan's weekly lines are ticked as pid:every:… (3.8.0)
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id) || v.id === "every") throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
   if (v.due !== undefined && v.due !== null) {
@@ -139,17 +167,7 @@ function unit(v: unknown): Obj {
     // Due: what a date asks that cards can't measure (a lecture to watch, a
     // chapter to read), each follower ticking it by hand; words and a link
     if (!Array.isArray(v.todo) || v.todo.length > TODO_MAX) throw V.bad("plan");
-    const todo = v.todo.map((x) => {
-      if (!V.isObj(x) || Object.keys(x).some((k) => !["k", "t", "url"].includes(k))) throw V.bad("plan");
-      if (!["watch", "read", "do"].includes(x.k as string) || !V.isStr(x.t, 140, 1) || /[\u0000-\u001f]/.test(x.t as string)) throw V.bad("plan");
-      const one: Obj = { k: x.k, t: (x.t as string).trim() };
-      if (x.url !== undefined && x.url !== null && x.url !== "") {
-        if (!V.isStr(x.url, 500, 1) || !/^https:\/\/[^\s"'<>]+$/.test(x.url as string)) throw V.bad("plan");
-        one.url = x.url;
-      }
-      if (!one.t) throw V.bad("plan");
-      return one;
-    });
+    const todo = v.todo.map((x) => todoLine(x));
     if (todo.length) out.todo = todo;
   }
   const cards = v.cards ?? [];
@@ -195,6 +213,100 @@ function unit(v: unknown): Obj {
   return out;
 }
 
+/** A name as one part of an Anki tag: spaces become _, the characters a tag
+ *  or a search can't hold go, a : is a -. The twin of plans.py tag_part
+ *  and Tags.part in builder.js: change one, change all three. */
+const slug = (name: string) => String(name).replace(/\s+/gu, "_").replace(/["*\\%]/g, "").replace(/:/g, "-")
+  .replace(/_+/g, "_").replace(/^[_-]+|[_-]+$/g, "");
+
+export function tagPart(name: string): string {
+  return slug(name) || "tag";
+}
+
+/** The plan's own part of its tags, from its name when the first is made
+ *  (and then kept, whatever the plan is called later). The twin of
+ *  plans.py tag_root and Tags.root in builder.js. */
+export function tagRoot(planName: string): string {
+  return slug(planName).slice(0, TAG_ROOT_MAX).replace(/[_-]+$/, "") || "plan";
+}
+
+const escRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The doc with its plan tags moved from DueCrew::{from} to DueCrew::{to}:
+ *  the root, and every date, plan tag and pace pick that names one, as a tag
+ *  or inside a search (escaped as Tags.ankiSearch writes it, or not). */
+export function reroot(doc: Obj, from: string, to: string): Obj {
+  const plain = new RegExp(`(^|[\\s"(:-])DueCrew::${escRe(from)}(?=::|$|[\\s")])`, "gi");
+  const esc = new RegExp(`DueCrew::${escRe(from.replace(/_/g, "\\_"))}(?=::|$|[\\s")])`, "gi");
+  const tag = (t: string) => t.toLowerCase() === `duecrew::${from.toLowerCase()}` || t.toLowerCase().startsWith(`duecrew::${from.toLowerCase()}::`)
+    ? `DueCrew::${to}${t.slice(`DueCrew::${from}`.length)}` : t;
+  const q = (x: string) => x.replace(esc, `DueCrew::${to.replace(/_/g, "\\_")}`).replace(plain, (_m, pre) => `${pre}DueCrew::${to}`);
+  const fix = (o: Obj) => {
+    if (Array.isArray(o.tags)) o.tags = (o.tags as unknown[]).map((t) => typeof t === "string" ? tag(t) : t);
+    if (Array.isArray(o.search)) o.search = (o.search as unknown[]).map((x) => typeof x === "string" ? q(x) : x);
+    if (o.sn && typeof o.sn === "object") o.sn = Object.fromEntries(Object.entries(o.sn as Obj).map(([k, v]) => [q(k), v]));
+  };
+  const out = JSON.parse(JSON.stringify(doc)) as Obj;
+  for (const u of (out.units as Obj[] | undefined) || []) fix(u);
+  for (const t of (out.tags as Obj[] | undefined) || []) fix(t);
+  const pace = out.pace as Obj | undefined;
+  if (pace && Array.isArray(pace.cover)) pace.cover = (pace.cover as unknown[]).map((c) => typeof c === "string" && c.startsWith("tag:") ? `tag:${tag(c.slice(4))}` : c);
+  out.tagroot = to;
+  return out;
+}
+
+/** The plan's tag root, its own: the one it holds (a save never moves it),
+ *  or, with its first tag, the one asked for, or _2, _3… when another plan
+ *  has it (case aside). The doc comes back with its dates following. */
+export async function rooted(env: Env, id: string, held: string | null | undefined, doc: Obj): Promise<{ doc: Obj; root: string | null }> {
+  const want = doc.tagroot as string | undefined;
+  if (!want) return { doc, root: held ?? null };
+  if (held) return { doc: want === held ? doc : reroot(doc, want, held), root: held };
+  for (let i = 1; i <= 50; i++) {
+    const sfx = i === 1 ? "" : `_${i}`;
+    const r = `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
+    const taken = await env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id).first("x");
+    if (!taken) return { doc: r === want ? doc : reroot(doc, want, r), root: r };
+  }
+  throw new HttpError(503, "try_again");
+}
+
+/** Two saves took the same root at once: the second saves again (409), and gets _2. */
+export function rootTaken(e: unknown): never {
+  if (String((e as Error)?.message || e).includes("UNIQUE") && String((e as Error)?.message || e).includes("tagroot")) throw new HttpError(409, "stale");
+  throw e;
+}
+
+/** A plan tag: {id, name, notes?, tags?, decks?, search?, n?}: what it
+ *  holds is exact notes, or a tag's, a subdeck's or a search's cards in
+ *  each follower's copy; `n` how many cards the author's Anki found. */
+function planTag(v: unknown): Obj {
+  if (!V.isObj(v)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "notes", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  const name = V.displayName(v.name);
+  if (name.length > TAG_NAME_MAX) throw V.bad("plan");
+  const out: Obj = { id: v.id, name };
+  for (const k of ["tags", "decks"] as const) {
+    const x = v[k] ?? [];
+    if (!Array.isArray(x) || x.length > SOURCES_MAX) throw V.bad("plan");
+    if (x.length) out[k] = [...new Set(x.map(path))];
+  }
+  const search = v.search ?? [];
+  if (!Array.isArray(search) || search.length > SEARCH_MAX
+      || !search.every((q) => V.isStr(q, SEARCH_LEN, 1) && !/[\u0000-\u001f]/.test(q as string))) throw V.bad("plan");
+  if (search.length) out.search = [...new Set(search as string[])];
+  const notes = v.notes ?? [];
+  if (!Array.isArray(notes) || notes.length > IDLIST_MAX || !notes.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
+  if (notes.length) out.notes = [...new Set(notes as string[])];
+  if (!out.tags && !out.decks && !out.search && !out.notes) throw V.bad("plan");  // a tag holds something
+  if (v.n !== undefined && v.n !== null) {
+    if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
+    out.n = v.n;
+  }
+  return out;
+}
+
 /** 3.2: the plan's shape over time. `catchup`: every nth week opens nothing
  *  new (0: none); `taper`: the last days before `end` open nothing new. */
 function phases(v: unknown): Obj {
@@ -235,7 +347,7 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
@@ -258,7 +370,26 @@ export function planDoc(v: unknown): Obj {
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
   const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0)
     + ((u.notes as unknown[] | undefined)?.length ?? 0);
-  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) > CARDS_MAX) throw V.bad("plan");
+  // 3.8.0: the plan's tags, under its own part of the tag (fixed when the first was made)
+  let tagNotes = 0;
+  if (v.tags !== undefined && v.tags !== null) {
+    if (!Array.isArray(v.tags) || v.tags.length > TAGS_MAX) throw V.bad("plan");
+    const tags = v.tags.map(planTag);
+    const parts = new Set(tags.map((t) => tagPart(t.name as string).toLowerCase()));
+    if (new Set(tags.map((t) => t.id)).size !== tags.length || parts.size !== tags.length) throw V.bad("plan");
+    if (tags.length) {
+      if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
+      out.tagroot = v.tagroot;
+      out.tags = tags;
+      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0), 0);
+    }
+  }
+  if (!out.tags && v.tagroot !== undefined && v.tagroot !== null) {
+    // kept once made, so a tag made again lands where the old one was
+    if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
+    out.tagroot = v.tagroot;
+  }
+  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) + tagNotes > CARDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.idr as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (v.reviews !== undefined && v.reviews !== null) {
@@ -289,6 +420,13 @@ export function planDoc(v: unknown): Obj {
     if (evs.length) out.events = evs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
   }
   for (const u of units) if (u.for && !evIds.has(u.for as string)) delete u.for;
+  if (v.every !== undefined && v.every !== null) {
+    // 3.8.0: lines that come every week on their weekdays, from the plan's
+    // first date to its last (Due, each follower ticking each day's by hand)
+    if (!Array.isArray(v.every) || v.every.length > EVERY_MAX) throw V.bad("plan");
+    const every = v.every.map((x) => todoLine(x, true));
+    if (every.length) out.every = every;
+  }
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
   if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");
@@ -353,7 +491,9 @@ async function isMember(env: Env, squad: string | null, uid: string): Promise<bo
 }
 
 // a follow as a row: mine only (G3, G4: my shift, my pause's days, my skips)
-const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist, team_ask, moved";
+const FOLLOW_COLS = "share, paused, sched, progress, early, shift, pause_until, pause_since, skipped, hist, team_ask, moved, own";
+/** 3.8.0: how a plan's cards open for me: on its dates (null), when I open them, or the next once I've seen the last. */
+export const OWN_PACE = ["ready", "next"];
 
 /** 3.7.6: a plan's team and sharing my progress are one choice: on the
  *  team, my progress counts go to its authors; off it, they don't. */
@@ -388,10 +528,11 @@ async function following(env: Env, plan: string, uid: string) {
 
 /** My follow's own days, as the add-on and the site read them. */
 function followDays(f: { shift?: number | null; pause_until?: string | null; pause_since?: string | null; skipped?: string | null;
-                         moved?: string | null }) {
+                         moved?: string | null; own?: string | null }) {
   return { shift: f.shift ?? 0, until: f.pause_until ?? null, since: f.pause_since ?? null,
     skipped: f.skipped ? JSON.parse(f.skipped) as string[] : [],
-    moved: f.moved ? JSON.parse(f.moved) as Record<string, number> : {} };  // 3.7.6: one date later, days
+    moved: f.moved ? JSON.parse(f.moved) as Record<string, number> : {},  // 3.7.6: one date later, days
+    ...(f.own && OWN_PACE.includes(f.own) ? { own: f.own } : {}) };  // 3.8.0: at my own pace
 }
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
@@ -431,7 +572,7 @@ async function ownerOnly(env: Env, id: string, s: Session): Promise<Plan> {
 
 type Follow = { share: number; paused: number; sched: string | null; progress: string | null; early: number;
   shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null;
-  moved?: string | null;
+  moved?: string | null; own?: string | null;
   team_ask?: number };
 type Editor = { uid: string; name: string; emoji: string };
 
@@ -643,7 +784,13 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     audience: p.audience,
     squad: p.squad,
     doc: body.doc !== undefined ? JSON.stringify(keepIdr(planDoc(body.doc), p.doc)) : p.doc,
+    tagroot: p.tagroot ?? null,
   };
+  if (body.doc !== undefined) {  // 3.8.0: its tags' root is its own
+    const r = await rooted(env, id, p.tagroot, JSON.parse(next.doc));
+    next.doc = JSON.stringify(r.doc);
+    next.tagroot = r.root;
+  }
   if (body.audience !== undefined) {
     if (body.audience !== "code" && body.audience !== "squad") throw V.bad("audience");
     next.audience = body.audience;
@@ -667,9 +814,9 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
   }
   const r = await env.DB.prepare(
-    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, version = version + 1, updated_at = ?
+    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, nowSec(), id, body.version).run();
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   // the save stands either way; a post past the day's ceiling is said, not lost silently
@@ -960,6 +1107,56 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
   return json(await view(env, await getPlan(env, id), s.uid));
 }
 
+/** POST /plans/{id}/tags {name, add?, remove?, n?}: 3.8.0, notes picked in an
+ *  author's Anki put on one of the plan's tags (made if it's new) or taken
+ *  off it; a tag left with nothing goes. Note guids only. `n`: how many
+ *  cards the tag holds in that Anki now. */
+export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
+  const body = await readJson(req, PLAN_BODY_MAX);
+  for (const k of Object.keys(body)) if (!["name", "add", "remove", "n"].includes(k)) throw V.bad("tag");
+  const name = V.displayName(body.name);
+  if (name.length > TAG_NAME_MAX) throw V.bad("tag");
+  const list = (x: unknown) => {
+    if (x === undefined) return [];
+    if (!Array.isArray(x) || x.length > IDLIST_MAX || !x.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("tag");
+    return x as string[];
+  };
+  const add = list(body.add), remove = new Set(list(body.remove));
+  if (!add.length && !remove.size) throw V.bad("tag");
+  if (body.n !== undefined && !V.isInt(body.n, 0, 1_000_000)) throw V.bad("tag");
+  const doc = JSON.parse(p.doc) as Obj & { tags?: Obj[] };
+  const tags = doc.tags || [];
+  const part = tagPart(name).toLowerCase();
+  let t = tags.find((x) => tagPart(x.name as string).toLowerCase() === part);
+  if (!t) {
+    if (!add.length) throw new HttpError(404, "no_tag");
+    t = { id: newUnitId(), name, notes: [] };
+    tags.push(t);
+  }
+  const had = new Set((t.notes as string[] | undefined) || []);
+  const notes = [...new Set([...had, ...add])].filter((g) => !remove.has(g));
+  if (notes.length > IDLIST_MAX) throw new HttpError(400, "too_many");
+  if (notes.length) t.notes = notes; else delete t.notes;
+  if (body.n !== undefined) t.n = body.n;
+  doc.tags = tags.filter((x) => x.notes || x.tags || x.decks || x.search);
+  if (!doc.tags.length) delete doc.tags;
+  if (!doc.tagroot) doc.tagroot = p.tagroot || tagRoot(p.name);
+  const r0 = await rooted(env, id, p.tagroot, planDoc(doc));
+  const clean = JSON.stringify(r0.doc);
+  if (clean === p.doc) return json(await view(env, p, s.uid));
+  await roomFor(env, p.owner, clean.length - p.doc.length);
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, keepLib(p, clean), r0.root, nowSec(), id, p.version).run().catch(rootTaken);
+  if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  const added = notes.filter((g) => !had.has(g)).length, taken = [...had].filter((g) => remove.has(g)).length;
+  await logSave(env, id, p.version + 1, s.uid, added
+    ? `tagged ${added} note${added === 1 ? "" : "s"} as ${name} in Anki`
+    : `took ${taken} note${taken === 1 ? "" : "s"} off ${name} in Anki`, p.doc);
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
 /** DELETE /plans/{id}: the author takes it down. Followers keep every card
  *  they have open; nothing is suspended anywhere. */
 export async function remove(s: Session, env: Env, [id]: string[]): Promise<Response> {
@@ -1076,6 +1273,8 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   const body = await readJson(req);
   if (typeof body.code !== "string") throw V.bad("code");
   const sched = body.sched !== undefined ? schedule(body.sched) : undefined;
+  if (body.own !== undefined && body.own !== null && !OWN_PACE.includes(body.own as string)) throw V.bad("follow");
+  const own = body.own === undefined ? undefined : (body.own as string | null);
   const code = normalizeCode(body.code);
   await limitOrThrow(env, `planpeek:${s.uid}`, 60, 3600);  // the same guesses as peek's
   const p = await env.DB.prepare("SELECT * FROM plans WHERE code = ?").bind(code).first<Plan>();
@@ -1088,22 +1287,23 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   }
   const sj = sched === undefined ? null : sched === null ? null : JSON.stringify(sched);
   await env.DB.prepare(
-    `INSERT INTO plan_follows (plan, uid, share, paused, sched, at) VALUES (?, ?, 0, 0, ?, ?)
+    `INSERT INTO plan_follows (plan, uid, share, paused, sched, own, at) VALUES (?, ?, 0, 0, ?, ?, ?)
      ON CONFLICT(plan, uid) DO UPDATE SET paused = 0
-       ${sched === undefined ? "" : ", sched = excluded.sched"}`,
-  ).bind(p.id, s.uid, sj, nowSec()).run();
+       ${sched === undefined ? "" : ", sched = excluded.sched"}${own === undefined ? "" : ", own = excluded.own"}`,
+  ).bind(p.id, s.uid, sj, own ?? null, nowSec()).run();
   const full = body.team === true && !(await joinTeam(env, p.id, s.uid));
   return json({ ...(await view(env, p, s.uid)), ...(full ? { teamFull: true } : {}) });
 }
 
-/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?, moved?}.
+/** PATCH /plans/{id}/follow {share?, paused?, sched?, early?, shift?, until?, since?, skipped?, moved?, own?}.
  *  G3, G4: my own days: how many days my dates run later than the plan's
  *  (0-365), a pause's first and last day, the dates I skip (unit ids).
  *  3.7.6: `moved` {unit id: 1-365 days later}, one date at a time on top
  *  of the shift. Reset to default is one PATCH of all of them. */
 export async function patchFollow(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved"].includes(k)) throw V.bad("follow");
+  for (const k of Object.keys(body)) if (!["share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved", "own"].includes(k)) throw V.bad("follow");
+  if (body.own !== undefined && body.own !== null && !OWN_PACE.includes(body.own as string)) throw V.bad("follow");
   if (body.early !== undefined && !V.isInt(body.early, 0, 7)) throw V.bad("follow");
   if (body.shift !== undefined && !V.isInt(body.shift, 0, 365)) throw V.bad("follow");
   for (const k of ["until", "since"]) if (body[k] !== undefined && body[k] !== null && !V.isDate(body[k])) throw V.bad("follow");
@@ -1131,15 +1331,17 @@ export async function patchFollow(req: Request, s: Session, env: Env, [id]: stri
   const moved = body.moved !== undefined
     ? (Object.keys(body.moved as object).length ? JSON.stringify(Object.fromEntries(Object.entries(body.moved as Record<string, number>).sort())) : null)
     : f.moved ?? null;
+  const own = body.own !== undefined ? (body.own as string | null) : f.own ?? null;
   if (paused !== f.paused || sj !== f.sched || early !== (f.early ?? 0) || shift !== (f.shift ?? 0)
-      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped || moved !== (f.moved ?? null)) {
+      || until !== f.pause_until || since !== f.pause_since || skipped !== f.skipped || moved !== (f.moved ?? null)
+      || own !== (f.own ?? null)) {
     await env.DB.prepare(
-      `UPDATE plan_follows SET paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?, moved = ?
+      `UPDATE plan_follows SET paused = ?, sched = ?, early = ?, shift = ?, pause_until = ?, pause_since = ?, skipped = ?, moved = ?, own = ?
         WHERE plan = ? AND uid = ?`,
-    ).bind(paused, sj, early, shift, until, since, skipped, moved, id, s.uid).run();
+    ).bind(paused, sj, early, shift, until, since, skipped, moved, own, id, s.uid).run();
   }
   return json({ share: share === 1, paused: paused === 1, sched: sj ? JSON.parse(sj) : null, early,
-    ...followDays({ shift, pause_until: until, pause_since: since, skipped, moved }) });
+    ...followDays({ shift, pause_until: until, pause_since: since, skipped, moved, own }) });
 }
 
 /** DELETE /plans/{id}/follow: stop. My progress goes with it. */
@@ -1267,7 +1469,7 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
  *  moves at every sync. A short hash; one read. */
 export async function planStamp(env: Env, uid: string): Promise<string> {
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved,
+    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
             (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
        FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ? ORDER BY p.id`,
   ).bind(uid).raw();
@@ -1283,7 +1485,7 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
     `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.team_ask, f.paused, f.sched, f.early,
-            f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, u.name AS owner_name
+            f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
             OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
@@ -1314,7 +1516,8 @@ export async function forBoard(env: Env, uid: string) {
   // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their
   // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
-    `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
+    `SELECT p.id, p.version, p.name, json_extract(p.doc, '$.deck') AS deck,
+            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
@@ -1324,7 +1527,7 @@ export async function forBoard(env: Env, uid: string) {
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
                     + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
-  ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
+  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; units: string }>();
   // 3.7.3: the newest posts per plan, and this version reached me
   const posts = new Map<string, Obj[]>();
   if (mineRows.results.length) {
@@ -1344,10 +1547,12 @@ export async function forBoard(env: Env, uid: string) {
       "UPDATE plan_follows SET seen_version = ?1 WHERE plan = ?2 AND uid = ?3 AND seen_version IS NOT ?1",
     ).bind(r.version, r.id, uid)));
   }
-  const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
+  // 3.8.0: with the plan's own tags, so my Anki carries them too (counts, and older followers' note ids)
+  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
+    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
+    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}) });
   return {
-    authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
+    authored: authored.results.map((r) => ({ id: r.id, version: r.version, name: r.name, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),

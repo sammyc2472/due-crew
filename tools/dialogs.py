@@ -165,19 +165,6 @@ def main(out):
             traceback.print_exc()
             failures.append(f"{label}: {e}")
 
-    def settings():
-        from due_crew.ui.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, emoji="\U0001F98A"), noop, noop, noop,
-                             noop, noop, noop, edit_emoji=noop, edit_status=noop)
-        tabs = dlg.findChild(QtWidgets.QTabWidget)
-        for i in range(tabs.count()):
-            tabs.setCurrentIndex(i)
-            shoot(dlg, os.path.join(out, f"settings-{i}-{tabs.tabText(i).lower()}.png"))
-        # Just show up chosen: the numbers stay set underneath, greyed out
-        dlg = SettingsDialog(None, CLIENT, dict(CONFIG, show_up=True), noop, noop, noop,
-                             noop, noop, noop, tab="privacy")
-        shoot(dlg, os.path.join(out, "settings-privacy-showup.png"))
-
     def friends():
         from due_crew.ui.friends_dialog import FriendsDialog
         dlg = FriendsDialog(None, CLIENT, muted=[], on_mute=noop)
@@ -327,6 +314,17 @@ def main(out):
         if not names or names[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
             raise RuntimeError("follow: a unit's name went in as markup")
         shoot(dlg, os.path.join(out, "plan-follow.png"))
+        # 3.8.0: at my own pace: the late-start question goes, the box under it shows, the line says so
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
+        settle()
+        dlg.how_ready.setChecked(True)
+        settle(100)
+        if dlg.own() != "next" or dlg.how_next.isHidden() or dlg.late_skip.isVisible() or "Nothing opens" not in dlg.about.text():
+            raise RuntimeError(f"follow at my pace: {dlg.own()!r} {dlg.about.text()!r}")
+        dlg.how_next.setChecked(False)
+        if dlg.own() != "ready":
+            raise RuntimeError("follow at my pace: the box under it")
+        shoot(dlg, os.path.join(out, "plan-follow-own-pace.png"))
         shoot(SwapDialog(None, ("Step1", "Step1_v11"), 1944), os.path.join(out, "plan-swap.png"))
         shoot(CatchUpDialog(None, 2, 61, {"opens": day(6)}), os.path.join(out, "plan-resume.png"))
         # G4, G7: a follower's own days
@@ -427,15 +425,183 @@ def main(out):
         if len(subs) != 1:
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
-        want = ["Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Send feedback…"]
+        want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Show on the Decks screen",
+                "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
+        # 3.8.0: Study what's next carries Ctrl+Shift+S; Show on the Decks screen is a check
+        acts = {a.text(): a for a in subs[0].actions()}
+        if acts["Study what’s next"].shortcut().toString() != "Ctrl+Shift+S":
+            raise RuntimeError("tools menu: Study what's next has no Ctrl+Shift+S")
+        if not acts["Show on the Decks screen"].isCheckable():
+            raise RuntimeError("tools menu: Show on the Decks screen isn't a check")
 
-    for label, build in (("tools menu", tools_menu), ("settings", settings), ("friends", friends), ("decks", decks),
+    def map_card():
+        # 3.8.0: "What I know" as a picture: the sheet, and the card itself in each look
+        from due_crew.ui.map_card_dialog import MapCardDialog, paint
+        from due_crew import mapcard as M
+        tiles = [{"key": k.lower(), "name": k, "n": n, "know": kn, "started": n if kn is not None else 0}
+                 for k, n, kn in (("Cardio · Physiology", 412, 86), ("Cardio · Pathology", 318, 77), ("Cardio · Pharm", 260, 84),
+                                  ("Renal · Physiology", 190, 66), ("Pulm · Pathology", 150, 88), ("Heme", 120, None),
+                                  ("Endo", 96, 71), ("MSK", 64, 94))]
+        prev = {"cardio · physiology": 82, "cardio · pathology": 79, "renal · physiology": 60}
+        dlg = MapCardDialog(None, "Big Step 1", "2026-10-12", tiles, "fsrs", prev, "2026-10-05")
+        shoot(dlg, os.path.join(out, "map-card-sheet.png"))
+        for name, look, pct, ch in (("light", "light", True, False), ("dark", "dark", True, False),
+                                    ("shape", "light", False, False), ("change", "light", True, True)):
+            img = paint(M.card("Big Step 1", "2026-10-12", tiles, "fsrs", pct, prev if ch else None,
+                               "2026-10-05" if ch else ""), look)
+            if img.isNull() or img.width() != M.SIZE:
+                raise RuntimeError("map card: no picture")
+            img.save(os.path.join(out, f"map-card-{name}.png"))
+        if "🟩 Cardio · Physiology 86%" not in dlg.text():
+            raise RuntimeError(f"map card: text {dlg.text()!r}")
+        dlg.pct.setChecked(False)
+        if "%" in dlg.text():
+            raise RuntimeError("map card: Percentages off still has numbers")
+        none = MapCardDialog(None, "Big Step 1", "2026-10-12", tiles)
+        if none.change.isEnabled():
+            raise RuntimeError("map card: This week's change on with no week to compare")
+        none.close()
+        part = MapCardDialog(None, "Big Step 1 · Cardio", "2026-10-12", tiles, part=True)
+        if part.change.isEnabled() or "whole deck" not in part.change_note.text():
+            raise RuntimeError("map card: a tile's parts should say the change is the deck's")
+        part.close()
+
+    def share_card():
+        # 3.8.0: Share › As a picture, made in Anki: the sheet, and each card in each size and look
+        from due_crew.ui.share_card_dialog import ShareCardDialog, paint
+        from due_crew import sharecard as S
+        today = "2026-10-14"  # a Wednesday
+        start = datetime.date(2024, 3, 4)
+        days = {}
+        for i in range((datetime.date.fromisoformat(today) - start).days + 1):
+            d = start + datetime.timedelta(days=i)
+            if (i * 7) % 11 not in (3, 8):  # most days, not all
+                days[d.isoformat()] = (40 + (i * 37) % 260, (12 + (i * 13) % 70) * 60000)
+        wk = S.week(days, today, False, {today: 14, "2026-10-12": 20}, 23, 4)
+        one = S.week(days, today, True, {today: 14}, 23, 2)
+        cheers = {"2026": 31, "2025": 12}
+        pick = lambda k: ({"kind": "alltime", "title": "Share my Anki, all time", "sizes": ("story", "link"), "file": "due-crew-all-time",
+                           "data": S.alltime(days, today, sum(cheers.values()))} if k == "all" else
+                          {"kind": "year", "title": "Share my year", "sizes": ("story",), "file": f"due-crew-{k}",
+                           "data": S.year(days, k, today, cheers.get(k, 0))})  # noqa: E731
+        dlg = ShareCardDialog(None, pick, S.year_options(days, today), "2026")
+        shoot(dlg, os.path.join(out, "share-card-year-sheet.png"))
+        if dlg.link.isVisible() or not dlg.switch["cheers"].isChecked():
+            raise RuntimeError("share card: a year is story only, and its cheers start on")
+        dlg.pick.setCurrentIndex(dlg.pick.count() - 1)
+        if dlg.kind() != "alltime" or not dlg.switch["best"].isEnabled():
+            raise RuntimeError("share card: All time didn't take over the sheet")
+        dlg.close()
+        priv = S.privacy({"share_time": False})
+        wdlg = ShareCardDialog(None, lambda _k: {"kind": "week", "title": "Share my week", "sizes": ("story", "link"),
+                                                 "file": "due-crew-week-2026-10-12", "data": wk}, priv=priv)
+        shoot(wdlg, os.path.join(out, "share-card-week-sheet.png"))
+        if wdlg.switch["time"].isChecked() or "Privacy" not in wdlg.switch["time"].text():
+            raise RuntimeError("share card: Time studied should start off when Privacy keeps it home")
+        wdlg.close()
+        for kind, data, sizes in (("week", wk, ("story", "link")), ("today", one, ("story", "link")),
+                                  ("year", pick("2026")["data"], ("story",)), ("year", pick("2025")["data"], ("story",)),
+                                  ("alltime", pick("all")["data"], ("story", "link"))):
+            on = {k: True for k in ("time", "reviews", "streak", "crew", "best", "cheers")}
+            for size in sizes:
+                for look in ("light", "dark"):
+                    img = paint(kind, size, data, on, look)
+                    if img.isNull() or (img.width(), img.height()) != S.SIZES[size]:
+                        raise RuntimeError(f"share card: no {kind} {size} picture")
+                    tag = data.get("year") if kind == "year" else ""
+                    img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
+
+    def why():
+        # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
+        from due_crew.ui.why_dialog import WhyDialog
+        gs = [{"say": "3 suspended, 1 of them as leeches.", "fix": ("unsuspend",), "label": "Unsuspend them", "n": 3},
+              {"say": "New: today's 20 new cards in Anatomy are done.", "fix": ("more_new", 1, 43), "label": "43 more new today", "n": 1},
+              {"say": "Not due till Fri 16 Oct, by FSRS.", "fix": ("due_now",), "label": "Study it now", "n": 1},
+              {"say": "Learning: back at 15:40. Nothing to do: it comes back on its own.", "fix": None, "label": "", "n": 1},
+              {"say": "In <b>Custom</b> Study Session, a filtered deck, not in Anatomy: it shows when you study it.",
+               "fix": ("empty", 9), "label": "Empty Custom Study Session", "n": 1}]
+        fixed = []
+        dlg = WhyDialog(None, gs, fixed.append)
+        shoot(dlg, os.path.join(out, "why.png"))
+        if len([b for _s, b in dlg.rows if b]) != 4 or "Undo" not in dlg.note.text():
+            raise RuntimeError("why: a fix a reason, the undo note")
+        if dlg.rows[4][0].textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("why: a deck's name must be plain text")
+        dlg.rows[0][1].click()
+        if fixed[-1]["label"] != "Unsuspend them" or dlg.rows[0][1].isEnabled():
+            raise RuntimeError("why: the fix runs once")
+        dlg.show_groups(gs[3:4])
+        if len(dlg.rows) != 1 or dlg.note.isVisible():
+            raise RuntimeError("why: read again after a fix")
+        dlg.close()
+
+    def open_cards():
+        # 3.8.0: Browse › Due Crew: open its cards…: counted first, leeches stay, first in line ticked
+        from due_crew.ui.open_dialog import OpenDialog
+        asked = []
+        dlg = OpenDialog(None, "12 Strep <b>", "#Videos › Micro › 12 Strep", {"open": 46, "already": 2, "leech": 2},
+                         ["On Step 1: SLG 15, which count them"], on_open=lambda first, study: asked.append((first, study)))
+        settle()
+        if dlg.facts.textFormat() != QtCore.Qt.TextFormat.PlainText or "2 are leeches and stay suspended" not in dlg.facts.text():
+            raise RuntimeError(f"open: {dlg.facts.text()!r}")
+        shoot(dlg, os.path.join(out, "open-cards.png"))
+        dlg = OpenDialog(None, None, "", {"open": 3, "already": 0, "leech": 0}, on_open=lambda first, study: asked.append((first, study)))
+        dlg.show()
+        dlg.first.setChecked(False)
+        dlg.study_btn.click()
+        if asked != [(False, True)]:
+            raise RuntimeError(f"open: asked {asked!r}")
+        none = OpenDialog(None, "Renal", "", {"open": 0, "already": 5, "leech": 0})
+        if none.open_btn.isVisible() or none.first.isVisible():
+            raise RuntimeError("open: nothing to open shows no Open")
+        none.close()
+
+    def plan_tags():
+        # 3.8.0: Browse › tag for a plan: only plans I write; a tag's name from the
+        # server stays text; the notes already on it can come off; it goes on a click
+        from due_crew.ui.tag_dialog import TagDialog
+        pid, _code = STORE.add_plan("sam", "MS2 Block 1", "Big Step 1", [
+            {"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        STORE.plans[pid]["doc"]["tagroot"] = "MS2_Block_1"
+        STORE.plans[pid]["doc"]["tags"] = [{"id": "t1", "name": "SLG 12 <b>", "notes": ["guid000001", "guid000002"]}]
+        STORE.add_plan("igk", "Not mine", "Big Step 1", [{"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        got = []
+        dlg = TagDialog(None, CLIENT, ["guid000001", "guid000003", "guid000004"], lambda *a: got.append(a), outside=lambda p: 2)
+        settle()
+        names = [dlg.plan.itemText(i) for i in range(dlg.plan.count())]
+        if not any("MS2 Block 1" in n for n in names) or any("Not mine" in n for n in names):
+            raise RuntimeError(f"tag: plans listed {names!r}")
+        dlg.plan.setCurrentIndex(next(i for i, n in enumerate(names) if "MS2 Block 1" in n))
+        dlg.tag.setEditText("SLG 12 <b>")
+        settle(100)
+        if dlg.where.textFormat() != QtCore.Qt.TextFormat.PlainText or "DueCrew::MS2_Block_1::SLG_12_<b>" not in dlg.where.text():
+            raise RuntimeError(f"tag: where {dlg.where.text()!r}")
+        if "2 of them aren't in Big Step 1" not in dlg.where.text():
+            raise RuntimeError(f"tag: outside the deck {dlg.where.text()!r}")
+        if dlg.take_btn.isHidden() or "1" not in dlg.take_btn.text():
+            raise RuntimeError(f"tag: take off {dlg.take_btn.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-tag.png"))
+        dlg = TagDialog(None, CLIENT, ["guid000005"], lambda *a: got.append(a))
+        settle()
+        dlg.plan.setCurrentIndex(next(i for i in range(dlg.plan.count()) if "MS2 Block 1" in dlg.plan.itemText(i)))
+        dlg.tag.setEditText("SLG 14")
+        dlg.show()
+        dlg.add_btn.click()
+        settle()
+        if not got or got[-1][1] != "SLG 14" or got[-1][3] != ["guid000005"]:
+            raise RuntimeError(f"tag: sent {got!r} {dlg.status.text()!r}")
+        if not any(t["name"] == "SLG 14" for t in STORE.plans[pid]["doc"]["tags"]):
+            raise RuntimeError("tag: the plan didn't get it")
+        dlg.close()
+
+    for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
-                         ("report", report), ("plans", plans), ("schedule", schedule)):
+                         ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

@@ -27,6 +27,7 @@ from . import plans as P
 from .app import _state, cfg, save_cfg
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
+MISSES = P.our_deck("Today's misses")  # their filtered deck, under Due Crew's parent
 LEECH_MIN = 3  # new leeches this week before it suggests a look
 RECOVER_MAX = 200  # leeches recovered in a morning, at most
 REVIEWS_FRESH = 30.0  # seconds a reviews-due count is good for
@@ -82,13 +83,21 @@ def plan_dates(today):
         applied = st.get("applied") or {}
         crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
+        own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
+        own_days = st.get("own_opened") or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
-            if not opens or opens > end:
-                continue
             a = applied.get(u["id"])
             pr = (prog.get(p["id"]) or {}).get(u["id"])
             o, s, t = pr or [0, 0, 0]
+            if own:
+                if not P.opened_here(applied, u, prog.get(p["id"]) or {}):
+                    continue
+                if int(t) and int(s) >= int(t) and own_days.get(u["id"]) != today:
+                    continue
+                opens = today
+            if not opens or opens > end:
+                continue
             # 3.7.2: an even date (or a 3.2 schedule) opens in slices and is
             # applied only when its window ends: while it runs, what's due is
             # what has opened so far
@@ -106,7 +115,7 @@ def plan_dates(today):
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
                           "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
-                          "what": P.topics_line([u]),
+                          "what": P.topics_line([u]), "topics": P.topic_view([u]),  # 3.8.0: each a link
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
@@ -122,9 +131,43 @@ def plan_dates(today):
     return dates, events, reviews
 
 
+def plan_every(today):
+    """3.8.0: the weekly lines of the plans I follow and run here, as
+    due.view takes them: {pid, plan, first, last, lines}, from my first date
+    to my last (or the plan's last event or end date, if later)."""
+    pf = _pf()
+    state = pf._state_cfg()
+    out = []
+    for p in pf.followed():
+        st = state.get(p["id"])
+        doc = p["doc"]
+        lines = [x for x in doc.get("every") or [] if isinstance(x, dict)]
+        if not lines or p.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
+            continue
+        days = [str(u.get("opens") or "") for u in P.units(doc) if u.get("opens")]
+        if not days:
+            continue
+        ends = days + [str(e.get("day") or "") for e in doc.get("events") or [] if isinstance(e, dict)]
+        ends += [str(doc["end"])] if doc.get("end") else []
+        out.append({"pid": p["id"], "plan": P.plan_title(p), "first": min(days), "last": max(ends), "lines": lines})
+    return out
+
+
+def _every_line(key, today, any_day=False):
+    """(plan, line) for a weekly line's key, on today (or any day), else (None, None)."""
+    pid = key.split(":")[0]
+    for p in plan_every(today):
+        if p["pid"] == pid:
+            keys = D.every_keys(pid, p["lines"])
+            if key in keys and (any_day or D.every_on(p, p["lines"][keys.index(key)], today)):
+                return p, p["lines"][keys.index(key)]
+    return None, None
+
+
 def _reviews():
-    """{due, done}: reviews and learning due now across my decks, and
-    whether I've reviewed today. Cached a little: the board redraws often."""
+    """{due, done, back, at}: reviews and learning due now across my decks,
+    whether I've reviewed today, and the learning cards back later today
+    (how many, the first one's time). Cached a little: the board redraws often."""
     hit = _state.get("due_reviews")
     if hit and time.time() - hit[0] < REVIEWS_FRESH:
         return hit[1]
@@ -134,11 +177,45 @@ def _reviews():
         due = sum(int(n.review_count) + int(n.learn_count) for n in tree.children)
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         done = int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", start) or 0)
-        out = {"due": due, "done": done}
+        # 3.8.0: learning cards that come back later today (past Anki's learn-ahead)
+        now = int(time.time())
+        ahead = int(mw.col.get_config("collapseTime", 1200) or 0)
+        back, first = mw.col.db.first("SELECT count(), min(due) FROM cards WHERE queue = 1 AND due > ? AND due < ?",
+                                      now + ahead, int(mw.col.sched.day_cutoff)) or (0, None)
+        t = time.localtime(int(first)) if back and first else None
+        out = {"due": due, "done": done, "back": int(back or 0), "at": f"{t.tm_hour}:{t.tm_min:02d}" if t else "",
+               "next": _next_deck(tree)}
+        if back and first:
+            _flip_at(int(first) - ahead)
     except Exception:
         traceback.print_exc()
     _state["due_reviews"] = (time.time(), out)
     return out
+
+
+def _flip_at(when):
+    """3.8.0: when the first learning card comes back (inside Anki's
+    learn-ahead), Reviews says it's due: one timer, the earliest, redraws
+    the box while the Decks screen shows it. Gone with the profile."""
+    pending = _state.get("back_timer")
+    if pending and pending[0] <= when and pending[1] == app.generation:
+        return
+    gen = app.generation
+    _state["back_timer"] = (when, gen)
+    delay = max(5, min(when - int(time.time()), 86400)) * 1000 + 2000
+
+    def fire():
+        if _state.get("back_timer") != (when, gen) or app.generation != gen:
+            return
+        _state["back_timer"] = None
+        _state["due_reviews"] = None
+        if getattr(mw, "state", "") == "deckBrowser":
+            _swap(cfg())
+    try:
+        from aqt.qt import QTimer
+        QTimer.singleShot(int(delay), fire)
+    except Exception:
+        traceback.print_exc()
 
 
 def _day_state():
@@ -167,10 +244,7 @@ def suggestions(c, today):
         return list(hit[1])
     out = []
     try:
-        start = (mw.col.sched.day_cutoff - 86400) * 1000
-        n = int(mw.col.db.scalar("SELECT count(DISTINCT cid) FROM revlog WHERE id >= ? AND ease = 1", start) or 0)
-        if n >= AGAIN_MIN and "again" not in gone:
-            out.append({"key": "again", "text": f"Go over today's {n:,} misses", "go": "Study"})
+        # 3.8.0: today's misses are Study today's last step, not a suggestion of their own
         if not c.get("due_leeches"):
             week = (mw.col.sched.day_cutoff - 8 * 86400) * 1000
             lee = int(mw.col.db.scalar(
@@ -192,6 +266,24 @@ def notes():
              "go": "See them"}] if n and "recovered" not in (st.get("dismissed") or []) else []
 
 
+YOU_TABS = D.TABS + ("plans", "insights")  # 3.8.0: the You bubble's tabs, Due's lists first
+
+
+def you_tab(c):
+    """The You bubble's tab on this computer (`due_tab`), Today when unknown."""
+    tab = c.get("due_tab")
+    return tab if tab in YOU_TABS else "today"
+
+
+def folded(c, v):
+    """The bubble folded or open: Due's own rule with its lists on (v), else
+    my Hide/Show for today."""
+    if v:
+        return bool(v.get("folded"))
+    choice = c.get("due_fold")
+    return isinstance(choice, dict) and choice.get("day") == _today() and bool(choice.get("folded"))
+
+
 def view(c):
     """due.view for the board, or None when the box is off or there's no day yet."""
     today = _today()
@@ -202,9 +294,11 @@ def view(c):
         items = D.prune(_items(c), today)
         v = D.view(today, dates, items, _ticks(c), tab=c.get("due_tab", "today"), events=events,
                    review_days=revs, reviews=_reviews() if mw.col else None,
-                   suggestions=suggestions(c, today), notes=notes())
+                   suggestions=suggestions(c, today), notes=notes(), every=plan_every(today))
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
+        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
+        v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
     except Exception:
         traceback.print_exc()
         return None
@@ -243,6 +337,8 @@ def parts(col, idxs, today):
             a = applied.get(u["id"])
             running = (not a and int((prog.get(u["id"]) or [0])[0]) > 0
                        and bool(u.get("even") or p.get("sched")))  # an even date part open (3.7.2)
+            if P.own_pace(p):  # 3.8.0: at my own pace, the dates I opened
+                opens = today if P.opened_here(applied, u, prog) else "9999"
             if opens == today or (opens < today and (a or running) and not str(a).startswith("skip:")):
                 got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
                 if got:
@@ -286,8 +382,10 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
 
 
 def morning(c):
-    """Once per Anki day, at the refresh: recover leeches when asked."""
-    if not c.get("due_leeches") or not mw.col or not _today():
+    """Once per Anki day, at the refresh: recover leeches when asked. Only on
+    the Decks screen: mid-review its undo step would sit on my last answer
+    (as the plans' morning waits for Decks)."""
+    if not c.get("due_leeches") or not mw.col or not _today() or getattr(mw, "state", "") != "deckBrowser":
         return
     pc, st = _day_state()
     if st.get("leeches_done"):
@@ -301,6 +399,22 @@ def morning(c):
     _put_day(pc, st)
     if st["recovered"]:
         _pf()._after_change()
+
+
+def recover_now():
+    """3.8.0: Recover leeches switched on: today's go now, and it says what
+    happened (it waited for the next refresh and said nothing)."""
+    c = cfg()
+    if not c.get("due_leeches") or not mw.col or not _today():
+        return
+    pc, st = _day_state()
+    st["leeches_done"] = False
+    _put_day(pc, st)
+    morning(c)
+    _pc, st = _day_state()
+    n = len(st.get("recovered") or [])
+    tooltip(f"{n:,} leech{'es' if n != 1 else ''} back as new cards. Edit › Undo puts {'them' if n != 1 else 'it'} back."
+            if n else "No leeches to recover now. Each morning looks again.")
 
 
 def after_refresh():
@@ -327,22 +441,30 @@ def add(c, when, text, raw=False):
         return
     text = " ".join(unquote(text).split())
     day = today if when == "today" else "" if when == "later" else when
+    rule = None
     if not raw:
-        text, said = D.parse(text, today)
-        if said is not None:
-            day = said
+        text, rule = D.parse_repeat(text)  # 3.8.0: "every mon" first
+        if not rule:
+            text, said = D.parse(text, today)
+            if said is not None:
+                day = said
     if not D.day_ok(day, today):
         day = today
     items = D.prune(_items(c), today)
-    items, it = D.add(items, text, day, today)
+    items, it = D.add(items, text, day, today, rule=rule)
     if not it:
         tooltip("That's 60 open. Tick or delete some first." if D.open_count(items) >= D.MAX_OPEN else "Nothing to add.")
         return
     _save(c, items=items)
     tab = c.get("due_tab", "today")
-    shown = (tab == "later" and not day) or (tab == "today" and day == today) or (
-        tab == "upcoming" and day and day <= D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD)))
-    if not shown:
+    if it.get("r"):
+        shown = tab == "upcoming" or (tab == "today" and D.on_day(it, today))
+        if not shown:
+            _state["due_toast"] = (time.time(), {"text": "Added, " + D.repeat_label(it["r"]), "tab": "upcoming"})
+    else:
+        shown = (tab == "later" and not day) or (tab == "today" and day == today) or (
+            tab == "upcoming" and day and day <= D.iso(D.d(today) + datetime.timedelta(days=D.AHEAD)))
+    if not shown and not it.get("r"):
         _state["due_toast"] = (time.time(), {"text": "Added to " + (D.long_day(day, today) if day else "Later"),
                                              "tab": "later" if not day else "upcoming"})
     _swap(c)
@@ -358,6 +480,14 @@ def item_menu(c, ident):
         return
     m = QMenu(mw)
     tomorrow = D.iso(D.d(today) + datetime.timedelta(days=1))
+    if it.get("r"):
+        # 3.8.0: a repeat has no day to move to; it stops instead
+        m.addAction("Edit…").triggered.connect(lambda: _edit(ident))
+        m.addAction("Stop repeating").triggered.connect(lambda: stop_repeat(cfg(), ident))
+        m.addSeparator()
+        m.addAction("Delete").triggered.connect(lambda: delete(cfg(), ident))
+        m.exec(QCursor.pos())
+        return
 
     def move(day):
         c2 = cfg()
@@ -418,18 +548,38 @@ def delete(c, ident):
     _swap(c)
 
 
+def stop_repeat(c, ident):
+    """3.8.0: a repeat becomes a one-off today."""
+    _save(c, items=D.change(_items(c), ident, _today(), r=""))
+    _swap(c)
+
+
 def tick(c, ident):
     items = _items(c)
     it = next((x for x in items if x["id"] == ident), None)
     if it:
-        _save(c, items=D.change(items, ident, _today(), done=not it["done"]))
+        today = _today()
+        _save(c, items=D.change(items, ident, today, done=not D.done_on(it, today)))
         _swap(c)
 
 
 def todo_tick(c, key):
-    """An author's line, ticked by hand (only once its date has opened)."""
+    """An author's line, ticked by hand (only once its date has opened); a
+    weekly one (3.8.0) for today, on its day."""
     today = _today()
     pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
+    if uid == "every":
+        p, _ln = _every_line(key, today)
+        if not p:
+            return
+        ticks = _ticks(c)
+        if ticks.get(key) == today:
+            ticks.pop(key, None)
+        else:
+            ticks[key] = today
+        _save(c, ticks=D.clean_ticks(ticks))
+        _swap(c)
+        return
     dates, _e, _r = plan_dates(today)
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
     keys = D.line_keys(pid, uid, (x or {}).get("todo"))
@@ -449,6 +599,12 @@ def todo_tick(c, key):
 def open_link(key):
     """An author's line's link, in the browser: only an https one on a date I follow."""
     pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
+    if uid == "every":
+        _p, ln = _every_line(key, _today(), any_day=True)
+        if ln and str(ln.get("url") or "").startswith("https://"):
+            from aqt.utils import openLink
+            openLink(ln["url"])
+        return
     dates, _e, _r = plan_dates(_today())
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
     todo = (x or {}).get("todo") or []
@@ -467,9 +623,9 @@ def go(key):
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         cids = [int(x) for x in mw.col.db.list(
             "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)][:500]
-        if cids and pf._filtered(mw.col, "Due Crew · today's misses", cids):
+        if cids and pf._filtered(mw.col, MISSES, cids):
             pf._after_change()
-            did = mw.col.decks.id_for_name("Due Crew · today's misses")
+            did = mw.col.decks.id_for_name(MISSES)
             if did:
                 mw.col.decks.select(did)
                 mw.moveToState("overview")
@@ -496,7 +652,9 @@ def on_message(cmd, parts):
     """The board's Due commands (duetab, dueadd, …). True when handled."""
     c = cfg()
     arg = parts[2] if len(parts) > 2 else ""
-    if cmd == "duetab" and arg in D.TABS:
+    if cmd == "duetab" and arg in YOU_TABS:
+        if arg in (c.get("hidden_tabs") or []):
+            c["hidden_tabs"] = [k for k in c["hidden_tabs"] if k != arg]  # a link to it shows it again
         c["due_tab"] = arg
         c["due_fold"] = {"day": _today(), "folded": False}
         save_cfg(c)
@@ -504,8 +662,7 @@ def on_message(cmd, parts):
         _swap(c)
     elif cmd == "duefold":
         # Hide or Show by hand: it holds for today; tomorrow Due decides again
-        v = view(c)
-        c["due_fold"] = {"day": _today(), "folded": not (v or {}).get("folded")}
+        c["due_fold"] = {"day": _today(), "folded": not folded(c, view(c))}
         save_cfg(c)
         _swap(c)
     elif cmd == "dueadd" and len(parts) > 4:
@@ -524,6 +681,8 @@ def on_message(cmd, parts):
         open_link(":".join(parts[2:5]))
     elif cmd == "duego" and arg:
         go(arg)
+    elif cmd == "duestudy":
+        study_today()  # 3.8.0
     elif cmd == "duex" and arg:
         dismiss(arg)
     elif cmd == "dueshow" and arg in D.TABS:
@@ -534,3 +693,139 @@ def on_message(cmd, parts):
     else:
         return False
     return True
+
+
+# ---- 3.8.0: Study today, one button through the day ----
+
+def _plan_decks():
+    """The decks of the plans I follow (not paused), in plan order."""
+    pf = _pf()
+    st = pf._state_cfg()
+    out = []
+    for p in pf.followed():
+        did = (st.get(p["id"]) or {}).get("deck_id")
+        if p.get("paused") or not did or not pf._deck_ok(mw.col, did) or int(did) in out:
+            continue
+        out.append(int(did))
+    return out
+
+
+def _due_now(col, dids, tree=None):
+    """{deck id: cards Anki would show now} for these decks and every top
+    deck, from Anki's deck tree (its limits, its subdecks)."""
+    out = {}
+
+    def walk(node, top):
+        if top or int(node.deck_id) in dids:
+            out[int(node.deck_id)] = int(node.review_count) + int(node.learn_count) + int(node.new_count)
+        for ch in node.children:
+            walk(ch, False)
+    for ch in (tree or col.sched.deck_due_tree()).children:
+        walk(ch, True)
+    return out
+
+
+def _next_deck(tree):
+    """3.8.0 (Board in Motion, 35): the deck Study today opens first, its
+    last name, for the button; from the tree _reviews already read."""
+    try:
+        plan = _plan_decks()
+        step = D.study_next(plan, _due_now(mw.col, set(plan), tree), 0, True)
+        return str(mw.col.decks.name(int(step[1]))).split("::")[-1] if step else ""
+    except Exception:
+        traceback.print_exc()
+        return ""
+
+
+def _misses_today(col):
+    start = (col.sched.day_cutoff - 86400) * 1000
+    return [int(x) for x in col.db.list("SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)]
+
+
+def study_today():
+    """Study today › (the box, its folded line, Ctrl+Shift+S): the walk
+    starts. Plans' decks first, then the deck with the most due, then
+    today's misses, each in Anki's own review; it goes on when a deck runs
+    out and ends when I leave the review."""
+    if not mw.col:
+        return
+    _state["study_walk"] = {"misses": False, "steps": 0}
+    study_step(first=True)
+
+
+def study_step(first=False):
+    w = _state.get("study_walk")
+    if not w or not mw.col:
+        return
+    w["steps"] += 1
+    step = None
+    if w["steps"] <= D.STUDY_STEPS:
+        try:
+            plan = _plan_decks()
+            misses = _misses_today(mw.col)
+            step = D.study_next(plan, _due_now(mw.col, set(plan)),
+                                len(misses) if len(misses) >= AGAIN_MIN else 0, w["misses"])
+        except Exception:
+            traceback.print_exc()
+    if step and step[0] == "misses":
+        w["misses"] = True
+        pf = _pf()
+        name = MISSES
+        if pf._filtered(mw.col, name, _misses_today(mw.col)[:500]):
+            pf._after_change()
+            did = mw.col.decks.id_for_name(name)
+            if did:
+                return _study_deck(did, first, "today's misses")
+        step = None
+    if step:
+        return _study_deck(step[1], first)
+    _state["study_walk"] = None
+    r = _reviews() or {}
+    back = int(r.get("back") or 0)
+    tooltip(f"Done for now · {back:,} learning card{'s' if back != 1 else ''} back at {r.get('at')}"
+            if back and r.get("at") else "Nothing due now." if first else "Done for today.")
+    if not first and getattr(mw, "state", "") != "deckBrowser":
+        mw.moveToState("deckBrowser")
+
+
+def _study_deck(did, first, label=None):
+    try:
+        mw.col.decks.select(int(did))
+        if not first:
+            tooltip("Next: " + (label or mw.col.decks.name(int(did))), period=2500)
+        _state["study_walk"]["deck"] = int(did)
+        mw.moveToState("review")
+    except Exception:
+        traceback.print_exc()
+        _state["study_walk"] = None
+
+
+def walk_keys(state, shortcuts):
+    """Escape while Study today walks the review: the walk stops there, the
+    deck stays open (Anki's review has no Escape of its own)."""
+    if state == "review" and _state.get("study_walk"):
+        shortcuts.append(("Esc", stop_walk))
+
+
+def stop_walk():
+    if _state.get("study_walk"):
+        _state["study_walk"] = None
+        tooltip("Study today stopped. This deck stays open.")
+
+
+def on_state(new, old):
+    """Anki's screen changed: a walk goes on when its deck runs out (Anki's
+    review hands over to the deck's overview with nothing left), and ends
+    when I leave it any other way."""
+    if not _state.get("study_walk") or new == "review":
+        return
+    if new == "overview" and old == "review" and mw.col:
+        try:
+            left = sum(int(x) for x in mw.col.sched.counts())
+        except Exception:
+            left = 1
+        if not left:
+            from aqt.qt import QTimer
+            QTimer.singleShot(0, study_step)
+            return
+    _state["study_walk"] = None

@@ -81,15 +81,20 @@ const iso = (d) => d.toISOString().slice(0, 10);
 const parseIso = (s) => new Date(`${s}T00:00:00Z`);
 const addDays = (s, n) => { const d = parseIso(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 const pretty = (s) => { const d = parseIso(s); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
-const today = () => iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000));
+// 3.8.0: my Anki day, which rolls over at the hour my Anki says (/auth/me), not at midnight
+let rollover = 0;
+const today = () => iso(new Date(Date.now() - new Date().getTimezoneOffset() * 60000 - rollover * 3600000));
 const nextMonday = () => { let d = today(); while (parseIso(d).getUTCDay() !== 1) d = addDays(d, 1); return d; };
 const spaced = (code) => `${code.slice(0, 4)} ${code.slice(4)}`;
 const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
 const uid8 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 
 async function copy(text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
-  catch { btn.textContent = "Select and copy"; }
+  try {
+    await navigator.clipboard.writeText(text);
+    if (window.dcMotion) return dcMotion.copied(btn);  // 3.8.0: Copied ✓ in place, then back
+    btn.textContent = "Copied";
+  } catch { btn.textContent = "Select and copy"; }
   setTimeout(() => { btn.textContent = "Copy"; }, 1600);
 }
 
@@ -156,6 +161,7 @@ let me = null;  // {uid, name} or null
 
 async function whoami() {
   try { me = await api("GET", "/auth/me"); } catch { me = null; }
+  rollover = Math.max(0, Math.min(23, Number(me?.rollover) || 0));
   if (me) wearAccent(me.accent || "green");
   renderNav();
   return me;
@@ -255,11 +261,24 @@ function codeStep(address, next) {
     h("p", { class: "muted" }, "We sent a code to ", h("b", {}, address), ". It expires in 10 minutes."),
     h("label", { for: "code" }, "Code"), code,
     h("div", {}, h("button", { type: "submit" }, "Sign in")), status);
+  // 3.8.0 (Board in Motion, 33): each digit lands as it's typed or pasted; a check when the code's right
+  let digits = 0;
+  code.addEventListener("input", () => {
+    const n = code.value.replace(/\D/g, "").length;
+    if (n > digits) window.dcMotion?.anim(code, [{ transform: "scale(1)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }], { duration: 140 });
+    digits = n;
+  });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     status.className = "status"; status.textContent = "Checking…";
     try {
       const r = await api("POST", "/auth/verify", { email: address, code: code.value.replace(/\D/g, ""), device: "duecrew.com", web: true });
+      status.className = "status good"; status.textContent = "Signed in ✓";
+      if (window.dcMotion?.ok()) {
+        status.style.display = "inline-block";
+        dcMotion.anim(status, [{ transform: "scale(.7)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: 0.6 }, { transform: "none" }], { duration: 260 });
+        await new Promise((ok) => setTimeout(ok, 420));
+      }
       if (r.new || !r.name) return nameStep(next);
       await whoami();
       go(next);
@@ -694,7 +713,7 @@ function yourData(lg, set) {
   const days = { length: lg?.n || 0 }, first = lg?.first || "";
   const items = Array.isArray(set.due_items) ? set.due_items : [];
   const ticks = set.due_ticks && typeof set.due_ticks === "object" ? Object.keys(set.due_ticks).length : 0;
-  const open = items.filter((x) => x && !(set.due_ticks || {})[x.id]).length;
+  const open = items.filter((x) => x && (dueRepeats(x) || !x.done)).length;
   const when = (d) => { const p = parseIso(d); return `${MONTHS[p.getUTCMonth()]} ${p.getUTCFullYear()}`; };
   const row = (title, line, ...act) => h("div", { class: "drow" }, h("div", {}, h("b", {}, title), h("p", { class: "muted small" }, line)), h("div", { class: "row" }, ...act));
   const dl = h("button", { class: "ghost", onclick: async () => {
@@ -781,6 +800,25 @@ const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6]
   const d = addDays(mon, i); const v = days?.[d];
   return h("i", { class: v?.studied || v?.reviews ? "on" : d > today() ? "later" : "", title: pretty(d) });
 }));
+
+// 3.8.0: a squad's last 7 days together, totals only: [study days between
+// us, how many of us studied]. Twin of board.squad_week.
+function squadWeek(rows, day) {
+  // a row's week is its 7 days to its own last sync: one `age` days ago counts at most 7 - age of
+  // them, a week old or more none, a day ahead (a timezone ahead) as today; board.squad_week
+  const at = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? Date.parse(`${iso}T00:00:00Z`) : NaN);
+  const t = at(day);
+  if (!Number.isFinite(t)) return [0, 0];
+  const days = [];
+  for (const r of rows || []) {
+    if (typeof r.week !== "number" || !Number.isFinite(r.week)) continue;
+    const d = at(r.day);
+    if (!Number.isFinite(d)) continue;
+    const age = Math.round((t - d) / 86400000);
+    if (age >= -1 && age < 7) days.push(Math.min(7 - Math.max(age, 0), Math.max(0, Math.trunc(r.week))));
+  }
+  return [days.reduce((a, d) => a + d, 0), days.filter((d) => d).length];
+}
 
 // ---- 3.3: the board, as the add-on draws it (due_crew/board.py) ----
 
@@ -893,11 +931,17 @@ const Board = (() => {
     document.querySelectorAll(".cheer-pop").forEach((x) => x.remove());
     const pop = h("div", { class: "cheer-pop", role: "menu" }, QUICK.map((e) => h("button", { class: "linkish", title: `Send ${e}`, onclick: async () => {
       pop.remove();
-      try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; }
+      try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; window.dcMotion?.cheer(uid, e); }
       catch { anchor.title = "Couldn't send. Try again."; }
     } }, e)));
-    anchor.after(pop);
-    setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { pop.remove(); document.removeEventListener("click", off); } }), 0);
+    // 3.8.0: on the page, not in the table's scroll box (which clipped it), opening up near the bottom
+    document.body.append(pop);
+    const at = anchor.getBoundingClientRect(), ph = pop.offsetHeight;
+    Object.assign(pop.style, { position: "fixed", right: `${Math.max(8, window.innerWidth - at.right)}px`,
+      top: `${at.bottom + 4 + ph > window.innerHeight ? Math.max(8, at.top - ph - 4) : at.bottom + 4}px` });
+    const close = () => { pop.remove(); window.removeEventListener("scroll", close, true); };
+    window.addEventListener("scroll", close, true);
+    setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { close(); document.removeEventListener("click", off); } }), 0);
   }
 
   /** board.plan_target: a status that starts with a number is a plan. */
@@ -936,11 +980,13 @@ const Board = (() => {
     return cell;
   }
 
-  function table(people, period, today, onSort) {
+  /** board._corner (3.8.0, head row B): a picker in the header's top-left corner. */
+  const corner = (picker) => h("th", { class: "lt corner", colspan: 2 }, picker);
+  function table(people, period, today, onSort, picker = null) {
     const kept = store("dc-sort") || "reviews";  // "week" is the squads' own column
     const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
     const [fresh, dormant] = rows(people, period, sort, today);
-    const head = h("tr", {}, h("th"), h("th"), HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+    const head = h("tr", {}, picker ? corner(picker) : [h("th"), h("th")], HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
     let n = 0;
     const tr = (r, rank) => {
@@ -948,10 +994,10 @@ const Board = (() => {
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
       const dash = r.paused || r.quiet || r.notyet;
       const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
-      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim() },
+      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim(), "data-uid": r.p.uid },
         h("td", { class: "rk" }, rank), nameCell(r, period),
-        h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n" }, dash || r.time === null ? "—" : fmtTime(r.time)),
-        h("td", { class: "n" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
+        h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n k-time" }, dash || r.time === null ? "—" : fmtTime(r.time)),
+        h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
         h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
     };
     // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
@@ -967,36 +1013,44 @@ const Board = (() => {
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
       for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
     }
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
+    // board.py: nothing to rank (me alone, the day I joined) takes no medal
+    const blank = (r) => [r.reviews, r.time, r.retention, r.streak].every((v) => v === null);
+    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); if (blank(r)) return tr(r, "—"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
       ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
     return h("div", { class: "scrollx" }, tbl);
   }
 
   /** show-up mode, as _presence_html: a square a day, Monday to today,
-   *  nothing ranked; sorted by squares lit, then name. */
-  function presence(people, today) {
+   *  nothing ranked; sorted by squares lit, then name. picker: Crew's views
+   *  in the header's corner, "N showed up today" under the table. */
+  function presence(people, today, picker = null) {
     const mon = Sched.monday(today); const wk = []; for (let x = mon; x <= today; x = addDays(x, 1)) wk.push(x);
     const [fresh, dormant] = rows(people, "today", "reviews", today);
     const lit = (r) => wk.filter((l) => showed(dayOf(r.p.week || {}, l))).length;
     fresh.sort((a, b) => lit(b) - lit(a) || (a.p.name || "").toLowerCase().localeCompare((b.p.name || "").toLowerCase()));
-    const todayN = fresh.filter((r) => showed(dayOf(r.p.week || {}, today) || dayOf(r.p.week || {}, addDays(today, 1)))).length;
+    const todayN = fresh.filter((r) => showed(dayOf(r.p.week || {}, addDays(today, 1)) || dayOf(r.p.week || {}, today))).length;  // as rows(): a friend ahead's today first
     const note = (r) => r.paused ? h("span", { class: "ago faded it" }, " · on a break")
       : r.quiet ? (ago(r.last)[0] ? h("span", { class: "ago faded" }, ` (${ago(r.last)[0]})`) : null)
       : r.stale ? h("span", { class: "ago faded" }, " · yesterday")
       : r.away ? h("span", { class: "ago faded" }, ` ✈️ ${r.away}`) : null;
-    return h("div", { class: "scrollx" }, h("table", { class: "brdt" },
-      h("thead", {}, h("tr", {}, h("th", { class: "lt", colspan: 2 }, `${todayN} showed up today`), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
+    const said = `${todayN} showed up today`;
+    return h("div", {}, h("div", { class: "scrollx" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, picker ? corner(picker) : h("th", { class: "lt", colspan: 2 }, said), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
       h("tbody", {}, [...fresh, ...dormant].map((r) => h("tr", { class: [r.you ? "you" : "", r.paused || r.quiet || r.stale ? "dim" : ""].join(" ").trim() },
         h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name || "?"}`), note(r)),
-        wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); }))))));
+        wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); })))))),
+      picker ? h("p", { class: "muted small sum" }, said) : null);
   }
 
   /** The Decks tab, as _decks_body: a group per deck I share, my bar and
-   *  each crewmate's with the same deck. */
-  function decks(me, crew, decksBy, today) {
+   *  each crewmate's with the same deck. picker: Crew's views, on a line of
+   *  their own with the key at its right (3.8.0, head row B). */
+  function decks(me, crew, decksBy, today, picker = null) {
     const mine = decksBy[me.uid] || [];
-    if (!mine.length) return h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own.");
+    const key = () => h("span", { class: "dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked");
+    const top = picker ? h("div", { class: "pline" }, picker, mine.length ? key() : null) : null;
+    if (!mine.length) return h("div", {}, top, h("p", { class: "muted small" }, "No shared decks yet. In Anki: Settings › Shared decks. Matching decks pair up on their own."));
     const match = (a, b) => { const x = new Set(a.sig || []); return (b.sig || []).some((g) => x.has(g)); };
     const days = [today, addDays(today, 1)];
     const bar = (name, d, isMe) => {
@@ -1009,9 +1063,9 @@ const Board = (() => {
           h("i", { class: "fs", style: `width:${pct(d.seen)}%` }), h("i", { class: "fm", style: `width:${pct(d.mature)}%` })),
         h("span", { class: "n" }, h("span", {}, counts), d.today && days.includes(d.day) ? h("small", { class: "dd" }, `+${Number(d.today).toLocaleString()} today`) : null));
     };
-    return h("div", {}, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
+    return h("div", {}, top, mine.map((d) => h("div", { class: "dg" }, h("b", { class: "dgh" }, d.name),
       bar(me.name || "You", d, true), crew.map((f) => { const od = (decksBy[f.uid] || []).find((x) => match(d, x)); return od ? bar(f.name, od, false) : null; }))),
-      h("p", { class: "muted small dleg dkey" }, h("i", { class: "fm" }), "mature", h("i", { class: "fs" }), "seen", h("i", { class: "fo" }), "unlocked"));
+      top ? null : h("p", { class: "muted small dleg" }, key()));
   }
 
   /** A squad board, as _squads_html: one squad at a time behind a
@@ -1024,7 +1078,9 @@ const Board = (() => {
     const y = d.getUTCFullYear(); const first = new Date(Date.UTC(y, 0, 4));
     return `${y}-W${String(1 + Math.round(((d - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7)).padStart(2, "0")}`;
   };
-  async function squads(showUp, crewUids, pendingUids, onSort, refresh) {
+  /** plans: 3.8.0, the plans whose squad I'm in ({id: "plan:<plan id>", pid,
+   *  name}), pills after my own; onLeft(pid) when I leave one here. */
+  async function squads(showUp, crewUids, pendingUids, onSort, refresh, plans = [], onLeft = () => {}) {
     const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
@@ -1032,14 +1088,17 @@ const Board = (() => {
     }
     const list = squadsGot.list;
     const joinOrCreate = h("button", { class: "linkish add", onclick: () => { const box = document.querySelector(".rail .codebox input, .rail input"); if (box) { box.focus(); box.scrollIntoView({ block: "center" }); } } }, "+ join or create");
-    if (!list.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
+    if (!list.length && !plans.length) return h("div", {}, h("div", { class: "sqsw" }, joinOrCreate),
       h("p", { class: "muted small" }, "Join with a code, or make one in Anki."));
     let cur = store("dc-squad");
-    if (!list.some((q) => q.id === cur)) cur = list[0].id;
+    if (!list.some((q) => q.id === cur) && !plans.some((q) => q.id === cur)) cur = (list[0] || plans[0]).id;
+    const pill = (q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name);
+    const sw = h("div", { class: "sqsw" }, list.map(pill), plans.map(pill), joinOrCreate);
+    const plan = plans.find((q) => q.id === cur);
+    if (plan) return h("div", {}, sw, PlanSquad.view(plan.pid, onSort, { left: () => { store("dc-squad", ""); onLeft(plan.pid); } }));
     // only the squad on screen is fetched; another one when it's picked
     if (!(cur in squadsGot.boards)) squadsGot.boards[cur] = await api("GET", `/squads/${cur}?wk=${isoWeek(day)}`).catch(() => null);
     const sq = squadsGot.boards[cur];
-    const sw = h("div", { class: "sqsw" }, list.map((q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name)), joinOrCreate);
     if (!sq) return h("div", {}, sw, h("p", { class: "muted small" }, "Couldn’t load. Check your connection and Refresh."));
     const sort = store("dc-sort") || "reviews";
     const field = { reviews: "reviews", time: "studyTimeMs", retention: "accuracy", streak: "streak", week: "week" }[sort] || "reviews";
@@ -1053,7 +1112,7 @@ const Board = (() => {
     const together = live.reduce((n, r) => n + (r.reviews || 0), 0);
     let line = `${rows.length.toLocaleString()} in ${sq.name}` + (sq.open === false ? " · locked" : "");
     if (live.length) line += showUp ? ` · ${live.length.toLocaleString()} showed up today` : ` · ${live.length.toLocaleString()} studying today · ${together.toLocaleString()} reviews together`;
-    const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+    const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
     const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
     let n = 0;
@@ -1068,10 +1127,10 @@ const Board = (() => {
       else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
       const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
       const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
-      const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
+      const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n k-time" }, "—"), h("td", { class: "n k-retention" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
         h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
-        h("td", { class: "n" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
-        h("td", { class: "n" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
+        h("td", { class: "n k-time" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
+        h("td", { class: "n k-retention" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
         h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"), wk7];
       return h("tr", { class: [you ? "you" : "", today && !nyet ? "" : "dim"].join(" ").trim() },
         h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), notes), cells);
@@ -1114,8 +1173,13 @@ const Board = (() => {
     acts.push(leave);
     const foot = h("div", { class: "sqline" }, acts.flatMap((a, i) => (i ? [" · ", a] : [a])));
     if (!body.length) return h("div", {}, sw, bingo, h("p", { class: "muted small" }, "No one’s synced yet."), foot);
-    return h("div", {}, sw, bingo, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
-      h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))), foot);
+    // 3.8.0: the squad's week, totals only, as board._squad_week_line
+    const [wkDays, wkPeople] = squadWeek(rows, day);
+    const wkLine = wkPeople >= 2 ? h("p", { class: "muted small sum sqwk" }, "Last 7 days: ", h("b", {}, wkDays.toLocaleString()),
+      ` study days between ${wkPeople.toLocaleString()} of you`) : null;
+    // 3.8.0, head row B: the squads' names in the table's corner, its line under it, then the bingo card
+    return h("div", {}, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
+      h("thead", {}, h("tr", {}, corner(sw), heads)), h("tbody", {}, body))), h("p", { class: "muted small sum" }, line), wkLine, bingo, foot);
   }
 
   function shareText(people, today) {
@@ -1148,45 +1212,65 @@ async function home() {
   const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
-  // board.py _head: the add-on's tabs, Plans included
-  const tabs = showUp ? [["today", "Crew"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"], ["squads", "Squads"], ["plans", "Plans"]];
-  let tab = Board.store("dc-tab") || "today";
-  if (!tabs.some(([k]) => k === tab)) tab = "today";
+  // board.py _head (3.8.0): the board is your people, Crew and Squads.
+  // Crew's views are its picker (crew_views: Today, Week, Decks; show-up mode
+  // has This week and Decks), and the Crew pill goes back to the last one.
+  // What's mine (Anki's You bubble: Due, Plans) is the rail's.
+  const tabs = [["crew", "Crew"], ["squads", "Squads"]];
+  const views = showUp ? [["today", "This week"], ["decks", "Decks"]] : [["today", "Today"], ["week", "Week"], ["decks", "Decks"]];
+  let tab = Board.store("dc-tab") || "crew";
+  let view = Board.store("dc-crew") || "today";
+  if (tab === "today" || tab === "week" || tab === "decks") { view = tab; tab = "crew"; }  // a tab before 3.8.0
+  if (!tabs.some(([k]) => k === tab)) tab = "crew";  // and Plans, now the rail's
+  if (showUp && view === "week") view = "today";  // _crew_on: one view for both
+  if (!views.some(([k]) => k === view)) view = "today";
   const pills = h("span", { class: "pills" });
   const panel = h("div");
   const fetched = Date.now();
   const updated = h("span", { class: "muted" });
+  // 3.8.0: what changed moves, as on the add-on's board (motion.js, the same file)
   async function draw() {
+    const root = pills.closest(".brd") || panel.parentNode || panel;
+    let mo = null;
+    try { mo = window.dcMotion ? dcMotion.before(root) : null; } catch { mo = null; }
+    await drawNow();
+    try { if (mo) dcMotion.after(root, mo); } catch { /* the board's drawn either way */ }
+  }
+  async function drawNow() {
     if (typeof drawFoot === "function") drawFoot();
     pills.replaceChildren(...tabs.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; Board.store("dc-tab", k); draw(); } }, l)));
     const mins = Math.floor((Date.now() - fetched) / 60000);
     updated.textContent = mins < 1 ? "Updated just now" : `Updated ${mins}m ago`;
-    if (tab === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t));
-    if (tab === "squads") { panel.replaceChildren(h("p", { class: "muted small" }, "Loading…")); return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw)); }
-    if (tab === "plans") return panel.replaceChildren(plansTab());
-    panel.replaceChildren(...[showUp ? Board.presence(people, t) : Board.table(people, tab, t, draw), crew.length ? null : solo()].filter(Boolean));
+    if (tab === "squads") {
+      // 3.8.0: a plan's squad is a pill too; in it is sharing my progress (3.7.6), unless still asked
+      const mine = followed.filter((p) => p.following.share && !p.following.teamAsk).map((p) => ({ id: `plan:${p.id}`, pid: p.id, name: p.name }));
+      const left = (pid) => { const p = followed.find((x) => x.id === pid); if (p) p.following.share = false; draw(); };
+      panel.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
+      return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left));
+    }
+    const picker = h("div", { class: "sqsw" }, views.map(([k, l]) =>
+      h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));
+    if (view === "decks") return panel.replaceChildren(Board.decks(b.me, crew, b.decks || {}, t, picker));
+    panel.replaceChildren(...[showUp ? Board.presence(people, t, picker) : Board.table(people, view, t, draw, picker), crew.length ? null : solo()].filter(Boolean));
   }
   // board.py C5: until a friend adds me back, the invite is the board
   function solo() {
-    const wait = !waiting.length ? "They show up here once they add you back." : waiting.length <= 2
+    // board.py's words; the code and Got a code? are the Friends panel's, beside it
+    const wait = !waiting.length ? "Send a friend your invite. Once you’ve added each other, they’re here." : waiting.length <= 2
       ? `Waiting for ${waiting.map((f) => f.name).join(" and ")} to add you back.` : `Waiting for ${waiting.length} people to add you back.`;
     return h("div", { class: "solo" }, h("b", {}, "Bring your crew"), h("span", { class: "muted" }, wait),
-      h("div", { class: "row" }, b.me.code ? h("span", { class: "mono codepill" }, spaced(b.me.code)) : null,
-        b.me.code ? h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null,
-        h("button", { class: "linkish", onclick: () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } } }, "Got a code?")));
+      b.me.code ? h("div", { class: "row" }, h("button", { onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite")) : null);
   }
-  // 3.5.0's Plans tab, as far as the site can show it: each plan I follow,
-  // on track or behind; the day-by-day lives on its page and in Anki
-  function plansTab() {
-    if (!followed.length) return h("div", { class: "solo" }, h("b", {}, "Following no plans"),
-      h("span", { class: "muted" }, "A plan opens a deck's cards on their days. Paste a plan's code in Got a code?, find one in the library, or make one in Anki: Tools › Due Crew › Make a plan from a deck."),
+  // You › Plans (3.8.0), as far as the site can show it, in the rail: each
+  // plan I follow, on track or behind; the day-by-day lives on its page and
+  // in Anki. Following none, the ways in
+  function plansPanel() {
+    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"),
+      h("small", { class: "muted" }, "A plan opens a deck’s cards on their days. Find one in the library, paste its code below, or make one in Anki."),
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
-    return h("div", { class: "ptab" }, followed.map((p) => h("div", { class: "pcard" }, h("div", { class: "row", style: "justify-content:space-between" },
-      h("b", {}, link(`/plans/${p.id}`, p.name)), h("small", { class: "muted" }, p.ownerName ? `${p.ownerName}’s` : "")), onTrack(p, true),
-      me?.admin && !p.following?.paused ? planLoad(p) : null)),
-      h("p", { class: "muted small" }, link("/plans", "All plans ›")));
+    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true)));
   }
-  // board.py's footer: Crew ▾ (people) and Share ▾ (as text, then as a
+  // board.py's footer: Crew (people) and Share (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
   const footLeft = h("span", { class: "fl" });
   const toCode = () => { const i = document.getElementById("anycode"); if (i) { i.focus(); i.scrollIntoView({ block: "center" }); } };
@@ -1199,7 +1283,7 @@ async function home() {
       pop.style.left = `${btn.offsetLeft}px`;
       e.currentTarget.after(pop);
       setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener("click", off); } }), 0);
-    } }, `${label} ▾`);
+    } }, label);  // 3.8.0 (Sam): no caret, as in Anki
     return btn;
   }
   function drawFoot() {
@@ -1209,7 +1293,7 @@ async function home() {
       if (v === "Copy invite") return;
       updated.textContent = v; setTimeout(() => { updated.textContent = "Updated just now"; }, 2400);
     } })]);
-    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew ▾"; }, 2400); }]);
+    crewItems.push(["Shared decks…", (btn) => { btn.textContent = "In Anki: Settings › Shared decks"; setTimeout(() => { btn.textContent = "Crew"; }, 2400); }]);
     const shareItems = [["As text"]];
     if (!showUp) shareItems.push(["My day", () => share(Board.shareText(people, t))]);
     shareItems.push(["Our week", () => share(Board.shareWeek(people, t))], ["As a picture"]);
@@ -1226,6 +1310,12 @@ async function home() {
   };
   const followed = plansR.plans.filter((p) => p.following);
   await draw();
+  // 3.8.0 (Board in Motion, 22): a friend arrives, once each in this browser; the first time, everyone's known
+  try {
+    const k = `dc-seen:${b.me.uid}`, was = JSON.parse(localStorage.getItem(k) || "null"), now = crew.map((f) => f.uid);
+    if (Array.isArray(was)) { const fresh = now.filter((u) => !was.includes(u)); if (fresh.length) window.dcMotion?.arrive(fresh); }
+    localStorage.setItem(k, JSON.stringify([...new Set([...(Array.isArray(was) ? was : []), ...now])].slice(-300)));
+  } catch { /* no storage: nothing to say */ }
   const my = b.me.week?.days || {};
   // K1: my week as a picture; a number my Privacy switches keep home isn't in my week to draw.
   // K7: today's is the same card with today's numbers.
@@ -1263,7 +1353,7 @@ async function home() {
     codeBox());
   page(todayStrip(followed, my[t]), h("div", { class: "wb" },
     h("div", { class: "stack" },
-      h("section", { class: "brd" },
+      h("section", { class: "brd dc-panel" },
         h("div", { class: "top2" }, pills),
         panel,
         h("div", { class: "foot" }, footLeft,
@@ -1275,7 +1365,7 @@ async function home() {
         h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
       duePanel(followed, sett?.settings || {}, t),
       sinceYouWereHere(b, crew, t),
-      followed.length ? h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true))) : null,
+      plansPanel(),
       friends)));
   // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
   const want = new URLSearchParams(location.search).get("card");
@@ -1302,6 +1392,24 @@ function dueLineKeys(pid, uid, todo) {
     return `${pid}:${uid}:${hh}` + (count[hh] > 1 ? `.${count[hh]}` : "");
   });
 }
+
+/** 3.8.0: a repeating to-do's weekdays (Monday "0"), as due.py keeps them, or "". */
+function dueRepeats(x) { return typeof x?.r === "string" && /^[0-6]{1,7}$/.test(x.r) ? x.r : ""; }
+/** due.on_day: a repeat falls on `d` (one of its weekdays, from its start). */
+function dueOnDay(x, d) { const r = dueRepeats(x); return !!r && r.includes(String((parseIso(d).getUTCDay() + 6) % 7)) && (!x.d || d >= x.d); }
+/** due.every_on (3.8.0): a plan's weekly line falls on `d`: one of its
+ *  weekdays, between the plan's first date and its last, as I run it. */
+function dueEveryOn(span, ln, d) { const r = dueRepeats(ln); return !!r && span.first <= d && d <= span.last && r.includes(String((parseIso(d).getUTCDay() + 6) % 7)); }
+/** plan_every's span: my first date of the plan to my last, its last event or its end, if later. */
+function dueEverySpan(p) {
+  const shift = p.following?.shift || 0, skipped = new Set(p.following?.skipped || []), moved = p.following?.moved || {};
+  const days = Sched.units(p.doc).filter((u) => !skipped.has(u.id)).map((u) => { const by = shift + (moved[u.id] || 0); return by ? addDays(u.opens, by) : u.opens; });
+  if (!days.length) return null;
+  const ends = [...days, ...(p.doc.events || []).map((e) => e.day).filter(Boolean), ...(p.doc.end ? [shift ? addDays(p.doc.end, shift) : p.doc.end] : [])];
+  return { first: days.reduce((a, x) => (x < a ? x : a)), last: ends.reduce((a, x) => (x > a ? x : a)) };
+}
+/** due.repeat_label: "every day", "weekdays", "every Mon, Thu". */
+function dueRepeatLabel(r) { return r === "0123456" ? "every day" : r === "01234" ? "weekdays" : "every " + [...r].map((k) => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][Number(k)]).join(", "); }
 
 /** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
@@ -1336,15 +1444,31 @@ function duePanel(followed, set, t) {
         h("span", {}, h("b", {}, u.name), h("small", { class: "muted" }, p.name), lines),
         h("small", { class: "muted" }, pr && pr[2] ? `${pr[1].toLocaleString()} / ${pr[2].toLocaleString()}` : "")));
     }
+    // 3.8.0: the plan's weekly lines, ticked in Anki for the day (due.every_keys)
+    const every = (p.doc.every || []).filter((x) => x && typeof x.t === "string");
+    const span = every.length ? dueEverySpan(p) : null;
+    if (span) {
+      const keys = dueLineKeys(p.id, "every", every);
+      every.forEach((ln, i) => {
+        if (dueEveryOn(span, ln, tm)) tomorrow.push(ln.t);
+        if (!dueEveryOn(span, ln, t)) return;
+        rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${ticks[keys[i]] === t ? " on" : ""}`, "aria-hidden": "true" }),
+          h("span", {}, h("span", {}, h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[ln.k] || "Do"), " · ",
+            ln.url && /^https:\/\//.test(ln.url) ? h("a", { href: ln.url, target: "_blank", rel: "noopener" }, ln.t) : ln.t),
+            h("small", { class: "muted" }, `${p.name} · ${dueRepeatLabel(dueRepeats(ln))}`)),
+          h("small", {}, "")));
+      });
+    }
   }
-  for (const x of items.filter((x) => x.d === t)) {
-    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${x.done ? " on" : ""}`, "aria-hidden": "true" }),
-      h("span", { class: x.done ? "muted" : "" }, x.t), h("small", {}, "")));
+  for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, t) : x.d === t))) {
+    const done = dueRepeats(x) ? x.done === t : !!x.done;  // a repeat is done for the day it was ticked
+    rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${done ? " on" : ""}`, "aria-hidden": "true" }),
+      h("span", { class: done ? "muted" : "" }, x.t), h("small", {}, "")));
   }
-  for (const x of items.filter((x) => x.d === tm && !x.done)) tomorrow.push(x.t);
-  const behind = items.filter((x) => x.d && x.d < t && !x.done).length;
+  for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, tm) : x.d === tm && !x.done))) tomorrow.push(x.t);
+  const behind = items.filter((x) => !dueRepeats(x) && x.d && x.d < t && !x.done).length;
   if (!rows.length && !behind && !tomorrow.length) return null;
-  return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
+  return h("section", { class: "panel due", title: "Ticked in Anki, as you study" }, h("h4", {}, "Due today"),
     behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
     rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
     tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null);
@@ -1570,6 +1694,9 @@ function yearHeat(days, y = null) {
     h("div", { class: "hg" }, cells)),
     h("div", { class: "hk" }, "Less ", [1, 2, 3, 4].map((l) => h("i", { class: `l${l}` })), " More", h("i", { class: "pre", style: "margin-left:12px" }), " before your log"));
   if (!y || y === t.slice(0, 4)) setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);  // narrow: today's end shows first
+  // 3.8.0 (Board in Motion, 28): the squares fill in, a quick wave to today, the first time each year shows
+  const seen = (yearHeat.waved ||= new Set());
+  if (!seen.has(y || "now")) { seen.add(y || "now"); requestAnimationFrame(() => window.dcMotion?.wave(wrap.querySelector(".hg"))); }
   // a day's numbers under the squares: on hover with a mouse, on a tap with a finger
   const read = h("div", { class: "hread", "aria-live": "polite" });
   const say = (d) => {
@@ -1998,10 +2125,11 @@ async function logPage() {
         h("details", {}, h("summary", { class: "small" }, "By week, 12 weeks"), weeks))),
     h("section", { class: "panel", style: "margin-top:12px" }, h("h4", {}, h("span", {}, "Day by day ", h("span", { class: "muted" }, "last 30 days")), order), table),
     followed.length ? h("h2", {}, "Plans") : null,
-    followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p))));
+    followed.map((p) => h("section", { class: "panel", style: "margin-bottom:12px" }, h("h4", {}, link(`/plans/${p.id}`, p.name)), onTrack(p, false), onTrackChart(p),
+      me?.admin && !p.following?.paused ? planLoad(p) : null)));  // 3.8.0: from the board's Plans tab, room to be read
 }
 
-// ---- 3.5, X: the admin's page: counts, their history, the cutover, the bridge ----
+// ---- 3.5, X: the admin's page: counts and their history ----
 
 const svgEl = (tag, attrs, text) => {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -2308,14 +2436,13 @@ function squadPanel(nav) {
 }
 
 /** Today's one list of what's waiting (A2): new feedback, email changes
- *  not yet finished, a bridge run that failed. */
+ *  not yet finished. */
 function needsYou(s, show) {
   const row = (tag, text, label, go, warn) => h("div", { class: "nrow2" }, h("span", { class: `pill${warn ? " w" : ""}` }, tag), h("span", {}, text),
     h("button", { class: "linkish", onclick: go }, label));
   const rows = [];
   if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
   for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
-  if (s.bridge?.error) rows.push(row("System", "The 2.x bridge's last run failed", "Look", () => show("system"), true));
   // Q6: quiet accounts, as the daily job sees them (each deletion is in the audit log)
   const hk = s.housekeeping;
   const house = hk ? h("p", { class: "muted small" }, h("b", {}, "Housekeeping "),
@@ -2506,26 +2633,6 @@ async function adminPage() {
     hbars([["codes sent", c.sent], ["signed in", c.ok], ["wrong code tries", c.wrong], ["ran out of tries or time", c.out], ["held by the rate limit", c.limited]], (l, i) => i > 1),
     h("small", { class: "muted" }, c.sent ? `${Math.round((100 * c.ok) / c.sent)}% of codes end in a sign-in. Counters only: no address, no code.` : "Counters only: no address, no code."));
 
-  // the cutover from 2.x
-  const cu = s.cutover, all = Math.max(1, cu.on3 + cu.active2 + cu.quiet);
-  const seg = (n, cls) => h("i", { class: cls, style: `width:${(100 * n) / all}%` });
-  const cutover = h("section", { class: "panel" }, h("h4", {}, "The cutover", h("span", { class: "muted" }, `of ${s.accounts.toLocaleString()} accounts`)),
-    h("div", { class: "stackbar" }, seg(cu.on3, "a"), seg(cu.active2, "b"), seg(cu.quiet, "c")),
-    h("div", { class: "legend" }, h("span", {}, h("i", { class: "a" }), `on 3.x · ${cu.on3.toLocaleString()}`),
-      h("span", {}, h("i", { class: "b" }), `on 2.x, studied in 7 days · ${cu.active2.toLocaleString()}`),
-      h("span", {}, h("i", { class: "c" }), `quiet · ${cu.quiet.toLocaleString()}`)),
-    h("small", { class: "muted" }, "2.x counts people whose week the bridge brought in during the last 7 days."));
-
-  // the 2.x bridge
-  const b = s.bridge;
-  const bridge = h("section", { class: "panel" }, h("h4", {}, "The 2.x bridge", b ? h("span", { class: b.error ? "warn" : "muted" }, `ran ${ago(b.at)}`) : null),
-    b ? [h("div", { class: "mini3" }, h("div", {}, h("b", {}, b.pulled.toLocaleString()), h("small", {}, "pulled")),
-        h("div", {}, h("b", {}, b.pushed.toLocaleString()), h("small", {}, "pushed")),
-        h("div", {}, h("b", {}, `${(b.ms / 1000).toFixed(1)}s`), h("small", {}, "took"))),
-      h("small", { class: "muted" }, `Today: ${b.runsToday} run${b.runsToday === 1 ? "" : "s"}, ${b.failedToday} failed.`),
-      b.error ? h("p", { class: "warn small" }, `Last error: ${b.error}`) : null]
-      : h("p", { class: "muted small" }, "It hasn't run since this page began keeping track (it runs every 15 minutes while the FIREBASE_SA secret is set)."));
-
   // the library: what's taken out, to put back (Take out is on each card in the library)
   const libList = h("div", { class: "plans" });
   const drawLib = (plans) => libList.replaceChildren(...(plans.length ? plans.map((p) => {
@@ -2599,7 +2706,7 @@ async function adminPage() {
     inbox: ["Inbox", h("div", { class: "apage" }, feedbackPanel(nav))],
     notices: ["Notices", h("div", { class: "apage" }, notices)],
     bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
-    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes, cutover, bridge))],
+    system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes))],
     log: ["Audit log", h("div", { class: "apage" }, auditPanel(nav))],
   };
   const side = h("nav", { class: "aside", "aria-label": "Admin" });

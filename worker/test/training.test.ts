@@ -258,6 +258,9 @@ describe("the log", () => {
     const year = String(new Date().getUTCFullYear());
     expect((await sam.call("GET", "/log")).body.cheers).toEqual({ [year]: 2 });
     expect((await dre.call("GET", "/log")).body.cheers).toEqual({});
+    // 3.8.0: the add-on's pictures ask for the counts alone, not the log
+    expect((await sam.call("GET", "/log?cheers=1")).body).toEqual({ cheers: { [year]: 2 } });
+    expect((await dre.call("GET", "/log?cheers=1")).body).toEqual({ cheers: {} });
     await sam.call("DELETE", "/account");
     expect(await db().prepare("SELECT COUNT(*) AS n FROM cheer_counts").first("n")).toBe(0);
   });
@@ -285,14 +288,11 @@ describe("admin counts", () => {
 });
 
 describe("the week's 3.2 extras", () => {
-  it("carries a recap, and it never goes to Firestore", async () => {
-    const { outbound } = await import("../src/bridge");
+  it("carries a recap", async () => {
     const { sam, dre } = await crew();
     const recap = { name: "Step 1", n: 3, day: "2026-10-26" };
     expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), recap } })).toBe(200);
     expect((await dre.call("GET", "/board")).body.friends.find((f: any) => f.uid === "sam").week.recap).toEqual(recap);
-    const doc = await db().prepare("SELECT doc FROM weeks WHERE uid = 'sam'").first<string>("doc");
-    expect(outbound(doc!, 1)).not.toHaveProperty("recap");
     expect(await sam.status("POST", "/sync", { week: { ...WEEK("2026-10-26"), recap: { name: "", n: 0, day: "x" } } })).toBe(400);
   });
 });

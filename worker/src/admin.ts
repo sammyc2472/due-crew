@@ -1,7 +1,6 @@
 // The admin's page (3.2, 3.5 X): counts only, never names or emails. Today's
-// counts, their history (a daily snapshot in admin_days), sign-in steps
-// and the bridge's runs as counters on today's row, how far the cutover
-// from 2.x has come, and the bridge's last run.
+// counts, their history (a daily snapshot in admin_days), and sign-in steps
+// as counters on today's row.
 
 import type { Session } from "./auth";
 import { isAdmin } from "./notices";
@@ -78,9 +77,6 @@ async function counts(env: Env) {
     q("SELECT COUNT(*) AS n FROM plans"),
     q("SELECT COUNT(*) AS n FROM plan_follows"),
     q("SELECT COUNT(*) AS n FROM tips"),
-    // the cutover: on 2.x and still studying (the bridge brings their week in)
-    q(`SELECT COUNT(*) AS n FROM users u JOIN weeks w ON w.uid = u.uid
-        WHERE (u.client_version IS NULL OR u.client_version NOT LIKE '3.%') AND w.updated_at > ?`, now - 7 * 86400),
     q("SELECT COUNT(*) AS n FROM plans WHERE listed = 1"),
     q("SELECT COUNT(*) AS n FROM plans WHERE listed = -1"),
   ]);
@@ -88,12 +84,12 @@ async function counts(env: Env) {
   return {
     accounts: n(0), on3: n(1), seenWeek: n(2), seenDay: n(3),
     friendEdges: n(4), mutualPairs: n(5) / 2, squads: n(6), memberships: n(7),
-    plans: n(8), follows: n(9), tips: n(10), active2: n(11), listed: n(12), takenOut: n(13),
+    plans: n(8), follows: n(9), tips: n(10), listed: n(11), takenOut: n(12),
   };
 }
 
 // the daily snapshot's keys (accounts come from users.created_at instead)
-const KEPT = ["on3", "seenWeek", "seenDay", "mutualPairs", "squads", "memberships", "plans", "follows", "tips", "active2", "listed"] as const;
+const KEPT = ["on3", "seenWeek", "seenDay", "mutualPairs", "squads", "memberships", "plans", "follows", "tips", "listed"] as const;
 
 /** The daily cron: today's counts, kept. */
 export async function snapshot(env: Env): Promise<void> {
@@ -102,29 +98,18 @@ export async function snapshot(env: Env): Promise<void> {
   await env.DB.batch(KEPT.map((k) => env.DB.prepare("INSERT OR REPLACE INTO admin_days (day, key, n) VALUES (?, ?, ?)").bind(d, `n.${k}`, c[k])));
 }
 
-/** After each bridge run: its numbers, or the first line of what went wrong. */
-export async function bridgeRan(env: Env, ms: number, r: { pulled: number; pushed: number } | null, error?: unknown): Promise<void> {
-  const msg = error === undefined ? null : String((error as Error)?.message || error).split("\n")[0].slice(0, 120);
-  await env.DB.prepare(
-    "INSERT OR REPLACE INTO bridge_last (id, at, ms, pulled, pushed, error) VALUES (1, ?, ?, ?, ?, ?)",
-  ).bind(nowSec(), Math.round(ms), r?.pulled ?? 0, r?.pushed ?? 0, msg).run();
-  await bump(env, "bridge.runs");
-  if (msg !== null) await bump(env, "bridge.failed");
-}
-
 function adminOnly(env: Env, s: Session) {
   if (!isAdmin(env, s.uid)) throw new HttpError(404, "not_found");
 }
 
-/** GET /admin/stats: today's counts, the cutover, sign-in codes over the
- *  last 7 days, the bridge's last run, the library, versions. */
+/** GET /admin/stats: today's counts, sign-in codes over the last 7 days,
+ *  versions, and what's waiting on the admin. */
 export async function stats(s: Session, env: Env): Promise<Response> {
   adminOnly(env, s);
   const c = await counts(env);
   const since = day(nowSec() - 6 * 86400);
-  const [codes, bridge, versions, fbOpen, moving] = await env.DB.batch<any>([
+  const [codes, versions, fbOpen, moving] = await env.DB.batch<any>([
     env.DB.prepare("SELECT key, SUM(n) AS n FROM admin_days WHERE day >= ? AND key LIKE 'codes.%' GROUP BY key").bind(since),
-    env.DB.prepare("SELECT at, ms, pulled, pushed, error FROM bridge_last WHERE id = 1"),
     env.DB.prepare("SELECT client_version AS v, COUNT(*) AS n FROM users GROUP BY client_version ORDER BY n DESC LIMIT 12"),
     // what's waiting on the admin (A2's Needs you): new feedback, email changes not yet finished
     env.DB.prepare("SELECT COUNT(*) AS n FROM feedback WHERE done = 0"),
@@ -132,15 +117,10 @@ export async function stats(s: Session, env: Env): Promise<Response> {
                       WHERE c.at > ? ORDER BY c.at DESC LIMIT 10`).bind(nowSec() - 7 * 86400),
   ]);
   const code = Object.fromEntries((codes.results as { key: string; n: number }[]).map((r) => [r.key.slice(6), r.n]));
-  const today = await env.DB.prepare("SELECT key, n FROM admin_days WHERE day = ? AND key LIKE 'bridge.%'").bind(day()).all<{ key: string; n: number }>();
-  const b = bridge.results[0] as { at: number; ms: number; pulled: number; pushed: number; error: string | null } | undefined;
   return json({
     ...c,
-    cutover: { on3: c.on3, active2: c.active2, quiet: Math.max(0, c.accounts - c.on3 - c.active2) },
     codes: { sent: code.sent ?? 0, ok: code.ok ?? 0, wrong: code.wrong ?? 0, out: code.out ?? 0, limited: code.limited ?? 0 },
-    bridge: b ? { ...b, runsToday: today.results.find((r) => r.key === "bridge.runs")?.n ?? 0,
-                  failedToday: today.results.find((r) => r.key === "bridge.failed")?.n ?? 0 } : null,
-    versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "2.x", r.n]),
+    versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "no add-on sync", r.n]),
     feedbackOpen: (fbOpen.results[0] as { n: number }).n,
     emailChanges: (moving.results as { uid: string; name: string | null; at: number }[]).map((r) => ({ uid: r.uid, name: r.name || "?", at: r.at })),
     housekeeping: await Quiet.counts(env),  // Q6: folded, quiet past the trim, due to go in 30 days

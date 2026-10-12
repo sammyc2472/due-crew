@@ -7,8 +7,8 @@ import traceback
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import board
-from .app import _profile_files, _state, cfg, client
+from . import app, board
+from .app import _bg, _profile_files, _state, cfg, client
 from .backend.shapes import away_on
 from .stats import gather_stats, period_review
 from .stats.queries import StatsQueries
@@ -207,3 +207,108 @@ def dismiss_review(kind):
         _wrap_data()[f"{kind}_dismissed"] = info["key"]
         from .wrap import _save_wrap
         _save_wrap()
+
+
+# ---- 3.8.0: Share › As a picture, made here (sharecard.py) ----
+
+LATE_DAYS = 31  # a phone's reviews can arrive this late: read again each time
+
+
+def _log_days(q):
+    """{day: (reviews, time_ms)} for every day I answered a card: the
+    whole revlog the first time a session asks (the one big read; about
+    a second for millions of reviews), then the last month again, which
+    a phone's late sync can still change. Main thread."""
+    cache = _state.get("pic_log") or {}
+    if cache.get("gen") == app.generation and cache.get("days") is not None:
+        recent = q.daily_totals(LATE_DAYS)
+        cut = q.day_label(LATE_DAYS - 1)
+        days = {lb: v for lb, v in cache["days"].items() if lb < cut}
+    else:
+        first = mw.col.db.scalar("SELECT MIN(id) FROM revlog WHERE ease > 0")
+        if not first:
+            return {}
+        span = max(1, (q._cutoff_s() - int(first) // 1000) // 86400 + 1)
+        try:
+            from aqt.qt import QApplication, Qt
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            wait = QApplication
+        except ImportError:  # the suite's Qt has no cursor
+            wait = None
+        try:
+            recent = q.daily_totals(span)
+        finally:
+            if wait is not None:
+                wait.restoreOverrideCursor()
+        days = {}
+    days.update({lb: (n, t) for lb, (n, t, _c, _g) in recent.items() if n})
+    _state["pic_log"] = {"gen": app.generation, "days": days}
+    return days
+
+
+def _crew_with_me(span):
+    """How many of my crew studied on any of these days (never who)."""
+    return sum(1 for e in _state["entries"] or [] if not e.get("you")
+               and any(board._showed((e.get("days") or {}).get(lb)) for lb in span))
+
+
+def picture(kind):
+    """The footer's Share › As a picture: the card made here (it opened
+    duecrew.com before). My day and week start from my Privacy switches;
+    my year and all time count my crew's cheers with one request."""
+    if not mw.col:
+        return
+    from . import sharecard as S
+    from .ui.share_card_dialog import ShareCardDialog
+    q = StatsQueries(mw.col)
+    try:
+        days = _log_days(q)
+        today = q.day_label(0)
+    except Exception:
+        traceback.print_exc()
+        return
+    c = cfg()
+    if kind in ("picturetoday", "pictureweek"):
+        one = kind == "picturetoday"
+        try:
+            stats = gather_stats(mw.col, _profile_files())
+            fresh = q.new_cards_by_day(7)
+        except Exception:
+            traceback.print_exc()
+            return
+        span = [today] if one else list(reversed(board.week_labels(list(_state["labels"]) or [q.day_label(i) for i in range(7)])))
+        d = S.week(days, today, one, fresh, stats.streak, _crew_with_me(span))
+        mon = (datetime.date.fromisoformat(today) - datetime.timedelta(days=datetime.date.fromisoformat(today).weekday())).isoformat()
+        card = {"kind": "today" if one else "week", "title": "Share today" if one else "Share my week",
+                "sizes": ("story", "link"), "file": f"due-crew-{today}" if one else f"due-crew-week-{mon}", "data": d}
+        dlg = ShareCardDialog(mw, lambda _k: card, priv=S.privacy(c), tooltip=tooltip)
+    else:
+        cheers = {"by": None}  # {year: n} once counted
+        signed = client().signed_in
+
+        def choose(k):
+            by = cheers["by"]
+            if k == "all":
+                total = sum(by.values()) if by is not None else None
+                return {"kind": "alltime", "title": "Share my Anki, all time", "sizes": ("story", "link"),
+                        "file": "due-crew-all-time", "data": S.alltime(days, today, total)}
+            return {"kind": "year", "title": "Share my year", "sizes": ("story",), "file": f"due-crew-{k}",
+                    "data": S.year(days, k, today, (by or {}).get(str(k), 0) if by is not None else None)}
+        if not days:
+            tooltip("No reviews yet.")
+            return
+        dlg = ShareCardDialog(mw, choose, S.year_options(days, today), "all" if kind == "picturealltime" else today[:4],
+                              tooltip=tooltip, cheers_say="counting…" if signed else "sign in to count")
+        if signed:
+            gen, cl = app.generation, client()
+
+            def done(by):
+                if gen != app.generation or _state.get("share_card") is not dlg:
+                    return
+                dlg.cheers_say = "couldn't count"
+                if by is not None:
+                    cheers["by"] = by
+                dlg.refresh()
+            _bg(cl.cheer_counts, done)
+    _state["share_card"] = dlg  # kept while it's open
+    dlg.show()

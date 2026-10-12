@@ -40,6 +40,18 @@ def svg(theme="light", accent="green"):
             .replace(f'fill="{DRAWN_INK}"', f'fill="{WORDMARK[shade]}"'))
 
 
+def line_svg(theme="light", accent="green"):
+    """3.8.0: the one-line logo as SVG text in this accent and theme, for
+    the map's picture card (drawn by Qt, not the board's CSS)."""
+    from .board import ACCENTS, DARK, DEFAULT_ACCENT, LIGHT  # board imports this module
+    shade = "dark" if theme == "dark" else "light"
+    on = ACCENTS.get(accent, ACCENTS[DEFAULT_ACCENT])[shade][0]
+    off = (DARK if shade == "dark" else LIGHT)["line"]
+    return (_read("logo_line.svg").replace(f'fill="{DRAWN_ON}"', f'fill="{on}"')
+            .replace(f'fill="{DRAWN_OFF}"', f'fill="{off}"')
+            .replace(f'fill="{DRAWN_INK}"', f'fill="{WORDMARK[shade]}"'))
+
+
 def board_mark():
     """The one-line logo as inline SVG for the board's top left, where the
     words "Due Crew" were. Fills come from classes the board's CSS points at

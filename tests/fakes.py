@@ -69,6 +69,19 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Forget", ids))
 
+    def reposition_new_cards(self, card_ids, starting_from=0, step_size=1, randomize=False, shift_existing=False):
+        """Anki's Reposition: these new cards at starting_from, step_size apart, in
+        the order given; with shift_existing, the other new cards from there move
+        along to make room. An undoable op."""
+        ids = [int(i) for i in card_ids]
+        if shift_existing:
+            self.db.conn.execute(f"UPDATE cards SET due = due + ? WHERE type = 0 AND due >= ? AND id NOT IN "
+                                 f"({','.join('?' * len(ids))})", (len(ids) * step_size, starting_from, *ids))
+        for k, cid in enumerate(ids):
+            self.db.conn.execute("UPDATE cards SET due = ? WHERE id = ? AND type = 0", (starting_from + k * step_size, cid))
+        if self.col is not None:
+            self.col.undo_steps.append(("Reposition", ids))
+
     def suspend_cards(self, ids):
         """Anki's: queue -1, whatever it was. An undoable op."""
         ids = [int(i) for i in ids]
@@ -89,6 +102,34 @@ class FakeTags:
             if row:
                 kept = [t for t in str(row[0]).split() if t.lower() not in str(tags).lower().split()]
                 self.db.conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (" " + " ".join(kept) + " ", int(nid)))
+
+    def _put(self, nid, tags):
+        self.db.conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (" " + " ".join(tags) + " " if tags else "", int(nid)))
+
+    def bulk_add(self, nids, tags):
+        """Anki's: those tags on those notes, once each (any case)."""
+        for nid in nids:
+            row = self.db.conn.execute("SELECT tags FROM notes WHERE id = ?", (int(nid),)).fetchone()
+            if row:
+                have = str(row[0]).split()
+                self._put(nid, have + [t for t in str(tags).split() if t.lower() not in {x.lower() for x in have}])
+
+    def _every(self, f):
+        for nid, tags in self.db.conn.execute("SELECT id, tags FROM notes").fetchall():
+            old = str(tags or "").split()
+            new = f(old)
+            if new != old:
+                self._put(nid, new)
+
+    def rename(self, old, new):
+        """Anki's: a tag and its children, renamed on every note."""
+        low = str(old).lower()
+        self._every(lambda ts: [new + t[len(old):] if t.lower() == low or t.lower().startswith(low + "::") else t for t in ts])
+
+    def remove(self, tags):
+        """Anki's: tags and their children off every note."""
+        lows = str(tags).lower().split()
+        self._every(lambda ts: [t for t in ts if not any(t.lower() == x or t.lower().startswith(x + "::") for x in lows)])
 
 
 class FakeCol:
@@ -176,12 +217,15 @@ class FakeDecks:
     def name(self, did):
         return self.names.get(did, "?")
 
+    def id_for_name(self, name):
+        return next((d for d, n in self.names.items() if n == name), None)
+
     def deck_and_child_ids(self, did):
         root = self.names.get(did, "\0")
         return [d for d, n in self.names.items() if d == did or n.startswith(root + "::")]
 
-    def all_names_and_ids(self):
-        return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]
+    def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
+        return [types.SimpleNamespace(id=d, name=n) for d, n in self.names.items()]  # none filtered
 
 
 # ------------------------------------------------------------ fake worker
@@ -221,6 +265,36 @@ def _is_int(v, lo=0, hi=None):
     return isinstance(v, int) and not isinstance(v, bool) and v >= lo and (hi is None or v <= hi)
 
 
+# JavaScript's String.trim() set and .length (UTF-16 units), so the fake
+# measures a plan's lines as plans.ts does
+_JS_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+
+def _js_len(t):
+    return len(t.encode("utf-16-le")) // 2
+
+
+def _todo_line(x, every=False):
+    """plans.ts todoLine: a line to tick by hand {k, t, url?}; `every` adds r,
+    its weekdays (Monday "0"), kept sorted."""
+    keys = {"k", "t", "url", "r"} if every else {"k", "t", "url"}
+    if (not isinstance(x, dict) or not set(x) <= keys or x.get("k") not in ("watch", "read", "do")
+            or not isinstance(x.get("t"), str) or not 0 < _js_len(x["t"]) <= 140 or re.search(r"[\x00-\x1f]", x["t"])):
+        raise Bad(400, "plan")
+    one = {"k": x["k"], "t": x["t"].strip(_JS_SPACE)}
+    if x.get("url") not in (None, ""):
+        if not isinstance(x["url"], str) or _js_len(x["url"]) > 500 or not re.fullmatch(r"https://[^\s\"'<>]+", x["url"]):
+            raise Bad(400, "plan")
+        one["url"] = x["url"]
+    if not one["t"]:
+        raise Bad(400, "plan")
+    if every:
+        if not isinstance(x.get("r"), str) or not re.fullmatch(r"[0-6]{1,7}", x["r"]):
+            raise Bad(400, "plan")
+        one["r"] = "".join(sorted(set(x["r"])))
+    return one
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -234,7 +308,7 @@ class Bad(Exception):
 class FakeWorker:
     """The Worker's API in memory: worker/src restated in Python, so the
     client suite needs nothing but the standard library. It's a model of
-    the Worker, as the old fake was of the Firestore rules; worker/test is
+    the Worker; worker/test is
     what proves the real one (in workerd, with D1).
 
     Every request is logged as (method, path, status): the request budget
@@ -256,6 +330,7 @@ class FakeWorker:
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
+        self.new_codes = {}  # uid -> POST /codes today (20 a day)
         self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.otp = {}        # email -> code
@@ -382,6 +457,8 @@ class FakeWorker:
             return self._invites(method, me, parts[1:])
         if m == ("POST", "cheers") and len(parts) == 2:
             return self._cheer(me, parts[1], body or {})
+        if m == ("GET", "log") and len(parts) == 1 and query.get("cheers") == "1":
+            return 200, {"cheers": dict(getattr(self, "cheer_counts", {}).get(me) or {})}  # 3.8.0
         if parts[:1] == ["knocks"]:
             return self._knock(method, me, parts[1:], body or {})
         if m == ("POST", "reports") and len(parts) == 1:
@@ -798,19 +875,9 @@ class FakeWorker:
                                       "emoji": self.users[f]["emoji"] or "", "mutual": self.mutual(me, f)}
                                      for o, f in sorted(self.friends) if o == me and f in self.users],
                          "knocks": self._knocks_of(me)}
-        if method == "PUT" and not rest:
-            ids = (body or {}).get("ids")
-            if not isinstance(ids, list):
-                raise Bad(400, "bad_ids")
-            added = sorted({i for i in ids if i in self.users and i != me})
-            for f in added:
-                self.friends.add((me, f))
-                if (f, me) in self.friends:
-                    self.knocks.pop((me, f), None)
-                else:
-                    self.knocks.setdefault((f, me), {"squad": "", "at": _now()})
-            return 200, {"added": added}
         fid = rest[0] if rest else ""
+        if not fid:
+            raise Bad(405, "method")  # 3.8.0: PUT /friends {ids}, the 2.x restore, is gone (the path is GET's)
         if method == "PUT":
             if fid == me:
                 raise Bad(400, "self")
@@ -827,12 +894,12 @@ class FakeWorker:
 
     def _codes(self, method, me, rest, body):
         if method == "POST" and not rest:
-            want = (body or {}).get("code")
-            old = self.users[me]["code"]
-            if want and want == old:
-                return 200, {"code": old}
+            # a new code, always drawn (3.8.0: the body is ignored; the 2.x restore once asked for its old one)
+            self.new_codes[me] = self.new_codes.get(me, 0) + 1
+            if self.new_codes[me] > 20:  # social.ts NEW_CODES_PER_DAY: a click, four rows written
+                raise Bad(429, "slow_down")
             n = 0
-            code = want if want and want not in self.codes else None
+            code = None
             while code is None:
                 n += 1
                 cand = f"C{abs(hash((me, n, len(self.codes)))) % 10**5:05d}"
@@ -903,6 +970,13 @@ class FakeWorker:
             raise Bad(400, "bad_guid")
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
+        if not body.get("guid"):  # 3.7.1: a cheer received counts on my year card, a sender once a day
+            day = datetime.date.today().isoformat()
+            seen = self.__dict__.setdefault("cheer_days", set())
+            if (me, to, day) not in seen:
+                seen.add((me, to, day))
+                by = self.__dict__.setdefault("cheer_counts", {}).setdefault(to, {})
+                by[day[:4]] = by.get(day[:4], 0) + 1
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
                                  "guid": body.get("guid"), "at": _now(), "n": self._next_cheer()}
         if body.get("guid") and body.get("note"):  # 3.2: a tip with words stays on its card
@@ -1010,6 +1084,8 @@ class FakeWorker:
         return out
 
     def _squad(self, method, me, rest, query, body):
+        if method == "POST" and len(rest) == 1:
+            raise Bad(405, "method")  # the path is GET's and PATCH's (3.8.0: POST /squads/restore is gone)
         if method == "POST" and not rest:
             if set(body) != {"name"} or not str(body["name"]).strip() or len(body["name"].strip()) > 24:
                 raise Bad(400, "bad_name")
@@ -1030,14 +1106,6 @@ class FakeWorker:
                 raise Bad(404, "no_squad")
             fu = self.users.get(self.squads[sid]["founder"]) or {}
             return 200, dict(self._info(sid, code), founderName=fu.get("name") or "")
-        if method == "POST" and rest == ["restore"]:
-            code = "".join(ch for ch in str(body.get("code", "")).upper() if ch in SQUAD_ALPHABET)
-            sid = self.squad_id(code)
-            if sid not in self.squads:
-                founder = body.get("founder") if body.get("founder") in self.users else me
-                self.squads[sid] = {"name": body.get("name") or "squad", "founder": founder, "open": True}
-            st, info = self._squad("POST", me, [sid, "join"], {}, {"code": code})
-            return st, dict(info, code=code)
         sid = rest[0] if rest else ""
         if sid not in self.squads:
             raise Bad(404, "no_squad")
@@ -1095,7 +1163,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -1123,15 +1191,81 @@ class FakeWorker:
         p["doc"] = doc
         p["version"] += 1
 
+    @staticmethod
+    def _tag_part(name):
+        """plans.ts tagPart."""
+        s = re.sub(r"\s+", "_", str(name))
+        s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+        s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
+        return s or "tag"
+
+    @classmethod
+    def _tag_root(cls, name):
+        """plans.ts tagRoot."""
+        s = re.sub(r"\s+", "_", str(name))
+        s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+        s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
+        return re.sub(r"[_-]+$", "", s[:60]) or "plan"
+
+    def _plan_tags(self, v, doc, picks):
+        """3.8.0, plans.ts planTag and planDoc's tags: {id, name, notes?, tags?,
+        decks?, search?, n?}, unique by their Anki name, under `tagroot`."""
+        tags = v.get("tags")
+        if tags is not None:
+            if not isinstance(tags, list) or len(tags) > 100:
+                raise Bad(400, "plan")
+            out = []
+            for t in tags:
+                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "tags", "decks", "search", "n"}
+                        or not self.UNIT_ID.fullmatch(str(t.get("id"))) or not isinstance(t.get("name"), str)
+                        or not t["name"].strip() or len(t["name"]) > 40):
+                    raise Bad(400, "plan")
+                nt = {"id": t["id"], "name": t["name"].strip()}
+                for k in ("tags", "decks", "search"):
+                    x = t.get(k) or []
+                    if not isinstance(x, list) or len(x) > (10 if k == "search" else 50) or not all(isinstance(y, str) and y for y in x):
+                        raise Bad(400, "plan")
+                    if x:
+                        nt[k] = list(dict.fromkeys(x))
+                notes = t.get("notes") or []
+                if not isinstance(notes, list) or len(notes) > 5000 or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in notes):
+                    raise Bad(400, "plan")
+                if notes:
+                    nt["notes"] = list(dict.fromkeys(notes))
+                if not any(k in nt for k in ("tags", "decks", "search", "notes")):
+                    raise Bad(400, "plan")
+                if t.get("n") is not None:
+                    if not _is_int(t["n"], 0, 1_000_000):
+                        raise Bad(400, "plan")
+                    nt["n"] = t["n"]
+                out.append(nt)
+            if len({t["id"] for t in out}) != len(out) or len({self._tag_part(t["name"]).lower() for t in out}) != len(out):
+                raise Bad(400, "plan")
+            if out:
+                root = v.get("tagroot")
+                if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
+                    raise Bad(400, "plan")
+                doc["tagroot"], doc["tags"] = root, out
+                picks += sum(len(t.get("notes") or []) for t in out)
+        if "tags" not in doc and v.get("tagroot") is not None:
+            root = v["tagroot"]
+            if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
+                raise Bad(400, "plan")
+            doc["tagroot"] = root
+        if picks > 50000:
+            raise Bad(400, "plan")
+
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every",
+                                                      "tags", "tagroot"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
             raise Bad(400, "plan")
         out = []
         for u in units:
-            if not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id"))):
+            if (not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id")))
+                    or u.get("id") == "every"):  # taken: the weekly lines are ticked as pid:every:…
                 raise Bad(400, "plan")
             if not DATE_RE.fullmatch(str(u.get("opens"))) or (u.get("due") is not None and (
                     not DATE_RE.fullmatch(str(u["due"])) or u["due"] < u["opens"])):
@@ -1149,6 +1283,11 @@ class FakeWorker:
                   "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
             if u.get("due"):
                 nu["due"] = u["due"]
+            if u.get("todo") is not None:  # Due: a date's lines to tick by hand
+                if not isinstance(u["todo"], list) or len(u["todo"]) > 8:
+                    raise Bad(400, "plan")
+                if u["todo"]:
+                    nu["todo"] = [_todo_line(x) for x in u["todo"]]
             if u.get("search"):
                 nu["search"] = list(dict.fromkeys(u["search"]))
             if u.get("sn"):
@@ -1202,6 +1341,8 @@ class FakeWorker:
             raise Bad(400, "plan")
         out.sort(key=lambda u: u["opens"])
         doc = {"deck": v["deck"], "units": out}
+        self._plan_tags(v, doc, sum(len(u["cards"]) + len(u.get("notes") or []) + len(u.get("nids") or []) + len(u.get("cids") or [])
+                                    for u in out))
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
@@ -1216,6 +1357,13 @@ class FakeWorker:
                 del u["for"]
         if v.get("end"):
             doc["end"] = v["end"]
+        every = v.get("every")  # 3.8.0: lines every week, on their weekdays (plans.ts todoLine)
+        if every is not None:
+            if not isinstance(every, list) or len(every) > 6:
+                raise Bad(400, "plan")
+            lines = [_todo_line(x, True) for x in every]
+            if lines:
+                doc["every"] = lines
         if v.get("reviews"):
             ids = {u["id"] for u in out}
             if not all(isinstance(r, dict) and r.get("from") in ids and r.get("to") in ids for r in v["reviews"]):
@@ -1257,7 +1405,8 @@ class FakeWorker:
         if p["owner"] == me:
             out["code"] = p["code"]
         if f:
-            out["following"] = {"share": f["share"], "paused": f["paused"], "sched": f.get("sched")}
+            out["following"] = {"share": f["share"], "paused": f["paused"], "sched": f.get("sched"),
+                                **({"own": f["own"]} if f.get("own") else {})}  # 3.8.0: at my own pace
         return out
 
     @staticmethod
@@ -1313,9 +1462,12 @@ class FakeWorker:
                 raise Bad(404, "no_plan")
             old = self.follows.get((pid, me))
             sched = self._sched(body["sched"]) if "sched" in body else (old or {}).get("sched")
+            if body.get("own") not in (None, "ready", "next"):  # 3.8.0: at my own pace
+                raise Bad(400, "follow")
+            own = body["own"] if "own" in body else (old or {}).get("own")
             self.follows[(pid, me)] = {"share": bool(old and old["share"]), "paused": False,
                                        "progress": old["progress"] if old else None, "sched": sched,
-                                       "teamAsk": bool(old and old.get("teamAsk"))}
+                                       "teamAsk": bool(old and old.get("teamAsk")), **({"own": own} if own else {})}
             self._count("plan_follows")
             if body.get("team") is True:  # 3.7.6: following onto its team; share alone does nothing now
                 self._join_team(pid, me)
@@ -1329,7 +1481,8 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved"} or (
+            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved", "own"} or (
+                    body.get("own") not in (None, "ready", "next")) or (
                     "early" in body and not _is_int(body["early"], 0, 7)) or (
                     "shift" in body and not _is_int(body["shift"], 0, 365)) or any(
                     body.get(k) is not None and not DATE_RE.fullmatch(str(body[k])) for k in ("until", "since") if k in body) or (
@@ -1360,9 +1513,12 @@ class FakeWorker:
             if "moved" in body and dict(body["moved"]) != f.get("moved", {}):  # 3.7.6
                 f["moved"] = dict(body["moved"])
                 self._count("plan_follows")
+            if "own" in body and body["own"] != f.get("own"):  # 3.8.0
+                f["own"] = body["own"]
+                self._count("plan_follows")
             return 200, {"share": share, "paused": paused, "sched": sched, "early": early,
                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                         "moved": f.get("moved", {})}
+                         "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {})}
         if rest[1:] == ["ids"] and method == "PUT":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1398,6 +1554,49 @@ class FakeWorker:
                 p["version"] += 1
                 self._count("plans")
             return 200, {"version": p["version"]}
+        if rest[1:] == ["tags"] and method == "POST":  # 3.8.0: plans.ts tagNotes
+            if p["owner"] != me and me not in (p.get("editors") or ()):
+                raise Bad(403, "not_author")
+            name, add, remove = body.get("name"), body.get("add") or [], body.get("remove") or []
+            if (not set(body) <= {"name", "add", "remove", "n"} or not isinstance(name, str) or not name.strip()
+                    or len(name) > 40 or not isinstance(add, list) or not isinstance(remove, list)
+                    or len(add) > 5000 or len(remove) > 5000
+                    or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in add + remove) or not (add or remove)
+                    or (body.get("n") is not None and not _is_int(body["n"], 0, 1_000_000))):
+                raise Bad(400, "bad_tag")
+            doc = json.loads(json.dumps(p["doc"]))
+            tags = doc.get("tags") or []
+            t = next((x for x in tags if self._tag_part(x["name"]).lower() == self._tag_part(name.strip()).lower()), None)
+            if t is None:
+                if not add:
+                    raise Bad(404, "no_tag")
+                t = {"id": f"t{len(tags):07d}", "name": name.strip(), "notes": []}
+                tags.append(t)
+            had = list(t.get("notes") or [])
+            notes = [g for g in dict.fromkeys(had + list(add)) if g not in set(remove)]
+            if len(notes) > 5000:
+                raise Bad(400, "too_many")
+            if notes:
+                t["notes"] = notes
+            else:
+                t.pop("notes", None)
+            if body.get("n") is not None:
+                t["n"] = body["n"]
+            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "tags", "decks", "search"))]
+            if not doc["tags"]:
+                doc.pop("tags")
+            if not doc.get("tagroot"):
+                # plans.ts rooted: a plan's root is its own (case aside), else _2, _3…
+                want = self._tag_root(p["name"])
+                taken = {str(q["doc"].get("tagroot") or "").lower() for k, q in self.plans.items() if k != pid}
+                doc["tagroot"] = next(r for r in (want if i == 1 else f"{want[:60 - len(str(i)) - 1].rstrip('_-')}_{i}"
+                                                  for i in range(1, 52)) if r.lower() not in taken)
+            clean = self._plan_doc(doc)
+            if clean != p["doc"]:
+                p["doc"] = clean
+                p["version"] += 1
+                self._count("plans")
+            return 200, self._plan_view(pid, me)
         if rest[1:] == ["cards"] and method == "POST":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1605,7 +1804,7 @@ class FakeWorker:
                           "share": f["share"], **({"teamAsk": True} if f.get("teamAsk") else {}),
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                          "moved": f.get("moved", {}),
+                          "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
                           "followers": len(rows), "crewDone": done,
                           "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
@@ -1613,12 +1812,12 @@ class FakeWorker:
                   for pid, p in sorted(self.plans.items())
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
-        authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
+        authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
                  **{k: u[k] for k in ("nids", "cids", "notes", "opens") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
-            or u.get("notes")]}}
-            for pid, p in sorted(self.plans.items()) if p["owner"] == me]
+            or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags") if p["doc"].get(k)})}  # 3.8.0: its own tags
+            for pid, p in sorted(self.plans.items()) if p["owner"] == me or me in (p.get("editors") or ())]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 
     def _delete_account(self, me):
@@ -1694,7 +1893,7 @@ def install_fake_aqt():
                  "profile_did_open", "profile_will_close", "card_will_show",
                  "reviewer_will_show_context_menu", "reviewer_did_show_question",
                  "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw",
-                 "browser_will_show_context_menu"):
+                 "browser_will_show_context_menu", "state_shortcuts_will_change"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")

@@ -41,20 +41,15 @@ describe("X: the admin's page keeps its history", () => {
     expect(JSON.stringify(keys.results)).not.toContain("school");
   });
 
-  it("the cutover and the bridge's last run", async () => {
+  it("versions, with an account that never synced from an add-on", async () => {
     const sam = await person("sam");
-    const old = await person("old");
-    await db().prepare("UPDATE users SET client_version = '3.5.0' WHERE uid = 'sam'").run();
-    await db().prepare("UPDATE users SET client_version = '2.13.0' WHERE uid = 'old'").run();
-    await db().prepare("INSERT INTO weeks (uid, doc, updated_at) VALUES ('old', '{}', ?)").bind(Math.floor(Date.now() / 1000)).run();
-    await person("gone");
-    const { bridgeRan } = await import("../src/admin");
-    await bridgeRan({ DB: db() } as any, 1800, { pulled: 23, pushed: 61 });
-    await bridgeRan({ DB: db() } as any, 900, null, new Error("403 PERMISSION_DENIED\nmore detail"));
+    await person("site");
+    await db().prepare("UPDATE users SET client_version = '3.8.0' WHERE uid = 'sam'").run();
+    await db().prepare("UPDATE users SET client_version = NULL WHERE uid = 'site'").run();
     const s = (await admin(sam, "/admin/stats")).body;
-    expect(s.cutover).toEqual({ on3: 1, active2: 1, quiet: 1 });
-    expect(s.bridge).toMatchObject({ ms: 900, pulled: 0, pushed: 0, error: "403 PERMISSION_DENIED", runsToday: 2, failedToday: 1 });
-    expect(old.uid).toBe("old");
+    expect(s.versions).toEqual(expect.arrayContaining([["3.8.0", 1], ["no add-on sync", 1]]));
+    expect(s.cutover).toBeUndefined();
+    expect(s.bridge).toBeUndefined();
   });
 
   it("a notice taken down stays in the list of past notices", async () => {

@@ -1,11 +1,9 @@
-// Sign-in by emailed code, our own sessions, sign-out, account deletion,
-// and the one-shot identity import from Firebase Auth.
+// Sign-in by emailed code, our own sessions, sign-out and account deletion.
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 
 import { bump } from "./admin";
 import { isAdmin } from "./notices";
-import { forget } from "./bridge";
 import { hit, limitOrThrow, peek } from "./limits";
 import { sendCode, sendMail } from "./mail";
 import {
@@ -197,14 +195,16 @@ const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
 
 /** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
-  // 3.5.0: and my accent, from the settings the add-on keeps, so the site wears it too
+  // 3.5.0: and my accent, from the settings the add-on keeps, so the site wears it too;
+  // 3.8.0: and the hour my Anki's day rolls over, so the site's today is Anki's
   const u = await env.DB.prepare(
-    `SELECT u.uid, u.email, u.name, u.emoji, json_extract(t.json, '$.accent') AS accent
+    `SELECT u.uid, u.email, u.name, u.emoji, u.rollover, json_extract(t.json, '$.accent') AS accent
        FROM users u LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`,
-  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; accent: unknown }>();
+  ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; rollover: number | null; accent: unknown }>();
   if (!u) throw new HttpError(401, "auth");
   const out = { uid: u.uid, email: u.email, name: u.name, emoji: u.emoji,
-    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green" };
+    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green",
+    ...(u.rollover == null ? {} : { rollover: Number(u.rollover) }) };
   return json(isAdmin(env, u.uid) ? { ...out, admin: true } : out);  // 3.2.1: the site shows Admin
 }
 
@@ -292,85 +292,7 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
   ]) stmts.push(db.prepare(sql).bind(uid));
   if (user) stmts.push(db.prepare("DELETE FROM otp WHERE email = ?").bind(user.email));
   await db.batch(stmts);  // one transaction: all of it or none
-  try {
-    await forget(env, s.uid);  // the 2.x copies the bridge made, while it runs
-  } catch {
-    console.log("due crew: couldn't clear the 2.x copies of a deleted account");
-  }
   return json({ ok: true });
-}
-
-/** POST /admin/import-users {users: [{uid, email, name?, code?}]}: the
- *  one-shot import of `firebase auth:export`, so a first 3.0 sign-in lands
- *  on the account's old uid, under the name and friend code it had (when
- *  the import carries them). Idempotent by uid. An address already on
- *  another uid (someone signed in to 3.0 before the import) is skipped and
- *  reported; a code someone already holds stays theirs. */
-export async function importUsers(req: Request, env: Env): Promise<Response> {
-  const want = env.ADMIN_TOKEN;
-  const got = (req.headers.get("authorization") || "").replace(/^Bearer /, "");
-  if (!want) throw new HttpError(404, "not_found");
-  if (!timingSafeEqual(await sha256Hex(got), await sha256Hex(want))) throw new HttpError(401, "auth");
-  const body = await readJson(req);
-  if (!Array.isArray(body.users)) throw new HttpError(400, "bad_users");
-  const now = nowSec();
-  let imported = 0;
-  let reclaimed = 0;
-  const skipped: string[] = [];
-  const rows: { uid: string; email: string; name: string | null; code: string | null }[] = [];
-  for (const u of body.users as Record<string, unknown>[]) {
-    const email = normEmail(u?.email);
-    const uid = typeof u?.uid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(u.uid) ? u.uid : null;
-    if (!email || !uid) {
-      skipped.push(String(u?.uid ?? "?"));
-      continue;
-    }
-    const name = typeof u.name === "string" && u.name.trim() ? u.name.trim().slice(0, 60) : null;
-    const code = typeof u.code === "string" && /^[A-Z0-9]{6}$/.test(u.code) ? u.code : null;
-    rows.push({ uid, email, name, code });
-  }
-  for (let i = 0; i < rows.length; i += 50) {
-    const chunk = rows.slice(i, i + 50);
-    const results = await env.DB.batch(chunk.map((r) => env.DB.prepare(
-      `INSERT INTO users (uid, email, name, created_at, from2x) VALUES (?, ?, ?, ?, 1)
-       ON CONFLICT DO NOTHING`).bind(r.uid, r.email, r.name, now)));
-    const coded = chunk.filter((r, j) => results[j].meta.changes && r.code);
-    if (coded.length) {
-      const claims = await env.DB.batch(coded.map((r) => env.DB.prepare(
-        "INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(r.code, r.uid)));
-      const won = coded.filter((_r, j) => claims[j].meta.changes);
-      if (won.length) {
-        await env.DB.batch(won.map((r) => env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(r.code, r.uid)));
-      }
-    }
-    if (body.reclaimCodes === true) {
-      // 3.0.0's first sync swapped imported codes for new ones: an account
-      // already here gets its imported code back when nobody else holds it
-      const back = chunk.filter((r, j) => !results[j].meta.changes && r.code);
-      for (const r of back) {
-        const claim = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")
-          .bind(r.code, r.uid).run();
-        const mine = await env.DB.prepare("SELECT uid FROM codes WHERE code = ?").bind(r.code).first<string>("uid");
-        if (!claim.meta.changes && mine !== r.uid) continue;
-        await env.DB.batch([
-          env.DB.prepare("UPDATE users SET code = ? WHERE uid = ?").bind(r.code, r.uid),
-          env.DB.prepare("DELETE FROM codes WHERE uid = ? AND code != ?").bind(r.uid, r.code),
-        ]);
-        reclaimed++;
-      }
-    }
-    for (let j = 0; j < chunk.length; j++) {
-      if (results[j].meta.changes) {
-        imported++;
-        continue;
-      }
-      // already there by uid (a re-run: fine) or the address is on another uid
-      const owner = await env.DB.prepare("SELECT uid FROM users WHERE email = ?")
-        .bind(chunk[j].email).first<{ uid: string }>();
-      if (owner?.uid !== chunk[j].uid) skipped.push(chunk[j].uid);
-    }
-  }
-  return json({ imported, skipped, reclaimed });
 }
 
 // ---- a link to open on the computer (3.4 review, C2) ----

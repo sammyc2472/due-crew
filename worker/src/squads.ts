@@ -6,7 +6,7 @@
 import type { Session } from "./auth";
 import * as B from "./bingo";
 import { limitOrThrow } from "./limits";
-import { checkUid, from2x, nameOf } from "./social";
+import { checkUid, nameOf } from "./social";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -135,42 +135,6 @@ async function joinById(s: Session, env: Env, id: string): Promise<Response> {
   if ((n ?? 0) >= MEMBERS_MAX) throw new HttpError(403, "full");  // the add-on says the door is shut
   await joinStmt(env, id, s.uid, await myName(env, s.uid)).run();
   return json(info(sq));
-}
-
-/** POST /squads/restore {code, name, founder}: 3.0's first sync brings back
- *  a squad from 2.x, which the client knows by its code. If someone got
- *  there first it's a join; if not, the squad comes back with the founder
- *  its members remember, and me in it. Block lists don't come back. */
-export async function restore(req: Request, s: Session, env: Env): Promise<Response> {
-  const body = await readJson(req);
-  const code = normalizeCode(typeof body.code === "string" ? body.code : "");
-  if (code.length !== SQUAD_CODE_LEN) throw V.bad("code");
-  const name = V.squadName(body.name);
-  await limitOrThrow(env, `squadrestore:${s.uid}`, 30, 86400);  // a 2.x computer's squads, once; not a way round create's limit
-  // a code the admin replaced opens nothing, and isn't made again
-  let id = await idForCode(env, code);
-  const exists = !!id;
-  // 3.7.1 review: only a 2.x account brings a squad back; anyone else joins
-  // what exists (a restore was a way to make a squad with a chosen code
-  // and anyone as its founder)
-  if (!id && !(await from2x(env, s.uid))) throw new HttpError(404, "no_squad");
-  if (!id) {
-    id = await squadId(code);
-    if (await env.DB.prepare("SELECT 1 FROM squads WHERE id = ?").bind(id).first()) throw new HttpError(403, "wrong_code");
-  }
-  if (!exists) {
-    let founder = s.uid;
-    if (typeof body.founder === "string" && body.founder !== s.uid
-        && await env.DB.prepare("SELECT 1 FROM users WHERE uid = ?").bind(body.founder).first()) {
-      founder = body.founder;
-    }
-    await env.DB.prepare(
-      "INSERT INTO squads (id, name, founder, open, created_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT DO NOTHING",
-    ).bind(id, name, founder, nowSec()).run();
-  }
-  const r = await joinById(s, env, id);  // restore demanded the code
-  if (r.status !== 200) return r;
-  return json({ ...(await r.json() as object), code });
 }
 
 /** GET /squads/{id}[?wk=2026-W40]: the squad and every member's row, one

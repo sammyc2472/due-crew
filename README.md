@@ -5,14 +5,15 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=6" width="600">
 
-Studying for a big exam is more fun with friends! Due Crew puts your friends on
+Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
-each of you has gotten. You only see people you've added, and they see
-you once they add you back. Your cards never leave your computer.
+each of you has gotten. Above them is your own day, and one button to
+study it. You only see people you've added, and they see you once they
+add you back. Your cards never leave your computer.
 
-## Showing up for each other
+## Your crew
 
 **Cheers.** Tap 🎉 next to a friend's name and it rains down their
 screen, with your note.
@@ -29,38 +30,77 @@ bar, breaks together.
 - **Good-luck cards.** Leave a line the night before a friend's exam.
 - **Profiles.** Half a year of a friend's studying, and your days in a
   row together.
-- **Shared decks.** Decks you have in common, like AnKing, match up.
+- **Shared decks.** The decks you have in common, side by side.
 - **Status, exam and away dates, just-show-up mode,** six accent colours,
   and your board and log on duecrew.com.
 
-## Squad bingo
+## Squads and bingo
 
-Every Monday your squad gets a new 3×3 card of studying squares: an early
-start, twenty minutes without a break, a day with nothing left due, new
-cards three days in a row. Most need more than one of you, and the middle
-unlocks when enough of you do something together. Three in a row is
-bingo. Copy the card to your group chat.
+A squad is a group with a code: a class, a study group, the people in
+your year. Every Monday it gets a new 3×3 card of studying squares: an
+early start, twenty minutes without a break, a day with nothing left
+due, new cards three days in a row. Most need more than one of you, and
+the middle unlocks when enough of you do something together. Three in a
+row is bingo. Under the squad, the week adds up: "23 study days between
+5 of you".
 
 <img alt="A squad's bingo card with a line" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/bingo.png?v=2" width="600">
+
+## Your day
+
+Above the board is yours.
+
+- **Today** is what's due, what your plans open, ticking itself as you
+  review, and your own to-dos. Type "every mon" and one comes back
+  each week.
+- **Upcoming** is the next two weeks, and **Later** whatever has no day
+  yet.
+- **Study today** goes through the day's decks, your plans' first, then
+  today's misses (Ctrl+Shift+S).
+- **Insights**, for any deck: the cards Anki won't show you before your
+  exam, what isn't sticking yet, your week in time, and a map of what you
+  know, topic by topic. Click a topic to open its parts. It's worked out
+  in your Anki and never sent; copy the map as a picture or as text if you
+  want to share it.
 
 ## Study plans
 
 Plan a class's or a crew's studying on a calendar at duecrew.com: pick
 chapters from a deck (Tools → Due Crew → Make a plan from a deck), set a
 pace, mark the exam, and share the code. Everyone following gets that
-day's cards each morning. Behind? **Catch up** or **Move my days back**.
-Plans can have co-authors and notes, go in your calendar app, and be
-shared in the library. Join a plan's **Team** to see who showed up today,
-ask and answer questions, and play bingo together; **Insights** shows the
-cards Anki won't show you before your next exam, what isn't sticking yet,
-and your week in time, worked out in your Anki.
+day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 
-**Due**, above the board, is your day: what your plans open, ticking
-itself as you review, the lecture or chapter that goes with it, and your
-own to-dos for any day. Upcoming shows the next two weeks; anything left
-undone waits under Behind.
+<img alt="You › Plans: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=6" width="600">
 
-<img alt="The Plans tab: today's work and the week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=2" width="600">
+- **Your own pace.** Follow a plan with its cards opening **When I'm
+  ready**: **Up next** opens the next date, first in Anki's line of new
+  cards, or opens it by itself once you've seen most of the last one.
+  Your pace and when it gets you to the end show underneath.
+- **Plan tags.** A plan can put its own tags on your notes
+  (`DueCrew::Block_1::Lecture_12`), so a lecture's cards are one click
+  away in Browse. Its authors make them in Anki or on duecrew.com.
+- **A plan's squad.** See who showed up today, ask and answer questions,
+  and play bingo with everyone on the plan.
+- Plans can have co-authors and notes, go in your calendar app, and be
+  shared in the library.
+
+## In Anki's browser
+
+Right-click a card, or a tag in the sidebar:
+
+- **Why isn't it showing?** Suspended, buried, past today's new-card
+  limit, not due till Friday: each in Anki's own words, with Anki's own
+  fix, one Undo away.
+- **Open its cards / open these.** Unsuspends a tag's cards, or the
+  ones you picked, first in line for new cards. Leeches stay suspended.
+- **Show on my plan** finds the date a card belongs to, and **Tag for a
+  plan** is for a plan's authors.
+
+## Share
+
+Share your day, week, year or all time as a picture, made in Anki. Pick
+which numbers show, then copy or save it. It goes only where you paste
+it.
 
 ## Install
 
@@ -80,23 +120,26 @@ newer. Restart Anki after installing.
 Your stats go only to people you've added and squads you join. Choose
 what you share in Settings → Privacy, or pause at any time. Anyone else
 sees your name and emoji, nothing more. Card text never leaves your
-computer: a crewmate sees a card's text only if they have the same card.
-Your email is used to sign you in. Your own to-dos in Due are kept with
-your settings, so every computer has them; only you see them. If you write in, Sam, who runs Due
-Crew, can look up your account, your squads and who's on your crew list
-to fix problems; never how you study, and each look is logged. Feedback
-you send goes to Sam with your name. Deleting your account deletes your
-data. Accounts with no activity for 12 months (24 when paused) are
-deleted with everything in them; opening Anki with Due Crew on, or
-signing in at duecrew.com, counts.
-The add-on and server are on
+computer: a crewmate sees a card's text only if they have the same card,
+and a plan holds card and note IDs, which each follower's Anki looks up
+in its own copy. Insights, your topic map and your progress on each
+bingo square stay on your computer. Your email is used to sign you in.
+Your own to-dos are kept with your settings, so every computer has them;
+only you see them. If you write in, Sam, who runs Due Crew, can look up
+your account, your squads and who's on your crew list to fix problems;
+never how you study, and each look is logged. Feedback you send goes to
+Sam with your name. Deleting your account deletes your data. Accounts
+with no activity for 12 months (24 when paused) are deleted with
+everything in them; opening Anki with Due Crew on, or signing in at
+duecrew.com, counts. The add-on and server are on
 [GitHub](https://github.com/sammyc2472/due-crew).
 
 ## Development
 
-Plain Python and Anki hooks, no build step; the server is a Cloudflare
-Worker in `worker/`. Tests: `python3 tests/test_due_crew.py`, and
-`npx vitest run` in `worker/`. See `tests/README.md`.
+Plain Python and Anki hooks, no build step. The server is a Cloudflare
+Worker in `worker/`, duecrew.com is `site/`. Tests:
+`python3 tests/test_due_crew.py`, and `npx vitest run` in `worker/`. See
+`tests/README.md`.
 
 ## License
 

@@ -38,11 +38,6 @@ installing — add-ons load at launch).
 ## Accent colors
 - [ ] Settings → Appearance → Accent: each of the six recolors the pills, links, your-row highlight, and the profile/stranger cards' buttons; check one in light and one in dark mode.
 
-## Rules deployment (maintainer)
-- [ ] Rules published in the console BEFORE the add-on release; after it, no v2.0 client shows "server catching up" in the footer.
-- [ ] Console: delete the retired `server_board`, `server_names`, and `servers` collections once v1.x clients are gone.
-- [ ] Firebase budget alert is set.
-
 ## 2.5: emoji, squads week, block, Refresh
 - [ ] Your card → "Pick an emoji" → 🦊: it shows before your name on Today, on your card, in the Friends list, in the crew week share, and (after a sync) on the squad board.
 - [ ] Squads pill: a "Week" column shows N/7 for each member and sorts; the crew's Today/Week tables ignore that sort.
@@ -219,7 +214,7 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre builds three dates (one opening today, one yesterday, one next week), publishes, offers it to the squad.
 - [ ] Dre: Browse → select three cards (one of them c2 of a cloze) → right-click → Due Crew: add to a plan… → the plan, "With <date>" → Add. The site shows 3 single cards on that date. Again with "On its own date": a new date appears.
 - [ ] Maya: the Decks and Squads tabs show "Dre offered <squad> a plan: <name>" with Look and ×. Look opens Follow a plan with the code filled in; × hides it for good.
-- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", "Join this plan's team" unchecked (its tooltip says what it shares). Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
+- [ ] Maya: Follow a plan… → paste the link (duecrew.com/p/CODE): the title, "Run it on" with the matching deck and "best match of your decks", the list of dates with what's found ("not in your copy" in orange for a missing one), "N cards found in your copy", "2 units have already opened (N cards)", "Join this plan's squad" unchecked (its tooltip says what it shares). Follow with Open them now: a toast "Due Crew opened 2 dates: N cards"; Edit → Undo says "Undo Due Crew: open 2 dates", and undoes all of them at once.
 - [ ] A copy whose tags start differently (rename the top tag in Maya's collection first): "Your tags start differently … Use X::". Use it: the dates match.
 - [ ] Follow again on a fresh profile with Start from the next unit: nothing opens now; the next date opens on its morning.
 - [ ] The Decks tab: "<name> · Dre's plan", "week X of Y · N following", a row per opened date (You: seen, Crew: done, "N of M"), the next date's "opens …", "✓ Opened … this morning: N cards" with Undo. Review a card: Undo goes (Anki has a newer step).
@@ -227,11 +222,11 @@ for the builder's link), as for 3.0. Two accounts: Dre (author) and Maya
 - [ ] Dre moves a date later and one earlier, adds a date: Maya's card says "Dre moved … and added …" with OK. Nothing that was open closes. The date moved earlier opens the next morning, not before.
 - [ ] Plan ▾ → Open everything now: every date opens, one undo step. Change deck…: pick another deck; its cards for the opened dates open. Pause: no mornings; the card says paused. Resume: asks "N units opened while paused" with Open them now / Start from the next unit.
 - [ ] Plan ▾ → Stop following: "Stop following <name>? Nothing gets suspended…", Stop. The card goes; every open card stays open; Dre's progress page stops counting Maya.
-- [ ] Follow with "Join this plan's team" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join the team from the Team tab: she counts; Leave the team (its question says progress stops counting): she doesn't.
+- [ ] Follow with "Join this plan's squad" unchecked: Dre's progress page doesn't count Maya, the crew's done counts leave her out, and her own progress still shows on the site's Home. Join its squad from the plan card's line (it asks first, saying what it shares): she counts; Leave in the squad (its question says progress stops counting): she doesn't.
 - [ ] 3.7.6: a date's details from today on have Move…: pick a day; the date shows there dashed with "· moved" and Put it back; the site's plan page says "1 date moved". Plan ▾ › Reset to default… lists what goes back; Reset puts it all back.
 - [ ] 3.7.6: follow a plan whose first dates have passed: Start where everyone is (no behind, the earlier dates skipped with Undo skip), Catch up over 2 weeks (a catch-up note, no "behind"), Start from the beginning (today is its first date).
 - [ ] 3.7.6: on a card with another add-on's button beside Edit (AnkiHub), the answer buttons sit in the middle and the ask chip sits beside More.
-- [ ] 3.7.6: a follower who shared before the update sees "Join this plan's team?" once on the plan card; Join puts them on the team; No thanks makes it go without a question.
+- [ ] 3.7.6: a follower who shared before the update sees "Join this plan's squad?" once on the plan card; Join puts them in it; No thanks makes it go without a question.
 - [ ] A plan or date name with <b>markup</b>: shown as text on the card, in the dialogs, and in the toast.
 - [ ] `wrangler tail`: a normal day is still one GET /board and one POST /sync per refresh and sync; the plans ride the day's first refresh (`decks=1`).
 
@@ -258,7 +253,7 @@ deck both share (Settings › Shared decks).
 - [ ] The plan card: three tiles (new today N / M, reviews due, ~minutes left), "On track." and Study now (opens the deck's review). A rest day says "rest day: no new"; a catch-up week and the taper say so.
 - [ ] Skip two study days (change the date): the card says "You missed Tue and Wed: N new cards waiting" with Spread them (+N a day), Push my dates back 2 days, Leave them open. Push: one request, a tooltip; the plan's dates on the site don't move for Dre. Spread: the target grows by a quarter a day. Either way the question doesn't come back for those days.
 - [ ] Plan ▾ → My schedule…: the same dialog with No schedule; No schedule takes it off.
-- [ ] A checkpoint's morning: "Due Crew built Checkpoint · <date>", a filtered deck of that date's cards with most lapses first. Study it: the card says "N done", then "Checkpoint … done: X of N right first time".
+- [ ] A checkpoint's morning: "Due Crew built Checkpoint · <date>", a filtered deck of that date's cards with most lapses first, under the Due Crew deck in the deck list. Study it: the card says "N done", then "Checkpoint … done: X of N right first time".
 - [ ] The Monday of plan week 2: "Week 1 done: X of Y sessions, N new cards, on track." Dre's board shows "· week 1 done" beside Maya's name that day.
 - [ ] Who knows this one: Maya presses Again on a card Dre has mature in the shared deck, then syncs. On its answer side, beside Edit: "🐙 Dre knows this · Ask". Ask → a line → the flag goes up. Dre's Decks tab: "Maya asks about a card you know: "…"" first, with Tip; the same card in Dre's reviewer shows "Maya asked about this · Tip". Dre tips: Maya's flag comes down; next time the card's answer shows "💡 Dre's tip"; click: the tip and This helped. Nothing is ever drawn inside the card.
 - [ ] A card with no one who knows it and no tip: no chip. A card on the question side: no chip.
@@ -281,7 +276,7 @@ deck both share (Settings › Shared decks).
 - [ ] As text: Copy the prompt, paste it into an AI with a syllabus, paste the answer back, Read it: the preview lists each date; a made-up tag says not found; a "# Pick in Anki" line shows under To pick in Anki. Replace, Save.
 - [ ] On a phone: the week shows as a list of days; What to cover folds.
 
-### 3.3: following, the Plans tab, together
+### 3.3: following, the Plans tab, together (3.8.0: the tab is You › Plans, above the board)
 
 - [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
 - [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
@@ -344,7 +339,7 @@ In Anki (as a follower):
 - [ ] Home: the strip says what opens today, what's waiting, the next event, and today so far; the year shows under the board; "Since you were here" lists crew added back, notes and plan changes (a second visit shows only what's new).
 - [ ] Home: a crewmate with an exam in the next two weeks: Send good luck › a line › Send. On their exam morning, their Anki shows it with the others.
 - [ ] Log: tiles, the year, this week and last, 30 days by date, a plan's history line (after a few days of syncs); Export CSV downloads.
-- [ ] Admin: tiles with lines (only accounts has a line the first day), sign-in codes, the cutover, the bridge's last run, notices with Take down and Post again.
+- [ ] Admin: tiles with lines (only accounts has a line the first day), sign-in codes, notices with Take down and Post again.
 
 ### 3.5.0: asking about a card (K1–K3)
 
@@ -353,7 +348,7 @@ In Anki (as a follower):
 - [ ] After their tip: your Decks tab shows "answered · 1 tip". When the card comes up, the answer side shows "💡 Name: the tip" beside Edit, cut short with the whole tip on hover; This helped turns to ✓ Helped without opening anything; clicking the tip opens all tips.
 - [ ] Night mode and light mode: the chip and the new headings read clearly.
 
-### 3.5.0: the Plans tab, and codes anywhere
+### 3.5.0: the Plans tab, and codes anywhere (3.8.0: You › Plans; its Today box went to Due's Today)
 
 - [ ] Plans tab with a plan: the Today box names today's date(s), reviews, new and minutes; Study now starts the plan's deck; Put off to tomorrow closes them until tomorrow's morning.
 - [ ] The week: today outlined, past days ticked or "N left", rest days faded, an event outlined. Click a later day: Open now opens it, Skip it skips it (Undo skip on the same day), Move my days back asks how many. ‹ › moves a week and "Today" comes back.
@@ -481,6 +476,27 @@ In Anki (as a follower):
       after), searches and picked cards as one line each, and Browse N
       cards opens Anki's browser on exactly those cards. The Today box
       has one line of today's topics, cut with … when long.
+- [ ] 3.8.0: each topic there (and in the Today box's line) is underlined
+      with dots; a click opens Anki's browser on that topic's cards. A
+      tag reads as "deck:<your deck>" tag:<the tag> in the search bar
+      (your copy's tag when the plan's deck is another version) and finds
+      the same cards as the date's own count; a subdeck, search or picked
+      cards open by id. A topic none of whose cards are in your deck says
+      so in a tooltip.
+- [ ] 3.8.0: a past day's "16 left" in its cell opens Browse on just those
+      unseen cards (the day itself doesn't open); its details show "Browse
+      42 cards · 24 left". The Today box's "16 new behind" and Due's
+      Behind "N cards to see" open the unseen cards of earlier dates. Due's
+      plan rows: each topic opens its cards. Insights: a topic's name and
+      the hero's "53 cards" open the same cards Study would. "3 leeches
+      stay suspended" › See them.
+- [ ] 3.8.0: Browse › select a card on a plan you follow › right-click ›
+      Due Crew: show on my plan. Anki's main window comes forward on the
+      Plans tab, that date's week, its details open; a tooltip names the
+      date. A card on no plan says so. ‹ › lets go of that day.
+- [ ] 3.8.0, the site: a date's panel (in the builder) › Copy search on a
+      tag; paste it into Anki's Browse: it finds that tag's cards, in your
+      copy's version of the deck too.
 
 ### The admin page, grown up (duecrew.com/admin)
 
@@ -518,7 +534,6 @@ In Anki (as a follower):
 - [ ] Log › Share my 2026 ›: the year card, the days before the log dashed.
 - [ ] Squads › a squad with bingo › Share ›: the card, a line ringed.
 - [ ] A plan with every card seen: "Finished" on its page, Share a card ›; the code only on a code plan.
-- [ ] Anki › Crew ▾ › Share today as a picture…: the browser opens duecrew.com signed in, the today card's sheet open, the address back to /home.
 - [ ] On a computer, Copy picture, then paste into a chat.
 - [ ] In December (or with the clock set), Home's rail opens with "Your 2026 in Anki"; Not now hides it after a reload.
 
@@ -530,7 +545,7 @@ In Anki (as a follower):
 - [ ] Admin › Today: the Housekeeping line under Needs you.
 
 
-## Due (above the board)
+## Due (above the board; 3.8.0: the box's Today, Upcoming and Later)
 
 - [ ] Due sits above the board on every tab; ▴ folds it to one line (and it stays folded after Anki restarts); the line's Study › opens the plan's deck.
 - [ ] Today: Behind (a plan date from an earlier day not yet seen, an item of yours from yesterday), then Reviews, today's dates with each resource's numbers, your items. Review a date's cards: its box ticks itself at the next refresh.
@@ -548,19 +563,99 @@ In Anki (as a follower):
 - [ ] The author adds cards to today's date and saves. The follower, on the Decks screen, refreshes: "Dre added N cards to …" with Open and Not today; nothing opened yet. Open: they open in one step (Edit › Undo closes them). Mid-review the line waits until you're back on Decks.
 - [ ] Not today: tomorrow's morning opens them. A later date the author changed redraws on the week at once.
 - [ ] Held back on Follow: a new card added to a later date stays suspended.
-- [ ] "Tell followers…" with a save, and a post on the plan page's Updates tab: the follower's plan card shows the newest one with OK; the site shows it above Calendar · Team until Close.
+- [ ] "Tell followers…" with a save, and a post on the plan page's Updates tab: the follower's plan card shows the newest one with OK; the site shows it above the calendar until Close.
 - [ ] The author's Updates tab: "This version is in N of M followers' Anki" after the follower refreshes.
 
-## 3.7.3: a plan's Team and Insights (two followers, or an author and a follower)
+## 3.7.3: a plan's squad and Insights (two followers, or an author and a follower; 3.8.0: the squad is on the Squads tab)
 
-- [ ] The plan card has Plan · Team · Insights. Team, not joined: "N on the team", the one line about what it shares, Join the team.
-- [ ] Both join. Review one of the plan's cards on one side and sync: the other side's Team shows them lit (others faded); the Plan tab's line says "N of the team showed up".
-- [ ] Ask the team (type, Enter): it shows for the other at their next Team open, with a badge on Team until they open it; your own question never badges you.
+- [ ] (3.8.0: no Plan · Insights tabs on the card; Insights is the box's own tab.) Not in its squad: the crew line ends "Join its squad"; it asks first, saying what it shares; Yes: "You're in. It's on the Squads tab."
+- [ ] Both join. Review one of the plan's cards on one side and sync: on the other side, Squads › the plan's pill shows them lit (others faded); the plan card's line says "Squad: N of M showed up · Open ›", and Open goes to the squad.
+- [ ] Ask the squad (type, Enter): it shows for the other at their next look, with a badge on the plan's pill and "Name asked ›" on the plan card until they open it; your own question never badges you.
+- [ ] Squads with a squad of your own and a plan's squad: both pills; picking one shows it (a plan's: who showed up, then Ask the squad and its threads; "Open the plan · Leave" under it). With no squad of your own, the plan's squad is the one shown. Restart Anki: the pill you picked is still picked.
 - [ ] Reply (Anki asks in a small box; the site opens one under the question); the asker marks That helped; Remove your own; Report someone else's (they're muted for you, their words go).
-- [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the team about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
-- [ ] Team bingo: the small card under the faces, Open shows the full card (‹ Plans goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
-- [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the team (the streak, "Showed up 3 days").
+- [ ] In the reviewer, right-click a card from the plan's deck: "Due Crew: ask the squad about this…". The other side sees "on a card", or "on a card you have down" when they have it at 21+ days; See the card opens their browser on it. No card text leaves either computer.
+- [ ] Squad bingo in a plan's squad: the small card under the faces, Open shows the full card (‹ Squads goes back); the same card and middle as the squad's, a square stamped once lit on both; nobody's name on a square.
+- [ ] Studied on a phone yesterday, synced the computer today: yesterday counts for the squad (the streak, "Showed up 3 days").
 - [ ] Insights (3.7.9): the header's % right against the 2 weeks before; with FSRS on, "N cards Anki won't show you before …" and Study N opens a filtered deck of them: an event with prep dates ("for") is named on the box and counts only those dates; an event no date preps for, or none, reads "Before Tue 13" and counts the whole plan; Not sticking yet rows (topic, its source, not right yet / forgot) each with Study; Your week in minutes with today marked; Optimize FSRS opens the deck's options, Not now hides it. A plan with no reviews says "Insights fill in after a week of reviews."
-- [ ] Leave the team: off it, your questions stay. Stopping the plan also takes you off.
-- [ ] duecrew.com, the plan's page as a follower: Calendar · Team, the same team; on a phone the rail stacks under the questions.
+- [ ] Leave (under the plan's squad): its pill goes and the tab shows your own squad; your questions stay. Stopping the plan also takes you out.
+- [ ] duecrew.com, the plan's page as a follower: no Team tab; "You're in its squad. Open it ›" (or what it shares and Join its squad), which lands on Home's Squads tab with the plan's pill picked: who showed up, its bingo, then Ask the squad. Leave there: the pill goes.
 - [ ] Share ▾ in Anki on a Mac: "As text" and "As a picture" show as grey headings; My day, Our week, The squad's day; My day…, My week…, My year…, All time….
+
+### 3.8.0: Crew, one tab (the four pills became two, below)
+
+- [ ] Under Crew, Today, Week and Decks are picked as a squad is on the Squads tab; Week shows the week's table as before.
+- [ ] Pick Week, go to Squads, click Crew: it comes back on Week. Pick Decks, the same. Restart Anki: still the one picked.
+- [ ] Settings › Privacy › Just show up: This week and Decks.
+
+### 3.8.0: You, and your people
+
+- [ ] Open Anki on an install that was on the Plans tab: the board opens on Crew › Today, with the box above it open on Plans. A hidden Week (from 3.7) is gone from Settings and shows in the picker.
+- [ ] The box above the board: Today · Upcoming · Later, a thin rule, then Plans · Insights, as words (the one on screen underlined). The count ("1 of 4 done") shows on Today and Upcoming only. Hide ▴ folds the whole box to one line; Show opens it.
+- [ ] Today: a plan date's topics sit on its resources' rows (Video Series · Pharmacokinetics 6 / 85), each topic opening its cards in Browse; the list ends with the add line (no Tomorrow line; Upcoming has it). Behind shows on Today, not on Upcoming. Later's tab shows only while Later holds something; add one there ("Call home later") and the toast's Show opens it.
+- [ ] The board under it: Crew · Squads pills, nothing else; the Decks view is in Crew's picker. Light, dark and a narrow window: nothing spills past the board's edge; on a narrow window Hide sits on the right.
+- [ ] Plans: a day's details open on its click (none open by default; Browse › Show on my plan opens its day); "Month ↗" opens the month on duecrew.com.
+- [ ] Plans: each plan's card with no Today box: its line (week, followers, "opens 2 days early" when set), the next exam's cards at risk ("53 cards Anki won't show you before KSA … · Study 53 · Insights ›") with FSRS on, the week, one note, the crew line. Paused: "No new cards while it's paused" with Resume now. A rest day says so.
+- [ ] Behind on a plan: its behind line has Catch up…, and the menu ends with Push my dates back…. The day details' link reads Push my dates back… too.
+- [ ] The morning opens cards: Today says "This morning opened N new cards" with Put off to tomorrow, which closes them until tomorrow's morning; review a card and the line goes. With Due off in Settings, the line is on Plans instead.
+- [ ] Following no plan: Plans shows the three ways in. A squad's offer to follow a plan shows on Plans and on Squads.
+- [ ] Insights with a plan's deck picked: as 3.7.9, its leeches at the bottom ("N leeches stay suspended in this deck · See them" opens the browser on them). The plan card no longer mentions leeches.
+- [ ] Insights on a deck with no plan (pick it in Insights' row of decks, or "How it's sticking ›" beside your deck on Crew › Decks): Exam and a date field sit in its head; set a date within three weeks there and the box reads "Your exam · …" over the whole deck, and Settings › Privacy shows the same date; clear the field and it's gone from both. Not sticking yet names topics from the deck's tags (never "leech"), or its subdecks when the cards have no tags; Study and the name's Browse open the same cards. Your week's key says "what Anki has due".
+- [ ] The deck you picked stays picked after a restart (it's this computer's), and stays in the row after ten minutes.
+- [ ] Settings › Board › Shows: Crew (always), Decks, Squads, Plans, Insights. Hide Plans and Insights with Due off: no box at all. A link to a hidden one (Insights › on a plan, How it's sticking ›) shows it again.
+- [ ] Browse › right-click › Due Crew: show on my plan: the box opens on Plans, that date's week, its details open.
+- [ ] Following a plan (Follow…): the box opens on Plans with the new plan.
+- [ ] duecrew.com Home: Crew · Squads with Today · Week · Decks under Crew; a saved Decks or Plans tab opens on Crew. The rail's Plans panel lists each plan (following none: the library and Your plans). As admin, the plan-load chart is on the Log page under each plan.
+
+### 3.8.0: five small ones, repeating to-dos, no jumps
+
+- [ ] Filtered decks: Study a plan date (a "Due Crew · …" deck), finish every card in it; the next morning it's gone from the Decks screen, and Edit › Undo right after the morning still offers the morning's step (Put off to tomorrow works). A Due Crew deck with cards left stays. A filtered deck you made yourself stays.
+- [ ] Learning back: review until only learning cards are left with steps of 10 min or more: Reviews says "N back at H:MM" (your clock) and isn't ticked; the box doesn't fold for the day until they're done.
+- [ ] Sync now: with an AnkiWeb login, after the morning opens cards the line reads "This morning opened N new cards. Sync now · Put off to tomorrow"; Sync now runs Anki's sync, and once synced the link goes. Not logged in to AnkiWeb: no Sync now.
+- [ ] Hard: on a deck where you press Hard on a fifth of reviews, Insights says "You press Hard on N% of reviews. Anki counts Hard as remembered." Not now hides it on every deck (for 30 days).
+- [ ] Repeating to-dos: add "Practice block every tue" (the add box previews "→ every Tue"; × keeps the words). On a Tuesday it's on Today with "every Tue ▾"; tick it, and Upcoming shows next Tuesday's (no tick on that one). Its ▾ has Edit…, Stop repeating (a one-off today), Delete. "every mon: X", "X daily", "X weekdays", "X mondays" work too. duecrew.com's Due panel shows it on its days.
+- [ ] No jumps: with the pointer on the box, flick Today → Insights → Later: the board under it stays put while the pointer stays on Due Crew; move it off and the box eases to its size. Squads while fetching keeps its height. Hide still folds at once.
+
+
+### 3.8.0: one Settings, two keys, Study today, the topic map
+
+- [ ] Tools › Due Crew › Settings… from the review screen: Anki goes to the Decks screen with Settings open. The add-on's Config button (Tools › Add-ons) does the same and the Add-ons window closes. Signed out, Settings still opens (Sign in… on You).
+- [ ] Turn "Due Crew on the Decks screen" off: the board goes; Tools › Due Crew › Show on the Decks screen (a check) brings it back.
+- [ ] Ctrl+Shift+S from the Decks screen, a deck's overview and Browse's main window: Study today starts. Ctrl+Shift+Q while reviewing a plan's card in its squad asks the squad; elsewhere it says what it's for. Settings › Board › Shortcuts › off: neither key does anything; on again, both do.
+- [ ] Study today with a plan and two other decks due: the plan's deck first; when it's done Anki goes straight to the next deck ("Next: …"), then today's misses, then "Done for today" on the Decks screen. Press Escape mid-deck: "Study today stopped. This deck stays open.", and when the deck runs out Anki stays on its overview (no "Next: …").
+- [ ] On a Mac: Settings › Board › Shortcuts shows ⌘⇧S and ⌃⇧Q; ⌃⇧Q (the Control key) while reviewing asks the squad, and nothing asks to log out.
+- [ ] Squads: a squad with a long name (24 letters, or a plan's) is cut short in the table's corner, its whole name on hover; the table stays inside the card in a narrow window. Switching squads, the names don't jump sideways while it loads.
+- [ ] Type half a to-do, then wait for a refresh (or a learning card coming back): the words and the day stay; press Enter and the box empties.
+- [ ] Insights › What you know: broad subjects (a big shared deck: its systems), the big ones big, shaded by how well you know them; no lecture names, no subject twice. FSRS off: the tooltip says "right on their last review".
+- [ ] With one block unsuspended (say all of Cardio), the map shows that block's parts, not one big Cardio tile; a subject with nothing started reads "new"; one partly started has a bar along its foot.
+- [ ] The map's heading reads "by Systems ▾" (or another grouping); a yield rating isn't the first pick when a topic tree is there. Pick another way: the map redraws from the top, and stays that way for this deck after Anki restarts.
+- [ ] Share › on the map's key: a sheet with the card as on screen (the opened level, its trail in the title). Copy picture, paste into a chat: a sharp 1080 square. Save… writes a .png. Copy as text: a line a subject with its square (🟩 🟨 🟧 ⬜) and %, then the foot. Percentages off: no numbers on the card or in the text, a Less–More key. Dark: the dark card.
+- [ ] Share › As a picture › My week… (3.8.0): a sheet in Anki, not the browser: the card as on duecrew.com (squares, the big number, the stats, "with N crew this week"). With Time in Privacy off, Time studied starts off and says "off in Privacy"; tick it and the time shows. Story / Link change the shape; Copy picture pastes a sharp 1080×1350 (or 1200×630) into a chat; Save… writes a .png.
+- [ ] My day…: today's card, "Today · Wed 14 Oct". In Just show up, My day… isn't offered and My week… starts with every number off.
+- [ ] My year…: this year's calendar, the picker lists the years you studied in and All time; pick a year and back. Cheers from my crew says "counting…" for a moment, then ticks on with "Cheered on N times" (or "none yet"). Signed out: "sign in to count". The first open on a big collection may show a wait cursor for a second; the second is instant.
+- [ ] Browse › right-click a suspended card › Due Crew: why isn't it showing?: "Suspended, so Anki never shows it." Unsuspend: the card unsuspends, the sheet reads again, Edit › Undo puts it back. Signed out, the item is still there.
+- [ ] The same on a buried card (Show it today), a review due next week (Study it now: due today in Browse), a card in a filtered deck (Empty …: the deck empties), a new card deep in a big deck (N more new today: Anki's deck list shows the higher New count today). Pick ten cards of mixed kinds: a line a kind, with how many.
+- [ ] Settings › Find a setting: type colour: Accent, Board › How it looks; Enter: the Accent row lights. Type holiday on the Board tab: Away; pick it: the Privacy tab opens and Away lights. Type something it doesn't have: "Nothing by that name". Esc empties it.
+- [ ] Motion (3.8.0): tick a to-do: the check draws, the words get their line, the bar grows. Tick the day's last: the box folds with one soft green light and says ✓ Done for today. Add a to-do for Thursday: a chip flies to Upcoming. Click Upcoming, then Plans: the green line slides under each, and the box eases to its height. Crew ↔ Squads: the pill slides. Open Decks: the bars grow in. ↻: it turns until the board's back. With the system's Reduce motion on (macOS Accessibility › Display), none of it moves.
+- [ ] Motion, round two (3.8.0): ⚙ slides Settings in, ‹ Board slides it back. Sort by Time: the column washes green once. Open Dre's card: it grows from the name and its year waves in; ✕, Escape and a click outside each shrink it back into the name. Dismiss a knock: it folds and the board closes up. Copy on a banner: the link says Copied ✓, then Copy again. Study a deck from Study today › (it names the deck) and come back to Decks: the box's numbers roll and ticks draw (the memory), with no tab sliding. Study a stuck topic's cards right: it says "sticking now ✓" and folds. Hover the logo: the six studied days do the wave, Thursday sits out; it also waves at the day's first board and when the day's done. A friend who adds you back: their row opens in with "new" for a few seconds, once. Reduce motion on: none of it moves.
+- [ ] Motion: leave the board open while a friend studies; on the next refresh their numbers count up and glow; a refresh with nothing new moves nothing. Nothing slides between rows when the order changes.
+- [ ] This week's change: off with "From next week" the first time; a week later (or with the clock moved on), on, with ↑/↓ pills on the tiles and "up N since …" at the foot; switching the map's "by" keeps each way's week.
+- [ ] A tile with a › opens its parts, with "All › Cardio · N cards, N% · Browse all" above them; All goes back; Browse all opens every card of the subject (new ones too). A tile without a › opens all of its cards in Browse.
+- [ ] Not sticking yet: a topic's name opens all of its cards in Browse; its Study N builds the hard ones only.
+- [ ] Insights on a plan's deck: no plan name or › to Plans in its head; the exam date box is there. An exam date sooner than the plan's next event names the box "Your exam"; later, the plan's event does.
+- [ ] The board's head: Today · Week · Decks in the table's top-left corner (light, dark, a narrow window); on Decks a line of its own with the key at its right; show-up mode's "N showed up today" under the table. Squads: the squad names in the corner (+ join or create wraps when narrow), the squad's line, its week and the bingo card under the table. Crew and Share in the footer have no ▾ and still open their menus.
+- [ ] Squads: under the table, "Last 7 days: N study days between M of you" (no line when only one of you studied), the same on duecrew.com.
+- [ ] A plan with an "Every week" line (builder, under the pace: Do · Practice questions, F): on a Friday it's in Today with the plan's name and "every Fri"; tick it, it's done for today only; Upcoming shows it once, on the next Friday; its link opens in the browser; it's never Behind; duecrew.com's Due panel shows it on Fridays.
+- [ ] Due Crew's filtered decks (a date's Study, Insights' Study, a checkpoint, today's misses) sit under one Due Crew deck that folds with Anki's +/−. Once they're all studied, the next morning's tidy removes them and the Due Crew deck in one step (Edit › Undo: Delete Deck); an old "Due Crew · …" deck at the top goes the same way once empty.
+- [ ] Settings › Board › Due › Recover leeches, switched on with a leech in the collection: "1 leech back as new cards. Edit › Undo puts it back." at once; Edit › Undo does.
+- [ ] Plan tags, as the author (3.8.0): in Browse pick a few notes › right-click › Due Crew: tag for a plan…: only plans you made or co-author are listed; type SLG 12, it says where it lands (DueCrew::<plan>::SLG_12) › Tag N notes: the browser's sidebar has the tag at once, and Edit › Undo takes it off here. Pick some of those notes again: Take N off is there. A plan you only follow: "Only a plan's author or co-authors tag for it."
+- [ ] Plan tags on duecrew.com: the builder's What to cover starts with This plan's tags (SLG 12 · 3 notes); + puts it on the picked day; Rename moves it on every date that used it; × asks, then drops it. A day with a plan tag: Overlap › SLG 12 · but not · a tag › Add makes "SLG 12 but not …" on that day. Text › Edit the whole plan starts with `tag | SLG 12 | notes:…` lines. Text › Tag by objective › Copy the tagging prompt carries the plan's tags and says to attach your own export.
+- [ ] Plan tags, as a follower: after the author saves, the next morning (after AnkiWeb's sync, on the Decks screen) or a mid-day update gives your notes DueCrew::<plan>::SLG_12; the plan card says "New tags: SLG 12" once, with Browse them (opens on DueCrew::<plan>::*) and OK. Edit › Undo right after takes them off in one step. Reviewing when the update lands: nothing changes until you're back on Decks. Your own tags never change.
+- [ ] Plan tags, stopping: Stop following asks, with "Take its tags off my notes" ticked; untick it and they stay; ticked, every DueCrew::<plan> tag goes (and DueCrew too when nothing else is under it).
+- [ ] Plan tags, as an author who doesn't follow the plan: make a tag on duecrew.com from another tag (This plan's tags, or a `tag |` line in Text), save; Anki's next morning (or a refresh that brings the plan) tags your own notes DueCrew::<plan>::<tag> in one undo step and says so once; the builder's date counts it after that. Follow your own plan: nothing is announced again. Delete the plan on the site: the next morning takes the tags off your notes.
+- [ ] Plan tags on duecrew.com, as a follower: the plan's page lists This plan's tags under the pace, with "in your Anki under DueCrew › …"; Copy search copies a search Browse finds them with.
+- [ ] Your own pace: Follow a plan with "When I'm ready" (and, once, with the box under it): the late-start question goes, the line says nothing opens by itself; a deck whose later cards are open offers "Hold back N cards of later dates until you open them". The next morning opens nothing. You › Plans: "at your pace", Up next with N new, Open and Open and study, Then …, where the plan's dates are; no Behind, and Today has no Behind for it either.
+- [ ] Open: the date's cards open (no leech) and Anki's next new cards are theirs (check the Browse Due column: they're first); the card says "Opened … first in line. Undo"; Undo shuts them again and it's Up next again. Open and study goes straight into a Due Crew deck of those new cards.
+- [ ] With "the next once I've seen the last": study most of the opened date, and the next morning opens the following one by itself, only one.
+- [ ] Put back on the plan card: only the unseen cards of the last date shut again; Edit › Undo puts them back. Stop following opens them.
+- [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
+- [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.

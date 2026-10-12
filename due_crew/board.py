@@ -15,7 +15,9 @@ ahead of mine still renders as fresh.
 import datetime as _dt
 import html as _html
 import json as _json
+import os as _os
 import re as _re
+import sys as _sys
 import time
 from datetime import date as _date, datetime, timezone
 
@@ -57,9 +59,14 @@ NIGHT_SELECTORS = ("body.nightMode", "body.night_mode", "body.night-mode",
                    ":root.night-mode")
 
 SORT_KEYS = ("reviews", "time", "retention", "streak", "week")  # week: squads only
-PERIODS = ("today", "week", "decks", "squads", "plans")
+# 3.8.0: the board is your people, Crew (Today, Week, Decks) and Squads;
+# Plans and Insights are the You bubble's (YOU_MORE)
+PERIODS = ("today", "week", "decks", "squads")
 # 3.5.0: tabs a person can hide in Settings (per computer); Today always shows
-HIDEABLE_TABS = (("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
+# 3.8.0: Today and Week are always there; the rest can be hidden in Settings
+HIDEABLE_TABS = (("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"), ("insights", "Insights"))
+CREW_VIEWS = (("today", "Today"), ("week", "Week"), ("decks", "Decks"))
+YOU_MORE = (("plans", "Plans"), ("insights", "Insights"))
 
 
 def hidden_tabs(cfg):
@@ -123,8 +130,7 @@ def _ago(ts_str):
 
 QUIET_FOLD_DAYS = 90  # "The next round", Q3: the server's fold, the same number
 # Q2: said where people read it (here, the Settings dialog, the site's Account, the README)
-KEEP_LINE = ("Kept while you use it: after 12 months with no activity (24 when paused), "
-             "your account is deleted with everything in it. Opening Anki counts.")
+KEEP_LINE = "Unused for 12 months (24 when paused), an account is deleted with everything in it."
 
 
 def _long_quiet(ts_str, now=None):
@@ -209,15 +215,6 @@ def _showed(doc):
     return bool(doc.get("reviews") or doc.get("studyTimeMs") or "accuracy" in doc)
 
 
-def _full_crew_days(entries, labels):
-    """Days on which every non-paused member studied. 0 for solo boards."""
-    active = [e for e in entries if not e.get("paused")]
-    if len(active) < 2:
-        return 0
-    return sum(1 for lb in labels
-               if all(_showed((e.get("days") or {}).get(lb)) for e in active))
-
-
 def _exam_text(iso, today_label):
     """"exam Fri" within the 14 days before the date; "" otherwise. The text
     is client-built from a parsed date — a friend's doc can never inject."""
@@ -236,13 +233,6 @@ def _exam_text(iso, today_label):
     if delta < 7:
         return f"exam {d.strftime('%a')}"
     return f"exam {d.strftime('%b')} {d.day}"
-
-
-def _exam_badge(iso, today_label):
-    txt = _exam_text(iso, today_label)
-    if not txt:
-        return ""
-    return f' <span class="exb">&#128214; {_html.escape(txt)}</span>'
 
 
 def live_now(until, now=None):
@@ -489,6 +479,11 @@ def _css(cfg):
        spacing and the you-row highlight alone */
     #due-crew.dc-frame {{ background: var(--dc-bg); border-radius: 12px;
       padding: 16px 18px 10px; }}
+    /* 3.8.0: two of them, apart: the You bubble (Due, Plans, Insights) on
+       top, and under it the board, your people (Crew, Squads) */
+    #due-crew.dc-frame.dc-split {{ background: transparent; padding: 0; border-radius: 0; }}
+    #due-crew.dc-split > .du {{ background: var(--dc-bg); margin: 0 0 12px; }}
+    #due-crew .dc-sheet {{ background: var(--dc-bg); border-radius: 12px; padding: 16px 18px 10px; }}
     /* the deck screen is shared with Anki's own styles (26.x paints
        `.fancy table` with a glass fill) and other add-ons' CSS. None of
        them may redecorate this board: no borders, shadows, radii, or fills
@@ -529,7 +524,7 @@ def _css(cfg):
     #due-crew .dc-scroll th {{ position: sticky; top: 0; z-index: 1;
       background: var(--dc-bg) !important; }}
     #due-crew table {{ width: 100%; border-collapse: collapse; }}
-    #due-crew th {{ padding: 2px 8px 6px; text-align: right; }}
+    #due-crew th {{ padding: 2px 8px 6px; text-align: right; white-space: nowrap; }}
     #due-crew th a {{ color: var(--dc-muted); font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew th a.on {{ color: var(--dc-accent); }}
     #due-crew td {{ padding: {pad}px 8px; white-space: nowrap; }}
@@ -568,7 +563,7 @@ def _css(cfg):
     #due-crew .dc-foot .fl, #due-crew .dc-foot .fr {{ display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }}
     #due-crew .dc-foot a.pb {{ border: 1px solid var(--dc-accent); border-radius: 99px; padding: 1px 9px; }}
     #due-crew .dc-foot a.pb.on {{ background: var(--dc-accent); color: var(--dc-bg); }}
-    #due-crew .dc-foot a.pb.warn {{ border-color: var(--dc-hours); color: var(--dc-hours); }}
+    #due-crew .dc-foot a.warn {{ color: var(--dc-hours); }}
     #due-crew .dc-foot a.ic {{ color: var(--dc-muted); font-weight: 400; font-size: 13px; }}
     #due-crew .dc-wrap[hidden] {{ display: none; }}
     #due-crew .dc-wrap a.wn {{ color: var(--dc-muted); text-decoration: none; font-size: 11px; white-space: nowrap; margin-left: 8px; }}
@@ -600,10 +595,6 @@ def _css(cfg):
     #due-crew .chip {{ font-size: 10px; margin-left: 5px; white-space: nowrap; color: var(--dc-muted); }}
     #due-crew .chip.live {{ color: var(--dc-fresh); font-weight: 700; }}
     #due-crew .chip.exam {{ color: var(--dc-hours); font-weight: 700; }}
-    #due-crew .exb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
-      margin-left: 5px; white-space: nowrap; }}
-    #due-crew .bkb {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
-      margin-left: 5px; white-space: nowrap; }}
     #due-crew .awb {{ font-size: 10px; font-weight: 700; color: var(--dc-hours);
       margin-left: 5px; white-space: nowrap; }}
     #due-crew .dc-stw {{ position: relative; display: block; max-width: 100%;
@@ -644,6 +635,47 @@ def _css(cfg):
     #due-crew .dc-foot .warn {{ color: var(--dc-hours); }}
     #due-crew .dg {{ margin-bottom: 12px; }}
     #due-crew .dgh {{ font-size: 12.5px; font-weight: 700; margin: 2px 0 5px; }}
+    #due-crew .dgh .dsk {{ font-size: 11px; color: var(--dc-accent); text-decoration: none; margin-left: 8px; }}
+    #due-crew .ihead {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin: 0 0 8px; }}
+    #due-crew .ihead .dc-sw {{ padding: 0; }}
+    #due-crew .ictx {{ text-align: left; font-size: 11.5px; color: var(--dc-muted); }}
+    #due-crew .ihead .dc-sw + .ictx {{ margin-left: auto; }}
+    #due-crew .ictx b {{ color: var(--dc-ink); }}
+    #due-crew .ictx a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    /* 3.8.0, the topic map */
+    #due-crew .tmap {{ display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }}
+    #due-crew .tmap .tm {{ display: flex; flex-direction: column; justify-content: space-between; min-height: 44px; min-width: 0;
+      border-radius: 6px; padding: 5px 7px; text-decoration: none; font-size: 11.5px; font-weight: 600; white-space: normal;
+      color: var(--dc-ink); overflow: hidden; }}
+    #due-crew .tmap .tm span {{ overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
+    #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; }}
+    #due-crew .tmap .tm {{ position: relative; }}
+    #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
+    #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}
+    #due-crew .ik select.tmby {{ -webkit-appearance: none; appearance: none; font: inherit; font-weight: 700;
+      color: var(--dc-accent); background: transparent; border: 0; padding: 0 0 0 2px; margin: 0; cursor: pointer;
+      text-transform: none; letter-spacing: 0; color-scheme: light dark; }}
+    #due-crew .ik .tmsh {{ margin-left: 8px; color: var(--dc-accent); font-weight: 700; text-decoration: none;
+      text-transform: none; letter-spacing: 0; white-space: nowrap; }}
+    #due-crew .ik .tmbv {{ font-style: normal; font-size: 9px; color: var(--dc-accent); margin-left: 2px; pointer-events: none; }}
+    #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
+    #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
+    #due-crew .tmt b {{ color: var(--dc-ink); }}
+    #due-crew .tmt a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .tmap .tm:hover {{ filter: brightness(.94); }}
+    #due-crew .tm.s3, #due-crew .sw.s3 {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .tm.s2 {{ background: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
+    #due-crew .tm.s1 {{ background: color-mix(in srgb, var(--dc-accent) 25%, var(--dc-bg)); }}
+    #due-crew .tm.s0, #due-crew .sw.s0 {{ background: var(--dc-hours); color: var(--dc-bg); }}
+    #due-crew .iexam {{ position: relative; display: inline-flex; align-items: baseline; gap: 2px; }}
+    #due-crew .iexam .q {{ color: var(--dc-muted); font-weight: 400; padding: 0 2px; }}
+    #due-crew .iexam input.ixd {{ position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0;
+      pointer-events: none; }}
+    #due-crew .ideck {{ font-size: 13px; color: var(--dc-ink); }}
+    #due-crew .ideck + .ictx {{ margin-left: auto; }}
+    #due-crew .iexam input {{ font: inherit; color: var(--dc-ink); background: var(--dc-bg); border: 1px solid var(--dc-line);
+      border-radius: 6px; padding: 1px 4px; margin: 0; color-scheme: light dark; }}
     #due-crew .dr {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 12px; }}
     #due-crew .dr.me .dn {{ font-weight: 700; }}
     #due-crew .dn {{ width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }}
@@ -666,6 +698,13 @@ def _css(cfg):
     #due-crew .dc-live {{ display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
       vertical-align: 1px; }}
+    /* 3.8.0: studying now breathes, slowly; ↻ turns while the board fetches (motion.js) */
+    @keyframes dcbreathe {{ from {{ opacity: .4; transform: scale(.85); }} to {{ opacity: 1; transform: scale(1); }} }}
+    @keyframes dcspin {{ to {{ transform: rotate(360deg); }} }}
+    @media (prefers-reduced-motion: no-preference) {{
+      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out infinite alternate; }}
+      #due-crew .dc-foot a.ic.dc-spin {{ display: inline-block; animation: dcspin .8s linear infinite; }}
+    }}
     #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
       background: var(--dc-line); overflow: hidden; vertical-align: middle; margin: 0 4px 0 1px; }}
     #due-crew .dc-plan i {{ display: block; height: 100%; background: var(--dc-accent); }}
@@ -697,78 +736,68 @@ def _css(cfg):
     }}
     #due-crew .dc-sw {{ font-size: 11.5px; padding: 2px 0 8px; }}
     #due-crew .dc-sw a {{ color: var(--dc-muted); text-decoration: none; margin-right: 12px; }}
-    #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700;
-      border-bottom: 1px dotted currentColor; }}
+    #due-crew .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; box-shadow: inset 0 -2px var(--dc-accent);
+      padding-bottom: 2px; }}
     #due-crew .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
+    #due-crew .dc-sw a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
+      background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
+    /* 3.8.0, head row B (Sam's pick): Crew's views, and a squad's names, in
+       the table's top-left corner; what was there goes under the table.
+       Decks has no table: its picker has a line of its own, with the key */
+    #due-crew th.dc-corner {{ text-align: left; white-space: normal; }}
+    #due-crew th.dc-corner .dc-sw {{ padding: 0; position: relative; top: 2px; }}
+    #due-crew th.dc-corner .dc-sw a {{ display: inline-block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
+      max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }}
+    #due-crew th.dc-corner .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; }}
+    #due-crew th.dc-corner .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
+    #due-crew .dc-pline {{ display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 10px; text-align: left; padding: 0 8px; }}
+    #due-crew .dc-sheet > .dc-sw {{ text-align: left; padding-left: 8px; }}  /* a squad with no table yet */
+    @media (max-width: 560px) {{ #due-crew .dc-pline {{ padding: 0 4px; }} #due-crew .dc-sheet > .dc-sw {{ padding-left: 4px; }} }}
+    #due-crew .dc-pline .dc-sw {{ padding-bottom: 6px; }}
+    #due-crew .dc-pline .dkey {{ margin-left: auto; font-size: 11px; color: var(--dc-muted); }}
+    #due-crew .dc-sum {{ text-align: left; padding: 6px 8px 0; }}
     #due-crew .dc-card {{ padding: 16px; text-align: center;
       border-radius: 12px; background: var(--dc-bg); }}
     #due-crew .dc-card b {{ font-size: 15px; display: block; margin-bottom: 5px; }}
     #due-crew .dc-card span {{ font-size: 12px; color: var(--dc-muted); }}
     #due-crew .dc-card a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    /* 3.1: a plan I follow, on the Decks tab */
+    /* 3.1: a plan I follow (You › Plans since 3.8.0) */
     #due-crew .dc-pc {{ margin-bottom: 14px; }}
     #due-crew .dc-pc .pk {{ display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 2px 0 6px; }}
     #due-crew .dc-pc .pk b {{ font-size: 12.5px; }}
     #due-crew .dc-pc .pk span {{ font-size: 11px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pk .acts {{ margin-left: auto; display: flex; gap: 12px; }}
     #due-crew .dc-pc .pk .acts a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; }}
-    #due-crew .dc-pc .u3 {{ display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 118px 58px;
-      gap: 10px; align-items: center; font-size: 12px; padding: 3px 0; }}
-    #due-crew .dc-pc .u3 .u {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    #due-crew .dc-pc .u3.hd {{ color: var(--dc-muted); font-size: 10.5px; font-weight: 700; }}
-    #due-crew .dc-pc .u3.now .u {{ font-weight: 700; }}
-    #due-crew .dc-pc .u3.later {{ color: var(--dc-faded); }}
-    #due-crew .dc-pc .u3.skip {{ color: var(--dc-faded); }}
-    #due-crew .dc-pc .u3.skip .u {{ text-decoration: line-through; }}
-    #due-crew .dc-pc .bar {{ display: block; height: 8px; background: var(--dc-well); border-radius: 2px;
-      overflow: hidden; position: relative; }}
-    #due-crew .dc-pc .bar i {{ position: absolute; left: 0; top: 0; bottom: 0; background: var(--dc-accent); }}
-    #due-crew .dc-pc .bar i.part {{ opacity: 0.35; }}
     #due-crew .dc-pc .miss {{ color: var(--dc-hours); font-size: 11px; }}
     #due-crew .dc-pc .n {{ color: var(--dc-muted); font-variant-numeric: tabular-nums; text-align: right;
       white-space: nowrap; font-size: 11px; }}
-    #due-crew .dc-pc .pn {{ font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--dc-well);
+    #due-crew .dc-pc .pn {{ font-size: 12px; padding: 6px 0 0; border-top: 1px solid var(--dc-line);
       display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }}
     #due-crew .dc-pc .pn.warn {{ color: var(--dc-hours); }}
-    #due-crew .dc-pc .u3 a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11px; text-align: right; }}
-    #due-crew .dc-pc .pn a, #due-crew .dc-pc .pl a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
+    #due-crew .dc-pc .pn a {{ margin-left: auto; color: var(--dc-accent); font-weight: 700;
       text-decoration: none; white-space: nowrap; }}
-    #due-crew .dc-pc .pl {{ display: flex; gap: 10px; }}
-    /* 3.2: today's session, the week's recap */
-    #due-crew .dc-pc .ss {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }}
-    #due-crew .dc-pc .ss div {{ background: var(--dc-well); border-radius: 8px; padding: 6px 9px; display: grid; }}
-    #due-crew .dc-pc .ss b {{ font-size: 16px; font-variant-numeric: tabular-nums; }}
-    #due-crew .dc-pc .ss b small {{ font-size: 11px; color: var(--dc-muted); font-weight: 400; }}
-    #due-crew .dc-pc .ss span {{ font-size: 10.5px; color: var(--dc-muted); }}
     #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
     #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
-    /* 3.5.0: the Plans tab's Today box and week (Anki centres the Decks
-       screen's text; the tab reads left to right) */
+    /* 3.8.0: at my own pace, Up next */
+    #due-crew .dc-pc .pnx {{ text-align: left; margin-top: 4px; }}
+    #due-crew .dc-pc .nx {{ display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+      padding: 7px 10px; border: 1px solid var(--dc-accent); border-radius: 8px; background: var(--dc-you-bg); }}
+    #due-crew .dc-pc .nx .nx1 {{ font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }}
+    #due-crew .dc-pc .nx .nx1 small {{ color: var(--dc-muted); font-size: 11.5px; }}
+    #due-crew .dc-pc .nx .lbl {{ font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-accent); margin-right: 4px; }}
+    #due-crew .dc-pc .nx .nx2 {{ display: flex; gap: 6px; }}
+    #due-crew .dc-pc .nx a.bt, #due-crew .dc-pc .nx a.bt2 {{ font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 7px;
+      padding: 4px 12px; white-space: nowrap; border: 1px solid var(--dc-accent); }}
+    #due-crew .dc-pc .nx a.bt {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .dc-pc .nx a.bt2 {{ color: var(--dc-accent); background: transparent; }}
+    #due-crew .dc-pc .pq, #due-crew .dc-pc .pnl {{ font-size: 11.5px; color: var(--dc-muted); margin: 6px 2px 0; }}
+    #due-crew .dc-pc .pnl {{ color: var(--dc-ink); }}
+    #due-crew .dc-pc .pq a, #due-crew .dc-pc .pnl a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    /* 3.5.0: a plan's week (Anki centres the Decks screen's text; the plan reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
-    #due-crew .ptoday {{ border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 11px;
-      display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 2px 0 10px; }}
-    #due-crew .ptoday > * {{ min-width: 0; }}
-    #due-crew .ptoday .h {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-      color: var(--dc-accent); }}
-    #due-crew .ptoday.rest {{ border-color: var(--dc-line); }}
-    #due-crew .ptoday.rest .h {{ color: var(--dc-muted); }}
-    #due-crew .ptoday.behind {{ border-color: var(--dc-hours); }}
-    #due-crew .ptoday.behind .h {{ color: var(--dc-hours); }}
-    #due-crew .ptoday .what {{ font-size: 14px; }}
-    #due-crew .ptoday .next {{ font-size: 11.5px; color: var(--dc-muted); }}
-    #due-crew .ptoday .next b {{ color: var(--dc-ink); }}
-    #due-crew .ptoday .next a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    #due-crew .ptoday .nums {{ display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--dc-muted); }}
-    #due-crew .ptoday .nums b {{ color: var(--dc-ink); font-size: 14px; font-variant-numeric: tabular-nums; }}
-    #due-crew .ptoday .nums .ok {{ color: var(--dc-accent); font-weight: 700; }}
     #due-crew .wbar {{ display: block; height: 5px; background: var(--dc-well); border-radius: 3px; overflow: hidden; }}
     #due-crew .wbar i {{ display: block; height: 100%; background: var(--dc-accent); }}
-    #due-crew .ptoday .wbar {{ max-width: 320px; }}
-    #due-crew .ptoday .btns {{ display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }}
-    #due-crew .ptoday .btns a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 12px; }}
-    #due-crew .ptoday .btns a.q {{ color: var(--dc-muted); font-weight: 500; }}
-    #due-crew .ptoday .btns a.bt.on {{ background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
-    #due-crew .pwh {{ display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 2px 0 6px; }}
+    #due-crew .pwh {{ display: flex; align-items: center; gap: 10px; font-size: 12px; margin: 8px 0 6px; }}
     #due-crew .pwh .nav {{ display: flex; align-items: center; gap: 8px; }}
     #due-crew .pwh .nav a {{ font-size: 15px; line-height: 20px; }}
     #due-crew .pwh a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
@@ -821,17 +850,13 @@ def _css(cfg):
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
     #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
     #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
-    #due-crew .ptoday .tw {{ display: block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
-                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
+    /* 3.8.0: a set of cards that opens in Browse (a topic, "16 left"): one look
+       everywhere, the board's green, as Today's (Sam: "pick one style and stick with it") */
+    #due-crew a.tp {{ color: var(--dc-accent); font-weight: inherit; text-decoration: none; }}
+    #due-crew a.tp:hover {{ text-decoration: underline; text-underline-offset: 2px; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
     #due-crew .pcrew a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
-    /* 3.7.3: the plan's tabs, Team and Insights */
-    #due-crew .psub {{ display: flex; gap: 16px; align-items: baseline; font-size: 12px; margin: 0 0 8px;
-      border-bottom: 1px solid var(--dc-line); text-align: left; }}
-    #due-crew .psub a {{ color: var(--dc-muted); font-weight: 700; text-decoration: none; padding: 3px 0 5px; margin-bottom: -1px; }}
-    #due-crew .psub a.on {{ color: var(--dc-ink); box-shadow: inset 0 -2px var(--dc-accent); }}
-    #due-crew .psub a i {{ font-style: normal; font-size: 10px; font-weight: 700; color: var(--dc-accent-ink);
-      background: var(--dc-accent); border-radius: 99px; padding: 0 5px; margin-left: 4px; }}
+    /* 3.7.3: a plan's squad (3.8.0: on the Squads tab) */
     #due-crew .tg {{ font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); margin: 12px 0 4px; text-align: left; }}
     #due-crew .tg:first-child {{ margin-top: 2px; }}
@@ -847,9 +872,9 @@ def _css(cfg):
     #due-crew .tqa {{ display: flex; gap: 6px; align-items: center; margin: 2px 0 6px; }}
     #due-crew .tqa input {{ flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--dc-ink); background: var(--dc-bg);
       border: 1px solid var(--dc-line); border-radius: 7px; padding: 5px 8px; }}
-    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a, #due-crew .tleave a {{
+    #due-crew .tqa a, #due-crew .tq a, #due-crew .tjoin a, #due-crew .wk2 a {{
       color: var(--dc-accent); font-weight: 700; text-decoration: none; font-size: 11.5px; white-space: nowrap; }}
-    #due-crew .tq {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 7px 10px; margin-top: 6px;
+    #due-crew .tq {{ border-top: 1px solid var(--dc-line); padding: 7px 0; margin-top: 0;  /* 3.8.0: rows, not boxes */
       display: grid; gap: 3px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }}
     #due-crew .tq .t {{ display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }}
     #due-crew .tq .t .m {{ margin-left: auto; color: var(--dc-muted); font-size: 11px; white-space: nowrap; }}
@@ -865,10 +890,10 @@ def _css(cfg):
       text-align: left; font-size: 12px; }}
     #due-crew .tjoin a.bt {{ justify-self: start; background: var(--dc-accent); color: var(--dc-accent-ink); border-radius: 7px; padding: 4px 12px; }}
     #due-crew .tjoin .k, #due-crew .tq0 {{ color: var(--dc-muted); font-size: 11.5px; text-align: left; }}
-    #due-crew .tleave {{ text-align: left; margin-top: 10px; }}
     #due-crew .dc-ins {{ display: grid; gap: 14px; text-align: left; font-size: 12px; }}
     #due-crew .dc-ins a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-ins a.q {{ color: var(--dc-muted); font-weight: 500; }}
+    #due-crew .dc-ins a.tp {{ font-weight: inherit; white-space: normal; }}
     #due-crew .ihd {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }}
     #due-crew .ihd b {{ font-size: 18px; font-variant-numeric: tabular-nums; }}
     #due-crew .ihd > span {{ font-size: 12px; }}
@@ -894,7 +919,8 @@ def _css(cfg):
       padding: 5px 0; border-bottom: 1px solid var(--dc-line); }}
     #due-crew .irow:last-child {{ border-bottom: 0; }}
     #due-crew .irow .n {{ display: grid; min-width: 0; text-align: left; }}
-    #due-crew .irow .n b {{ font-weight: 500; color: var(--dc-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    #due-crew .irow .n b {{ font-weight: 500; color: var(--dc-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding-bottom: 2px; }}  /* 3.8.0: room for the name's underline */
     #due-crew .irow .n span {{ font-size: 10.5px; color: var(--dc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     #due-crew .irow .ib {{ position: relative; height: 9px; border-radius: 5px; background: var(--dc-well); overflow: hidden; }}
     #due-crew .irow .ib i {{ position: absolute; top: 0; bottom: 0; }}
@@ -931,15 +957,12 @@ def _css(cfg):
     #due-crew .dc-pways {{ display: grid; gap: 10px; margin: 4px 0 8px; }}
     #due-crew .dc-pways .t {{ font-size: 14px; }}
     #due-crew .dc-pways .ways {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }}
-    #due-crew .dc-pways .way {{ border: 1px solid var(--dc-line); border-radius: 10px; padding: 9px 10px; display: grid;
-      gap: 6px; align-content: start; font-size: 12px; }}
+    #due-crew .dc-pways .way {{ display: grid; gap: 6px; align-content: start; font-size: 12px; }}
     #due-crew .dc-pways .way b {{ font-size: 13px; }}
     #due-crew .dc-pways .way a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .dc-pways input {{ font: inherit; font-size: 12px; padding: 3px 7px; border: 1px solid var(--dc-line);
       border-radius: 6px; background: var(--dc-bg); color: var(--dc-ink); min-width: 0; }}
     @media (max-width: 560px) {{
-      #due-crew .dc-pc .u3 {{ grid-template-columns: minmax(0, 1fr) 70px; }}
-      #due-crew .dc-pc .u3 .n {{ grid-column: 1 / -1; text-align: left; }}
       #due-crew .wk2 {{ grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 10px; }}
       #due-crew .wk2 .acts {{ grid-column: 1 / -1; }}
       #due-crew .wk2.hd span:last-child {{ display: none; }}
@@ -949,7 +972,6 @@ def _css(cfg):
       #due-crew .pwk .d {{ width: 100%; }}
       #due-crew .pwk .wbar {{ width: 100%; }}
       #due-crew .dc-pways .ways {{ grid-template-columns: 1fr; }}
-      #due-crew .pwh .site {{ margin-left: 0; }}
       #due-crew .pwh {{ flex-wrap: wrap; }}
     }}
     </style>
@@ -959,25 +981,57 @@ def _css(cfg):
 def _pycmd(cmd):
     """Only ids and keys ride in commands; anything else is dropped so a
     server-sourced id could never close the quote it sits in."""
-    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_-]', '', str(cmd))}'); return false;"
+    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}'); return false;"
 
 
-def _head(period, show_up=False, hidden=frozenset()):
-    if show_up:
-        # one crew view: today is the last square of the week
-        keys = (("today", "Crew"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
-        on = "today" if period in ("today", "week") else period
-    else:
-        keys = (("today", "Today"), ("week", "Week"), ("decks", "Decks"), ("squads", "Squads"), ("plans", "Plans"))
-        on = period
+def crew_views(show_up=False, hidden=frozenset()):
+    """3.8.0: Crew's views, picked under the pills: Today, Week, Decks; in
+    show-up mode This week (one view for both) and Decks. Decks can hide."""
+    first = (("today", "This week"),) if show_up else CREW_VIEWS[:2]
+    return first + (CREW_VIEWS[2:] if "decks" not in hidden else ())
+
+
+def _crew_on(period, show_up=False):
+    """The Crew view a period draws as: show-up mode draws Week as This week."""
+    return "today" if show_up and period == "week" else period
+
+
+def _head(period, show_up=False, hidden=frozenset(), crew="today"):
+    """3.8.0: the board is your people: Crew and Squads. Crew's views are
+    picked under the pills (_crew_picker), and the Crew pill goes back to
+    the one last picked."""
+    views = dict(crew_views(show_up, hidden))
+    crew = _crew_on(crew, show_up)
+    crew = crew if crew in views else "today"
+    keys = (("crew", "Crew"), ("squads", "Squads"))
+    on = "squads" if period == "squads" else "crew"
     keys = tuple((k, label) for k, label in keys if k not in hidden)
     pills = ""
     for key, label in keys:
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
-                  f'onclick="{_pycmd("period:" + key)}">{label}</a>')
+                  f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
     return (f'<div class="dc-head"><span class="dc-title">{board_mark()}</span>'
             f'<span>{pills}</span></div>')
+
+
+def _crew_picker(period, show_up=False, hidden=frozenset()):
+    """3.8.0: Crew's views, picked as a squad is (the Squads tab's .dc-sw).
+    Nothing when there's only one."""
+    views = crew_views(show_up, hidden)
+    if len(views) < 2:
+        return ""
+    period = _crew_on(period, show_up)
+    on = ' class="on"'
+    return ('<div class="dc-sw">' + "".join(
+        f'<a{on if period == k else ""} href="#" onclick="{_pycmd("period:" + k)}">{t}</a>'
+        for k, t in views) + "</div>")
+
+
+def _corner(inner):
+    """3.8.0, head row B (Sam's pick): a picker in the table's top-left
+    corner, over the rank and the name, where the header was empty."""
+    return f'<th class="lt dc-corner" colspan="2">{inner}</th>'
 
 
 def _chip(row):
@@ -1076,11 +1130,39 @@ def _row_html(row, rank, cfg, period="today"):
             f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 
 
-def _table_html(data, cfg, period):
+def _solo_html(data):
+    """3.4 review, C5: until a friend adds me back, the invite is the board
+    (in show-up mode too, 3.8.0)."""
+    if len(data["entries"]) != 1:
+        return ""
+    code = str(data.get("my_code") or "")
+    spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
+    # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
+    add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
+           ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
+           "pycmd('duecrew:addcode:'+v);return false;")
+    pending = [str(x) for x in data.get("pending") or []]
+    if not pending:
+        wait = "Send a friend your invite. Once you’ve added each other, they’re here."
+    elif len(pending) <= 2:
+        wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
+    else:
+        wait = f"Waiting for {len(pending)} people to add you back."
+    return (f'<div class="dc-empty"><b>Bring your crew</b>'
+            f'<span style="color: var(--dc-muted);">{wait}</span>'
+            f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
+            f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
+            f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
+            f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+            f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
+
+
+def _table_html(data, cfg, period, pick=""):
+    """pick: Crew's views (_crew_picker), in the header's corner."""
     sort = sort_key(cfg)
     fresh, dormant = build_rows(data["entries"], data["labels"],
                                 data.get("tomorrow", ""), period, cfg)
-    heads = "<th></th><th></th>"
+    heads = _corner(pick) if pick else "<th></th><th></th>"
     if sort == "week":
         sort = "reviews"
     for key, label in HEADERS:
@@ -1092,12 +1174,14 @@ def _table_html(data, cfg, period):
     if cfg.get("show_up"):
         fresh, dormant = build_rows(data["entries"], data["labels"],
                                     data.get("tomorrow", ""), "today", cfg)
-        return _presence_html(fresh, dormant, data["labels"], data["entries"])
+        return _presence_html(fresh, dormant, data["labels"], data["entries"], pick) + _solo_html(data)
     body = ""
     n = 0  # show-up rows are counted, not ranked
     for row in fresh:
         if row.get("showup"):
             rank = "&#10003;"
+        elif all(row.get(k) is None for k in ("reviews", "time_ms", "retention", "streak")):
+            rank = "&mdash;"  # 3.8.0: nothing to rank (me alone, the day I joined), no medal
         else:
             n += 1
             rank = MEDALS[n - 1] if n <= 3 else f"#{n}"
@@ -1112,29 +1196,7 @@ def _table_html(data, cfg, period):
         for row in long_q:
             body += _row_html(row, "&mdash;", cfg, period).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
-    solo = ""
-    if len(data["entries"]) == 1:
-        # 3.4 review, C5: until a friend adds me back, the invite is the board
-        code = str(data.get("my_code") or "")
-        spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
-        # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
-        add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
-               ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-               "pycmd('duecrew:addcode:'+v);return false;")
-        pending = [str(x) for x in data.get("pending") or []]
-        if not pending:
-            wait = "They show up here once they add you back."
-        elif len(pending) <= 2:
-            wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
-        else:
-            wait = f"Waiting for {len(pending)} people to add you back."
-        solo = (f'<div class="dc-empty"><b>Bring your crew</b>'
-                f'<span style="color: var(--dc-muted);">{wait}</span>'
-                f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
-                f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
-                f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
-                f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
-                f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
+    solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
@@ -1151,6 +1213,138 @@ def _scroll(html, rows):
     return f'<div class="dc-scroll">{html}</div>' if rows > ROW_CAP else html
 
 
+def swap_js(html_out):
+    """3.8.0: the board redrawn in place, without the jumps. While the
+    pointer is on Due Crew (a tab clicked, a row ticked), neither part (the
+    You box, the board) gets shorter: each keeps its height until the
+    pointer leaves (or the window resizes), then lets go at once. A part
+    still fetching (.dc-wait) keeps
+    its height either way; a box folded by Hide folds at once."""
+    return """
+    (function() {
+        var el = document.getElementById('due-crew');
+        if (!el) { return; }
+        var parts = [':scope > .du', '.dc-sheet'], was = {};
+        var on = el.matches(':hover');
+        parts.forEach(function (s) { var p = el.querySelector(s); if (p) { was[s] = p.getBoundingClientRect().height; } });
+        // a to-do half typed when a redraw comes (a refresh, learning cards back): kept, with its day
+        var din = document.getElementById('du-in'), keep = null;
+        if (din && el.contains(din) && document.activeElement === din && din.value) {
+            var w0 = document.getElementById('du-when'), d0 = document.getElementById('du-date');
+            keep = {v: din.value, s: din.selectionStart, e: din.selectionEnd, w: w0 ? w0.value : null,
+                    d: d0 ? d0.value : null, dd: d0 ? d0.style.display : null};
+        }
+        var tmp = document.createElement('div');
+        tmp.innerHTML = %s;
+        var nu = tmp.firstElementChild;
+        var mo = null;  // 3.8.0: what changed moves (motion.js); the swap goes on whatever it does
+        try { mo = window.dcMotion ? dcMotion.before(el) : null; } catch (e) { mo = null; }
+        el.parentNode.replaceChild(nu, el);
+        if (keep) {
+            var n1 = document.getElementById('du-in');
+            if (n1 && !n1.value) {
+                n1.value = keep.v; n1.focus();
+                try { n1.setSelectionRange(keep.s, keep.e); } catch (e) {}
+                var w1 = document.getElementById('du-when'), d1 = document.getElementById('du-date');
+                if (w1 && keep.w) { w1.value = keep.w; }
+                if (d1 && keep.d !== null) { d1.value = keep.d; d1.style.display = keep.dd; }
+                n1.dispatchEvent(new Event('input'));
+            }
+        }
+        try { if (mo) { dcMotion.after(nu, mo); } } catch (e) {}
+        var held = [];
+        parts.forEach(function (s) {
+            var p = nu.querySelector(s);
+            if (!p || !was[s] || p.classList.contains('du-one')) { return; }
+            if ((on || p.querySelector('.dc-wait')) && p.getBoundingClientRect().height < was[s] - 1) {
+                p.style.boxSizing = 'border-box';
+                p.style.minHeight = was[s] + 'px';
+                held.push(p);
+            }
+        });
+        if (held.length) {
+            // let go at once when the pointer leaves, the window resizes or loses focus
+            // (an eased release lagged behind a window being resized)
+            var free = function () {
+                held.forEach(function (p) { if (!p.querySelector('.dc-wait')) { p.style.minHeight = ''; } });
+                window.removeEventListener('resize', free);
+                window.removeEventListener('blur', free);
+            };
+            nu.addEventListener('mouseleave', free);
+            window.addEventListener('resize', free);
+            window.addEventListener('blur', free);
+        }
+    })();
+    """ % _json.dumps(html_out)
+
+
+# 3.8.0, pick 28: Find a setting. The box's index (settings_index) is in its
+# data-ix; a pick on another tab asks for that tab, and the next draw lands on it.
+FIND_JS = r"""
+(function () {
+  if (!window.dcFind) {
+    window.dcFind = {
+      want: null,
+      ix: function (inp) { try { return JSON.parse(inp.getAttribute('data-ix') || '[]'); } catch (e) { return []; } },
+      type: function (inp) {
+        var box = inp.nextElementSibling, q = inp.value.toLowerCase().match(/[a-z0-9]+/g) || [], self = this;
+        while (box.firstChild) { box.removeChild(box.firstChild); }
+        if (!q.length) { box.hidden = true; return; }
+        var hits = this.ix(inp).filter(function (x) {
+          var k = ' ' + x.k;
+          return q.every(function (w) { return k.indexOf(' ' + w) >= 0; });
+        }).slice(0, 7);
+        if (!hits.length) {
+          var n = document.createElement('span'); n.className = 'st-none'; n.textContent = 'Nothing by that name';
+          box.appendChild(n);
+        }
+        hits.forEach(function (h, i) {
+          var b = document.createElement('button'), l = document.createElement('b'), w = document.createElement('small');
+          b.type = 'button'; b.setAttribute('role', 'option'); if (!i) { b.className = 'on'; }
+          l.textContent = h.l; w.textContent = h.w; b.appendChild(l); b.appendChild(w);
+          b.addEventListener('click', function () { box.hidden = true; inp.value = ''; self.go(h); });
+          box.appendChild(b);
+        });
+        box.hidden = false;
+      },
+      key: function (e, inp) {
+        var box = inp.nextElementSibling;
+        if (e.key === 'Escape') { inp.value = ''; box.hidden = true; return; }
+        if (e.key === 'Enter') { e.preventDefault(); var b = box.querySelector('button'); if (b) { b.click(); } }
+      },
+      go: function (h) {
+        var on = document.querySelector('#due-crew .dc-head .dc-pill.on');
+        var tab = on ? (on.getAttribute('data-f') || '').split(':')[1] : '';
+        if (tab === h.t) { this.land(h.f); return; }
+        this.want = {f: h.f, at: Date.now()};
+        pycmd('duecrew:settab:' + h.t);
+      },
+      land: function (f) {
+        var el = document.querySelector('#due-crew [data-f="' + f + '"]') || document.querySelector('#due-crew [data-f^="' + f + '"]');
+        if (!el) { return; }
+        var row = el.closest('.st-row, .st-radio, .st-acts, .st-foot') || el;
+        var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        row.scrollIntoView({block: 'center', behavior: still ? 'auto' : 'smooth'});
+        row.classList.remove('st-hit'); void row.offsetWidth; row.classList.add('st-hit');
+        setTimeout(function () { row.classList.remove('st-hit'); }, 2400);
+        try { el.focus({preventScroll: true}); } catch (e) {}
+      },
+      after: function () {
+        var w = this.want, self = this;
+        this.want = null;
+        if (w && Date.now() - w.at < 4000) { setTimeout(function () { self.land(w.f); }, 0); }  // after the swap's own focus
+      }
+    };
+  }
+  window.dcFind.after();
+})();
+"""
+
+# 3.8.0: the board's motion, one file shared with duecrew.com (site/public/motion.js, byte for byte)
+with open(_os.path.join(_os.path.dirname(__file__), "motion.js"), encoding="utf-8") as _f:
+    MOTION_JS = _f.read()
+
+
 def keep_me_in_view_js():
     """Run after the board is drawn or swapped: a capped view starts with
     your own row in view, wherever it ranks. Nothing happens under the
@@ -1164,7 +1358,14 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS
+    """ + DUE_JS + MOTION_JS + FIND_JS + MOTION_DRAWN
+
+
+# 3.8.0, round two: the board remembers what it said, so a draw anew (back
+# from a review, no swap) moves what changed while I was away (motion.js)
+MOTION_DRAWN = """
+try { if (window.dcMotion) { dcMotion.drawn(document.getElementById('due-crew')); } } catch (e) {}
+"""
 
 
 # a deck row without a "+N today" line holds its place, filled when another
@@ -1222,11 +1423,12 @@ def _bar(name, is_me, d, delta=None, today_labels=()):
             f'<span class="dc-count"><span>{counts}</span>{chip_html}</span></div>')
 
 
-def _presence_html(fresh, dormant, labels, entries):
+def _presence_html(fresh, dormant, labels, entries, pick=""):
     """The board in show-up mode: one view in place of Today and Week — a
     square per day, Monday to today, nothing to rank. Sorted by days showed
     up, then name; today is the last square, so who showed up today reads
-    off the right-hand column."""
+    off the right-hand column. pick: Crew's views, in the header's corner
+    (3.8.0), and "N showed up today" goes under the table."""
     days_of = {e["user_id"]: e.get("days") or {} for e in entries}
     week = list(reversed(week_labels(labels)))  # Monday first
     # sorted by what is on screen: squares lit this week, then name
@@ -1237,7 +1439,8 @@ def _presence_html(fresh, dormant, labels, entries):
     for lb in week:
         cls = "sqh on" if lb == labels[0] else "sqh"
         letters += f'<th class="{cls}">{"MTWTFSS"[datetime.fromisoformat(lb).weekday()]}</th>'
-    heads = f'<th class="lt" colspan="2">{today_n} showed up today</th>{letters}'
+    said = f"{today_n} showed up today"
+    heads = (_corner(pick) if pick else f'<th class="lt" colspan="2">{said}</th>') + letters
     body = ""
     for row in fresh + dormant:
         name = _label(row["name"], row.get("emoji"))
@@ -1261,7 +1464,8 @@ def _presence_html(fresh, dormant, labels, entries):
             for lb in week)
         body += (f'<tr class="{cls.strip()}"><td class="rk"></td>'
                  f'<td class="nm">{name}{note}</td>{cells}</tr>')
-    return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+    return (_scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class='))
+            + (f'<div class="dc-line dc-sum">{said}</div>' if pick else ""))
 
 
 def _tricky_html(tricky, mine=None):
@@ -1305,24 +1509,40 @@ def _tricky_html(tricky, mine=None):
     return out
 
 
-def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None):
-    return _tricky_html(tricky, mine) + _decks_body(data, deltas)
+def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=None, pick=""):
+    return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine))
 
 
 def _plans_html(plans):
-    """3.3: the Plans tab, a card each; 3.5.0: with none, the ways in."""
+    """3.3: the plans, a card each; 3.5.0: with none, the ways in."""
     cards = (plans or {}).get("cards") or []
     return "".join(_plan_card_html(card) for card in cards) if cards else _plans_empty_html()
+
+
+def _you_plans(plans, opened=None):
+    """3.8.0, You › Plans: a plan offered to one of my squads, then each plan
+    I follow; following none, the ways in. opened: this morning's line, here
+    only when Due is off (it's under Today otherwise)."""
+    return _opened_line(opened) + _offer_banners((plans or {}).get("offers")) + _plans_html(plans)
+
+
+def _opened_line(op):
+    """3.8.0, from the plan's old Today box: what this morning opened, with
+    Put off to tomorrow (its undo) while that's still Anki's latest step."""
+    n = int((op or {}).get("n") or 0)
+    if not n:
+        return ""
+    # 3.8.0: Sync now while AnkiWeb hasn't had them (a phone gets them from there)
+    sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
+            if op.get("sync") else "")
+    return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}.</span>'
+            f'<span class="acts">{sync}<a href="#" title="They open again tomorrow morning" onclick="{_pycmd("plannottoday")}">'
+            f'Put off to tomorrow</a></span></div>')
 
 
 def _segs(segments):
     """[(text, bold)] from plans.py, escaped."""
     return "".join(f"<b>{_html.escape(str(t))}</b>" if b else _html.escape(str(t)) for t, b in segments)
-
-
-def _pbar(done, total, solid=True):
-    pct = 0 if not total else max(0, min(100, round(100 * int(done) / int(total))))
-    return f'<span class="bar"><i class="{"" if solid else "part"}" style="width:{pct}%"></i></span>'
 
 
 def _plans_empty_html():
@@ -1333,15 +1553,16 @@ def _plans_empty_html():
     return (f'<div class="dc-pways"><b class="t">Follow a plan</b><div class="ways">'
             f'<div class="way"><b>Got a code?</b><input id="dc-plancode" placeholder="N4AP ULM2" '
             f'onkeydown="if(event.key===\'Enter\'){{{add}}}"><a href="#" onclick="{add}">Follow</a></div>'
-            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">Library on duecrew.com &#8599;</a></div>'
+            f'<div class="way"><b>Find one</b><a href="#" onclick="{_pycmd("planlibrary")}">The library &#8599;</a></div>'
             f'<div class="way"><b>Make one</b><a href="#" onclick="{_pycmd("planmake")}">Pick a deck&hellip;</a></div>'
             f'</div></div>')
 
 
 def _plan_card_html(card):
-    """3.5.0, the Plans tab: the plan, a Today
-    box, this week as the site's calendar draws it (a list when narrow),
-    one note at most, and the crew. Plan, date and event names are the
+    """3.5.0, a plan I follow (You › Plans since 3.8.0): the plan, what it
+    says about now (_plan_now), this week as the site's calendar draws it
+    (a list when narrow), one note at most, and the crew. Today is the tab
+    beside it, so there's no Today box. Plan, date and event names are the
     author's: escaped here."""
     e = _html.escape
     pid = str(card.get("id", ""))
@@ -1349,51 +1570,100 @@ def _plan_card_html(card):
            f'<span>{e(str(card.get("sub") or ""))}</span>'
            f'<span class="acts"><a href="#" onclick="{_pycmd("planmenu:" + pid)}">Plan &#9662;</a></span></div>')
     tabs = card.get("tabs") or {}
-    out += _plan_tabs(pid, tabs)
-    if tabs.get("sub") == "team":
-        return out + _team_html(pid, tabs) + "</div>"
-    if tabs.get("sub") == "ins":
-        return out + _insights_html(pid, tabs.get("insights") or {}) + "</div>"
     if card.get("no_deck"):
         out += (f'<div class="dc-line">No deck here has this plan&rsquo;s cards yet. '
                 f'<a href="#" onclick="{_pycmd("plandeck:" + pid)}">Pick a deck</a></div>')
-    box, behind = _today_box(card, pid)
-    out += box + _week_html(card, pid)
-    notes = _plan_notes(card, pid, skip_waiting=behind)
+    out += _plan_now(card, pid) + _week_html(card, pid)
+    notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
-    crew = _team_line(pid, tabs) or _crew_line(card)
+    crew = _squad_line(pid, tabs)
+    if not crew:
+        # 3.8.0: not in its squad: the crew who follow it, and the way in
+        crew = _crew_line(card)
+        if not card.get("team_ask"):
+            join = f'<a href="#" onclick="{_pycmd(f"planteamjoin:{pid}:ask")}">Join its squad</a>'
+            crew = f"{crew} &middot; {join}" if crew else join
     if crew:
         out += f'<div class="pcrew">{crew}</div>'
     return out + "</div>"
 
 
-# ---- 3.7.3: the plan's tabs: Plan, Team, Insights ----
+def _plan_now(card, pid):
+    """3.8.0: what the plan's Today box said that Today, the tab beside it,
+    doesn't: that it's paused, a day with no new cards, and the next
+    exam's cards at risk (card["ins"], from Insights), with Study."""
+    e = _html.escape
+    if card.get("paused"):
+        return (f'<div class="pn"><span>No new cards while it&rsquo;s paused.</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></span></div>')
+    out = _own_html(card.get("own"), pid) if card.get("own") else ""
+    kind = (card.get("session") or {}).get("kind")
+    if kind in ("rest", "catchup", "taper"):
+        word = {"rest": "a rest day", "catchup": "in its catch-up week", "taper": "in its taper"}[kind]
+        out += f'<div class="pn"><span>Today is {word}: reviews, and no new cards.</span></div>'
+    ins = card.get("ins") or {}
+    n = int(ins.get("n") or 0)
+    if n and ins.get("did"):
+        did = int(ins["did"])
+        wd, dn = _ins_day(ins.get("day"))
+        when = (f'<b>{e(str(ins["name"]))}</b> on {wd} {dn}' if ins.get("name") else f"{wd} {dn}")
+        out += (f'<div class="pn"><span><a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
+                f'{n:,} card{"s" if n != 1 else ""}</a> Anki won&rsquo;t show you before {when}</span>'
+                f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a>'
+                f'<a href="#" onclick="{_pycmd(f"youins:{did}")}">Insights &rsaquo;</a></span></div>')
+    return out
 
-def _plan_tabs(pid, tabs):
-    sub = tabs.get("sub") or "plan"
-    badge = int(tabs.get("unread") or 0)
-    out = ""
-    for k, name in (("plan", "Plan"), ("team", "Team"), ("ins", "Insights")):
-        b = f"<i>{badge}</i>" if k == "team" and badge and sub != "team" else ""
-        out += f'<a href="#" class="{"on" if k == sub else ""}" onclick="{_pycmd(f"plansub:{pid}:{k}")}">{name}{b}</a>'
-    return f'<div class="psub">{out}</div>'
+
+def _own_html(ow, pid):
+    """3.8.0, at my own pace: Up next with Open and Open and study, what
+    follows, the last step's Undo (or Put back), and quiet lines: where the
+    plan's dates are, my pace, the exam. No Behind. Names are the author's:
+    escaped here."""
+    e = _html.escape
+    out = '<div class="pnx">'
+    nx = ow.get("next")
+    if nx:
+        n = int(nx.get("n") or 0)
+        out += (f'<div class="nx"><span class="nx1"><span class="lbl">Up next</span> <b>{e(str(nx.get("name") or "?"))}</b>'
+                + (f' <small>{n:,} new</small>' if n else "") + '</span>'
+                f'<span class="nx2"><a class="bt" href="#" onclick="{_pycmd("planpaceopen:" + pid)}">Open</a>'
+                f'<a class="bt2" href="#" onclick="{_pycmd("planpacestudy:" + pid)}">Open and study</a></span></div>')
+        then, more = ow.get("then") or [], int(ow.get("more") or 0)
+        if then:
+            out += f'<div class="pq">Then {" &middot; ".join(e(str(x)) for x in then)}{f" &middot; {more:,} more" if more else ""}</div>'
+    else:
+        out += '<div class="pq">Every date of it is open.</div>'
+    if ow.get("last"):
+        out += (f'<div class="pnl">{e(str(ow["last"]))} '
+                f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">Undo</a></div>')
+    elif ow.get("back"):
+        b = ow["back"]
+        out += (f'<div class="pq"><a href="#" onclick="{_pycmd("planpaceback:" + pid)}">Put back {e(str(b.get("name") or "?"))}</a>'
+                f' &middot; {int(b.get("n") or 0):,} not seen yet</div>')
+    said = " ".join(e(str(ow[k])) for k in ("at", "pace") if ow.get(k))
+    if said:
+        out += f'<div class="pq">{said}</div>'
+    if ow.get("finish"):
+        out += f'<div class="pq">{e(str(ow["finish"]))}</div>'
+    return out + "</div>"
 
 
-def _team_line(pid, tabs):
-    """The Plan tab's line about the team: faces, how many showed up, the
-    newest question from someone else."""
+def _squad_line(pid, tabs):
+    """3.8.0, the Plan tab's line about the plan's squad: faces, how many
+    showed up, and the way there (the newest question from someone else
+    when there is one). "" when I'm not in it."""
     e = _html.escape
     s = tabs.get("summary")
     if not s:
         return ""
     faces = "".join(e(str(x)) for x in s.get("faces") or [])
     n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
-    out = f'{faces} {n} of the team showed up' if n else f'{of} on the team'
-    last = s.get("last")
-    if last:
-        out += f' &middot; <a href="#" onclick="{_pycmd(f"plansub:{pid}:team")}">{e(str(last.get("name") or "?"))} asked &rsaquo;</a>'
-    return out
+    out = f'{faces} Squad: {n} of {of} showed up' if n else f'Squad: {of} in it'
+    last, unread = s.get("last"), int(tabs.get("unread") or 0)
+    go = (f'{e(str(last.get("name") or "?"))} asked' if last and unread
+          else f'{unread} new' if unread else "Open")
+    return out.strip() + f' &middot; <a href="#" onclick="{_pycmd(f"squadplan:{pid}")}">{go} &rsaquo;</a>'
 
 
 def _team_ago(at, now=None):
@@ -1422,22 +1692,23 @@ def face(emoji, name, small=False):
     return f'<span class="ini{" sm" if small else ""}">{_html.escape(initial(name))}</span>'
 
 
-def _team_html(pid, tabs):
-    """Who showed up today, the team's bingo, Ask the team and its threads.
-    Names, words and topics are other people's: escaped here."""
+def _plan_squad_html(pid, tabs):
+    """3.8.0, a plan's squad on the Squads tab (the plan's Team tab until
+    then): who showed up today, its bingo, Ask the squad and its threads,
+    and the way out. Names, words and topics are other people's: escaped here."""
     e = _html.escape
     st, v = tabs.get("team_state"), tabs.get("team")
     if v is None:
         if st == "failed":
             return (f'<div class="tq0">Couldn&rsquo;t reach Due Crew. '
                     f'<a href="#" onclick="{_pycmd(f"planteamretry:{pid}")}">Try again</a></div>')
-        return '<div class="tq0">Fetching&hellip;</div>'
+        return '<div class="tq0 dc-wait">Fetching&hellip;</div>'
     if not v.get("on"):
         n = int(v.get("count") or 0)
-        return (f'<div class="tjoin"><b>{f"{n} on the team" if n else "No team yet"}</b>'
-                '<span class="k">The team sees that you showed up today, and your questions and answers; '
+        return (f'<div class="tjoin"><b>{f"{n} in its squad" if n else "No one in its squad yet"}</b>'
+                '<span class="k">The squad sees that you showed up today, and your questions and answers; '
                 'your progress counts for the plan&rsquo;s authors. Never your numbers.</span>'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join the team</a></div>')
+                f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join its squad</a></div>')
     me = tabs.get("me")
     faces = ""
     for f in v.get("faces") or []:
@@ -1458,13 +1729,13 @@ def _team_html(pid, tabs):
         cells = "".join(f'<i class="{"on" if (ev["middle"]["done"] if c == 4 else ev["squares"][CELLS_BINGO.index(c)]["done"]) else ""}"></i>'
                         for c in range(9))
         out += (f'<style>{BINGO_CSS}</style><div class="bg-card" style="margin-top:8px"><span class="bg-mini">{cells}</span>'
-                f'<span class="bg-t"><b>Team bingo</b><span>{e(bingo_line(ev))}</span></span>'
+                f'<span class="bg-t"><b>Squad bingo</b><span>{e(bingo_line(ev))}</span></span>'
                 f'<a href="#" onclick="{_pycmd(f"planteambingo:{pid}")}">Open</a></div>')
     draft = e(str(tabs.get("draft") or ""), quote=True)
     send = (f"var v=document.getElementById('dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}').value;"
             f"if(v.trim())pycmd('duecrew:planteamask:{pid}:'+encodeURIComponent(v.slice(0,280)));return false;")
     iid = f"dc-tqa-{_re.sub(r'[^A-Za-z0-9]', '', pid)}"
-    out += (f'<div class="tg">Ask the team</div><div class="tqa"><input id="{iid}" maxlength="280" '
+    out += (f'<div class="tg">Ask the squad</div><div class="tqa"><input id="{iid}" maxlength="280" '
             f'placeholder="Ask anything&hellip;" value="{draft}" onkeydown="if(event.key===\'Enter\'){{{send}}}">'
             f'<a href="#" onclick="{send}">Ask</a></div>')
     known = tabs.get("known") or {}
@@ -1509,7 +1780,8 @@ def _team_html(pid, tabs):
                 f'<span class="acts">{acts}</span></div></div>')
     if not v.get("asks"):
         out += '<div class="tq0">No questions yet.</div>'
-    return out + f'<div class="tleave"><a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">Leave the team</a></div>'
+    return out + (f'<div class="dc-line"><a href="#" onclick="{_pycmd("duetab:plans")}">Open the plan</a> &middot; '
+                  f'<a href="#" onclick="{_pycmd(f"planteamleave:{pid}")}">Leave</a></div>')
 
 
 def _hm(m):
@@ -1541,9 +1813,49 @@ def _ins_spark(days):
             f'<path d="{path}"/><circle class="end" cx="{ex:.1f}" cy="{ey:.1f}" r="3"/>{dots}</svg>')
 
 
-def _ins_week(pid, w, aim, today):
+def _you_insights(ins):
+    """3.8.0, You › Insights: for everyone, a deck at a time, picked as a
+    squad is. ins: team_flow.you_view: {decks: [{did, name, full}], did,
+    exam: my exam date or "", view: the deck's Insights}. It's the deck's,
+    plan or not: a plan I follow on it only sharpens it (its events
+    aim the exam box, its dates name the topics, its behind line). Names are
+    mine (decks) or authors' (plan events, topics): escaped."""
+    e = _html.escape
+    ins = ins or {}
+    decks = ins.get("decks") or []
+    if not decks:
+        return '<div class="tq0">Insights fill in after a week of reviews.</div>'
+    did = int(ins.get("did") or decks[0]["did"])
+    on = ' class="on"'
+    cur = next((d for d in decks if int(d["did"]) == did), decks[0])
+    # 3.8.0 (Sam): the deck's name always shows: one deck, its name; more, the picker
+    pick = (f'<b class="ideck" title="{e(str(cur.get("full") or cur["name"]))}">{e(str(cur["name"]))}</b>'
+            if len(decks) < 2 else '<div class="dc-sw">' + "".join(
+                f'<a{on if int(d["did"]) == did else ""} href="#" title="{e(str(d.get("full") or d["name"]))}" '
+                f'onclick="{_pycmd("insdeck:" + str(int(d["did"])))}">{e(str(d["name"]))}</a>' for d in decks) + "</div>")
+    # 3.8.0: my exam date, set right here (Settings has the same one): a link, Add exam
+    # date, that opens the date picker; once set, the day itself, with × to take it off
+    ex = str(ins.get("exam") or "")
+    ex = ex if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", ex) else ""
+    try:
+        x = _dt.date.fromisoformat(ex) if ex else None
+    except ValueError:
+        x, ex = None, ""
+    said = f"Exam {x:%a} {x.day} {x:%b}" if x else "Add exam date"
+    off = (f' <a class="q" href="#" title="Take your exam date off" aria-label="Take your exam date off" '
+           f'onclick="{_pycmd("setexam:off")}">&times;</a>' if x else "")
+    ctx = (f'<span class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">'
+           f'<a href="#" onclick="var i=this.nextElementSibling;try{{i.showPicker();}}catch(x){{i.classList.remove(\'ixd\');i.focus();}}return false;">{said}</a>'
+           f'<input class="ixd" type="date" value="{e(ex)}" aria-label="Exam date" '
+           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));">{off}</span>')
+    head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
+    return head + _insights_html(did, ins.get("view") or {})
+
+
+def _ins_week(did, w, aim, today):
     """Your week in time: the last 7 days as studied, today (done, and what's
-    left), and the plan's next days at my own pace."""
+    left), and the next days at my own pace: what the plan asks, or (3.8.0,
+    no plan) what Anki has due."""
     past, ahead = w.get("past") or [], w.get("ahead") or []
     cols = [("p", m, d, f"{_hm(m)} in this deck") for d, m in past]
     done = int(w.get("today_done") or 0)
@@ -1556,7 +1868,7 @@ def _ins_week(pid, w, aim, today):
     top = max([c[1] for c in cols] + [60])
     W, H, gap = 640, 90, 6
     bw = (W - gap * (len(cols) - 1)) / max(1, len(cols))
-    hid = "hx" + _re.sub(r"[^A-Za-z0-9]", "", pid)[:20]
+    hid = "hx" + _re.sub(r"[^A-Za-z0-9]", "", str(did))[:20]
     grid = "".join(f'<line class="g" x1="0" x2="{W}" y1="{H - H * h * 60 / top:.1f}" y2="{H - H * h * 60 / top:.1f}"/>'
                    f'<text class="yl" x="-5" y="{H - H * h * 60 / top + 3:.1f}">{h} h</text>'
                    for h in range(1, int(top // 60) + 1))
@@ -1587,16 +1899,18 @@ def _ins_week(pid, w, aim, today):
     to = (f" to {_ins_day(aim['day'])[0]}" if aim.get("name") and int(aim.get("in") or 99) <= 6 else " this week")
     return (f'<div class="isec"><div class="ik">Your week<span>&nbsp;&middot; about {_hm(w["avg"])} a day{to}'
             f' &middot; the last 7 days: {_hm(w.get("was") or 0)}</span>'
-            f'<span class="ikey"><i class="sw pm"></i>your days <i class="sw hx"></i>what the plan asks</span></div>'
+            f'<span class="ikey"><i class="sw pm"></i>your days <i class="sw hx"></i>{"what the plan asks" if w.get("src") != "anki" else "what Anki has due"}</span></div>'
             f'<div class="iwk"><svg viewBox="-24 0 664 120" role="img" aria-label="Minutes a day in this deck">{defs}{grid}'
             f'<line class="base" x1="0" x2="{W}" y1="{H}" y2="{H}"/>{bars}</svg></div></div>')
 
 
-def _insights_html(pid, v):
+def _insights_html(did, v):
     """3.7.9 (mock "Insights"): mine alone, worked out in my Anki. The
-    header's right, the cards Anki won't show me before the plan's next
-    event that I'd be under my target on by then, what's not sticking yet,
-    my week in time, Optimize FSRS when my newest cards fall short."""
+    header's right, the cards Anki won't show me before the next exam (a
+    plan's event, or my own date: 3.8.0) that I'd be under my target on by
+    then, what's not sticking yet, my week in time, Optimize FSRS when my
+    newest cards fall short, and the deck's suspended leeches. 3.8.0: a
+    deck's, plan or not (did, its id, in each command)."""
     e = _html.escape
     v = v if isinstance(v, dict) else {}
     out = ""
@@ -1605,7 +1919,7 @@ def _insights_html(pid, v):
     if now[1] >= 50:
         pct = round(100 * now[0] / now[1])
         was = (f'<span class="m">{round(100 * before[0] / before[1])}% the 2 weeks before</span>' if before[1] >= 50 else "")
-        out += (f'<div class="ihd" title="This plan&rsquo;s deck, first answer of each card each day: '
+        out += (f'<div class="ihd" title="This deck, first answer of each card each day: '
                 f'{now[0]:,} of {now[1]:,} right in 2 weeks"><b>{pct}%</b><span>right on reviews{" &middot; " + was if was else ""}</span>'
                 f'{_ins_spark(r.get("days") or [])}</div>')
     aim = v.get("aim") or {}
@@ -1618,111 +1932,117 @@ def _insights_html(pid, v):
         k = int(aim.get("in") or 7)
         when, dn = _ins_day(aim.get("day"))
         days = f'{k} day{"s" if k != 1 else ""}'
-        # 3.7.9: named for the event only when its prep dates are what's counted; else by the day
+        # 3.7.9: named for the event only when its prep dates are what's counted; else by the day.
+        # 3.8.0: my own exam date (Settings) is named too, over the whole deck
         scoped = bool(aim.get("scoped") and aim.get("name"))
-        lab = f'{e(str(aim["name"]))} &middot; {when} {dn} &middot; {days}' if scoped else f'Before {when} {dn} &middot; {days}'
-        whose = "this plan&rsquo;s prep dates for it" if scoped else "this plan"
+        mine = aim.get("kind") == "exam"
+        lab = (f'{e(str(aim["name"]))} &middot; {when} {dn} &middot; {days}' if scoped
+               else f'Your exam &middot; {when} {dn} &middot; {days}' if mine
+               else f'Before {when} {dn} &middot; {days}')
+        whose = "the plan&rsquo;s prep dates for it" if scoped else "this deck"
         out += (f'<div class="ihero"><div class="k">{lab}</div>'
                 f'<div class="t" title="Started cards of {whose} that Anki won&rsquo;t show you before then, under your {int(v.get("target") or 90)}% by then (FSRS)">'
-                f'{len(hero):,} card{"s" if len(hero) != 1 else ""} Anki won&rsquo;t show you before {when}</div>'
-                f'<a class="bt" href="#" onclick="{_pycmd(f"planinsstudy:{pid}:h")}">Study {len(hero):,}</a></div>')
-    if int(v.get("behind") or 0):
+                f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"insbrowse:{did}:h")}">'
+                f'{len(hero):,} card{"s" if len(hero) != 1 else ""}</a> Anki won&rsquo;t show you before {when}</div>'
+                f'<a class="bt" href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {len(hero):,}</a></div>')
+    if int(v.get("behind") or 0) and v.get("pid"):
         out += (f'<div class="iline">{int(v["behind"]):,} new cards behind &middot; '
-                f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></div>')
+                f'<a href="#" onclick="{_pycmd("plancatch:" + str(v["pid"]))}">Catch up&hellip;</a></div>')
     rows = v.get("rows") or []
     if rows:
         out += ('<div class="isec"><div class="ik">Not sticking yet<span>&nbsp;&middot; last 2 weeks</span>'
                 '<span class="ikey"><i class="sw st"></i>not right yet <i class="sw fg"></i>forgot</span></div>')
         for i, x in enumerate(rows):
             of, st, fg = max(1, int(x["of"])), int(x["stuck"]), int(x["forgot"])
-            tip = f'{x["name"]} &middot; {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
-            out += (f'<div class="irow" title="{e(tip)}"><span class="n"><b>{e(str(x["name"]))}</b>'
+            tip = f'{x["name"]} · {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
+            out += (f'<div class="irow" title="{e(tip)}"><span class="n"><b><a class="tp" href="#" title="Browse them" '
+                    f'onclick="{_pycmd(f"insbrowse:{did}:{i}")}">{e(str(x["name"]))}</a></b>'
                     f'<span>{e(str(x.get("src") or ""))}</span></span>'
                     f'<span class="ib"><i class="st" style="width:{100 * st / of:.1f}%"></i>'
                     f'<i class="fg" style="left:{100 * st / of:.1f}%;width:{100 * fg / of:.1f}%"></i></span>'
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
-                    f'<a href="#" onclick="{_pycmd(f"planinsstudy:{pid}:{i}")}">Study {st + fg}</a></div>')
+                    f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
     if w:
-        out += _ins_week(pid, w, aim, today)
+        out += _ins_week(did, w, aim, today)
     f = v.get("fsrs")
     if f:
         out += (f'<div class="iline" title="Reviews of cards 1&ndash;3 days since their last review, 4 weeks: '
-                f'{int(f["right"])}% right of {int(f["n"]):,}">Your newest cards come back {int(f["right"])}% right, '
-                f'not the {int(f["target"])}% Anki aims for. '
-                f'<a href="#" onclick="{_pycmd("planinsfsrs:" + pid)}">Optimize FSRS</a> '
-                f'<a class="q" href="#" onclick="{_pycmd("planinsfsrsno:" + pid)}">Not now</a></div>')
+                f'{int(f["right"])}% right of {int(f["n"]):,}">Newest cards {int(f["right"])}% right, '
+                f'Anki aims for {int(f["target"])}% &middot; '
+                f'<a href="#" onclick="{_pycmd(f"insfsrs:{did}")}">Optimize FSRS</a> '
+                f'<a class="q" href="#" onclick="{_pycmd(f"insfsrsno:{did}")}">Not now</a></div>')
+    h = v.get("hard")
+    if h:
+        # 3.8.0: the Hard habit, said once a month at most
+        out += (f'<div class="iline" title="{int(h["n"]):,} reviews in 4 weeks">You press Hard on {int(h["pct"])}% of reviews. '
+                f'Anki counts Hard as remembered. '
+                f'<a class="q" href="#" onclick="{_pycmd(f"inshardno:{did}")}">Not now</a></div>')
+    lee = int(v.get("leeches") or 0)
+    if lee:
+        # 3.8.0: from the plan card; a leech is the deck's
+        out += (f'<div class="iline">{lee:,} suspended leech{"es" if lee != 1 else ""} &middot; '
+                f'<a href="#" onclick="{_pycmd(f"insleeches:{did}")}">See them</a></div>')
     if not out:
         return '<div class="tq0">Insights fill in after a week of reviews.</div>'
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _today_box(card, pid):
-    """(html, behind): what today holds, in one of its states: paused, a
-    rest day, done, behind, or a study day."""
+def _ins_map(did, tiles, by, at=(), ways=()):
+    """3.8.0, the topic map: each subject a tile, sized by its cards in play,
+    shaded by how much I know now of the ones I've started (a bar along its
+    foot: how many I've started; none yet, "new"). A tile that splits again
+    opens into its smaller ones (at: the keys opened), the trail above them
+    goes back, and Browse all opens the open one's cards; a tile that
+    doesn't, its cards. ways: how else it can split (Systems, a resource,
+    Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
+    own Anki. Two tiles at least, or it says nothing."""
+    if len(tiles) < 2:
+        return ""
     e = _html.escape
-    s = card.get("session") or {}
-    kind = s.get("kind")
-    head = f'Today &middot; {e(str(card.get("today") or ""))}'
-    names = [str(n) for n in card.get("today_names") or []]
-    what = " &middot; ".join(f"<b>{e(n)}</b>" for n in names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
-    # 3.6.5, P7: one line of what today's dates cover
-    if card.get("today_what"):
-        what += f'<span class="tw" title="{e(str(card["today_what"]))}">{e(str(card["today_what"]))}</span>'
-    nxt = card.get("next")
-    nxt_line = (f'<span class="next">Next: <b>{e(nxt["name"])}</b> &middot; {e(str(nxt["day"]))}'
-                + (f' &middot; {int(nxt["n"]):,} new' if int(nxt.get("n") or 0) else "")
-                + (f' &middot; <a href="#" onclick="{_pycmd("plannow:" + pid + ":" + str(nxt["uid"]))}">Open now</a>'
-                   if nxt.get("uid") else "") + '</span>') if nxt else ""
-    if card.get("paused"):
-        what_ = str(card.get("sub") or "paused").split(" · ")[0]
-        return (f'<div class="ptoday rest"><span class="h">{e(what_[:1].upper() + what_[1:])}</span>'
-                f'<span class="what">No new cards until then</span>'
-                f'<div class="btns"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></div></div>'), False
-    due = s.get("due")
-    reviews = f'<span><b>{int(due):,}</b> reviews</span>' if due is not None else ""
-    if kind in ("rest", "catchup", "taper"):
-        word = {"rest": "rest day", "catchup": "catch-up week", "taper": "taper"}[kind]
-        return (f'<div class="ptoday rest"><span class="h">{head} &middot; {word}</span>'
-                f'<span class="what">{reviews or "Reviews"} &middot; no new</span>{nxt_line}'
-                f'<div class="btns"><a class="bt on" href="#" onclick="{_pycmd("planstudy:" + pid)}">Study</a></div></div>'), False
-    target, done = int(s.get("target") or 0), int(s.get("done") or 0)
-    if s and target and done >= target and not int(due or 0):
-        return (f'<div class="ptoday done"><span class="h">{head}</span>'
-                f'<span class="what">&#10003; <b>Done</b> &middot; {target:,} new'
-                + (f' &middot; {int(due):,} reviews' if due is not None else "") + f'</span>{nxt_line}</div>'), False
-    # 3.7.6: while a catch-up runs, what's behind is what it's catching up on: not "behind"
-    behind = 0 if card.get("catch") else int(s.get("behind") or 0) or int(card.get("waiting") or 0)
-    if s.get("ask"):
-        behind = 0  # the missed-days question says it, with its own three ways
-    bar = _wbar(min(done, target), target) if target else ""
-    nums = []
-    if due is not None:
-        nums.append(f'<span><b>{int(due):,}</b> reviews</span>')
-    if target:
-        nums.append(f'<span><b>{min(done, target):,}</b> / {target:,} new</span>')
-    op = card.get("opened")
-    if op and int(card.get("early") or 0):
-        early = int(card["early"])
-        nums.append(f'<span>opened {early} day{"s" if early != 1 else ""} early</span>')
-    something = bool(target) or bool(int(due or 0))
-    if s and kind == "study" and not behind and not s.get("ask") and target:
-        nums.append('<span class="ok">&#10003; on track</span>')
-    btns = ""
-    if s and kind == "study" and something:
-        btns += f'<a class="bt on" href="#" onclick="{_pycmd("planstudy:" + pid)}">Study now</a>'
-    if op and op.get("undo") and not behind:
-        btns += f'<a href="#" class="q" onclick="{_pycmd("plannottoday")}">Put off to tomorrow</a>'
-    if behind:
-        btns += (f'<a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a>'
-                 f'<a href="#" onclick="{_pycmd("planshift:" + pid)}">Move my days back&hellip;</a>')
-    line = (f'<span class="what">{what}</span>' if what else
-            '<span class="what">Nothing new opens today</span>' if not target else "")
-    return (f'<div class="ptoday{" behind" if behind else ""}"><span class="h">{head}'
-            + (f' &middot; {behind:,} new behind' if behind else "") + f'</span>{line}'
-            + (f'<div class="nums">{"".join(nums)}</div>' if nums else "") + bar
-            + ("" if what or target else nxt_line)
-            + (f'<div class="btns">{btns}</div>' if btns else "") + '</div>'), bool(behind)
+    from .team import map_level, map_shade
+    trail, cur = map_level(tiles, at)
+    big = max(int(t["n"]) for t in cur) or 1
+    how = "you’d remember now (FSRS)" if by == "fsrs" else "right on their last review"  # escaped with the tip
+    out, fresh = "", False
+    for i, t in enumerate(cur):
+        n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
+        fresh = fresh or k is None
+        said = (f"{n:,} cards, none started yet" if k is None
+                else f"{n:,} cards, {st:,} started, {int(k)}% {how}")
+        tip = f'{t["name"]}: {said}. ' + ("Open it." if t.get("kids") else "Browse them.")
+        more = '<i aria-hidden="true">&rsaquo;</i>' if t.get("kids") else ""
+        bar = (f'<i class="tmb" style="width:{100 * st / n:.0f}%"></i>' if k is not None and 0 < st < n else "")
+        out += (f'<a class="tm {"sn" if k is None else f"s{map_shade(int(k))}"}" href="#" '
+                f'style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
+                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span>'
+                f'<b>{"new" if k is None else f"{int(k)}%"}</b>{bar}</a>')
+    path = ""
+    if trail:
+        steps = [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:0")}">All</a>']
+        steps += [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:{j}")}">{e(str(t["name"]))}</a>'
+                  for j, t in enumerate(trail[:-1], 1)]
+        last = trail[-1]
+        steps.append(f'<b>{e(str(last["name"]))}</b>')
+        lk = last.get("know")
+        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards'
+                f'{"" if lk is None else f", {int(lk)}%"} '
+                f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
+    key = '<i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+' + (' <i class="sw sn"></i>new' if fresh else "")
+    ways = [w for w in ways or () if isinstance(w, dict)]
+    if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
+        opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
+                       for i, w in enumerate(ways))
+        sub = (f'<span>&nbsp;&middot; by <select class="tmby" aria-label="Split by" '
+               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value);">{opts}</select>'
+               f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
+    else:
+        sub = "<span>&nbsp;&middot; by topic, now</span>"
+    share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
+    return (f'<div class="isec"><div class="ik">What you know{sub}'
+            f'<span class="ikey">{key}{share}</span></div>'
+            f'{path}<div class="tmap">{out}</div></div>')
 
 
 def _week_html(card, pid):
@@ -1740,13 +2060,14 @@ def _week_html(card, pid):
            f'<a href="#" class="tb{"" if off else " here"}" onclick="{_pycmd(f"planweek:{pid}:0")}">Today</a>'
            f'<a href="#" title="Next week" onclick="{_pycmd(f"planweek:{pid}:next")}">&rsaquo;</a></span>')
     out = (f'<div class="pwh"><b>{title}</b>{nav}'
-           f'<a class="site" href="#" title="Opens in your browser" onclick="{_pycmd("plansite:" + pid)}">Month on duecrew.com &#8599;</a></div>')
+           f'<a class="site" href="#" title="The month on duecrew.com, in your browser" '
+           f'onclick="{_pycmd("plansite:" + pid)}">Month &#8599;</a></div>')
     cells, details = "", ""
-    # the box marks the open day: today on this week, else the first day with plans
+    # 3.8.0: a day's details open on a click (today's are the box's Today), or
+    # on the day Browse › Show on my plan asked for
+    focus = card.get("focus")
+    sel = next((i for i, d in enumerate(week) if d["day"] == focus), None) if focus else None
     has_any = [bool(d["units"] or d["events"]) for d in week]
-    sel = next((i for i, d in enumerate(week) if d["today"]), None) if off == 0 else None
-    if sel is None:
-        sel = next((i for i, x in enumerate(has_any) if x), None)
     # 3.7.81: plan load: a day's bar is its size (to the week's biggest) filled with what it asks
     loaded = any(d.get("size") is not None for d in week)
     of = max([int(d.get("size") or 0) for d in week] + [1])
@@ -1754,12 +2075,13 @@ def _week_html(card, pid):
         did = f"dc-pd-{_re.sub(r'[^A-Za-z0-9]', '', pid)}-{i}"
         new, seen = int(d.get("new") or 0), int(d.get("seen") or 0)
         size, ask = (int(d["size"]), int(d.get("ask") or 0)) if d.get("size") is not None else (None, 0)
+        uids = "-".join(str(u["uid"]) for u in d["units"] if u["state"] != "skip")
         if size is not None:
-            mark = (("&#10003;" if not ask else f'<span class="late">{ask:,} behind</span>') if d["past"] and size
-                    else ("&#10003;" if not ask else f"{ask:,} to go") if d["today"] and size
+            mark = (("&#10003;" if not ask else f'<span class="late">{_left_a(pid, uids, f"{ask:,} behind")}</span>') if d["past"] and size
+                    else ("&#10003;" if not ask else _left_a(pid, uids, f"{ask:,} to go")) if d["today"] and size
                     else (f"{ask:,} new" if ask else "nothing new") if size else "")
         elif d["past"] or d["today"]:
-            mark = ("&#10003;" if new and seen >= new else f"{new - seen:,} left" if new and d["past"] else
+            mark = ("&#10003;" if new and seen >= new else _left_a(pid, uids, f"{new - seen:,} left") if new and d["past"] else
                     f"{new:,}" if new else "")
         else:
             mark = f"{new:,}" if new else ""
@@ -1809,23 +2131,43 @@ def _week_html(card, pid):
                 tag = ' <span class="mv">&middot; moved</span>' if u.get("moved") else ""
                 rows += f'<div class="r"><span class="u">{e(u["name"])}{tag}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
                 # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
-                what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}{" &middot; ".join(e(str(x)) for x in xs)}</span>'
+                # 3.8.0: each topic opens its cards in Browse
+                what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}'
+                               + " &middot; ".join(_topic_a(pid, uid, x, i) for x, i in xs) + '</span>'
                                for g, xs in (u.get("what") or []))
                 browse = (f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {int(u["total"]):,} card{"s" if int(u["total"]) != 1 else ""}</a>'
                           if int(u["total"]) and u["state"] != "skip" else "")
+                if browse and u["state"] == "open" and 0 < int(u["seen"]) < int(u["total"]):
+                    browse += (f'<a href="#" onclick="{_pycmd(f"planleft:{pid}:{uid}")}">'
+                               f'{int(u["total"]) - int(u["seen"]):,} left</a>')  # 3.8.0
                 if what or browse:
                     rows += f'<div class="wi">{what}{f"<span class=acts>{browse}</span>" if browse else ""}</div>'
             for n in d["events"]:
                 rows += f'<div class="r"><span class="u"><b>{e(n)}</b></span><span class="n"></span><span></span></div>'
             later = (not d["past"] and not d["today"] and any(u["state"] == "later" for u in d["units"]))
-            back = (f'<div class="acts"><a href="#" onclick="{_pycmd("planshift:" + pid)}">Move my days back&hellip;</a></div>'
+            back = (f'<div class="acts"><a href="#" onclick="{_pycmd("planshift:" + pid)}">Push my dates back&hellip;</a></div>'
                     if later else "")
             details += (f'<div class="pday" id="{did}"{"" if i == sel else " hidden"}><b>{e(d["dow"])} {int(d["num"])} {_mon(d["day"])}'
                         + (' &middot; today' if d["today"] else "") + '</b>'
                         f'{rows}{back}</div>')
     key = ('<div class="pkey"><span><i class="kn"></i>new to you</span><span><i class="kc"></i>seen or in your Anki by then</span>'
-           '<span>longest = busiest day</span></div>') if loaded else ""
+           '</div>') if loaded else ""
     return out + f'<div class="pwk">{cells}</div>{key}{details}'
+
+
+def _left_a(pid, uids, text):
+    """3.8.0: a day's "16 left" in its cell, opening those cards in Browse;
+    the cell's own click (its details) doesn't fire with it."""
+    if not uids:
+        return text
+    return (f'<a class="tp" href="#" title="Browse them" onclick="event.stopPropagation();'
+            f'{_pycmd(f"planleft:{pid}:{uids}")}">{text}</a>')
+
+
+def _topic_a(pid, uids, name, i):
+    """3.8.0: a plan's topic as a link to its cards in Anki's browser."""
+    return (f'<a class="tp" href="#" title="Browse its cards" '
+            f'onclick="{_pycmd(f"plantopic:{pid}:{uids}:{int(i)}")}">{_html.escape(str(name))}</a>')
 
 
 def _abar(size, ask, of, late, label):
@@ -1872,7 +2214,7 @@ def _crew_line(card):
     return ""
 
 
-def _plan_notes(card, pid, skip_waiting=False):
+def _plan_notes(card, pid):
     """Everything the plan has to say beyond today and the week, most
     pressing first; the tab shows the first. Each carries its own action."""
     e = _html.escape
@@ -1904,7 +2246,7 @@ def _plan_notes(card, pid, skip_waiting=False):
                    f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
     if card.get("team_ask"):
         # 3.7.6: shared progress before the team and sharing were one choice: asked once
-        out.append('<div class="pn"><span>Join this plan&rsquo;s team? The others on it see your name and the days you '
+        out.append('<div class="pn"><span>Join this plan&rsquo;s squad? The others in it see your name and the days you '
                    'show up, and your progress counts for its authors.</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planteamjoin:" + pid)}">Join</a>'
                    f'<a href="#" onclick="{_pycmd("planteamno:" + pid)}">No thanks</a></span></div>')
@@ -1915,6 +2257,16 @@ def _plan_notes(card, pid, skip_waiting=False):
     if card.get("change"):
         out.append(f'<div class="pn"><span>{_segs(card["change"])}</span>'
                    f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
+    tn = card.get("tag_news")
+    if tn and tn.get("names"):
+        # 3.8.0: the plan's own tags, on my notes since today
+        more = int(tn.get("more") or 0)
+        miss = int(tn.get("missing") or 0)
+        names = ", ".join(e(str(x)) for x in tn["names"])
+        out.append(f'<div class="pn"><span>New tags: <b>{names}</b>{f" and {more} more" if more else ""}.'
+                   f'{f" {miss:,} of their notes aren&rsquo;t in your deck." if miss else ""}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("plantags:" + pid)}">Browse them</a>'
+                   f'<a href="#" onclick="{_pycmd("plantagsok:" + pid)}">OK</a></span></div>')
     lim, want = s.get("limit"), int(s.get("target") or 0)
     if lim is not None and want > int(lim) and s.get("kind") == "study":
         out.append(f'<div class="pn warn"><span>Anki shows {int(lim):,} new a day in this deck; today has {want:,}.</span>'
@@ -1923,17 +2275,12 @@ def _plan_notes(card, pid, skip_waiting=False):
     if fb and not card.get("fallback_ok"):
         out.append(f'<div class="pn"><span>{fb} date{"s use tags" if fb != 1 else " uses a tag"} your deck names differently, '
                    f'matched by their cards.</span><span class="acts"><a href="#" onclick="{_pycmd("planidsok:" + pid)}">OK</a></span></div>')
-    # 3.6.5: what the plan left shut here, said once (OK until it grows)
-    lee, miss, of = (list(card.get("aside") or []) + [0, 0, 0])[:3]
+    # 3.6.5: what the plan left shut here, said once (OK until it grows).
+    # 3.8.0: the leeches are the deck's, so they're on Insights
+    _lee, miss, of = (list(card.get("aside") or []) + [0, 0, 0])[:3]
     ok = (list(card.get("aside_ok") or []) + [0, 0])[:2]
-    if (lee and int(lee) > int(ok[0])) or (miss and int(miss) > int(ok[1])):
-        said = []
-        if lee:
-            said.append(f'{int(lee):,} leech{"es stay" if int(lee) != 1 else " stays"} suspended: Anki set '
-                        f'{"them" if int(lee) != 1 else "it"} aside, and a plan never opens one.')
-        if miss:
-            said.append(f'{int(miss):,} of {int(of):,} exact cards aren\u2019t in your deck.')
-        out.append(f'<div class="pn"><span>{" ".join(said)}</span>'
+    if miss and int(miss) > int(ok[1]):
+        out.append(f'<div class="pn"><span>{int(miss):,} of {int(of):,} exact cards aren\u2019t in your deck.</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planasideok:" + pid)}">OK</a></span></div>')
     if card.get("catch"):
         c = card["catch"]
@@ -1941,8 +2288,10 @@ def _plan_notes(card, pid, skip_waiting=False):
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plancatchstop:" + pid)}">Stop</a></span></div>')
     for kind, segments in card.get("lines") or []:
         if kind == "behind" and not card.get("catch"):
-            out.append(f'<div class="pn warn"><span>{_segs(segments)}</span></div>')
-    if int(card.get("waiting") or 0) and not card.get("catch") and not skip_waiting:
+            # 3.8.0: Catch up (and Push my dates back, in its menu), from the old Today box
+            out.append(f'<div class="pn warn"><span>{_segs(segments)}</span>'
+                       f'<span class="acts"><a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></span></div>')
+    if int(card.get("waiting") or 0) and not card.get("catch"):
         w = int(card["waiting"])
         out.append(f'<div class="pn"><span><b>{w:,}</b> new from earlier days waiting</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("plancatch:" + pid)}">Catch up&hellip;</a></span></div>')
@@ -2011,28 +2360,40 @@ def _offer_banners(offers):
     return out
 
 
-def _decks_body(data, deltas=None):
+# 3.7.1, I6: a key drawn like the bars, no words about hovering
+_DKEY = '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span>'
+
+
+def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
+    """Crew › Decks: pick (Crew's views) on a line of its own, the key at its
+    right when the bars come next (3.8.0, head row B); asks, the cards asked
+    about, between them and the bars, with the key under the bars."""
     deltas = deltas or {}
     labels = data.get("labels") or []
     # a friend ahead of my timezone writes my "tomorrow" as their today
     today_labels = tuple(lb for lb in (labels[0] if labels else "", data.get("tomorrow")) if lb)
     groups, extras = build_deck_groups(data["entries"])
-    if not groups and not extras:
-        return ('<div class="dc-line">No shared decks yet. '
-                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a> '
-                '&mdash; matching decks pair up on their own.</div>')
+    up = bool(pick) and not asks and bool(groups)
+    top = f'<div class="dc-pline">{pick}{_DKEY if up else ""}</div>' if pick else ""
+    if not groups:  # a friend's alone isn't drawn (extras, since 2.7): the way in
+        return (top + asks + '<div class="dc-line">No shared decks yet. '
+                f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
     html = ""
     for g in groups:
         label = _html.escape(str(g["label"]))
+        did = (sticking or {}).get(str(g["label"]))
+        if did:
+            # 3.8.0: my own deck, to how it's sticking (You › Insights)
+            label += (f'<a class="dsk" href="#" title="How it&rsquo;s sticking, in Insights" '
+                      f'onclick="{_pycmd("youins:" + str(int(did)))}">How it&rsquo;s sticking &rsaquo;</a>')
         rows = "".join(
             _bar(n, me, d, deltas.get((uid, d.get("name", ""))), today_labels)
             for n, me, d, uid in g["rows"])
         html += f'<div class="dg"><div class="dgh">{label}</div>{rows}</div>'
     html = _scroll(_even_bars(html), sum(len(g["rows"]) for g in groups))
-    html += ('<div class="dc-line" style="padding-top: 2px;">'
-             # 3.7.1, I6: a key drawn like the bars, no words about hovering
-             '<span class="dkey"><i class="fm"></i>mature<i class="fs"></i>seen<i class="fo"></i>unlocked</span></div>')
-    return html
+    if groups and not up:
+        html += f'<div class="dc-line" style="padding-top: 2px;">{_DKEY}</div>'
+    return top + asks + html
 
 
 SQUAD_FIELDS = {"reviews": "reviews", "time": "time_ms",
@@ -2047,11 +2408,50 @@ def _switcher(view):
     parts = []
     for sq in view.get("squads") or []:
         on = ' class="on"' if sq["id"] == view.get("current") else ""
-        parts.append(f'<a{on} href="#" onclick="{_pycmd("squad:" + str(sq["id"]))}">'
-                     f'{_html.escape(str(sq["name"]))}</a>')
+        nm = _html.escape(str(sq["name"]))
+        parts.append(f'<a{on} href="#" title="{nm}" onclick="{_pycmd("squad:" + str(sq["id"]))}">{nm}</a>')
+    for sq in view.get("plan_squads") or []:
+        # 3.8.0: a plan's squad, named for the plan; the badge is its threads that moved
+        on = sq["id"] == view.get("current")
+        n = int(sq.get("unread") or 0)
+        cls = ' class="on"' if on else ""
+        badge = f"<i>{n}</i>" if n and not on else ""
+        nm = _html.escape(str(sq["name"]))
+        parts.append(f'<a{cls} href="#" title="{nm}" onclick="{_pycmd("squadplan:" + str(sq["pid"]))}">{nm}{badge}</a>')
     parts.append(f'<a class="add" href="#" onclick="{_pycmd("squadadd")}">'
                  f'+ join or create</a>')
     return '<div class="dc-sw">' + "".join(parts) + "</div>"
+
+
+def squad_week(rows, day):
+    """3.8.0: a squad's last 7 days together, totals only (nobody ahead of
+    anybody): (study days between us, how many of us studied). A row's week
+    is its 7 days to its own last sync, so a sync `age` days ago counts at
+    most 7 - age of them, and one a week old or more none (a day ahead is
+    today, a timezone ahead). Its twin is squadWeek in app.js."""
+    try:
+        today = datetime.fromisoformat(str(day)).date()
+    except ValueError:
+        return 0, 0
+    days = []
+    for r in rows or []:
+        w = r.get("week")
+        if not isinstance(w, (int, float)) or isinstance(w, bool) or w != w or abs(w) == float("inf"):
+            continue
+        try:
+            age = (today - datetime.fromisoformat(str(r.get("day"))).date()).days
+        except ValueError:
+            continue
+        if -1 <= age < 7:  # a day ahead: a friend ahead of my timezone, synced on their today
+            days.append(min(7 - max(age, 0), max(0, int(w))))
+    return sum(days), sum(1 for d in days if d)
+
+
+def _squad_week_line(rows, day):
+    days, people = squad_week(rows, day)
+    if people < 2:
+        return ""
+    return f'<div class="dc-line dc-sum sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
 
 
 def _squads_html(view, cfg):
@@ -2060,12 +2460,13 @@ def _squads_html(view, cfg):
     on the person's card (click a name), not on the row."""
     state = view.get("state")
     sw = _switcher(view)
+    if view.get("kind") == "plan":
+        return sw + _plan_squad_html(str(view.get("pid") or ""), view)
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
-        return (sw + '<div class="dc-line">A private board '
-                'for any group. Join with a code, or create one.</div>')
+        return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
     if state == "loading":
-        return sw + '<div class="dc-line">Fetching&hellip;</div>'
+        return sw + '<div class="dc-line dc-wait">Fetching&hellip;</div>'
     if state == "error":
         return (sw + '<div class="dc-line">Couldn&rsquo;t '
                 'load. Check your connection and Refresh.</div>')
@@ -2101,9 +2502,9 @@ def _squads_html(view, cfg):
     if live:
         headline += (f' &middot; {len(live):,} studying today &middot; '
                      f'{int(view.get("reviews") or 0):,} reviews together')
-    # the squad head is rebuilt below when show-up mode is on
-    heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
-             f'<span style="color: var(--dc-muted); font-size: 11px;">{headline}</span></th>')
+    # 3.8.0, head row B: the squads' names in the table's corner, the
+    # headline under it (rebuilt below when show-up mode is on)
+    heads = _corner(sw)
     for key, label in SQUAD_HEADERS:
         on = "on" if key == sort else ""
         arrow = " &#9662;" if key == sort else ""
@@ -2113,11 +2514,10 @@ def _squads_html(view, cfg):
     numberless = lambda r: all(r.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if show_up:
         live.sort(key=lambda r: (-(r.get("week") or 0), r["name"].lower()))
-        heads = (f'<th style="text-align: left; font-weight: 400;" colspan="2">'
-                 f'<span style="color: var(--dc-muted); font-size: 11px;">{people:,} in {name}'
-                 + (" &middot; locked" if view.get("open") is False else "")
-                 + (f" &middot; {len(live):,} showed up today" if live else "") + "</span></th>"
-                 '<th><span style="color: var(--dc-muted); font-size: 11px; font-weight: 700;">&#128197; 7 days</span></th>')
+        headline = (f'{people:,} in {name}' + (" &middot; locked" if view.get("open") is False else "")
+                    + (f" &middot; {len(live):,} showed up today" if live else ""))
+        heads = (_corner(sw) + '<th><span style="color: var(--dc-muted); font-size: 11px; '
+                 'font-weight: 700;">&#128197; 7 days</span></th>')
     body = ""
     n = 0
     folded = False
@@ -2189,7 +2589,9 @@ def _squads_html(view, cfg):
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
-    return sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
+    # the bingo card under the table, the names it's for being in its corner
+    return (_scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
+            + f'<div class="dc-line dc-sum">{headline}</div>' + _squad_week_line(rows, day) + bingo + foot)
 
 
 # ---- 3.6: squad bingo ----
@@ -2198,7 +2600,8 @@ BINGO_CSS = """
     /* the whole card's frame is #due-crew.bg-full itself: its rules say so */
     #due-crew .bg-card, #due-crew.bg-full, #due-crew .bg-row, #due-crew .bg-bar, #due-crew .bg-info { text-align: left; }
     #due-crew [hidden] { display: none !important; }
-    #due-crew .bg-card { border: 1.5px solid var(--dc-accent); border-radius: 10px; padding: 9px 12px; margin: 2px 0 10px;
+    #due-crew .bg-card { border-top: 1px solid var(--dc-line); border-bottom: 1px solid var(--dc-line); padding: 9px 0;
+      margin: 2px 0 10px;  /* 3.8.0: a row between rules, no box */
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; }
     #due-crew .bg-card .bg-t { display: grid; gap: 1px; flex: 1 1 180px; min-width: 0; }
     #due-crew .bg-card .bg-t span, #due-crew .bg-q { color: var(--dc-muted); }
@@ -2298,11 +2701,12 @@ def bingo_html(bv, cfg, loading=False, team=False):
     head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
     team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
-    back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Plans</a>' if team_card
+    back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Squads</a>' if team_card
             else f'<a class="bg-a" href="#" onclick="{_pycmd("bingoback")}">&lsaquo; Squads</a>')
     if not bv:
         said = "Fetching&hellip;" if loading else "No card this week yet. Refresh brings it."
-        return head + f'<div class="bg-bar">{back}<b>{"Team" if team_card else "Squad"} bingo</b></div><div class="bg-q">{said}</div></div>'
+        return head + (f'<div class="bg-bar">{back}<b>Squad bingo</b></div>'
+                       f'<div class="bg-q{" dc-wait" if loading else ""}">{said}</div></div>')
     card, ev = bv["card"], bv["ev"]
     names, me = bv.get("names") or {}, bv.get("me")
     progress = bv.get("progress") or []
@@ -2326,7 +2730,7 @@ def bingo_html(bv, cfg, loading=False, team=False):
                         f'<span class="ic">{e(m["icon"]) if mid["done"] else "&#128274;"}</span>'
                         f'<span class="tt">{e(m["name"])}</span><span class="rl">{e(m["rule"])}</span>{prog}</button>')
             state = ("Unlocked. It counts toward all four lines through the middle." if mid["done"]
-                     else f'{mid["have"]} of {mid["goal"]} so far. The {"team" if team_card else "squad"} unlocks it together.')
+                     else f'{mid["have"]} of {mid["goal"]} so far. The squad unlocks it together.')
             infos += (f'<div data-i="m" hidden><b>{e(m["icon"])} {e(m["name"])}: {e(m["rule"])}</b>'
                       f'<span>{e(m["detail"])}</span><span class="k">{"This week the middle is free." if free else state}</span></div>')
             continue
@@ -2384,7 +2788,7 @@ def bingo_html(bv, cfg, loading=False, team=False):
         older = f'<div class="bg-row bg-q">{n} of you need{"s" if n == 1 else ""} to update Due Crew to play.</div>'
     copy = ("" if team_card else
             f'<a class="bg-a" href="#" title="The grid in emoji, never who stamped what" onclick="{_pycmd("bingocopy")}">Copy for the group chat</a>')
-    title = "Team bingo" if team_card else f'{e(bv.get("squad") or "Squad")} bingo'
+    title = f'{e(bv.get("squad") or "Squad")} bingo'
     return (head
             + f'<div class="bg-bar">{back}<b>{title}</b>'
               f'<span class="bg-q">{e(_week_span(card["wk"]))} &middot; {stamps} of 9</span>{copy}</div>'
@@ -2430,14 +2834,14 @@ def _review_banner(kind, info):
 
 
 def crew_menu_items():
-    """The footer's Crew ▾ (3.4 review, H5; 3.7.1, H3): people only, the
-    same on every tab. What you post went to Share ▾."""
+    """The footer's Crew menu (3.4 review, H5; 3.7.1, H3): people only, the
+    same on every tab. What you post went to Share."""
     return [("Friends…", "friends"), ("Copy invite", "copyinvite"),
             ("Shared decks…", "decks")]
 
 
 def share_menu_items(show_up, squad_ok=False):
-    """The footer's Share ▾ (3.7.1, H3), as [(label, command)], a label of
+    """The footer's Share menu (3.7.1, H3), as [(label, command)], a label of
     None being a heading: as text first, then as a picture, the same on
     every tab. Today's numbers aren't offered in just-show-up mode."""
     items = [(None, "As text")]
@@ -2492,26 +2896,30 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None):
-    """due: Due's view (due_flow.view), above the board on every tab.
+           notice=None, asks=None, due=None, you=None, sticking=None):
+    """3.8.0: two parts, apart. On top the You bubble (you_html): due,
+    Due's view (due_flow.view, None when Due is off), and you, its Plans and
+    Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
+    the board, your people: Crew (Today, Week, Decks) and Squads.
+    sticking: {deck name: deck id} of my decks Insights has, for Decks' links.
     live: I'm studying now (the footer offers to stop). tricky: flagged
-    cards I share with a crewmate (Decks tab). milestones: [(uid, name,
+    cards I share with a crewmate (Crew › Decks). milestones: [(uid, name,
     days)] for a crewmate's 100- or 365-day streak, with a one-tap cheer.
     room (2.12): {"mine": lobby or None, "invites": [...], "done": ...};
-    see room_html. plans (3.1): {cards, offers} from plan_flow.board_view:
-    the cards on the Decks tab, a squad's offers on Decks and Squads.
+    see room_html. plans (3.1): {cards, offers} from plan_flow.board_view
+    (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.5.0): my own asks about cards (together.my_asks_view), Decks tab."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks."""
     period = cfg.get("period", "today")
-    hidden = hidden_tabs(cfg)  # 3.5.0: Plans shows by default, with a plan or without
+    hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
-        period = "today"
+        period = "today"  # a saved Plans (before 3.8.0) or a hidden view: Crew's Today
     show_up = bool(cfg.get("show_up"))
-    body = (_decks_html(data, deltas, tricky, plans, asks) if period == "decks"
-            else _plans_html(plans) if period == "plans"
+    pick = "" if period == "squads" else _crew_picker(period, show_up, hidden)
+    body = (_decks_html(data, deltas, tricky, None, asks, sticking, pick) if period == "decks"
             else _squads_html(squad_view or {"state": "none"}, cfg)
             if period == "squads"
-            else _table_html(data, cfg, period))
+            else _table_html(data, cfg, period, pick))
     # 3.4 review, H6: one banner at a time, the most time-bound first; the
     # rest wait behind "1 of N ›". The admin's notice and my own room stay.
     bans = []
@@ -2580,8 +2988,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     for kind in ("month", "year"):
         if reviews and reviews.get(kind):
             bans.append(_review_banner(kind, reviews[kind]))
-    if period in ("decks", "squads", "plans"):
-        bans += _split_wraps(_offer_banners((plans or {}).get("offers")))
+    if period == "squads":
+        bans += _split_wraps(_offer_banners((plans or {}).get("offers")))  # and on You's Plans
     body = (notice_html(notice) if notice else "") + _one_at_a_time(bans) + lobby + body
 
     # 3.4 review, H5: the day's two social actions as buttons, the rest in
@@ -2599,15 +3007,15 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                  f'onclick="{_pycmd("live")}">I&rsquo;m studying</a>')
         if not (room or {}).get("mine"):
             # 2.12: a study room for the crew
-            left += (f'<a class="pb" href="#" title="Rounds and breaks with your crew" '
-                     f'onclick="{_pycmd("roomopen")}">Open a room</a>')
+            left += (f'<a href="#" title="Rounds and breaks with your crew" '
+                     f'onclick="{_pycmd("roomopen")}">Open a room</a>')  # 3.8.0: one pill in the footer
     left += (f'<a href="#" title="Friends" '
-             f'onclick="{_pycmd("crewmenu")}">Crew &#9662;</a>'
+             f'onclick="{_pycmd("crewmenu")}">Crew</a>'  # 3.8.0 (Sam): no caret
              f'<a href="#" title="As text or a picture" '
-             f'onclick="{_pycmd("sharemenu")}">Share &#9662;</a>')
+             f'onclick="{_pycmd("sharemenu")}">Share</a>')
     n_pending = len(data.get("pending", []))
     if n_pending:
-        left += (f'<a class="pb warn" href="#" title="You added them; you\'re crew when they add you back" '
+        left += (f'<a class="warn" href="#" title="You added them; you\'re crew when they add you back" '
                  f'onclick="{_pycmd("friends")}">{n_pending} waiting</a>')
 
     ago, _tone = _ago_secs(max(0.0, time.time() - fetched_at)) if fetched_at else ("just now", "")
@@ -2615,12 +3023,31 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
     foot = (f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
-            f'<span class="fr">{failed}Updated {ago}'
+            f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
-    return (f'<div id="due-crew" class="dc-frame">'
-            f'{_css(cfg)}<style>{DUE_CSS}</style>{_due_html(due)}{_head(period, show_up, hidden)}{body}{foot}</div>')
+    return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>'
+            f'{you_html(cfg, due, you)}<div class="dc-sheet">'
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period)}{body}{foot}</div></div>')
+
+
+def you_html(cfg, due=None, you=None):
+    """3.8.0, the You bubble: Today, Upcoming and Later (Due's lists, when
+    Due is on), then Plans and Insights unless hidden in Settings. due:
+    due.view or None; you: {tab, folded, plans, insights, opened}, from the glue
+    (None: Due's lists alone, as before). "" when there's nothing to show."""
+    if you is None:
+        return _due_html(due)
+    hidden = hidden_tabs(cfg)
+    more = tuple(t for t in YOU_MORE if t[0] not in hidden)
+    keys = (["today", "upcoming", "later"] if due else []) + [k for k, _l in more]
+    if not keys:
+        return ""
+    tab = you.get("tab") if you.get("tab") in keys else keys[0]
+    body = (_you_plans(you.get("plans"), None if due else you.get("opened")) if tab == "plans"
+            else _you_insights(you.get("insights")) if tab == "insights" else "")
+    return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")))
 
 
 # ---- 3.5.0: Settings, in the board ----
@@ -2669,6 +3096,8 @@ SETTINGS_CSS = """
     #due-crew .st-sw button { width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
       box-shadow: 0 0 0 2px var(--dc-bg); }
     #due-crew .st-sw button.on { box-shadow: 0 0 0 2px var(--dc-bg), 0 0 0 4px var(--dc-ink); }
+    #due-crew .st-kbd { font: 11px Menlo, Consolas, monospace; border: 1px solid var(--dc-line); border-radius: 5px;
+      padding: 1px 6px; color: var(--dc-ink); white-space: nowrap; }
     #due-crew .st-in { font: inherit; font-size: 12.5px; border: 1px solid var(--dc-line); border-radius: 6px;
       padding: 2px 7px; background: var(--dc-bg); color: var(--dc-ink); color-scheme: light dark; }
     #due-crew .st-in:disabled { color: var(--dc-faded); }
@@ -2692,6 +3121,21 @@ SETTINGS_CSS = """
       margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
     #due-crew button:focus-visible, #due-crew a:focus-visible, #due-crew input:focus-visible {
       outline: 2px solid var(--dc-accent); outline-offset: 2px; }
+    /* 3.8.0, pick 28: Find a setting */
+    #due-crew .st-find { margin-left: auto; position: relative; text-align: left; }
+    #due-crew .st-find input { width: 150px; max-width: 42vw; }
+    #due-crew .st-hits { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 240px; max-width: 80vw;
+      display: grid; background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 10px; padding: 4px;
+      box-shadow: 0 6px 22px rgba(0,0,0,.14); }
+    #due-crew .st-hits[hidden] { display: none; }
+    #due-crew .st-hits button { all: unset; display: grid; gap: 1px; padding: 6px 9px; border-radius: 7px; cursor: pointer; text-align: left; }
+    #due-crew .st-hits button:hover, #due-crew .st-hits button.on { background: var(--dc-you-bg); }
+    #due-crew .st-hits b { font-size: 12.5px; color: var(--dc-ink); }
+    #due-crew .st-hits small { font-size: 11px; color: var(--dc-muted); }
+    #due-crew .st-hits .st-none { padding: 6px 9px; font-size: 12px; color: var(--dc-muted); }
+    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } to { background-color: transparent; } }
+    @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
+    @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """
 SETTINGS_TABS = (("you", "You"), ("board", "Board"), ("privacy", "Privacy"))
 
@@ -2749,8 +3193,7 @@ def _settings_you(view):
             + '</div>')
     # 3.6.5, P6: feedback, here as well as in Tools › Due Crew
     out += ('<div class="st-box">'
-            + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>',
-                      "What's working and what isn't")
+            + _st_row("Feedback", f'<a class="st-lk" href="#" {_st_click("setfeedback")}>Send&hellip;</a>')
             + '</div>')
     out += (f'<div class="st-foot"><a class="st-lk" href="#" {_st_click("setsignout")}>Sign out</a>'
             f'<a class="st-lk st-danger" href="#" {_st_click("setdelete")}>Delete account&hellip;</a></div>'
@@ -2760,7 +3203,7 @@ def _settings_you(view):
 
 def _settings_board(cfg):
     hidden = hidden_tabs(cfg)
-    pills = '<button class="st-pill on" disabled aria-pressed="true">Today</button>' + "".join(
+    pills = '<button class="st-pill on" disabled aria-pressed="true">Crew</button>' + "".join(
         f'<button class="st-pill{"" if k in hidden else " on"}" aria-pressed="{"false" if k in hidden else "true"}" '
         f'{_st_click(f"settabs:{k}:{1 if k in hidden else 0}")}>{t}</button>' for k, t in HIDEABLE_TABS)
     accent = cfg.get("accent", DEFAULT_ACCENT)
@@ -2774,10 +3217,10 @@ def _settings_board(cfg):
     g = lambda k, d: bool(cfg.get(k, d))  # noqa: E731
     return ('<div class="st-h">What it shows</div><div class="st-box">'
             + _st_row("Due Crew on the Decks screen", _st_switch("show_leaderboard", g("show_leaderboard", True), "Due Crew on the Decks screen"),
-                      "Tools › Due Crew › Settings turns it back on")
+                      "Tools › Due Crew › Show on the Decks screen brings it back")
             + _st_row("Yesterday for friends who haven't synced", _st_switch("show_stale", g("show_stale", True), "Yesterday for friends who haven't synced"))
             + _st_row("Tell me when my crew studies", _st_switch("sync_notifications", g("sync_notifications", True), "Tell me when my crew studies"))
-            + _st_row("Tabs", f'<span class="st-pills">{pills}</span>')
+            + _st_row("Shows", f'<span class="st-pills">{pills}</span>')
             + '</div><div class="st-h">How it looks</div><div class="st-box">'
             + _st_row("Theme", _st_seg("theme", (("auto", "Match Anki"), ("light", "Light"), ("dark", "Dark")), cfg.get("theme", "auto"), "Theme"))
             + _st_row("Accent", f'<span class="st-sw" role="group" aria-label="Accent">{swatches}</span>')
@@ -2787,12 +3230,16 @@ def _settings_board(cfg):
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
             + '</div><div class="st-h">Due</div><div class="st-box">'
-            + _st_row("Due above the board", _st_switch("due_show", g("due_show", True), "Due above the board"),
-                      "Your plans' dates and your own to-dos")
+            + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
-                      "From your own Anki: today's misses, new leeches")
+                      "Today's misses, new leeches")
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
+            + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
+            + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
+            + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
+            + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
+                      "Off if another add-on uses these keys")
             + '</div>'
             + f'<div class="st-foot"><span></span>'
               f'<a class="st-lk" href="#" {_st_click("setreset")}>Reset board</a></div>')
@@ -2827,8 +3274,8 @@ def _settings_privacy(cfg):
     return ('<div class="st-h">What your crew and squads see</div><div class="st-box" role="radiogroup">'
             + radio("numbers", "My numbers") + nums
             + radio("showup", "Just that I studied", "Squares, no numbers. You see everyone the same way.")
-            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;. Your streak keeps counting. "
-                    "A paused account is kept 24 months without activity; opening Anki counts.")
+            + radio("paused", "Nothing for now", "Your crew sees &ldquo;on a break&rdquo;; your streak keeps counting. "
+                    "Kept 24 months without activity.")
             + '</div><div class="st-h">Dates your crew sees</div><div class="st-box">'
             + _st_row("&#128214; Exam", exam_ctl, "Shown for the two weeks before")
             + _st_row("&#9992;&#65039; Away", away_ctl)
@@ -2842,6 +3289,71 @@ def _st_toggle_cmd(cmd, on, label):
             f'aria-label="{label}" {_st_click(cmd)}></button>')
 
 
+# 3.8.0, pick 28 (Find a setting): words people use for a setting that its own label doesn't say
+FIND_WORDS = {
+    "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
+    "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
+    "settabs:": "tabs hide squads decks plans insights", "set:due_suggest:": "hard habit misses again",
+    "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
+    "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
+    "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
+    "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
+    "setreset": "default", "friends": "crew code invite", "decks": "share deck",
+}
+
+
+def _find_key(f):
+    """A control's data-f, without the state at its end ("set:share_time:0"
+    finds the switch whichever way it's set)."""
+    bits = f.split(":")
+    return ":".join(bits[:2]) + ":" if bits[0] in ("set", "settabs") and len(bits) > 2 else f
+
+
+def settings_index(view, cfg):
+    """3.8.0, pick 28: every setting a word can find, across Settings' three
+    tabs: [{t: tab, f: the control's data-f (its start), l: its label,
+    w: where ("Board › How it looks"), k: words to match}]. Read from the
+    tabs as they're drawn, so a new row is findable as soon as it's there.
+    Labels and headings are the add-on's own words; the people, squads and
+    decks the You tab names stay out."""
+    import html as H
+    names = dict(SETTINGS_TABS)
+    out, seen = [], set()
+
+    def add(tab, f, label, where, extra=""):
+        label = " ".join(_re.sub(r"<[^>]+>", "", H.unescape(label)).split())
+        key = (tab, _find_key(f))
+        if not label or key in seen:
+            return
+        seen.add(key)
+        words = " ".join([label, where, extra] + [w for k, w in FIND_WORDS.items() if f.startswith(k)])
+        out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
+    for tab in ("you", "board", "privacy"):
+        body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
+                else _settings_board(cfg) if tab == "board" else _settings_privacy(cfg))
+        sections = _re.split(r'<div class="st-h">', body)
+        for i, sec in enumerate(sections):
+            head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
+            where = names[tab] + (f" › {head}" if head else "")
+            rows = list(_re.finditer(r'<div class="st-row"><span class="st-l"><span>(.*?)</span>(?:<small>(.*?)</small>)?', sec))
+            for j, m in enumerate(rows):
+                end = rows[j + 1].start() if j + 1 < len(rows) else len(sec)
+                f = _re.search(r'data-f="([^"]+)"', sec[m.end():end])
+                sub = H.unescape(m.group(2) or "") if tab != "you" else ""  # the You tab's lines name people and squads
+                if f:
+                    add(tab, f.group(1), m.group(1), where, sub)
+                for pf, pt in _re.findall(r'<button class="st-pill[^"]*"[^>]*data-f="([^"]+)"[^>]*>(.*?)</button>', sec[m.end():end]):
+                    add(tab, pf, pt, where + " › " + H.unescape(m.group(1)))
+            for f, b, small in _re.findall(r'<button class="st-radio[^"]*"[^>]*data-f="([^"]+)"[^>]*><i></i><span><b>(.*?)</b>(?:<small>(.*?)</small>)?', sec):
+                add(tab, f, b, where, H.unescape(small))
+            for f, t in _re.findall(r'<button class="st-pill[^"]*"[^>]*data-f="([^"]+)"[^>]*>(.*?)</button>', sec):
+                add(tab, f, t, where)
+            for f, t in _re.findall(r'<a class="st-lk[^"]*" href="#" data-f="([^"]+)"[^>]*>(.*?)</a>', sec):
+                if t.strip() not in ("Open", "Send&hellip;"):
+                    add(tab, f, t, where)
+    return out
+
+
 def settings_html(view, cfg):
     """3.5.0: Settings in place of the board.
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
@@ -2851,11 +3363,15 @@ def settings_html(view, cfg):
                     for k, t in SETTINGS_TABS)
     body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
-    foot = ("Privacy, dates, status and accent are saved to your account. The rest stays on this computer."
-            if view.get("signed_in") else "")
+    foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
-            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b></div>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b>'
+            # 3.8.0, pick 28: a word finds a setting on any tab (FIND_JS)
+            f'<span class="st-find"><input type="search" class="st-in" placeholder="Find a setting" aria-label="Find a setting" '
+            f'autocomplete="off" data-ix="{_html.escape(_json.dumps(settings_index(view, cfg)), quote=True)}" '
+            f'oninput="dcFind.type(this)" onkeydown="dcFind.key(event, this)">'
+            f'<span class="st-hits" role="listbox" aria-label="Settings found" hidden></span></span></div>'
             f'{body}'
             f'{f"<div class=st-note>{foot}</div>" if foot else ""}</div>')
 
@@ -2904,20 +3420,14 @@ def _card(cfg, title, body_html):
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False, moved=False, gone=False):
-    """moved: signed in on 2.x, which used passwords. 3.0 signs in with an
-    emailed code, so everyone signs in once more, and nothing is lost.
-    gone (Q4): the account was deleted after 12 months without activity."""
+def signed_out_card(cfg, expired=False, gone=False):
+    """gone (Q4): the account was deleted after 12 months without activity."""
     if gone:
         return _card(cfg, "Welcome back",
                      f'Your Due Crew account was deleted after 12 months without activity, '
                      f'as the listing says. Your Anki and its cards are untouched. '
                      f'<a href="#" onclick="{_pycmd("setup")}">Start again with your email</a>; '
                      f'your crew can add you with your new code.')
-    if moved:
-        return _card(cfg, "Due Crew",
-                     f'Due Crew now signs in with a code by email, no password. '
-                     f'<a href="#" onclick="{_pycmd("setup")}">Sign in</a> once to carry on.')
     if expired:
         return _card(cfg, "Due Crew",
                      f'Your sign-in expired. '
@@ -3153,6 +3663,7 @@ def stranger_card_js(info):
             if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
         });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (inner, act_cmd, act_label, act_primary, extras_json)
 
@@ -3224,6 +3735,7 @@ def luck_card_js(name, lines):
         back.appendChild(card);
         back.addEventListener('click', function(e) { if (e.target === back) { back.remove(); } });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (title, items)
 
@@ -3313,20 +3825,31 @@ def profile_overlay_js(profile):
             pad = _date.fromisoformat(str(profile.get("start"))).weekday()
         except (TypeError, ValueError):
             pad = 0
+        try:
+            first = _date.fromisoformat(str(profile.get("start")))
+        except (TypeError, ValueError):
+            first = None
         cols = []
-        week = [-1] * pad
-        for n in cells:
-            week.append(_heat_level(int(n)))
+        week = [(-1, None, 0)] * pad
+        for i, n in enumerate(cells):
+            day = (first + _dt.timedelta(days=i)).isoformat() if first else None
+            week.append((_heat_level(int(n)), day, int(n)))
             if len(week) == 7:
                 cols.append(week)
                 week = []
         if week:
-            cols.append(week + [-1] * (7 - len(week)))
+            cols.append(week + [(-1, None, 0)] * (7 - len(week)))
+
+        def cell(lvl, day, n):
+            # 3.8.0: on my own card, a day I studied opens its cards in Browse
+            if you and day and n > 0:
+                d = _date.fromisoformat(day)
+                return (f'<i class="dchm h{lvl}" title="{d:%a} {d.day} {d:%b} \u00b7 {n:,} review{"s" if n != 1 else ""}. '
+                        f'Browse them" onclick="{_pycmd("heatday:" + day)}"></i>')
+            return f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>'
         col_html = ""
         for col in cols[-26:]:
-            cell_html = "".join(
-                f'<i class="dchm h{lvl if lvl >= 0 else "x"}"></i>' for lvl in col)
-            col_html += f'<div class="dchc">{cell_html}</div>'
+            col_html += f'<div class="dchc">{"".join(cell(*c) for c in col)}</div>'
         grid = f'<div class="dchg">{col_html}</div>'
 
     lines = ""
@@ -3413,6 +3936,7 @@ def profile_overlay_js(profile):
         var style = document.createElement('style');
         style.textContent = '.dchg{display:flex;gap:2px;margin:12px 0 8px;}' +
             '.dchc{display:flex;flex-direction:column;gap:2px;}' +
+            '.dchm[onclick]{cursor:pointer;}.dchm[onclick]:hover{outline:1px solid ' + accent + ';}' +
             '.dchm{width:8px;height:8px;border-radius:1.5px;display:block;background:' +
             dcWell + ';}' +
             '.dchm.h1{background:' + accent + ';opacity:0.25;}' +
@@ -3464,6 +3988,7 @@ def profile_overlay_js(profile):
             if (e.key === 'Escape') { back.remove(); document.removeEventListener('keydown', esc); }
         });
         document.body.appendChild(back);
+        if (window.dcMotion) { dcMotion.open(back, card); }  // 3.8.0: from the name, back into it
     })();
     """ % (inner, act_label, act_primary, act_cmd)
 
@@ -3471,23 +3996,25 @@ def profile_overlay_js(profile):
 # ---- Due: the day's to-do, above the board ----
 
 DUE_CSS = """
-    #due-crew .du { text-align: left; border: 1.5px solid var(--dc-accent); border-radius: 11px;
-      padding: 9px 12px 10px; margin: 0 0 14px; display: grid; gap: 6px; }
+    #due-crew .du { text-align: left; border-radius: 12px; padding: 12px 18px; margin: 0 0 14px;
+      display: grid; gap: 6px; align-content: start; }
     #due-crew .du > * { min-width: 0; }
     #due-crew .du a { text-decoration: none; }
     #due-crew .du-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 460px) { #due-crew .du-h > .du-n { display: none; } }  /* Hide stays on the tabs' line */
     #due-crew .du-h .sp { flex: 1; }
     #due-crew .du-n { color: var(--dc-muted); font-size: 11.5px; white-space: nowrap; }
-    #due-crew .du-fold { font-size: 12px; font-weight: 700; color: var(--dc-accent); border: 1px solid var(--dc-line);
-      border-radius: 99px; padding: 2px 10px; white-space: nowrap; flex: none; }
+    #due-crew .du-fold { font-size: 11.5px; font-weight: 600; color: var(--dc-muted); white-space: nowrap; flex: none;
+      margin-left: auto; }
+    #due-crew .du-one .du-fold { color: var(--dc-accent); font-weight: 700; }
     #due-crew .du-tm { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
-    #due-crew .du-tabs { display: inline-flex; white-space: nowrap; }
-    #due-crew .du-tabs a { font-size: 11px; font-weight: 700; padding: 1px 10px; border: 1px solid var(--dc-line);
-      color: var(--dc-muted); }
-    #due-crew .du-tabs a + a { border-left: 0; }
-    #due-crew .du-tabs a:first-child { border-radius: 99px 0 0 99px; }
-    #due-crew .du-tabs a:last-child { border-radius: 0 99px 99px 0; }
-    #due-crew .du-tabs a.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
+    /* 3.8.0: the box's tabs are words (the board's pills are the buttons): the
+       one on screen in ink, underlined; Plans and Insights after a rule */
+    #due-crew .du-tabs { display: inline-flex; gap: 14px; white-space: nowrap; }
+    #due-crew .du-tabs a { font-size: 12px; font-weight: 700; color: var(--dc-muted); padding: 1px 0 3px; }
+    #due-crew .du-tabs a:hover { color: var(--dc-ink); }
+    #due-crew .du-tabs a.on { color: var(--dc-ink); box-shadow: inset 0 -2px var(--dc-accent); }
+    #due-crew .du-tabs.du-more { padding-left: 14px; border-left: 1px solid var(--dc-line); }
     #due-crew .du-r { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 9px; align-items: start;
       padding: 5px 0 4px; border-top: 1px solid var(--dc-line); }
     #due-crew .du-r .t { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
@@ -3496,8 +4023,9 @@ DUE_CSS = """
     #due-crew .du-r .end { display: flex; gap: 10px; align-items: baseline; white-space: nowrap; font-size: 11.5px; }
     #due-crew .du-r .end .n { color: var(--dc-muted); font-variant-numeric: tabular-nums; }
     #due-crew .du-go { color: var(--dc-accent); font-weight: 700; font-size: 11.5px; white-space: nowrap; }
-    #due-crew .du-tag { color: var(--dc-muted); font-size: 11px; border: 1px solid var(--dc-line); border-radius: 6px;
-      padding: 0 6px; white-space: nowrap; }
+    #due-crew .du-go .nm { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+    #due-crew .du-tag { color: var(--dc-muted); font-size: 11px; white-space: nowrap; }
+    #due-crew .du-tag:hover { color: var(--dc-ink); }
     #due-crew .du-bx { box-sizing: border-box; width: 14px; height: 14px; border: 1.5px solid var(--dc-faded);
       border-radius: 4px; margin-top: 2px; display: block; position: relative; }
     #due-crew a.du-bx { cursor: pointer; }
@@ -3516,10 +4044,10 @@ DUE_CSS = """
     #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); padding-top: 4px; }
     #due-crew .du-sec.warn { color: #c77700; }
-    #due-crew .du-bh { display: grid; gap: 0; }
+    #due-crew .du-bh { display: grid; gap: 0; padding-bottom: 8px; }
     #due-crew .du-line { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font-size: 12px;
-      border-radius: 8px; padding: 5px 9px; background: var(--dc-you-bg); }
-    #due-crew .du-line.ev { color: #c77700; font-weight: 700; background: transparent; padding: 0; }
+      padding: 5px 0 1px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); }
+    #due-crew .du-line b { color: var(--dc-ink); font-weight: 600; }
     #due-crew .du-line .acts { display: flex; gap: 12px; }
     #due-crew .du-line a, #due-crew .du-sg a { color: var(--dc-accent); font-weight: 700; }
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
@@ -3543,7 +4071,7 @@ DUE_CSS = """
     #due-crew .du-ln.done > span:nth-child(2) { color: var(--dc-muted); text-decoration: line-through; }
     #due-crew .du-q { color: var(--dc-faded); font-size: 11.5px; padding: 3px 0 3px 25px; }
     #due-crew .du-evl { color: #c77700; font-weight: 700; font-size: 12px; padding-left: 25px; }
-    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 7px 12px; white-space: nowrap; }
+    #due-crew .du-one { display: flex; align-items: center; gap: 6px 12px; padding: 10px 18px; white-space: nowrap; }
     #due-crew .du-one > * { flex: none; }
     #due-crew .du-one .wbar { flex: 0 1 90px; width: auto; min-width: 24px; margin: 0; }
     #due-crew .du-one .sp { flex: 1 1 0; }
@@ -3608,9 +4136,9 @@ DUE_JS = r"""
         }
       }
     }
-    var m = w.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)$/);
+    var m = w.match(/^([0-9]{1,2})(?:st|nd|rd|th)? ([a-z]{3,9}\.?)$/);
     if (m && month(m[2])) { return onOrAfter(today, month(m[2]), +m[1]); }
-    m = w.match(/^([a-z]{3,9}\.?) (\d{1,2})(?:st|nd|rd|th)?$/);
+    m = w.match(/^([a-z]{3,9}\.?) ([0-9]{1,2})(?:st|nd|rd|th)?$/);
     if (m && month(m[1])) { return onOrAfter(today, month(m[1]), +m[2]); }
     return null;
   }
@@ -3627,6 +4155,48 @@ DUE_JS = r"""
     }
     return { text: words.join(' '), day: null };
   }
+  // due.repeat_word and due.parse_repeat (3.8.0), restated: change one, change both
+  var WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  function repeatWord(w) {
+    w = w.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (w === 'daily' || w === 'every day' || w === 'each day') { return '0123456'; }
+    if (w === 'weekdays' || w === 'every weekday' || w === 'each weekday') { return '01234'; }
+    if (w.slice(-1) === 's' && WEEK.indexOf(w.slice(0, -1)) >= 0) { return String(WEEK.indexOf(w.slice(0, -1))); }
+    var m = w.match(/^(?:every|each) ([a-z ]+)$/);
+    if (!m) { return null; }
+    var on = {}, names = m[1].split(' ');
+    for (var i = 0; i < names.length; i++) {
+      if (names[i] === 'and') { continue; }
+      var k = -1;
+      for (var j = 0; j < 7; j++) { if (names[i].length >= 3 && WEEK[j].indexOf(names[i]) === 0) { k = j; break; } }
+      if (k < 0) { return null; }
+      on[k] = 1;
+    }
+    var out = '';
+    for (var x = 0; x < 7; x++) { if (on[x]) { out += x; } }
+    return out || null;
+  }
+  function parseRepeat(text) {
+    var t = text.replace(/\s+/g, ' ').trim();
+    var m = t.match(/^([^:]{3,40}):\s*(.+)$/);
+    if (m) { var r0 = repeatWord(m[1]); if (r0) { return { text: m[2], rule: r0 }; } }
+    var words = t.split(' ');
+    for (var n = Math.min(6, words.length - 1); n >= 1; n--) {
+      var r = repeatWord(words.slice(-n).join(' '));
+      if (r) {
+        var rest = words.slice(0, -n).join(' ').replace(/[ ,\-·:]+$/, '');
+        if (rest) { return { text: rest, rule: r }; }
+      }
+    }
+    return { text: t, rule: null };
+  }
+  function repeatLabel(r) {
+    if (r === '0123456') { return 'every day'; }
+    if (r === '01234') { return 'weekdays'; }
+    var out = [];
+    for (var i = 0; i < r.length; i++) { var n = WEEK[+r.charAt(i)]; out.push(n.charAt(0).toUpperCase() + n.slice(1, 3)); }
+    return 'every ' + out.join(', ');
+  }
   function label(d, today) {
     if (d === '') { return 'Later'; }
     if (d === today) { return 'Today'; }
@@ -3641,9 +4211,10 @@ DUE_JS = r"""
     preview: function () {
       var box = document.querySelector('#due-crew .du'), inp = el('du-in'), said = el('du-said');
       if (!box || !inp || !said) { return; }
-      var p = parse(inp.value, box.getAttribute('data-today'));
-      if (p.day === null || this.raw) { said.innerHTML = ''; return; }
-      said.innerHTML = '&rarr; ' + label(p.day, box.getAttribute('data-today')) +
+      var rp = parseRepeat(inp.value);
+      var p = rp.rule ? null : parse(inp.value, box.getAttribute('data-today'));
+      if ((!rp.rule && p.day === null) || this.raw) { said.innerHTML = ''; return; }
+      said.innerHTML = '&rarr; ' + (rp.rule ? repeatLabel(rp.rule) : label(p.day, box.getAttribute('data-today'))) +
         '<a href="#" title="Keep the words as text" onclick="dcDue.raw=true;dcDue.preview();return false;">&times;</a>';
     },
     pick: function () {
@@ -3659,8 +4230,13 @@ DUE_JS = r"""
       if (!inp || !inp.value.trim()) { return; }
       var w = sel ? sel.value : 'today';
       if (w === 'pick') { w = (dt && dt.value) ? dt.value : 'today'; }
+      if (window.dcMotion) {  // 3.8.0: the redraw shows where it went
+        var r = inp.getBoundingClientRect();
+        dcMotion.say({add: inp.value.trim().slice(0, 16), when: w, from: {x: r.left, y: r.top}});
+      }
       pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
       this.raw = false;
+      inp.value = '';  // sent: a redraw doesn't put it back (swap_js keeps a half-typed one)
     },
     plus: function (d) {
       var sel = el('du-when'), dt = el('du-date'), inp = el('du-in');
@@ -3689,6 +4265,8 @@ def _due_tick(cmd, on, label):
 def _due_mine(r, short=False):
     e = _html.escape
     tick = _due_tick("duetick:" + r["id"], r["done"], "Done" if not r["done"] else "Not done")
+    if r.get("ahead"):
+        tick = '<span class="du-bx"></span>'  # 3.8.0: a repeat's next day ticks on that day
     tag = f'<a href="#" class="du-tag" title="Move, edit or delete" onclick="{_pycmd("dueitem:" + r["id"])}">{e(r["tag"])} &#9662;</a>'
     if short:
         return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span>{e(r["text"])}</span>'
@@ -3699,15 +4277,42 @@ def _due_mine(r, short=False):
             f'<span class="end">{do}{tag}</span></div>')
 
 
+def _due_every(r, short=False):
+    """3.8.0: a plan's weekly line ("Do · Practice questions", every Fri),
+    ticked by hand for the day; a day ahead's ticks on that day."""
+    e = _html.escape
+    text = e(r["text"])
+    if r.get("url", "").startswith("https://"):
+        text = f'<a href="#" title="{e(r["url"])}" onclick="{_pycmd("duelink:" + r["key"])}">{text}</a>'
+    tick = ('<span class="du-bx"></span>' if r.get("ahead")
+            else _due_tick(f'duetodo:{r["key"]}', r["done"], "Done" if not r["done"] else "Not done"))
+    if short:
+        return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span><b>{e(r["label"])}</b> &middot; {text}'
+                f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["tag"])}</span></div>')
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{tick}<span class="t"><span class="x"><b>{e(r["label"])}</b> '
+            f'&middot; {text}</span><small>{e(r["plan"])} &middot; {e(r["tag"])}</small></span><span class="end"></span></div>')
+
+
 def _due_plan(r):
-    """A plan's date on Today, in full: its resources, the author's lines, its bar."""
+    """A plan's date on Today, in full: its resources (each with its topics,
+    3.8.0), the author's lines, its bar."""
     e = _html.escape
     box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
+    groups, used = list(r.get("topics") or []), set()
+
+    def topics_of(label):
+        # a resource's topics on its own row (P.parts groups as P.topics does; no resource is "Other")
+        for k, (g, xs) in enumerate(groups):
+            if k not in used and (g == label or (label == "Other" and not g)):
+                used.add(k)
+                return " &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+        return ""
     subs = ""
     for ln in r["lines"]:
         if ln["kind"] == "part":
             subs += (f'<span class="du-sub"><span class="du-bx auto{" on" if ln["done"] else ""}"></span>'
-                     f'<span><b>{e(ln["label"])}</b></span><span class="n">{int(ln["seen"]):,} / {int(ln["total"]):,}</span></span>')
+                     f'<span><b>{e(ln["label"])}</b>{topics_of(ln["label"])}</span>'
+                     f'<span class="n">{int(ln["seen"]):,} / {int(ln["total"]):,}</span></span>')
         else:
             text = e(ln["text"])
             if ln.get("url", "").startswith("https://"):
@@ -3727,10 +4332,17 @@ def _due_plan(r):
         said = f'+{int(r["upd"]):,} added' if int(r["upd"]) > 0 else "updated"
         extra.append(f'{said} &middot; <a href="#" onclick="{_pycmd("planupdopen:" + r["pid"])}">Open</a>')
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
-    what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
+    rest = [(g, xs) for k, (g, xs) in enumerate(groups) if k not in used]
+    if rest:  # 3.8.0: each topic opens its cards in Browse
+        # as the Plans tab's day writes them: the group in bold, then its topics
+        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                                              for g, xs in rest) + "</small>"
+    elif groups:
+        what = ""
+    else:
+        what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
     bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""
-    go = (f'<a href="#" class="du-go" onclick="{_pycmd("planstudy:" + r["pid"])}">Study &rsaquo;</a>'
-          if not r["done"] and r["total"] and r["seen"] < r["total"] else "")
+    go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{e(r["name"])}</b>'
             f'<small>{meta}</small>{what}{subs}{bar}</span><span class="end">{n}{go}</span></div>')
@@ -3740,6 +4352,8 @@ def _due_short(r):
     e = _html.escape
     if r["kind"] == "mine":
         return _due_mine(r, short=True)
+    if r["kind"] == "every":
+        return _due_every(r, short=True)
     box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
     return (f'<div class="du-ln{" done" if r["done"] else ""}">{box}<span><b>{e(r["name"])}</b>'
             f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["n"])}</span></div>')
@@ -3752,14 +4366,15 @@ def _due_behind(v):
     out = '<div class="du-bh"><div class="du-sec warn">Behind</div>'
     for p in v["behind_plans"]:
         left = int(p["left"])
-        what = f'{int(p["dates"])} date{"s" if p["dates"] != 1 else ""}' + (f' &middot; {left:,} cards to see' if left else "")
+        what = f'{int(p["dates"])} date{"s" if p["dates"] != 1 else ""}' + (
+            f' &middot; <a class="tp" href="#" title="Browse them" onclick="{_pycmd("planleft:" + p["pid"])}">{left:,} cards to see</a>'
+            if left else "")
         out += (f'<div class="du-r">{_due_box("", auto=True)}<span class="t"><b>{e(p["plan"])}</b><small>{what}</small></span>'
-                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("planstudy:" + p["pid"])}">Study &rsaquo;</a>'
-                f'<a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
+                f'<span class="end"><a href="#" class="du-go" onclick="{_pycmd("plancatch:" + p["pid"])}">Catch up&hellip;</a></span></div>')
     out += "".join(_due_mine(r) for r in v["behind_mine"])
     if v["behind_more"]:
         out += f'<div class="du-q">and {int(v["behind_more"])} more</div>'
-    return out + '<div class="du-sec">Today</div></div>' if v["tab"] == "today" else out + "</div>"
+    return out + "</div>"
 
 
 def _due_add(v, default):
@@ -3780,20 +4395,49 @@ def _due_add(v, default):
             f'<a href="#" class="du-go" onclick="dcDue.send();return false;">Add</a></div>')
 
 
-def _due_html(v):
-    """Due, above the board on every tab. v: due.view, from
-    due_flow.view; every string in it is escaped here."""
-    if not v:
+# 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
+STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
+def _study_to(v):
+    """3.8.0 (Board in Motion, 35): the deck Study today opens first, named
+    on the button (due_flow works it out from Anki's deck tree)."""
+    to = v.get("study_to")
+    return f' <span class="nm">{_html.escape(str(to))}</span>' if to else ""
+
+
+STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses ({STUDY_KBD})"
+
+
+def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
+    """The You bubble (3.8.0; Due above the board until then): Due's lists,
+    Today, Upcoming and Later, when Due is on (v: due.view, from
+    due_flow.view), then `more`, [(key, label)] (Plans, Insights), with
+    `more_tab` picked and `more_body` drawn. Every string in v is escaped
+    here; `more_body` comes drawn. folded: when there are no lists to say
+    it (Due off)."""
+    if not v and not more:
         return ""
     e = _html.escape
+    if not v:
+        # Due's lists off: Plans and Insights only, folded or not
+        if folded:
+            names = " &middot; ".join(lb for _k, lb in more)
+            return (f'<div class="du du-one"><a href="#" onclick="{_pycmd("duefold")}" title="Show"><b>{names}</b></a>'
+                    f'<span class="sp"></span><a href="#" class="du-fold" title="Show" '
+                    f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
+        tab = more_tab if more_tab in dict(more) else more[0][0]
+        tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+                       for k, lb in more)
+        return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="You">{tabs}</span>'
+                f'<span class="sp"></span><a href="#" class="du-fold" title="Fold to one line" '
+                f'onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>{more_body}</div>')
     today = e(v["today"])
     done_n, total_n = int(v["done_n"]), int(v["total_n"])
     count = f"{done_n} of {total_n} done" if total_n else ""
     if v["folded"]:
         bar = _wbar(done_n, total_n) if total_n else ""
-        st = v.get("start")
-        go = (f'<a href="#" class="du-go" title="{e(st["name"])}" onclick="{_pycmd("planstudy:" + st["pid"])}">'
-              f'Study &rsaquo;&nbsp;<span class="nm">{e(st["name"])}</span></a>' if st else "")
+        # 3.8.0: Study today walks the day (the plans' decks first), as the box's
+        go = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">'
+              f'Study today &rsaquo;{_study_to(v)}</a>' if v.get("study") else "")
         behind = f'<span class="du-n" style="color:#c77700">{int(v["behind_n"])} behind</span>' if v["behind_n"] else ""
         if v.get("done"):
             # the day's done: what's next, in place of the bar
@@ -3806,14 +4450,29 @@ def _due_html(v):
                 f'<b>{e(v["name"])}</b></a><span class="du-n">{count or "nothing today"}</span>{bar}{behind}'
                 f'<span class="sp"></span>{go}<a href="#" class="du-fold" title="Show the whole list" '
                 f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
-    tab = v["tab"]
+    tab = more_tab if more_tab in dict(more) else v["tab"]
+    # 3.8.0: Later shows only when it holds something; adding one shows it
+    lists = (("today", "Today"), ("upcoming", "Upcoming")) + (
+        (("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}'),) if v["later"] else ())
+    if tab not in dict(lists) and tab not in dict(more):
+        tab = "today"
     tabs = "".join(
-        f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
-        for k, lb in (("today", "Today"), ("upcoming", "Upcoming"),
-                      ("later", f'Later{" " + str(v["later_n"]) if v["later_n"] else ""}')))
+        f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+        for k, lb in lists)
+    if more:
+        # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
+        tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
+            f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
+    study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;{_study_to(v)}</a>'
+             if tab == "today" and v.get("study") else "")
+    if v.get("done") and tab == "today":
+        count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
-            f'<span class="sp"></span><span class="du-n">{count if tab != "later" else ""}</span>'
+            f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{study}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')
+    if tab in dict(more):
+        return f'<div class="du" data-today="{today}">{head}{more_body}</div>'
+
     toast = ""
     if v.get("toast"):
         toast = (f'<div class="du-line"><span>{e(v["toast"]["text"])}</span>'
@@ -3823,15 +4482,20 @@ def _due_html(v):
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":
-                if not r["due"] and not r["done"]:
+                back = int(r.get("back") or 0)
+                if not r["due"] and not r["done"] and not back:
                     continue
-                n = "all done" if r["done"] else f'{int(r["due"]):,} due'
+                n = ("all done" if r["done"] else f'{int(r["due"]):,} due' if r["due"]
+                     else f'{back:,} back{" at " + e(r["at"]) if r.get("at") else " later"}')
                 body += (f'<div class="du-r{" done" if r["done"] else ""}">{_due_box("on" if r["done"] else "")}'
                          f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
             elif r["kind"] == "plan":
                 body += _due_plan(r)
+            elif r["kind"] == "every":
+                body += _due_every(r)
             else:
                 body += _due_mine(r)
+        body += _opened_line(v.get("opened"))
         for sg in v["suggestions"] + v["notes"]:
             body += (f'<div class="du-sg"><span>&#10022;</span><span>{e(sg["text"])}</span><span>'
                      f'<a href="#" onclick="{_pycmd("duego:" + sg["key"])}">{e(sg["go"])}</a>'
@@ -3839,24 +4503,12 @@ def _due_html(v):
         if not v["rows"] and not v["suggestions"] and not v["notes"]:
             body += '<div class="du-empty">Nothing due today.</div>'
         body += _due_add(v, "today")
-        if v["event"]:
-            ev = v["event"]
-            body += f'<div class="du-line ev"><span>&#9733; {e(ev["name"])} {"today" if ev["when"] == "Today" else "on " + e(ev["when"])}</span></div>'
-        nxt = ", ".join(e(x) for x in v["tomorrow"][:3]) + (f" and {len(v['tomorrow']) - 3} more" if len(v["tomorrow"]) > 3 else "")
-        lead = "Done for today &middot; tomorrow" if total_n and done_n == total_n else "Tomorrow"
-        if nxt:
-            body += (f'<div class="du-line"><span><b>{lead}:</b> {nxt}</span>'
-                     f'<a href="#" onclick="{_pycmd("duetab:upcoming")}">Upcoming &rsaquo;</a></div>')
-        elif v["next"]:
-            body += (f'<div class="du-line"><span><b>Next:</b> {", ".join(e(x) for x in v["next"]["names"][:2])} &middot; '
-                     f'{e(v["next"]["day"])}</span><a href="#" onclick="{_pycmd("duetab:upcoming")}">Upcoming &rsaquo;</a></div>')
     elif tab == "upcoming":
-        body += _due_behind(v)
-        for dd in v["days"]:
+        for dd in v["days"]:  # 3.8.0: Behind is Today's alone
             if dd.get("quiet"):
                 body += f'<div class="du-q">{e(dd["label"])} &middot; nothing due</div>'
                 continue
-            what = "review day" if dd["review"] and not dd["n"] else (f'{dd["n"]} thing{"s" if dd["n"] != 1 else ""}' if dd["n"] else "")
+            what = "review day" if dd["review"] and not dd["n"] else ""  # 3.8.0: its rows are the count
             plus = (f'<a href="#" class="plus" title="Add a to-do for this day" '
                     f'onclick="dcDue.plus(\'{e(dd["day"])}\');return false;">+</a>')
             body += (f'<div class="du-dh{" today" if dd["today"] else ""}"><span>{e(dd["head"])}</span>'
@@ -3868,6 +4520,6 @@ def _due_html(v):
         if v["later"]:
             body += "".join(_due_mine(r) for r in v["later"])
         else:
-            body += '<div class="du-empty">Nothing here. A to-do with no day waits here until you give it one.</div>'
+            body += '<div class="du-empty">Nothing here.</div>'
         body += _due_add(v, "later")
     return f'<div class="du" data-today="{today}">{head}{toast}{body}</div>'

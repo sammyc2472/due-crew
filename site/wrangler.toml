@@ -10,7 +10,7 @@ routes = [
   { pattern = "www.duecrew.com", custom_domain = true },
 ]
 
-# Workers Logs: what the code logs (errors, the bridge's counts), kept a few
+# Workers Logs: what the code logs (errors, the daily counts), kept a few
 # days in the dashboard. Not each request: URLs carry friend and plan codes,
 # and codes are never logged.
 [observability]
