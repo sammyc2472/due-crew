@@ -7191,23 +7191,59 @@ def test_insights_379():
     from due_crew import team as T
     check("insights: the Hard habit needs 15% of 200 answers or more",
           T.hard_habit(30, 200) == {"pct": 15, "n": 200} and T.hard_habit(29, 200) is None and T.hard_habit(100, 199) is None)
-    topics = [("a", "Renal", [], ["t:a"], []), ("b", "Cardio", [], ["t:b"], []), ("c", "Tiny", [], ["t:c"], [])]
-    cards = {"t:a": range(0, 30), "t:b": range(30, 80), "t:c": range(80, 85)}
-    know = {c: (0.5 if c < 10 else 0.95) for c in range(85)}
-    tm = T.topic_map(topics, lambda t: cards[t], know)
-    check("map: topics with 20 started cards, biggest first, weakest cards first",
-          [(t["name"], t["n"], t["know"]) for t in tm] == [("Cardio", 50, 95), ("Renal", 30, 80)]
-          and tm[1]["cids"][:10] == list(range(10)), tm)
+    R, sy = "#Big_v1", ["Cardio", "Renal", "Pulm", "Neuro"]
+    paths = {c: [f"{R}::^Systems::{sy[c % 4]}::{['Anatomy', 'Pathology'][c // 4 % 2]}",
+                 f"{R}::#Lectures::{sy[c % 4]}::01_Sec", f"{R}::#Lectures::{sy[(c + 1) % 4]}::01_Sec",
+                 f"{R}::#Library::Article_{c:04d}", f"{R}::#QBank::Step::{100000 + c}", "leech"] for c in range(160)}
+    know = {c: (0.5 if c < 40 else 0.95) for c in range(160)}
+    tm = T.subjects(paths, know)
+    check("map: broad subjects, from the tags that sort my cards cleanly (no lecture in two systems), biggest first",
+          [(t["name"], t["n"], t["know"]) for t in tm] == [("Cardio", 40, 84), ("Neuro", 40, 84), ("Pulm", 40, 84), ("Renal", 40, 84)]
+          and tm[0]["find"] == {"tags": [f"{R}::^Systems::Cardio"]} and "cids" not in tm[0], tm)
+    kids = tm[0].get("kids") or []
+    check("map: a subject opens into its parts, each with its own way to Browse",
+          [(t["name"], t["n"]) for t in kids] == [("Anatomy", 20), ("Pathology", 20)]
+          and kids[0]["find"] == {"tags": [f"{R}::^Systems::Cardio::Anatomy"]} and not kids[0].get("kids"), kids)
+    both = {c: ["Pharm::Autonomics"] + (["Micro::Bugs"] if c < 10 else []) for c in range(60)}
+    both.update({c: ["Micro::Bugs::Gram"] for c in range(60, 90)})
+    both.update({c: ["Physio"] for c in range(90, 115)})
+    bt = T.subjects(both, {c: 0.9 for c in both})
+    check("map: a card in two subjects counts once, in the bigger",
+          [(t["name"], t["n"]) for t in bt] == [("Pharm", 60), ("Micro", 30), ("Physio", 25)], bt)
+    root = T.subjects({c: ["Step1::Renal" if c < 30 else "Step1::Cardio"] for c in range(70)}, {c: 0.9 for c in range(70)})
+    check("map: every tag under one root: the subjects under it",
+          [(t["name"], t["n"], t["find"]["tags"]) for t in root] == [("Cardio", 40, ["Step1::Cardio"]), ("Renal", 30, ["Step1::Renal"])], root)
+    ch = T.subjects({c: ["Book::#Ch::%02d_Chapter" % (1 + c // 30)] for c in range(60)}, {c: 0.9 for c in range(60)})
+    check("map: names that read the same keep their numbers", [t["name"] for t in ch] == ["01 Chapter", "02 Chapter"], ch)
+    sub = T.subjects({c: ["Verbs::Irregular" if c < 25 else "Nouns"] for c in range(50)}, {c: 0.9 for c in range(50)}, decks=True)
+    check("map: by subdecks, Browse by the subdeck", [(t["name"], t["find"]) for t in sub]
+          == [("Nouns", {"decks": ["Nouns"]}), ("Verbs", {"decks": ["Verbs"]})], sub)
+    check("map: nothing to say, no tiles", T.subjects({}, {1: 0.5}) == [] and T.subjects({1: ["leech"]}, {1: 0.5}) == [])
+    check("map: where it is, the keys opened that still open",
+          T.map_level(tm, ["cardio"]) == ([tm[0]], kids) and T.map_level(tm, ["nope"]) == ([], tm)
+          and T.map_level(tm, ["cardio", "anatomy"]) == ([tm[0]], kids) and T.map_level(tm, None) == ([], tm))
     ids = {c: ["Big::#QBank::Step::%d" % (100000 + c), "Big::#Videos::Renal"] for c in range(30)}
     dt, _g = T.deck_topics(ids, set(range(30)), min_n=20)
     check("topics: a question bank's ids are never a topic", [x[1] for x in dt] == ["Renal"], dt)
     check("map: shades at 70, 80, 90", [T.map_shade(k) for k in (69, 70, 85, 90)] == [0, 1, 2, 3])
-    mh = board._ins_map(10, [dict(t, name="<b>" + t["name"]) for t in tm], "fsrs")
-    check("map: tiles sized by cards, shaded, escaped, each opening Browse", 'class="tm s3"' in mh and 'class="tm s2"' in mh
-          and "flex:50 1" in mh and "&lt;b&gt;Cardio" in mh and "<b>Cardio" not in mh
-          and "duecrew:insmap:10:0" in mh and "duecrew:insmap:10:1" in mh and "remember now (FSRS)" in mh)
-    check("map: one tile says nothing", board._ins_map(10, tm[:1], "fsrs") == ""
-          and "right on their last review" in board._ins_map(10, tm, "right"))
+    leaf = lambda k, name, n, kn: {"key": k, "name": name, "n": n, "know": kn, "find": {"tags": [name]}}  # noqa: E731
+    nest = [dict(leaf("cardio", "<b>Cardio", 50, 95), kids=[
+                dict(leaf("valves", "Valves", 20, 70), kids=[leaf("mitral", "Mitral", 10, 60), leaf("aortic", "Aortic", 10, 80)]),
+                leaf("rhythm", "Rhythm", 30, 85)]),
+            leaf("renal", "Renal", 30, 85)]
+    mh = board._ins_map(10, nest, "fsrs")
+    check("map: tiles sized by cards, shaded, escaped; one that opens says so, one that doesn't opens Browse",
+          'class="tm s3"' in mh and 'class="tm s2"' in mh and "flex:50 1" in mh and "&lt;b&gt;Cardio" in mh
+          and "<b>Cardio" not in mh and "duecrew:insmap:10:0" in mh and "duecrew:insmap:10:1" in mh
+          and mh.count("&rsaquo;</i>") == 1 and "Open it." in mh and "Browse them." in mh
+          and "remember now (FSRS)" in mh and 'class="tmt"' not in mh, mh)
+    deep = board._ins_map(10, nest, "fsrs", ["cardio", "valves"])
+    check("map: opened two down, the trail back (All, Cardio), where I am, Browse all; its tiles",
+          'class="tmt"' in deep and "duecrew:insmapup:10:0'); return false;\">All</a>" in deep
+          and "duecrew:insmapup:10:1'); return false;\">&lt;b&gt;Cardio</a>" in deep and "<b>Valves</b> &middot; 20 cards, 70%" in deep
+          and "duecrew:insmapall:10" in deep and ">Mitral<" in deep and ">Aortic<" in deep and ">Rhythm<" not in deep, deep)
+    check("map: one tile says nothing", board._ins_map(10, nest[:1], "fsrs") == ""
+          and "right on their last review" in board._ins_map(10, nest, "right"))
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))
     ins = {"decks": [{"did": 10, "name": "Step 1", "full": "Step 1"}, {"did": 20, "name": bad, "full": bad}],
            "did": 10, "exam": False, "plan": {"id": "p1", "name": bad}, "view": view}
@@ -7215,15 +7251,15 @@ def test_insights_379():
     check("you › insights: the decks picked as a squad is, mine escaped",
           'class="dc-sw"' in yh and '<a class="on" href="#" title="Step 1" onclick="pycmd(\'duecrew:insdeck:10\')' in yh
           and "duecrew:insdeck:20" in yh and "<img" not in yh, yh[:600])
-    check("you › insights: with a plan on the deck, it says so, with the way to it",
-          "&lt;img" in yh and "<img" not in yh and "duecrew:duetab:plans" in yh and "From" not in yh)
+    check("you › insights: the deck's, plan or not: no way off to the plan, my exam date right here",
+          "duecrew:duetab:plans" not in yh and 'aria-label="Exam date"' in yh and "<img" not in yh)
     lone = board._you_insights(dict(ins, decks=ins["decks"][:1], plan=None))
     check("you › insights: one deck, no picker; no plan, my exam date set right here",
           'class="dc-sw"' not in lone and 'aria-label="Exam date"' in lone and 'value=""' in lone
           and "duecrew:setexam:" in lone and "this.value||" in lone and "settings:privacy" not in lone)
     mine = board._you_insights(dict(ins, plan=None, exam="2026-11-30"))
-    check("you › insights: no plan, my exam date shows in it; a plan's deck has the plan instead",
-          'value="2026-11-30"' in mine and 'class="dc-sw"' in mine and "setexam" not in yh
+    check("you › insights: my exam date shows in it, on every deck",
+          'value="2026-11-30"' in mine and 'class="dc-sw"' in mine and "setexam" in yh
           and 'value=""' in board._you_insights(dict(ins, plan=None, exam='"><img x>')))
     check("you › insights: no decks reviewed yet", "Insights fill in" in board._you_insights({"decks": []}))
     # ---- the glue, on a collection ----
@@ -7302,8 +7338,8 @@ def test_insights_379():
         dc._on_js(False, "duecrew:insbrowse:10:h", DeckBrowser())
         dc._on_js(False, "duecrew:insbrowse:10:0", DeckBrowser())
         dc._on_js(False, "duecrew:insleeches:10", DeckBrowser())
-        check("glue: 3.8.0, Browse shows the same cards Study would; See them, the leeches", shown == [list(range(210, 220)),
-              [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212], [700]], shown)
+        check("glue: 3.8.0, Browse: the box's cards; a topic's name, all of its cards (Study, the hard ones); See them, the leeches",
+              shown == [list(range(210, 220)), list(range(200, 230)), [700]], shown)
         n = len(built) + len(shown)
         for cmd in ("insstudy:x:h", "insstudy:10:zz", "insbrowse:10:", "insdeck:", "youins:abc"):
             dc._on_js(False, "duecrew:" + cmd, DeckBrowser())
@@ -7342,6 +7378,10 @@ def test_insights_379():
         check("glue, no plan: the week ahead is what Anki has due, its new cards a day; no behind",
               [n for _d, _m, n, _r in wk0.get("ahead") or []] == [5, 5, 2, 0, 0, 0, 0] and wk0.get("src") == "anki"
               and "behind" not in w0 and "pid" not in w0, wk0)
+        soon, late = TF.insights(10, "pI", _day(2))["aim"], TF.insights(10, "pI", _day(10))["aim"]
+        check("glue: with a plan, my own exam date aims the box when it's sooner, over the whole deck; else the plan's quiz",
+              (soon["kind"], soon["day"], soon["scoped"]) == ("exam", _day(2), False)
+              and (late["kind"], late["name"], late["day"]) == ("", "Quiz", _day(3)), (soon, late))
         check("glue, no plan: no exam date, a week out", TF.insights(10, None, "")["aim"]["kind"] == ""
               and TF.insights(10, None, "")["aim"]["day"] == _day(7))
         fr = TF.insights(20)
@@ -7349,17 +7389,17 @@ def test_insights_379():
               [(r["name"], r["of"], r["stuck"]) for r in fr.get("rows") or []] == [("Verbs", 13, 13)] or
               [(r["name"], r["of"]) for r in fr.get("rows") or []] == [], fr.get("rows"))
         check("glue: a deck that isn't there has none", TF.insights(99) == {})
-        # the picker: the plan's deck first, then the decks I've reviewed most
+        # the picker: by deck, the ones I've reviewed most first; a plan on one says so (pid)
         decks = TF.you_decks()
-        check("you decks: the plan's deck first, then my reviewed roots, by reviews",
+        check("you decks: my reviewed roots, by reviews, a plan's marked",
               [(d["did"], d["name"], d["pid"]) for d in decks] == [(10, "Step 1", "pI"), (20, "French", None)], decks)
         yv = TF.you_view({})
-        check("you view: the first deck, its plan", yv["did"] == 10 and yv["plan"] == {"id": "pI", "name": P.plan_title(F.mine(plan))}
+        check("you view: the first deck, sharpened by the plan on it", yv["did"] == 10 and "plan" not in yv
               and yv["view"].get("pid") == "pI")
         dc._on_js(False, "duecrew:insdeck:20", DeckBrowser())
         check("picker: a deck's click picks it (this computer's)", conf.get("ins_deck") == 20)
         yv = TF.you_view(conf)
-        check("you view: the deck picked, no plan on it", yv["did"] == 20 and yv["plan"] is None)
+        check("you view: the deck picked, no plan on it", yv["did"] == 20 and not yv["view"].get("pid"))
         dc._on_js(False, "duecrew:insdeck:30", DeckBrowser())
         check("picker: a deck it doesn't list isn't picked", conf.get("ins_deck") == 20)
         conf.update(hidden_tabs=["insights", "decks"], due_tab="today")
@@ -7380,17 +7420,38 @@ def test_insights_379():
         dc._on_js(False, "duecrew:inshardno:10", DeckBrowser())
         check("glue: Not now puts the Hard habit away for a while", pc.get("ins_hard_hide") and not TF.insights(10, "pI").get("hard"))
         # 3.8.0: the topic map
-        vp = TF.insights(10, "pI")
-        check("map: with the plan, its topics with 20 started cards (Renal), what I know now",
-              [(t["name"], t["n"]) for t in vp.get("map") or []] == [("Renal", 30)] and vp.get("map_by") == "fsrs"
-              and 0 <= vp["map"][0]["know"] <= 100, vp.get("map"))
-        vd = TF.insights(10)
-        names = [t["name"] for t in vd.get("map") or []]
-        check("map: with no plan, the deck's own tags name its tiles, biggest first", len(names) >= 2
-              and names[0] == "Started" and "Renal" in names and "leech" not in [n.lower() for n in names], vd.get("map"))
+        vp, vd = TF.insights(10, "pI"), TF.insights(10)
+        check("map: the deck's tags in broad subjects, plan or not; all under one root, what's under it",
+              [(t["name"], t["n"]) for t in vp.get("map") or []] == [("Started", 50), ("Other", 10)] and vp.get("map_by") == "fsrs"
+              and [t["name"] for t in vd.get("map") or []] == ["Started", "Other"] and 0 <= vp["map"][0]["know"] <= 100, vp.get("map"))
         shown.clear()
-        dc._on_js(False, "duecrew:insmap:10:0", DeckBrowser())
-        check("map: a tile opens its weakest cards in Browse", shown and shown[-1] and set(shown[-1]) <= set(range(400, 450)), shown)
+        dc._on_js(False, "duecrew:insmap:10:1", DeckBrowser())
+        check("map: a tile that doesn't split opens all of its cards in Browse", shown == [list(range(300, 310))], shown)
+        # a deck whose subjects split again: Cardio opens into Valves and Rhythm
+        for i in range(70):
+            tag = ("Med::^Sys::Cardio::Valves", "Med::^Sys::Cardio::Rhythm", "Med::^Sys::Renal::Tubule", "Med::^Sys::Pulm")[i // 20 if i < 60 else 3]
+            fakes.add_card(conn, 900 + i, did=30, ctype=2, queue=2, ivl=4, tags=tag + " Med::#Lectures::L%d" % (i % 7), due=1050)
+            fakes.add_review(conn, at(2), ease=3, cid=900 + i)
+        fakes.add_card(conn, 990, did=30, tags="Med::^Sys::Cardio::Valves")  # new: not on the map, in Browse
+        m = TF.insights(30).get("map") or []
+        check("map: broad first, from the tags that sort my cards cleanly (not the lectures); Cardio splits again",
+              [(t["name"], t["n"], bool(t.get("kids"))) for t in m] == [("Cardio", 40, True), ("Renal", 20, False)], m)
+        _state.pop("map_at", None)
+        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
+        yv = TF.you_view(dict(conf, ins_deck=30))
+        check("map: a tile that splits opens into its parts, the trail back above them",
+              (_state.get("map_at") or {}).get(30) == ["cardio"] and yv["view"].get("map_at") == ["cardio"]
+              and ">Rhythm<" in board._ins_map(30, m, "fsrs", yv["view"]["map_at"]), _state.get("map_at"))
+        shown.clear()
+        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
+        dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
+        check("map: inside, a part opens its cards; Browse all, the open subject's, new ones too",
+              shown == [list(range(920, 940)), list(range(900, 940)) + [990]], shown)
+        dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
+        check("map: All goes back to the top", (_state.get("map_at") or {}).get(30) == [])
+        dc._on_js(False, "duecrew:insmap:30:9", DeckBrowser())
+        dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
+        check("map: no such tile, or nothing open: nothing", len(shown) == 2 and not (_state.get("map_at") or {}).get(30))
         dc._on_js(False, "duecrew:insfsrsno:10", DeckBrowser())
         check("glue: Not now puts Optimize FSRS away, on every deck", pc.get("ins_fsrs_hide") and not TF.insights(10, "pI").get("fsrs")
               and not TF.insights(10).get("fsrs"))

@@ -128,7 +128,7 @@ same commit, each with its test:
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
-| Insights (a deck's, plan or not; You › Insights; the topic map) | `team.py`, `team_flow.py` | never sent |
+| Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts) | `team.py`, `team_flow.py` | never sent |
 | Due (the bubble's Today, Upcoming, Later; Study today, 3.8.0) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |

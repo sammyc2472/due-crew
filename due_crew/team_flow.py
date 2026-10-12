@@ -455,10 +455,10 @@ def _since(col, days):
 
 
 def you_decks():
-    """[{did, name, full, pid}] as Insights' picker shows them: the decks of
-    the plans I follow here first, then the deck I picked last (from Crew ›
-    Decks, say), then the top-level decks I've reviewed most in two weeks;
-    DECKS_MAX at most. Main thread."""
+    """[{did, name, full, pid}] as Insights' picker shows them, by deck: the
+    top-level decks I've reviewed most in two weeks, then a plan's deck not
+    among them, and the deck I picked last (from Crew › Decks, say) always;
+    DECKS_MAX at most. pid: a plan I follow on that deck. Main thread."""
     have = _state.get("you_decks")
     if have and time.time() - have["at"] < INSIGHTS_FRESH:
         return have["list"]
@@ -484,12 +484,11 @@ def _you_decks(col, picked=0):
         full = str(col.decks.name(did) or "")
         seen.add(did)
         out.append({"did": did, "name": full.split("::")[-1] or full, "full": full, "pid": pid})
+    plans = {}
     for p in pf.followed():
         st = state.get(p["id"])
         if st and pf._deck_ok(col, st.get("deck_id")):
-            add(st["deck_id"], p["id"])
-    if picked:
-        add(picked)
+            plans.setdefault(int(st["deck_id"]), p["id"])
     roots = {}
     for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
                              "JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.ease > 0 GROUP BY 1", _since(col, T.DAYS)):
@@ -501,13 +500,20 @@ def _you_decks(col, picked=0):
     for root, _n in sorted(roots.items(), key=lambda x: (-x[1], x[0].lower())):
         rid = col.decks.id_for_name(root)
         if rid:
-            add(rid)
+            add(rid, plans.get(int(rid)))
+    for did, pid in plans.items():
+        add(did, pid)
+    if picked and picked not in seen:
+        if len(out) >= DECKS_MAX:
+            out.pop()
+        add(picked, plans.get(int(picked)))
     return out
 
 
 def you_view(c):
-    """What You › Insights draws: {decks, did, plan, exam (my date, or ""), view}. The deck
-    picked (cfg ins_deck, this computer's) or the first. Main thread."""
+    """What You › Insights draws: {decks, did, exam (my date, or ""), view}. The deck
+    picked (cfg ins_deck, this computer's) or the first; a plan I follow on
+    it sharpens it (its events, topic names, behind). Main thread."""
     decks = you_decks()
     if not decks:
         return {"decks": []}
@@ -516,8 +522,8 @@ def you_view(c):
     p = _plan(d["pid"]) if d.get("pid") else None
     exam = str(c.get("exam_date") or "")
     return {"decks": decks, "did": d["did"], "exam": exam,
-            "plan": {"id": p["id"], "name": P.plan_title(p)} if p else None,
-            "view": insights(d["did"], p["id"] if p else None, exam)}
+            "view": dict(insights(d["did"], p["id"] if p else None, exam),
+                         map_at=(_state.get("map_at") or {}).get(d["did"]) or [])}
 
 
 def plan_lines(cards):
@@ -530,7 +536,7 @@ def plan_lines(cards):
         if card.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
             continue
         did = int(st["deck_id"])
-        v = insights(did, card["id"], "")
+        v = insights(did, card["id"], str(cfg().get("exam_date") or ""))
         aim = v.get("aim") or {}
         if v.get("hero"):
             card["ins"] = {"n": len(v["hero"]), "did": did, "day": aim.get("day"),
@@ -578,6 +584,9 @@ def _new_per_day(col, did):
         return 0
 
 
+MY_EXAM = "~exam"  # my own exam date, among a plan's events
+
+
 def _work_out(did, pid=None, exam=""):
     col = mw.col
     if not col or not col.decks.get(did, default=False):
@@ -606,30 +615,23 @@ def _work_out(did, pid=None, exam=""):
         f"WHERE id >= ? AND type = 1 AND ease > 0 AND cid IN ({deck}) ORDER BY id", cutoff - 1, since(2 * T.DAYS)))
 
     # the exam box: started cards Anki won't show me before the aim, under my target by then
-    # (FSRS only). A plan aims at its next event (its prep dates' cards when it names them,
-    # else all of the plan's), else a week out; with no plan, my own exam date when it's
-    # within AIM_DAYS, over the whole deck, else a week out
+    # (FSRS only). The deck's, plan or not: it aims at the next of my own exam date and
+    # a plan's events within AIM_DAYS, else a week out. A plan's event counts its prep dates'
+    # cards when it names them, else all of the plan's; anything else, the whole deck
+    mine = [{"day": exam, "name": "Your exam", "id": MY_EXAM}] if exam else []
     if p:
         ms = P.unit_matches(idx, doc, swap)
-        plan = set()
-        for v in ms.values():
-            plan |= set(v)
         ld = P.load(idx, doc, swap)
         units = P.units(doc)
-        day, name, k, eid = T.aim(doc.get("events"), today)
+    day, name, k, eid = T.aim(list(doc.get("events") or []) + mine if p else mine, today)
+    aimed, prep = deck, []
+    if p and eid and eid != MY_EXAM:
         prep = T.prep_units(units, eid)
-        aimed = plan
-        if prep:
-            aimed = set()
-            for uid in prep:
-                aimed |= set(ms.get(uid) or ())
-        out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep)}
-        aimed = _in(aimed) if aimed else ""
-    else:
-        mine = [{"day": exam, "name": "Your exam", "id": "exam"}] if exam else []
-        day, name, k, eid = T.aim(mine, today)
-        aimed = deck
-        out["aim"] = {"day": day, "name": name, "in": k, "scoped": False, "kind": "exam" if eid else ""}
+        got = set()
+        for uid in prep or ms:
+            got |= set(ms.get(uid) or ())
+        aimed = _in(got) if got else ""
+    out["aim"] = {"day": day, "name": name, "in": k, "scoped": bool(prep), "kind": "exam" if eid == MY_EXAM else ""}
     if _fsrs(col) and aimed and sday:
         last = dict(col.db.all(f"SELECT cid, max(id) FROM revlog WHERE cid IN ({aimed}) GROUP BY cid"))
         mem_of = {}
@@ -660,12 +662,14 @@ def _work_out(did, pid=None, exam=""):
     forgot = {c for c, m in miss_last.items() if c in first_right and first_right[c] < m}
     if p:
         out["rows"] = T.not_sticking(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), reviewed, stuck, forgot)
+        for r in out["rows"]:
+            r["find"] = {"tags": [P.swapped(t, swap) for t in r.get("tags") or []]}
     else:
         out["rows"] = _deck_rows(col, did, reviewed, stuck, forgot)
 
     # 3.8.0, the topic map: what I know now, by topic
     try:
-        out["map"], out["map_by"] = _map(col, did, deck, (idx, swap, doc) if p else None, cutoff)
+        out["map"], out["map_by"] = _map(col, did, deck, cutoff)
     except Exception:
         traceback.print_exc()
 
@@ -767,6 +771,8 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
     topics, groups = T.deck_topics(tags_of, reviewed)
     rows = T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
     if rows:
+        for r in rows:
+            r["find"] = {"tags": r.get("tags") or []}
         return rows
     root = str(col.decks.name(did) or "")
     paths = {}
@@ -775,7 +781,10 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
         if name.startswith(root + "::"):
             paths[int(cid)] = [name[len(root) + 2:]]
     topics, groups = T.deck_topics(paths, reviewed)
-    return T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
+    rows = T.not_sticking(topics, lambda t: groups.get(t, ()), reviewed, stuck, forgot)
+    for r in rows:
+        r["find"] = {"decks": r.get("tags") or []}
+    return rows
 
 
 def _know(col, deck, cutoff):
@@ -805,20 +814,17 @@ def _know(col, deck, cutoff):
             for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({ids})")}, "right"
 
 
-def _map(col, did, deck, plan, cutoff):
-    """(tiles, by) for the topic map: the plan's topics; with no plan the
-    deck's tags, else its subdecks (as Not sticking yet finds them)."""
+def _map(col, did, deck, cutoff):
+    """(tiles, by) for the topic map: my started cards in broad subjects
+    (T.subjects) by the deck's own tags, plan or not; with no tags to say,
+    its subdecks."""
     know, by = _know(col, deck, cutoff)
     if not know:
         return [], by
-    if plan:
-        idx, swap, doc = plan
-        return T.topic_map(T.topic_list(doc), lambda t: idx.tag_cards(P.swapped(t, swap)), know), by
     ids = _in(know)
     tags_of = {int(cid): str(tags or "").split() for cid, tags in
                col.db.all(f"SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({ids})")}
-    topics, groups = T.deck_topics(tags_of, set(know), min_n=T.MAP_MIN)
-    tiles = T.topic_map(topics, lambda t: groups.get(t, ()), know)
+    tiles = T.subjects(tags_of, know)
     if len(tiles) >= 2:
         return tiles, by
     root = str(col.decks.name(did) or "")
@@ -827,16 +833,61 @@ def _map(col, did, deck, plan, cutoff):
         name = str(col.decks.name(int(d)) or "")
         if name.startswith(root + "::"):
             paths[int(cid)] = [name[len(root) + 2:]]
-    topics, groups = T.deck_topics(paths, set(know), min_n=T.MAP_MIN)
-    return T.topic_map(topics, lambda t: groups.get(t, ()), know), by
+    return T.subjects(paths, know, decks=True), by
 
 
-def browse_map(did, i):
-    """A topic map tile: its weakest cards in Anki's browser."""
+def _find_cids(col, did, find):
+    """3.8.0: every card of the deck under a topic's tags (and their
+    children) or its subdecks: what a topic's name opens in Browse."""
+    deck = _deck_sql(col, did)
+    out = set()
+    for t in (find or {}).get("tags") or []:
+        lt = str(t).lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        out |= {int(c) for c in col.db.list(
+            f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
+            f"AND ((' ' || lower(n.tags) || ' ') LIKE ? ESCAPE '\\' OR (' ' || lower(n.tags) || ' ') LIKE ? ESCAPE '\\')",
+            f"% {lt} %", f"% {lt}::%")}
+    root = str(col.decks.name(did) or "")
+    for path in (find or {}).get("decks") or []:
+        sub = col.decks.id_for_name(f"{root}::{path}")
+        if sub:
+            dids = _in(col.decks.deck_and_child_ids(sub))
+            out |= {int(c) for c in col.db.list(f"SELECT id FROM cards WHERE did IN ({dids}) OR odid IN ({dids})")}
+    return sorted(out)
+
+
+def _map_at(did):
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
-    tiles = view.get("map") or []
-    if mw.col and 0 <= i < len(tiles):
-        _plans_flow()._browse(tiles[i]["cids"], empty="Nothing to show.")
+    return T.map_level(view.get("map"), (_state.get("map_at") or {}).get(did))
+
+
+def open_map(did, i):
+    """A topic map tile: one that splits again opens into its smaller
+    tiles, with the trail back above them; one that doesn't, all of its
+    cards in this deck, in Anki's browser."""
+    trail, cur = _map_at(did)
+    if not mw.col or not 0 <= i < len(cur):
+        return
+    t = cur[i]
+    if t.get("kids"):
+        _state.setdefault("map_at", {})[did] = [x["key"] for x in trail] + [t["key"]]
+        app.swap(cfg())
+    else:
+        _plans_flow()._browse(_find_cids(mw.col, did, t.get("find")), empty="Nothing to show.")
+
+
+def map_up(did, n):
+    """The trail: back to its nth step (0, All)."""
+    trail, _cur = _map_at(did)
+    _state.setdefault("map_at", {})[did] = [x["key"] for x in trail[:n]]
+    app.swap(cfg())
+
+
+def browse_map(did):
+    """The trail's Browse all: the open tile's cards in this deck."""
+    trail, _cur = _map_at(did)
+    if mw.col and trail:
+        _plans_flow()._browse(_find_cids(mw.col, did, trail[-1].get("find")), empty="Nothing to show.")
 
 
 def _pick(did, key):
@@ -875,10 +926,16 @@ def study(did, key):
 
 
 def browse(did, key):
-    """3.8.0: the same cards in Anki's browser, to look them over or fix them."""
+    """3.8.0: in Anki's browser. The exam box: its cards. A topic's name:
+    all of its cards in the deck (Study is for the hard ones)."""
     cids, _title = _pick(did, key)
-    if mw.col:
-        _plans_flow()._browse(cids, empty="Nothing to show.")
+    if not mw.col:
+        return
+    if str(key).isdigit():
+        rows = (((_state.get("insights") or {}).get(did) or {}).get("view") or {}).get("rows") or []
+        r = rows[int(key)] if int(key) < len(rows) else None
+        cids = (_find_cids(mw.col, did, r.get("find")) if r and r.get("find") else []) or cids
+    _plans_flow()._browse(cids, empty="Nothing to show.")
 
 
 def browse_leeches(did):
@@ -1001,7 +1058,11 @@ def on_message(cmd, parts):
         elif cmd == "insfsrsno":
             fsrs(did, open_it=False)
         elif cmd == "insmap" and x.isdigit():
-            browse_map(did, int(x))
+            open_map(did, int(x))
+        elif cmd == "insmapup" and x.isdigit():
+            map_up(did, int(x))
+        elif cmd == "insmapall":
+            browse_map(did)
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
         elif cmd == "insleeches":

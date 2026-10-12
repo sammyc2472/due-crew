@@ -623,4 +623,8 @@ In Anki (as a follower):
 - [ ] Turn "Due Crew on the Decks screen" off: the board goes; Tools › Due Crew › Show on the Decks screen (a check) brings it back.
 - [ ] Ctrl+Shift+S from the Decks screen, a deck's overview and Browse's main window: Study today starts. Ctrl+Shift+Q while reviewing a plan's card in its squad asks the squad; elsewhere it says what it's for. Settings › Board › Shortcuts › off: neither key does anything; on again, both do.
 - [ ] Study today with a plan and two other decks due: the plan's deck first; when it's done Anki goes straight to the next deck ("Next: …"), then today's misses, then "Done for today" on the Decks screen. Press Escape mid-deck: the walk stops there.
-- [ ] Insights › What you know: tiles for the deck's topics, the big ones big, shaded by how well you know them; a tile opens its weakest cards in Browse. FSRS off: the tooltip says "right on their last review".
+- [ ] Insights › What you know: broad subjects (a big shared deck: its systems), the big ones big, shaded by how well you know them; no lecture names, no subject twice. FSRS off: the tooltip says "right on their last review".
+- [ ] A tile with a › opens its parts, with "All › Cardio · N cards, N% · Browse all" above them; All goes back; Browse all opens every card of the subject (new ones too). A tile without a › opens all of its cards in Browse.
+- [ ] Not sticking yet: a topic's name opens all of its cards in Browse; its Study N builds the hard ones only.
+- [ ] Insights on a plan's deck: no plan name or › to Plans in its head; the exam date box is there. An exam date sooner than the plan's next event names the box "Your exam"; later, the plan's event does.
+- [ ] Settings › Board › Due › Recover leeches, switched on with a leech in the collection: "1 leech back as new cards. Edit › Undo puts it back." at once; Edit › Undo does.

@@ -290,16 +290,24 @@ def check(path):
        and not any(r["name"].lower() == "leech" for r in bare.get("rows") or []) and t_bare < 3.0,
        f"{[(r['name'], r['src'], r['of']) for r in (bare.get('rows') or [])[:3]]}, hero {len(bare.get('hero') or [])}, "
        f"week {'yes' if bare.get('week') else 'no'}, {t_bare*1000:.0f} ms")
-    ok("insights: the decks to pick, the plan's first, Anki's own deck names and ids",
-       decks and decks[0]["did"] == did and decks[0]["pid"] == "pI" and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
+    ok("insights: the decks to pick, by deck, the plan's marked, Anki's own deck names and ids",
+       any(d["did"] == did and d["pid"] == "pI" for d in decks) and t_decks < 0.5, f"{decks}, {t_decks*1000:.0f} ms")
     ok("insights: the deck's suspended leeches", len(lee) >= 1, f"{len(lee)}")
     # 3.8.0: the topic map on a big deck's size, and Study today's counts from Anki's tree
     from due_crew import due_flow as DF
     t = tm()
-    tiles, by = TF._map(col, did, TF._deck_sql(col, did), None, int(col.sched.day_cutoff))
+    tiles, by = TF._map(col, did, TF._deck_sql(col, did), int(col.sched.day_cutoff))
     t_map = tm() - t
-    ok("map: the deck's topics as tiles, what I know now, in one pass", isinstance(tiles, list) and t_map < 2.0,
+    ok("map: the deck's broad subjects as tiles, what I know now, in one pass", len(tiles) >= 2 and t_map < 2.0,
        f"{[(x['name'], x['n'], x['know']) for x in tiles[:4]]}, by {by}, {t_map*1000:.0f} ms")
+    kid = next((x for x in tiles if x.get("kids")), None)
+    t = tm()
+    allc = TF._find_cids(col, did, tiles[0]["find"]) if tiles else []
+    t_find = tm() - t
+    ok("map: a subject opens into its parts; its Browse finds all of its cards, new ones too",
+       kid and tiles and len(allc) >= tiles[0]["n"] and t_find < 1.0,
+       f"{kid['name'] if kid else None} › {[(k['name'], k['n']) for k in (kid or {}).get('kids', [])[:4]]}; "
+       f"{tiles[0]['name'] if tiles else ''}: {len(allc):,} cards ({tiles[0]['n'] if tiles else 0} started), {t_find*1000:.0f} ms")
     t = tm()
     dn = DF._due_now(col, {did})
     t_due = tm() - t

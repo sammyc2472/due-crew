@@ -648,6 +648,10 @@ def _css(cfg):
     #due-crew .tmap .tm span {{ overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
       -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
     #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; }}
+    #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
+    #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
+    #due-crew .tmt b {{ color: var(--dc-ink); }}
+    #due-crew .tmt a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     #due-crew .tmap .tm:hover {{ filter: brightness(.94); }}
     #due-crew .tm.s3, #due-crew .sw.s3 {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
     #due-crew .tm.s2 {{ background: color-mix(in srgb, var(--dc-accent) 55%, var(--dc-bg)); }}
@@ -1619,10 +1623,10 @@ def _ins_spark(days):
 def _you_insights(ins):
     """3.8.0, You › Insights: for everyone, a deck at a time, picked as a
     squad is. ins: team_flow.you_view: {decks: [{did, name, full}], did,
-    plan: {id, name} or None, exam: my exam date or "", view: the deck's
-    Insights}. A plan I follow on the deck brings its exam and its topic
-    names; without one, the deck's tags name the topics and my own exam
-    date aims the exam box. Names are mine (decks) or authors' (plans): escaped."""
+    exam: my exam date or "", view: the deck's Insights}. It's the deck's,
+    plan or not: a plan I follow on it only sharpens it (its events
+    aim the exam box, its dates name the topics, its behind line). Names are
+    mine (decks) or authors' (plan events, topics): escaped."""
     e = _html.escape
     ins = ins or {}
     decks = ins.get("decks") or []
@@ -1633,20 +1637,14 @@ def _you_insights(ins):
     pick = ("" if len(decks) < 2 else '<div class="dc-sw">' + "".join(
         f'<a{on if int(d["did"]) == did else ""} href="#" title="{e(str(d.get("full") or d["name"]))}" '
         f'onclick="{_pycmd("insdeck:" + str(int(d["did"])))}">{e(str(d["name"]))}</a>' for d in decks) + "</div>")
-    plan = ins.get("plan")
-    if plan:  # its exam and its topics
-        ctx = (f'<a href="#" title="The plan on this deck" onclick="{_pycmd("duetab:plans")}">'
-               f'{e(str(plan.get("name") or "Plan"))} &rsaquo;</a>')
-    else:
-        # 3.8.0: my exam date, set right here (Settings has the same one)
-        ex = str(ins.get("exam") or "")
-        ex = ex if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", ex) else ""
-        ctx = (f'<label class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">Exam '
-               f'<input type="date" value="{e(ex)}" aria-label="Exam date" '
-               f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));"></label>')
-
-    # 3.8.0: the decks, and the plan on this one (or a way to my exam date), one row
-    head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>' if pick or ctx else ""
+    # 3.8.0: my exam date, set right here (Settings has the same one); a plan's
+    # event sooner aims the box instead, and says its name
+    ex = str(ins.get("exam") or "")
+    ex = ex if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", ex) else ""
+    ctx = (f'<label class="iexam" title="Your exam date. Your crew sees it for the two weeks before.">Exam '
+           f'<input type="date" value="{e(ex)}" aria-label="Exam date" '
+           f'onchange="pycmd(\'duecrew:setexam:\'+(this.value||\'off\'));"></label>')
+    head = f'<div class="ihead">{pick}<span class="ictx">{ctx}</span></div>'
     return head + _insights_html(did, ins.get("view") or {})
 
 
@@ -1761,7 +1759,7 @@ def _insights_html(did, v):
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
                     f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"))
     if w:
         out += _ins_week(did, w, aim, today)
     f = v.get("fsrs")
@@ -1787,25 +1785,38 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by):
-    """3.8.0, the topic map: each topic a tile, sized by its started cards,
-    shaded by how much I know now; a click opens its weakest in Browse.
+def _ins_map(did, tiles, by, at=()):
+    """3.8.0, the topic map: each subject a tile, sized by its started cards,
+    shaded by how much I know now. A tile that splits again opens into its
+    smaller ones (at: the keys opened), the trail above them goes back, and
+    Browse all opens the open one's cards; a tile that doesn't, its cards.
     Mine alone, from my own Anki. Two tiles at least, or it says nothing."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
-    from .team import map_shade
-    big = max(int(t["n"]) for t in tiles) or 1
+    from .team import map_level, map_shade
+    trail, cur = map_level(tiles, at)
+    big = max(int(t["n"]) for t in cur) or 1
     how = "you&rsquo;d remember now (FSRS)" if by == "fsrs" else "right on their last review"
     out = ""
-    for i, t in enumerate(tiles):
+    for i, t in enumerate(cur):
         n, k = int(t["n"]), int(t["know"])
-        tip = f'{t["name"]}: {n:,} cards, {k}% {how}. Browse the weakest.'
+        tip = f'{t["name"]}: {n:,} cards, {k}% {how}. ' + ("Open it." if t.get("kids") else "Browse them.")
+        more = '<i aria-hidden="true">&rsaquo;</i>' if t.get("kids") else ""
         out += (f'<a class="tm s{map_shade(k)}" href="#" style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
-                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}</span><b>{k}%</b></a>')
+                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span><b>{k}%</b></a>')
+    path = ""
+    if trail:
+        steps = [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:0")}">All</a>']
+        steps += [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:{j}")}">{e(str(t["name"]))}</a>'
+                  for j, t in enumerate(trail[:-1], 1)]
+        last = trail[-1]
+        steps.append(f'<b>{e(str(last["name"]))}</b>')
+        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards, {int(last["know"])}% '
+                f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
     return (f'<div class="isec"><div class="ik">What you know<span>&nbsp;&middot; by topic, now</span>'
             f'<span class="ikey"><i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+</span></div>'
-            f'<div class="tmap">{out}</div></div>')
+            f'{path}<div class="tmap">{out}</div></div>')
 
 
 def _week_html(card, pid):

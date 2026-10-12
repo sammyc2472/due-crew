@@ -860,7 +860,7 @@ every release that changes how something works.
   open until they're done (`due_flow._reviews`: back, at). The morning's
   line has Sync now (Anki's own Sync) while this Anki signs in to AnkiWeb
   and the collection changed since its last sync (`col.mod` > `ls`, both
-  ms). Insights takes my exam date in its head when no plan is on the deck
+  ms). Insights takes my exam date in its head (on every deck since "Insights is the deck's" below)
   (`setexam`, as Settings; the crew sees it for the two weeks before).
   Insights says when Hard is 15% or more of 200+ review answers in four
   weeks ("Anki counts Hard as remembered"), with Not now for 30 days
@@ -908,15 +908,57 @@ every release that changes how something works.
   new cards by the deck's options. At the end: "Done for today", or the
   learning cards back later.
   The topic map (3.8.0, Easier Anki §9, Sam: "you made a … plan thing by
-  topic, where did those go?"): in Insights, each topic a tile sized by
-  its started cards and shaded by how much I know now, FSRS's recall today
-  (stability, days since its last answer) or with FSRS off the share whose
-  last answer was right; 70/80/90% shades. Topics are the plan's
-  (`topic_list`), else the deck's tags (`deck_topics` at 20 started
-  cards), else its subdecks; twelve tiles at most, biggest first. A click
-  opens the topic's weakest in Browse (`insmap`). About 1 s on a big shared
-  deck's size, in Insights' ten-minute cache. A question bank's id tags
-  ("…::Step::104523") are never a topic, in Not sticking yet too.
+  topic, where did those go?"): in Insights, my started cards in broad
+  subjects (`team.subjects`), each a tile sized by its cards and shaded
+  by how much I know now, FSRS's recall today (stability, days since its
+  last answer) or with FSRS off the share whose last answer was right;
+  70/80/90% shades. Plan or not, by the deck's own tags. Sam's first look:
+  "mixed up / hyperspecific" (it named the plan's lecture topics, a card
+  in several). Now a tag's family is what comes before its first level
+  (under a resource's mark, "^Systems::Cardio" reads Cardio; else the
+  tag's root), each family is cut at the shallowest level with two tiles
+  of 20 cards, and the family whose tiles hold the most cards with one
+  subject each wins, so a lecture tagged under two systems never makes
+  the map. A card in two subjects counts once, in the bigger. Every tag
+  under one root ("Step1::…"): what's under it. With no tags to say, the
+  subdecks. Sam: "could clicking on a tile open up subtiles?": a tile that
+  splits again (two of 10 cards, four levels at most) opens into its
+  parts, with the trail back above them ("All › Cardio · 412 cards, 86% ·
+  Browse all"; `insmap`, `insmapup`, `insmapall`, the keys opened in
+  `_state["map_at"]`, per deck, this session); a tile that doesn't opens
+  all of its cards in Browse (`team_flow._find_cids`: the deck's cards
+  under the tag and its children, or the subdeck), new ones too. Names
+  that read the same keep their numbers ("01 Chapter"). Twelve tiles a
+  level at most, biggest first. About 1.2 s on a big shared deck's size
+  (each tag read once), in Insights' ten-minute cache. A question bank's
+  id tags ("…::Step::104523") are never a subject, in Not sticking yet
+  too. Not sticking yet: a topic's name opens all of its cards in Browse
+  (Sam: "that should open everything while the study XX opens the hard
+  ones"); its Study keeps the ones not sticking.
+  Insights is the deck's (3.8.0, Sam: "it honestly can always be
+  organized by deck … the benefit of the plan is the more specific
+  feedback"): its head is the decks and my exam date, on every deck; the
+  plan's name and its way off to Plans went. The decks are listed by
+  reviews in two weeks (a plan's deck not among them after, the one I
+  picked always). A plan I follow on the deck only sharpens it: the exam
+  box aims at the next of my exam date and the plan's events (a plan
+  event counts its prep dates' cards; my exam, the whole deck), Not
+  sticking yet names the plan's dates, the week counts its dates, and
+  Behind has Catch up.
+  One Study (3.8.0, Sam: "a ton of study buttons that all do the same
+  thing"): the box's Study today, on its folded line too; the Study › on a
+  plan's date and on Behind, and the misses suggestion, went (they're the
+  walk's first and last steps). Study today opens real decks (Anki's own
+  Study Now on each, a parent with its subdecks); only today's misses is
+  a filtered deck. The no-jumps hold lets go at once, and on a window
+  resize or blur (Sam: "a pretty big delay on window resizing"; the eased
+  release lagged). On my own profile card, a studied day opens that Anki
+  day's answered cards in Browse (`heatday`). "4 back at 9:42" flips to
+  due when they come back while the Decks screen shows it (one timer, the
+  earliest, `due_flow._flip_at`). The empty crew box: "Send a friend your
+  invite. Once you've added each other, they're here." Recover leeches
+  (Sam: "does not work"): it ran only in the morning; switched on, it
+  recovers the leeches now, as one undo step, and says how many.
   The site, audited (3.8.0): a long word in the rail no longer widens the
   page; Squads hides columns by name (its line spans two, which hid the
   wrong ones under 560 px) and its line wraps; the cheer popup sits on the

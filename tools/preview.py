@@ -258,9 +258,15 @@ _INS = {"target": 90, "right": {"now": [1308, 1519], "before": [1590, 1836],
                            ("2026-10-13", 128, 133, 55)], "avg": 204, "was": 38, "today_done": 46},
         "fsrs": {"right": 85, "n": 486, "target": 90}}
 _DECKS = [{"did": 10, "name": "Big Step 1", "full": "Big Step 1"}, {"did": 20, "name": "Spanish", "full": "Languages::Spanish"}]
-_MAP = [{"key": k, "name": k, "n": n, "know": kn, "cids": [1]} for k, n, kn in (
-    ("Pharmacokinetics", 412, 92), ("Autonomic drugs", 318, 84), ("Renal physiology", 260, 76), ("Acid-base", 190, 66),
-    ("Cell injury", 150, 88), ("Inflammation", 120, 81), ("Neoplasia", 96, 71), ("Hemodynamics", 64, 94))]
+def _tile(name, n, kn, kids=()):
+    t = {"key": name.lower(), "name": name, "n": n, "know": kn, "find": {"tags": ["Big::^Systems::" + name]}}
+    return dict(t, kids=list(kids)) if kids else t
+
+
+_MAP = [_tile("Cardio", 412, 86, [_tile("Physiology", 160, 91), _tile("Pathology", 132, 79), _tile("Pharmacology", 84, 88),
+                                  _tile("Anatomy", 36, 94)]),
+        _tile("Renal", 318, 77), _tile("Pulm", 260, 84), _tile("Neuro", 190, 66), _tile("GI", 150, 88), _tile("Heme", 120, 81),
+        _tile("Endo", 96, 71), _tile("MSK", 64, 94)]
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
              "view": dict(_INS, did=10, pid="p1", leeches=3, week=dict(_INS["week"], src="plan"), map=_MAP, map_by="fsrs")}
 sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
@@ -270,6 +276,9 @@ _DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,
                  rows=[{"name": "Subjunctive", "src": "Grammar", "of": 41, "stuck": 7, "forgot": 3, "cids": [1]},
                        {"name": "Preterite", "src": "Grammar", "of": 63, "stuck": 5, "forgot": 1, "cids": [1]}],
                  week=dict(_INS["week"], src="anki"))
+sections.append("<h3>3.8.0: You › Insights, the map opened on Cardio</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV,
+    you=_YOU("insights", insights=dict(_PLAN_INS, view=dict(_PLAN_INS["view"], map_at=["cardio"])))))
 sections.append("<h3>3.8.0: You › Insights, a deck with no plan (my exam date, its tags), Due off</h3>" + board.render(
     DATA, {"period": "today", "due_show": False}, now_ts - 60, plans=PLANS,
     you=_YOU("insights", insights={"decks": _DECKS, "did": 20, "exam": True, "plan": None, "view": _DECK_INS})))
