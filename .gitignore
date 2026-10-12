@@ -19,3 +19,4 @@ wdev.log
 users.json
 # wrangler dev's local secrets (tools/site_preview.sh writes one)
 .dev.vars
+tools/motion_preview.html

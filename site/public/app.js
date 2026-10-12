@@ -915,7 +915,7 @@ const Board = (() => {
     document.querySelectorAll(".cheer-pop").forEach((x) => x.remove());
     const pop = h("div", { class: "cheer-pop", role: "menu" }, QUICK.map((e) => h("button", { class: "linkish", title: `Send ${e}`, onclick: async () => {
       pop.remove();
-      try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; }
+      try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; window.dcMotion?.cheer(uid, e); }
       catch { anchor.title = "Couldn't send. Try again."; }
     } }, e)));
     // 3.8.0: on the page, not in the table's scroll box (which clipped it), opening up near the bottom
@@ -978,7 +978,7 @@ const Board = (() => {
       const rv = r.reviews === null ? "—" : h("span", {}, r.reviews.toLocaleString(), period === "week" && r.new > 0 && r.reviews > 0 ? h("small", {}, r.new >= r.reviews ? "all new" : `${Math.min(r.new, r.reviews).toLocaleString()} new`) : null);
       const dash = r.paused || r.quiet || r.notyet;
       const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
-      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim() },
+      return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim(), "data-uid": r.p.uid },
         h("td", { class: "rk" }, rank), nameCell(r, period),
         h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n k-time" }, dash || r.time === null ? "—" : fmtTime(r.time)),
         h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
@@ -1212,7 +1212,15 @@ async function home() {
   const panel = h("div");
   const fetched = Date.now();
   const updated = h("span", { class: "muted" });
+  // 3.8.0: what changed moves, as on the add-on's board (motion.js, the same file)
   async function draw() {
+    const root = pills.closest(".brd") || panel.parentNode || panel;
+    let mo = null;
+    try { mo = window.dcMotion ? dcMotion.before(root) : null; } catch { mo = null; }
+    await drawNow();
+    try { if (mo) dcMotion.after(root, mo); } catch { /* the board's drawn either way */ }
+  }
+  async function drawNow() {
     if (typeof drawFoot === "function") drawFoot();
     pills.replaceChildren(...tabs.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => { tab = k; Board.store("dc-tab", k); draw(); } }, l)));
     const mins = Math.floor((Date.now() - fetched) / 60000);
@@ -1323,7 +1331,7 @@ async function home() {
     codeBox());
   page(todayStrip(followed, my[t]), h("div", { class: "wb" },
     h("div", { class: "stack" },
-      h("section", { class: "brd" },
+      h("section", { class: "brd dc-panel" },
         h("div", { class: "top2" }, pills),
         panel,
         h("div", { class: "foot" }, footLeft,

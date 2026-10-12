@@ -15,6 +15,7 @@ ahead of mine still renders as fresh.
 import datetime as _dt
 import html as _html
 import json as _json
+import os as _os
 import re as _re
 import sys as _sys
 import time
@@ -697,6 +698,13 @@ def _css(cfg):
     #due-crew .dc-live {{ display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--dc-accent); box-shadow: 0 0 0 2px var(--dc-you-bg); margin: 0 3px 0 6px;
       vertical-align: 1px; }}
+    /* 3.8.0: studying now breathes, slowly; ↻ turns while the board fetches (motion.js) */
+    @keyframes dcbreathe {{ from {{ opacity: .4; transform: scale(.85); }} to {{ opacity: 1; transform: scale(1); }} }}
+    @keyframes dcspin {{ to {{ transform: rotate(360deg); }} }}
+    @media (prefers-reduced-motion: no-preference) {{
+      #due-crew .dc-live {{ animation: dcbreathe 2.4s ease-in-out infinite alternate; }}
+      #due-crew .dc-foot a.ic.dc-spin {{ display: inline-block; animation: dcspin .8s linear infinite; }}
+    }}
     #due-crew .dc-plan {{ display: inline-block; width: 36px; height: 4px; border-radius: 2px;
       background: var(--dc-line); overflow: hidden; vertical-align: middle; margin: 0 4px 0 1px; }}
     #due-crew .dc-plan i {{ display: block; height: 100%; background: var(--dc-accent); }}
@@ -1214,6 +1222,8 @@ def swap_js(html_out):
         var tmp = document.createElement('div');
         tmp.innerHTML = %s;
         var nu = tmp.firstElementChild;
+        var mo = null;  // 3.8.0: what changed moves (motion.js); the swap goes on whatever it does
+        try { mo = window.dcMotion ? dcMotion.before(el) : null; } catch (e) { mo = null; }
         el.parentNode.replaceChild(nu, el);
         if (keep) {
             var n1 = document.getElementById('du-in');
@@ -1226,6 +1236,7 @@ def swap_js(html_out):
                 n1.dispatchEvent(new Event('input'));
             }
         }
+        try { if (mo) { dcMotion.after(nu, mo); } } catch (e) {}
         var held = [];
         parts.forEach(function (s) {
             var p = nu.querySelector(s);
@@ -1252,6 +1263,11 @@ def swap_js(html_out):
     """ % _json.dumps(html_out)
 
 
+# 3.8.0: the board's motion, one file shared with duecrew.com (site/public/motion.js, byte for byte)
+with open(_os.path.join(_os.path.dirname(__file__), "motion.js"), encoding="utf-8") as _f:
+    MOTION_JS = _f.read()
+
+
 def keep_me_in_view_js():
     """Run after the board is drawn or swapped: a capped view starts with
     your own row in view, wherever it ranks. Nothing happens under the
@@ -1265,7 +1281,7 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS
+    """ + DUE_JS + MOTION_JS
 
 
 # a deck row without a "+N today" line holds its place, filled when another
@@ -2879,7 +2895,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
               'Your numbers are safe; Refresh tries again.">Couldn&rsquo;t sync</span>'
               ' &middot; ') if sync_error else ""
     foot = (f'<div class="dc-foot"><span class="fl">{left}</span><span class="sp"></span>'
-            f'<span class="fr">{failed}Updated {ago}'
+            f'<span class="fr">{failed}<span class="upd">Updated {ago}</span>'
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
@@ -3997,6 +4013,10 @@ DUE_JS = r"""
       if (!inp || !inp.value.trim()) { return; }
       var w = sel ? sel.value : 'today';
       if (w === 'pick') { w = (dt && dt.value) ? dt.value : 'today'; }
+      if (window.dcMotion) {  // 3.8.0: the redraw shows where it went
+        var r = inp.getBoundingClientRect();
+        dcMotion.say({add: inp.value.trim().slice(0, 16), when: w, from: {x: r.left, y: r.top}});
+      }
       pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
       this.raw = false;
       inp.value = '';  // sent: a redraw doesn't put it back (swap_js keeps a half-typed one)
@@ -4221,6 +4241,8 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
             f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
     study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;</a>'
              if tab == "today" and v.get("study") else "")
+    if v.get("done") and tab == "today":
+        count = "&#10003; Done for today"  # 3.8.0: as the folded line says it (and motion.js lights the box once)
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'
             f'<span class="sp"></span><span class="du-n">{count if tab in ("today", "upcoming") else ""}</span>{study}'
             f'<a href="#" class="du-fold" title="Fold to one line" onclick="{_pycmd("duefold")}">Hide &#9652;</a></div>')

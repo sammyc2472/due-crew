@@ -8327,6 +8327,51 @@ def test_every_site_twin_v380():
           (out.stdout, out.stderr, want))
 
 
+def test_board_motion_v380():
+    """3.8.0, "Board in Motion" (all seventeen): one motion.js, byte for byte
+    on the board and duecrew.com; the swap notes the board before and moves
+    what changed after; every add-on class its rules name is still drawn;
+    nothing moves on its own clock but studying now, and only without
+    Reduce motion; a cheer sent floats; the open box says Done for today."""
+    root = os.path.join(REPO, "due_crew", "motion.js")
+    js = open(root, encoding="utf-8").read()
+    site = open(os.path.join(REPO, "site", "public", "motion.js"), encoding="utf-8").read()
+    check("motion: one file, the same on the board and the site", js == site)
+    sw = board.swap_js("<div id='due-crew'></div>")
+    check("motion: the swap notes the board before it and moves what changed after; a fault in it never stops the swap",
+          "try { mo = window.dcMotion ? dcMotion.before(el) : null; } catch (e) { mo = null; }" in sw
+          and "try { if (mo) { dcMotion.after(nu, mo); } } catch (e) {}" in sw
+          and sw.index("dcMotion.before(el)") < sw.index("replaceChild(nu, el)") < sw.index("dcMotion.after(nu, mo)"))
+    check("motion: loaded with the board's script after every draw", board.MOTION_JS == js and js in board.keep_me_in_view_js())
+    check("motion: Reduce motion stops it all (the script asks; the CSS only moves without it)",
+          "prefers-reduced-motion: reduce" in js and "if (!el || !el.animate || !M.ok()) return null;" in js
+          and "@media (prefers-reduced-motion: no-preference)" in board._css({}))
+    css = board._css({})
+    breathing = css[css.index("@media (prefers-reduced-motion: no-preference)"):]
+    check("motion: studying now breathes, and ↻ turns, only there", "dcbreathe 2.4s" in breathing and "dcspin" in breathing
+          and "animation:" not in css[:css.index("@media (prefers-reduced-motion: no-preference)")].split("dcfall")[0].replace("animation: none", ""))
+    sel = " ".join(re.findall(r'sel: "([^"]+)"', js)) + " " + " ".join(re.findall(r"closest\(['\"]([^'\"]+)['\"]\)", js))
+    site_only = {"pills", "sqsw", "bgmini", "bgt", "brd", "foot", "dc-panel", "st-tabs"}
+    names = sorted({c for c in re.findall(r"\.([a-z][a-z0-9-]*)", sel)} - site_only)
+    drawn = open(os.path.join(REPO, "due_crew", "board.py"), encoding="utf-8").read()
+    missing = [c for c in names if not re.search(r'class="[^"]*\b%s\b|class=\\?"[^"]*\b%s\b|\.%s\b' % (c, c, c), drawn)]
+    check("motion: every class its rules name is one the board draws (a rename can't switch a motion off)",
+          len(names) >= 25 and not missing, (missing, names))
+    check("motion: nothing in it sorts, so no row slides past another (never a race)", "sort(" not in js)
+    social = open(os.path.join(REPO, "due_crew", "social.py"), encoding="utf-8").read()
+    check("motion: a cheer sent floats up from their row (the glue asks, escaped as JSON)",
+          'mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))' in social)
+    check("motion: Add tells the next redraw what it added and from where", "dcMotion.say({add: inp.value.trim().slice(0, 16), when: w" in board.DUE_JS)
+    from due_crew import due as D
+    day = TODAY.isoformat()
+    v = D.view(day, [], [{"id": "z1", "t": "Practice", "d": day, "done": day, "at": day}], {}, reviews={"due": 0, "done": 5})
+    v["done"] = D.done_for_today(v)  # as due_flow sets it
+    html = board._due_html(v)
+    check("motion: the open box says Done for today, as the folded line does; the foot's Updated is its own span",
+          "&#10003; Done for today" in html and '<span class="upd">Updated ' in board.render(
+              {"entries": [], "labels": [day], "tomorrow": "", "pending": []}, {}, 0), html[:600])
+
+
 def test_why_not_showing_v380():
     """3.8.0, pick 9: Browse › why isn't it showing? (why, pure): one plain
     sentence a card, in Anki's words, and Anki's own fix beside it;

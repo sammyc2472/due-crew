@@ -1020,6 +1020,31 @@ every release that changes how something works.
   (Edit › Undo takes it back), then reads again; `ui/why_dialog.py` is the
   sheet, every line plain text. `tools/real_anki.py` checks it on Anki's
   engine: each state, each fix, and that the raise reaches the card.
+  Board in Motion (Sam picked all seventeen on the mock page): the board
+  is redrawn whole (`board.swap_js`), so `motion.js` (one file, byte for
+  byte the same as `site/public/motion.js`) notes before each swap what
+  its rules know (a tick, a bar, a count, a tab group, a crew cell keyed
+  by person, column and view, a square, a deck bar, the map, a bingo
+  stamp, the sparkline) and after it moves only what changed. A refresh
+  that brings nothing new moves nothing; nothing moves with the system's
+  Reduce motion; nothing sorts, so rows never slide past each other. The
+  seventeen: a tick draws its check and the words get their line; the
+  day's bar grows and its count rolls; finishing the day lights the box
+  once and the open box says "✓ Done for today" as the folded line did;
+  Add opens the new row into place, or flies a chip to Upcoming or Later
+  (the Add box leaves a hint, `dcMotion.say`); learning cards back glow;
+  Hide and Show ease the box's height; every tab group's line or pill
+  slides to the pick and what's under it comes in, the box easing to its
+  new height; a plan's day: the outline glides, its card slides in (a
+  click, no redraw), and ‹ › slide the week; the map's tile grows to fill
+  the map, its parts come in (All goes back out); a friend's numbers
+  count up and glow; a newly studied square pops; Decks' bars grow in
+  when Decks opens; a cheer sent floats up from their row (social.py
+  asks once it's sent); ↻ turns while fetching and Updated comes in;
+  a bingo stamp presses in, a line's squares ring, BINGO pops; Insights'
+  line draws in; studying now breathes (CSS, the one that moves on its
+  own). Hints expire in 4 s. The site's board wraps its draw the same
+  way. `tools/motion_preview.py` plays each one on the real board.
   One look for a set of cards (Sam: "the linked card sets appear
   differently on plan vs today/upcoming... pick one style and stick with
   it"): every link that opens cards in Browse (`a.tp`: a topic, "16

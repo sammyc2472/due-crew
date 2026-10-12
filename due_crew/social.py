@@ -4,6 +4,7 @@ there because they are a squad flow."""
 
 import datetime
 import html
+import json
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -93,6 +94,10 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
             tooltip("Tip sent.")
         elif ok:
             tooltip(f"Sent {html.escape(emoji)} to {html.escape(to_name)}.")
+            try:  # 3.8.0: a few of it float up from their row (motion.js)
+                mw.web.eval("window.dcMotion&&dcMotion.cheer(%s,%s)" % (json.dumps(str(to_uid)), json.dumps(str(emoji))))
+            except Exception:
+                pass
         else:
             tooltip("Couldn't send. Check your connection.")
 

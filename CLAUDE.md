@@ -115,6 +115,7 @@ same commit, each with its test:
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
 - `room_model.phase` ↔ the room widget's JS
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
+- `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -190,6 +191,9 @@ migrations, the API, then the site (`docs/go-live.md`, 2b).
   itself, and buttons start from the reset in `_css`. `tools/preview.py`
   renders inside the same `<center>` and button style: look at a new part
   there (light, dark, narrow) before calling it done.
+  `tools/motion_preview.py` plays each motion on the real board; a
+  redraw's motion lives in `motion.js` (only what changed moves, nothing
+  with Reduce motion, no row ever slides past another).
 - Every `duecrew:` command a page emits needs a handler
   (`test_every_board_command_has_a_handler`), and a new one gets a test
   that sends it through `_on_js` as the board does (3.5.0's Settings went
