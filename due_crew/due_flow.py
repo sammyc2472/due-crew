@@ -370,8 +370,10 @@ def recover_leeches(col, label="Due Crew: recover leeches", cap=RECOVER_MAX):
 
 
 def morning(c):
-    """Once per Anki day, at the refresh: recover leeches when asked."""
-    if not c.get("due_leeches") or not mw.col or not _today():
+    """Once per Anki day, at the refresh: recover leeches when asked. Only on
+    the Decks screen: mid-review its undo step would sit on my last answer
+    (as the plans' morning waits for Decks)."""
+    if not c.get("due_leeches") or not mw.col or not _today() or getattr(mw, "state", "") != "deckBrowser":
         return
     pc, st = _day_state()
     if st.get("leeches_done"):
@@ -772,6 +774,19 @@ def _study_deck(did, first, label=None):
     except Exception:
         traceback.print_exc()
         _state["study_walk"] = None
+
+
+def walk_keys(state, shortcuts):
+    """Escape while Study today walks the review: the walk stops there, the
+    deck stays open (Anki's review has no Escape of its own)."""
+    if state == "review" and _state.get("study_walk"):
+        shortcuts.append(("Esc", stop_walk))
+
+
+def stop_walk():
+    if _state.get("study_walk"):
+        _state["study_walk"] = None
+        tooltip("Study today stopped. This deck stays open.")
 
 
 def on_state(new, old):

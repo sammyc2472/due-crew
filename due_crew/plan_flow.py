@@ -1093,6 +1093,7 @@ def _filtered(col, name, cids):
     (or rebuilt) under `name`. Returns True when it took."""
     try:
         did = col.decks.id_for_name(name) or 0
+        had = col.decks.id_for_name(P.PARENT)  # a "Due Crew" deck of the person's own isn't ours to tidy
         deck = col.sched.get_or_create_filtered_deck(deck_id=did)
         deck.name = name
         term = deck.config.search_terms[0]
@@ -1102,7 +1103,9 @@ def _filtered(col, name, cids):
         deck.config.reschedule = True
         col.sched.add_or_update_filtered_deck(deck)
         _note_built(col.decks.id_for_name(name))
-        _note_built(col.decks.id_for_name(P.PARENT))  # made with it, so the tidy may clear it
+        parent = col.decks.id_for_name(P.PARENT)
+        if parent and (not had or int(parent) in (_pcfg().get("built") or [])):
+            _note_built(parent)  # made with it (or before, by us), so the tidy may clear it
         return True
     except Exception:
         traceback.print_exc()
@@ -1633,9 +1636,14 @@ def browse_left(pid, uids=()):
     got = _plan_idx(pid)
     if not got:
         return
-    _p, st, doc, idx = got
+    p, st, doc, idx = got
     today = _today()
-    us = [u for u in P.units(doc) if (u["id"] in uids if uids else str(u.get("opens") or "") < today)]
+    applied = st.get("applied") or {}
+
+    def mine(u):  # as Due's Behind counts (due_flow.plan_dates): opened here, or opening in slices; not skipped
+        a = applied.get(u["id"])
+        return not str(a).startswith("skip:") if a else bool(u.get("even") or (p or {}).get("sched"))
+    us = [u for u in P.units(doc) if (u["id"] in uids if uids else str(u.get("opens") or "") < today and mine(u))]
     try:
         cids = set()
         for u in us:

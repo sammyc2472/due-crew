@@ -1025,6 +1025,25 @@ every release that changes how something works.
   loading, a plan's squad) a squad's names stay on top. The same on the
   site (`corner` in app.js). Crew and Share in the footer lost their
   carets (Sam), on both sides.
+  The night's review (3.8.0, four reviewers over everything since
+  2d4ed86; fixed, each with its test): Insights take the first plan on a
+  deck (a second plan's line could Study the first's cards); the map's
+  tile cards are found in any alphabet, the Tags way can be picked, a
+  pick out of the ways shown falls back to the best, short numbers are
+  names; a squad's long name is cut in the corner (its whole name on
+  hover); the squad's week counts a sync's days only within the last 7
+  (both twins); "N showed up today" reads a friend ahead's day first
+  (both); no deck of mine shared says so; show-up mode keeps the
+  invite; a second identical line can be ticked (a dot rides in
+  commands); Escape stops Study today (Anki's review has no Escape of
+  its own); the tidy leaves a "Due Crew" deck the person made; leeches
+  are recovered on the Decks screen only; a half-typed to-do survives a
+  redraw; a line's words reach Due as served, so ticks match the site's;
+  Behind's Browse counts dates as Due does; on a Mac, Ask the squad is
+  ⌃⇧Q (⌘⇧Q is the system's Log Out). The Worker: a date can't be
+  called "every", twenty new codes a day, housekeeping skips the old
+  bridge's cron; the fake answers as it does. Empty Firestore before
+  3.8.0's Worker goes live (`docs/cloudflare-setup.md`).
   A plan's weekly lines (3.8.0, Sam's pick: "every Fri: practice
   questions"): the doc's `every`, a date's line with its weekdays (six at
   most; `plans.ts` todoLine, `fakes.FakeWorker`, `shapes.clean_plan_doc`).

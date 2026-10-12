@@ -16,6 +16,7 @@ import datetime as _dt
 import html as _html
 import json as _json
 import re as _re
+import sys as _sys
 import time
 from datetime import date as _date, datetime, timezone
 
@@ -737,10 +738,13 @@ def _css(cfg):
        Decks has no table: its picker has a line of its own, with the key */
     #due-crew th.dc-corner {{ text-align: left; white-space: normal; }}
     #due-crew th.dc-corner .dc-sw {{ padding: 0; position: relative; top: 2px; }}
-    #due-crew th.dc-corner .dc-sw a {{ display: inline-block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted); }}
+    #due-crew th.dc-corner .dc-sw a {{ display: inline-block; font-size: 11.5px; font-weight: 400; color: var(--dc-muted);
+      max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }}
     #due-crew th.dc-corner .dc-sw a.on {{ color: var(--dc-ink); font-weight: 700; }}
     #due-crew th.dc-corner .dc-sw a.add {{ color: var(--dc-accent); font-weight: 700; }}
-    #due-crew .dc-pline {{ display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 10px; text-align: left; }}
+    #due-crew .dc-pline {{ display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 10px; text-align: left; padding: 0 8px; }}
+    #due-crew .dc-sheet > .dc-sw {{ text-align: left; padding-left: 8px; }}  /* a squad with no table yet */
+    @media (max-width: 560px) {{ #due-crew .dc-pline {{ padding: 0 4px; }} #due-crew .dc-sheet > .dc-sw {{ padding-left: 4px; }} }}
     #due-crew .dc-pline .dc-sw {{ padding-bottom: 6px; }}
     #due-crew .dc-pline .dkey {{ margin-left: auto; font-size: 11px; color: var(--dc-muted); }}
     #due-crew .dc-sum {{ text-align: left; padding: 6px 8px 0; }}
@@ -958,7 +962,7 @@ def _css(cfg):
 def _pycmd(cmd):
     """Only ids and keys ride in commands; anything else is dropped so a
     server-sourced id could never close the quote it sits in."""
-    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_-]', '', str(cmd))}'); return false;"
+    return f"pycmd('duecrew:{_re.sub(r'[^A-Za-z0-9:_.-]', '', str(cmd))}'); return false;"
 
 
 def crew_views(show_up=False, hidden=frozenset()):
@@ -1107,6 +1111,33 @@ def _row_html(row, rank, cfg, period="today"):
             f'<td class="nm">{name}{chip}{la}{extra}{status}</td>{cells}{cheer}</tr>')
 
 
+def _solo_html(data):
+    """3.4 review, C5: until a friend adds me back, the invite is the board
+    (in show-up mode too, 3.8.0)."""
+    if len(data["entries"]) != 1:
+        return ""
+    code = str(data.get("my_code") or "")
+    spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
+    # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
+    add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
+           ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
+           "pycmd('duecrew:addcode:'+v);return false;")
+    pending = [str(x) for x in data.get("pending") or []]
+    if not pending:
+        wait = "Send a friend your invite. Once you’ve added each other, they’re here."
+    elif len(pending) <= 2:
+        wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
+    else:
+        wait = f"Waiting for {len(pending)} people to add you back."
+    return (f'<div class="dc-empty"><b>Bring your crew</b>'
+            f'<span style="color: var(--dc-muted);">{wait}</span>'
+            f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
+            f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
+            f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
+            f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
+            f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
+
+
 def _table_html(data, cfg, period, pick=""):
     """pick: Crew's views (_crew_picker), in the header's corner."""
     sort = sort_key(cfg)
@@ -1124,7 +1155,7 @@ def _table_html(data, cfg, period, pick=""):
     if cfg.get("show_up"):
         fresh, dormant = build_rows(data["entries"], data["labels"],
                                     data.get("tomorrow", ""), "today", cfg)
-        return _presence_html(fresh, dormant, data["labels"], data["entries"], pick)
+        return _presence_html(fresh, dormant, data["labels"], data["entries"], pick) + _solo_html(data)
     body = ""
     n = 0  # show-up rows are counted, not ranked
     for row in fresh:
@@ -1146,29 +1177,7 @@ def _table_html(data, cfg, period, pick=""):
         for row in long_q:
             body += _row_html(row, "&mdash;", cfg, period).replace('<tr class="', '<tr class="qh ', 1)
     body = _even_rows(body)
-    solo = ""
-    if len(data["entries"]) == 1:
-        # 3.4 review, C5: until a friend adds me back, the invite is the board
-        code = str(data.get("my_code") or "")
-        spaced = f"{code[:4]} {code[4:]}" if len(code) == 6 else code
-        # 3.5.0: a friend's, a plan's or a squad's code, or a whole invite
-        add = ("var v=(document.getElementById('dc-addcode').value||'').toUpperCase()"
-               ".replace(/[^A-Z0-9 \\/]/g,' ').slice(0,200);"
-               "pycmd('duecrew:addcode:'+v);return false;")
-        pending = [str(x) for x in data.get("pending") or []]
-        if not pending:
-            wait = "Send a friend your invite. Once you’ve added each other, they’re here."
-        elif len(pending) <= 2:
-            wait = f"Waiting for {' and '.join(_html.escape(x) for x in pending)} to add you back."
-        else:
-            wait = f"Waiting for {len(pending)} people to add you back."
-        solo = (f'<div class="dc-empty"><b>Bring your crew</b>'
-                f'<span style="color: var(--dc-muted);">{wait}</span>'
-                f'<div class="row">{f"<span class=dc-code>{_html.escape(spaced)}</span>" if code else ""}'
-                f'<a class="bt on" href="#" onclick="{_pycmd("copyinvite")}">Copy invite</a></div>'
-                f'<div class="row"><input id="dc-addcode" placeholder="A code, or paste an invite" '
-                f'onkeydown="if(event.key===\'Enter\'){{{add}}}">'
-                f'<a class="bt" href="#" onclick="{add}">Add</a></div></div>')
+    solo = _solo_html(data)
     # the name column ellipsizes, so the table can never outgrow the card;
     # past the row cap it scrolls inside it
     return _scroll(f'<table><tr>{heads}</tr>{body}</table>', body.count('<tr class=')) + solo
@@ -1199,10 +1208,28 @@ def swap_js(html_out):
         var parts = [':scope > .du', '.dc-sheet'], was = {};
         var on = el.matches(':hover');
         parts.forEach(function (s) { var p = el.querySelector(s); if (p) { was[s] = p.getBoundingClientRect().height; } });
+        // a to-do half typed when a redraw comes (a refresh, learning cards back): kept, with its day
+        var din = document.getElementById('du-in'), keep = null;
+        if (din && el.contains(din) && document.activeElement === din && din.value) {
+            var w0 = document.getElementById('du-when'), d0 = document.getElementById('du-date');
+            keep = {v: din.value, s: din.selectionStart, e: din.selectionEnd, w: w0 ? w0.value : null,
+                    d: d0 ? d0.value : null, dd: d0 ? d0.style.display : null};
+        }
         var tmp = document.createElement('div');
         tmp.innerHTML = %s;
         var nu = tmp.firstElementChild;
         el.parentNode.replaceChild(nu, el);
+        if (keep) {
+            var n1 = document.getElementById('du-in');
+            if (n1 && !n1.value) {
+                n1.value = keep.v; n1.focus();
+                try { n1.setSelectionRange(keep.s, keep.e); } catch (e) {}
+                var w1 = document.getElementById('du-when'), d1 = document.getElementById('du-date');
+                if (w1 && keep.w) { w1.value = keep.w; }
+                if (d1 && keep.d !== null) { d1.value = keep.d; d1.style.display = keep.dd; }
+                n1.dispatchEvent(new Event('input'));
+            }
+        }
         var held = [];
         parts.forEach(function (s) {
             var p = nu.querySelector(s);
@@ -1797,7 +1824,7 @@ def _insights_html(did, v):
                 '<span class="ikey"><i class="sw st"></i>not right yet <i class="sw fg"></i>forgot</span></div>')
         for i, x in enumerate(rows):
             of, st, fg = max(1, int(x["of"])), int(x["stuck"]), int(x["forgot"])
-            tip = f'{x["name"]} &middot; {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
+            tip = f'{x["name"]} · {of} cards reviewed in 2 weeks: {st} not right yet, {fg} forgotten after being right'
             out += (f'<div class="irow" title="{e(tip)}"><span class="n"><b><a class="tp" href="#" title="Browse them" '
                     f'onclick="{_pycmd(f"insbrowse:{did}:{i}")}">{e(str(x["name"]))}</a></b>'
                     f'<span>{e(str(x.get("src") or ""))}</span></span>'
@@ -2208,7 +2235,7 @@ def _decks_body(data, deltas=None, sticking=None, pick="", asks=""):
     groups, extras = build_deck_groups(data["entries"])
     up = bool(pick) and not asks and bool(groups)
     top = f'<div class="dc-pline">{pick}{_DKEY if up else ""}</div>' if pick else ""
-    if not groups and not extras:
+    if not groups:  # a friend's alone isn't drawn (extras, since 2.7): the way in
         return (top + asks + '<div class="dc-line">No shared decks yet. '
                 f'<a href="#" onclick="{_pycmd("decks")}">Pick decks to share</a></div>')
     html = ""
@@ -2241,32 +2268,47 @@ def _switcher(view):
     parts = []
     for sq in view.get("squads") or []:
         on = ' class="on"' if sq["id"] == view.get("current") else ""
-        parts.append(f'<a{on} href="#" onclick="{_pycmd("squad:" + str(sq["id"]))}">'
-                     f'{_html.escape(str(sq["name"]))}</a>')
+        nm = _html.escape(str(sq["name"]))
+        parts.append(f'<a{on} href="#" title="{nm}" onclick="{_pycmd("squad:" + str(sq["id"]))}">{nm}</a>')
     for sq in view.get("plan_squads") or []:
         # 3.8.0: a plan's squad, named for the plan; the badge is its threads that moved
         on = sq["id"] == view.get("current")
         n = int(sq.get("unread") or 0)
         cls = ' class="on"' if on else ""
         badge = f"<i>{n}</i>" if n and not on else ""
-        parts.append(f'<a{cls} href="#" onclick="{_pycmd("squadplan:" + str(sq["pid"]))}">'
-                     f'{_html.escape(str(sq["name"]))}{badge}</a>')
+        nm = _html.escape(str(sq["name"]))
+        parts.append(f'<a{cls} href="#" title="{nm}" onclick="{_pycmd("squadplan:" + str(sq["pid"]))}">{nm}{badge}</a>')
     parts.append(f'<a class="add" href="#" onclick="{_pycmd("squadadd")}">'
                  f'+ join or create</a>')
     return '<div class="dc-sw">' + "".join(parts) + "</div>"
 
 
-def squad_week(rows):
+def squad_week(rows, day):
     """3.8.0: a squad's last 7 days together, totals only (nobody ahead of
-    anybody): (study days between us, how many of us studied). Its twin is
-    squadWeek in app.js."""
-    days = [min(7, max(0, int(r["week"]))) for r in rows or [] if isinstance(r.get("week"), (int, float))
-            and not isinstance(r["week"], bool) and r["week"] == r["week"] and abs(r["week"]) != float("inf")]
+    anybody): (study days between us, how many of us studied). A row's week
+    is its 7 days to its own last sync, so a sync `age` days ago counts at
+    most 7 - age of them, and one a week old or more none (a day ahead is
+    today, a timezone ahead). Its twin is squadWeek in app.js."""
+    try:
+        today = datetime.fromisoformat(str(day)).date()
+    except ValueError:
+        return 0, 0
+    days = []
+    for r in rows or []:
+        w = r.get("week")
+        if not isinstance(w, (int, float)) or isinstance(w, bool) or w != w or abs(w) == float("inf"):
+            continue
+        try:
+            age = (today - datetime.fromisoformat(str(r.get("day"))).date()).days
+        except ValueError:
+            continue
+        if -1 <= age < 7:  # a day ahead: a friend ahead of my timezone, synced on their today
+            days.append(min(7 - max(age, 0), max(0, int(w))))
     return sum(days), sum(1 for d in days if d)
 
 
-def _squad_week_line(rows):
-    days, people = squad_week(rows)
+def _squad_week_line(rows, day):
+    days, people = squad_week(rows, day)
     if people < 2:
         return ""
     return f'<div class="dc-line dc-sum sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
@@ -2409,7 +2451,7 @@ def _squads_html(view, cfg):
                 'synced yet.</div>' + foot)
     # the bingo card under the table, the names it's for being in its corner
     return (_scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
-            + f'<div class="dc-line dc-sum">{headline}</div>' + _squad_week_line(rows) + bingo + foot)
+            + f'<div class="dc-line dc-sum">{headline}</div>' + _squad_week_line(rows, day) + bingo + foot)
 
 
 # ---- 3.6: squad bingo ----
@@ -3039,8 +3081,8 @@ def _settings_board(cfg):
             + _st_row("Recover leeches", _st_switch("due_leeches", g("due_leeches", False), "Recover leeches"),
                       "Each morning, as new cards")
             + '</div><div class="st-h">Shortcuts</div><div class="st-box">'
-            + _st_row("Study what&rsquo;s next", '<kbd class="st-kbd">Ctrl+Shift+S</kbd>', "From any Anki screen")
-            + _st_row("Ask the squad about this card", '<kbd class="st-kbd">Ctrl+Shift+Q</kbd>', "While reviewing")
+            + _st_row("Study what&rsquo;s next", f'<kbd class="st-kbd">{STUDY_KBD}</kbd>', "From any Anki screen")
+            + _st_row("Ask the squad about this card", f'<kbd class="st-kbd">{ASK_KBD}</kbd>', "While reviewing")
             + _st_row("Shortcuts on", _st_switch("shortcuts", g("shortcuts", True), "Shortcuts on"),
                       "Off if another add-on uses these keys")
             + '</div>'
@@ -3961,6 +4003,7 @@ DUE_JS = r"""
       if (w === 'pick') { w = (dt && dt.value) ? dt.value : 'today'; }
       pycmd('duecrew:dueadd:' + w + ':' + (this.raw ? 1 : 0) + ':' + encodeURIComponent(inp.value));
       this.raw = false;
+      inp.value = '';  // sent: a redraw doesn't put it back (swap_js keeps a half-typed one)
     },
     plus: function (d) {
       var sel = el('du-when'), dt = el('du-date'), inp = el('du-in');
@@ -4118,7 +4161,9 @@ def _due_add(v, default):
             f'<a href="#" class="du-go" onclick="dcDue.send();return false;">Add</a></div>')
 
 
-STUDY_TIP = "Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses (Ctrl+Shift+S)"
+# 3.8.0: the two keys as this computer writes them (a Mac: Command for Study, Control for Ask, __init__.py)
+STUDY_KBD, ASK_KBD = ("⌘⇧S", "⌃⇧Q") if _sys.platform == "darwin" else ("Ctrl+Shift+S", "Ctrl+Shift+Q")
+STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses ({STUDY_KBD})"
 
 
 def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
@@ -4139,7 +4184,7 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                     f'<span class="sp"></span><a href="#" class="du-fold" title="Show" '
                     f'onclick="{_pycmd("duefold")}">Show &#9662;</a></div>')
         tab = more_tab if more_tab in dict(more) else more[0][0]
-        tabs = "".join(f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+        tabs = "".join(f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
                        for k, lb in more)
         return (f'<div class="du"><div class="du-h"><span class="du-tabs" role="tablist" aria-label="You">{tabs}</span>'
                 f'<span class="sp"></span><a href="#" class="du-fold" title="Fold to one line" '
@@ -4171,12 +4216,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
     if tab not in dict(lists) and tab not in dict(more):
         tab = "today"
     tabs = "".join(
-        f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
+        f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>'
         for k, lb in lists)
     if more:
         # 3.8.0: Plans and Insights, after a gap: what's mine beyond the day
         tabs += '</span><span class="du-tabs du-more" role="tablist" aria-label="Plans and Insights">' + "".join(
-            f'<a href="#" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
+            f'<a href="#" role="tab" aria-selected="{"true" if k == tab else "false"}" class="{"on" if k == tab else ""}" onclick="{_pycmd("duetab:" + k)}">{lb}</a>' for k, lb in more)
     study = (f'<a href="#" class="du-go" title="{STUDY_TIP}" onclick="{_pycmd("duestudy")}">Study today &rsaquo;</a>'
              if tab == "today" and v.get("study") else "")
     head = (f'<div class="du-h"><span class="du-tabs" role="tablist" aria-label="{e(v["name"])}">{tabs}</span>'

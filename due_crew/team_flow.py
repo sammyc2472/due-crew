@@ -398,7 +398,8 @@ def ask_this_card():
     screen; said in a line when there's nothing to ask about."""
     card = getattr(getattr(mw, "reviewer", None), "card", None) if getattr(mw, "state", "") == "review" else None
     if not card:
-        tooltip("Ctrl+Shift+Q asks your squad about the card you're reviewing.")
+        from .board import ASK_KBD
+        tooltip(f"{ASK_KBD} asks your squad about the card you're reviewing.")
         return
     if not plan_for_card(card):
         tooltip("This card isn't on a plan whose squad you're in.")

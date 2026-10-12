@@ -3525,7 +3525,8 @@ def test_browse_from_the_board_380():
     saved = (F.followed, F._state_cfg, F._today, F._browse, F.tooltip, F.app.swap, F.save_cfg, mw.col)
     try:
         F.followed = lambda: [plan]
-        F._state_cfg = lambda c=None: {"pB": {"deck_id": 10}}
+        applied = {"a": _day(-1), "b": _day(-2)}
+        F._state_cfg = lambda c=None: {"pB": {"deck_id": 10, "applied": applied}}
         F._today = lambda: _day(0)
         F._browse = lambda cids, q=None, empty="": shown.append((sorted(cids), q)) if cids else said.append(empty)
         F.tooltip = lambda msg, **k: said.append(msg)
@@ -3539,6 +3540,12 @@ def test_browse_from_the_board_380():
         check("left: a day's two dates together; a seen card isn't left", 8 not in shown[-1][0] and 1 in shown[-1][0], shown)
         dc._on_js(False, "duecrew:planleft:pB", DeckBrowser())
         check("behind: every date before today, what's opened and not seen", shown[-1][0] == [1], shown)
+        applied["a"] = "skip:" + _day(-1)
+        n = len(shown)
+        dc._on_js(False, "duecrew:planleft:pB", DeckBrowser())
+        check("behind: a date skipped here isn't behind, as Due counts it (the review)",
+              len(shown) == n and said[-1] == "Nothing left to see.", (shown[-1], said[-1:]))
+        applied["a"] = _day(-1)
         dc._on_js(False, "duecrew:plantopic:pB:c:0", DeckBrowser())
         check("topic: a date ahead's topic finds its cards", shown[-1][0] == [3], shown)
         n = len(shown)
@@ -6385,12 +6392,14 @@ def test_due_author_lines_arrive_clean():
     """Due: a date's author lines, as a plan arrives: words, a kind, an https link only, 8 at most."""
     from due_crew.backend import shapes
     doc = shapes.clean_plan_doc({"deck": "D", "units": [{"id": "a", "name": "A", "opens": "2026-10-03", "todo": [
-        {"k": "watch", "t": "  Lecture\n14 ", "url": "https://example.com/x"}, {"k": "watch", "t": "x", "url": "javascript:alert(1)"},
-        {"k": "sing", "t": "y"}, {"k": "read", "t": ""}] + [{"k": "do", "t": str(i)} for i in range(10)]}]})
+        {"k": "watch", "t": "Lecture  14", "url": "https://example.com/x"}, {"k": "watch", "t": "x", "url": "javascript:alert(1)"},
+        {"k": "sing", "t": "y"}, {"k": "read", "t": ""}, {"k": "read", "t": "Lec\nture"}, {"k": "read", "t": " "}]
+        + [{"k": "do", "t": str(i)} for i in range(10)]}]})
     todo = doc["units"][0]["todo"]
-    check("due lines: tidy, https only, unknown kinds and empty ones dropped, 8 at most",
-          todo[0] == {"k": "watch", "t": "Lecture 14", "url": "https://example.com/x"} and todo[1] == {"k": "watch", "t": "x"}
-          and len(todo) == 8, todo)
+    check("due lines: as the server keeps them (so a tick's key is the site's too), https only; unknown kinds, "
+          "empty ones and control characters dropped, 8 at most",
+          todo[0] == {"k": "watch", "t": "Lecture  14", "url": "https://example.com/x"} and todo[1] == {"k": "watch", "t": "x"}
+          and len(todo) == 8 and not any("\n" in x["t"] or not x["t"].strip() for x in todo), todo)
 
 
 def test_due_folds_itself_when_done():
@@ -6935,7 +6944,7 @@ def test_plan_team_v39():
             shtml = board._squads_html(sv, conf["cfg"])
             check("3.8.0: the Squads tab draws it: its pill on, who showed up, Ask the squad",
                   sv["kind"] == "plan" and "Showed up today" in shtml and "Ask the squad" in shtml
-                  and f"<a class=\"on\" href=\"#\" onclick=\"pycmd('duecrew:squadplan:{pid}')" in shtml, shtml[:600])
+                  and f"<a class=\"on\" href=\"#\" title=\"Step 1\" onclick=\"pycmd('duecrew:squadplan:{pid}')" in shtml, shtml[:600])
             check("3.7.6: and shares my progress, here and on the server",
                   store.follows[(pid, "maya")]["share"] and next(p for p in maya.session["plans"] if p["id"] == pid)["share"])
             # someone who shared before the merge is asked once on the plan card
@@ -7920,6 +7929,136 @@ def test_review_fixes_v380():
           and w.handle("POST", "https://x/squads/restore", hdr, {}).status_code == 405)
 
 
+def test_review_fixes_board_due_v380():
+    """3.8.0, the night's review, the board and Due: a squad's long name is
+    cut in the corner with the whole name on hover; a squad with no table
+    starts where the corner does; no deck of mine shared says so; show-up
+    mode keeps the invite; tooltips' dots once; tab lists have tabs. Due: a
+    second identical line can be ticked (a dot rides in commands); Escape
+    stops Study today; the tidy leaves a "Due Crew" deck the person made;
+    leeches are recovered on the Decks screen only; a half-typed to-do
+    survives a redraw; a line's words reach both sides the same (tick keys
+    match the site's)."""
+    import shutil
+    import subprocess
+    from due_crew import due as D, due_flow as F, plan_flow as PF
+    from due_crew.backend import shapes
+    from due_crew.app import _state
+    T0 = TODAY.isoformat()
+    css = board._css({})
+    check("review: a long squad name is cut short in the corner",
+          "#due-crew th.dc-corner .dc-sw a {" in css and "max-width: 8em; overflow: hidden; text-overflow: ellipsis;" in css)
+    sw = board._switcher({"squads": [{"id": "x", "name": "Saturday <night> study crew"}], "current": "x"})
+    check("review: its whole name on hover, escaped", 'title="Saturday &lt;night&gt; study crew"' in sw, sw)
+    check("review: a squad with no table, and Decks' line, start where the corner's words do",
+          "#due-crew .dc-sheet > .dc-sw { text-align: left; padding-left: 8px; }" in css
+          and "text-align: left; padding: 0 8px; }" in css, css[css.find(".dc-pline"):css.find(".dc-pline") + 200])
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    me = {"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "", "days": {T0: {"reviews": 5, "studied": True}}}
+    dre = {"user_id": "dre", "name": "Dre", "you": False, "paused": False, "last_updated": "", "days": {},
+           "decks": [{"name": "Step 1", "sig": ["a"], "total": 10, "seen": 5, "mature": 2}]}
+    dk = board.render({"entries": [me, dre], "labels": labels, "tomorrow": ""}, {"period": "decks"}, 0)
+    check("review: a friend shares a deck and I share none: the way in, not nothing", "No shared decks yet" in dk)
+    solo = board.render({"entries": [me], "labels": labels, "tomorrow": "", "my_code": "ABC123"}, {"period": "today", "show_up": True}, 0)
+    check("review: show-up mode on my own keeps the invite (as the site)", "Bring your crew" in solo and "showed up today" in solo)
+    ins = board._insights_html(10, {"rows": [{"name": "Cardio", "src": "", "of": 40, "stuck": 5, "forgot": 2, "cids": [1]}]})
+    check("review: Not sticking's tooltip isn't escaped twice", "Cardio · 40 cards reviewed" in ins and "&amp;middot;" not in ins, ins[:500])
+    you = board.you_html({"show_up": False}, None, {"tab": "plans", "plans": {"cards": [], "offers": []}})
+    check("review: a tab list's links are tabs, the open one selected", 'role="tab" aria-selected="true"' in you
+          and 'role="tab" aria-selected="false"' in you, you[:400])
+    # a dot rides in a command: a second identical line's key
+    keys = D.line_keys("p1", "u1", [{"k": "do", "t": "Practice"}, {"k": "do", "t": "Practice"}])
+    check("review: a second identical line's key reaches its handler whole", keys[1].endswith(".2")
+          and f"duecrew:duetodo:{keys[1]}'" in board._pycmd("duetodo:" + keys[1]), (keys, board._pycmd("duetodo:" + keys[1])))
+    check("review: nothing that closes a quote rides", board._pycmd("x'y\"z<>;.") == "pycmd('duecrew:xyz.'); return false;")
+    # Escape stops the walk
+    saved_walk = _state.get("study_walk")
+    try:
+        _state["study_walk"] = {"misses": False, "steps": 1}
+        keys_on = []
+        F.walk_keys("review", keys_on)
+        none = []
+        F.walk_keys("overview", none)
+        check("review: Escape is a key while Study today walks the review, only then", [k for k, _f in keys_on] == ["Esc"] and none == [])
+        keys_on[0][1]()
+        check("review: Escape stops the walk", _state.get("study_walk") is None)
+        idle = []
+        F.walk_keys("review", idle)
+        check("review: no walk, no Escape of ours", idle == [])
+    finally:
+        _state["study_walk"] = saved_walk
+    # the tidy leaves a "Due Crew" deck of the person's own
+    ids = {"Due Crew": 900}
+    pc = {}
+
+    class Deck:
+        def __init__(self):
+            self.name = ""
+            self.config = types.SimpleNamespace(search_terms=[types.SimpleNamespace(search="", limit=0, order=0)], reschedule=False)
+
+    def add(deck):
+        ids.setdefault(deck.name, 1000 + len(ids))
+        ids.setdefault(deck.name.split("::")[0], 1000 + len(ids))
+    col = types.SimpleNamespace(decks=types.SimpleNamespace(id_for_name=lambda n: ids.get(n)),
+                                sched=types.SimpleNamespace(get_or_create_filtered_deck=lambda deck_id=0: Deck(),
+                                                            add_or_update_filtered_deck=add))
+    saved = (PF._pcfg, PF._psave)
+    try:
+        PF._pcfg = lambda: pc
+        PF._psave = lambda c: pc.update(c)
+        PF._filtered(col, "Due Crew::Renal", [1, 2])
+        check("review: a Due Crew deck I made myself isn't noted to tidy; the filtered one is",
+              900 not in pc.get("built", []) and ids["Due Crew::Renal"] in pc.get("built", []), pc)
+        ids.pop("Due Crew")
+        pc.clear()
+        PF._filtered(col, "Due Crew::Pharm", [3])
+        check("review: a parent Due Crew made is noted", ids["Due Crew"] in pc.get("built", []), (ids, pc))
+    finally:
+        PF._pcfg, PF._psave = saved
+    # leeches: on the Decks screen only
+    got = []
+    saved = (F._day_state, F.recover_leeches, F._put_day, F._today, getattr(dc_mw(), "state", None), dc_mw().col)
+    try:
+        st = {}
+        F._day_state = lambda: ({}, st)
+        F._put_day = lambda pc, s: None
+        F.recover_leeches = lambda col: got.append("ran") or []
+        F._today = lambda: T0
+        dc_mw().col = object()
+        dc_mw().state = "review"
+        F.morning({"due_leeches": True})
+        check("review: mid-review, the leeches wait (their undo step would sit on my answer)", got == [] and not st.get("leeches_done"))
+        dc_mw().state = "deckBrowser"
+        F.morning({"due_leeches": True})
+        check("review: on the Decks screen, they're recovered", got == ["ran"] and st.get("leeches_done"))
+    finally:
+        F._day_state, F.recover_leeches, F._put_day, F._today, dc_mw().state, dc_mw().col = saved
+    js = board.swap_js("<div id='due-crew'></div>")
+    check("review: a half-typed to-do survives a redraw while it has focus; a sent one is cleared",
+          "document.activeElement === din && din.value" in js and "n1.value = keep.v" in js
+          and "inp.value = '';  // sent" in open(board.__file__, encoding="utf-8").read())
+    # a line's words as served: the same tick keys on both sides
+    raw = [{"k": "do", "t": "Practice  questions", "r": "4"}, {"k": "do", "t": "👩‍⚕️ rounds", "r": "1"},
+           {"k": "read", "t": "Read ch. 6­", "r": "2"}]
+    served = shapes.clean_plan_doc({"deck": "D", "units": [], "every": raw})["every"]
+    check("review: a line's words reach Due as the server keeps them", [x["t"] for x in served] == [x["t"] for x in raw], served)
+    node = shutil.which("node")
+    if not node:
+        print("SKIP line keys twin: no node")
+        return
+    appjs = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    src = appjs[appjs.index("function dueLineHash"):appjs.index("/** 3.8.0: a repeating to-do's weekdays")]
+    out = subprocess.run([node, "-e", src + f"\nconsole.log(JSON.stringify(dueLineKeys('p1', 'every', {json.dumps(raw)})))"],
+                         capture_output=True, text=True, timeout=20)
+    check("review: the same tick keys on the site (dueLineKeys) as in Anki, odd spaces and joined emoji too",
+          json.loads(out.stdout or "null") == D.every_keys("p1", served), (out.stdout, out.stderr, D.every_keys("p1", served)))
+
+
+def dc_mw():
+    from aqt import mw
+    return mw
+
+
 def test_head_row_b_v380():
     """3.8.0, head row B (Sam's pick, from the spec's four): Crew's views sit
     in the table's top-left corner, where the header was empty, and a
@@ -8016,14 +8155,22 @@ def test_head_row_b_v380():
 
 def test_squad_week_v380():
     """3.8.0: a squad's last 7 days together, totals only, under its table,
-    on both sides (squadWeek in app.js is the twin). No line for one."""
+    on both sides (squadWeek in app.js is the twin). No line for one. A
+    row's week is its 7 days to its own last sync: a sync 2 days ago counts
+    at most 5 of them, one a week old or more none (the review: a member
+    gone since March kept adding their 7)."""
     import shutil
     import subprocess
-    rows = [{"week": 5}, {"week": 7}, {"week": 0}, {"week": None}, {"week": 9}, {"week": 2.6}, {"week": True},
-            {"week": "4"}, {}, {"week": -3}, {"week": float("nan")}]
-    check("squad week: the days added up (7 at most each), and how many studied",
-          board.squad_week(rows) == (5 + 7 + 0 + 7 + 2 + 0, 4), board.squad_week(rows))
-    check("squad week: nothing to add", board.squad_week([]) == (0, 0) and board.squad_week(None) == (0, 0))
+    D = "2026-10-12"
+    ago = lambda n: (datetime.date(2026, 10, 12) - datetime.timedelta(days=n)).isoformat()  # noqa: E731
+    rows = [{"week": 5, "day": D}, {"week": 7, "day": D}, {"week": 0, "day": D}, {"week": None, "day": D},
+            {"week": 9, "day": D}, {"week": 2.6, "day": D}, {"week": True, "day": D}, {"week": "4", "day": D}, {},
+            {"week": -3, "day": D}, {"week": float("nan"), "day": D}, {"week": 7, "day": ago(2)}, {"week": 3, "day": ago(2)},
+            {"week": 7, "day": ago(7)}, {"week": 7, "day": "2026-03-01"}, {"week": 4, "day": ago(-1)}, {"week": 6}]
+    check("squad week: the days added up (7 at most each, fewer for an older sync), and how many studied",
+          board.squad_week(rows, D) == (5 + 7 + 0 + 7 + 2 + 0 + 5 + 3 + 4, 7), board.squad_week(rows, D))
+    check("squad week: nothing to add", board.squad_week([], D) == (0, 0) and board.squad_week(None, D) == (0, 0)
+          and board.squad_week(rows, "") == (0, 0))
     T0 = TODAY.isoformat()
     sq = {"state": "ok", "name": "<b>BUSM", "day": T0, "yesterday": "", "people": 3,
           "rows": [{"user_id": "a", "name": "A", "day": T0, "reviews": 30, "week": 5, "you": True},
@@ -8037,17 +8184,17 @@ def test_squad_week_v380():
     check("squad week: show-up view too", "between 2 of you" in board._squads_html(sq, {"show_up": True}))
     js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
     check("squad week: the site draws the same line", "Last 7 days: " in js and "study days between ${wkPeople" in js
-          and "wkPeople >= 2" in js)
+          and "wkPeople >= 2" in js and "squadWeek(rows, day)" in js)
     node = shutil.which("node")
     if not node:
         print("SKIP squad week twin: no node")
         return
     src = js[js.index("function squadWeek"):js.index("// ---- 3.3: the board")]
     jsrows = [r for r in rows if not (isinstance(r.get("week"), float) and r["week"] != r["week"])]
-    out = subprocess.run([node, "-e", src + f"\nconsole.log(JSON.stringify(squadWeek({json.dumps(jsrows)})))"],
+    out = subprocess.run([node, "-e", src + f"\nconsole.log(JSON.stringify(squadWeek({json.dumps(jsrows)}, {json.dumps(D)})))"],
                          capture_output=True, text=True, timeout=20)
     check("squad week: the site adds up as the add-on does (the twin)",
-          json.loads(out.stdout or "null") == list(board.squad_week(jsrows)), (out.stdout, out.stderr))
+          json.loads(out.stdout or "null") == list(board.squad_week(jsrows, D)), (out.stdout, out.stderr))
 
 
 def test_every_lines_v380():
@@ -8084,12 +8231,12 @@ def test_every_lines_v380():
     check("every: before its first day, none", not [r for r in D.view(T, [], [], {}, every=[dict(every[0], first="2026-10-04")])["rows"]
                                                     if r["kind"] == "every"])
     check("every: never behind", D.view("2026-10-05", [], [], {}, every=every)["behind_n"] == 0)
-    doc = shapes.clean_plan_doc({"deck": "D", "units": [], "every": [{"k": "do", "t": " Practice\nquestions ", "r": "414"},
+    doc = shapes.clean_plan_doc({"deck": "D", "units": [], "every": [{"k": "do", "t": "Practice  questions", "r": "414"},
                                                                      {"k": "do", "t": "No days"}, {"k": "do", "t": "x", "r": "9"},
                                                                      {"k": "read", "t": "y", "r": "0", "url": "javascript:alert(1)"}]
                                   + [{"k": "do", "t": str(i), "r": "0"} for i in range(9)]})
     check("every: arrives clean: weekdays sorted, none without them, https only, 6 at most",
-          doc["every"][0] == {"k": "do", "t": "Practice questions", "r": "14"} and doc["every"][1] == {"k": "read", "t": "y", "r": "0"}
+          doc["every"][0] == {"k": "do", "t": "Practice  questions", "r": "14"} and doc["every"][1] == {"k": "read", "t": "y", "r": "0"}
           and len(doc["every"]) == 6, doc.get("every"))
     # drawn
     h = board._due_html(v)

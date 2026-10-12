@@ -17,6 +17,7 @@ squad board each fetch their own, when someone looks.
 import datetime
 import html
 import re
+import sys
 import threading
 import time
 import traceback
@@ -1353,7 +1354,9 @@ def _settle_tabs():
         save_cfg(c)
 
 
-STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", "Ctrl+Shift+Q"  # 3.8.0: clear of Anki's own
+# 3.8.0: clear of Anki's own. On a Mac Qt's "Ctrl" is Command, and ⌘⇧Q is the
+# system's Log Out: Ask the squad is the Control key there (Qt's "Meta"), ⌃⇧Q
+STUDY_KEY, ASK_KEY = "Ctrl+Shift+S", ("Meta+Shift+Q" if sys.platform == "darwin" else "Ctrl+Shift+Q")
 
 
 def _tools_menu():
@@ -1517,6 +1520,7 @@ if hasattr(gui_hooks, "reviewer_will_answer_card"):
     gui_hooks.reviewer_will_answer_card.append(rooms.will_answer)  # none under a room's break
 gui_hooks.state_did_change.append(rooms.on_state)
 gui_hooks.state_did_change.append(due_flow.on_state)  # 3.8.0: Study today's walk
+gui_hooks.state_shortcuts_will_change.append(due_flow.walk_keys)  # and Escape stops it
 if hasattr(gui_hooks, "top_toolbar_did_redraw"):  # Anki 2.1.54+
     gui_hooks.top_toolbar_did_redraw.append(rooms.on_toolbar)
 

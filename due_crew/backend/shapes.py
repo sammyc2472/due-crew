@@ -522,13 +522,23 @@ def _clean_unit(u):
     return out
 
 
+def _todo_text(t):
+    """A line's words kept as the server keeps them (plans.ts todoLine: 1 to
+    140 long in JavaScript's count, no control characters), so its tick key
+    is the same here as on duecrew.com (due.line_keys, dueLineKeys); drawn
+    escaped. '' for anything else."""
+    if not isinstance(t, str) or not t.strip() or len(t.encode("utf-16-le")) // 2 > 140 or re.search(r"[\x00-\x1f]", t):
+        return ""
+    return t
+
+
 def _todo_lines(lines, every=False):
     """Due: lines to tick by hand, {k, t, url?}; with every (3.8.0, a plan's
     weekly ones) each keeps its weekdays `r` (Monday "0") or is dropped."""
     out = []
     for x in lines if isinstance(lines, list) else []:
-        if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and clean_note(x.get("t"), 140):
-            one = {"k": x["k"], "t": clean_note(x["t"], 140)}
+        if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and _todo_text(x.get("t")):
+            one = {"k": x["k"], "t": x["t"]}
             if isinstance(x.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,500}", x["url"]):
                 one["url"] = x["url"]
             if every:

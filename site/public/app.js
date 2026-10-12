@@ -787,8 +787,20 @@ const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6]
 
 // 3.8.0: a squad's last 7 days together, totals only: [study days between
 // us, how many of us studied]. Twin of board.squad_week.
-function squadWeek(rows) {
-  const days = (rows || []).filter((r) => typeof r.week === "number" && Number.isFinite(r.week)).map((r) => Math.min(7, Math.max(0, Math.trunc(r.week))));
+function squadWeek(rows, day) {
+  // a row's week is its 7 days to its own last sync: one `age` days ago counts at most 7 - age of
+  // them, a week old or more none, a day ahead (a timezone ahead) as today; board.squad_week
+  const at = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? Date.parse(`${iso}T00:00:00Z`) : NaN);
+  const t = at(day);
+  if (!Number.isFinite(t)) return [0, 0];
+  const days = [];
+  for (const r of rows || []) {
+    if (typeof r.week !== "number" || !Number.isFinite(r.week)) continue;
+    const d = at(r.day);
+    if (!Number.isFinite(d)) continue;
+    const age = Math.round((t - d) / 86400000);
+    if (age >= -1 && age < 7) days.push(Math.min(7 - Math.max(age, 0), Math.max(0, Math.trunc(r.week))));
+  }
   return [days.reduce((a, d) => a + d, 0), days.filter((d) => d).length];
 }
 
@@ -1001,7 +1013,7 @@ const Board = (() => {
     const [fresh, dormant] = rows(people, "today", "reviews", today);
     const lit = (r) => wk.filter((l) => showed(dayOf(r.p.week || {}, l))).length;
     fresh.sort((a, b) => lit(b) - lit(a) || (a.p.name || "").toLowerCase().localeCompare((b.p.name || "").toLowerCase()));
-    const todayN = fresh.filter((r) => showed(dayOf(r.p.week || {}, today) || dayOf(r.p.week || {}, addDays(today, 1)))).length;
+    const todayN = fresh.filter((r) => showed(dayOf(r.p.week || {}, addDays(today, 1)) || dayOf(r.p.week || {}, today))).length;  // as rows(): a friend ahead's today first
     const note = (r) => r.paused ? h("span", { class: "ago faded it" }, " · on a break")
       : r.quiet ? (ago(r.last)[0] ? h("span", { class: "ago faded" }, ` (${ago(r.last)[0]})`) : null)
       : r.stale ? h("span", { class: "ago faded" }, " · yesterday")
@@ -1146,7 +1158,7 @@ const Board = (() => {
     const foot = h("div", { class: "sqline" }, acts.flatMap((a, i) => (i ? [" · ", a] : [a])));
     if (!body.length) return h("div", {}, sw, bingo, h("p", { class: "muted small" }, "No one’s synced yet."), foot);
     // 3.8.0: the squad's week, totals only, as board._squad_week_line
-    const [wkDays, wkPeople] = squadWeek(rows);
+    const [wkDays, wkPeople] = squadWeek(rows, day);
     const wkLine = wkPeople >= 2 ? h("p", { class: "muted small sum sqwk" }, "Last 7 days: ", h("b", {}, wkDays.toLocaleString()),
       ` study days between ${wkPeople.toLocaleString()} of you`) : null;
     // 3.8.0, head row B: the squads' names in the table's corner, its line under it, then the bingo card
