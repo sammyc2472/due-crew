@@ -17,12 +17,14 @@ PER_TAG = 5000  # plans.ts IDLIST_MAX: a tag's notes
 
 class TagDialog(QDialog):
     """guids: the picked notes' guids. on_done(plan, name, path, added, taken)
-    runs on the main thread once the plan has it."""
+    runs on the main thread once the plan has it. outside(plan): how many of
+    them have no card in the plan's deck here (a follower's Anki tags inside
+    it only), read on the main thread."""
 
-    def __init__(self, parent, client, guids, on_done=None):
+    def __init__(self, parent, client, guids, on_done=None, outside=None):
         super().__init__(parent)
         self.client, self.guids = client, list(dict.fromkeys(guids))
-        self.on_done = on_done
+        self.on_done, self.outside, self._out = on_done, outside, {}
         self.plans = []
         attach_alive(self)
         n = len(self.guids)
@@ -124,8 +126,17 @@ class TagDialog(QDialog):
         self.take_btn.setText(f"Take {inside:,} off")
         self.add_btn.setEnabled(bool(p) and bool(name) and len(self.guids) <= PER_TAG)
         if p and name:
+            if self.outside and p["id"] not in self._out:
+                try:
+                    self._out[p["id"]] = int(self.outside(p) or 0)
+                except Exception:
+                    self._out[p["id"]] = 0
+            out = self._out.get(p["id"], 0)
+            deck = str((p.get("doc") or {}).get("deck") or "its deck")
             self.where.setText(f"Everyone following {p.get('name') or 'it'} gets it with the plan's next update, "
-                               f"as {self._path(name)}. Only the notes' IDs go to the plan; their text stays here.")
+                               f"as {self._path(name)}. Only the notes' IDs go to the plan; their text stays here."
+                               + (f" {out:,} of them aren't in {deck}, so followers won't get {'that one' if out == 1 else 'those'}."
+                                  if out else ""))
         else:
             self.where.setText("")
 
@@ -148,7 +159,7 @@ class TagDialog(QDialog):
                 self.take_btn.setEnabled(True)
                 self.status.setText({403: "Only the plan's author or co-authors tag for it.",
                                      404: "That tag is gone already.",
-                                     400: "That's more notes than one tag holds (5,000)."}.get(
+                                     400: "That's more than the plan holds: 5,000 notes a tag, 50,000 picks a plan."}.get(
                     status, "Couldn't tag them. Check your connection."))
                 return
             doc = got.get("doc") or {}

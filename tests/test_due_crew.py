@@ -8704,8 +8704,8 @@ def test_plan_tags_glue_v380():
         caught = {}
 
         class Sheet:
-            def __init__(self, parent, cl, guids, on_done=None):
-                caught.update(guids=guids, done=on_done)
+            def __init__(self, parent, cl, guids, on_done=None, outside=None):
+                caught.update(guids=guids, done=on_done, outside=outside)
 
             def exec(self):
                 return 0
@@ -8718,6 +8718,12 @@ def test_plan_tags_glue_v380():
                     return [4, 5]
             F.tag_for_plan(Browser())
             g45 = caught["guids"]
+            col.decks = fakes.FakeDecks({10: "Step 1", 11: "Other"})
+            col.db.conn.execute("UPDATE cards SET did = 11 WHERE nid = 5")
+            n_out = caught["outside"]({"doc": {"deck": "step 1"}})
+            col.db.conn.execute("UPDATE cards SET did = 10 WHERE nid = 5")
+            check("tags: the sheet counts the picked notes outside the plan's deck (followers tag inside it only)",
+                  n_out == 1 and caught["outside"]({"doc": {"deck": "Step 1"}}) == 0 and caught["outside"]({"doc": {"deck": "Gone"}}) == 0, str(n_out))
             mine_plan, _st = dre.tag_plan_notes(pid, "SLG 15", add=g45)
             caught["done"](dict(mine_plan, id=pid), "SLG 15", "DueCrew::MS2_Block_1::SLG_15", g45, [])
             fresh = dict(shapes.clean_plan(dict(w._plan_view(pid, "kai"), deck_id=10)), id=pid)

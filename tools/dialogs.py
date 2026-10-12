@@ -537,7 +537,7 @@ def main(out):
         STORE.plans[pid]["doc"]["tags"] = [{"id": "t1", "name": "SLG 12 <b>", "notes": ["guid000001", "guid000002"]}]
         STORE.add_plan("igk", "Not mine", "Big Step 1", [{"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
         got = []
-        dlg = TagDialog(None, CLIENT, ["guid000001", "guid000003", "guid000004"], lambda *a: got.append(a))
+        dlg = TagDialog(None, CLIENT, ["guid000001", "guid000003", "guid000004"], lambda *a: got.append(a), outside=lambda p: 2)
         settle()
         names = [dlg.plan.itemText(i) for i in range(dlg.plan.count())]
         if not any("MS2 Block 1" in n for n in names) or any("Not mine" in n for n in names):
@@ -547,6 +547,8 @@ def main(out):
         settle(100)
         if dlg.where.textFormat() != QtCore.Qt.TextFormat.PlainText or "DueCrew::MS2_Block_1::SLG_12_<b>" not in dlg.where.text():
             raise RuntimeError(f"tag: where {dlg.where.text()!r}")
+        if "2 of them aren't in Big Step 1" not in dlg.where.text():
+            raise RuntimeError(f"tag: outside the deck {dlg.where.text()!r}")
         if dlg.take_btn.isHidden() or "1" not in dlg.take_btn.text():
             raise RuntimeError(f"tag: take off {dlg.take_btn.text()!r}")
         shoot(dlg, os.path.join(out, "plan-tag.png"))

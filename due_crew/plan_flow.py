@@ -2718,6 +2718,21 @@ def tag_for_plan(browser):
             guid_of[int(nid)] = str(g)
     from .ui.tag_dialog import TagDialog
 
+    def outside(p):
+        """How many picked notes have no card in the plan's deck here: a follower's
+        Anki tags inside the plan's deck only."""
+        want = str(((p or {}).get("doc") or {}).get("deck") or "").lower()
+        dids = [d for d, n in P.deck_choices(mw.col) if want and (n.lower() == want or n.lower().startswith(want + "::"))]
+        if not dids:
+            return 0
+        ds = ",".join(str(d) for d in dids)
+        inside = set()
+        for i in range(0, len(nids), 500):
+            part = ",".join(str(n) for n in nids[i:i + 500])
+            inside |= {int(n) for n in mw.col.db.list(
+                f"SELECT DISTINCT nid FROM cards WHERE nid IN ({part}) AND (did IN ({ds}) OR odid IN ({ds}))")}
+        return len(set(nids) - inside)
+
     def done(plan, name, path, added, taken):
         by_guid = {g: n for n, g in guid_of.items()}
         mine = [by_guid[g] for g in (added or taken) if g in by_guid]
@@ -2749,7 +2764,7 @@ def tag_for_plan(browser):
                 + ("" if taken else f"{html.escape(plan.get('name') or 'The plan')}'s followers get it with its next update."),
                 period=5000)
 
-    TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done).exec()
+    TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done, outside=outside).exec()
 
 
 def add_to_plan(browser):
