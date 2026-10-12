@@ -229,6 +229,25 @@ def confirm(parent, title, text, yes):
     return box.clickedButton() is go
 
 
+def confirm_check(parent, title, text, yes, check, checked=True):
+    """confirm, with one box to tick under the text (3.8.0: "Take its tags
+    off my notes too"). Returns (yes, ticked)."""
+    from aqt.qt import QCheckBox, QMessageBox, Qt
+    box = QMessageBox(parent or mw)
+    box.setIcon(QMessageBox.Icon.Question)
+    box.setWindowTitle(title)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(text)
+    tick = QCheckBox(check)
+    tick.setChecked(bool(checked))
+    box.setCheckBox(tick)
+    go = box.addButton(yes, QMessageBox.ButtonRole.AcceptRole)
+    cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(cancel)
+    box.exec()
+    return box.clickedButton() is go, tick.isChecked()
+
+
 def _plain_input(parent, title, label):
     """A QInputDialog whose label is plain text: names in it come from the
     server, and Qt reads a label with a tag in it as rich text."""

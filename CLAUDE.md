@@ -73,9 +73,9 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   `worker/test/consent.test.ts` is the model.
 - A squad row is an UPDATE, never an insert; the join (with its code) is
   the only way in.
-- Card text never leaves the computer: flags, asks, knows, plan picks and
-  plan squad questions carry a note guid and card number, and each reader's Anki
-  reads its own copy.
+- Card text never leaves the computer: flags, asks, knows, plan picks,
+  plan tags and plan squad questions carry a note guid and card number, and
+  each reader's Anki reads its own copy.
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
   server; an install pulls before it uploads (`account.ensure()`), and the
   newest save wins. Theme, sort, tab, hidden tabs and the room chip's side
@@ -112,6 +112,8 @@ same commit, each with its test:
   (a plan's weekly lines, 3.8.0)
 - `board.face` ↔ `face` in `site/public/builder.js`
 - `team.bingo_line` ↔ `bingoLine` in builder.js (`PlanSquad`)
+- `plans.tag_part`/`tag_root` ↔ `tagPart`/`tagRoot` in `worker/src/plans.ts`
+  ↔ `Tags.part`/`Tags.root` in builder.js (a plan tag's name in Anki, 3.8.0)
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
 - `room_model.phase` ↔ the room widget's JS
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
@@ -138,6 +140,7 @@ same commit, each with its test:
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts` |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
+| Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 
 ## Releasing

@@ -644,6 +644,8 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     return {"id": plan["id"], "title": P.plan_title(plan), "sub": sub, "rows": rows,
             "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
+            # 3.8.0: the plan's tags that came today, once (OK, or Browse them)
+            "tag_news": (st or {}).get("tag_news") if str(((st or {}).get("tag_news") or {}).get("day") or "") == today else None,
             # 3.7.3: what an author's update adds to today and earlier, waiting for Open; their posts
             "update": (_state.get("plan_updates") or {}).get(plan["id"]) if mw else None,
             "posts": unread_posts(plan) if mw else [],
@@ -721,6 +723,90 @@ def _open_now(plan_list, mode=None, everything=False, toast=True):
     return res
 
 
+def _tags_changed():
+    """After plan tags change on notes: Browse's sidebar and table, the Edit
+    menu's Undo."""
+    try:
+        mw.update_undo_actions()
+    except Exception:
+        pass
+    try:
+        from anki.collection import OpChanges
+        from aqt import gui_hooks
+        gui_hooks.operation_did_execute(OpChanges(note_text=True, tag=True, browser_table=True), None)
+    except Exception:
+        pass
+
+
+def apply_tags(plan_list, toast=True):
+    """3.8.0, main thread: the plans' own tags on this copy's notes, as soon as
+    a plan's update is here. Its callers make that after the day's AnkiWeb
+    sync and on the Decks screen (a tag on a stale note would win over an
+    edit made on the phone), and before what opens (a date can use a tag).
+    One undo step a plan; only DueCrew::<the plan> tags are ever touched.
+    Returns the line to say, or None."""
+    if not mw.col:
+        return None
+    c = _pcfg()
+    state = _state_cfg(c)
+    today = _today()
+    said, changed, moved = [], False, False
+    for p in plan_list:
+        st = state.get(p["id"])
+        doc = _plan_doc(p)
+        if not st or not _deck_ok(mw.col, st.get("deck_id")) or not (P.plan_tags(doc) or st.get("tags")):
+            continue
+        # the deck is read (a second on a big one) when the plan's tags changed, and once
+        # an Anki day for a tag made from a tag or a search (new notes that match)
+        sig = P.tags_sig(doc)
+        if st.get("tags_sig") == sig and st.get("tags_day") == today:
+            continue
+        try:
+            applied, res = P.sync_tags(mw.col, P.DeckIndex(mw.col, st["deck_id"]), doc, st.get("tags"),
+                                       f"Due Crew: {p.get('name') or 'plan'}'s tags", _swap(st))
+        except Exception:
+            traceback.print_exc()
+            continue
+        if res["added"] or res["removed"] or applied != (st.get("tags") or {}):
+            moved = True
+        if applied:
+            st["tags"] = applied
+        else:
+            st.pop("tags", None)
+        st["tags_sig"], st["tags_day"] = sig, today
+        changed = True
+        if res["new"]:
+            st["tag_news"] = {"day": today, "names": res["new"][:6], "more": max(0, len(res["new"]) - 6),
+                              "missing": int(sum(res["missing"].values()))}
+            said.append(f"{html.escape(p.get('name') or 'A plan')}'s tags are in your Anki: "
+                        + ", ".join(html.escape(x) for x in res["new"][:3]) + (" and more" if len(res["new"]) > 3 else "") + ".")
+    if changed:
+        c["plans"] = state
+        _psave(c)
+    if moved:
+        _tags_changed()
+    line = " ".join(said) or None
+    if line and toast:
+        tooltip(line, period=5000)
+    return line
+
+
+def _drop_plan_tags(st, name):
+    """A plan I no longer follow takes its tags off my notes (one undo step)."""
+    tags = (st or {}).get("tags") or {}
+    path = next(iter(tags.values()), "")
+    parts = str(path).split("::")
+    if len(parts) < 3 or not mw.col:
+        return 0
+    try:
+        n = P.drop_tags(mw.col, "::".join(parts[:2]), f"Due Crew: {name or 'plan'}'s tags off")
+    except Exception:
+        traceback.print_exc()
+        return 0
+    _tags_changed()
+    return n
+
+
 def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
     """Main thread. Once per Anki day, for each followed, unpaused plan:
     open what's due. Waits for the day's AnkiWeb sync when this profile
@@ -746,14 +832,17 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         if fresh:
             ids = {p["id"] for p in plan_list}
             gone = [pid for pid in state if pid not in ids]
-            if not here and any((state.get(pid) or {}).get("held") for pid in gone):
+            if not here and any((state.get(pid) or {}).get("held") or (state.get(pid) or {}).get("tags") for pid in gone):
                 return _morning_waits(awaiting_sync, fresh)
             for pid in gone:
-                held = (state.pop(pid, None) or {}).get("held") or []
+                was = state.pop(pid, None) or {}
+                held = was.get("held") or []
                 if held and mw.col:
                     # taken down elsewhere (the author deleted it, or I stopped
                     # it on the site): what Hold back suspended opens again, as Stop does
                     P.open_cards(mw.col, held, "Due Crew: a plan you followed ended")
+                if was.get("tags"):
+                    _drop_plan_tags(was, "a plan you followed")  # 3.8.0: and its tags come off
             changed = bool(gone)
             for p in plan_list:
                 st = state.get(p["id"])
@@ -788,7 +877,12 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         _psave(c)
         if tidy_decks(mw.col):
             _after_change()
+        tagged = apply_tags(plan_list, toast=False)  # 3.8.0: a date can use one of its plan's tags
         line = opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
+        if tagged:
+            line = f"{line} {tagged}" if line else tagged
+            if toast and not _state.get("plans_opened_said"):
+                tooltip(tagged, period=5000)
         if hold_new([p for p in plan_list if not p.get("paused") and p["id"] not in new_here], _state_cfg(), today):
             _after_change()  # 3.7.3: what an author added to later dates waits, for whoever chose Hold back
         apply_catch()  # G5
@@ -834,6 +928,7 @@ def midday(plan_list, toast=True):
         _state["plans_midday"] = True
         return None
     _state["plans_midday"] = False
+    apply_tags(plan_list, toast=toast)  # 3.8.0: as soon as the update is here, before what it opens
     c = _pcfg()
     state = _state_cfg(c)
     today = _today()
@@ -1478,6 +1573,10 @@ def on_message(cmd, parts):
             back(arg) if p.get("since") else set_paused(arg, False)
     elif cmd == "planmenu" and arg:
         plan_menu(arg)
+    elif cmd == "plantags" and arg:  # 3.8.0: the plan's tags, in Browse
+        browse_tags(arg)
+    elif cmd == "plantagsok" and arg:
+        tags_seen(arg)
     elif cmd == "planok" and arg:
         seen_change(arg)
     elif cmd == "planupdopen" and arg:   # 3.7.3: an update's Open
@@ -1617,6 +1716,29 @@ def _browse(cids, q=None, empty="None of its cards are in your deck."):
     import aqt
     browser = aqt.dialogs.open("Browser", mw)
     browser.search_for(q or "cid:" + ",".join(str(int(c)) for c in sorted(cids)))
+
+
+def browse_tags(pid):
+    """3.8.0: Browse on the plan's tags here (DueCrew::<the plan>::*)."""
+    st = _state_cfg().get(pid) or {}
+    path = next(iter((st.get("tags") or {}).values()), "")
+    parts = str(path).split("::")
+    if len(parts) < 3:
+        tooltip("Its tags aren't in your Anki yet.")
+        return
+    import aqt
+    browser = aqt.dialogs.open("Browser", mw)
+    browser.search_for(P.tag_search("::".join(parts[:2])) + "::*\"")
+    tags_seen(pid, swap=False)
+
+
+def tags_seen(pid, swap=True):
+    c = _pcfg()
+    st = _state_cfg(c).get(pid)
+    if st and st.pop("tag_news", None) is not None:
+        _psave(c)
+    if swap:
+        app.swap(cfg())
 
 
 def _plan_idx(pid):
@@ -2277,12 +2399,19 @@ def stop_following(pid):
     p = next((p for p in followed() if p["id"] == pid), None)
     if p is None:
         return
-    from .ui import confirm
-    if not confirm(mw, "Stop following",
-                   f"Stop following {p.get('name') or 'this plan'}?\n\n"
-                   "Cards already open stay open"
-                   + (", and the ones it held back open too" if (_state_cfg().get(pid) or {}).get("held") else "")
-                   + ". The crew stops seeing your progress on this plan.", "Stop"):
+    from .ui import confirm, confirm_check
+    text = (f"Stop following {p.get('name') or 'this plan'}?\n\n"
+            "Cards already open stay open"
+            + (", and the ones it held back open too" if (_state_cfg().get(pid) or {}).get("held") else "")
+            + ". The crew stops seeing your progress on this plan.")
+    untag = False
+    if (_state_cfg().get(pid) or {}).get("tags"):
+        # 3.8.0: its tags stay only if I say so (they stop updating)
+        ok, untag = confirm_check(mw, "Stop following", text, "Stop",
+                                  f"Take {p.get('name') or 'its'}'s tags off your notes too")
+        if not ok:
+            return
+    elif not confirm(mw, "Stop following", text, "Stop"):
         return
     cl = client()
 
@@ -2296,6 +2425,8 @@ def stop_following(pid):
         if held and mw.col:
             P.open_cards(mw.col, held, f"Due Crew: stop {p.get('name') or 'plan'}")
             _after_change()
+        if untag:
+            _drop_plan_tags(state.get(pid), p.get("name"))
         state.pop(pid, None)
         pc["plans"] = state
         _psave(pc)
@@ -2376,6 +2507,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
                 skip_past(st3, plan, _today())
                 c3["plans"] = _state_cfg(c3)
                 _psave(c3)
+        apply_tags([fresh])  # 3.8.0: its tags, before its dates open
         # "skip:" saved the passed dates as skipped on my follow, so today's opens as usual
         res = _open_now([fresh], mode="skip" if kind == "skip" and not rest else "open")
         if not ok:
@@ -2439,6 +2571,8 @@ def browser_menu(browser, menu):
         return
     action = menu.addAction("Due Crew: add to a plan…")
     action.triggered.connect(lambda: add_to_plan(browser))
+    tag = menu.addAction("Due Crew: tag for a plan…")  # 3.8.0: plan tags
+    tag.triggered.connect(lambda: tag_for_plan(browser))
     copy = menu.addAction("Due Crew: copy as plan selector")
     copy.triggered.connect(lambda: copy_selector(browser))
     out = menu.addAction("Due Crew: export for my AI…")
@@ -2560,6 +2694,62 @@ def copy_selector(browser):
     QApplication.clipboard().setText(text)
     what = f"{n:,} note{'s' if n != 1 else ''}" if notes_mode else f"{n:,} card{'s' if n != 1 else ''}"
     tooltip(f"Copied {what}. Paste into a date on duecrew.com." + (" A date takes up to 5,000." if n > 5000 else ""))
+
+
+def tag_for_plan(browser):
+    """3.8.0, Browse › Due Crew: tag for a plan…: the picked notes onto one of
+    a plan's own tags (or off it). The plan gets their guids; this Anki gets
+    the tag at once, in one undo step; followers with the plan's update."""
+    if not mw.col or not _signed_in():
+        return
+    try:
+        nids = browser.selected_notes() if hasattr(browser, "selected_notes") else browser.selectedNotes()
+    except Exception:
+        traceback.print_exc()
+        return
+    nids = [int(n) for n in nids or []]
+    if not nids:
+        tooltip("Select some notes first.")
+        return
+    guid_of = {}
+    for i in range(0, len(nids), 500):
+        part = nids[i:i + 500]
+        for nid, g in mw.col.db.all(f"SELECT id, guid FROM notes WHERE id IN ({','.join(str(n) for n in part)})"):
+            guid_of[int(nid)] = str(g)
+    from .ui.tag_dialog import TagDialog
+
+    def done(plan, name, path, added, taken):
+        by_guid = {g: n for n, g in guid_of.items()}
+        mine = [by_guid[g] for g in (added or taken) if g in by_guid]
+        if mine and path.lower().startswith(P.TAG_PARENT.lower() + "::"):
+            pos = None
+            try:
+                pos = mw.col.add_custom_undo_entry(f"Due Crew: {'take off' if taken else 'tag'} {name}")
+            except Exception:
+                pos = None
+            for i in range(0, len(mine), 5000):
+                (mw.col.tags.bulk_remove if taken else mw.col.tags.bulk_add)(mine[i:i + 5000], path)
+            if pos is not None:
+                try:
+                    mw.col.merge_undo_entries(pos)
+                except Exception:
+                    pass
+            _tags_changed()
+        # following my own plan: this copy has it already, so its update doesn't call it new
+        c = _pcfg()
+        st = _state_cfg(c).get(plan.get("id"))
+        doc = _plan_doc(plan)
+        t = next((x for x in P.plan_tags(doc) if P.tag_path(doc, x).lower() == path.lower()), None)
+        if st is not None and t and not taken:
+            st.setdefault("tags", {})[str(t["id"])] = path
+            _psave(c)
+        n = len(added or taken)
+        tooltip((f"Took {n:,} note{'s' if n != 1 else ''} off {html.escape(name)}."
+                 if taken else f"Tagged {n:,} note{'s' if n != 1 else ''} as {html.escape(name)}. ")
+                + ("" if taken else f"{html.escape(plan.get('name') or 'The plan')}'s followers get it with its next update."),
+                period=5000)
+
+    TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done).exec()
 
 
 def add_to_plan(browser):

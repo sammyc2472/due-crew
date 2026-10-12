@@ -200,6 +200,17 @@ by hand in the add-on; the ticks are theirs (`due_ticks` in their settings).
 3.8.0: the doc may carry `every: [{k, t, url?, r}]` (up to 6), the same
 lines with `r`, their weekdays (Monday "0", kept sorted): on those days
 from the plan's first date to its last, each follower ticks each day's.
+3.8.0 plan tags: the doc may carry `tags: [{id, name, notes?, tags?,
+decks?, search?, n?}]` (up to 100; a name up to 40 characters, unique as
+an Anki tag part; `notes` are guids, 5,000 a tag, counted into the plan's
+50,000; `tags`/`decks`/`search` make a tag from what they find in each
+copy) and `tagroot`, the plan's own part (`tagRoot` of its name, set with
+the first tag and never changed by a save). Each follower's Anki writes a
+tag as `DueCrew::<tagroot>::<tagPart(name)>`. `POST /plans/{id}/tags
+{name, add?, remove?, n?}` (the owner and co-authors; guids): puts notes on
+a tag, made if new, or takes them off (`404 no_tag` taking off a tag that
+isn't there; a tag left with nothing goes); `400 too_many` past 5,000; a
+plan version like any save, with a line in the plan's history.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

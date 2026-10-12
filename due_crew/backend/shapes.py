@@ -567,6 +567,27 @@ def clean_sched(s):
     return out
 
 
+def _clean_plan_tag(t):
+    """3.8.0: one of a plan's tags, {id, name, notes?, tags?, decks?, search?, n?}:
+    names and note guids, never card text. None if it holds nothing."""
+    if not isinstance(t, dict) or not _UNIT_ID.fullmatch(str(t.get("id") or "")):
+        return None
+    name = clean_note(t.get("name"), 40)
+    if not name:
+        return None
+    out = {"id": t["id"], "name": name}
+    for k, cap in (("tags", 50), ("decks", 50), ("search", 10)):
+        got = [x for x in t.get(k) or [] if isinstance(x, str) and x.strip()][:cap]
+        if got:
+            out[k] = got
+    notes = [g for g in t.get("notes") or [] if isinstance(g, str) and g][:5000]
+    if notes:
+        out["notes"] = notes
+    if isinstance(t.get("n"), int) and not isinstance(t.get("n"), bool) and t["n"] >= 0:
+        out["n"] = t["n"]
+    return out if any(k in out for k in ("tags", "decks", "search", "notes")) else None
+
+
 def clean_plan_doc(doc):
     """{deck, units}: units sorted by when they open, as plans.py reads them."""
     doc = doc if isinstance(doc, dict) else {}
@@ -588,6 +609,13 @@ def clean_plan_doc(doc):
     every = _todo_lines(doc.get("every"), every=True)
     if every:
         out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
+    tags = [t for t in map(_clean_plan_tag, doc.get("tags") or []) if t][:100]  # 3.8.0: the plan's own tags
+    root = doc.get("tagroot")
+    if (isinstance(root, str) and 0 < len(root) <= 60 and not re.search(r'[\s"*\\%:]', root)
+            and not re.match(r"[_-]|.*[_-]$", root)):
+        out["tagroot"] = root
+        if tags:
+            out["tags"] = tags
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over

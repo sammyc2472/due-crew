@@ -90,6 +90,34 @@ class FakeTags:
                 kept = [t for t in str(row[0]).split() if t.lower() not in str(tags).lower().split()]
                 self.db.conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (" " + " ".join(kept) + " ", int(nid)))
 
+    def _put(self, nid, tags):
+        self.db.conn.execute("UPDATE notes SET tags = ? WHERE id = ?", (" " + " ".join(tags) + " " if tags else "", int(nid)))
+
+    def bulk_add(self, nids, tags):
+        """Anki's: those tags on those notes, once each (any case)."""
+        for nid in nids:
+            row = self.db.conn.execute("SELECT tags FROM notes WHERE id = ?", (int(nid),)).fetchone()
+            if row:
+                have = str(row[0]).split()
+                self._put(nid, have + [t for t in str(tags).split() if t.lower() not in {x.lower() for x in have}])
+
+    def _every(self, f):
+        for nid, tags in self.db.conn.execute("SELECT id, tags FROM notes").fetchall():
+            old = str(tags or "").split()
+            new = f(old)
+            if new != old:
+                self._put(nid, new)
+
+    def rename(self, old, new):
+        """Anki's: a tag and its children, renamed on every note."""
+        low = str(old).lower()
+        self._every(lambda ts: [new + t[len(old):] if t.lower() == low or t.lower().startswith(low + "::") else t for t in ts])
+
+    def remove(self, tags):
+        """Anki's: tags and their children off every note."""
+        lows = str(tags).lower().split()
+        self._every(lambda ts: [t for t in ts if not any(t.lower() == x or t.lower().startswith(x + "::") for x in lows)])
+
 
 class FakeCol:
     """A collection over a real sqlite database. The undo queue is a list
@@ -1150,8 +1178,73 @@ class FakeWorker:
         p["doc"] = doc
         p["version"] += 1
 
+    @staticmethod
+    def _tag_part(name):
+        """plans.ts tagPart."""
+        s = re.sub(r"\s+", "_", str(name))
+        s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+        s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
+        return s or "tag"
+
+    @classmethod
+    def _tag_root(cls, name):
+        """plans.ts tagRoot."""
+        s = re.sub(r"\s+", "_", str(name))
+        s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+        s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
+        return re.sub(r"[_-]+$", "", s[:60]) or "plan"
+
+    def _plan_tags(self, v, doc, picks):
+        """3.8.0, plans.ts planTag and planDoc's tags: {id, name, notes?, tags?,
+        decks?, search?, n?}, unique by their Anki name, under `tagroot`."""
+        tags = v.get("tags")
+        if tags is not None:
+            if not isinstance(tags, list) or len(tags) > 100:
+                raise Bad(400, "plan")
+            out = []
+            for t in tags:
+                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "tags", "decks", "search", "n"}
+                        or not self.UNIT_ID.fullmatch(str(t.get("id"))) or not isinstance(t.get("name"), str)
+                        or not t["name"].strip() or len(t["name"]) > 40):
+                    raise Bad(400, "plan")
+                nt = {"id": t["id"], "name": t["name"].strip()}
+                for k in ("tags", "decks", "search"):
+                    x = t.get(k) or []
+                    if not isinstance(x, list) or len(x) > (10 if k == "search" else 50) or not all(isinstance(y, str) and y for y in x):
+                        raise Bad(400, "plan")
+                    if x:
+                        nt[k] = list(dict.fromkeys(x))
+                notes = t.get("notes") or []
+                if not isinstance(notes, list) or len(notes) > 5000 or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in notes):
+                    raise Bad(400, "plan")
+                if notes:
+                    nt["notes"] = list(dict.fromkeys(notes))
+                if not any(k in nt for k in ("tags", "decks", "search", "notes")):
+                    raise Bad(400, "plan")
+                if t.get("n") is not None:
+                    if not _is_int(t["n"], 0, 1_000_000):
+                        raise Bad(400, "plan")
+                    nt["n"] = t["n"]
+                out.append(nt)
+            if len({t["id"] for t in out}) != len(out) or len({self._tag_part(t["name"]).lower() for t in out}) != len(out):
+                raise Bad(400, "plan")
+            if out:
+                root = v.get("tagroot")
+                if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
+                    raise Bad(400, "plan")
+                doc["tagroot"], doc["tags"] = root, out
+                picks += sum(len(t.get("notes") or []) for t in out)
+        if "tags" not in doc and v.get("tagroot") is not None:
+            root = v["tagroot"]
+            if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
+                raise Bad(400, "plan")
+            doc["tagroot"] = root
+        if picks > 50000:
+            raise Bad(400, "plan")
+
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every",
+                                                      "tags", "tagroot"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -1235,6 +1328,8 @@ class FakeWorker:
             raise Bad(400, "plan")
         out.sort(key=lambda u: u["opens"])
         doc = {"deck": v["deck"], "units": out}
+        self._plan_tags(v, doc, sum(len(u["cards"]) + len(u.get("notes") or []) + len(u.get("nids") or []) + len(u.get("cids") or [])
+                                    for u in out))
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
@@ -1438,6 +1533,44 @@ class FakeWorker:
                 p["version"] += 1
                 self._count("plans")
             return 200, {"version": p["version"]}
+        if rest[1:] == ["tags"] and method == "POST":  # 3.8.0: plans.ts tagNotes
+            if p["owner"] != me and me not in (p.get("editors") or ()):
+                raise Bad(403, "not_author")
+            name, add, remove = body.get("name"), body.get("add") or [], body.get("remove") or []
+            if (not set(body) <= {"name", "add", "remove", "n"} or not isinstance(name, str) or not name.strip()
+                    or len(name) > 40 or not isinstance(add, list) or not isinstance(remove, list)
+                    or len(add) > 5000 or len(remove) > 5000
+                    or not all(isinstance(g, str) and 0 < len(g) <= 40 for g in add + remove) or not (add or remove)
+                    or (body.get("n") is not None and not _is_int(body["n"], 0, 1_000_000))):
+                raise Bad(400, "bad_tag")
+            doc = json.loads(json.dumps(p["doc"]))
+            tags = doc.get("tags") or []
+            t = next((x for x in tags if self._tag_part(x["name"]).lower() == self._tag_part(name.strip()).lower()), None)
+            if t is None:
+                if not add:
+                    raise Bad(404, "no_tag")
+                t = {"id": f"t{len(tags):07d}", "name": name.strip(), "notes": []}
+                tags.append(t)
+            had = list(t.get("notes") or [])
+            notes = [g for g in dict.fromkeys(had + list(add)) if g not in set(remove)]
+            if len(notes) > 5000:
+                raise Bad(400, "too_many")
+            if notes:
+                t["notes"] = notes
+            else:
+                t.pop("notes", None)
+            if body.get("n") is not None:
+                t["n"] = body["n"]
+            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "tags", "decks", "search"))]
+            if not doc["tags"]:
+                doc.pop("tags")
+            doc.setdefault("tagroot", self._tag_root(p["name"]))
+            clean = self._plan_doc(doc)
+            if clean != p["doc"]:
+                p["doc"] = clean
+                p["version"] += 1
+                self._count("plans")
+            return 200, self._plan_view(pid, me)
         if rest[1:] == ["cards"] and method == "POST":
             if p["owner"] != me:
                 raise Bad(403, "not_author")

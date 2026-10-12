@@ -2208,6 +2208,16 @@ def _plan_notes(card, pid):
     if card.get("change"):
         out.append(f'<div class="pn"><span>{_segs(card["change"])}</span>'
                    f'<a href="#" onclick="{_pycmd("planok:" + pid)}">OK</a></div>')
+    tn = card.get("tag_news")
+    if tn and tn.get("names"):
+        # 3.8.0: the plan's own tags, on my notes since today
+        more = int(tn.get("more") or 0)
+        miss = int(tn.get("missing") or 0)
+        names = ", ".join(e(str(x)) for x in tn["names"])
+        out.append(f'<div class="pn"><span>New tags: <b>{names}</b>{f" and {more} more" if more else ""}.'
+                   f'{f" {miss:,} of their notes aren&rsquo;t in your deck." if miss else ""}</span>'
+                   f'<span class="acts"><a href="#" onclick="{_pycmd("plantags:" + pid)}">Browse them</a>'
+                   f'<a href="#" onclick="{_pycmd("plantagsok:" + pid)}">OK</a></span></div>')
     lim, want = s.get("limit"), int(s.get("target") or 0)
     if lim is not None and want > int(lim) and s.get("kind") == "study":
         out.append(f'<div class="pn warn"><span>Anki shows {int(lim):,} new a day in this deck; today has {want:,}.</span>'

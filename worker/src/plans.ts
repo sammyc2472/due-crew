@@ -51,6 +51,14 @@ export const PLANS_MAX = 50;
 export const PLAN_BYTES_MAX = 24 * 1024 * 1024;
 const TREES_BYTES = 6 * 1024 * 1024;
 const UNIT_ID = /^[a-z0-9]{1,12}$/;
+// 3.8.0, plan tags: the plan's own tags (SLG 12), made in an author's Anki
+// (exact notes, by guid) or from text (a tag's, a subdeck's or a search's
+// cards, found in each follower's copy). Each follower's Anki puts them on
+// its notes as DueCrew::{tagroot}::{the name}; a date uses one as any tag.
+// Names and note guids only, never card text.
+const TAGS_MAX = 100;
+const TAG_NAME_MAX = 40;
+const TAG_ROOT_MAX = 60;
 
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
@@ -205,6 +213,53 @@ function unit(v: unknown): Obj {
   return out;
 }
 
+/** A name as one part of an Anki tag: spaces become _, the characters a tag
+ *  or a search can't hold go, a : is a -. The twin of plans.py tag_part
+ *  and Tags.part in builder.js: change one, change all three. */
+const slug = (name: string) => String(name).replace(/\s+/gu, "_").replace(/["*\\%]/g, "").replace(/:/g, "-")
+  .replace(/_+/g, "_").replace(/^[_-]+|[_-]+$/g, "");
+
+export function tagPart(name: string): string {
+  return slug(name) || "tag";
+}
+
+/** The plan's own part of its tags, from its name when the first is made
+ *  (and then kept, whatever the plan is called later). The twin of
+ *  plans.py tag_root and Tags.root in builder.js. */
+export function tagRoot(planName: string): string {
+  return slug(planName).slice(0, TAG_ROOT_MAX).replace(/[_-]+$/, "") || "plan";
+}
+
+/** A plan tag: {id, name, notes?, tags?, decks?, search?, n?}: what it
+ *  holds is exact notes, or a tag's, a subdeck's or a search's cards in
+ *  each follower's copy; `n` how many cards the author's Anki found. */
+function planTag(v: unknown): Obj {
+  if (!V.isObj(v)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "notes", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  const name = V.displayName(v.name);
+  if (name.length > TAG_NAME_MAX) throw V.bad("plan");
+  const out: Obj = { id: v.id, name };
+  for (const k of ["tags", "decks"] as const) {
+    const x = v[k] ?? [];
+    if (!Array.isArray(x) || x.length > SOURCES_MAX) throw V.bad("plan");
+    if (x.length) out[k] = [...new Set(x.map(path))];
+  }
+  const search = v.search ?? [];
+  if (!Array.isArray(search) || search.length > SEARCH_MAX
+      || !search.every((q) => V.isStr(q, SEARCH_LEN, 1) && !/[\u0000-\u001f]/.test(q as string))) throw V.bad("plan");
+  if (search.length) out.search = [...new Set(search as string[])];
+  const notes = v.notes ?? [];
+  if (!Array.isArray(notes) || notes.length > IDLIST_MAX || !notes.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
+  if (notes.length) out.notes = [...new Set(notes as string[])];
+  if (!out.tags && !out.decks && !out.search && !out.notes) throw V.bad("plan");  // a tag holds something
+  if (v.n !== undefined && v.n !== null) {
+    if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
+    out.n = v.n;
+  }
+  return out;
+}
+
 /** 3.2: the plan's shape over time. `catchup`: every nth week opens nothing
  *  new (0: none); `taper`: the last days before `end` open nothing new. */
 function phases(v: unknown): Obj {
@@ -245,7 +300,7 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
@@ -268,7 +323,26 @@ export function planDoc(v: unknown): Obj {
   if (new Set(units.map((u) => u.id)).size !== units.length) throw V.bad("plan");
   const idLen = (u: Obj) => ((u.nids as unknown[] | undefined)?.length ?? 0) + ((u.cids as unknown[] | undefined)?.length ?? 0)
     + ((u.notes as unknown[] | undefined)?.length ?? 0);
-  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) > CARDS_MAX) throw V.bad("plan");
+  // 3.8.0: the plan's tags, under its own part of the tag (fixed when the first was made)
+  let tagNotes = 0;
+  if (v.tags !== undefined && v.tags !== null) {
+    if (!Array.isArray(v.tags) || v.tags.length > TAGS_MAX) throw V.bad("plan");
+    const tags = v.tags.map(planTag);
+    const parts = new Set(tags.map((t) => tagPart(t.name as string).toLowerCase()));
+    if (new Set(tags.map((t) => t.id)).size !== tags.length || parts.size !== tags.length) throw V.bad("plan");
+    if (tags.length) {
+      if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
+      out.tagroot = v.tagroot;
+      out.tags = tags;
+      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0), 0);
+    }
+  }
+  if (!out.tags && v.tagroot !== undefined && v.tagroot !== null) {
+    // kept once made, so a tag made again lands where the old one was
+    if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
+    out.tagroot = v.tagroot;
+  }
+  if (units.reduce((n, u) => n + (u.cards as unknown[]).length + idLen(u), 0) + tagNotes > CARDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.ids as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (units.reduce((n, u) => n + ((u.idr as unknown[] | undefined)?.length ?? 0), 0) > IDS_MAX) throw V.bad("plan");
   if (v.reviews !== undefined && v.reviews !== null) {
@@ -974,6 +1048,55 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, p.version + 1, s.uid, search !== null ? "added a search in Anki"
     : `added ${cards.length} single card${cards.length === 1 ? "" : "s"} in Anki`, p.doc);
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+/** POST /plans/{id}/tags {name, add?, remove?, n?}: 3.8.0, notes picked in an
+ *  author's Anki put on one of the plan's tags (made if it's new) or taken
+ *  off it; a tag left with nothing goes. Note guids only. `n`: how many
+ *  cards the tag holds in that Anki now. */
+export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
+  const body = await readJson(req, PLAN_BODY_MAX);
+  for (const k of Object.keys(body)) if (!["name", "add", "remove", "n"].includes(k)) throw V.bad("tag");
+  const name = V.displayName(body.name);
+  if (name.length > TAG_NAME_MAX) throw V.bad("tag");
+  const list = (x: unknown) => {
+    if (x === undefined) return [];
+    if (!Array.isArray(x) || x.length > IDLIST_MAX || !x.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("tag");
+    return x as string[];
+  };
+  const add = list(body.add), remove = new Set(list(body.remove));
+  if (!add.length && !remove.size) throw V.bad("tag");
+  if (body.n !== undefined && !V.isInt(body.n, 0, 1_000_000)) throw V.bad("tag");
+  const doc = JSON.parse(p.doc) as Obj & { tags?: Obj[] };
+  const tags = doc.tags || [];
+  const part = tagPart(name).toLowerCase();
+  let t = tags.find((x) => tagPart(x.name as string).toLowerCase() === part);
+  if (!t) {
+    if (!add.length) throw new HttpError(404, "no_tag");
+    t = { id: newUnitId(), name, notes: [] };
+    tags.push(t);
+  }
+  const had = new Set((t.notes as string[] | undefined) || []);
+  const notes = [...new Set([...had, ...add])].filter((g) => !remove.has(g));
+  if (notes.length > IDLIST_MAX) throw new HttpError(400, "too_many");
+  if (notes.length) t.notes = notes; else delete t.notes;
+  if (body.n !== undefined) t.n = body.n;
+  doc.tags = tags.filter((x) => x.notes || x.tags || x.decks || x.search);
+  if (!doc.tags.length) delete doc.tags;
+  if (!doc.tagroot) doc.tagroot = tagRoot(p.name);
+  const clean = JSON.stringify(planDoc(doc));
+  if (clean === p.doc) return json(await view(env, p, s.uid));
+  await roomFor(env, p.owner, clean.length - p.doc.length);
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+  if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  const added = notes.filter((g) => !had.has(g)).length, taken = [...had].filter((g) => remove.has(g)).length;
+  await logSave(env, id, p.version + 1, s.uid, added
+    ? `tagged ${added} note${added === 1 ? "" : "s"} as ${name} in Anki`
+    : `took ${taken} note${taken === 1 ? "" : "s"} off ${name} in Anki`, p.doc);
   return json(await view(env, await getPlan(env, id), s.uid));
 }
 

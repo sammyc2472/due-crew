@@ -945,6 +945,17 @@ class ApiClient:
         status, data = self._call("POST", f"/plans/{plan_id}/cards", body)
         return (clean_plan(data) if status == 200 else None), status
 
+    def tag_plan_notes(self, plan_id, name, add=(), remove=()):
+        """3.8.0: notes (by guid) put on one of a plan's own tags, made if new,
+        or taken off it. (plan, status)."""
+        body = {"name": str(name)[:40]}
+        if add:
+            body["add"] = [str(g) for g in add]
+        if remove:
+            body["remove"] = [str(g) for g in remove]
+        status, data = self._call("POST", f"/plans/{plan_id}/tags", body)
+        return (clean_plan(data) if status == 200 else None), status
+
     def set_days(self, plan_id, **fields):
         """G3, G4: PATCH my follow's own days (any of paused, shift, until,
         since, skipped, and 3.7.6's moved). The follow as the server has it, or None."""

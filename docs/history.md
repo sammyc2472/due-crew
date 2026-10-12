@@ -1190,3 +1190,32 @@ every release that changes how something works.
   Alone with nothing yet, my row has no medal, on the site and in Anki
   (the twin). The landing picture is the sample crew (it had the stress
   test's row), with a dark one; the README's are re-rendered too.
+  Plan tags (3.8.0, Sam's picks on the Plan Tags mock: real tags, owner
+  and co-authors only, made in Anki or on duecrew.com, also by an AI):
+  a plan carries its own tags (SLG 12) in its doc, `tags` ({id, name,
+  notes by guid, or tags/decks/searches it is made from}, 100 at most,
+  5,000 notes each, counted into the doc's card ceiling) and `tagroot`,
+  the plan's part fixed from its name when the first tag is made (so a
+  renamed plan keeps its tags where they are). In Anki each one is
+  `DueCrew::<tagroot>::<name>` (MS2_Block_1::SLG_12); the name as a tag
+  part is a twin of three: `plans.ts` tagPart/tagRoot, `plans.tag_part`,
+  `Tags.part` in builder.js. The author tags in Browse (right-click ›
+  Due Crew: tag for a plan…, `ui/tag_dialog.py`; one request on a click,
+  `POST /plans/{id}/tags`, guids only, the plan's log says what changed)
+  or on the site (This plan's tags, over What to cover: + puts one on a
+  date, Rename and × move or drop it on every date that used it; Text's
+  `tag | NAME | …` lines; Text › Tag by objective, a prompt of its own
+  with the person's objectives and their own export, never sent to us).
+  A follower's Anki writes them as soon as the plan's update is here,
+  after the day's AnkiWeb sync and on the Decks screen (a tag on a stale
+  note would win over an edit made on the phone), before what opens (a
+  date can use a tag): `plans.sync_tags`, one undo step a plan, only
+  DueCrew::<that plan> ever touched; renames and removals follow; the
+  deck is read only when the tags changed or once an Anki day (a second
+  on a big deck). The plan card says "New tags: …" once, with Browse
+  them. Stop following asks, with a box ticked, before taking them off;
+  a plan gone takes them along. A date's Overlap (and, but not, or) makes
+  an Anki search of a plan tag and another (SLG 12 but not Pharm). An
+  add-on before 3.8.0 gets no tags but still finds the dates' cards (the
+  author's uploaded ids). No new request on refresh or sync: the tags
+  ride the plan doc. `tools/real_anki.py` runs it on Anki's engine.

@@ -527,11 +527,47 @@ def main(out):
             raise RuntimeError("why: read again after a fix")
         dlg.close()
 
+    def plan_tags():
+        # 3.8.0: Browse › tag for a plan: only plans I write; a tag's name from the
+        # server stays text; the notes already on it can come off; it goes on a click
+        from due_crew.ui.tag_dialog import TagDialog
+        pid, _code = STORE.add_plan("sam", "MS2 Block 1", "Big Step 1", [
+            {"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        STORE.plans[pid]["doc"]["tagroot"] = "MS2_Block_1"
+        STORE.plans[pid]["doc"]["tags"] = [{"id": "t1", "name": "SLG 12 <b>", "notes": ["guid000001", "guid000002"]}]
+        STORE.add_plan("igk", "Not mine", "Big Step 1", [{"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        got = []
+        dlg = TagDialog(None, CLIENT, ["guid000001", "guid000003", "guid000004"], lambda *a: got.append(a))
+        settle()
+        names = [dlg.plan.itemText(i) for i in range(dlg.plan.count())]
+        if not any("MS2 Block 1" in n for n in names) or any("Not mine" in n for n in names):
+            raise RuntimeError(f"tag: plans listed {names!r}")
+        dlg.plan.setCurrentIndex(next(i for i, n in enumerate(names) if "MS2 Block 1" in n))
+        dlg.tag.setEditText("SLG 12 <b>")
+        settle(100)
+        if dlg.where.textFormat() != QtCore.Qt.TextFormat.PlainText or "DueCrew::MS2_Block_1::SLG_12_<b>" not in dlg.where.text():
+            raise RuntimeError(f"tag: where {dlg.where.text()!r}")
+        if dlg.take_btn.isHidden() or "1" not in dlg.take_btn.text():
+            raise RuntimeError(f"tag: take off {dlg.take_btn.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-tag.png"))
+        dlg = TagDialog(None, CLIENT, ["guid000005"], lambda *a: got.append(a))
+        settle()
+        dlg.plan.setCurrentIndex(next(i for i in range(dlg.plan.count()) if "MS2 Block 1" in dlg.plan.itemText(i)))
+        dlg.tag.setEditText("SLG 14")
+        dlg.show()
+        dlg.add_btn.click()
+        settle()
+        if not got or got[-1][1] != "SLG 14" or got[-1][3] != ["guid000005"]:
+            raise RuntimeError(f"tag: sent {got!r} {dlg.status.text()!r}")
+        if not any(t["name"] == "SLG 14" for t in STORE.plans[pid]["doc"]["tags"]):
+            raise RuntimeError("tag: the plan didn't get it")
+        dlg.close()
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why)):
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

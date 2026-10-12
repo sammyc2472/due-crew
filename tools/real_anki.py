@@ -372,6 +372,44 @@ def check(path):
     after = WF.context(col)["left"](did)["new"]
     ok("why: N more new today raises today's room by N in Anki's own tree", after >= min(before + need, 9999) - 1,
        f"{before} → {after} (asked {need:,} more)")
+    # 3.8.0: plan tags: a follower's Anki puts the plan's own tags on its notes (exact notes by
+    # guid, a tag's notes), renames one, takes notes off, drops one, each sync one undo step;
+    # unfollowing takes them all off; nobody's own tags are touched
+    guids = col.db.list(f"SELECT n.guid FROM notes n WHERE n.id IN (SELECT nid FROM cards WHERE did = {did}) ORDER BY n.id LIMIT 3000")
+    own = col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')
+    own_before = len(own)
+    pt = {"deck": "Step Deck", "tagroot": "MS2_Block_1", "units": units[:2], "tags": [
+        {"id": "t1", "name": "SLG 12", "notes": guids + ["not-in-this-copy"]},
+        {"id": "t2", "name": "SLG 14: receptors", "tags": [lect[0]]},
+        {"id": "t3", "name": "Cardio overlap", "search": [units[-1]["search"][0]]}]}
+    idx7 = P.DeckIndex(col, did)
+    n14 = len(P.tag_notes(idx7, pt, pt["tags"][1])[0])
+    n_s = len(P.tag_notes(idx7, pt, pt["tags"][2])[0])
+    label = "Due Crew: MS2 Block 1's tags"
+    t = tm(); applied, out = P.sync_tags(col, idx7, pt, {}, label); t_tag = tm() - t
+    p12, p14 = "DueCrew::MS2_Block_1::SLG_12", "DueCrew::MS2_Block_1::SLG_14-_receptors"
+    find = lambda path: set(col.find_notes(P.tag_search(path) + '"'))
+    ok("plan tags: each on the notes it holds here, by guid, by tag, by search, in one undo step",
+       len(find(p12)) == 3000 and len(find(p14)) == n14 > 0 and n_s > 0 and out["missing"] == {"SLG 12": 1}
+       and col.undo_status().undo == label and sorted(out["new"]) == ["Cardio overlap", "SLG 12", "SLG 14: receptors"],
+       f"{out['added']:,} notes tagged, {t_tag*1000:.0f} ms")
+    every = set(col.find_notes(P.tag_search("DueCrew::MS2_Block_1") + '::*"'))
+    ok("plan tags: Browse on DueCrew::<plan>::* finds them all", every == find(p12) | find(p14) | find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    t = tm(); again, out2 = P.sync_tags(col, P.DeckIndex(col, did), pt, applied, label); t_again = tm() - t
+    ok("plan tags: the next sync with nothing new writes nothing", out2["added"] == out2["removed"] == 0 and again == applied,
+       f"{t_again*1000:.0f} ms")
+    pt2 = dict(pt, tags=[dict(pt["tags"][0], name="SLG 12 renal", notes=guids[500:])] + pt["tags"][1:2])
+    t = tm(); applied2, out3 = P.sync_tags(col, P.DeckIndex(col, did), pt2, applied, label); t_up = tm() - t
+    p12b = "DueCrew::MS2_Block_1::SLG_12_renal"
+    ok("plan tags: a rename moves it, notes taken off come off, a tag gone goes, one undo step",
+       not find(p12) and len(find(p12b)) == 2500 and out3["removed"] == 500 and not find("DueCrew::MS2_Block_1::Cardio_overlap")
+       and col.undo_status().undo == label, f"{t_up*1000:.0f} ms")
+    col.undo()
+    ok("plan tags: Edit › Undo puts the last update back", len(find(p12)) == 3000 and not find(p12b) and find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    n_drop = P.drop_tags(col, pt, "Due Crew: stop following MS2 Block 1")
+    ok("plan tags: unfollowing takes every one of them off; my own tags stay",
+       n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
+       f"{n_drop:,} notes")
     col.close()
 
 

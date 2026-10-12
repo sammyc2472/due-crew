@@ -8529,6 +8529,213 @@ def test_board_motion_round_two_glue_v380():
         U.mw.web = saved[1]
 
 
+def _tag_col():
+    """Six notes in deck 10 ("Step 1"): 1-3 under #Book::Ch07, 4-6 under
+    #Video::Auto; 6 also carries the person's own tag "mine"."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for i in range(1, 7):
+        fakes.add_card(conn, i, did=10, tags=("#Book::Ch07" if i <= 3 else "#Video::Auto") + (" mine" if i == 6 else ""))
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    return col
+
+
+def _tags_of(col, nid):
+    return str(col.db.conn.execute("SELECT tags FROM notes WHERE id = ?", (nid,)).fetchone()[0]).split()
+
+
+def test_plan_tags_v380():
+    """3.8.0, plan tags (Sam's picks: real tags, owner and co-authors only,
+    the AI on duecrew.com; DueCrew::<plan>::<tag>; made from tags too;
+    a follower's Anki gets one as soon as the plan updates). The name rule
+    is one in three places; the doc keeps names and guids only; this copy's
+    notes carry each tag exactly where the plan says, in one undo step,
+    and nothing else is ever touched."""
+    from due_crew import plans as P
+    from due_crew.backend import shapes
+    # the same cases as worker/test/plantags.test.ts
+    check("tags: a name is one part of an Anki tag (plans.ts tagPart's cases)",
+          (P.tag_part("SLG 12"), P.tag_part("  SLG  12: receptors "), P.tag_part('a "quoted"*\\%name'), P.tag_part("___"))
+          == ("SLG_12", "SLG_12-_receptors", "a_quotedname", "tag"))
+    check("tags: the plan's part from its name (tagRoot's cases)",
+          (P.tag_root("MS2 Block 1"), len(P.tag_root("x" * 80)), P.tag_root(":::")) == ("MS2_Block_1", 60, "plan"))
+    builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
+    worker = open(os.path.join(REPO, "worker", "src", "plans.ts"), encoding="utf-8").read()
+    rule = 'replace(/\\s+/gu, "_").replace(/["*\\\\%]/g, "").replace(/:/g, "-")'
+    check("tags: builder.js and plans.ts spell the rule the same way (the twins)", rule in builder and rule in worker, rule)
+    doc = shapes.clean_plan_doc({"deck": "Step 1", "units": [], "tagroot": "MS2_Block_1", "tags": [
+        {"id": "t1", "name": "SLG 12", "notes": ["guid000001", "guid000002", "gone"], "text": "card text"},
+        {"id": "t2", "name": "SLG 14", "tags": ["#Book::Ch07"], "n": 3},
+        {"id": "t3", "name": "Empty"}, {"id": "BAD!", "name": "x", "tags": ["A"]}]})
+    check("tags: cleaned on arrival: names, guids and sources only; one holding nothing goes",
+          doc.get("tagroot") == "MS2_Block_1" and [t["id"] for t in doc.get("tags", [])] == ["t1", "t2"]
+          and "text" not in doc["tags"][0] and doc["tags"][1]["n"] == 3, str(doc.get("tags")))
+    check("tags: a root that isn't one Anki tag part is dropped, and its tags with it",
+          "tags" not in shapes.clean_plan_doc({"deck": "D", "units": [], "tagroot": "MS2 Block", "tags": doc["tags"]}))
+    col = _tag_col()
+    idx = P.DeckIndex(col, 10)
+    applied, res = P.sync_tags(col, idx, doc, {}, "Due Crew: MS2 Block 1's tags")
+    check("tags: on the notes they hold here: by guid, and a tag's cards in this copy",
+          applied == {"t1": "DueCrew::MS2_Block_1::SLG_12", "t2": "DueCrew::MS2_Block_1::SLG_14"}
+          and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 1) and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 2)
+          and all("DueCrew::MS2_Block_1::SLG_14" in _tags_of(col, n) for n in (1, 2, 3))
+          and not any(t.startswith("DueCrew") for n in (4, 5, 6) for t in _tags_of(col, n)), str(applied))
+    check("tags: what's new is said, with the exact notes this copy lacks",
+          res["new"] == ["SLG 12", "SLG 14"] and res["missing"] == {"SLG 12": 1} and res["added"] == 5, str(res))
+    check("tags: one undo step, named", [x[0] for x in col.undo_steps] == ["Due Crew: MS2 Block 1's tags"], str(col.undo_steps))
+    again = P.sync_tags(col, P.DeckIndex(col, 10), doc, applied, "again")
+    check("tags: nothing to do, nothing done (no undo step)", again[1]["added"] == again[1]["removed"] == 0
+          and len(col.undo_steps) == 1 and again[1]["new"] == [])
+    doc2 = dict(doc, tags=[dict(doc["tags"][0], name="SLG 12b", notes=["guid000002", "guid000004"])])
+    applied2, res2 = P.sync_tags(col, P.DeckIndex(col, 10), doc2, applied, "Due Crew: update")
+    check("tags: renamed in the plan, renamed here; a note taken out and one put in; a gone tag comes off",
+          applied2 == {"t1": "DueCrew::MS2_Block_1::SLG_12b"}
+          and "DueCrew::MS2_Block_1::SLG_12b" in _tags_of(col, 2) and "DueCrew::MS2_Block_1::SLG_12b" in _tags_of(col, 4)
+          and not any(t.startswith("DueCrew") for t in _tags_of(col, 1)) and not any("SLG_14" in t for n in (1, 2, 3) for t in _tags_of(col, n))
+          and res2["new"] == [] and len(col.undo_steps) == 2, str((applied2, res2, [_tags_of(col, n) for n in range(1, 7)])))
+    check("tags: the person's own tags and the deck's are never touched",
+          "mine" in _tags_of(col, 6) and "#Book::Ch07" in _tags_of(col, 1) and "#Video::Auto" in _tags_of(col, 4))
+    sneaky = {"t9": "mine", "t1": "DueCrew::MS2_Block_1::SLG_12b"}
+    P.sync_tags(col, P.DeckIndex(col, 10), doc2, sneaky, "x")
+    check("tags: a stored name not under DueCrew is never taken off", "mine" in _tags_of(col, 6))
+    n = P.drop_tags(col, doc2, "Due Crew: MS2 Block 1's tags off")
+    check("tags: unfollowing takes the plan's tags off every note, one step",
+          n == 2 and not any(t.lower().startswith("duecrew") for k in range(1, 7) for t in _tags_of(col, k))
+          and col.undo_steps[-1][0] == "Due Crew: MS2 Block 1's tags off")
+    check("tags: an Anki search for one, its _ \" * \\ read as themselves",
+          P.tag_search('DueCrew::MS2_Block_1::a"b*c') == '"tag:DueCrew::MS2\\_Block\\_1::a\\"b\\*c')
+    check("tags: only under DueCrew, ever", P.drop_tags(col, "mine::x", "x") == 0 and "mine" in _tags_of(col, 6))
+
+
+def test_plan_tags_glue_v380():
+    """3.8.0, plan tags in the add-on: Browse sends the picked notes' guids
+    to the plan (owner or co-author) and tags them here; a follower's Anki
+    takes them as soon as the plan's update is here (the morning, a mid-day
+    update, a new follow), before what opens; the plan card says so once;
+    Stop asks before taking them off; a plan gone takes them along."""
+    import due_crew as dc
+    from due_crew import plan_flow as F, plans as P, board
+    from aqt.deckbrowser import DeckBrowser
+    w = world({"dre": "Dre", "maya": "Maya", "kai": "Kai"})
+    pid, _code = w.add_plan("dre", "MS2 Block 1", "Step 1", [])
+    w.plans[pid]["editors"] = {"maya"}
+    dre = new_client(w, "dre", "Dre")
+    got, status = dre.tag_plan_notes(pid, "SLG 12", add=["guid000001", "guid000002"])
+    check("tags: Browse's notes reach the plan by guid, the plan's part made from its name",
+          status == 200 and got["doc"]["tagroot"] == "MS2_Block_1"
+          and got["doc"]["tags"][0]["name"] == "SLG 12" and got["doc"]["tags"][0]["notes"] == ["guid000001", "guid000002"], str(got and got["doc"]))
+    maya = new_client(w, "maya", "Maya")
+    check("tags: a co-author tags too", maya.tag_plan_notes(pid, "SLG 13", add=["guid000003"])[1] == 200)
+    kai = new_client(w, "kai", "Kai")
+    check("tags: anyone else can't", kai.tag_plan_notes(pid, "SLG 12", add=["guid000009"])[1] == 403)
+    check("tags: taken off, the last one takes the tag", maya.tag_plan_notes(pid, "slg 13", remove=["guid000003"])[0]["doc"]["tags"][0]["name"] == "SLG 12")
+    # a follower's Anki: the morning, an update, a new follow
+    col = _tag_col()
+    plan = dict(w._plan_view(pid, "kai"), deck_id=10)
+    from due_crew.backend import shapes
+    plan = dict(shapes.clean_plan(plan), id=pid)
+    pc = {"plans": {pid: {"deck_id": 10, "applied": {}}}}
+    saved = (F._pcfg, F._psave, dc_mw().col, F._today, F.tooltip)
+    said = []
+    try:
+        F._pcfg, F._psave = (lambda: pc), (lambda c: None)
+        dc_mw().col = col
+        F._today = lambda: TODAY.isoformat()
+        F.tooltip = lambda msg, **k: said.append(msg)
+        line = F.apply_tags([plan])
+        st = pc["plans"][pid]
+        check("tags: a follower's notes carry the plan's tag, remembered by its id, said once",
+              st["tags"] == {plan["doc"]["tags"][0]["id"]: "DueCrew::MS2_Block_1::SLG_12"}
+              and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 1) and line and "SLG 12" in line
+              and st["tag_news"]["names"] == ["SLG 12"], str((st, line)))
+        reads = []
+        real_idx = P.DeckIndex
+        P.DeckIndex = lambda *a, **k: reads.append(1) or real_idx(*a, **k)
+        try:
+            again = F.apply_tags([plan])
+            edited = dict(plan, doc=dict(plan["doc"], tags=[dict(plan["doc"]["tags"][0], notes=["guid000001"])]))
+            F.apply_tags([edited])
+            F._today = lambda: (TODAY + datetime.timedelta(days=1)).isoformat()
+            F.apply_tags([edited])
+        finally:
+            P.DeckIndex = real_idx
+            F._today = lambda: TODAY.isoformat()
+        check("tags: the deck is read again only when the plan's tags change, or the next Anki day",
+              again is None and len(reads) == 2 and "DueCrew::MS2_Block_1::SLG_12" not in _tags_of(col, 2), str(reads))
+        F.apply_tags([plan])
+        view = F.card_view(plan, st, {}, TODAY.isoformat())
+        html = board._plan_card_html(dict(view, tag_news=dict(view["tag_news"], names=["<SLG 12>"]), id=pid))
+        check("tags: the plan card says it the day it happens, escaped, with Browse them and OK",
+              "New tags: <b>&lt;SLG 12&gt;</b>" in html and f"duecrew:plantags:{pid}" in html and f"duecrew:plantagsok:{pid}" in html, html[:300])
+        opened = []
+        before = F.tags_seen
+        F.tags_seen = lambda p, swap=True: opened.append(("seen", p))
+        try:
+            dc._on_js(False, f"duecrew:plantagsok:{pid}", DeckBrowser())
+        finally:
+            F.tags_seen = before
+        check("tags: the card's OK reaches its handler", opened == [("seen", pid)], str(opened))
+        F.tags_seen(pid, swap=False)
+        check("tags: OK clears the line", "tag_news" not in pc["plans"][pid])
+        src = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+        morning = src[src.index("def maybe_morning"):src.index("def _morning_waits")]
+        check("tags: the morning tags before what opens, after the sync and on Decks",
+              morning.index("apply_tags(plan_list, toast=False)") < morning.index("_open_now([p for p in plan_list if not p.get(\"paused\")]")
+              and morning.index("if awaiting_sync or") < morning.index("apply_tags(plan_list") and morning.index("if not here:") < morning.index("apply_tags(plan_list"))
+        mid = src[src.index("def midday"):src.index("def hold_new")]
+        check("tags: an update later in the day tags at once (on Decks), before what it opens",
+              mid.index('if getattr(mw, "state", "") != "deckBrowser"') < mid.index("apply_tags(plan_list") < mid.index("dry = run("))
+        fol = src[src.index("def on_followed"):src.index("def open_make")]
+        check("tags: a new follow tags before its first dates open", fol.index("apply_tags([fresh])") < fol.index("res = _open_now([fresh]"))
+        check("tags: a plan gone takes its tags off (and waits for Decks to)",
+              '_drop_plan_tags(was, "a plan you followed")' in morning and '.get("tags") for pid in gone)' in morning)
+        stop = src[src.index("def stop_following"):src.index("# ---- following ----")]
+        check("tags: Stop asks with a box to tick before taking them off", "confirm_check(" in stop and "if untag:" in stop)
+        n = F._drop_plan_tags(pc["plans"][pid], "MS2 Block 1")
+        check("tags: taking them off on Stop", n == 2 and not any(t.startswith("DueCrew") for t in _tags_of(col, 1)))
+        # Browse › tag for a plan: the sheet sends the guids; this Anki tags them at once, and a plan
+        # I follow myself doesn't call the tag new when its update comes
+        import types
+        caught = {}
+
+        class Sheet:
+            def __init__(self, parent, cl, guids, on_done=None):
+                caught.update(guids=guids, done=on_done)
+
+            def exec(self):
+                return 0
+        was_mod, was_in = sys.modules.get("due_crew.ui.tag_dialog"), F._signed_in
+        sys.modules["due_crew.ui.tag_dialog"] = types.SimpleNamespace(TagDialog=Sheet)
+        F._signed_in = lambda: True
+        try:
+            class Browser:
+                def selected_notes(self):
+                    return [4, 5]
+            F.tag_for_plan(Browser())
+            g45 = caught["guids"]
+            mine_plan, _st = dre.tag_plan_notes(pid, "SLG 15", add=g45)
+            caught["done"](dict(mine_plan, id=pid), "SLG 15", "DueCrew::MS2_Block_1::SLG_15", g45, [])
+            fresh = dict(shapes.clean_plan(dict(w._plan_view(pid, "kai"), deck_id=10)), id=pid)
+            pc["plans"][pid].pop("tag_news", None)
+            F.apply_tags([fresh])
+            news = (pc["plans"][pid].get("tag_news") or {}).get("names") or []
+            check("tags: Browse's notes carry the tag here at once, and my own update doesn't call it new",
+                  len(g45) == 2 and all("DueCrew::MS2_Block_1::SLG_15" in _tags_of(col, n) for n in (4, 5))
+                  and "SLG 15" not in news and any("as SLG 15" in x for x in said), str((news, said[-1:])))
+        finally:
+            F._signed_in = was_in
+            if was_mod is None:
+                sys.modules.pop("due_crew.ui.tag_dialog", None)
+            else:
+                sys.modules["due_crew.ui.tag_dialog"] = was_mod
+    finally:
+        F._pcfg, F._psave, dc_mw().col, F._today, F.tooltip = saved
+    menu = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    check("tags: Browse's menu has it, signed in", 'menu.addAction("Due Crew: tag for a plan…")' in menu
+          and menu.index('if not client().signed_in') < menu.index('"Due Crew: tag for a plan…"'))
+
+
 def test_why_not_showing_v380():
     """3.8.0, pick 9: Browse › why isn't it showing? (why, pure): one plain
     sentence a card, in Anki's words, and Anki's own fix beside it;

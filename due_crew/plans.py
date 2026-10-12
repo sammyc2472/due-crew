@@ -1133,6 +1133,179 @@ def change_note(owner, old, doc):
     return segs
 
 
+# ---- 3.8.0: plan tags ----
+# A plan's own tags (SLG 12): made in an author's Anki (exact notes by guid)
+# or on duecrew.com (a tag's, a subdeck's or a search's cards in each copy).
+# Each follower's Anki puts them on its own notes as DueCrew::<the plan's
+# part>::<the tag's>, as soon as the plan's update is here; a date uses one
+# as any tag. Only those tags are ever touched here, never anyone's own.
+
+TAG_PARENT = "DueCrew"
+TAG_ROOT_MAX = 60
+
+
+def _slug(name):
+    s = re.sub(r"\s+", "_", str(name or ""))
+    s = re.sub(r'["*\\%]', "", s).replace(":", "-")
+    s = re.sub(r"_+", "_", s)
+    return re.sub(r"^[_-]+|[_-]+$", "", s)
+
+
+def tag_part(name):
+    """A name as one part of an Anki tag: spaces are _, the characters a tag
+    or a search can't hold go, a : is a -. The twin of plans.ts tagPart and
+    Tags.part in builder.js: change one, change all three."""
+    return _slug(name) or "tag"
+
+
+def tag_root(plan_name):
+    """The plan's own part, from its name when its first tag is made (then
+    kept in the doc as `tagroot`). plans.ts tagRoot, Tags.root."""
+    return re.sub(r"[_-]+$", "", _slug(plan_name)[:TAG_ROOT_MAX]) or "plan"
+
+
+def plan_tags(doc):
+    """The plan's tags, as its doc carries them (cleaned)."""
+    return [t for t in (doc or {}).get("tags") or [] if isinstance(t, dict) and t.get("id")]
+
+
+def tags_sig(doc):
+    """What the plan's tags are, short: the glue reads the deck again only when it changes."""
+    body = json.dumps({"root": (doc or {}).get("tagroot"), "tags": plan_tags(doc)}, sort_keys=True)
+    return hashlib.sha1(body.encode()).hexdigest()[:16]
+
+
+def tag_base(doc):
+    return f"{TAG_PARENT}{_SEP}{(doc or {}).get('tagroot') or 'plan'}"
+
+
+def tag_path(doc, tag):
+    """DueCrew::MS2_Block_1::SLG_12: the tag as this Anki writes it."""
+    return f"{tag_base(doc)}{_SEP}{tag_part(tag.get('name'))}"
+
+
+def tag_search(path):
+    """An Anki search for one tag, its \\ " _ * read as themselves (Tags.ankiSearch
+    in builder.js escapes a tag the same way); open, so a caller can end it
+    with ::* before the closing quote."""
+    esc = re.sub(r'([\\"*_])', r"\\\1", str(path))
+    return f'"tag:{esc}'
+
+
+def tag_notes(idx, doc, tag, swap=None):
+    """(the note ids the tag holds in this copy, how many of its exact notes
+    this copy doesn't have): its notes by guid, and what its tags, subdecks
+    and searches find, inside the plan's deck."""
+    unit = {"tags": tag.get("tags") or [], "decks": tag.get("decks") or [],
+            "search": tag.get("search") or [], "notes": tag.get("notes") or []}
+    cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
+    missing = sum(1 for g in tag.get("notes") or [] if str(g) not in idx.by_guid)
+    return {idx.nid_of[c] for c in cids if c in idx.nid_of}, missing
+
+
+def _tagged(col, path):
+    """The notes carrying exactly this tag (any case)."""
+    return {int(n) for n in col.db.list(
+        "SELECT id FROM notes WHERE instr(' ' || lower(tags) || ' ', ?) > 0", f" {str(path).lower()} ")}
+
+
+def sync_tags(col, idx, doc, applied, label, swap=None):
+    """Make this copy's notes carry the plan's tags as the plan says, as one
+    undo step `label`: each tag on the notes it holds here and on no others,
+    one renamed in the plan renamed here, one gone taken off. applied: {tag
+    id: the tag as last written here}. Returns (applied now, {added, removed,
+    new: [names new here], missing: {name: exact notes not in this copy}})."""
+    applied = {str(k): str(v) for k, v in (applied or {}).items()}
+    tags = plan_tags(doc)
+    wanted = {}
+    out = {"added": 0, "removed": 0, "new": [], "missing": {}}
+    for t in tags:
+        nids, miss = tag_notes(idx, doc, t, swap)
+        wanted[str(t["id"])] = (tag_path(doc, t), nids, str(t.get("name") or ""))
+        if miss:
+            out["missing"][str(t.get("name") or "")] = miss
+    ours = tag_base(doc).lower() + _SEP
+    steps = []
+    for tid, old in applied.items():
+        if not old.lower().startswith(TAG_PARENT.lower() + _SEP):
+            continue  # never anyone's own tag
+        if tid not in wanted:
+            steps.append(("drop", old))
+        elif wanted[tid][0].lower() != old.lower():
+            steps.append(("rename", old, wanted[tid][0]))
+    plan_moves = []
+    for tid, (path, nids, name) in wanted.items():
+        if not path.lower().startswith(ours):
+            continue
+        have = _tagged(col, path) if tid in applied else set()
+        if tid in applied and any(st[0] == "rename" and st[2] == path for st in steps):
+            have = _tagged(col, applied[tid])  # what the rename will carry over
+        add, take = sorted(nids - have), sorted(have - nids)
+        if add:
+            plan_moves.append(("add", path, add))
+        if take:
+            plan_moves.append(("take", path, take))
+        if tid not in applied and nids:
+            out["new"].append(name)
+    if not steps and not plan_moves:
+        return {tid: w[0] for tid, w in wanted.items()}, out
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    for st in steps:
+        if st[0] == "drop":
+            col.tags.remove(st[1])
+        else:
+            col.tags.rename(st[1], st[2])
+    for kind, path, nids in plan_moves:
+        for i in range(0, len(nids), 5000):
+            part = nids[i:i + 5000]
+            if kind == "add":
+                col.tags.bulk_add(part, path)
+                out["added"] += len(part)
+            else:
+                col.tags.bulk_remove(part, path)
+                out["removed"] += len(part)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return {tid: w[0] for tid, w in wanted.items()}, out
+
+
+def drop_tags(col, doc_or_base, label):
+    """Unfollow: the plan's tags off every note here, as one undo step; and
+    the DueCrew parent too once no note carries anything under it. Returns
+    how many notes carried one."""
+    base = doc_or_base if isinstance(doc_or_base, str) else tag_base(doc_or_base)
+    if not base.lower().startswith(TAG_PARENT.lower() + _SEP):
+        return 0
+    n = int(col.db.scalar("SELECT count() FROM notes WHERE instr(' ' || lower(tags), ?) > 0",
+                          f" {base.lower()}{_SEP}") or 0)
+    pos = None
+    if hasattr(col, "add_custom_undo_entry"):
+        try:
+            pos = col.add_custom_undo_entry(label)
+        except Exception:
+            pos = None
+    col.tags.remove(base)
+    low = TAG_PARENT.lower()
+    left = int(col.db.scalar("SELECT count() FROM notes WHERE instr(' ' || lower(tags), ?) > 0 "
+                             "OR instr(' ' || lower(tags) || ' ', ?) > 0", f" {low}{_SEP}", f" {low} ") or 0)
+    if not left:
+        col.tags.remove(TAG_PARENT)
+    if pos is not None and hasattr(col, "merge_undo_entries"):
+        try:
+            col.merge_undo_entries(pos)
+        except Exception:
+            pass
+    return n
+
+
 # ---- the browser: which cards ----
 
 # searches whose answer is this person's own Anki, not the deck: another

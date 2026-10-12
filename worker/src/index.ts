@@ -124,6 +124,7 @@ authed("GET", r(`/plans/${ID}`), P.get);
 authed("PUT", r(`/plans/${ID}`), P.put);
 authed("DELETE", r(`/plans/${ID}`), (_q, s, env, p) => P.remove(s, env, p));
 authed("POST", r(`/plans/${ID}/cards`), P.addCards);
+authed("POST", r(`/plans/${ID}/tags`), P.tagNotes);  // 3.8.0: plan tags, from an author's Anki
 authed("GET", r(`/plans/${ID}/progress`), (_q, s, env, p) => P.progress(s, env, p));
 authed("PATCH", r(`/plans/${ID}/follow`), P.patchFollow);
 authed("DELETE", r(`/plans/${ID}/follow`), (_q, s, env, p) => P.unfollow(s, env, p));
