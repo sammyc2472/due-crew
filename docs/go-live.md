@@ -53,7 +53,10 @@ tools/release.sh --tag     # the same, then tags v3.3.0 and pushes the tag
 
 Until the GitHub secrets exist, the tag's deploy job stands down. Deploy by hand:
 
-### 2b. By hand, from `worker/`
+### 2b. By hand
+
+`tools/deploy.sh`, from a clean `main`, does these three from `worker/`,
+then step 4's checks:
 
 ```
 npx wrangler d1 migrations apply due-crew --remote --env=""

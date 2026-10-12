@@ -115,20 +115,21 @@ attach a custom domain over one.
 3.0 moved the 2.x accounts across; 3.8.0 took out the bridge, the import
 and every 2.x path. What's left is Sam's.
 
-**Before deploying 3.8.0's Worker**, empty Firestore. Until 3.8.0 the
+**Right after deploying 3.8.0's Worker**, empty Firestore. Until 3.8.0 the
 bridge copied 3.x people's week, decks, heatmap, name, emoji and friend
 edges there, and deleting an account deleted its copies (`forget()`).
 3.8.0's Worker no longer can, so a copy left behind would outlive its
 account, readable by 2.x crewmates under the old rules, for as long as
-the project exists (a shut-down project is kept 30 days):
+the project exists (a shut-down project is kept 30 days). Not before the
+deploy: the old Worker's bridge runs every 15 minutes, copies 3.x people
+back in, and takes an empty Firestore to mean a 2.x person turned their
+heatmap off, deleting it from D1. 3.8.0's Worker has no bridge, so once
+it's live nothing writes Firestore again and the empty one stays empty:
 
-0. `firebase firestore:delete --all-collections --project anki-leaderboard-f6691`
-   (or, in the console, Firestore › the database › Delete). Then deploy.
-
-Once 3.8.0's Worker is live:
-
-1. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
+1. `firebase firestore:delete --all-collections --project anki-leaderboard-f6691`
+   (or, in the console, Firestore › the database › Delete).
+2. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
    it was set there).
-2. console.cloud.google.com, project anki-leaderboard-f6691: delete the
+3. console.cloud.google.com, project anki-leaderboard-f6691: delete the
    `due-crew-bridge` service account's key, then the project itself
    (IAM & Admin › Settings › Shut down).

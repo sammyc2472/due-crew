@@ -169,8 +169,9 @@ same commit, each with its test:
 `tools/release.sh` does 3–4 from a clean `main` (`--tag` tags and pushes);
 `tools/check_prod.sh` checks the live API and site after the deploy
 (no sign-in, no mail). The tags' deploy job stands down until the GitHub
-secrets exist, so production is deployed by hand from `worker/`: the
-migrations, the API, then the site (`docs/go-live.md`, 2b).
+secrets exist, so production is deployed by hand: `tools/deploy.sh` from a
+clean `main` does the migrations, the API, then the site, then
+`check_prod.sh` (`docs/go-live.md`, 2b).
 
 ## Rules of the road
 

@@ -1165,8 +1165,10 @@ every release that changes how something works.
   Behind's Browse counts dates as Due does; on a Mac, Ask the squad is
   ⌃⇧Q (⌘⇧Q is the system's Log Out). The Worker: a date can't be
   called "every", twenty new codes a day, housekeeping skips the old
-  bridge's cron; the fake answers as it does. Empty Firestore before
-  3.8.0's Worker goes live (`docs/cloudflare-setup.md`).
+  bridge's cron; the fake answers as it does. Empty Firestore right
+  after 3.8.0's Worker goes live, never before: the old bridge would copy
+  3.x people back and read the empty one as 2.x heatmaps turned off
+  (`docs/cloudflare-setup.md`).
   A plan's weekly lines (3.8.0, Sam's pick: "every Fri: practice
   questions"): the doc's `every`, a date's line with its weekdays (six at
   most; `plans.ts` todoLine, `fakes.FakeWorker`, `shapes.clean_plan_doc`).
@@ -1270,3 +1272,9 @@ every release that changes how something works.
   opened (`_claim_opened`). `tools/real_anki.py` checks first in line and
   its Undo on Anki's engine. No new request: all of it is local but the
   one PATCH of the choice.
+  The README (and the AnkiWeb listing, from its tagline down) rewritten
+  for 3.8.0: Your crew, Squads and bingo, Your day, Study plans (own
+  pace, plan tags, a plan's squad), In Anki's browser, Share; no deck
+  named by name. `tools/deploy.sh` deploys production by hand from a
+  clean main (migrations, the API, the site, `check_prod.sh`), what the
+  tag's job does once its secrets exist.
