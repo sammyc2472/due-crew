@@ -397,6 +397,19 @@ async function builder(id) {
   // date's searches, so an add-on before 3.8.1 opens the same cards
   const cutQ = (tagPath, t) => `${Tags.ankiSearch("tag", ptagPath(t))} ${Tags.ankiSearch("tag", tagPath)}`;
   const cutOf = (u, q) => (u.cut || []).find((c) => c.q === q);
+  /** 3.8.1: a tag where it sits in a search, whole (SLG_1 isn't in SLG_12), as Tags.ankiSearch
+   *  writes it or plain (an AI's search:tag:DueCrew::…); the bound is plans.ts reroot's */
+  const tagRe = (path, flags = "i") => {
+    const e = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(${e(Tags.ankiSearch("tag", path).slice(1, -1))}|${e(`tag:${path}`)})(?=::|$|[\\s")])`, flags);
+  };
+  /** a search onto a date, if it has room (a date holds 10; a cut's search must stay) */
+  const addSearch = (u, q) => {
+    if ((u.search || []).includes(q)) return true;
+    if ((u.search || []).length >= 10) { note = "A date holds up to 10 searches and cuts."; return false; }
+    u.search = [...(u.search || []), q];
+    return true;
+  };
   const isOwnTag = (path) => path.toLowerCase().startsWith(`duecrew::${tagRootNow().toLowerCase()}::`);
   /** each date's cuts as the plan's tags are now: one whose tag went is its
    *  whole tag again; a renamed tag's cut searches by its new name */
@@ -409,7 +422,7 @@ async function builder(id) {
         if (!t) { takeSearch(u, c.q); u.tags = [...new Set([...(u.tags || []), c.tag])]; continue; }
         const q = cutQ(c.tag, t);
         if (q !== c.q) { const was = u.sn?.[c.q]; takeSearch(u, c.q); if (was != null) u.sn = { ...(u.sn || {}), [q]: was }; c.q = q; }
-        if (!(u.search || []).includes(q)) u.search = [...(u.search || []), q].slice(-10);
+        if (!(u.search || []).includes(q)) u.search = [...(u.search || []), q];  // in place of its old one
         keep.push(c);
       }
       if (keep.length) u.cut = keep; else delete u.cut;
@@ -423,8 +436,8 @@ async function builder(id) {
     const t = inId && ptags().find((x) => x.id === inId);
     if (!t) { u.tags.push(tagPath); return; }
     const q = cutQ(tagPath, t);
+    if (!addSearch(u, q)) { u.tags.push(tagPath); return; }
     u.cut = [...(u.cut || []), { tag: tagPath, in: t.id, q }];
-    u.search = [...new Set([...(u.search || []), q])].slice(-10);
   }
   function takeCut(u, c) {
     takeSearch(u, c.q);
@@ -434,16 +447,15 @@ async function builder(id) {
   /** a tag renamed (or gone, newPath null): the dates using it follow, as a tag and in their searches */
   function retag(oldPath, newPath) {
     const low = oldPath.toLowerCase();
-    const oq = Tags.ankiSearch("tag", oldPath).slice(1, -1);
     const nq = newPath ? Tags.ankiSearch("tag", newPath).slice(1, -1) : null;
     for (const u of doc.units) {
       if ((u.tags || []).some((t) => t.toLowerCase() === low)) {
         u.tags = newPath ? u.tags.map((t) => (t.toLowerCase() === low ? newPath : t)) : u.tags.filter((t) => t.toLowerCase() !== low);
       }
       for (const q of [...(u.search || [])]) {
-        if (!q.includes(oq)) continue;
+        if (!tagRe(oldPath).test(q)) continue;
         if (!nq) { takeSearch(u, q); continue; }
-        const q2 = q.split(oq).join(nq);
+        const q2 = q.replace(tagRe(oldPath, "gi"), () => nq);
         u.search = u.search.map((x) => (x === q ? q2 : x));
         if (u.sn?.[q] != null) { u.sn[q2] = u.sn[q]; delete u.sn[q]; }
       }
@@ -519,8 +531,8 @@ async function builder(id) {
       if (ovl.op === "and" && !pt) {
         // 3.8.1: the deck's tag kept to what this plan tag holds: a cut, in the tag's row in Anki
         const q = cutQ(otherPath, t);
+        if (!addSearch(u, q)) { draw(); return; }
         u.cut = [...(u.cut || []).filter((c) => !(c.tag === otherPath && c.in === t.id)), { tag: otherPath, in: t.id, q }];
-        u.search = [...new Set([...(u.search || []), q])].slice(-10);
         if (fresh) { u.name = `${Tags.word(otherPath.split("::").pop())} · ${t.name}`.slice(0, 60); auto.delete(u.id); }
       } else {
         const q = ovl.op === "and" ? `${A} ${B}` : ovl.op === "not" ? `${A} -${B}` : `(${A} OR ${B})`;
@@ -773,6 +785,15 @@ async function builder(id) {
     else if (c.cards) { if (c.u.opens === d) return; const t = unitOn(d); t.cards = [...(t.cards || []), ...c.u.cards]; c.u.cards = []; }
     else if (c.ids) { if (c.u.opens === d) return; const t = unitOn(d); for (const k of ["nids", "cids", "notes"]) { t[k] = [...new Set([...(t[k] || []), ...(c.u[k] || [])])]; if (!t[k].length) delete t[k]; } delete t.idn; delete t.idr; takeIds(c.u); }
     else if (c.search) { if (c.u.opens === d) return; const t = unitOn(d); t.search = [...new Set([...(t.search || []), c.search])]; if (c.u.sn?.[c.search] != null) t.sn = { ...(t.sn || {}), [c.search]: c.u.sn[c.search] }; takeSearch(c.u, c.search); }
+    else if (c.cut) {
+      // 3.8.1: the cut moves as it is; onto a day with all of that tag already, it just goes
+      if (c.u.opens === d) return;
+      const t = unitOn(d), n0 = c.u.sn?.[c.cut.q], x = c.cut;
+      const has = (t.tags || []).includes(x.tag) || (t.cut || []).some((y) => y.tag === x.tag && y.in === x.in);
+      if (!has && !addSearch(t, x.q)) { cleanup(); draw(); return; }
+      takeCut(c.u, x);
+      if (!has) { t.cut = [...(t.cut || []), x]; if (n0 != null) t.sn = { ...(t.sn || {}), [x.q]: n0 }; }
+    }
     else { if (c.u.opens === d) return; takeOut(c.u, c.key); addTo(d, c.key); }
     cleanup(); renameAll(); byOpens(); mark(); draw();
   }
@@ -1043,7 +1064,7 @@ async function builder(id) {
     const days = dayMap(a, b);
     for (const [d, e] of [...days.entries()].sort()) {
       if (e.load <= cap * 1.25) continue;
-      const big = e.chips.filter((c) => !c.even && !c.cards).sort((x, y) => y.n - x.n)[0];
+      const big = e.chips.filter((c) => !c.even && !c.cards && !c.search && !c.ids && !c.cut && c.key).sort((x, y) => y.n - x.n)[0];
       return h("div", { class: "hnote" }, h("span", {}, h("b", {}, pretty(d)), ` is heavy: ${e.load.toLocaleString()} new (pace ${cap.toLocaleString()}).`),
         big ? h("button", { class: "ghost", onclick: () => { picked = d; splitting = { u: big.u, key: big.key }; sideTab = "day"; draw(); } }, `Split ${big.text}`) : null);
     }
@@ -1416,7 +1437,9 @@ async function builder(id) {
   // ---- as text ----
   const CARDS_TEXT = 500;
   // 3.8.0: a plan tag as a line: tag | SLG 12 | tag:…, search:… | notes:…
-  const tagLine = (t) => ["tag", t.name, ptagFrom(t).join(", "), (t.notes || []).length ? Picks.notesText(t.notes) : "",
+  const tagSrcs = (t) => [[...(t.tags || []).map((x) => `tag:${x}`), ...(t.decks || []).map((x) => `deck:${x}`)].join(", "),
+    ...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);
+  const tagLine = (t) => ["tag", t.name, ...tagSrcs(t), (t.notes || []).length ? Picks.notesText(t.notes) : "",
     (t.cards || []).length ? Picks.cardsText(t.cards) : ""].filter(Boolean).join(" | ");
   const toText = () => { byOpens(); return [...ptags().map(tagLine), ...[...events().map((x) => `${x.day} | event | ${x.name}`), ...doc.units.map((u) => [u.opens, u.name,
     [...(u.tags || []).map((t) => `tag:${t}`), ...(u.cut || []).map((c) => `tag:${c.tag} in ${(ptags().find((x) => x.id === c.in) || {}).name || "?"}`),
@@ -1696,7 +1719,7 @@ async function builder(id) {
       const m = (t.notes || []).length + (t.cards || []).length;
       if (ids + m <= 2000) { ids += m; standing.lines.push(tagLine(t)); continue; }
       standing.cut = true;
-      standing.lines.push(`${["tag", t.name, ptagFrom(t).join(", ")].filter(Boolean).join(" | ")} (${ptagSize(t)})`);
+      standing.lines.push(`${["tag", t.name, ...tagSrcs(t)].join(" | ")} (${ptagSize(t)})`);
     }
     const tagList = [...count.keys()].filter((k) => kindOf(k) === "tag" && !pathOf(k).startsWith("DueCrew::"))
       .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)).slice(0, 300)
@@ -1825,9 +1848,8 @@ async function builder(id) {
       const gone = adding ? [] : doc.units.filter((x) => !r.units.some((u) => u.id === x.id));
       const goneTags = adding ? [] : ptags().filter((t) => !r.tags.some((x) => x.id === t.id));
       // 3.8.1: the dates in the text that still use a tag it takes off
-      const tagQ = (t) => Tags.ankiSearch("tag", ptagPath(t)).slice(1, -1).toLowerCase();
       const usesOf = (u) => goneTags.filter((t) => (u.tags || []).some((x) => x.toLowerCase() === ptagPath(t).toLowerCase())
-        || (u.cut || []).some((c) => c.in === t.id) || (u.search || []).some((q) => q.toLowerCase().includes(tagQ(t))));
+        || (u.cut || []).some((c) => c.in === t.id) || (u.search || []).some((q) => tagRe(ptagPath(t)).test(q)));
       const using = taken ? [] : r.units.filter((u) => usesOf(u).length).sort((a, b) => a.opens.localeCompare(b.opens));
       const bare = (u) => !(srcs(u).length || (u.cards || []).length || (u.search || []).length || (u.cut || []).length || hasIds(u));
       const usingWhy = (u) => {
@@ -1842,7 +1864,7 @@ async function builder(id) {
         for (const t of ts) {
           u.tags = (u.tags || []).filter((x) => x.toLowerCase() !== ptagPath(t).toLowerCase());
           for (const c of (u.cut || []).filter((x) => x.in === t.id)) { takeCut(u, c); u.tags = [...new Set([...u.tags, c.tag])]; }
-          for (const q of [...(u.search || [])]) if (q.toLowerCase().includes(tagQ(t))) takeSearch(u, q);
+          for (const q of [...(u.search || [])]) if (tagRe(ptagPath(t)).test(q)) takeSearch(u, q);
         }
       }
       const takeAll = () => {
@@ -2447,7 +2469,9 @@ async function builder(id) {
     const M = window.dcMotion, at = `${view}|${anchor}`, was = M ? M.places(".cal2 .ch[data-k]", "data-k", ".d") : null;
     // the side's lists keep their place through a redraw (a click on a tag low in a list)
     const kept = [".ptags .ptlist", ".tree2 .tlist"].map((q) => [q, document.querySelector(q)?.scrollTop || 0]);
+    const y = window.scrollY;
     drawNow();
+    if (y) window.scrollTo(0, y);
     for (const [q, y] of kept) { const el = y && document.querySelector(q); if (el) el.scrollTop = y; }
     // the same days on screen: a date moved to another settles; ‹ › slide; another view just draws
     try { if (M && (slid || at === `${view}|${anchor}`)) M.moved(".cal2 .ch[data-k]", "data-k", was, slid, ".cal2", ".d"); } catch { /* drawn either way */ }

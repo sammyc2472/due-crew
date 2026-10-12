@@ -1319,4 +1319,14 @@ every release that changes how something works.
   picks (`team._ours`: topics and the map's first way); the map's "by"
   gets one way a plan, "<plan>'s tags" (`team_flow._plan_ways`, each tag
   a tile, `team.plan_tiles`), with the tags no card in the deck carries.
+  An add-on before 3.8.1 opens a cut by its search, leaves a tag's single
+  cards out, and doesn't see a tag made only of single cards.
+  Found by the plans review before release (builder): a plan tag inside
+  a search is matched whole (`tagRe`, bounded as `reroot` is), so
+  renaming SLG 1 no longer rewrites SLG 12; a tag line writes each
+  search as its own part, so Edit the whole plan reads it back; a cut
+  chip dragged to another day moves as a cut; a cut's search is never
+  trimmed off a full date (10 searches and cuts, said); a heavy day's
+  Split takes only a whole tag or subdeck; and a redraw keeps the page
+  where it was (on a phone the day panel is under the calendar).
   No new request; the Worker changed (deploy it before the add-on).

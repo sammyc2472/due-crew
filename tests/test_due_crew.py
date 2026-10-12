@@ -8708,6 +8708,17 @@ def test_plan_tags_builder_v381():
           "In Anki each one becomes the tag DueCrew::${tagRootNow()}::NAME" in builder
           and "This plan's tags now, as they stand" in builder and "#cards column" in builder
           and "if (ids + m <= 2000)" in builder)
+    check("r2 site: a plan tag's tag inside a search is matched whole (renaming SLG 1 leaves SLG 12), as plans.ts reroot bounds it",
+          '(?=::|$|[\\\\s")])`, flags);' in builder and "if (!tagRe(oldPath).test(q)) continue;" in builder
+          and "q.replace(tagRe(oldPath, \"gi\"), () => nq)" in builder and "q.includes(oq)" not in builder)
+    check("r2 site: a tag line writes each search as its own part, so Edit the whole plan reads it back the same",
+          "...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);" in builder and '"tag", t.name, ...tagSrcs(t)' in builder)
+    check("r2 site: a cut chip dragged to another day moves as a cut; a cut's search is never trimmed away",
+          "else if (c.cut) {" in builder and "takeCut(c.u, x);" in builder and ".slice(-10)" not in builder
+          and 'note = "A date holds up to 10 searches and cuts."' in builder)
+    check("r2 site: a heavy day's Split takes a whole tag or subdeck only; a redraw keeps the page where it was",
+          "!c.even && !c.cards && !c.search && !c.ids && !c.cut && c.key" in builder
+          and "const y = window.scrollY;\n    drawNow();\n    if (y) window.scrollTo(0, y);" in builder)
 
 
 def test_plan_tags_insights_v381():
