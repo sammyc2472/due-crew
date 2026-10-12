@@ -353,6 +353,22 @@ def morning(c):
         _pf()._after_change()
 
 
+def recover_now():
+    """3.8.0: Recover leeches switched on: today's go now, and it says what
+    happened (it waited for the next refresh and said nothing)."""
+    c = cfg()
+    if not c.get("due_leeches") or not mw.col or not _today():
+        return
+    pc, st = _day_state()
+    st["leeches_done"] = False
+    _put_day(pc, st)
+    morning(c)
+    _pc, st = _day_state()
+    n = len(st.get("recovered") or [])
+    tooltip(f"{n:,} leech{'es' if n != 1 else ''} back as new cards. Edit › Undo puts {'them' if n != 1 else 'it'} back."
+            if n else "No leeches to recover now. Each morning looks again.")
+
+
 def after_refresh():
     """Every refresh: a fresh reviews count, and the morning (once a day)."""
     _state["due_reviews"] = None

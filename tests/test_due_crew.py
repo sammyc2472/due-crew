@@ -6534,6 +6534,27 @@ def test_due_board_and_clicks():
     check("leeches: its sibling and a non-leech left alone", rows[2] == (2, 2, 1) and rows[3] == (2, 2, 9))
     check("leeches: one undo step", len(col.undo_steps) == 1 and col.undo_steps[0][0].startswith("Due Crew"))
     check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
+    # 3.8.0: switched on, they come back now, and it says so
+    fakes.add_card(conn, 4, did=10, ctype=2, queue=-1, tags="leech Renal", lapses=9)
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    conf2, said = {"due_leeches": False}, []
+    saved2 = (dc.cfg, dc.save_cfg, F.cfg, F.mw.col, F.tooltip, F._today, F._pf)
+    store = {}
+    try:
+        dc.cfg = F.cfg = lambda: conf2
+        dc.save_cfg = lambda c, **k: conf2.update(c)
+        F.mw.col, F.tooltip, F._today = col, (lambda m, **k: said.append(m)), (lambda: T)
+        F._pf = lambda: types.SimpleNamespace(_pcfg=lambda: store, _psave=lambda d: None, _after_change=lambda: None)
+        dc._state["settings_tab"] = "board"
+        dc._on_js(False, "duecrew:set:due_leeches:1", DeckBrowser())
+        check("leeches: switched on, today's come back at once, and it says so",
+              conf2.get("due_leeches") is True and said and said[-1].startswith("1 leech back as new cards"), (said, store))
+        dc._on_js(False, "duecrew:set:due_leeches:1", DeckBrowser())
+        check("leeches: on again changes nothing", len(said) == 1)
+    finally:
+        (dc.cfg, dc.save_cfg, F.cfg, F.mw.col, F.tooltip, F._today, F._pf) = saved2
+        dc._state["settings_tab"] = None
 
 
 def test_history_import():

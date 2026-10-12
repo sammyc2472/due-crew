@@ -307,6 +307,16 @@ def check(path):
        f"{dn.get(did)} due, {len(dn)} decks, {t_due*1000:.0f} ms")
     col.decks.select(did)
     ok("study: the current deck's counts, as the review hands over", len(col.sched.counts()) == 3, str(col.sched.counts()))
+    # 3.8.0: Recover leeches on Anki's engine: the tag off, unsuspended, new again, one undo step
+    lc = col.get_card(col.find_cards('tag:leech deck:"Step Deck"')[0])
+    lc.type, lc.queue, lc.lapses, lc.ivl = 2, -1, 9, 5
+    col.update_card(lc)
+    got = DF.recover_leeches(col)
+    back = col.get_card(lc.id)
+    ok("leeches: back as a new card, the tag off, unsuspended, as one undo step",
+       lc.id in got and back.type == 0 and back.queue == 0 and back.lapses == 0
+       and "leech" not in [t.lower() for t in back.note().tags] and col.undo_status().undo == "Due Crew: recover leeches",
+       f"{len(got)} recovered, undo {col.undo_status().undo!r}")
     t = tm()
     days = col.db.list(
         f"SELECT DISTINCT CAST((? - id / 1000) / 86400 AS INTEGER) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "

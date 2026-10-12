@@ -1178,6 +1178,7 @@ def _apply_settings(changed, focus=None):
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
     chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
+    leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     c.update(changed)
     save_cfg(c)
     if changed.get("show_leaderboard") is False:
@@ -1191,6 +1192,8 @@ def _apply_settings(changed, focus=None):
         rooms.refresh_widgets()
     if "shortcuts" in changed:
         _apply_keys()
+    if leeches:
+        due_flow.recover_now()  # 3.8.0: now, and said, not at the next refresh
     if push:
         _share_push["n"] += 1
         n = _share_push["n"]
