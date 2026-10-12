@@ -5931,7 +5931,8 @@ def test_you_bubble_v380():
     th = board._due_html(dv2)
     check("refined: a date's topics on their resource's row; what has no resource stays on its own line",
           "<b>Video Series</b> &middot; <a class=\"tp\"" in th and "Kidney &lt;b&gt;</a>" in th and "<b>Kidney" not in th
-          and "duecrew:plantopic:p1:u1:1" in th and "Search: <a" in th and "Video Series: <a" not in th, th[:3000])
+          and "duecrew:plantopic:p1:u1:1" in th and "<b>Search</b> &middot; <a" in th and "Video Series</b> &middot; <a" in th
+          and th.count("Video Series") == 1, th[:3000])
     up = board._due_html(dict(dv2, tab="upcoming"))
     check("simpler: Today ends with its list; tomorrow and the exam are Upcoming's, the exam escaped",
           "du-next" not in th and "Tomorrow:" not in th and "Quiz" not in th and "Upcoming &rsaquo;" not in th
@@ -8324,6 +8325,17 @@ def test_every_site_twin_v380():
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=20)
     check("every site: the same days, keys and words as the add-on (the twin)", json.loads(out.stdout or "null") == want,
           (out.stdout, out.stderr, want))
+
+
+def test_card_set_links_one_look_v380():
+    """3.8.0 (Sam: "the linked card sets appear differently on plan vs
+    today/upcoming... pick one style and stick with it"): a link that
+    opens a set of cards (a.tp) is the board's green everywhere, with no
+    per-screen look of its own; Today writes a group as Plans does."""
+    rules = re.findall(r"#due-crew[^{}]*a\.tp[^{}]*\{[^}]*\}", board._css({}))
+    check("card-set links: one rule sets their colour, the green; none grey or dotted",
+          rules and all("dotted" not in r and "inherit;" not in r.split("color:")[1][:12] for r in rules if "color:" in r)
+          and sum(1 for r in rules if "color:" in r) == 1 and "var(--dc-accent)" in [r for r in rules if "color:" in r][0], rules)
 
 
 def test_share_pictures_v380():

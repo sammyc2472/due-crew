@@ -1003,6 +1003,13 @@ every release that changes how something works.
   alone; an older Worker ignores it and sends the whole log, cheers in
   it), and the switch says "counting…", "sign in to count" or "couldn't
   count" until then.
+  One look for a set of cards (Sam: "the linked card sets appear
+  differently on plan vs today/upcoming... pick one style and stick with
+  it"): every link that opens cards in Browse (`a.tp`: a topic, "16
+  left", "56 cards to see", an Insights topic) is the board's green with
+  no underline until hovered, as Today's were; Plans' and Insights' grey
+  dotted ones and their own rules are gone. Today writes a group as the
+  Plans day does ("**Picked** · 3 single cards", not "Picked: …").
   Its head (Sam: "the exam thing … looks bad"; "the overall deck name
   doesn't show"): the deck's name always shows (one deck, its name; more,
   the picker), and the exam date is a link, Add exam date, that opens the

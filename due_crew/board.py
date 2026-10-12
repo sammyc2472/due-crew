@@ -827,12 +827,10 @@ def _css(cfg):
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
     #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
     #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
-    #due-crew .pday .wi a.tp {{ color: inherit; font-weight: inherit;
-      text-decoration: underline dotted; text-underline-offset: 2px; }}
-    #due-crew .pday .wi a.tp:hover {{ color: var(--dc-accent); }}
-    /* 3.8.0: counts and names that open their cards in Browse, read as the text they are */
-    #due-crew a.tp {{ color: inherit; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }}
-    #due-crew a.tp:hover {{ color: var(--dc-accent); }}
+    /* 3.8.0: a set of cards that opens in Browse (a topic, "16 left"): one look
+       everywhere, the board's green, as Today's (Sam: "pick one style and stick with it") */
+    #due-crew a.tp {{ color: var(--dc-accent); font-weight: inherit; text-decoration: none; }}
+    #due-crew a.tp:hover {{ text-decoration: underline; text-underline-offset: 2px; }}
     #due-crew .pcrew {{ font-size: 11.5px; color: var(--dc-muted); margin-top: 8px; }}
     #due-crew .pcrew a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     /* 3.7.3: a plan's squad (3.8.0: on the Squads tab) */
@@ -872,9 +870,7 @@ def _css(cfg):
     #due-crew .dc-ins {{ display: grid; gap: 14px; text-align: left; font-size: 12px; }}
     #due-crew .dc-ins a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-ins a.q {{ color: var(--dc-muted); font-weight: 500; }}
-    #due-crew .dc-ins a.tp {{ color: inherit; font-weight: inherit; text-decoration: underline dotted; text-underline-offset: 2px;
-      white-space: normal; }}
-    #due-crew .dc-ins a.tp:hover {{ color: var(--dc-accent); }}
+    #due-crew .dc-ins a.tp {{ font-weight: inherit; white-space: normal; }}
     #due-crew .ihd {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }}
     #due-crew .ihd b {{ font-size: 18px; font-variant-numeric: tabular-nums; }}
     #due-crew .ihd > span {{ font-size: 12px; }}
@@ -4101,7 +4097,8 @@ def _due_plan(r):
     meta = " &middot; ".join([f'{e(r["plan"])}'] + extra)
     rest = [(g, xs) for k, (g, xs) in enumerate(groups) if k not in used]
     if rest:  # 3.8.0: each topic opens its cards in Browse
-        what = "<small>" + " &middot; ".join((f"{e(str(g))}: " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+        # as the Plans tab's day writes them: the group in bold, then its topics
+        what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
                                               for g, xs in rest) + "</small>"
     elif groups:
         what = ""
