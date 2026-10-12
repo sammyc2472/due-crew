@@ -534,7 +534,6 @@ In Anki (as a follower):
 - [ ] Log › Share my 2026 ›: the year card, the days before the log dashed.
 - [ ] Squads › a squad with bingo › Share ›: the card, a line ringed.
 - [ ] A plan with every card seen: "Finished" on its page, Share a card ›; the code only on a code plan.
-- [ ] Anki › Crew ▾ › Share today as a picture…: the browser opens duecrew.com signed in, the today card's sheet open, the address back to /home.
 - [ ] On a computer, Copy picture, then paste into a chat.
 - [ ] In December (or with the clock set), Home's rail opens with "Your 2026 in Anki"; Not now hides it after a reload.
 
@@ -630,6 +629,9 @@ In Anki (as a follower):
 - [ ] With one block unsuspended (say all of Cardio), the map shows that block's parts, not one big Cardio tile; a subject with nothing started reads "new"; one partly started has a bar along its foot.
 - [ ] The map's heading reads "by Systems ▾" (or another grouping); a yield rating isn't the first pick when a topic tree is there. Pick another way: the map redraws from the top, and stays that way for this deck after Anki restarts.
 - [ ] Share › on the map's key: a sheet with the card as on screen (the opened level, its trail in the title). Copy picture, paste into a chat: a sharp 1080 square. Save… writes a .png. Copy as text: a line a subject with its square (🟩 🟨 🟧 ⬜) and %, then the foot. Percentages off: no numbers on the card or in the text, a Less–More key. Dark: the dark card.
+- [ ] Share › As a picture › My week… (3.8.0): a sheet in Anki, not the browser: the card as on duecrew.com (squares, the big number, the stats, "with N crew this week"). With Time in Privacy off, Time studied starts off and says "off in Privacy"; tick it and the time shows. Story / Link change the shape; Copy picture pastes a sharp 1080×1350 (or 1200×630) into a chat; Save… writes a .png.
+- [ ] My day…: today's card, "Today · Wed 14 Oct". In Just show up, My day… isn't offered and My week… starts with every number off.
+- [ ] My year…: this year's calendar, the picker lists the years you studied in and All time; pick a year and back. Cheers from my crew says "counting…" for a moment, then ticks on with "Cheered on N times" (or "none yet"). Signed out: "sign in to count". The first open on a big collection may show a wait cursor for a second; the second is instant.
 - [ ] This week's change: off with "From next week" the first time; a week later (or with the clock moved on), on, with ↑/↓ pills on the tiles and "up N since …" at the foot; switching the map's "by" keeps each way's week.
 - [ ] A tile with a › opens its parts, with "All › Cardio · N cards, N% · Browse all" above them; All goes back; Browse all opens every card of the subject (new ones too). A tile without a › opens all of its cards in Browse.
 - [ ] Not sticking yet: a topic's name opens all of its cards in Browse; its Study N builds the hard ones only.

@@ -983,6 +983,26 @@ every release that changes how something works.
   `map_snaps`), and the card compares with the newest a week old or more
   (`week_ago`), on the top level only; until there is one the switch is
   off with "From next week".
+  Every picture made in Anki (Sam: "make the copy picture do the same
+  thing for all the other places it is instead of opening the website"):
+  Share › As a picture › My day…, My week…, My year…, All time… no longer
+  open duecrew.com; they open a sheet like the map's (`shares.picture`,
+  `ui/share_card_dialog.py`) with the site's cards (`sharecard.py`, a
+  port of cards.js: the same layouts, words and look, each card a list
+  of things to draw, so the suite reads what a switch takes off), from
+  my own reviews: the whole revlog read once a session (`_log_days`, a
+  wait cursor; about a second for millions of reviews), then the last
+  month again (a phone's late sync). A switch for each number, Story or
+  Link (a year is a story), Light or Dark, a year picker with All time,
+  then Copy picture and Save…. My day's and week's switches start where
+  my Privacy switches stand (Just show up: every number off; "off in
+  Privacy" by the switch), and stay mine to flip: the picture only goes
+  where I paste it. How many of my crew studied too comes from the
+  board's cache; the cheers my crew sent me (year, all time) are one
+  read on a click, after the sheet opens (`GET /log?cheers=1`, `{cheers}`
+  alone; an older Worker ignores it and sends the whole log, cheers in
+  it), and the switch says "counting…", "sign in to count" or "couldn't
+  count" until then.
   Its head (Sam: "the exam thing … looks bad"; "the overall deck name
   doesn't show"): the deck's name always shows (one deck, its name; more,
   the picker), and the exam date is a link, Add exam date, that opens the

@@ -34,6 +34,7 @@ from .app import (_bg, ADDON_VERSION, FRESH_SECS, HEATMAP_DAYS, SQUAD_CACHE_SECS
                   save_cfg)
 from .backend.shapes import TransportError, _clean_day, clean_emoji, shared_numbers
 from .shares import _share, dismiss_review, review_banners
+from .shares import picture as share_picture
 from .social import (_cheer_menu, _edit_emoji, _edit_status, _fresh_cheers, _open_profile,
                      _play_cheers, _send_cheer, cheer_allowed, drop_muted, muted_uids, row_menu)
 from .squads import (_add_back, _block_member, _copy_invite, _dismiss_knock, _drop_squad,
@@ -1032,11 +1033,11 @@ def _share_menu(c):
     from aqt.qt import QCursor, QMenu
     run = {"squadshare": lambda: _share_squad(),
            "sharetoday": lambda: _share("sharetoday"), "sharecrewweek": lambda: _share("sharecrewweek"),
-           # K7: the picture is drawn on duecrew.com, signed in, its sheet open
-           "picturetoday": lambda: plan_flow.open_site("/home?card=today"),
-           "pictureweek": lambda: plan_flow.open_site("/home?card=week"),
-           "pictureyear": lambda: plan_flow.open_site("/home?card=year"),
-           "picturealltime": lambda: plan_flow.open_site("/home?card=alltime")}
+           # 3.8.0: the picture is made here (it opened duecrew.com before)
+           "picturetoday": lambda: share_picture("picturetoday"),
+           "pictureweek": lambda: share_picture("pictureweek"),
+           "pictureyear": lambda: share_picture("pictureyear"),
+           "picturealltime": lambda: share_picture("picturealltime")}
     menu = QMenu(mw)
     for label, key in board.share_menu_items(
             bool(c.get("show_up")), (_squad_view(c) or {}).get("state") == "ok"):

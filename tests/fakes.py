@@ -416,6 +416,8 @@ class FakeWorker:
             return self._invites(method, me, parts[1:])
         if m == ("POST", "cheers") and len(parts) == 2:
             return self._cheer(me, parts[1], body or {})
+        if m == ("GET", "log") and len(parts) == 1 and query.get("cheers") == "1":
+            return 200, {"cheers": dict(getattr(self, "cheer_counts", {}).get(me) or {})}  # 3.8.0
         if parts[:1] == ["knocks"]:
             return self._knock(method, me, parts[1:], body or {})
         if m == ("POST", "reports") and len(parts) == 1:
@@ -927,6 +929,13 @@ class FakeWorker:
             raise Bad(400, "bad_guid")
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
+        if not body.get("guid"):  # 3.7.1: a cheer received counts on my year card, a sender once a day
+            day = datetime.date.today().isoformat()
+            seen = self.__dict__.setdefault("cheer_days", set())
+            if (me, to, day) not in seen:
+                seen.add((me, to, day))
+                by = self.__dict__.setdefault("cheer_counts", {}).setdefault(to, {})
+                by[day[:4]] = by.get(day[:4], 0) + 1
         self.cheers[(to, me)] = {"emoji": body["emoji"], "note": body.get("note"), "luck": body.get("luck") is True,
                                  "guid": body.get("guid"), "at": _now(), "n": self._next_cheer()}
         if body.get("guid") and body.get("note"):  # 3.2: a tip with words stays on its card

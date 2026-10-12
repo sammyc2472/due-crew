@@ -6175,11 +6175,11 @@ def test_crew_menu_pictures():
         handled = set(re.findall(r'"([a-z]+)": lambda', run))
         check(f"{fn[4:]}: every key handled", keys <= handled, sorted(keys - handled))
     full = board.share_menu_items(False, True)
-    check("share menu: as text, then as a picture, year and all time on the site",
+    check("share menu: as text, then as a picture, year and all time made here (3.8.0)",
           [l or k for l, k in full] == ["As text", "My day", "Our week", "The squad's day", "As a picture",
                                         "My day…", "My week…", "My year…", "All time…"]
           and "head.setEnabled(False)" in text
-          and '"/home?card=alltime"' in text and '"/home?card=year"' in text)
+          and 'share_picture("picturealltime")' in text and 'share_picture("pictureyear")' in text)
     check("crew menu: people only",
           [k for _l, k in board.crew_menu_items()] == ["friends", "copyinvite", "decks"])
     import due_crew as dc
@@ -8324,6 +8324,184 @@ def test_every_site_twin_v380():
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=20)
     check("every site: the same days, keys and words as the add-on (the twin)", json.loads(out.stdout or "null") == want,
           (out.stdout, out.stderr, want))
+
+
+def test_share_pictures_v380():
+    """3.8.0: Share › As a picture, made in Anki (sharecard, pure): the
+    site's cards (cards.js) from my own reviews: my week's squares and
+    numbers, my year's calendar and best day, all time's bar a year; the
+    switches, starting from my Privacy switches; what each card draws."""
+    from due_crew import sharecard as S
+    measure = lambda s, px, w: len(s) * px * 0.55  # noqa: E731
+    texts = lambda ops: [o[1] for o in ops if o[0] == "text"]  # noqa: E731
+    today = "2026-10-14"  # a Wednesday
+    days = {"2026-10-12": (100, 30 * 60000), "2026-10-13": (40, 5 * 60000), "2026-10-14": (60, 20 * 60000),
+            "2026-10-09": (10, 60000), "2025-03-03": (5, 60000), "2025-03-04": (7, 60000), "2025-03-05": (300, 90 * 60000),
+            "2024-12-31": (2, 60000)}
+    wk = S.week(days, today, False, {"2026-10-12": 3, "2026-10-14": 9, "2026-10-09": 50}, 4, 2)
+    check("week: Monday to Sunday, the days so far studied, today ringed, tomorrow on",
+          [c["label"] for c in wk["days"]] == list("MTWTFSS") and [c["studied"] for c in wk["days"]][:3] == [True] * 3
+          and wk["days"][2]["today"] and [c["future"] for c in wk["days"]] == [False] * 3 + [True] * 4
+          and wk["studied"] == 3 and wk["elapsed"] == 3, wk["days"])
+    check("week: the numbers this week only, new cards too (last Friday's aren't in it)",
+          wk["reviews"] == 200 and wk["time"] == 55 * 60000 and wk["newCards"] == 12 and wk["range"] == "12 Oct – 18 Oct"
+          and wk["streak"] == 4 and wk["crew"] == 2, wk)
+    one = S.week(days, today, True, {"2026-10-14": 9}, 4, 1)
+    check("today: today's numbers, its day in the eyebrow",
+          one["reviews"] == 60 and one["newCards"] == 9 and one["range"] == "Wed 14 Oct" and one["studied"] == 1, one)
+    on = {k: True for k in ("time", "reviews", "streak", "crew", "best", "cheers")}
+    W, H, ops = S.draw("week", "story", wk, on, "light", measure)
+    t = texts(ops)
+    check("week card: a story, the logo, time studied the big number, the reviews, new cards and streak under it",
+          (W, H) == (1080, 1350) and ops[0] == ("logo", 78, 78, 40) and "MY WEEK · 12 OCT – 18 OCT" in t and "55m" in t
+          and "200" in t and "12" in t and "🔥 4" in t and "with 2 crew this week" in t and "duecrew.com" in t
+          and "studied, 3 of 3 days so far" in t, t)
+    _w, _h, ops = S.draw("week", "story", wk, dict(on, time=False, streak=False, crew=False), "light", measure)
+    t = texts(ops)
+    check("week card: a switch off takes its number off the card",
+          "55m" not in t and "200 reviews" in t and not any("🔥" in x for x in t) and not any(x.startswith("with ") for x in t), t)
+    _w, _h, ops = S.draw("week", "story", wk, {}, "dark", measure)
+    t = texts(ops)
+    check("week card: every number off, the days studied are left", "3 days" in t and not any(x.isdigit() and x != "3" for x in t)
+          and not any("reviews" in x or "new" in x for x in t), t)
+    W, H, ops = S.draw("today", "link", one, on, "light", measure)
+    t = texts(ops)
+    check("today, a link: wide, the numbers on one line", (W, H) == (1200, 630) and "TODAY · WED 14 OCT" in t
+          and "20m" in t and "60 reviews · 9 new · 🔥 4" in t and "with 1 crew today · duecrew.com" in t, t)
+    big = S._Ops(measure, S.LOOKS["light"]).fit("123,456 reviews", 300, 150, 90, 700)
+    check("a big number too wide shrinks, then ends in …", big[1] == 90 and big[0].endswith("…") and len(big[0]) < 15, big)
+
+    yr = S.year(days, "2025", today, 7)
+    first = S.year(days, "2024", today)
+    check("year: the calendar year in Monday-first columns, days before my first review dashed",
+          yr["cols"] == 53 and len(yr["cells"]) == 53 * 7 and yr["cells"][:2] == [{"out": True}] * 2
+          and yr["cells"][2] == {"lvl": 0} and yr["since"] == "" and yr["studied"] == 3
+          and first["cells"][0] == {"pre": True} and first["since"] == "31 Dec" and first["studied"] == 1,
+          (yr["cells"][:3], first["cells"][:2], first["since"]))
+    check("year: its streak, best day, reviews and cheers",
+          yr["streak"] == 3 and yr["best"] == {"n": 300, "day": "5 Mar"} and yr["reviews"] == 312 and yr["cheers"] == 7, yr)
+    now = S.year(days, "2026", today)
+    check("year: this year's days to come are drawn faint; its first day isn't 'since'",
+          now["cells"][-1] == {"out": True} and {"fut": True} in now["cells"] and now["since"] == "" and now["cheers"] is None)
+    _w, _h, ops = S.draw("year", "link", yr, on, "light", measure)
+    t = texts(ops)
+    check("year card: story only, its eyebrow, days, the four numbers, my crew's cheers",
+          (_w, _h) == (1080, 1350) and "MY YEAR IN ANKI · 2025" in t and "3 days" in t and "studied in 2025" in t
+          and "312" in t and "2h" in t and "300" in t and "biggest day · 5 Mar" in t and "🎉 Cheered on 7 times by my crew" in t, t)
+    al = S.alltime(days, today, 12)
+    check("all time: a bar a year, the longest streak and its year, the best year",
+          [r["days"] for r in al["years"]] == [1, 3, 4] and al["since"] == "Dec 2024" and al["streak"] == 3
+          and al["streakYear"] == 2025 and al["bestYear"]["year"] == 2026 and al["days"] == 8 and al["cheers"] == 12, al)
+    _w, _h, ops = S.draw("alltime", "story", al, dict(on, best=False), "dark", measure)
+    t = texts(ops)
+    check("all-time card: reviews big, a bar a year labelled, best year off",
+          "524" in t and "’24" in t and "’26" in t and "longest streak · 2025" in t and not any("best year" in x for x in t), t)
+    check("all time: nothing before my first review", S.alltime({}, today) is None)
+    check("picker: the years I studied in and this one, newest first, then All time",
+          S.year_options(days, today) == [("2026", "2026"), ("2025", "2025"), ("2024", "2024"), ("all", "All time")]
+          and S.year_options({}, today) == [("2026", "2026"), ("all", "All time")])
+
+    sw = {k: (note, start, en) for k, _l, note, start, en in S.switches("week", wk, S.privacy({"share_time": False}))}
+    check("switches: a number my Privacy keeps home starts off, and says so; I can still turn it on",
+          sw["time"] == ("off in Privacy", False, True) and sw["reviews"] == ("", True, True) and sw["crew"][1:] == (True, True), sw)
+    sw = {k: (note, start, en) for k, _l, note, start, en in S.switches("today", dict(one, streak=0, crew=0), S.privacy({"show_up": True}))}
+    check("switches: Just show up starts every number off; no streak or crew can't be on",
+          not sw["time"][1] and not sw["reviews"][1] and sw["streak"] == ("none yet", False, False)
+          and sw["crew"] == ("none yet today", False, False), sw)
+    sw = {k: (note, start, en) for k, _l, note, start, en in S.switches("year", dict(yr, cheers=None), {}, "counting…")}
+    check("switches: cheers wait for their count, then none yet or on",
+          sw["cheers"] == ("counting…", False, False)
+          and {k: v for k, _l, v, _s, _e in S.switches("year", dict(yr, cheers=0))}["cheers"] == "none yet"
+          and [x for x in S.switches("year", yr) if x[0] == "cheers"][0][3:] == (True, True), sw)
+    check("switches: all time over one year has no best year",
+          [x for x in S.switches("alltime", dict(al, bestYear=None)) if x[0] == "best"][0][2:] == ("one year so far", False, False))
+
+
+def test_share_pictures_glue_v380():
+    """3.8.0: Share › As a picture opens the card made in Anki, not the
+    website: my week from my reviews and my crew's days; my year with
+    my crew's cheers counted with one request, after it opens."""
+    from due_crew import shares as SH
+    from due_crew.app import _state
+    text = open(os.path.join(REPO, "due_crew", "__init__.py")).read()
+    check("menu: every picture is made here, none opens the site",
+          "/home?card=" not in text and all(f'share_picture("{k}")' in text
+                                            for k in ("picturetoday", "pictureweek", "pictureyear", "picturealltime")))
+    store = world({"sam": "Sam", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    cl = new_client(store, "sam")
+    d0 = datetime.date.today()
+    col = make_user_col([d0 - datetime.timedelta(days=k) for k in (0, 1, 400)], today=d0)
+    made, bg = [], []
+
+    class Dlg:
+        def __init__(self, parent, choose, options=None, value=None, priv=None, tooltip=None, cheers_say=""):
+            self.choose, self.options, self.value, self.priv, self.cheers_say = choose, options, value, priv, cheers_say
+            self.refreshed = 0
+            made.append(self)
+
+        def refresh(self):
+            self.refreshed += 1
+
+        def show(self):
+            self.shown = True
+    saved = (SH.client, SH._bg, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state.get("entries"), _state.get("labels"))
+    files = tempfile.mkdtemp()
+    sys.modules["due_crew.ui.share_card_dialog"] = types.SimpleNamespace(ShareCardDialog=Dlg)
+    try:
+        SH.client, SH._bg, SH.cfg, SH._profile_files = (lambda: cl), (lambda job, done: bg.append((job, done))), \
+            (lambda: {"share_reviews": False}), (lambda: files)
+        sys.modules["aqt"].mw.col = col
+        q = StatsQueries(col)
+        labels = [q.day_label(i) for i in range(7)]
+        _state["labels"] = labels
+        _state["entries"] = [{"you": True, "days": {}}, {"you": False, "days": {labels[0]: {"studied": True}}},
+                             {"you": False, "days": {labels[0]: {"studied": False}}}]
+        _state.pop("pic_log", None)
+        SH.picture("picturetoday")
+        dlg = made[-1]
+        card = dlg.choose(None)
+        check("my day: today's card, my reviews, one of my crew studied too, Reviews starting off as Privacy keeps it",
+              card["kind"] == "today" and card["data"]["reviews"] == 3 and card["data"]["crew"] == 1
+              and dlg.priv == {"time": True, "reviews": False, "streak": True} and dlg.shown and not bg
+              and _state["share_card"] is dlg, (card["data"], dlg.priv))
+        SH.picture("pictureyear")
+        dlg = made[-1]
+        check("my year: this year first, the years I studied in, All time; cheers being counted",
+              dlg.value == labels[0][:4] and dlg.options[-1] == ("all", "All time") and len(dlg.options) >= 2
+              and dlg.cheers_say == "counting…" and dlg.choose(dlg.value)["data"]["cheers"] is None and len(bg) == 1)
+        check("my year: the whole log was read once, the year before last's day in it",
+              (d0 - datetime.timedelta(days=400)).isoformat() in _state["pic_log"]["days"])
+        dre = new_client(store, "dre")
+        dre.send_cheer("sam", "🎉")
+        job, done = bg[-1]
+        got = job()
+        check("cheers: one read, mine by year", got == {str(datetime.date.today().year): 1}
+              and store.requests("GET", "/log") and len(store.requests("GET", "/log")) == 1, got)
+        done(got)
+        check("cheers: in the card once counted, the sheet redrawn",
+              dlg.refreshed == 1 and dlg.choose(str(datetime.date.today().year))["data"]["cheers"] == 1
+              and dlg.choose("all")["data"]["cheers"] == 1)
+        SH.picture("picturealltime")
+        dlg2 = made[-1]
+        bg[-1][1](None)
+        check("all time: opens on All time; a count that failed says so", dlg2.value == "all"
+              and dlg2.cheers_say == "couldn't count" and dlg2.choose("all")["data"]["cheers"] is None)
+        app_gen = SH.app.generation
+        SH.picture("pictureyear")
+        SH.app.generation += 1
+        bg[-1][1]({"2026": 5})
+        check("cheers: a profile closed while counting draws nothing", made[-1].refreshed == 0)
+        SH.app.generation = app_gen
+        signed_out = types.SimpleNamespace(signed_in=False)
+        SH.client = lambda: signed_out
+        n = len(bg)
+        SH.picture("pictureyear")
+        check("signed out: no request, the switch says why", len(bg) == n and made[-1].cheers_say == "sign in to count")
+    finally:
+        (SH.client, SH._bg, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state["entries"], _state["labels"]) = saved
+        sys.modules.pop("due_crew.ui.share_card_dialog", None)
+        _state.pop("share_card", None)
+        _state.pop("pic_log", None)
 
 
 def test_map_card_v380():

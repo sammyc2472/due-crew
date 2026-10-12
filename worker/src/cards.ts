@@ -175,9 +175,15 @@ export async function deleteLog(s: Session, env: Env): Promise<Response> {
 }
 
 /** GET /log: my log, for the site. ?summary=1 (Account): how many days and
- *  the first, not 15 years of them. */
+ *  the first, not 15 years of them. ?cheers=1 (3.8.0, the add-on's year
+ *  and all-time pictures): the cheers my crew sent me, by year, alone. */
 export async function getLog(req: Request, s: Session, env: Env): Promise<Response> {
-  if (new URL(req.url).searchParams.get("summary") === "1") {
+  const q = new URL(req.url).searchParams;
+  if (q.get("cheers") === "1") {
+    const counts = await env.DB.prepare("SELECT year, n FROM cheer_counts WHERE uid = ?").bind(s.uid).all<{ year: number; n: number }>();
+    return json({ cheers: Object.fromEntries(counts.results.map((r) => [String(r.year), r.n])) });
+  }
+  if (q.get("summary") === "1") {
     const r = await env.DB.prepare(
       "SELECT COUNT(d.key) AS n, MIN(d.key) AS first FROM logs l, json_each(l.json, '$.days') d WHERE l.uid = ?",
     ).bind(s.uid).first<{ n: number; first: string | null }>();

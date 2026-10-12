@@ -258,6 +258,9 @@ describe("the log", () => {
     const year = String(new Date().getUTCFullYear());
     expect((await sam.call("GET", "/log")).body.cheers).toEqual({ [year]: 2 });
     expect((await dre.call("GET", "/log")).body.cheers).toEqual({});
+    // 3.8.0: the add-on's pictures ask for the counts alone, not the log
+    expect((await sam.call("GET", "/log?cheers=1")).body).toEqual({ cheers: { [year]: 2 } });
+    expect((await dre.call("GET", "/log?cheers=1")).body).toEqual({ cheers: {} });
     await sam.call("DELETE", "/account");
     expect(await db().prepare("SELECT COUNT(*) AS n FROM cheer_counts").first("n")).toBe(0);
   });

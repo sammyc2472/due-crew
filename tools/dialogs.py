@@ -458,10 +458,56 @@ def main(out):
             raise RuntimeError("map card: a tile's parts should say the change is the deck's")
         part.close()
 
+    def share_card():
+        # 3.8.0: Share › As a picture, made in Anki: the sheet, and each card in each size and look
+        from due_crew.ui.share_card_dialog import ShareCardDialog, paint
+        from due_crew import sharecard as S
+        today = "2026-10-14"  # a Wednesday
+        start = datetime.date(2024, 3, 4)
+        days = {}
+        for i in range((datetime.date.fromisoformat(today) - start).days + 1):
+            d = start + datetime.timedelta(days=i)
+            if (i * 7) % 11 not in (3, 8):  # most days, not all
+                days[d.isoformat()] = (40 + (i * 37) % 260, (12 + (i * 13) % 70) * 60000)
+        wk = S.week(days, today, False, {today: 14, "2026-10-12": 20}, 23, 4)
+        one = S.week(days, today, True, {today: 14}, 23, 2)
+        cheers = {"2026": 31, "2025": 12}
+        pick = lambda k: ({"kind": "alltime", "title": "Share my Anki, all time", "sizes": ("story", "link"), "file": "due-crew-all-time",
+                           "data": S.alltime(days, today, sum(cheers.values()))} if k == "all" else
+                          {"kind": "year", "title": "Share my year", "sizes": ("story",), "file": f"due-crew-{k}",
+                           "data": S.year(days, k, today, cheers.get(k, 0))})  # noqa: E731
+        dlg = ShareCardDialog(None, pick, S.year_options(days, today), "2026")
+        shoot(dlg, os.path.join(out, "share-card-year-sheet.png"))
+        if dlg.link.isVisible() or not dlg.switch["cheers"].isChecked():
+            raise RuntimeError("share card: a year is story only, and its cheers start on")
+        dlg.pick.setCurrentIndex(dlg.pick.count() - 1)
+        if dlg.kind() != "alltime" or not dlg.switch["best"].isEnabled():
+            raise RuntimeError("share card: All time didn't take over the sheet")
+        dlg.close()
+        priv = S.privacy({"share_time": False})
+        wdlg = ShareCardDialog(None, lambda _k: {"kind": "week", "title": "Share my week", "sizes": ("story", "link"),
+                                                 "file": "due-crew-week-2026-10-12", "data": wk}, priv=priv)
+        shoot(wdlg, os.path.join(out, "share-card-week-sheet.png"))
+        if wdlg.switch["time"].isChecked() or "Privacy" not in wdlg.switch["time"].text():
+            raise RuntimeError("share card: Time studied should start off when Privacy keeps it home")
+        wdlg.close()
+        for kind, data, sizes in (("week", wk, ("story", "link")), ("today", one, ("story", "link")),
+                                  ("year", pick("2026")["data"], ("story",)), ("year", pick("2025")["data"], ("story",)),
+                                  ("alltime", pick("all")["data"], ("story", "link"))):
+            on = {k: True for k in ("time", "reviews", "streak", "crew", "best", "cheers")}
+            for size in sizes:
+                for look in ("light", "dark"):
+                    img = paint(kind, size, data, on, look)
+                    if img.isNull() or (img.width(), img.height()) != S.SIZES[size]:
+                        raise RuntimeError(f"share card: no {kind} {size} picture")
+                    tag = data.get("year") if kind == "year" else ""
+                    img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
-                         ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card)):
+                         ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
+                         ("share card", share_card)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

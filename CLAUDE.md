@@ -114,6 +114,7 @@ same commit, each with its test:
 - `team.bingo_line` ↔ `bingoLine` in builder.js (`PlanSquad`)
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
 - `room_model.phase` ↔ the room widget's JS
+- `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
 
 ## Where things live
@@ -133,7 +134,7 @@ same commit, each with its test:
 | Due (the bubble's Today, Upcoming, Later; Study today, 3.8.0) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
-| Shares: text, and picture cards | `share.py`, `shares.py` | `site/public/cards.js` |
+| Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts` |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 

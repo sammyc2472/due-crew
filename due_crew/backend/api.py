@@ -639,6 +639,16 @@ class ApiClient:
 
     # ---- settings (2.13) ----
 
+    def cheer_counts(self):
+        """3.8.0: {year: cheers my crew sent me} for my year and all-time
+        pictures, or None. One read on a click; an older Worker ignores
+        ?cheers=1 and sends my whole log, its cheers with it."""
+        status, data = self._call("GET", "/log?cheers=1")
+        got = data.get("cheers") if status == 200 else None
+        if not isinstance(got, dict):
+            return None
+        return {str(k): int(v) for k, v in got.items() if str(k).isdigit() and isinstance(v, int) and v >= 0}
+
     def get_settings(self):
         """(doc, status): {v, at, settings}; 404 when there's none yet."""
         status, data = self._call("GET", "/settings")
