@@ -654,6 +654,8 @@ def _css(cfg):
     #due-crew .ik select.tmby {{ -webkit-appearance: none; appearance: none; font: inherit; font-weight: 700;
       color: var(--dc-accent); background: transparent; border: 0; padding: 0 0 0 2px; margin: 0; cursor: pointer;
       text-transform: none; letter-spacing: 0; color-scheme: light dark; }}
+    #due-crew .ik .tmsh {{ margin-left: 8px; color: var(--dc-accent); font-weight: 700; text-decoration: none;
+      text-transform: none; letter-spacing: 0; white-space: nowrap; }}
     #due-crew .ik .tmbv {{ font-style: normal; font-size: 9px; color: var(--dc-accent); margin-left: 2px; pointer-events: none; }}
     #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
     #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
@@ -1858,8 +1860,9 @@ def _ins_map(did, tiles, by, at=(), ways=()):
                f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
+    share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
     return (f'<div class="isec"><div class="ik">What you know{sub}'
-            f'<span class="ikey">{key}</span></div>'
+            f'<span class="ikey">{key}{share}</span></div>'
             f'{path}<div class="tmap">{out}</div></div>')
 
 

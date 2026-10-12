@@ -426,10 +426,38 @@ def main(out):
         if not acts["Show on the Decks screen"].isCheckable():
             raise RuntimeError("tools menu: Show on the Decks screen isn't a check")
 
+    def map_card():
+        # 3.8.0: "What I know" as a picture: the sheet, and the card itself in each look
+        from due_crew.ui.map_card_dialog import MapCardDialog, paint
+        from due_crew import mapcard as M
+        tiles = [{"key": k.lower(), "name": k, "n": n, "know": kn, "started": n if kn is not None else 0}
+                 for k, n, kn in (("Cardio · Physiology", 412, 86), ("Cardio · Pathology", 318, 77), ("Cardio · Pharm", 260, 84),
+                                  ("Renal · Physiology", 190, 66), ("Pulm · Pathology", 150, 88), ("Heme", 120, None),
+                                  ("Endo", 96, 71), ("MSK", 64, 94))]
+        prev = {"cardio · physiology": 82, "cardio · pathology": 79, "renal · physiology": 60}
+        dlg = MapCardDialog(None, "Big Step 1", "2026-10-12", tiles, "fsrs", prev, "2026-10-05")
+        shoot(dlg, os.path.join(out, "map-card-sheet.png"))
+        for name, look, pct, ch in (("light", "light", True, False), ("dark", "dark", True, False),
+                                    ("shape", "light", False, False), ("change", "light", True, True)):
+            img = paint(M.card("Big Step 1", "2026-10-12", tiles, "fsrs", pct, prev if ch else None,
+                               "2026-10-05" if ch else ""), look)
+            if img.isNull() or img.width() != M.SIZE:
+                raise RuntimeError("map card: no picture")
+            img.save(os.path.join(out, f"map-card-{name}.png"))
+        if "🟩 Cardio · Physiology 86%" not in dlg.text():
+            raise RuntimeError(f"map card: text {dlg.text()!r}")
+        dlg.pct.setChecked(False)
+        if "%" in dlg.text():
+            raise RuntimeError("map card: Percentages off still has numbers")
+        none = MapCardDialog(None, "Big Step 1", "2026-10-12", tiles)
+        if none.change.isEnabled():
+            raise RuntimeError("map card: This week's change on with no week to compare")
+        none.close()
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
-                         ("report", report), ("plans", plans), ("schedule", schedule)):
+                         ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

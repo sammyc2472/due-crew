@@ -968,6 +968,21 @@ every release that changes how something works.
   the map's heading says "by Systems ▾", a pick of the best few ways (each
   tag family that splits, and Subdecks), kept per deck on this computer
   (`ins_map_by`, `insmapby`); a pick no longer there falls back to the best.
+  What I know, to share (Sam: "is there a way to make a bento
+  shareable"; "is there a text-based version"): Share › on the map's key
+  (`insmapshare`) opens a sheet with the level on screen as a 1080 square
+  card (`mapcard.card`, drawn with QPainter in `ui/map_card_dialog.py`,
+  the site's picture-card look: eyebrow, deck, tiles squarified, the
+  board's shades and amber, duecrew.com at the foot), with Percentages
+  (off: names and shades, a Less–More key), This week's change and Light
+  or Dark, then Copy picture, Save… and Copy as text (`mapcard.text`: a
+  square a subject, 🟩 80 and up, 🟨 from 70, 🟧 under, ⬜ new). Made in
+  Anki and only goes where it's pasted: Insights are never sent. The
+  change: once a week the map's know per tile is kept, per deck and way
+  (`mapcard.keep_ways`, three a way, four ways a deck, in plans.json's
+  `map_snaps`), and the card compares with the newest a week old or more
+  (`week_ago`), on the top level only; until there is one the switch is
+  off with "From next week".
   Its head (Sam: "the exam thing … looks bad"; "the overall deck name
   doesn't show"): the deck's name always shows (one deck, its name; more,
   the picker), and the exam date is a link, Add exam date, that opens the

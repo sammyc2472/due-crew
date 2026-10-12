@@ -7507,6 +7507,38 @@ def test_insights_379():
         dc._on_js(False, "duecrew:insmapby:30:9", DeckBrowser())
         check("map: no such way, nothing", (conf.get("ins_map_by") or {}).get("30") == ways[1]["key"])
         dc._on_js(False, "duecrew:insmapby:30:0", DeckBrowser())
+        # 3.8.0: Share › on the map: the card of the level on screen, made here
+        made = []
+
+        class Card:
+            def __init__(self, parent, title, day, tiles, by, prev, since, tooltip=None):
+                made.append((title, day, [t["name"] for t in tiles], by, prev, since))
+
+            def show(self):
+                made.append("shown")
+        sys.modules["due_crew.ui.map_card_dialog"] = types.SimpleNamespace(MapCardDialog=Card)
+        try:
+            TF.you_view(dict(conf, ins_deck=30))
+            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            check("share: the deck's map, its name and today, shown", made and made[0][:4] == ("Unused", _day(0), ["Cardio", "Pulm", "Renal"], "fsrs")
+                  and made[-1] == "shown", made)
+            check("share: no map a week old yet, no change", made[0][4] is None and made[0][5] == "")
+            sys30 = ((pc.get("map_snaps") or {}).get("30") or {}).get("med::^sys") or []
+            check("share: today's map kept for next week's change, by way, in this profile's plans file",
+                  [x["day"] for x in sys30] == [_day(0)] and "med::$yield" in pc["map_snaps"]["30"], pc.get("map_snaps"))
+            sys30[0]["day"] = _day(-8)
+            _state["insights"].pop(30, None)
+            TF.you_view(dict(conf, ins_deck=30))
+            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            check("share: a week on, the change since then; today's kept too", made[-2][4] and made[-2][5] == _day(-8)
+                  and [x["day"] for x in pc["map_snaps"]["30"]["med::^sys"]] == [_day(-8), _day(0)], (made[-2], pc["map_snaps"]["30"]))
+            dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
+            dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
+            check("share: opened, the parts on screen, named by the trail; the change is the deck's level only",
+                  made[-2][0] == "Unused · Cardio" and made[-2][2] == ["Valves", "Rhythm"] and made[-2][4] is None, made[-2])
+            dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
+        finally:
+            sys.modules.pop("due_crew.ui.map_card_dialog", None)
         dc._on_js(False, "duecrew:insmap:30:9", DeckBrowser())
         dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
         check("map: no such tile, or nothing open: nothing", len(shown) == 2 and not (_state.get("map_at") or {}).get(30))
@@ -7949,6 +7981,62 @@ def test_every_site_twin_v380():
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=20)
     check("every site: the same days, keys and words as the add-on (the twin)", json.loads(out.stdout or "null") == want,
           (out.stdout, out.stderr, want))
+
+
+def test_map_card_v380():
+    """3.8.0: "What I know" as a picture card and as text (mapcard, pure):
+    tiles laid out to fill the card, the board's shades, the foot; the
+    text's squares; last week's map kept once a week, for the change."""
+    from due_crew import mapcard as M
+    rects = M.squarify([50, 30, 20], 0, 0, 100, 100)
+    check("card: the tiles fill the space, sized by cards", abs(sum(w * h for _x, _y, w, h in rects) - 10000) < 1e-6
+          and abs(rects[0][2] * rects[0][3] - 5000) < 1e-6 and all(0 <= x and 0 <= y and x + w <= 100.0001 and y + h <= 100.0001
+                                                                   for x, y, w, h in rects), rects)
+    tiles = [{"key": "cardio", "name": "Cardio", "n": 412, "know": 86, "started": 400},
+             {"key": "renal", "name": "Renal", "n": 318, "know": 77, "started": 300},
+             {"key": "neuro", "name": "Neuro", "n": 190, "know": 66, "started": 190},
+             {"key": "msk", "name": "MSK", "n": 64, "know": 94, "started": 64},
+             {"key": "heme", "name": "Heme", "n": 120, "know": None, "started": 0}]
+    c = M.card("Big Step 1", "2026-10-12", tiles)
+    check("card: the eyebrow, the deck, biggest first, shades as the board's, nothing started has no number",
+          c["eyebrow"] == "WHAT I KNOW · 12 OCT" and c["title"] == "Big Step 1"
+          and [(t["name"], t["k"], t["shade"]) for t in c["tiles"]] == [("Cardio", 86, 2), ("Renal", 77, 1), ("Neuro", 66, 0),
+                                                                         ("Heme", None, None), ("MSK", 94, 3)], c["tiles"])
+    check("card: inside the card, room left at the foot", all(M.PAD - 1 <= t["x"] and t["x"] + t["w"] <= M.SIZE - M.PAD + 1
+                                                             and M.TOP - 1 <= t["y"] and t["y"] + t["h"] <= M.SIZE - M.FOOT + 1
+                                                             for t in c["tiles"]), c["tiles"])
+    check("card: the foot, over the started cards", c["foot"] == "80% I’d remember now · 1,104 cards", c["foot"])
+    check("card: without FSRS it says so", "right on their last review" in M.card("D", "2026-10-12", tiles, by="right")["foot"])
+    shape = M.card("Big Step 1", "2026-10-12", tiles, pct=False)
+    check("card: Percentages off, no numbers anywhere, the shades in words", shape["foot"] == "" and shape["key"] is True)
+    prev = {"cardio": 82, "renal": 79, "gone": 50}
+    ch = M.card("Big Step 1", "2026-10-12", tiles, prev=prev, since="2026-10-05")
+    check("card: this week's change on the tiles that were there, and at the foot",
+          [(t["name"], t["d"]) for t in ch["tiles"]][:3] == [("Cardio", 4), ("Renal", -2), ("Neuro", None)]
+          and ch["foot"] == "80% now · up 1 since 5 Oct", ch["foot"])
+    tx = M.text("Big Step 1", "2026-10-12", tiles)
+    check("card as text: a square and a line a subject, the foot, the add-on",
+          tx.splitlines()[:6] == ["What I know · Big Step 1 · 12 Oct", "🟩 Cardio 86%", "🟨 Renal 77%", "🟧 Neuro 66%",
+                                  "⬜ Heme new", "🟩 MSK 94%"] and "80% I’d remember now · 1,104 cards" in tx
+          and tx.endswith("Anki add-on 2035408484"), tx)
+    check("card as text: no numbers when they're off; the change when it's on",
+          "🟩 Cardio\n" in M.text("D", "2026-10-12", tiles, pct=False) and "%" not in M.text("D", "2026-10-12", tiles, pct=False)
+          and "🟩 Cardio 86% ↑4" in M.text("D", "2026-10-12", tiles, prev=prev, since="2026-10-05"))
+    s1 = M.keep([], "2026-10-01", tiles)
+    check("week: the first map kept", [x["day"] for x in s1] == ["2026-10-01"] and s1[0]["k"]["cardio"] == 86 and "heme" not in s1[0]["k"])
+    check("week: not again inside the week", M.keep(s1, "2026-10-06", tiles) == s1)
+    s2 = M.keep(s1, "2026-10-08", tiles)
+    s3 = M.keep(M.keep(s2, "2026-10-15", tiles), "2026-10-22", tiles)
+    check("week: a week on, another; three kept", [x["day"] for x in s2] == ["2026-10-01", "2026-10-08"]
+          and [x["day"] for x in s3] == ["2026-10-08", "2026-10-15", "2026-10-22"], s3)
+    w1 = M.keep_ways({}, "sys", "2026-10-01", tiles)
+    w2 = M.keep_ways(M.keep_ways(w1, "yield", "2026-10-03", tiles), "sys", "2026-10-03", tiles)
+    check("week: by way, so switching ways never pushes out a week", w2["sys"] == w1["sys"] and list(w2) == ["sys", "yield"], w2)
+    many = {f"w{i}": [{"day": f"2026-09-0{i}", "k": {"a": 1}}] for i in range(1, 6)}
+    check("week: four ways at most, the longest unseen go", sorted(M.keep_ways(many, "w1", "2026-10-03", tiles)) == ["w1", "w3", "w4", "w5"])
+    check("week: the map a week ago or more, for the change", M.week_ago(s2, "2026-10-12") == (s2[0]["k"], "2026-10-01")
+          and M.week_ago(s2, "2026-10-15")[1] == "2026-10-08" and M.week_ago(s2, "2026-10-05") == (None, "")
+          and M.week_ago(None, "2026-10-15") == (None, ""))
 
 
 def test_learning_back_flip_v380():

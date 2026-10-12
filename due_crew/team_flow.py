@@ -672,6 +672,7 @@ def _work_out(did, pid=None, exam=""):
     # 3.8.0, the topic map: what I know now, by topic
     try:
         out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
+        _map_week(out, did, today)
     except Exception:
         traceback.print_exc()
 
@@ -851,6 +852,42 @@ def _map(col, did, deck, cutoff):
 
 
 DECKS_WAY = "~decks"  # the map by the deck's subdecks, among its ways
+
+
+def _map_week(out, did, today):
+    """3.8.0: the deck's map a week ago or more, for the card's change:
+    kept in this profile's plans.json (never sent), today's added once a
+    week at most (mapcard.keep)."""
+    if not out.get("map"):
+        return
+    from . import mapcard as MC
+    way = next((w["key"] for w in out.get("map_ways") or [] if w.get("on")), "")
+    pf = _plans_flow()
+    pc = pf._pcfg()
+    snaps = pc.get("map_snaps") if isinstance(pc.get("map_snaps"), dict) else {}
+    had = snaps.get(str(did)) if isinstance(snaps.get(str(did)), dict) else {}
+    now = MC.keep_ways(had, way, today, out["map"])
+    if now != had:
+        pc["map_snaps"] = dict(snaps, **{str(did): now})
+        pf._psave(pc)
+    out["map_prev"], out["map_since"] = MC.week_ago(now.get(str(way)), today)
+
+
+def share_map(did):
+    """Share › on the map: the picture card (and its text) of the level on
+    screen, made here; last week's change for the whole deck's level."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    trail, cur = _map_at(did)
+    if len(cur) < 2 or not mw.col:
+        return
+    deck = str(mw.col.decks.name(did) or "").split("::")[-1] or "My deck"
+    title = " \u00b7 ".join([deck] + [str(t["name"]) for t in trail])
+    prev = None if trail else view.get("map_prev")
+    from .ui.map_card_dialog import MapCardDialog
+    dlg = MapCardDialog(mw, title, _plans_flow()._today(), cur, view.get("map_by") or "fsrs", prev,
+                        (view.get("map_since") or "") if prev else "", tooltip=tooltip)
+    _state["map_card"] = dlg  # kept while it's open
+    dlg.show()
 
 
 def pick_map(did, i):
@@ -1097,6 +1134,8 @@ def on_message(cmd, parts):
             browse_map(did)
         elif cmd == "insmapby" and x.isdigit():
             pick_map(did, int(x))
+        elif cmd == "insmapshare":
+            share_map(did)
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
         elif cmd == "insleeches":
