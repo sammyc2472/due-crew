@@ -924,7 +924,8 @@ every release that changes how something works.
   bottom; the avatar has no stray ▾; the picker's underline is straight and
   a long squad name ends in an ellipsis; dim rows and faded notes read at
   the muted colour (the faint one was 2.4:1); a lone tile keeps a tile's
-  width; the board keeps 300 px so a short tab doesn't pull the page up.
+  width (the strip still fills its row); the board keeps 300 px so a short
+  tab doesn't pull the page up, its footer at the bottom.
   Alone with nothing yet, my row has no medal, on the site and in Anki
   (the twin). The landing picture is the sample crew (it had the stress
   test's row), with a dark one; the README's are re-rendered too.
