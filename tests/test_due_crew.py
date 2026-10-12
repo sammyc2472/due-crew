@@ -7727,6 +7727,42 @@ def test_site_audit_v380():
           and os.path.exists(os.path.join(REPO, "site", "public", "board-dark.png")))
 
 
+def test_squad_week_v380():
+    """3.8.0: a squad's last 7 days together, totals only, under its table,
+    on both sides (squadWeek in app.js is the twin). No line for one."""
+    import shutil
+    import subprocess
+    rows = [{"week": 5}, {"week": 7}, {"week": 0}, {"week": None}, {"week": 9}, {"week": 2.6}, {"week": True},
+            {"week": "4"}, {}, {"week": -3}, {"week": float("nan")}]
+    check("squad week: the days added up (7 at most each), and how many studied",
+          board.squad_week(rows) == (5 + 7 + 0 + 7 + 2 + 0, 4), board.squad_week(rows))
+    check("squad week: nothing to add", board.squad_week([]) == (0, 0) and board.squad_week(None) == (0, 0))
+    T0 = TODAY.isoformat()
+    sq = {"state": "ok", "name": "<b>BUSM", "day": T0, "yesterday": "", "people": 3,
+          "rows": [{"user_id": "a", "name": "A", "day": T0, "reviews": 30, "week": 5, "you": True},
+                   {"user_id": "b", "name": "B", "day": T0, "reviews": 10, "week": 3},
+                   {"user_id": "c", "name": "C", "day": "", "week": 0}]}
+    html = board._squads_html(sq, {})
+    check("squad week: under the table, terse, no one ahead", "Last 7 days: <b>8</b> study days between 2 of you" in html
+          and html.index("Last 7 days") > html.index("</table>"), html[-600:])
+    one = dict(sq, rows=sq["rows"][:1] + [dict(sq["rows"][1], week=0)])
+    check("squad week: one of you studied, no line", "Last 7 days" not in board._squads_html(one, {}))
+    check("squad week: show-up view too", "between 2 of you" in board._squads_html(sq, {"show_up": True}))
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    check("squad week: the site draws the same line", "Last 7 days: " in js and "study days between ${wkPeople" in js
+          and "wkPeople >= 2" in js)
+    node = shutil.which("node")
+    if not node:
+        print("SKIP squad week twin: no node")
+        return
+    src = js[js.index("function squadWeek"):js.index("// ---- 3.3: the board")]
+    jsrows = [r for r in rows if not (isinstance(r.get("week"), float) and r["week"] != r["week"])]
+    out = subprocess.run([node, "-e", src + f"\nconsole.log(JSON.stringify(squadWeek({json.dumps(jsrows)})))"],
+                         capture_output=True, text=True, timeout=20)
+    check("squad week: the site adds up as the add-on does (the twin)",
+          json.loads(out.stdout or "null") == list(board.squad_week(jsrows)), (out.stdout, out.stderr))
+
+
 def test_learning_back_flip_v380():
     """3.8.0: the box flips "4 back at 9:42" to due when they come back:
     one timer, the earliest, a redraw on the Decks screen; none after the

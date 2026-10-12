@@ -627,5 +627,6 @@ In Anki (as a follower):
 - [ ] A tile with a › opens its parts, with "All › Cardio · N cards, N% · Browse all" above them; All goes back; Browse all opens every card of the subject (new ones too). A tile without a › opens all of its cards in Browse.
 - [ ] Not sticking yet: a topic's name opens all of its cards in Browse; its Study N builds the hard ones only.
 - [ ] Insights on a plan's deck: no plan name or › to Plans in its head; the exam date box is there. An exam date sooner than the plan's next event names the box "Your exam"; later, the plan's event does.
+- [ ] Squads: under the table, "Last 7 days: N study days between M of you" (no line when only one of you studied), the same on duecrew.com.
 - [ ] Due Crew's filtered decks (a date's Study, Insights' Study, a checkpoint, today's misses) sit under one Due Crew deck that folds with Anki's +/−. Once they're all studied, the next morning's tidy removes them and the Due Crew deck in one step (Edit › Undo: Delete Deck); an old "Due Crew · …" deck at the top goes the same way once empty.
 - [ ] Settings › Board › Due › Recover leeches, switched on with a leech in the collection: "1 leech back as new cards. Edit › Undo puts it back." at once; Edit › Undo does.

@@ -697,6 +697,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
 .sqsw .linkish { color: var(--muted); font-weight: 600; border-radius: 0; padding-bottom: 3px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sqsw .linkish.on { color: var(--ink); text-decoration: none; box-shadow: inset 0 -2px var(--accent); }  /* board.py .dc-sw, 3.8.0 */ .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
+.sqwk { text-align: center; margin: 8px 0 0; }  /* 3.8.0: the squad's week, totals only */
 /* 3.8.0: a plan's squad on the Squads tab: who showed up, its bingo, then its questions */
 .psq { display: grid; gap: 12px; text-align: left; max-width: 680px; margin: 0 auto; }
 .psq > * { min-width: 0; }

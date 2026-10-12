@@ -967,6 +967,11 @@ every release that changes how something works.
   under it, when Due Crew made it (its id kept with the built ones), in
   the same Delete Deck step; old "Due Crew · …" decks still go once empty.
   Checked on Anki's engine (`tools/real_anki.py`).
+  A squad's week (3.8.0, Sam's pick): under a squad's table, "Last 7
+  days: 23 study days between 5 of you", each member's days of the last
+  7 added up (`board.squad_week`, its twin `squadWeek` in app.js), on
+  both sides, in the show-up view too. Totals only: nobody's ahead of
+  anybody. Nothing new is sent or fetched: it's the rows' week.
   The site, audited (3.8.0): a long word in the rail no longer widens the
   page; Squads hides columns by name (its line spans two, which hid the
   wrong ones under 560 px) and its line wraps; the cheer popup sits on the

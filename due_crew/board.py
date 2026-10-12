@@ -2179,6 +2179,22 @@ def _switcher(view):
     return '<div class="dc-sw">' + "".join(parts) + "</div>"
 
 
+def squad_week(rows):
+    """3.8.0: a squad's last 7 days together, totals only (nobody ahead of
+    anybody): (study days between us, how many of us studied). Its twin is
+    squadWeek in app.js."""
+    days = [min(7, max(0, int(r["week"]))) for r in rows or [] if isinstance(r.get("week"), (int, float))
+            and not isinstance(r["week"], bool) and r["week"] == r["week"] and abs(r["week"]) != float("inf")]
+    return sum(days), sum(1 for d in days if d)
+
+
+def _squad_week_line(rows):
+    days, people = squad_week(rows)
+    if people < 2:
+        return ""
+    return f'<div class="dc-line sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
+
+
 def _squads_html(view, cfg):
     """A squad board: everyone here holds the same invite. Plain ranks — no
     medals, no cheers; these aren't necessarily people you know. Add lives
@@ -2315,7 +2331,8 @@ def _squads_html(view, cfg):
     if not body:
         return (sw + bingo + '<div class="dc-line">No one&rsquo;s '
                 'synced yet.</div>' + foot)
-    return sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class=')) + foot
+    return (sw + bingo + _scroll(f"<table><tr>{heads}</tr>{body}</table>", body.count('<tr class='))
+            + _squad_week_line(rows) + foot)
 
 
 # ---- 3.6: squad bingo ----

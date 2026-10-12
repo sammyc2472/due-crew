@@ -785,6 +785,13 @@ const squares = (days, mon) => h("span", { class: "sqs" }, [0, 1, 2, 3, 4, 5, 6]
   return h("i", { class: v?.studied || v?.reviews ? "on" : d > today() ? "later" : "", title: pretty(d) });
 }));
 
+// 3.8.0: a squad's last 7 days together, totals only: [study days between
+// us, how many of us studied]. Twin of board.squad_week.
+function squadWeek(rows) {
+  const days = (rows || []).filter((r) => typeof r.week === "number" && Number.isFinite(r.week)).map((r) => Math.min(7, Math.max(0, Math.trunc(r.week))));
+  return [days.reduce((a, d) => a + d, 0), days.filter((d) => d).length];
+}
+
 // ---- 3.3: the board, as the add-on draws it (due_crew/board.py) ----
 
 const Board = (() => {
@@ -1130,8 +1137,12 @@ const Board = (() => {
     acts.push(leave);
     const foot = h("div", { class: "sqline" }, acts.flatMap((a, i) => (i ? [" · ", a] : [a])));
     if (!body.length) return h("div", {}, sw, bingo, h("p", { class: "muted small" }, "No one’s synced yet."), foot);
+    // 3.8.0: the squad's week, totals only, as board._squad_week_line
+    const [wkDays, wkPeople] = squadWeek(rows);
+    const wkLine = wkPeople >= 2 ? h("p", { class: "muted small sqwk" }, "Last 7 days: ", h("b", {}, wkDays.toLocaleString()),
+      ` study days between ${wkPeople.toLocaleString()} of you`) : null;
     return h("div", {}, sw, bingo, h("div", { class: "scrollx sqb" }, h("table", { class: "brdt" },
-      h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))), foot);
+      h("thead", {}, h("tr", {}, h("th", { class: "sqt", colspan: 2 }, line), heads)), h("tbody", {}, body))), wkLine, foot);
   }
 
   function shareText(people, today) {
