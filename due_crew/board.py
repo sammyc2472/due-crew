@@ -2040,9 +2040,15 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
     share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
+    # 3.8.1: by a plan's own tags, the ones no card in this deck carries (a gap in the plan's coverage)
+    none = next((w.get("none") or [] for w in ways if w.get("on")), [])
+    gap = ""
+    if none and not trail:
+        names = ", ".join(e(str(x)) for x in none[:6]) + (f" and {len(none) - 6} more" if len(none) > 6 else "")
+        gap = f'<div class="tmt">No card in this deck carries {names}.</div>'
     return (f'<div class="isec"><div class="ik">What you know{sub}'
             f'<span class="ikey">{key}{share}</span></div>'
-            f'{path}<div class="tmap">{out}</div></div>')
+            f'{path}<div class="tmap">{out}</div>{gap}</div>')
 
 
 def _week_html(card, pid):

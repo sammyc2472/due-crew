@@ -1648,19 +1648,23 @@ def export_scope(idx, doc, scope, swap=None):
 def export_notes(col, nids, plain=True):
     """(text, notes): the notes in Anki's own plain-text export format, with
     the unique identifier (a note's guid, the same in every copy of a deck)
-    first, so an AI can answer with notes: lines. Written to a file on this
-    computer only; nothing here is sent anywhere."""
+    first, so an AI can answer with notes: lines; 3.8.1, and each note's
+    card numbers (cards:ID:N, a cloze's N its cloze number). Written to a
+    file on this computer only; nothing here is sent anywhere."""
     nl = sorted({int(n) for n in nids})
     rows = []
     names = {}
+    nums = {}
     for i in range(0, len(nl), 500):
         chunk = ",".join(str(n) for n in nl[i:i + 500])
         rows += col.db.all(
             f"SELECT n.id, n.guid, n.mid, n.flds, n.tags, (SELECT c.did FROM cards c WHERE c.nid = n.id "
             f"ORDER BY c.ord LIMIT 1) FROM notes n WHERE n.id IN ({chunk})")
+        for nid, ord_ in col.db.all(f"SELECT nid, ord FROM cards WHERE nid IN ({chunk})"):
+            nums.setdefault(int(nid), set()).add(int(ord_) + 1)
     out = ["#separator:tab", f"#html:{'false' if plain else 'true'}", "#guid column:1",
-           "#notetype column:2", "#deck column:3", "#tags column:4"]
-    for _nid, guid, mid, flds, tags, did in rows:
+           "#notetype column:2", "#deck column:3", "#tags column:4", "#cards column:5"]
+    for nid, guid, mid, flds, tags, did in rows:
         if mid not in names:
             try:
                 names[mid] = str((col.models.get(mid) or {}).get("name") or "")
@@ -1672,7 +1676,8 @@ def export_notes(col, nids, plain=True):
             deck = ""
         fields = str(flds or "").split("\x1f")
         fields = [_plain(f) if plain else f for f in fields]
-        out.append("\t".join(_cell(x) for x in [guid, names[mid], deck, str(tags or "").strip()] + fields))
+        card_nums = " ".join(str(n) for n in sorted(nums.get(int(nid), ())))
+        out.append("\t".join(_cell(x) for x in [guid, names[mid], deck, str(tags or "").strip(), card_nums] + fields))
     return "\n".join(out) + "\n", len(rows)
 
 

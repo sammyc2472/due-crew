@@ -3406,14 +3406,17 @@ def test_export_for_my_ai_365():
     check("export: the whole deck", P.export_scope(idx, doc, "deck") == {1, 2, 3, 4, 50, 8, 9})
     text, n = P.export_notes(col, {1, 50})
     lines = text.splitlines()
-    check("export: Anki's header, the guid column first", lines[:6] == ["#separator:tab", "#html:false", "#guid column:1",
-          "#notetype column:2", "#deck column:3", "#tags column:4"] and n == 2, str(lines[:6]))
+    check("export: Anki's header, the guid column first", lines[:7] == ["#separator:tab", "#html:false", "#guid column:1",
+          "#notetype column:2", "#deck column:3", "#tags column:4", "#cards column:5"] and n == 2, str(lines[:7]))
     row = next(x for x in lines if x.startswith("guid000001"))
     cells = row.split("\t")
-    check("export: a row is guid, notetype, deck, tags, then the fields, as plain text",
-          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "Heart failure"
-          and cells[5] == '"{{c1::BNP}} rises and ""so"""', str(cells))
-    check("export: one line a note, no tabs inside a field", len(lines) == 8 and all(x.count("\t") >= 4 for x in lines[6:]))
+    check("export: a row is guid, notetype, deck, tags, its card numbers (3.8.1), then the fields, as plain text",
+          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "1" and cells[5] == "Heart failure"
+          and cells[6] == '"{{c1::BNP}} rises and ""so"""', str(cells))
+    col.db.conn.execute("INSERT INTO cards (id, nid, did, odid, type, queue, ivl, ord, due, lapses) VALUES (777, 1, 10, 0, 0, 0, 0, 2, 0, 0)")
+    cells = next(x for x in P.export_notes(col, {1})[0].splitlines() if x.startswith("guid000001")).split("\t")
+    check("export: a note's card numbers are the ones it has (a cloze with c1 and c3: 1 3)", cells[4] == "1 3", str(cells[4]))
+    check("export: one line a note, no tabs inside a field", len(lines) == 9 and all(x.count("\t") >= 5 for x in lines[7:]))
     raw, _ = P.export_notes(col, {1}, plain=False)
     check("export: formatting kept when asked", "#html:true" in raw and "<b>Heart</b>" in raw)
     check("export: a size estimate errs high", P.export_size(col, {1, 50}) >= len(text) - 200)
@@ -8677,6 +8680,52 @@ def test_plan_tags_round_two_v381():
     snap = P.ids_snapshot(P.DeckIndex(col, 10), shapes.clean_plan_doc(dict(raw, units=lean["doc"]["units"])))
     check("r2: the author's note ids for a cut date go up with its cuts, so the Worker keeps them only while they're these",
           snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
+
+
+def test_plan_tags_insights_v381():
+    """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
+    choices (its topics, the map's first pick); the map's "by" gets one
+    named way a plan, each SLG a tile, with the ones no card carries."""
+    from due_crew import team as T, board
+    sys_tags = ["Step1::^Systems::Cardio::Heart", "Step1::^Systems::Renal::Kidney", "Step1::^Systems::Pulm::Lung"]
+    tags_of = {i: [sys_tags[i % 3], f"DueCrew::MS2_Block_1::SLG_{i % 5}"] for i in range(90)}
+    know = {i: (0.95 if i % 2 else 0.6) for i in range(90)}
+    topics, _groups = T.deck_topics(tags_of, set(tags_of))
+    check("r2 insights: a plan's own tags are never a topic of Not sticking yet",
+          not any("SLG" in t[1] for t in topics) and topics, str([t[1] for t in topics]))
+    tiles, ways = T.subjects_by(tags_of, know, set(tags_of))
+    check("r2 insights: nor the map's own pick, nor one of its ways",
+          not any("duecrew" in w["key"].lower() or "MS2" in w["name"] for w in ways) and {t["name"] for t in tiles} == {"Cardio", "Renal", "Pulm"},
+          str((ways, [t["name"] for t in tiles])))
+    held = [("SLG 1", "DueCrew::MS2_Block_1::SLG_1", set(range(0, 40))), ("SLG 2", "DueCrew::MS2_Block_1::SLG_2", set(range(40, 50))),
+            ("SLG 19", "DueCrew::MS2_Block_1::SLG_19", set()), ("SLG 3", "DueCrew::MS2_Block_1::SLG_3", {200})]
+    pt, none = T.plan_tiles(held, know, set(range(90)))
+    check("r2 insights: by a plan's tags: a tile a tag, biggest first, shaded by what I know; Browse by its tag",
+          [t["name"] for t in pt] == ["SLG 1", "SLG 2"] and pt[0]["n"] == 40 and pt[0]["know"] == round(100 * (20 * 0.95 + 20 * 0.6) / 40)
+          and pt[0]["find"] == {"tags": ["DueCrew::MS2_Block_1::SLG_1"]}, str(pt))
+    check("r2 insights: the ones no card here carries are named (one with cards, none in play, isn't)", none == ["SLG 19"], str(none))
+    way = {"key": "~plan:p1", "name": "MS2 Block 1's tags", "on": True, "none": ["SLG 19", "SLG <22>"]}
+    html = board._ins_map(10, pt, "fsrs", (), [{"key": "x", "name": "Systems", "on": False}, way])
+    check("r2 insights: picked, the way reads by the plan's name, and the gap is said, escaped",
+          "MS2 Block 1&#x27;s tags" in html and "No card in this deck carries SLG 19, SLG &lt;22&gt;." in html, html[-400:])
+    html2 = board._ins_map(10, pt, "fsrs", (), [dict(way, on=False), {"key": "x", "name": "Systems", "on": True}])
+    check("r2 insights: another way picked, no gap line", "No card in this deck" not in html2)
+    from due_crew import team_flow as TF
+    from due_crew.backend import shapes
+    col = _tag_col()
+    doc = shapes.clean_plan_doc({"deck": "Step 1", "units": [], "tagroot": "MS2_Block_1", "tags": [
+        {"id": "t1", "name": "SLG 1", "notes": ["guid000001", "guid000002"]}, {"id": "t2", "name": "SLG 2", "tags": ["#Video::Auto"]},
+        {"id": "t3", "name": "SLG 9", "notes": ["elsewhere"]}]})
+    saved = TF._tag_plans
+    try:
+        TF._tag_plans = lambda c, did: [("p1", "MS2 Block 1", doc, None)]
+        got = TF._plan_ways(col, 10, {1, 2, 4, 5, 6}, {1: 0.9, 4: 0.5})
+    finally:
+        TF._tag_plans = saved
+    way, tiles = got["~plan:p1"]
+    check("r2 insights: the plan's way reads what its tags hold in this deck, cards in play only",
+          way["name"] == "MS2 Block 1's tags" and way["none"] == ["SLG 9"]
+          and [(t["name"], t["n"]) for t in tiles] == [("SLG 2", 3), ("SLG 1", 2)], str((way, tiles)))
 
 
 def test_plan_tags_glue_v380():
