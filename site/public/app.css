@@ -281,6 +281,10 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .ch2 .cps { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }  /* 3.8.0: Copy search */
 .ch2 .cps:hover { color: var(--accent); }
 .ch2 .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
+/* 3.8.1: All of it / Only SLG 12, on a deck tag's chip */
+.ch2 .inpick { font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 4px; max-width: 140px; }
+.ch2 .inpick:hover, .ch2 .inpick:focus-visible { color: var(--accent); border-color: var(--accent); }
 .linkish { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 600; font-size: 12.5px; }
 label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; }
 .splitp { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
@@ -319,6 +323,9 @@ label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; ma
 .aibox p { margin: 0; }
 .aipre { white-space: pre-wrap; max-height: 320px; overflow: auto; background: var(--well); padding: 10px; border-radius: 8px; margin: 8px 0 0; }
 .pv { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 10px 12px; display: grid; gap: 6px; }
+.pv .warnbox { background: var(--warn-tint); border-radius: 8px; padding: 8px 10px; text-align: left; }  /* 3.8.1: tags still on dates */
+.pv .warnbox b { color: var(--warn); }
+.pv .warnbox ul { margin: 6px 0; padding-left: 20px; }
 .pvrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 700px) { .pvrow { grid-template-columns: 1fr; gap: 2px; } }
 /* 3.3: plans together */
@@ -931,6 +938,10 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .dayp .ch2 > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .dayp .ch2 .raw { display: block; max-width: 100%; }
 .dayp .ch2 > small, .dayp .ch2 > button { flex: none; white-space: nowrap; overflow-wrap: normal; }
+/* 3.8.1: a chip with All of it / Only SLG 12 keeps its name whole on the first line, the controls under it */
+.dayp .ch2:has(.inpick) { flex-wrap: wrap; row-gap: 2px; }
+.dayp .ch2:has(.inpick) > span:first-child { flex-basis: 100%; }
+.dayp .ch2 > .inpick { flex: 0 1 auto; min-width: 0; margin-left: auto; }
 .ltops, .ltodo { display: grid; gap: 2px; grid-column: 1 / -1; font-size: 12.5px; }
 .lrow > small.muted:last-child { grid-column: 1 / -1; }
 .lu small { font-size: 12px; } .lu.late small { color: var(--warn); }

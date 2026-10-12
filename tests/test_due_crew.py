@@ -8682,6 +8682,33 @@ def test_plan_tags_round_two_v381():
           snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
 
 
+def test_plan_tags_builder_v381():
+    """3.8.1 on duecrew.com: the builder names a cut as the add-on does,
+    writes and reads it as text, makes one from Overlap's "and", lets a tag
+    line hold single cards, and the whole plan's text names the dates still
+    using a tag it takes off."""
+    builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
+    plans_src = open(os.path.join(REPO, "due_crew", "plans.py"), encoding="utf-8").read()
+    check("r2 site: a cut is named for its tag's last part and the plan tag, as plans.topic_items names it (the twins)",
+          'return `${Tags.word(c.tag.split("::").pop())}${t ? ` · ${t.name}` : ""}`' in builder
+          and 'f"{_word(segs[-1])} \\u00b7 {c[\'nm\']}"' in plans_src)
+    check("r2 site: the text writes a cut as tag:PATH in NAME and reads it back, its search not again",
+          "`tag:${c.tag} in ${" in builder and "/^(\\S+)\\s+in\\s+(\\S.*)$/i" in builder
+          and ".filter((q) => !cutOf(u, q)).map((q) => `search:${q}`)" in builder)
+    check("r2 site: a cut keeps its Anki search in the date's searches, for an add-on before 3.8.1",
+          "const cutQ = (tagPath, t) => `${Tags.ankiSearch(\"tag\", ptagPath(t))} ${Tags.ankiSearch(\"tag\", tagPath)}`" in builder
+          and builder.count("syncCuts();") >= 3)
+    check("r2 site: Overlap's and with a deck tag is a cut; a tag line takes cards:",
+          'if (ovl.op === "and" && !pt)' in builder and "const cs = picks ? picks.cards : [];" in builder
+          and "(t.cards || []).length ? Picks.cardsText(t.cards)" in builder)
+    check("r2 site: the whole plan's text names the dates a removed tag is still on, and offers both ways",
+          '"Take them off those dates too"' in builder and '"Keep the tags"' in builder and '"Replace anyway"' in builder
+          and "What these dates already opened stays open." in builder)
+    check("r2 site: the tagging prompt gives the root, the tags as they stand and the #cards rule",
+          "In Anki each one becomes the tag DueCrew::${tagRootNow()}::NAME" in builder
+          and "This plan's tags as they stand:" in builder and "#cards column" in builder)
+
+
 def test_plan_tags_insights_v381():
     """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
     choices (its topics, the map's first pick); the map's "by" gets one
