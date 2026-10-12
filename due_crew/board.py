@@ -648,6 +648,9 @@ def _css(cfg):
     #due-crew .tmap .tm span {{ overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2;
       -webkit-box-orient: vertical; overflow-wrap: anywhere; }}
     #due-crew .tmap .tm b {{ font-size: 12px; font-variant-numeric: tabular-nums; }}
+    #due-crew .tmap .tm {{ position: relative; }}
+    #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
+    #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}
     #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
     #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
     #due-crew .tmt b {{ color: var(--dc-ink); }}
@@ -1802,11 +1805,13 @@ def _insights_html(did, v):
 
 
 def _ins_map(did, tiles, by, at=()):
-    """3.8.0, the topic map: each subject a tile, sized by its started cards,
-    shaded by how much I know now. A tile that splits again opens into its
-    smaller ones (at: the keys opened), the trail above them goes back, and
-    Browse all opens the open one's cards; a tile that doesn't, its cards.
-    Mine alone, from my own Anki. Two tiles at least, or it says nothing."""
+    """3.8.0, the topic map: each subject a tile, sized by its cards in play,
+    shaded by how much I know now of the ones I've started (a bar along its
+    foot: how many I've started; none yet, "new"). A tile that splits again
+    opens into its smaller ones (at: the keys opened), the trail above them
+    goes back, and Browse all opens the open one's cards; a tile that
+    doesn't, its cards. Mine alone, from my own Anki. Two tiles at least,
+    or it says nothing."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
@@ -1814,13 +1819,19 @@ def _ins_map(did, tiles, by, at=()):
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
     how = "you&rsquo;d remember now (FSRS)" if by == "fsrs" else "right on their last review"
-    out = ""
+    out, fresh = "", False
     for i, t in enumerate(cur):
-        n, k = int(t["n"]), int(t["know"])
-        tip = f'{t["name"]}: {n:,} cards, {k}% {how}. ' + ("Open it." if t.get("kids") else "Browse them.")
+        n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)
+        fresh = fresh or k is None
+        said = (f"{n:,} cards, none started yet" if k is None
+                else f"{n:,} cards, {st:,} started, {int(k)}% {how}")
+        tip = f'{t["name"]}: {said}. ' + ("Open it." if t.get("kids") else "Browse them.")
         more = '<i aria-hidden="true">&rsaquo;</i>' if t.get("kids") else ""
-        out += (f'<a class="tm s{map_shade(k)}" href="#" style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
-                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span><b>{k}%</b></a>')
+        bar = (f'<i class="tmb" style="width:{100 * st / n:.0f}%"></i>' if k is not None and 0 < st < n else "")
+        out += (f'<a class="tm {"sn" if k is None else f"s{map_shade(int(k))}"}" href="#" '
+                f'style="flex:{n} 1 {70 + int(150 * n / big)}px" title="{e(tip)}" '
+                f'onclick="{_pycmd(f"insmap:{did}:{i}")}"><span>{e(str(t["name"]))}{more}</span>'
+                f'<b>{"new" if k is None else f"{int(k)}%"}</b>{bar}</a>')
     path = ""
     if trail:
         steps = [f'<a href="#" onclick="{_pycmd(f"insmapup:{did}:0")}">All</a>']
@@ -1828,10 +1839,13 @@ def _ins_map(did, tiles, by, at=()):
                   for j, t in enumerate(trail[:-1], 1)]
         last = trail[-1]
         steps.append(f'<b>{e(str(last["name"]))}</b>')
-        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards, {int(last["know"])}% '
+        lk = last.get("know")
+        path = (f'<div class="tmt">{" &rsaquo; ".join(steps)} &middot; {int(last["n"]):,} cards'
+                f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
+    key = '<i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+' + (' <i class="sw sn"></i>new' if fresh else "")
     return (f'<div class="isec"><div class="ik">What you know<span>&nbsp;&middot; by topic, now</span>'
-            f'<span class="ikey"><i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+</span></div>'
+            f'<span class="ikey">{key}</span></div>'
             f'{path}<div class="tmap">{out}</div></div>')
 
 

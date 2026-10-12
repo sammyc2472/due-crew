@@ -521,9 +521,11 @@ def you_view(c):
     d = next((x for x in decks if x["did"] == did), decks[0])
     p = _plan(d["pid"]) if d.get("pid") else None
     exam = str(c.get("exam_date") or "")
-    return {"decks": decks, "did": d["did"], "exam": exam,
-            "view": dict(insights(d["did"], p["id"] if p else None, exam),
-                         map_at=(_state.get("map_at") or {}).get(d["did"]) or [])}
+    view = insights(d["did"], p["id"] if p else None, exam)
+    at = (_state.get("map_at") or {}).get(d["did"]) or []
+    if view.get("map"):
+        T.map_level(view["map"], at, view.get("_map_know") or {})  # what's on screen worked out
+    return {"decks": decks, "did": d["did"], "exam": exam, "view": dict(view, map_at=at)}
 
 
 def plan_lines(cards):
@@ -669,7 +671,7 @@ def _work_out(did, pid=None, exam=""):
 
     # 3.8.0, the topic map: what I know now, by topic
     try:
-        out["map"], out["map_by"] = _map(col, did, deck, cutoff)
+        out["map"], out["map_by"], out["_map_know"] = _map(col, did, deck, cutoff)
     except Exception:
         traceback.print_exc()
 
@@ -815,25 +817,29 @@ def _know(col, deck, cutoff):
 
 
 def _map(col, did, deck, cutoff):
-    """(tiles, by) for the topic map: my started cards in broad subjects
-    (T.subjects) by the deck's own tags, plan or not; with no tags to say,
-    its subdecks."""
+    """(tiles, by, know) for the topic map: the deck's cards in play (unsuspended,
+    started or not) split by its own tags the way that tells them apart
+    best (T.subjects), plan or not; with no tags to say, its subdecks.
+    Shaded by what I know now of the started ones."""
     know, by = _know(col, deck, cutoff)
-    if not know:
-        return [], by
-    ids = _in(know)
-    tags_of = {int(cid): str(tags or "").split() for cid, tags in
-               col.db.all(f"SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({ids})")}
-    tiles = T.subjects(tags_of, know)
+    rows = col.db.all(f"SELECT c.id, n.tags, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
+                      f"JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) AND c.queue != -1")
+    if not rows or not know:
+        return [], by, know
+    active = {int(cid) for cid, _t, _d in rows}
+    tags_of = {int(cid): str(tags or "").split() for cid, tags, _d in rows}
+    tiles = T.subjects(tags_of, know, active)
     if len(tiles) >= 2:
-        return tiles, by
+        return tiles, by, know
     root = str(col.decks.name(did) or "")
-    paths = {}
-    for cid, d in col.db.all(f"SELECT id, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({ids})"):
-        name = str(col.decks.name(int(d)) or "")
+    names, paths = {}, {}
+    for cid, _t, d in rows:
+        if int(d) not in names:
+            names[int(d)] = str(col.decks.name(int(d)) or "")
+        name = names[int(d)]
         if name.startswith(root + "::"):
             paths[int(cid)] = [name[len(root) + 2:]]
-    return T.subjects(paths, know, decks=True), by
+    return T.subjects(paths, know, active, decks=True), by, know
 
 
 def _find_cids(col, did, find):
@@ -858,7 +864,7 @@ def _find_cids(col, did, find):
 
 def _map_at(did):
     view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
-    return T.map_level(view.get("map"), (_state.get("map_at") or {}).get(did))
+    return T.map_level(view.get("map"), (_state.get("map_at") or {}).get(did), view.get("_map_know") or {})
 
 
 def open_map(did, i):

@@ -945,6 +945,21 @@ every release that changes how something works.
   event counts its prep dates' cards; my exam, the whole deck), Not
   sticking yet names the plan's dates, the week counts its dates, and
   Behind has Catch up.
+  The map, round three (Sam: "the tags are now too high level to be
+  useful … look at the cards that are currently unsuspended"): tiles are
+  the deck's cards in play (unsuspended, started or not), sized by them,
+  and the cut is the one that splits them best (`team._score`): the share
+  of cards in its tiles, each in one subject, times how many tiles' worth
+  it makes (the exponential of the sizes' entropy; 5 or more is full
+  marks, 3 inside a tile). Every family's every depth is tried, so one
+  block open (all Cardio) shows Cardio's parts, named by the level above
+  when two read the same ("Cardio · Physiology"). A tile is shaded by
+  what I know of its started cards, a bar along its foot says how much
+  of it is started, and none started reads "new". A tile's parts are
+  worked out for the level on screen (its › is exact) and deeper when it
+  opens (`team.expand`). On a big deck the cut is chosen on an even
+  sample of 3,000 cards, then made of all of them: about 1.6 s with
+  24,000 in play, in Insights' ten-minute cache.
   Its head (Sam: "the exam thing … looks bad"; "the overall deck name
   doesn't show"): the deck's name always shows (one deck, its name; more,
   the picker), and the exam date is a link, Add exam date, that opens the

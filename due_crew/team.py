@@ -6,6 +6,7 @@ at my own pace, and Optimize FSRS when my newest cards fall short. Worked
 out in my Anki from my own reviews; nothing about it leaves this computer."""
 
 import datetime
+import math
 
 from . import plans as P
 from . import schedule as S
@@ -203,16 +204,23 @@ def not_sticking(topics, cards_of, reviewed, stuck, forgot):
     return rows[:ROWS]
 
 
-MAP_MIN = 20     # 3.8.0, the topic map: started cards before a subject gets a tile...
-MAP_TILES = 12   # ...and the biggest this many
-MAP_SUB = 10     # a tile opens into smaller ones of this many cards or more...
-MAP_DEEP = 4     # ...this many levels down at most
+MAP_TILES = 12   # 3.8.0, the topic map: tiles on a level at most
+MAP_FIT = 5      # a level reads best with this many tiles' worth of cards or more (top level)...
+MAP_SUB_FIT = 3  # ...and inside a tile
+MAP_DEEP = 4     # a tile opens this many levels down at most
+MAP_SAMPLE = 3000  # a big deck's cut is chosen on an even sample of this many cards
+
+
+def _min_n(n, top):
+    """A tile's fewest cards: 1% of what's on the level (8 at least) at the
+    top, 2% (5 at least) inside a tile."""
+    return max(8, n // 100) if top else max(5, n // 50)
 
 
 def _cut(per, depth, min_n):
     """per {cid: [(head, rest, rest lowered)]} cut at depth: [(key, cids,
-    spell, depth)] of min_n cards or more, each card in its biggest
-    subject; and how many of their cards have one subject only."""
+    spell, depth)] of min_n cards or more, the biggest MAP_TILES, each card
+    in its biggest subject; and how many of their cards have one subject."""
     size, spell, keys_of = {}, {}, {}
     for cid, lst in per.items():
         keys = set()
@@ -228,67 +236,104 @@ def _cut(per, depth, min_n):
                 size[k] = size.get(k, 0) + 1
     groups = {}
     for cid, keys in keys_of.items():
-        groups.setdefault(max(keys, key=lambda k: (size[k], k)), []).append(cid)
-    tiles = [(k, v, P._SEP.join(spell[k][0] + spell[k][1][:depth]), depth) for k, v in groups.items() if len(v) >= min_n]
+        k = next(iter(keys)) if len(keys) == 1 else max(keys, key=lambda k: (size[k], k))
+        groups.setdefault(k, []).append(cid)
+    big = sorted(((k, v) for k, v in groups.items() if len(v) >= min_n), key=lambda kv: (-len(kv[1]), kv[0]))[:MAP_TILES]
+    tiles = [(k, v, P._SEP.join(spell[k][0] + spell[k][1][:depth]), depth) for k, v in big]
     return tiles, sum(1 for t in tiles for c in t[1] if len(keys_of[c]) == 1)
 
 
-def _level(per, min_n, want):
-    """The shallowest cut with `want` tiles, else the one with the most."""
-    tiles, clean = [], 0
-    for depth in (1, 2, 3):
-        here, ok = _cut(per, depth, min_n)
-        if len(here) >= want:
-            return here, ok
-        if len(here) > len(tiles):
-            tiles, clean = here, ok
-    return tiles, clean
+def _score(tiles, clean, n, fit):
+    """How well a cut splits n cards: the share in its tiles, the share of
+    those in one subject, and how many tiles' worth it makes (the
+    exponential of their sizes' entropy; fit or more is full marks). A cut
+    too broad makes two big tiles; too fine, crumbs under min_n."""
+    held = sum(len(t[1]) for t in tiles)
+    if not n or not held or len(tiles) < 2:
+        return 0.0
+    eff = math.exp(-sum(len(t[1]) / held * math.log(len(t[1]) / held) for t in tiles))
+    return (held / n) * (clean / held) * min(1.0, eff / fit)
+
+
+def _best(fams, n, fit, top, min_n=None):
+    """The best cut over every family (the six that hold the most cards)
+    and depth: (score, family, tiles). Shallower wins a tie."""
+    best = (0.0, None, [])
+    min_n = _min_n(n, top) if min_n is None else min_n
+    for fam in sorted(fams, key=lambda f: (-len(fams[f]), f))[:6]:
+        for depth in (1, 2, 3, 4):
+            tiles, clean = _cut(fams[fam], depth, min_n)
+            if not tiles:
+                break
+            sc = _score(tiles, clean, n, fit)
+            if sc > best[0] + 1e-9:
+                best = (sc, fam, tiles)
+    return best
 
 
 def _tiles(per, cut, know, decks, level):
+    """A cut's tiles, biggest first. Each keeps what it needs to open
+    later (expand): its level's cards and paths, privately (_-keys)."""
     out = []
     for key, cids, spell, depth in cut:
         name = P._word(spell.split(P._SEP)[-1])[:NAME_MAX]
         if not name:
             continue
-        avg = sum(know[c] for c in cids) / len(cids)
-        t = {"key": P._SEP.join(key), "name": name, "n": len(cids), "know": int(round(100 * avg)),
-             "find": {"decks" if decks else "tags": [spell]}}
-        if level < MAP_DEEP:
-            sub = {}
-            for c in cids:
-                lst = [(head + rest[:depth], rest[depth:], low[depth:]) for head, rest, low in per[c]
-                       if len(low) > depth and low[:depth] == key]
-                if lst:
-                    sub[c] = lst
-            kids, _ok = _level(sub, MAP_SUB, 2)
-            if len(kids) >= 2:
-                t["kids"] = _tiles(sub, kids, know, decks, level + 1)
-        out.append(t)
+        started = [know[c] for c in cids if c in know]
+        out.append({"key": P._SEP.join(key), "name": name, "n": len(cids), "started": len(started),
+                    "know": int(round(100 * sum(started) / len(started))) if started else None,
+                    "find": {"decks" if decks else "tags": [spell]},
+                    "_spell": spell, "_per": per, "_cids": cids, "_key": key, "_level": level})
     names = [t["name"].lower() for t in out]
-    for t in out:  # "01_Chapter", "02_Chapter": their numbers tell them apart
+    if len(set(names)) < len(names):  # two read the same: the level above names each ("Cardio · Physiology")
+        for t in out:
+            segs = t["_spell"].split(P._SEP)
+            up = P._word(segs[-2]) if len(segs) > 1 else ""
+            t["name"] = (f"{up} · {t['name']}" if up else t["name"])[:NAME_MAX]
+    names = [t["name"].lower() for t in out]
+    for t in out:  # still the same ("01_Chapter", "02_Chapter"): their numbers tell them apart
         if names.count(t["name"].lower()) > 1:
-            seg = t["find"][next(iter(t["find"]))][0].split(P._SEP)[-1]
+            seg = t["_spell"].split(P._SEP)[-1]
             t["name"] = (" ".join(seg.lstrip("#^$!").replace("_", " ").split()) or t["name"])[:NAME_MAX]
     out.sort(key=lambda t: (-t["n"], t["name"].lower()))
-    return out[:MAP_TILES]
+    return out
 
 
-def subjects(paths_of, know, decks=False, min_n=None):
-    """3.8.0, the topic map's tiles: my started cards split into broad
-    subjects, each card in one. paths_of: {cid: [tags]}, or with decks
-    {cid: [subdeck path below the deck]}; know: {cid: 0..1}. A tag's family
-    is what comes before its first level: under a resource's mark ("#…",
-    "^…") the mark ("^Systems::Cardio" reads Cardio), else the tag's root.
-    Each family is cut at the shallowest level with two tiles of min_n
-    cards (broad first: a tile opens into the rest); the family whose tiles hold the
-    most of my cards with one subject each wins, so nothing's mixed up. A
-    card in two subjects goes to the bigger. A question bank's ids, Anki's
-    own tags: never. [{key, name, n, know (0-100), find, kids}] biggest
-    first, MAP_TILES at most: find says how to Browse all of a tile's
-    cards; kids, when it splits again (two tiles of MAP_SUB or more), the
-    same one level down. One tile alone opens into its kids."""
-    min_n = MAP_MIN if min_n is None else min_n
+def expand(t, know):
+    """A tile's smaller ones (two of real size or more), worked out once:
+    t["kids"], [] when it doesn't split. Done for the level on screen, so
+    its › marks are exact; deeper when a tile opens (map_level)."""
+    if "kids" in t or "_per" not in t:
+        return t.get("kids") or []
+    t["kids"] = []
+    if t["_level"] < MAP_DEEP:
+        key, depth, per = t["_key"], len(t["_key"]), t["_per"]
+        sub = {}
+        for c in t["_cids"]:
+            lst = [(head + rest[:depth], rest[depth:], low[depth:]) for head, rest, low in per[c]
+                   if len(low) > depth and low[:depth] == key]
+            if lst:
+                sub[c] = lst
+        sc, _f, kids = _best({(): sub}, len(t["_cids"]), MAP_SUB_FIT, False)
+        if sc and len(kids) >= 2:
+            t["kids"] = _tiles(sub, kids, know, "decks" in t["find"], t["_level"] + 1)
+    return t["kids"]
+
+
+def subjects(paths_of, know, active=None, decks=False):
+    """3.8.0, the topic map's tiles: the cards in play (active: unsuspended,
+    started or not; know's when not given) split the way that tells them
+    apart best, not by the deck's top level. paths_of: {cid: [tags]}, or with decks {cid: [subdeck path
+    below the deck]}; know: {cid: 0..1} for the started ones. A tag's
+    family is what comes before its first level (under a resource's mark,
+    "^Systems::Cardio" reads Cardio; else the tag's root). Every family's
+    every depth is a cut; the best holds the most cards, each in one
+    subject, in about MAP_FIT tiles or more of real size (_score). A card
+    in two subjects goes to the bigger. A question bank's ids, Anki's own
+    tags: never. [{key, name, n (cards in play), started, know (0-100 over
+    the started, None with none), find, kids}] biggest first: find says how
+    to Browse all of a tile's cards; kids, the same inside it."""
+    active = set(know) if active is None else set(active)
     fams, seen = {}, {}  # family: {cid: [(head, rest, rest lowered)]}; a tag read once
 
     def read(t):
@@ -305,36 +350,50 @@ def subjects(paths_of, know, decks=False, min_n=None):
             return None
         low = tuple(x.lower() for x in segs)
         return low[:ri + 1], segs[:ri + 1], segs[ri + 1:], low[ri + 1:]
-    for cid in know:
-        for t in paths_of.get(cid) or ():
-            t = str(t)
-            if t not in seen:
-                seen[t] = read(t)
-            got = seen[t]
-            if got:
-                fams.setdefault(got[0], {}).setdefault(cid, []).append(got[1:])
-    best, score = None, (False, 0)
-    for fam in sorted(fams, key=lambda f: (-len(fams[f]), f))[:6]:
-        tiles, clean = _level(fams[fam], min_n, 2)
-        sc = (len(tiles) >= 2, clean)
-        if sc > score:
-            best, score = (fam, tiles), sc
-    out = _tiles(fams[best[0]], best[1], know, decks, 1) if best else []
-    while len(out) == 1 and out[0].get("kids"):
+    def gather(cids, only=None):
+        out = {}
+        for cid in cids:
+            for t in paths_of.get(cid) or ():
+                t = str(t)
+                if t not in seen:
+                    seen[t] = read(t)
+                got = seen[t]
+                if got and (only is None or got[0] == only):
+                    out.setdefault(got[0], {}).setdefault(cid, []).append(got[1:])
+        return out
+    # the cut is chosen on an even sample (all of a smaller deck), then made of every card
+    ids = sorted(active)
+    pick = ids[::max(1, len(ids) // MAP_SAMPLE)]
+    fams = gather(pick)
+    n, m = len(ids), len(pick)
+    _sc, fam, cut = _best(fams, m, MAP_FIT, True, max(2, _min_n(n, True) * m // max(1, n)))
+    if fam is not None and m < n:
+        fams = gather(ids, fam)
+        cut, _clean = _cut(fams.get(fam) or {}, cut[0][3], _min_n(n, True))
+    out = _tiles(fams[fam], cut, know, decks, 1) if fam is not None and cut else []
+    while len(out) == 1 and expand(out[0], know):
         out = out[0]["kids"]  # every tag under one root ("Step1::…"): what's under it
+    for t in out:
+        expand(t, know)
     return out
 
 
-def map_level(tiles, at):
+def map_level(tiles, at, know=None):
     """Where the map is: at, the keys of the tiles opened, in order. (trail
-    of the opened tiles that still open, the tiles shown now)."""
+    of the opened tiles that still open, the tiles shown now). With know,
+    what's on the way and on screen is worked out first (expand)."""
     trail, cur = [], tiles or []
     for k in at or ():
-        t = next((x for x in cur if x["key"] == k and x.get("kids")), None)
-        if not t:
+        t = next((x for x in cur if x["key"] == k), None)
+        if t is not None and know is not None:
+            expand(t, know)
+        if t is None or not t.get("kids"):
             break
         trail.append(t)
         cur = t["kids"]
+    if know is not None:
+        for t in cur:
+            expand(t, know)
     return trail, cur
 
 
