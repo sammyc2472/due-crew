@@ -113,23 +113,20 @@ attach a custom domain over one.
 ## Firebase is gone (3.8.0)
 
 3.0 moved the 2.x accounts across; 3.8.0 took out the bridge, the import
-and every 2.x path. What's left is Sam's.
+and every 2.x path.
 
-**Right after deploying 3.8.0's Worker**, empty Firestore. Until 3.8.0 the
-bridge copied 3.x people's week, decks, heatmap, name, emoji and friend
-edges there, and deleting an account deleted its copies (`forget()`).
-3.8.0's Worker no longer can, so a copy left behind would outlive its
-account, readable by 2.x crewmates under the old rules, for as long as
-the project exists (a shut-down project is kept 30 days). Not before the
-deploy: the old Worker's bridge runs every 15 minutes, copies 3.x people
-back in, and takes an empty Firestore to mean a 2.x person turned their
-heatmap off, deleting it from D1. 3.8.0's Worker has no bridge, so once
-it's live nothing writes Firestore again and the empty one stays empty:
+The Google project (anki-leaderboard-f6691) was shut down on 12 Oct 2026,
+before 3.8.0's Worker went out. Nothing in it can be read (2.x crewmates
+included), and Google deletes it for good 30 days on, Firestore and the
+`due-crew-bridge` service account with it. Don't restore it. Until 3.8.0
+is live, the old Worker's bridge fails every 15 minutes and stops before
+writing anything (no token, or a 403 on its first read), and a deleted
+account's 2.x copies (`forget()`) fail inside a try after D1 has
+deleted the account. Had the project stayed up, Firestore had to be emptied
+right after the deploy, never before: the old bridge would copy 3.x people
+back in, and read an empty Firestore as 2.x heatmaps turned off.
 
-1. `firebase firestore:delete --all-collections --project anki-leaderboard-f6691`
-   (or, in the console, Firestore › the database › Delete).
-2. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
-   it was set there).
-3. console.cloud.google.com, project anki-leaderboard-f6691: delete the
-   `due-crew-bridge` service account's key, then the project itself
-   (IAM & Admin › Settings › Shut down).
+What's left, any time:
+
+1. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
+   it was set there). Without it the old bridge doesn't run at all.

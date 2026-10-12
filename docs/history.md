@@ -1165,10 +1165,9 @@ every release that changes how something works.
   Behind's Browse counts dates as Due does; on a Mac, Ask the squad is
   ⌃⇧Q (⌘⇧Q is the system's Log Out). The Worker: a date can't be
   called "every", twenty new codes a day, housekeeping skips the old
-  bridge's cron; the fake answers as it does. Empty Firestore right
-  after 3.8.0's Worker goes live, never before: the old bridge would copy
-  3.x people back and read the empty one as 2.x heatmaps turned off
-  (`docs/cloudflare-setup.md`).
+  bridge's cron; the fake answers as it does. The Google project was
+  shut down before 3.8.0's Worker went out; the old bridge then fails
+  before writing anything (`docs/cloudflare-setup.md`).
   A plan's weekly lines (3.8.0, Sam's pick: "every Fri: practice
   questions"): the doc's `every`, a date's line with its weekdays (six at
   most; `plans.ts` todoLine, `fakes.FakeWorker`, `shapes.clean_plan_doc`).
