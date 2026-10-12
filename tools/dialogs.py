@@ -314,6 +314,17 @@ def main(out):
         if not names or names[0].textFormat() != QtCore.Qt.TextFormat.PlainText:
             raise RuntimeError("follow: a unit's name went in as markup")
         shoot(dlg, os.path.join(out, "plan-follow.png"))
+        # 3.8.0: at my own pace: the late-start question goes, the box under it shows, the line says so
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
+        settle()
+        dlg.how_ready.setChecked(True)
+        settle(100)
+        if dlg.own() != "next" or dlg.how_next.isHidden() or dlg.late_skip.isVisible() or "Nothing opens" not in dlg.about.text():
+            raise RuntimeError(f"follow at my pace: {dlg.own()!r} {dlg.about.text()!r}")
+        dlg.how_next.setChecked(False)
+        if dlg.own() != "ready":
+            raise RuntimeError("follow at my pace: the box under it")
+        shoot(dlg, os.path.join(out, "plan-follow-own-pace.png"))
         shoot(SwapDialog(None, ("Step1", "Step1_v11"), 1944), os.path.join(out, "plan-swap.png"))
         shoot(CatchUpDialog(None, 2, 61, {"opens": day(6)}), os.path.join(out, "plan-resume.png"))
         # G4, G7: a follower's own days
@@ -527,6 +538,27 @@ def main(out):
             raise RuntimeError("why: read again after a fix")
         dlg.close()
 
+    def open_cards():
+        # 3.8.0: Browse › Due Crew: open its cards…: counted first, leeches stay, first in line ticked
+        from due_crew.ui.open_dialog import OpenDialog
+        asked = []
+        dlg = OpenDialog(None, "12 Strep <b>", "#Videos › Micro › 12 Strep", {"open": 46, "already": 2, "leech": 2},
+                         ["On Step 1: SLG 15, which count them"], on_open=lambda first, study: asked.append((first, study)))
+        settle()
+        if dlg.facts.textFormat() != QtCore.Qt.TextFormat.PlainText or "2 are leeches and stay suspended" not in dlg.facts.text():
+            raise RuntimeError(f"open: {dlg.facts.text()!r}")
+        shoot(dlg, os.path.join(out, "open-cards.png"))
+        dlg = OpenDialog(None, None, "", {"open": 3, "already": 0, "leech": 0}, on_open=lambda first, study: asked.append((first, study)))
+        dlg.show()
+        dlg.first.setChecked(False)
+        dlg.study_btn.click()
+        if asked != [(False, True)]:
+            raise RuntimeError(f"open: asked {asked!r}")
+        none = OpenDialog(None, "Renal", "", {"open": 0, "already": 5, "leech": 0})
+        if none.open_btn.isVisible() or none.first.isVisible():
+            raise RuntimeError("open: nothing to open shows no Open")
+        none.close()
+
     def plan_tags():
         # 3.8.0: Browse › tag for a plan: only plans I write; a tag's name from the
         # server stays text; the notes already on it can come off; it goes on a click
@@ -569,7 +601,7 @@ def main(out):
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why), ("plan tags", plan_tags)):
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

@@ -707,7 +707,8 @@ def clean_days(v):
             # 3.7.6: one date moved later, {unit id: days}
             "moved": {str(k): n for k, n in (v.get("moved") or {}).items()
                       if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 365}
-            if isinstance(v.get("moved"), dict) else {}}
+            if isinstance(v.get("moved"), dict) else {},
+            "own": v["own"] if v.get("own") in ("ready", "next") else ""}  # 3.8.0: at my own pace
 
 
 def clean_offer(o):

@@ -1233,3 +1233,40 @@ every release that changes how something works.
   again when tags moved) reach followers on an older add-on. Followers
   see the tags on the plan's page too ("This plan's tags", each with Copy
   search for Browse; `followTags` in builder.js).
+  Your own pace (3.8.0, Sam's picks on the Your Own Pace mock): a follow
+  says how the plan's cards open, `own` on it (migration 0024; PATCH and
+  Follow take it; the refresh's stamp moves with it): on the plan's dates
+  (as before), When I'm ready (nothing opens by itself), or When I'm ready
+  with the next opening once I've seen 90% of the last one's open cards
+  (`P.next_by_itself`, one a morning, only after I've opened one). The plan
+  still gives the order; its dates still show as the plan's; mine only.
+  You › Plans trades Behind for Up next: Open (the next date, first in
+  Anki's line of new cards, one undo step, `open_next`) and Open and study
+  (then a Due Crew deck of its new cards, in deck order); the line after
+  says what it did with Undo (`own_undo`, while it's Anki's latest step),
+  or offers Put back (the last date's unseen cards shut again, never a
+  seen one; it's Up next again, and Stop following opens them,
+  `put_back_own`). Quiet lines: where the plan's dates are (`P.plan_at`),
+  my pace (dates opened in the last 14 days) and, with an exam or an end,
+  when that pace opens the last date (`P.finish_check`). A morning at my
+  pace opens only what an author adds to dates I opened (`P.own_due`); an
+  update asks first, as before. Due shows the dates I opened as today's
+  until seen, never Behind or Upcoming. Hold back holds every date I
+  haven't opened (`holdable(own=True)`), at Follow and when I switch; back
+  on the plan's dates, what's opened by date since asks, as Resume does.
+  The plan's ··· menu has How its cards open; Open early steps aside.
+  Follow: How its cards open, two choices and the box; starting late isn't
+  asked at my pace (earlier dates are just the next ones). The site: a
+  follower's plan page says "At your pace · next: …" (from the progress
+  Anki syncs) with the same choice, and no on-track line.
+  Open from Browse (signed in or not: Anki help): a tag in the sidebar,
+  Due Crew: open its cards… (its children too; a gui_hooks sidebar menu),
+  or the picked cards, open these…. The sheet counts first (open, open
+  already, leeches, which stay; the plans I follow that hold them,
+  `ui/open_dialog.py`); First in Anki's line of new cards, ticked
+  (`P.first_in_line`: Anki's Reposition, the rest shifted, inside the same
+  undo step as the unsuspend); Open and study. Never suspends anything,
+  unlike Anki's Toggle Suspend. At my pace, a date now all open counts as
+  opened (`_claim_opened`). `tools/real_anki.py` checks first in line and
+  its Undo on Anki's engine. No new request: all of it is local but the
+  one PATCH of the choice.

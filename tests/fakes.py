@@ -69,6 +69,19 @@ class FakeSched:
         if self.col is not None:
             self.col.undo_steps.append(("Forget", ids))
 
+    def reposition_new_cards(self, card_ids, starting_from=0, step_size=1, randomize=False, shift_existing=False):
+        """Anki's Reposition: these new cards at starting_from, step_size apart, in
+        the order given; with shift_existing, the other new cards from there move
+        along to make room. An undoable op."""
+        ids = [int(i) for i in card_ids]
+        if shift_existing:
+            self.db.conn.execute(f"UPDATE cards SET due = due + ? WHERE type = 0 AND due >= ? AND id NOT IN "
+                                 f"({','.join('?' * len(ids))})", (len(ids) * step_size, starting_from, *ids))
+        for k, cid in enumerate(ids):
+            self.db.conn.execute("UPDATE cards SET due = ? WHERE id = ? AND type = 0", (starting_from + k * step_size, cid))
+        if self.col is not None:
+            self.col.undo_steps.append(("Reposition", ids))
+
     def suspend_cards(self, ids):
         """Anki's: queue -1, whatever it was. An undoable op."""
         ids = [int(i) for i in ids]
@@ -1392,7 +1405,8 @@ class FakeWorker:
         if p["owner"] == me:
             out["code"] = p["code"]
         if f:
-            out["following"] = {"share": f["share"], "paused": f["paused"], "sched": f.get("sched")}
+            out["following"] = {"share": f["share"], "paused": f["paused"], "sched": f.get("sched"),
+                                **({"own": f["own"]} if f.get("own") else {})}  # 3.8.0: at my own pace
         return out
 
     @staticmethod
@@ -1448,9 +1462,12 @@ class FakeWorker:
                 raise Bad(404, "no_plan")
             old = self.follows.get((pid, me))
             sched = self._sched(body["sched"]) if "sched" in body else (old or {}).get("sched")
+            if body.get("own") not in (None, "ready", "next"):  # 3.8.0: at my own pace
+                raise Bad(400, "follow")
+            own = body["own"] if "own" in body else (old or {}).get("own")
             self.follows[(pid, me)] = {"share": bool(old and old["share"]), "paused": False,
                                        "progress": old["progress"] if old else None, "sched": sched,
-                                       "teamAsk": bool(old and old.get("teamAsk"))}
+                                       "teamAsk": bool(old and old.get("teamAsk")), **({"own": own} if own else {})}
             self._count("plan_follows")
             if body.get("team") is True:  # 3.7.6: following onto its team; share alone does nothing now
                 self._join_team(pid, me)
@@ -1464,7 +1481,8 @@ class FakeWorker:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
         if rest[1:] == ["follow"] and method == "PATCH":
-            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved"} or (
+            if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved", "own"} or (
+                    body.get("own") not in (None, "ready", "next")) or (
                     "early" in body and not _is_int(body["early"], 0, 7)) or (
                     "shift" in body and not _is_int(body["shift"], 0, 365)) or any(
                     body.get(k) is not None and not DATE_RE.fullmatch(str(body[k])) for k in ("until", "since") if k in body) or (
@@ -1495,9 +1513,12 @@ class FakeWorker:
             if "moved" in body and dict(body["moved"]) != f.get("moved", {}):  # 3.7.6
                 f["moved"] = dict(body["moved"])
                 self._count("plan_follows")
+            if "own" in body and body["own"] != f.get("own"):  # 3.8.0
+                f["own"] = body["own"]
+                self._count("plan_follows")
             return 200, {"share": share, "paused": paused, "sched": sched, "early": early,
                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                         "moved": f.get("moved", {})}
+                         "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {})}
         if rest[1:] == ["ids"] and method == "PUT":
             if p["owner"] != me:
                 raise Bad(403, "not_author")
@@ -1783,7 +1804,7 @@ class FakeWorker:
                           "share": f["share"], **({"teamAsk": True} if f.get("teamAsk") else {}),
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
-                          "moved": f.get("moved", {}),
+                          "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
                           "followers": len(rows), "crewDone": done,
                           "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],

@@ -1859,6 +1859,33 @@ async function builder(id) {
       h("button", { class: "linkish", onclick: () => { resetAsk = false; draw(); } }, "Cancel"));
   }
 
+  /** 3.8.0: a follower's "how its cards open": on the plan's dates, or at my own
+   *  pace (my Anki opens the next date when I ask, or once I've seen the last).
+   *  Mine only; the plan never changes. Next is the first date not all open yet,
+   *  by the progress my Anki syncs. */
+  function paceBox() {
+    const f = !author && plan.following;
+    if (!f) return null;
+    const own = f.own || "";
+    const prog = f.progress || {};
+    const skipped = new Set(f.skipped || []);
+    const next = own ? [...(doc.units || [])].filter((u) => !skipped.has(u.id)).sort((a, b) => (a.opens < b.opens ? -1 : a.opens > b.opens ? 1 : 0))
+      .find((u) => { const c = prog[u.id]; return !c || (c[2] > 0 && c[0] < c[2]); }) : null;  // not counted yet: not open yet
+    const sel = h("select", { "aria-label": "How its cards open", onchange: async (e) => {
+      sel.disabled = true;
+      try {
+        await api("PATCH", `/plans/${id}/follow`, { own: e.target.value || null });
+        plan = await api("GET", `/plans/${id}`);
+      } catch (err) { if (!err.status) console.error(err); }
+      draw();
+    } }, [["", "on the plan's dates"], ["ready", "when I'm ready"], ["next", "when I'm ready, the next once I've seen the last"]]
+      .map(([v, t]) => h("option", { value: v, selected: own === v }, t)));
+    return h("div", { class: "pacebox small" },
+      own ? h("div", {}, h("b", {}, "At your pace"), next ? ` · next: ${next.name || "?"}` : " · every date is open",
+        h("span", { class: "muted" }, next ? ". Your Anki opens it from You › Plans." : ".")) : null,
+      h("label", { class: "muted" }, "Cards open ", sel));
+  }
+
   /** B4: everything about sharing the plan, in one menu. */
   function share() {
     const url = `${location.origin}/p/${plan.code}`;
@@ -2264,7 +2291,8 @@ async function builder(id) {
         h("div", { class: "btitle" }, owner ? titleBox() : h("h1", {}, meta.name || "Untitled"),
           h("p", { class: "muted small bsub" }, subline(), resetBtn())),
         author ? share() : plan.code && plan.audience !== "squad" ? calMenu(plan.code) : null),
-      !author && plan.following ? onTrack(plan, false) : null,
+      !author && plan.following && !plan.following.own ? onTrack(plan, false) : null,  // 3.8.0: at my own pace, no Behind
+      paceBox(),
       !author && plan.following ? finished() : null,
       !author && !plan.following ? readerActions() : null,
       postLine(),

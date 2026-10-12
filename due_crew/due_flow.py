@@ -83,13 +83,21 @@ def plan_dates(today):
         applied = st.get("applied") or {}
         crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
         upd = (_state.get("plan_updates") or {}).get(p["id"]) or {}
+        own = P.own_pace(p)  # 3.8.0: the dates I opened are today's, till seen; nothing is behind or upcoming
+        own_days = st.get("own_opened") or {}
         for u in P.units(doc):
             opens = str(u.get("opens") or "")
-            if not opens or opens > end:
-                continue
             a = applied.get(u["id"])
             pr = (prog.get(p["id"]) or {}).get(u["id"])
             o, s, t = pr or [0, 0, 0]
+            if own:
+                if not P.opened_here(applied, u, prog.get(p["id"]) or {}):
+                    continue
+                if int(t) and int(s) >= int(t) and own_days.get(u["id"]) != today:
+                    continue
+                opens = today
+            if not opens or opens > end:
+                continue
             # 3.7.2: an even date (or a 3.2 schedule) opens in slices and is
             # applied only when its window ends: while it runs, what's due is
             # what has opened so far
@@ -329,6 +337,8 @@ def parts(col, idxs, today):
             a = applied.get(u["id"])
             running = (not a and int((prog.get(u["id"]) or [0])[0]) > 0
                        and bool(u.get("even") or p.get("sched")))  # an even date part open (3.7.2)
+            if P.own_pace(p):  # 3.8.0: at my own pace, the dates I opened
+                opens = today if P.opened_here(applied, u, prog) else "9999"
             if opens == today or (opens < today and (a or running) and not str(a).startswith("skip:")):
                 got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
                 if got:

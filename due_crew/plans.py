@@ -798,11 +798,43 @@ def next_unit(doc, today):
     return next((u for u in units(doc) if str(u.get("opens") or "") > today), None)
 
 
-def open_cards(col, cids, label, dry=False):
+def open_counts(col, cids):
+    """3.8.0, Browse's open sheet: of these cards, {"open": suspended ones that
+    would open, "already": open now, "leech": suspended leeches, which stay}."""
+    out = {"open": 0, "already": 0, "leech": 0}
+    cl = sorted({int(c) for c in cids})
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        for queue, leech in col.db.all(
+                f"SELECT c.queue, (' ' || lower(n.tags) || ' ') LIKE '% leech %' FROM cards c JOIN notes n ON n.id = c.nid "
+                f"WHERE c.id IN ({chunk})"):
+            key = "already" if int(queue) != -1 else "leech" if leech else "open"
+            out[key] += 1
+    return out
+
+
+def first_in_line(col, cids):
+    """3.8.0: these cards' new ones to the front of Anki's line of new cards,
+    in the order they had (Anki's Reposition, shifting the rest along).
+    Inside the caller's undo step. Returns how many moved."""
+    cl = sorted(int(c) for c in cids)
+    rows = []
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        rows += col.db.all(f"SELECT id, due FROM cards WHERE type = 0 AND queue = 0 AND id IN ({chunk})")
+    ids = [int(c) for c, _d in sorted(rows, key=lambda r: (r[1], r[0]))]
+    if not ids or not hasattr(col.sched, "reposition_new_cards"):
+        return 0
+    col.sched.reposition_new_cards(card_ids=ids, starting_from=0, step_size=1, randomize=False, shift_existing=True)
+    return len(ids)
+
+
+def open_cards(col, cids, label, dry=False, first=False):
     """Unsuspend the suspended ones among `cids`, as one undo step named
     `label`. Only queue -1 is touched, and never a leech (Anki suspended it
     for a reason); never suspends. Returns how many opened (0: nothing was
-    suspended, and no undo step is made). dry (3.7.3): how many it would."""
+    suspended, and no undo step is made). dry (3.7.3): how many it would.
+    first (3.8.0): and put them first in Anki's line of new cards."""
     if not cids:
         return 0
     ids = []
@@ -821,6 +853,8 @@ def open_cards(col, cids, label, dry=False):
         except Exception:
             pos = None
     col.sched.unsuspend_cards(ids)
+    if first:
+        first_in_line(col, ids)
     if pos is not None and hasattr(col, "merge_undo_entries"):
         try:
             col.merge_undo_entries(pos)
@@ -829,19 +863,20 @@ def open_cards(col, cids, label, dry=False):
     return len(ids)
 
 
-def holdable(idx, doc, today, swap=None, applied=None):
+def holdable(idx, doc, today, swap=None, applied=None, own=False):
     """3.3, "Hold back later dates until their day": the cards of dates
     that haven't opened yet which are active now and never studied (new,
     not suspended, not a leech). A card that is also on an opened date is
     never held. A date already applied here (opened early, C2) counts as
-    opened. What Follow offers to suspend, once, when asked."""
+    opened. What Follow offers to suspend, once, when asked. own (3.8.0,
+    at my own pace): a date is opened only when I opened it, whatever its day."""
     applied = applied or {}
     opened, later = set(), set()
     for u in units(doc):
         cids = idx.match(u, swap, doc.get("deck", ""))
         have = applied.get(u["id"])
         done = isinstance(have, str) and not have.startswith("skip:")
-        (opened if done or str(u.get("opens") or "") <= today else later).update(cids)
+        (opened if done or (not own and str(u.get("opens") or "") <= today) else later).update(cids)
     return {c for c in later - opened if idx.cards[c] == (0, 0) and c not in idx.leech}
 
 
@@ -1131,6 +1166,126 @@ def change_note(owner, old, doc):
         segs += c
     segs.append((".", False))
     return segs
+
+
+# ---- 3.8.0: at my own pace ----
+# A follow's `own`: None, the plan's dates open its cards (as before);
+# "ready", nothing opens by itself and I open the next date (You › Plans,
+# Browse); "next", the same, and once I've seen most of the last one I
+# opened, the next opens the morning after. The plan still gives the order;
+# its dates still show as the plan's. Mine only: the plan never changes.
+
+OWN = ("ready", "next")
+SEEN_ENOUGH = 0.9  # "next": the last date counts as seen at 90% of its open cards
+PACE_DAYS = 14     # "your pace": the dates I opened in the last two weeks
+
+
+def own_pace(plan):
+    return (plan or {}).get("own") in OWN
+
+
+def opened_here(applied, u, prog=None):
+    """A date I opened here: applied, not skipped, and (with progress) not
+    shut again since (Edit › Undo after an Open puts its cards back)."""
+    have = (applied or {}).get(u["id"])
+    if not isinstance(have, str) or have.startswith("skip:"):
+        return False
+    if prog is not None:
+        o, _s, t = (prog.get(u["id"]) or [0, 0, 0])[:3]
+        if int(t) and not int(o):
+            return False
+    return True
+
+
+def up_next(doc, applied, prog=None):
+    """At my own pace, the dates still to open, in the plan's order: not
+    opened here, and not skipped (at a late join, or as one of my own skips)."""
+    out = []
+    for u in units(doc):
+        have = (applied or {}).get(u["id"])
+        if isinstance(have, str) and have.startswith("skip:"):
+            continue
+        if not opened_here(applied, u, prog):
+            out.append(u)
+    return out
+
+
+def own_due(doc, applied, sig):
+    """At my own pace, what a morning opens by itself: only what an author's
+    update adds to dates I've opened. [(unit, "open")]."""
+    out = []
+    for u in units(doc):
+        have = (applied or {}).get(u["id"])
+        if isinstance(have, str) and not have.startswith("skip:") and have != sig(u):
+            out.append((u, "open"))
+    return out
+
+
+def own_last(doc, opened_days):
+    """The date I opened last at my own pace (the latest day; on one day, the
+    later in the plan), or None."""
+    by = {u["id"]: (i, u) for i, u in enumerate(units(doc))}
+    keys = [k for k in (opened_days or {}) if k in by]
+    if not keys:
+        return None
+    return by[max(keys, key=lambda k: (str(opened_days[k]), by[k][0]))][1]
+
+
+def next_by_itself(doc, applied, opened_days, prog):
+    """"next": the date that opens this morning, or None. Only after I've
+    opened one myself, and once I've seen SEEN_ENOUGH of the last one's open
+    cards (one with nothing open counts as seen); one a morning."""
+    last = own_last(doc, opened_days)
+    left = up_next(doc, applied, prog)
+    if last is None or not left:
+        return None
+    o, s, _t = ((prog or {}).get(last["id"]) or [0, 0, 0])[:3]
+    if int(o) and int(s) < SEEN_ENOUGH * int(o):
+        return None
+    return left[0]
+
+
+def plan_at(doc, today):
+    """Where the plan's own dates are today, for someone at their own pace."""
+    us = units(doc)
+    if not us:
+        return ""
+    past = [u for u in us if str(u.get("opens") or "") <= today]
+    if not past:
+        return f"The plan's dates start {fmt_day(us[0]['opens'])}."
+    last = past[-1]
+    end = str(last.get("due") or last.get("opens") or "")
+    if len(past) == len(us) and end < today:
+        return f"The plan's dates ended {fmt_day(end)}."
+    return f"The plan's dates are at {last.get('name') or '?'} today."
+
+
+def recent_opens(opened_days, today, days=PACE_DAYS):
+    """How many dates I opened in the last `days` days."""
+    since = (datetime.date.fromisoformat(today) - datetime.timedelta(days=days - 1)).isoformat()
+    return sum(1 for d in (opened_days or {}).values() if since <= str(d) <= today)
+
+
+def finish_check(doc, left, recent, today, days=PACE_DAYS):
+    """When the plan has an exam (its last event ahead) or an end: the day my
+    pace opens its last date, against it. A line, or None."""
+    if not left or not recent:
+        return None
+    evs = sorted((e for e in doc.get("events") or [] if isinstance(e, dict) and str(e.get("day") or "") >= today),
+                 key=lambda e: e["day"])
+    if evs:
+        day, name = evs[-1]["day"], str(evs[-1].get("name") or "the exam")
+    elif doc.get("end") and str(doc["end"]) >= today:
+        day, name = doc["end"], "the plan's end"
+    else:
+        return None
+    need = -(-left * days // recent)  # days, rounded up
+    done = datetime.date.fromisoformat(today) + datetime.timedelta(days=need)
+    late = (done - datetime.date.fromisoformat(day)).days
+    when = fmt_day(done.isoformat())
+    if late > 0:
+        return f"At that pace you open the last date on {when}, {late} day{'s' if late != 1 else ''} after {name}."
+    return f"At that pace you open the last date on {when}, in time for {name}."
 
 
 # ---- 3.8.0: plan tags ----

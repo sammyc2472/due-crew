@@ -220,6 +220,11 @@ too.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
+3.8.0, at my own pace (migration 0024): `POST /plans/follow` and `PATCH
+/plans/{id}/follow` take `own`: null (the plan's dates open its cards, as
+before), "ready" (nothing opens by itself) or "next" (the next date opens
+once I've seen the last); mine only, on the board's plans, on the plan's
+`following`, and in the refresh's plan stamp.
 G3, G4 (migration 0007): `PATCH /plans/{id}/follow` also takes `shift`
 (0-365 days my dates run later), `until` and `since` (a pause's last and
 first day, or null) and `skipped` (unit ids, up to 200). They're mine

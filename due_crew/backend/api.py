@@ -874,13 +874,15 @@ class ApiClient:
         status, data = self._call("GET", f"/plans/peek?code={code}")
         return (clean_plan(data) if status == 200 else None), status
 
-    def follow_plan(self, code, team=False, sched=None):
+    def follow_plan(self, code, team=False, sched=None, own=None):
         """3.7.6: `team` puts me on the plan's team too, which is what shares
         my progress with its authors (the reply says share: false when the
-        team was full)."""
+        team was full). 3.8.0: `own`, "ready" or "next", at my own pace."""
         body = {"code": normalize_code(code), "team": bool(team)}
         if sched is not None:
             body["sched"] = sched  # 3.2: my days and time
+        if own in ("ready", "next"):
+            body["own"] = own
         status, data = self._call("POST", "/plans/follow", body)
         if status == 200:
             self.session.pop("plans_hash", None)  # my progress goes out whole at the next sync
@@ -961,6 +963,16 @@ class ApiClient:
         since, skipped, and 3.7.6's moved). The follow as the server has it, or None."""
         body = {k: v for k, v in fields.items() if k in ("paused", "shift", "until", "since", "skipped", "moved")}
         status, data = self._call("PATCH", f"/plans/{plan_id}/follow", body)
+        if status != 200:
+            return None
+        got = dict(clean_days(data), paused=data.get("paused") is True)
+        self._note_follow(plan_id, **got)
+        return got
+
+    def set_own(self, plan_id, own):
+        """3.8.0: how the plan's cards open for me: None (its dates), "ready" or
+        "next". The follow's days as the server has them, or None."""
+        status, data = self._call("PATCH", f"/plans/{plan_id}/follow", {"own": own if own in ("ready", "next") else None})
         if status != 200:
             return None
         got = dict(clean_days(data), paused=data.get("paused") is True)

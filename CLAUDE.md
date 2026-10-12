@@ -81,9 +81,11 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   newest save wins. Theme, sort, tab, hidden tabs and the room chip's side
   stay per computer.
 - Plans: the plan says what and by when; my follow (shift, skips, moves,
-  pause, catch-up) says when for me (`plan_flow.mine` → `plans.my_doc`),
-  and never changes the plan. The morning opens what's due once per Anki
-  day, after the AnkiWeb sync, in one undo step. A plan never suspends on
+  pause, catch-up, and since 3.8.0 `own`, my own pace) says when for me
+  (`plan_flow.mine` → `plans.my_doc`), and never changes the plan. The
+  morning opens what's due once per Anki day, after the AnkiWeb sync, in
+  one undo step; at my own pace it opens only what an author adds to dates
+  I opened (and, "next", the next once I've seen the last). A plan never suspends on
   its own (Hold back is the one suspend, and only when asked), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
@@ -141,6 +143,7 @@ same commit, each with its test:
 | Admin, notices, feedback | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts` |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
+| Your own pace (Up next, Open, Put back); Browse › open its cards / open these (3.8.0) | `plans.up_next`, `plan_flow.open_next`, `plan_flow.open_cards_now`, `ui/open_dialog.py` | follow `own` (`plans.ts`); `paceBox` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 
 ## Releasing

@@ -289,9 +289,12 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
         applied = st.setdefault("applied", {})
         sig = _sig(st)
         src = st.setdefault("src", {})
+        # 3.8.0, at my own pace: a morning opens only what an author adds to dates I opened,
+        # and ("next") the next date once I've seen most of the last one I opened
+        own = P.own_pace(p) and not everything and mode != "skip"
         # 3.3, C2: a follower who studies on a phone opens days early
         when = S.iso(S.d(today) + datetime.timedelta(days=int(p.get("early") or 0))) if mode != "skip" else today
-        if (p.get("sched") or S.has_even(doc)) and not everything and mode != "skip":
+        if (p.get("sched") or S.has_even(doc)) and not everything and mode != "skip" and not own:
             pnames, pcids, puids = _spread(col, p, st, when, today)
             if pnames:
                 opened_units[p["id"]] = puids  # so Not today can put them off
@@ -300,16 +303,28 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
                 names += pnames
                 all_cids |= pcids
             continue
-        items = ([(u, "open") for u in P.units(doc)] if everything
-                 else P.due_now(doc, applied, when, sig))
-        later = st.get("later") or {}
-        if not everything:
-            items = [(u, how) for u, how in items if str(later.get(u["id"]) or "") <= today]
-        for u, _how in items:
-            later.pop(u["id"], None)
+        idx = None
+        if own:
+            items = P.own_due(doc, applied, sig)
+            if p.get("own") == "next" and not dry:  # a morning's, never an update's line
+                idx = P.DeckIndex(col, st["deck_id"])
+                nxt = P.next_by_itself(doc, applied, st.get("own_opened"), P.progress(idx, doc, _swap(st)))
+                if nxt and nxt["id"] not in {u["id"] for u, _h in items}:
+                    applied.pop(nxt["id"], None)  # shut again since (Undo): it opens whole
+                    src.pop(nxt["id"], None)
+                    items.append((nxt, "open"))
+                    st.setdefault("own_opened", {})[nxt["id"]] = today
+        else:
+            items = ([(u, "open") for u in P.units(doc)] if everything
+                     else P.due_now(doc, applied, when, sig))
+            later = st.get("later") or {}
+            if not everything:
+                items = [(u, how) for u, how in items if str(later.get(u["id"]) or "") <= today]
+            for u, _how in items:
+                later.pop(u["id"], None)
         if not items:
             continue
-        idx = P.DeckIndex(col, st["deck_id"])
+        idx = idx or P.DeckIndex(col, st["deck_id"])
         pnames, pcids = [], set()
         for u, how in items:
             if how == "open" and mode != "skip":
@@ -333,9 +348,9 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
     return {"n": n, "names": names, "label": label, "per": per, "units": opened_units, "spread": spread}
 
 
-def open_one(col, plan, st, uid, today):
+def open_one(col, plan, st, uid, today, first=False):
     """G1: one date, now, in one undo step; the morning won't open it again.
-    {n, names, label}."""
+    {n, names, label}. first (3.8.0): first in Anki's line of new cards."""
     p = mine(plan)
     u = next((x for x in P.units(p["doc"]) if x["id"] == uid), None)
     if u is None or not st or not _deck_ok(col, st.get("deck_id")):
@@ -348,7 +363,7 @@ def open_one(col, plan, st, uid, today):
     (st.get("later") or {}).pop(uid, None)
     name = u.get("name") or "?"
     label = P.step_label([name])
-    return {"n": P.open_cards(col, cids, label) if cids else 0, "names": [name], "label": label}
+    return {"n": P.open_cards(col, cids, label, first=first) if cids else 0, "names": [name], "label": label}
 
 
 def put_off(st, uids, today):
@@ -641,8 +656,13 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     change = None
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
         change = P.change_note(plan.get("ownerName"), st["snapshot"], _plan_doc(plan))
+    own = P.own_pace(plan) and not plan.get("paused") and not no_deck
+    if own:  # 3.8.0: no Behind at my own pace; what's next, and where the plan is
+        sub = f"at your pace · {followers:,} following"
+        waiting, catch, session = 0, None, None
     return {"id": plan["id"], "title": P.plan_title(plan), "sub": sub, "rows": rows,
-            "lines": [] if no_deck or plan.get("paused") else P.ahead_behind(doc, prog or {}, today),
+            "own": own_view(plan, st, prog, today) if own else None,
+            "lines": [] if no_deck or plan.get("paused") or own else P.ahead_behind(doc, prog or {}, today),
             "change": change, "no_deck": no_deck, "paused": bool(plan.get("paused")),
             # 3.8.0: the plan's tags that came today, once (OK, or Browse them)
             "tag_news": (st or {}).get("tag_news") if str(((st or {}).get("tag_news") or {}).get("day") or "") == today else None,
@@ -1035,7 +1055,7 @@ def hold_new(plan_list, state, today):
         if not st or not st.get("held") or not _deck_ok(mw.col, st.get("deck_id")):
             continue
         q = mine(p)
-        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), q["doc"], today, _swap(st), st.get("applied"))
+        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), q["doc"], today, _swap(st), st.get("applied"), own=P.own_pace(q))
         cids -= set(int(x) for x in st.get("held") or [])
         if not cids:
             continue
@@ -1114,7 +1134,7 @@ def offer_hold(pids, ask=None):
         st = state.get(pid)
         if not p or not st or not _deck_ok(mw.col, st.get("deck_id")):
             continue
-        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), p["doc"], _today(), _swap(st), st.get("applied"))
+        cids = P.holdable(P.DeckIndex(mw.col, st["deck_id"]), p["doc"], _today(), _swap(st), st.get("applied"), own=P.own_pace(p))
         if not cids or not ask(p.get("name") or "The plan", len(cids)):
             continue
         n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {p.get('name') or 'plan'}")
@@ -1246,9 +1266,10 @@ def check_cards(col, idx, cids, n=CHECK_CARDS):
     return [int(c) for c, _l in out[:n]]
 
 
-def _filtered(col, name, cids):
-    """Anki's own filtered deck over these cards, most lapses first; built
-    (or rebuilt) under `name`. Returns True when it took."""
+def _filtered(col, name, cids, order=4):
+    """Anki's own filtered deck over these cards, most lapses first (order 4;
+    6, as they come in the deck, for new cards); built (or rebuilt) under
+    `name`. Returns True when it took."""
     try:
         did = col.decks.id_for_name(name) or 0
         had = col.decks.id_for_name(P.PARENT)  # a "Due Crew" deck of the person's own isn't ours to tidy
@@ -1257,7 +1278,7 @@ def _filtered(col, name, cids):
         term = deck.config.search_terms[0]
         term.search = "cid:" + ",".join(str(c) for c in cids)
         term.limit = len(cids)
-        term.order = 4  # most lapses
+        term.order = order
         deck.config.reschedule = True
         col.sched.add_or_update_filtered_deck(deck)
         _note_built(col.decks.id_for_name(name))
@@ -1457,7 +1478,7 @@ def sessions(col, plan_list, state, today, idxs=None):
     """{plan id: session_view} for the plans on my schedule, on this computer."""
     from .stats.queries import StatsQueries
     q = StatsQueries(col)
-    todo = [(p, state.get(p["id"])) for p in plan_list if not p.get("paused")]
+    todo = [(p, state.get(p["id"])) for p in plan_list if not p.get("paused") and not P.own_pace(p)]
     todo = [(p, st) for p, st in todo if st and _deck_ok(col, st.get("deck_id"))]
     if not todo:
         return {}
@@ -1636,6 +1657,14 @@ def on_message(cmd, parts):
             back(arg) if p.get("since") else set_paused(arg, False)
     elif cmd == "planmenu" and arg:
         plan_menu(arg)
+    elif cmd == "planpaceopen" and arg:  # 3.8.0, at my own pace: Open, Open and study, Undo, Put back
+        open_next(arg)
+    elif cmd == "planpacestudy" and arg:
+        open_next(arg, study=True)
+    elif cmd == "planpaceundo" and arg:
+        own_undo(arg)
+    elif cmd == "planpaceback" and arg:
+        put_back_own(arg)
     elif cmd == "plantags" and arg:  # 3.8.0: the plan's tags, in Browse
         browse_tags(arg)
     elif cmd == "plantagsok" and arg:
@@ -1909,6 +1938,215 @@ def open_put_off(pid):
     st = _state_cfg().get(pid) or {}
     for uid in list((st.get("later") or {}).keys()):
         open_date(pid, uid)
+
+
+# ---- 3.8.0: at my own pace ----
+
+def _own_ctx(pid):
+    p = next((x for x in followed() if x["id"] == pid), None)
+    c = _pcfg()
+    state = _state_cfg(c)
+    st = state.get(pid)
+    if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
+        return None
+    return p, c, state, st
+
+
+def _note_last(c, pid, u, kind, label, n, was):
+    """What the plan card's line says (and its Undo undoes) while it's Anki's latest step."""
+    c["own_last"] = {"pid": pid, "uid": u["id"], "name": str(u.get("name") or "?"), "kind": kind,
+                     "label": label, "n": int(n), "day": _today(), "was": was}
+
+
+def _was(st, uid):
+    return {k: (st.get(k) or {}).get(uid) for k in ("applied", "src", "own_opened")}
+
+
+def open_next(pid, study=False):
+    """You › Plans, Open: the next date at my own pace opens now, first in
+    Anki's line of new cards, as one undo step. Open and study: then a Due
+    Crew deck of its new cards, and into it."""
+    got = _own_ctx(pid)
+    if not got:
+        return
+    p, c, state, st = got
+    today = _today()
+    prog = (_state.get("plan_progress") or {}).get(pid) or {}
+    left = P.up_next(p["doc"], st.get("applied"), prog)
+    if not left:
+        tooltip("Every date of this plan is open.")
+        return
+    u = left[0]
+    was = _was(st, u["id"])
+    (st.get("applied") or {}).pop(u["id"], None)  # shut again since (Undo): it opens whole
+    (st.get("src") or {}).pop(u["id"], None)
+    try:
+        res = open_one(mw.col, p, st, u["id"], today, first=True)
+    except Exception:
+        traceback.print_exc()
+        return
+    st.setdefault("own_opened", {})[u["id"]] = today
+    c["plans"] = state
+    if res["n"]:
+        _note_last(c, pid, u, "open", res["label"], res["n"], was)
+    _psave(c)
+    if res["n"]:
+        _after_change()
+    else:
+        tooltip(f"Nothing in {html.escape(str(u.get('name') or 'it'))} to open: it's open already.")
+    refresh_progress()
+    if study:
+        idx = P.DeckIndex(mw.col, st["deck_id"])
+        new = [c2 for c2 in idx.match(u, _swap(st), p["doc"].get("deck", "")) if idx.cards[c2] == (0, 0)]
+        name = _deck_name(u.get("name") or "date")
+        if new and _filtered(mw.col, name, new, order=6):
+            _after_change()
+            did = mw.col.decks.id_for_name(name)
+            if did:
+                mw.col.decks.select(did)
+                mw.moveToState("overview")
+                return
+    app.swap(cfg())
+
+
+def put_back_own(pid):
+    """At my own pace, Put back: the last date I opened shuts again, only its
+    cards I haven't seen (never a seen one, nor one another opened date
+    has), as one undo step; it's Up next again. Stopping the plan opens them."""
+    got = _own_ctx(pid)
+    if not got:
+        return
+    p, c, state, st = got
+    doc, applied = p["doc"], st.get("applied") or {}
+    u = P.own_last(doc, st.get("own_opened"))
+    if not u or not P.opened_here(applied, u):
+        return
+    idx = P.DeckIndex(mw.col, st["deck_id"])
+    deck = doc.get("deck", "")
+    others = set()
+    for x in P.units(doc):
+        if x["id"] != u["id"] and P.opened_here(applied, x):
+            others |= idx.match(x, _swap(st), deck)
+    cids = {c2 for c2 in idx.match(u, _swap(st), deck) - others if idx.cards[c2] == (0, 0)}
+    label = f"Due Crew: put back {u.get('name') or 'a date'}"
+    was = _was(st, u["id"])
+    n = P.hold_cards(mw.col, cids, label) if cids else 0
+    for k in ("applied", "src", "own_opened"):
+        (st.get(k) or {}).pop(u["id"], None)
+    if n:
+        st["held"] = sorted(set(st.get("held") or []) | {int(x) for x in cids})
+        _note_last(c, pid, u, "back", label, n, was)
+    c["plans"] = state
+    _psave(c)
+    if n:
+        _after_change()
+    refresh_progress()
+    app.swap(cfg())
+
+
+def own_undo(pid):
+    """The line's Undo after Open or Put back: Anki's own undo while it's its
+    latest step, then the date is as it was."""
+    last = _pcfg().get("own_last") or {}
+    if last.get("pid") != pid or not _undo_ok(last.get("label")):
+        tooltip("Anki has done something since. Use Edit › Undo.")
+        app.swap(cfg())
+        return
+
+    def done(_out=None):
+        pc = _pcfg()
+        state = _state_cfg(pc)
+        st = state.get(pid)
+        if st is not None:
+            for k, v in (last.get("was") or {}).items():
+                if v is None:
+                    (st.get(k) or {}).pop(last["uid"], None)
+                else:
+                    st.setdefault(k, {})[last["uid"]] = v
+        pc["plans"] = state
+        pc["own_last"] = {}
+        _psave(pc)
+        try:
+            mw.update_undo_actions()
+        except Exception:
+            pass
+        refresh_progress()
+        app.swap(cfg())
+
+    try:
+        from aqt.operations import CollectionOp
+    except ImportError:
+        CollectionOp = None
+    if CollectionOp is not None:
+        CollectionOp(mw, lambda col: col.undo()).success(done).run_in_background()
+        return
+    try:
+        mw.undo()
+    except Exception:
+        traceback.print_exc()
+        return
+    done()
+
+
+def set_own(pid, own):
+    """The plan's menu, How its cards open: mine, on the server (every
+    computer and the site agree). Back on the plan's dates, what's opened by
+    date since asks, as resuming does; at my own pace, a deck whose later
+    cards are open is offered Hold back."""
+    p = next((x for x in followed() if x["id"] == pid), None)
+    if p is None or (p.get("own") or "") == (own or ""):
+        return
+    was, cl = p.get("own") or "", client()
+
+    def done(res):
+        if res is None:
+            tooltip("Couldn't reach Due Crew. Check your connection.")
+            return
+        if was and not own:
+            _resume(pid)
+        elif own and not was:
+            from .ui import confirm
+            offer_hold([pid], ask=lambda name, n: confirm(
+                mw, "Hold back the rest",
+                f"{name}: {n:,} card{'s' if n != 1 else ''} of dates you haven't opened are open already. "
+                "Hold them back until you open their date?\n\nOne undo step; stopping the plan opens them again.",
+                "Hold back"))
+            tooltip("Nothing opens by itself now. Open the next date from You › Plans.", period=5000)
+        app.swap(cfg())
+
+    _bg(lambda: cl.set_own(pid, own or None), done)
+
+
+def own_view(plan, st, prog, today):
+    """card_view's part at my own pace: Up next, then, where the plan's dates
+    are, my pace (and the exam), the last step with its Undo, Put back."""
+    doc, real = plan["doc"], _plan_doc(plan)
+    st = st or {}
+    applied, days, prog = st.get("applied") or {}, st.get("own_opened") or {}, prog or {}
+    left = P.up_next(doc, applied, prog)
+
+    def to_open(u):
+        o, _s, t = (prog.get(u["id"]) or [0, 0, 0])[:3]
+        return max(0, int(t) - int(o))
+    recent = P.recent_opens(days, today)
+    last = None
+    ol = (_pcfg().get("own_last") or {}) if mw else {}
+    if ol.get("pid") == plan["id"] and ol.get("day") == today and mw and mw.col and _undo_ok(ol.get("label")):
+        n = int(ol.get("n") or 0)
+        last = (f"Opened {ol.get('name') or '?'} · {n:,} card{'s' if n != 1 else ''}, first in line."
+                if ol.get("kind") == "open" else f"Put back {ol.get('name') or '?'} · {n:,} card{'s' if n != 1 else ''}.")
+    back = None
+    lu = P.own_last(doc, days)
+    if lu and not last and P.opened_here(applied, lu, prog):
+        o, s2, _t = (prog.get(lu["id"]) or [0, 0, 0])[:3]
+        if int(o) > int(s2):
+            back = {"name": str(lu.get("name") or "?"), "n": int(o) - int(s2)}
+    return {"mode": plan.get("own"),
+            "next": {"uid": left[0]["id"], "name": str(left[0].get("name") or "?"), "n": to_open(left[0])} if left else None,
+            "then": [f"{u.get('name') or '?'} · {to_open(u):,}" for u in left[1:4]], "more": max(0, len(left) - 4),
+            "at": P.plan_at(real, today),
+            "pace": f"You opened {recent} date{'s' if recent != 1 else ''} in the last two weeks." if recent else None,
+            "finish": P.finish_check(real, len(left), recent, today), "last": last, "back": back}
 
 
 def set_skip(pid, uid, on):
@@ -2230,8 +2468,16 @@ def plan_menu(pid):
     menu = QMenu(mw)
     if p.get("sched"):  # 3.3: new follows do the plan's days; a 3.2 schedule can still change or go
         menu.addAction("My schedule…").triggered.connect(lambda: open_schedule(pid))
+    how = menu.addMenu("How its cards open")  # 3.8.0: at my own pace
+    for val, label in (("", "On the plan's dates"), ("ready", "When I'm ready"),
+                       ("next", "When I'm ready, the next once I've seen the last")):
+        a = how.addAction(label)
+        a.setCheckable(True)
+        a.setChecked((p.get("own") or "") == val)
+        a.triggered.connect(lambda _=False, val=val: set_own(pid, val))
     menu.addAction("Open everything now").triggered.connect(lambda: open_everything(pid))
     early = menu.addMenu("Open early")  # 3.3, C2: for studying on a phone
+    early.setEnabled(not P.own_pace(p))
     for n, label in ((0, "Off"), (1, "1 day"), (2, "2 days"), (3, "3 days"), (5, "5 days"), (7, "7 days")):
         a = early.addAction(label)
         a.setCheckable(True)
@@ -2546,7 +2792,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
         idx = P.DeckIndex(mw.col, deck_id)
         # 3.7.6: from the beginning, "later dates" are my shifted ones
         hdoc = P.my_doc(plan["doc"], int(rest)) if kind == "begin" and rest.isdigit() else plan["doc"]
-        cids = P.holdable(idx, hdoc, _today(), swap, state[plan["id"]].get("applied"))
+        cids = P.holdable(idx, hdoc, _today(), swap, state[plan["id"]].get("applied"), own=P.own_pace(plan))
         n = P.hold_cards(mw.col, cids, f"Due Crew: hold back {plan.get('name') or 'plan'}")
         if n:
             state[plan["id"]]["held"] = sorted(set(state[plan["id"]].get("held") or []) | set(int(c) for c in cids))
@@ -2630,6 +2876,8 @@ def browser_menu(browser, menu):
     from . import why_flow
     why = menu.addAction("Due Crew: why isn't it showing?")
     why.triggered.connect(lambda: why_flow.explain(browser))
+    opn = menu.addAction("Due Crew: open these…")  # 3.8.0: never suspends; leeches stay
+    opn.triggered.connect(lambda: open_these(browser))
     if not client().signed_in:
         return
     action = menu.addAction("Due Crew: add to a plan…")
@@ -2643,6 +2891,147 @@ def browser_menu(browser, menu):
     if followed():
         where = menu.addAction("Due Crew: show on my plan")
         where.triggered.connect(lambda: show_on_plan(browser))
+
+
+# ---- 3.8.0: open from Browse (a tag in the sidebar, or the picked cards) ----
+
+def sidebar_menu(sidebar, menu, item, index):
+    """gui_hooks.browser_sidebar_will_show_context_menu: a tag's Due Crew: open its cards…"""
+    try:
+        from aqt.browser.sidebar.item import SidebarItemType
+        if item is None or item.item_type != SidebarItemType.TAG:
+            return
+        tag = str(item.full_name or "")
+    except Exception:
+        return
+    if not tag:
+        return
+    menu.addSeparator()
+    parent = getattr(sidebar, "browser", None) or mw
+    menu.addAction("Due Crew: open its cards…").triggered.connect(lambda: open_tag(parent, tag))
+
+
+def _tag_words(tag):
+    """"#Videos::Micro::12_Strep" -> ("12 Strep", "#Videos › Micro › 12 Strep")."""
+    parts = [x.replace("_", " ").strip() or x for x in str(tag).split("::")]
+    return parts[-1], " › ".join(parts)
+
+
+def open_tag(parent, tag):
+    """A tag's cards, its children's too."""
+    if not mw.col:
+        return
+    try:
+        cids = mw.col.find_cards(P.tag_search(tag) + '"')
+    except Exception:
+        traceback.print_exc()
+        return
+    title, where = _tag_words(tag)
+    _open_sheet(parent, cids, title, where)
+
+
+def open_these(browser):
+    if not mw.col:
+        return
+    try:
+        cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
+    except Exception:
+        traceback.print_exc()
+        return
+    if not cids:
+        tooltip("Select some cards first.")
+        return
+    _open_sheet(browser, cids, None, "")
+
+
+def _on_plans(cids):
+    """Lines for the sheet: the plans I follow whose dates hold some of these."""
+    out, want = [], {int(c) for c in cids}
+    state = _state_cfg()
+    for p in followed():
+        st = state.get(p["id"])
+        if not st or not _deck_ok(mw.col, st.get("deck_id")):
+            continue
+        idx = P.DeckIndex(mw.col, st["deck_id"])
+        names = [str(u.get("name") or "?") for u in P.units(p["doc"])
+                 if idx.match(u, _swap(st), p["doc"].get("deck", "")) & want]
+        if names:
+            out.append(f"On {p.get('name') or 'a plan'}: {', '.join(names[:3])}"
+                       + (f" and {len(names) - 3} more" if len(names) > 3 else "") + ", which count them")
+        if len(out) == 2:
+            break
+    return out
+
+
+def _open_sheet(parent, cids, title, where):
+    counts = P.open_counts(mw.col, cids)
+    try:
+        plans = _on_plans(cids) if counts["open"] else []
+    except Exception:
+        traceback.print_exc()
+        plans = []
+    from .ui.open_dialog import OpenDialog
+    OpenDialog(parent, title, where, counts, plans,
+               on_open=lambda first, study: open_cards_now(cids, title or "the picked cards", first, study)).exec()
+
+
+def open_cards_now(cids, name, first=True, study=False):
+    """Open them (never a leech, never suspends), first in line when asked, as
+    one undo step; at my own pace, a date now all open counts as opened; with
+    study, a Due Crew deck of the new ones, and into it."""
+    if not mw.col:
+        return 0
+    n = P.open_cards(mw.col, cids, f"Due Crew: open {name}", first=first)
+    if n:
+        _after_change()
+    try:
+        _claim_opened()
+    except Exception:
+        traceback.print_exc()
+    refresh_progress()
+    if study:
+        cl = sorted({int(c) for c in cids})
+        new = []
+        for i in range(0, len(cl), 500):
+            chunk = ",".join(str(c) for c in cl[i:i + 500])
+            new += mw.col.db.list(f"SELECT id FROM cards WHERE type = 0 AND queue = 0 AND id IN ({chunk})")
+        deck = _deck_name(name)
+        if new and _filtered(mw.col, deck, new, order=6):
+            _after_change()
+            did = mw.col.decks.id_for_name(deck)
+            if did:
+                mw.col.decks.select(did)
+                mw.moveToState("overview")
+    if n:
+        tooltip(f"Opened {n:,}{' · first in line' if first else ''}. Edit › Undo puts them back.", period=5000)
+    app.swap(cfg())
+    return n
+
+
+def _claim_opened():
+    """At my own pace, a date whose cards are all open now (Browse opened them;
+    leeches aside) counts as opened today, so Up next moves on."""
+    c = _pcfg()
+    state = _state_cfg(c)
+    today, changed = _today(), False
+    for p in followed():
+        st = state.get(p["id"])
+        if not P.own_pace(p) or not st or not _deck_ok(mw.col, st.get("deck_id")):
+            continue
+        idx = P.DeckIndex(mw.col, st["deck_id"])
+        sig = _sig(st)
+        for u in P.up_next(p["doc"], st.get("applied")):
+            cids = idx.match(u, _swap(st), p["doc"].get("deck", ""))
+            shut = [c2 for c2 in cids if idx.cards[c2][0] == -1 and c2 not in idx.leech]
+            if cids and not shut:
+                st.setdefault("applied", {})[u["id"]] = sig(u)
+                st.setdefault("src", {})[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+                st.setdefault("own_opened", {})[u["id"]] = today
+                changed = True
+    if changed:
+        c["plans"] = state
+        _psave(c)
+    return changed
 
 
 def show_on_plan(browser):

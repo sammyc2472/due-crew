@@ -1521,6 +1521,8 @@ gui_hooks.reviewer_did_show_question.append(crew_cards.on_question)
 
 # 3.1: single cards onto a plan's date, from Anki's browser
 gui_hooks.browser_will_show_context_menu.append(plan_flow.browser_menu)
+if hasattr(gui_hooks, "browser_sidebar_will_show_context_menu"):  # 3.8.0: a tag's Due Crew: open its cards…
+    gui_hooks.browser_sidebar_will_show_context_menu.append(plan_flow.sidebar_menu)
 
 
 # 2.12: study rooms. The room follows Anki from screen to screen; the break

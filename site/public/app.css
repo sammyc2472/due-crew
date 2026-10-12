@@ -956,3 +956,8 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
   .chip.live::before { animation: dcbreathe 2.4s ease-in-out infinite alternate; }
   .brd .foot .dc-spin { display: inline-block; animation: dcspin .8s linear infinite; }
 }
+
+/* 3.8.0: a follower's how-its-cards-open, at their own pace */
+.pacebox { margin: 4px 0 10px; display: grid; gap: 4px; justify-items: start; }
+.pacebox label { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; max-width: 100%; }
+.pacebox select { font: inherit; font-size: 13px; padding: 2px 6px; max-width: 100%; }

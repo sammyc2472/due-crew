@@ -42,6 +42,29 @@ describe("plan updates (3.7.3)", () => {
     expect((await sam.call("GET", "/board?keep=1&pv=")).body.plans).toBeUndefined();
   });
 
+  it("3.8.0: how a plan's cards open is mine: on its dates, when I'm ready, or the next once I've seen the last", async () => {
+    const { dre, sam, p } = await setup();
+    const kai = await person("kai");
+    // chosen at Follow
+    const f = await kai.call("POST", "/plans/follow", { code: p.code, own: "ready" });
+    expect(f.status).toBe(200);
+    expect(f.body.following.own).toBe("ready");
+    expect(await kai.status("POST", "/plans/follow", { code: p.code, own: "whenever" })).toBe(400);
+    // changed later; the refresh's stamp moves so every computer hears it
+    const first = (await sam.call("GET", "/board?pv=")).body;
+    expect(first.plans[0].own).toBeUndefined();  // on the plan's dates: nothing to say
+    const set = await sam.call("PATCH", `/plans/${p.id}/follow`, { own: "next" });
+    expect(set.body.own).toBe("next");
+    const moved = (await sam.call("GET", `/board?pv=${first.pv}`)).body;
+    expect(moved.plans[0].own).toBe("next");
+    expect((await sam.call("GET", `/plans/${p.id}`)).body.following.own).toBe("next");
+    expect(await sam.status("PATCH", `/plans/${p.id}/follow`, { own: "fast" })).toBe(400);
+    // back to the plan's dates
+    expect((await sam.call("PATCH", `/plans/${p.id}/follow`, { own: null })).body.own).toBeUndefined();
+    // mine only: the author sees nothing of it
+    expect(JSON.stringify((await dre.call("GET", `/plans/${p.id}/progress`)).body)).not.toContain("ready");
+  });
+
   it("authors post; followers read; a post can ride a save; ceilings", async () => {
     const { dre, sam, p } = await setup();
     expect((await sam.call("POST", `/plans/${p.id}/posts`, { text: "hi" })).status).toBe(403);

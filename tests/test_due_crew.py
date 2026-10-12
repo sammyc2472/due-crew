@@ -8777,6 +8777,174 @@ def test_plan_tags_glue_v380():
           and menu.index('if not client().signed_in') < menu.index('"Due Crew: tag for a plan…"'))
 
 
+def test_own_pace_v380():
+    """3.8.0, at my own pace (Sam's picks on the Your Own Pace mock): a follow
+    says how its cards open: on the plan's dates (as before), when I'm ready
+    (nothing opens by itself; You › Plans' Open opens the next date, first in
+    Anki's line, one undo step), or the next once I've seen the last. No
+    Behind; a quiet line says where the plan's dates are, my pace, the exam.
+    Put back shuts the last date's unseen cards again. Browse opens a tag's
+    cards or the picked ones: never suspends, leeches stay, first in line."""
+    import due_crew as dc
+    from due_crew import plans as P, board, due_flow
+    from aqt.deckbrowser import DeckBrowser
+    doc = {"deck": "Step 1", "units": [dict(u) for u in _plan_units()],
+           "events": [{"id": "ex1", "day": _day(20), "name": "Block exam"}]}
+    us = P.units(doc)
+    sig = P.unit_sig
+    check("own: up next is every date in the plan's order, none opened", [u["id"] for u in P.up_next(doc, {})] == [u["id"] for u in us])
+    applied = {"hf": sig(us[0]), "ar": "skip:" + sig(us[1])}
+    check("own: an opened date and a skipped one aren't up next", [u["id"] for u in P.up_next(doc, applied)] == ["ex", "cz", "rn"])
+    check("own: an opened date shut again since (Undo) is up next again",
+          P.up_next(doc, applied, {"hf": [0, 0, 2]})[0]["id"] == "hf")
+    check("own: a morning opens only what an author adds to dates I opened",
+          P.own_due(doc, {"hf": "old"}, sig) == [(us[0], "open")] and P.own_due(doc, applied, sig) == [])
+    days = {"hf": _day(-1)}
+    check("own, next: nothing before I open one, nor till I've seen most of the last",
+          P.next_by_itself(doc, applied, {}, {}) is None
+          and P.next_by_itself(doc, applied, days, {"hf": [2, 1, 2]}) is None
+          and P.next_by_itself(doc, applied, days, {"hf": [10, 9, 10]})["id"] == "ex")
+    check("own: where the plan's dates are", P.plan_at(doc, _day(4)) == "The plan's dates are at Extras today."
+          and P.plan_at(doc, _day(-30)).startswith("The plan's dates start "))
+    recent = P.recent_opens({"a": _day(-20), "b": _day(-13), "c": _day(0)}, _day(0))
+    check("own: my pace is the dates I opened in the last two weeks", recent == 2, recent)
+    late = P.finish_check(doc, 4, 2, _day(0))
+    check("own: the exam check names the plan's exam and the day my pace gets there",
+          late == f"At that pace you open the last date on {P.fmt_day(_day(28))}, 8 days after Block exam.", late)
+    check("own: in time says so; no pace, no exam: no line",
+          "in time for Block exam" in P.finish_check(doc, 1, 7, _day(0))
+          and P.finish_check(doc, 4, 0, _day(0)) is None and P.finish_check(dict(doc, events=[]), 4, 2, _day(0)) is None)
+    idx = P.DeckIndex(_plan_col(), 10)
+    check("own: Hold back holds every date I haven't opened, whatever its day",
+          P.holdable(idx, doc, _day(0)) == set() and P.holdable(idx, doc, _day(0), own=True) == set())
+
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    store.plans[pid]["doc"]["events"] = [{"id": "ex1", "day": _day(20), "name": "Block exam"}]
+    maya = new_client(store, "maya", "Maya")
+    plan, _ = maya.follow_plan(code, own="ready")
+    check("own: chosen at Follow, on my follow", plan["own"] == "ready" and store.follows[(pid, "maya")]["own"] == "ready")
+    col = _plan_col()
+    fakes.add_card(col.db.conn, 30, did=10, queue=-1, tags="Step1::Cardio::Heart_failure leech")
+    for cid, due in ((1, 50), (2, 51), (3, 52), (4, 53), (5, 54), (6, 55), (9, 56), (30, 57)):
+        col.db.conn.execute("UPDATE cards SET due = ? WHERE id = ?", (due, cid))
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        F.on_followed(plan, 10, None, "open")
+        check("own: following at my own pace opens nothing by itself", _open(col) == {8}, sorted(_open(col)))
+        p = next(x for x in F.followed() if x["id"] == pid)
+        st = F._state_cfg()[pid]
+        prog = F.progress(col, [p], F._state_cfg())[pid]
+        v = F.card_view(p, st, prog, _day(0))
+        check("own: the card says at your pace, Up next with what opens, and no Behind",
+              v["sub"].startswith("at your pace") and v["own"]["next"]["name"] == "Heart failure" and v["own"]["next"]["n"] == 3  # not open yet, its leech too
+              and v["lines"] == [] and v["own"]["at"] == "The plan's dates are at Arrhythmia today."
+              and v["own"]["pace"] is None and v["own"]["finish"] is None, str(v["own"]))
+        F.open_next(pid)
+        st = F._state_cfg()[pid]
+        dues = dict(col.db.all("SELECT id, due FROM cards"))
+        check("own: Open opens the next date (never the leech), first in Anki's line, as one undo step",
+              {1, 2} <= _open(col) and 30 not in _open(col) and dues[1] == 0 and dues[2] == 1 and dues[3] > 1
+              and col.undo_status().undo == "Due Crew: open Heart failure" and st["own_opened"] == {"hf": _day(0)}, str(dues))
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        v = F.card_view(next(x for x in F.followed() if x["id"] == pid), st, F._state["plan_progress"][pid], _day(0))
+        html = board._plan_card_html(dict(v, own=dict(v["own"], next=dict(v["own"]["next"], name="<Arr>"))))
+        check("own: the card moves on, says what it did with Undo, names escaped",
+              v["own"]["next"]["name"] == "Arrhythmia" and v["own"]["last"] == "Opened Heart failure · 2 cards, first in line."
+              and "&lt;Arr&gt;" in html and f"duecrew:planpaceopen:{pid}" in html and f"duecrew:planpacestudy:{pid}" in html
+              and f"duecrew:planpaceundo:{pid}" in html and "Up next" in html and "Behind" not in html, html[:400])
+        dates, _e, _r = due_flow.plan_dates(_day(0))
+        check("own: Due shows the date I opened as today's, and no date I haven't",
+              [(d["uid"], d["opens"]) for d in dates if d["pid"] == pid] == [("hf", _day(0))], str([(d["uid"], d["opens"]) for d in dates]))
+        sys.modules["aqt.operations"] = None  # an Anki without CollectionOp: undo runs here
+        was_undo = getattr(F.mw, "undo", None)
+        F.mw.undo = col.undo
+        try:
+            F.own_undo(pid)
+        finally:
+            sys.modules.pop("aqt.operations", None)
+            if was_undo is None:
+                del F.mw.undo
+            else:
+                F.mw.undo = was_undo
+        st = F._state_cfg()[pid]
+        check("own: Undo shuts them again and Heart failure is up next again",
+              not ({1, 2} & _open(col)) and "hf" not in (st.get("applied") or {}) and not st.get("own_opened")
+              and not F._pcfg().get("own_last"), str(st))
+        F.open_next(pid)
+        # "next": once I've seen most of the last date, the morning opens the one after
+        maya.set_own(pid, "next")
+        check("own: changed later with one request, kept on my follow",
+              store.follows[(pid, "maya")]["own"] == "next" and next(x for x in F.followed() if x["id"] == pid)["own"] == "next")
+        col.db.conn.execute("UPDATE cards SET type = 2, queue = 2 WHERE id IN (1, 2)")
+        state = F._state_cfg()
+        state[pid]["own_opened"]["hf"] = _day(-1)
+        dry = F.run(col, F.followed(), json.loads(json.dumps(state)), _day(0), dry=True)
+        check("own, next: a mid-day update's line never offers the next by itself", dry["names"] == [], str(dry))
+        res = F.run(col, F.followed(), state, _day(0))
+        check("own, next: seen the last one, the next opens by itself, and only that",
+              res["names"] == ["Arrhythmia"] and 3 in _open(col) and 4 not in _open(col)
+              and state[pid]["own_opened"].get("ar") == _day(0), str(res))
+        res = F.run(col, F.followed(), state, _day(0))
+        check("own, next: not another till I've seen this one", res["names"] == [], str(res))
+        c = F._pcfg()
+        c["plans"] = state
+        F._psave(c)
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        v = F.card_view(next(x for x in F.followed() if x["id"] == pid), F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        check("own: Put back offers the last date's unseen cards", v["own"]["back"] == {"name": "Arrhythmia", "n": 1}, str(v["own"]))
+        F.put_back_own(pid)
+        st = F._state_cfg()[pid]
+        check("own: Put back shuts only its unseen cards, one undo step; it's up next again, and Stop opens them",
+              3 not in _open(col) and {1, 2} <= _open(col) and "ar" not in st["applied"] and 3 in st.get("held", [])
+              and col.undo_status().undo == "Due Crew: put back Arrhythmia"
+              and P.up_next(next(x for x in F.followed() if x["id"] == pid)["doc"], st["applied"])[0]["id"] == "ar")
+        # Browse: open what I picked, or a tag's cards
+        counts = P.open_counts(col, [3, 4, 8, 30])
+        check("browse: the sheet counts what opens, what's open, the leeches", counts == {"open": 2, "already": 1, "leech": 1}, str(counts))
+        n = F.open_cards_now([3, 4, 30], "Extras", first=True)
+        st = F._state_cfg()[pid]
+        dues = dict(col.db.all("SELECT id, due FROM cards"))
+        check("browse: opened (never the leech), first in line, said with its Undo",
+              n == 2 and {3, 4} <= _open(col) and 30 not in _open(col) and {dues[3], dues[4]} == {0, 1}
+              and any("Opened 2 · first in line" in t for t in g.toasts))
+        check("browse: at my own pace, dates now all open count as opened",
+              "ex" in st["applied"] and "ar" in st["applied"] and st["own_opened"].get("ex") == _day(0))
+        check("browse: a tag's words", F._tag_words("#Videos::Micro::12_Strep") == ("12 Strep", "#Videos › Micro › 12 Strep"))
+        acts = []
+        menu = types.SimpleNamespace(addSeparator=lambda: None,
+                                     addAction=lambda t: acts.append(t) or types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None)))
+        item_mod = types.ModuleType("aqt.browser.sidebar.item")
+        item_mod.SidebarItemType = types.SimpleNamespace(TAG="tag", DECK="deck")
+        saved_mod = sys.modules.get("aqt.browser.sidebar.item")
+        sys.modules["aqt.browser.sidebar.item"] = item_mod
+        try:
+            F.sidebar_menu(types.SimpleNamespace(browser=None), menu, types.SimpleNamespace(item_type="tag", full_name="#Videos::Micro"), None)
+            F.sidebar_menu(types.SimpleNamespace(browser=None), menu, types.SimpleNamespace(item_type="deck", full_name="Step 1"), None)
+        finally:
+            if saved_mod is None:
+                sys.modules.pop("aqt.browser.sidebar.item", None)
+            else:
+                sys.modules["aqt.browser.sidebar.item"] = saved_mod
+        check("browse: a tag in the sidebar has Due Crew: open its cards…, a deck doesn't", acts == ["Due Crew: open its cards…"], acts)
+        # the card's commands reach their handlers, through the board's own path
+        got = []
+        saved = {k: getattr(F, k) for k in ("open_next", "own_undo", "put_back_own")}
+        F.open_next = lambda p2, study=False: got.append(("open", p2, study))
+        F.own_undo = lambda p2: got.append(("undo", p2))
+        F.put_back_own = lambda p2: got.append(("back", p2))
+        try:
+            for cmd in ("planpaceopen", "planpacestudy", "planpaceundo", "planpaceback"):
+                dc._on_js(False, f"duecrew:{cmd}:{pid}", DeckBrowser())
+        finally:
+            for k, val in saved.items():
+                setattr(F, k, val)
+        check("own: Open, Open and study, Undo and Put back reach their handlers",
+              got == [("open", pid, False), ("open", pid, True), ("undo", pid), ("back", pid)], str(got))
+    check("own: back to the plan's dates with one request", maya.set_own(pid, None)["own"] == ""
+          and "own" not in store.follows[(pid, "maya")] or store.follows[(pid, "maya")].get("own") is None)
+
+
 def test_why_not_showing_v380():
     """3.8.0, pick 9: Browse › why isn't it showing? (why, pure): one plain
     sentence a card, in Anki's words, and Anki's own fix beside it;
@@ -8923,8 +9091,8 @@ def test_why_not_showing_glue_v380():
         PF.browser_menu(types.SimpleNamespace(), Menu())
     finally:
         PF.client = saved_client
-    check("glue: Browse's right-click asks why, signed out too (Anki help, not the account)",
-          acts == ["Due Crew: why isn't it showing?"], acts)
+    check("glue: Browse's right-click asks why and opens the picked cards, signed out too (Anki help, not the account)",
+          acts == ["Due Crew: why isn't it showing?", "Due Crew: open these…"], acts)
 
 
 def test_card_set_links_one_look_v380():

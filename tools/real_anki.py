@@ -372,6 +372,34 @@ def check(path):
     after = WF.context(col)["left"](did)["new"]
     ok("why: N more new today raises today's room by N in Anki's own tree", after >= min(before + need, 9999) - 1,
        f"{before} → {after} (asked {need:,} more)")
+    # 3.8.0, at my own pace and from Browse: open a tag's cards (its children too), first in
+    # Anki's line of new cards, never a leech, as one undo step; Undo shuts them and puts them back in line
+    tag = "#Big_Step1_v12::#Path_Book::02_Chapter_2"
+    t = tm(); tcids = col.find_cards(P.tag_search(tag) + '"'); t_find = tm() - t
+    kids = col.find_cards(P.tag_search(tag) + '::*"')
+    shut = [c for c in tcids if col.get_card(c).queue == -1]
+    counts = P.open_counts(col, tcids)
+    ok("open: a tag's cards, its children's too, counted first",
+       len(tcids) > 0 and set(kids) <= set(tcids) and counts["open"] + counts["leech"] == len(shut),
+       f"{len(tcids):,} cards, {counts}, {t_find*1000:.0f} ms")
+    before = {c: col.get_card(c).due for c in shut}
+    t = tm(); n = P.open_cards(col, tcids, "Due Crew: open 02 Chapter 2", first=True); t_open = tm() - t
+    opened = [c for c in shut if col.get_card(c).queue == 0]
+    lowest = sorted(col.db.list(f"SELECT due FROM cards WHERE did = {did} AND type = 0 AND queue = 0 ORDER BY due LIMIT {len(opened)}"))
+    ok("open: first in line: the opened new cards are the front of the deck's new cards, in their old order",
+       n == counts["open"] and sorted(col.get_card(c).due for c in opened) == lowest
+       and [c for c in sorted(opened, key=lambda c: col.get_card(c).due)] == sorted(opened, key=lambda c: before[c]),
+       f"{n:,} opened, {t_open*1000:.0f} ms")
+    ok("open: one undo step, named", col.undo_status().undo == "Due Crew: open 02 Chapter 2", repr(col.undo_status().undo))
+    col.undo()
+    ok("open: Edit › Undo shuts them and puts them back in line",
+       all(col.get_card(c).queue == -1 and col.get_card(c).due == before[c] for c in shut))
+    P.open_cards(col, tcids, "Due Crew: open 02 Chapter 2", first=True)
+    unseen = {c for c in tcids if col.get_card(c).type == 0 and col.get_card(c).queue == 0}
+    n_back = P.hold_cards(col, unseen, "Due Crew: put back 02 Chapter 2")
+    ok("put back: only the unseen ones shut again, one undo step",
+       n_back == len(unseen) and all(col.get_card(c).queue == -1 for c in unseen)
+       and col.undo_status().undo == "Due Crew: put back 02 Chapter 2")
     # 3.8.0: plan tags: a follower's Anki puts the plan's own tags on its notes (exact notes by
     # guid, a tag's notes), renames one, takes notes off, drops one, each sync one undo step;
     # unfollowing takes them all off; nobody's own tags are touched

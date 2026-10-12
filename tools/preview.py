@@ -219,6 +219,22 @@ _SQ = {"cards": [dict(PLAN_CARD, tabs={"unread": 2, "summary": {
     "shown": 5, "of": 12, "faces": ["\U0001F419", "\U0001F98A", "\U0001F331"], "last": {"name": "Maya"}}})], "offers": []}
 sections.append("<h3>3.8.0: a plan I follow, in its squad (the line goes there); Due off</h3>" + board.render(
     DATA, {"period": "week", "due_show": False}, now_ts - 60, plans=_SQ, you=_YOU("plans", plans=_SQ)))
+# 3.8.0: at my own pace: Up next with Open, what follows, the last step's Undo, quiet lines (no Behind)
+_OWN = {"mode": "ready", "next": {"uid": "u2", "name": "SLG 13 · Heart failure", "n": 180},
+        "then": ["SLG 14 · Arrhythmias · 96", "SLG 15 · Valves · 122", "SLG 16 · 140"], "more": 29,
+        "at": "The plan's dates are at SLG 14 today.", "pace": "You opened 5 dates in the last two weeks.",
+        "finish": "At that pace you open the last date on Tue 8 Dec, 3 days after Block exam.",
+        "last": "Opened SLG 12 · Cardiac receptors · 214 cards, first in line.", "back": None}
+sections.append("<h3>3.8.0: a plan at my own pace (When I'm ready), just after Open</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
+        PLAN_CARD, sub="at your pace · 6 following", tabs={"summary": None}, ins=None, lines=[], waiting=0, own=_OWN)], "offers": []})))
+sections.append("<h3>3.8.0: at my own pace, later (Put back), every date open</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
+        PLAN_CARD, sub="at your pace · 6 following", tabs={"summary": None}, ins=None, lines=[], waiting=0,
+        own=dict(_OWN, last=None, back={"name": "SLG 13 · Heart failure", "n": 180})),
+        dict(PLAN_CARD, id="p2", title="Micro · Dre's plan", sub="at your pace · 2 following", tabs={"summary": None}, ins=None, lines=[],
+             own=dict(_OWN, next=None, then=[], more=0, last=None, back=None, finish=None, pace=None,
+                      at="The plan's dates ended Fri 4 Dec."))], "offers": []})))
 sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None,

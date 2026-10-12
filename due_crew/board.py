@@ -778,6 +778,21 @@ def _css(cfg):
       text-decoration: none; white-space: nowrap; }}
     #due-crew .dc-pc .pn .acts {{ margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }}
     #due-crew .dc-pc .pn .acts a {{ margin-left: 0; }}
+    /* 3.8.0: at my own pace, Up next */
+    #due-crew .dc-pc .pnx {{ text-align: left; margin-top: 4px; }}
+    #due-crew .dc-pc .nx {{ display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+      padding: 7px 10px; border: 1px solid var(--dc-accent); border-radius: 8px; background: var(--dc-you-bg); }}
+    #due-crew .dc-pc .nx .nx1 {{ font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }}
+    #due-crew .dc-pc .nx .nx1 small {{ color: var(--dc-muted); font-size: 11.5px; }}
+    #due-crew .dc-pc .nx .lbl {{ font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-accent); margin-right: 4px; }}
+    #due-crew .dc-pc .nx .nx2 {{ display: flex; gap: 6px; }}
+    #due-crew .dc-pc .nx a.bt, #due-crew .dc-pc .nx a.bt2 {{ font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 7px;
+      padding: 4px 12px; white-space: nowrap; border: 1px solid var(--dc-accent); }}
+    #due-crew .dc-pc .nx a.bt {{ background: var(--dc-accent); color: var(--dc-accent-ink); }}
+    #due-crew .dc-pc .nx a.bt2 {{ color: var(--dc-accent); background: transparent; }}
+    #due-crew .dc-pc .pq, #due-crew .dc-pc .pnl {{ font-size: 11.5px; color: var(--dc-muted); margin: 6px 2px 0; }}
+    #due-crew .dc-pc .pnl {{ color: var(--dc-ink); }}
+    #due-crew .dc-pc .pq a, #due-crew .dc-pc .pnl a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
     /* 3.5.0: a plan's week (Anki centres the Decks screen's text; the plan reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .wbar {{ display: block; height: 5px; background: var(--dc-well); border-radius: 3px; overflow: hidden; }}
@@ -1582,7 +1597,7 @@ def _plan_now(card, pid):
     if card.get("paused"):
         return (f'<div class="pn"><span>No new cards while it&rsquo;s paused.</span>'
                 f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></span></div>')
-    out = ""
+    out = _own_html(card.get("own"), pid) if card.get("own") else ""
     kind = (card.get("session") or {}).get("kind")
     if kind in ("rest", "catchup", "taper"):
         word = {"rest": "a rest day", "catchup": "in its catch-up week", "taper": "in its taper"}[kind]
@@ -1598,6 +1613,40 @@ def _plan_now(card, pid):
                 f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a>'
                 f'<a href="#" onclick="{_pycmd(f"youins:{did}")}">Insights &rsaquo;</a></span></div>')
     return out
+
+
+def _own_html(ow, pid):
+    """3.8.0, at my own pace: Up next with Open and Open and study, what
+    follows, the last step's Undo (or Put back), and quiet lines: where the
+    plan's dates are, my pace, the exam. No Behind. Names are the author's:
+    escaped here."""
+    e = _html.escape
+    out = '<div class="pnx">'
+    nx = ow.get("next")
+    if nx:
+        n = int(nx.get("n") or 0)
+        out += (f'<div class="nx"><span class="nx1"><span class="lbl">Up next</span> <b>{e(str(nx.get("name") or "?"))}</b>'
+                + (f' <small>{n:,} new</small>' if n else "") + '</span>'
+                f'<span class="nx2"><a class="bt" href="#" onclick="{_pycmd("planpaceopen:" + pid)}">Open</a>'
+                f'<a class="bt2" href="#" onclick="{_pycmd("planpacestudy:" + pid)}">Open and study</a></span></div>')
+        then, more = ow.get("then") or [], int(ow.get("more") or 0)
+        if then:
+            out += f'<div class="pq">Then {" &middot; ".join(e(str(x)) for x in then)}{f" &middot; {more:,} more" if more else ""}</div>'
+    else:
+        out += '<div class="pq">Every date of it is open.</div>'
+    if ow.get("last"):
+        out += (f'<div class="pnl">{e(str(ow["last"]))} '
+                f'<a href="#" onclick="{_pycmd("planpaceundo:" + pid)}">Undo</a></div>')
+    elif ow.get("back"):
+        b = ow["back"]
+        out += (f'<div class="pq"><a href="#" onclick="{_pycmd("planpaceback:" + pid)}">Put back {e(str(b.get("name") or "?"))}</a>'
+                f' &middot; {int(b.get("n") or 0):,} not seen yet</div>')
+    said = " ".join(e(str(ow[k])) for k in ("at", "pace") if ow.get(k))
+    if said:
+        out += f'<div class="pq">{said}</div>'
+    if ow.get("finish"):
+        out += f'<div class="pq">{e(str(ow["finish"]))}</div>'
+    return out + "</div>"
 
 
 def _squad_line(pid, tabs):
