@@ -27,6 +27,7 @@ from . import plans as P
 from .app import _state, cfg, save_cfg
 
 AGAIN_MIN = 10  # today's misses before the box suggests going over them
+MISSES = P.our_deck("Today's misses")  # their filtered deck, under Due Crew's parent
 LEECH_MIN = 3  # new leeches this week before it suggests a look
 RECOVER_MAX = 200  # leeches recovered in a morning, at most
 REVIEWS_FRESH = 30.0  # seconds a reviews-due count is good for
@@ -556,9 +557,9 @@ def go(key):
         start = (mw.col.sched.day_cutoff - 86400) * 1000
         cids = [int(x) for x in mw.col.db.list(
             "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)][:500]
-        if cids and pf._filtered(mw.col, "Due Crew · today's misses", cids):
+        if cids and pf._filtered(mw.col, MISSES, cids):
             pf._after_change()
-            did = mw.col.decks.id_for_name("Due Crew · today's misses")
+            did = mw.col.decks.id_for_name(MISSES)
             if did:
                 mw.col.decks.select(did)
                 mw.moveToState("overview")
@@ -691,7 +692,7 @@ def study_step(first=False):
     if step and step[0] == "misses":
         w["misses"] = True
         pf = _pf()
-        name = "Due Crew · today's misses"
+        name = MISSES
         if pf._filtered(mw.col, name, _misses_today(mw.col)[:500]):
             pf._after_change()
             did = mw.col.decks.id_for_name(name)

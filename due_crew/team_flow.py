@@ -916,7 +916,7 @@ def study(did, key):
     if not cids or not mw.col:
         return
     pf = _plans_flow()
-    name = pf._deck_name(f"Due Crew · {title}")
+    name = pf._deck_name(title)
     if pf._filtered(mw.col, name, cids):
         pf._after_change()
         fid = mw.col.decks.id_for_name(name)

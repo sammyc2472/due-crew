@@ -1061,7 +1061,7 @@ def study_date(pid, uid):
     if not cids:
         tooltip("Nothing from this date studied yet.")
         return
-    name = _deck_name(f"Due Crew · {u.get('name') or 'date'}")
+    name = _deck_name(u.get('name') or 'date')
     if _filtered(mw.col, name, cids):
         _after_change()
         did = mw.col.decks.id_for_name(name)
@@ -1071,8 +1071,8 @@ def study_date(pid, uid):
 
 
 def _deck_name(name):
-    """A filtered deck's name from a date's: "::" in it would make a parent deck."""
-    return " ".join(str(name).replace("::", ": ").split())[:120]
+    """A filtered deck's name from a date's, under Due Crew's parent deck."""
+    return P.our_deck(name)
 
 
 def check_cards(col, idx, cids, n=CHECK_CARDS):
@@ -1102,6 +1102,7 @@ def _filtered(col, name, cids):
         deck.config.reschedule = True
         col.sched.add_or_update_filtered_deck(deck)
         _note_built(col.decks.id_for_name(name))
+        _note_built(col.decks.id_for_name(P.PARENT))  # made with it, so the tidy may clear it
         return True
     except Exception:
         traceback.print_exc()
@@ -1124,16 +1125,22 @@ def _note_built(did):
 
 def tidy_decks(col):
     """3.8.0, the morning, before it unsuspends (its undo step stays the
-    latest): the filtered decks Due Crew built that are empty now go, in
-    one step (Anki's Delete Deck). Returns how many."""
+    latest): the filtered decks Due Crew built that are empty now go, and
+    the Due Crew parent deck once nothing's under it, in one step (Anki's
+    Delete Deck). Returns how many."""
     try:
         normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
         rows = [(int(d.id), d.name, col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
                 for d in col.decks.all_names_and_ids(include_filtered=True) if int(d.id) not in normal]
         c = _pcfg()
         built = [x for x in c.get("built") or [] if isinstance(x, int)]
-        gone = P.tidy(rows, built)
-        keep = [x for x in built if x in {r[0] for r in rows} and x not in gone]
+        pid = col.decks.id_for_name(P.PARENT)
+        parent = None
+        if pid and int(pid) in normal:
+            parent = (int(pid), [int(x) for x in col.decks.deck_and_child_ids(pid) if int(x) != int(pid)],
+                      col.db.scalar("SELECT count() FROM cards WHERE did = ? OR odid = ?", int(pid), int(pid)) or 0)
+        gone = P.tidy(rows, built, parent)
+        keep = [x for x in built if (x in {r[0] for r in rows} or (parent and x == parent[0])) and x not in gone]
         if keep != built:
             c["built"] = keep
             _psave(c)
@@ -1147,7 +1154,7 @@ def tidy_decks(col):
 
 def build_checks(plan_list):
     """Main thread, in the morning: each checkpoint due today becomes a
-    filtered deck, "Checkpoint · Cardio". Its score stays on this computer."""
+    filtered deck, "Due Crew::Checkpoint · Cardio". Its score stays on this computer."""
     if not mw.col:
         return []
     import time as _time

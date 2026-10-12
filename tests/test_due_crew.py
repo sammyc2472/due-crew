@@ -4506,8 +4506,9 @@ def test_plan_search_is_the_decks_v34():
             pass
         check("search: the default search with nothing picked asks for a search or cards",
               g.toasts and "Search for the cards" in g.toasts[-1], str(g.toasts))
-        check("review: a date named with :: makes no parent deck for its filtered deck",
-              g.F._deck_name("Checkpoint · Renal::Pharm") == "Checkpoint · Renal: Pharm")
+        check("review: a filtered deck sits under Due Crew; a date named with :: makes no deeper one",
+              g.F._deck_name("Checkpoint · Renal::Pharm") == "Due Crew::Checkpoint · Renal: Pharm"
+              and g.F._deck_name("  ") == "Due Crew::Cards")
 
 
 def test_sign_in_keeps_anki_synced_v311():
@@ -6536,8 +6537,6 @@ def test_due_board_and_clicks():
     check("leeches: none, no step", F.recover_leeches(col) == [] and len(col.undo_steps) == 1)
     # 3.8.0: switched on, they come back now, and it says so
     fakes.add_card(conn, 4, did=10, ctype=2, queue=-1, tags="leech Renal", lapses=9)
-    import due_crew as dc
-    from aqt.deckbrowser import DeckBrowser
     conf2, said = {"due_leeches": False}, []
     saved2 = (dc.cfg, dc.save_cfg, F.cfg, F.mw.col, F.tooltip, F._today, F._pf)
     store = {}
@@ -7107,7 +7106,7 @@ def test_insights_379():
     import due_crew as dc
     from aqt import mw
     from aqt.deckbrowser import DeckBrowser
-    from due_crew import team as T, team_flow as TF, plan_flow as F, plans as P, board
+    from due_crew import team as T, team_flow as TF, plan_flow as F, board
     from due_crew.app import _state
     # ---- pure ----
     check("recall: FSRS's curve, 90% at t = s, and FSRS-6's own decay",
@@ -7333,8 +7332,8 @@ def test_insights_379():
         dc._on_js(False, "duecrew:insstudy:10:h", DeckBrowser())
         dc._on_js(False, "duecrew:insstudy:10:0", DeckBrowser())
         check("glue: no date preps for the quiz: the whole plan, the box by the day", v["aim"]["scoped"] is False)
-        check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew · Before Fri 4", list(range(210, 220))),
-              ("Due Crew · Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
+        check("glue: Study builds the hero's deck and a topic's", built == [("Due Crew::Before Fri 4", list(range(210, 220))),
+              ("Due Crew::Renal", [200, 201, 202, 203, 204, 205, 206, 207, 210, 211, 212])], built)
         dc._on_js(False, "duecrew:insbrowse:10:h", DeckBrowser())
         dc._on_js(False, "duecrew:insbrowse:10:0", DeckBrowser())
         dc._on_js(False, "duecrew:insleeches:10", DeckBrowser())
@@ -7360,7 +7359,7 @@ def test_insights_379():
         built.clear()
         dc._on_js(False, "duecrew:insstudy:10:h", DeckBrowser())
         check("glue: Renal preps for the quiz too: its weak cards, the deck by the event's name",
-              v3.get("hero") == list(range(210, 220)) and built == [("Due Crew · Before Quiz", list(range(210, 220)))], built)
+              v3.get("hero") == list(range(210, 220)) and built == [("Due Crew::Before Quiz", list(range(210, 220)))], built)
         # the same deck with no plan: my exam date, the deck's own tags, what Anki has due
         for i in range(12):
             fakes.add_card(conn, 600 + i, did=10, queue=0, tags="Step1::New")
@@ -7475,36 +7474,52 @@ def test_tidy_filtered_v380():
     """3.8.0: the morning clears the filtered decks Due Crew built once
     they're empty; a deck with cards, or one it didn't build, stays."""
     from due_crew import plans as P, plan_flow as F
-    rows = [(1, "Due Crew · Renal", 0), (2, "Due Crew · today's misses", 3), (3, "Checkpoint · Cardio", 0),
-            (4, "My cram", 0), (5, "Checkpoint · Pulm", 4)]
+    rows = [(1, "Due Crew · Renal", 0), (2, "Due Crew::Today's misses", 3), (3, "Checkpoint · Cardio", 0),
+            (4, "My cram", 0), (5, "Checkpoint · Pulm", 4), (6, "Due Crew::Renal", 0)]
     check("tidy: ours and empty go; with cards, or not ours, stay",
-          P.tidy(rows, [3, 5]) == [1, 3])
-    check("tidy: nothing built, only the old Due Crew names", P.tidy(rows, []) == [1])
+          P.tidy(rows, [3, 5]) == [1, 3, 6])
+    check("tidy: nothing built, only the Due Crew names", P.tidy(rows, []) == [1, 6])
+    check("tidy: the parent goes with the last of what's under it, if Due Crew made it, and empty",
+          P.tidy(rows, [8], (8, [6], 0)) == [1, 6, 8] and P.tidy(rows, [8], (8, [2, 6], 0)) == [1, 6]
+          and P.tidy(rows, [], (8, [6], 0)) == [1, 6] and P.tidy(rows, [8], (8, [6], 2)) == [1, 6]
+          and P.tidy([], [8], (8, [], 0)) == [8])
 
     class Decks:
         def __init__(self):
-            self.d = {1: ("Due Crew · Renal", True), 2: ("Due Crew · today's misses", True), 3: ("Checkpoint · Cardio", True),
-                      4: ("My cram", True), 9: ("Big Step 1", False)}
+            self.d = {1: ("Due Crew · Renal", True), 2: ("Due Crew::Today's misses", True),
+                      3: ("Due Crew::Checkpoint · Cardio", True), 4: ("My cram", True), 6: ("Due Crew::Renal", True),
+                      8: ("Due Crew", False), 9: ("Big Step 1", False)}
             self.removed = []
 
         def all_names_and_ids(self, skip_empty_default=False, include_filtered=True):
             return [types.SimpleNamespace(id=k, name=n) for k, (n, dyn) in self.d.items() if include_filtered or not dyn]
 
+        def id_for_name(self, name):
+            return next((k for k, (n, _d) in self.d.items() if n == name), None)
+
+        def deck_and_child_ids(self, did):
+            top = self.d[did][0]
+            return [did] + [k for k, (n, _d) in self.d.items() if n.startswith(top + "::")]
+
         def remove(self, ids):
-            self.removed += ids
+            self.removed.append(list(ids))
             for i in ids:
                 self.d.pop(i, None)
 
     cards = {2: 3}
-    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, did: cards.get(did, 0)))
-    pc = {"built": [3, 2, 77, "x"]}
+    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, *a: cards.get(a[0], 0)))
+    pc = {"built": [3, 2, 8, 77, "x"]}
     saved = (F._pcfg, F._psave)
     try:
         F._pcfg, F._psave = (lambda: pc), (lambda c: None)
         n = F.tidy_decks(col)
-        check("tidy: one step, the empty ones of ours; the list forgets what's gone",
-              n == 2 and col.decks.removed == [1, 3] and pc["built"] == [2], (n, col.decks.removed, pc))
-        check("tidy: again, nothing to do", F.tidy_decks(col) == 0 and col.decks.removed == [1, 3])
+        check("tidy: one step, the empty ones of ours; the parent stays while a deck under it has cards",
+              n == 3 and col.decks.removed == [[1, 3, 6]] and pc["built"] == [2, 8], (n, col.decks.removed, pc))
+        cards[2] = 0
+        n = F.tidy_decks(col)
+        check("tidy: the last one under it studied, it goes with the parent, one step",
+              n == 2 and col.decks.removed[1:] == [[2, 8]] and pc["built"] == [] and 8 not in col.decks.d, (n, col.decks.removed, pc))
+        check("tidy: again, nothing to do", F.tidy_decks(col) == 0 and len(col.decks.removed) == 2)
         F._note_built(5)
         F._note_built(2)
         check("tidy: a deck built is remembered once, newest last", pc["built"] == [5, 2], pc)

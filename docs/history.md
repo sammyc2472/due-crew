@@ -959,6 +959,14 @@ every release that changes how something works.
   invite. Once you've added each other, they're here." Recover leeches
   (Sam: "does not work"): it ran only in the morning; switched on, it
   recovers the leeches now, as one undo step, and says how many.
+  One Due Crew deck (3.8.0, Sam's pick): the filtered decks Due Crew
+  builds (a date's Study, Insights' Study, a checkpoint, today's misses)
+  are "Due Crew::…" (`plans.our_deck`), so they fold under one parent in
+  Anki's deck list; Anki makes the parent a normal deck. The morning's
+  tidy (`plans.tidy`) also takes the parent once it's empty with nothing
+  under it, when Due Crew made it (its id kept with the built ones), in
+  the same Delete Deck step; old "Due Crew · …" decks still go once empty.
+  Checked on Anki's engine (`tools/real_anki.py`).
   The site, audited (3.8.0): a long word in the rail no longer widens the
   page; Squads hides columns by name (its line spans two, which hid the
   wrong ones under 560 px) and its line wraps; the cheer popup sits on the

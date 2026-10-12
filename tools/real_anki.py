@@ -147,15 +147,17 @@ def check(path):
     pstore = {}
     keep_p = (F._pcfg, F._psave)
     F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
-    built = F._filtered(col, "Due Crew · " + units[5]["name"], pick)
-    fdid = col.decks.id_for_name("Due Crew · " + units[5]["name"])
-    in_deck = len(col.find_cards(f'deck:"Due Crew · {units[5]["name"]}"')) if fdid else 0
-    ok("Study: Anki's filtered deck of the date's seen cards", built and in_deck == len(pick) > 0, f"{in_deck} cards")
-    ok("…remembered as built here", pstore.get("built") == [fdid], pstore)
+    built = F._filtered(col, F._deck_name(units[5]["name"]), pick)
+    fdid = col.decks.id_for_name(F._deck_name(units[5]["name"]))
+    in_deck = len(col.find_cards(f'"deck:{F._deck_name(units[5]["name"])}"')) if fdid else 0
+    parent = col.decks.id_for_name("Due Crew")
+    ok("Study: Anki's filtered deck of the date's seen cards, under a Due Crew deck", built and in_deck == len(pick) > 0
+       and parent and not col.decks.get(parent)["dyn"], f"{in_deck} cards")
+    ok("…remembered as built here, with the parent", pstore.get("built") == [fdid, parent], pstore)
 
     # 3.8.0: the morning's tidy: a filtered deck of ours goes once it's empty; one with cards stays
-    F._filtered(col, "Checkpoint · Empty one", pick[:3])
-    edid = col.decks.id_for_name("Checkpoint · Empty one")
+    F._filtered(col, F._deck_name("Checkpoint · Empty one"), pick[:3])
+    edid = col.decks.id_for_name("Due Crew::Checkpoint · Empty one")
     mine = col.decks.id("Mine, not Due Crew's")
     t = tm(); n_none = F.tidy_decks(col); t_tidy = tm() - t
     ok("tidy: decks with cards in them stay", n_none == 0 and col.decks.get(fdid, default=False) and col.decks.get(edid, default=False),
@@ -164,8 +166,14 @@ def check(path):
     n_one = F.tidy_decks(col)
     ok("tidy: our empty one goes, as one undo step; a normal deck stays",
        n_one == 1 and not col.decks.get(edid, default=False) and col.decks.get(fdid, default=False)
-       and col.decks.get(mine, default=False) and pstore.get("built") == [fdid], (n_one, pstore, col.undo_status().undo))
+       and col.decks.get(mine, default=False) and sorted(pstore.get("built")) == sorted([fdid, parent]),
+       (n_one, pstore, col.undo_status().undo))
     ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in pick[:3])} deck:\"Step Deck\"")) == 3)
+    col.sched.empty_filtered_deck(fdid)
+    n_two = F.tidy_decks(col)
+    ok("tidy: the last one under Due Crew goes with the parent, one undo step",
+       n_two == 2 and not col.decks.get(fdid, default=False) and not col.decks.id_for_name("Due Crew")
+       and col.undo_status().undo == "Delete Deck" and pstore.get("built") == [], (n_two, pstore, col.undo_status().undo))
     F._pcfg, F._psave = keep_p
 
     # 3.8.0: learning cards back later today, past Anki's learn-ahead

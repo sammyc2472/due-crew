@@ -1292,15 +1292,30 @@ def best_deck(col, doc, choices=None):
     return best, best_swap
 
 
-FILTERED_PREFIX = "Due Crew · "
+PARENT = "Due Crew"  # 3.8.0: Due Crew's filtered decks sit under one parent deck
+FILTERED_PREFIX = "Due Crew · "  # before 3.8.0, at the top
 
 
-def tidy(filtered, built):
+def our_deck(name):
+    """A filtered deck Due Crew builds: "Due Crew::Renal", under the one
+    parent deck, so they fold away in Anki's deck list. "::" in the name
+    would make another level."""
+    return f"{PARENT}::" + (" ".join(str(name).replace("::", ": ").split())[:120] or "Cards")
+
+
+def tidy(filtered, built, parent=None):
     """3.8.0: which of the filtered decks Due Crew built go: the empty ones.
     filtered: [(deck id, name, cards in it)], Anki's filtered decks; built:
-    the ids Due Crew built here. Ours: built here, or named "Due Crew · …"
-    (built before the list was kept). One with cards in it stays: a
-    checkpoint not done yet, a date half studied."""
+    the ids Due Crew built here. Ours: built here, under "Due Crew::", or
+    named "Due Crew · …" (before the parent, and the list). One with cards
+    in it stays: a checkpoint not done yet, a date half studied. parent:
+    (its id, the decks under it, cards in it): the parent deck, when Due
+    Crew made it, goes too once it's empty with nothing left under it."""
     built = {int(x) for x in built}
-    return [int(d) for d, name, n in filtered
-            if not n and (int(d) in built or str(name).startswith(FILTERED_PREFIX))]
+    gone = [int(d) for d, name, n in filtered
+            if not n and (int(d) in built or str(name).startswith((FILTERED_PREFIX, PARENT + "::")))]
+    if parent:
+        pid, kids, n = parent
+        if int(pid) in built and not n and {int(k) for k in kids} <= set(gone):
+            gone.append(int(pid))
+    return gone
