@@ -14,8 +14,11 @@ npx wrangler dev    # local; with DEV_MAIL_LOG=1 in .dev.vars and no mail, codes
 
 ## Endpoints
 
-Everything but `/version`, `/auth/code` and `/auth/verify` takes
-`Authorization: Bearer <token>`.
+Everything takes `Authorization: Bearer <token>` (or the site's session
+cookie) except these, which need no sign-in: `GET /version`,
+`POST /auth/code`, `POST /auth/verify`, `POST /auth/link/redeem`,
+`GET /auth/gone`, `POST /links/email`, `GET /plans/ics`,
+`GET /plans/public` and `GET /invites/{code}`.
 
 ### Sign-in and account
 
@@ -24,7 +27,7 @@ Everything but `/version`, `/auth/code` and `/auth/verify` takes
 | `GET /version` | `{api, minClient}`, no auth. Replaces the rules-marker probe. |
 | `POST /auth/code {email}` | Sends a code: six digits, ten minutes, plain text, no links. The answer is the same whether or not the address has an account. |
 | `POST /auth/verify {email, code, device}` | `{token, uid, new, name}`. An unknown address becomes a new account (ULID uid); `new` says to ask for a name. |
-| `GET /auth/me` | `{uid, email, name, emoji, accent}` (3.5.0: the accent from my settings, else green; the site wears it). |
+| `GET /auth/me` | `{uid, email, name, emoji, accent, rollover?}` (3.5.0: the accent from my settings, else green; the site wears it. 3.8.0: `rollover`, the hour my Anki's day starts, once an add-on has synced it; the site's day follows it). |
 | `POST /auth/signout`, `POST /auth/signout-all` | This session; every session of mine. |
 | `POST /links/email {email, path}` | The site's "Email it" on a phone: one fixed message with `https://duecrew.com{path}`, where `path` is `/`, `/p/CODE` or `/i/CODE`. Only with `x-due-crew`; 5 an hour an address, 3 a day to one inbox. |
 | `GET /account/data` | 3.7.1, D2: everything kept about me as one JSON file (profile, settings, week, decks, heatmap, log, cheers counted, crew by name, squad rows, plans made and followed, notes, tips, cards I have down, feedback, sign-ins; never a token or anyone else's email). 10 a day. |
@@ -83,7 +86,7 @@ Everything but `/version`, `/auth/code` and `/auth/verify` takes
 | `GET /users/{uid}` | `{uid, name, emoji}`, and nothing more, and since 3.7.1 (D5) only to someone connected: a crew edge or a knock either way, or a squad or a plan in common. Anyone else gets `404 no_user`, as for no such account. |
 | `PUT /friends/{uid}` | Add someone (an add-back, a knock's Add). Clears their knock. `{uid, name, emoji, mutual}`. |
 | `DELETE /friends/{uid}` | Their reads of my numbers end with this request. |
-| `POST /codes` | A new friend code; the old one stops working. |
+| `POST /codes` | A new friend code; the old one stops working, and so do my invite links. 20 a day. |
 | `GET /codes/{code}` | Whose code it is, before adding: `{uid, name, emoji, mine, added}`. Adds nobody; shares the add's 30 an hour. |
 | `POST /invites` | 3.5.0: a one-time invite, `{code, expiresAt}`: 10 characters, returned once and kept as a hash; 14 days; 20 a day. A new friend code ends all of mine. |
 | `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |

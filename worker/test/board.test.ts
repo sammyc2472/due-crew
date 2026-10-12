@@ -163,6 +163,11 @@ describe("friends and codes", () => {
     expect((await sam.call("POST", "/codes", { code: b })).body.code).not.toBe(b);  // a body asks for nothing (3.8.0)
   });
 
+  it("twenty new codes a day: a click, each writing four rows", async () => {
+    for (let i = 0; i < 20; i++) expect((await sam.call("POST", "/codes")).status).toBe(200);
+    expect((await sam.call("POST", "/codes")).status).toBe(429);
+  });
+
   it("thirty code tries an hour", async () => {
     for (let i = 0; i < 30; i++) await dre.call("POST", `/codes/Q${String(i).padStart(5, "0")}/add`);
     expect((await dre.call("POST", "/codes/ZZZZZZ/add")).status).toBe(429);

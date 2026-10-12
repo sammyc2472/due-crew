@@ -83,6 +83,8 @@ describe("plans: authoring", () => {
     expect((await put(Array.from({ length: 7 }, () => ({ k: "do", t: "x", r: "4" })))).status).toBe(400);
     const dateLine = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], todo: [{ k: "do", t: "x", r: "4" }] }] } });
     expect(dateLine.status).toBe(400);  // a date's own line has no weekdays
+    const named = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], id: "every" }] } });
+    expect(named.status).toBe(400);  // "every" is the weekly lines' key (pid:every:…), never a date's
     const ok = await put([{ k: "do", t: " Practice questions ", r: "414" }, { k: "watch", t: "Review video", r: "0", url: "https://example.com/v" }]);
     expect(ok.status).toBe(200);
     expect(ok.body.doc.every).toEqual([{ k: "do", t: "Practice questions", r: "14" }, { k: "watch", t: "Review video", url: "https://example.com/v", r: "0" }]);

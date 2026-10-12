@@ -224,6 +224,36 @@ def _is_int(v, lo=0, hi=None):
     return isinstance(v, int) and not isinstance(v, bool) and v >= lo and (hi is None or v <= hi)
 
 
+# JavaScript's String.trim() set and .length (UTF-16 units), so the fake
+# measures a plan's lines as plans.ts does
+_JS_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+
+def _js_len(t):
+    return len(t.encode("utf-16-le")) // 2
+
+
+def _todo_line(x, every=False):
+    """plans.ts todoLine: a line to tick by hand {k, t, url?}; `every` adds r,
+    its weekdays (Monday "0"), kept sorted."""
+    keys = {"k", "t", "url", "r"} if every else {"k", "t", "url"}
+    if (not isinstance(x, dict) or not set(x) <= keys or x.get("k") not in ("watch", "read", "do")
+            or not isinstance(x.get("t"), str) or not 0 < _js_len(x["t"]) <= 140 or re.search(r"[\x00-\x1f]", x["t"])):
+        raise Bad(400, "plan")
+    one = {"k": x["k"], "t": x["t"].strip(_JS_SPACE)}
+    if x.get("url") not in (None, ""):
+        if not isinstance(x["url"], str) or _js_len(x["url"]) > 500 or not re.fullmatch(r"https://[^\s\"'<>]+", x["url"]):
+            raise Bad(400, "plan")
+        one["url"] = x["url"]
+    if not one["t"]:
+        raise Bad(400, "plan")
+    if every:
+        if not isinstance(x.get("r"), str) or not re.fullmatch(r"[0-6]{1,7}", x["r"]):
+            raise Bad(400, "plan")
+        one["r"] = "".join(sorted(set(x["r"])))
+    return one
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -259,6 +289,7 @@ class FakeWorker:
         self.settings = {}   # uid -> {v, at, settings}
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
+        self.new_codes = {}  # uid -> POST /codes today (20 a day)
         self.reports = []    # what POST /reports mailed (the Worker stores none)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.otp = {}        # email -> code
@@ -803,7 +834,7 @@ class FakeWorker:
                          "knocks": self._knocks_of(me)}
         fid = rest[0] if rest else ""
         if not fid:
-            raise Bad(404, "not_found")  # 3.8.0: PUT /friends {ids}, the 2.x restore, is gone
+            raise Bad(405, "method")  # 3.8.0: PUT /friends {ids}, the 2.x restore, is gone (the path is GET's)
         if method == "PUT":
             if fid == me:
                 raise Bad(400, "self")
@@ -821,6 +852,9 @@ class FakeWorker:
     def _codes(self, method, me, rest, body):
         if method == "POST" and not rest:
             # a new code, always drawn (3.8.0: the body is ignored; the 2.x restore once asked for its old one)
+            self.new_codes[me] = self.new_codes.get(me, 0) + 1
+            if self.new_codes[me] > 20:  # social.ts NEW_CODES_PER_DAY: a click, four rows written
+                raise Bad(429, "slow_down")
             n = 0
             code = None
             while code is None:
@@ -1000,6 +1034,8 @@ class FakeWorker:
         return out
 
     def _squad(self, method, me, rest, query, body):
+        if method == "POST" and len(rest) == 1:
+            raise Bad(405, "method")  # the path is GET's and PATCH's (3.8.0: POST /squads/restore is gone)
         if method == "POST" and not rest:
             if set(body) != {"name"} or not str(body["name"]).strip() or len(body["name"].strip()) > 24:
                 raise Bad(400, "bad_name")
@@ -1077,7 +1113,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -1113,7 +1149,8 @@ class FakeWorker:
             raise Bad(400, "plan")
         out = []
         for u in units:
-            if not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id"))):
+            if (not isinstance(u, dict) or not set(u) <= self.UNIT_KEYS or not self.UNIT_ID.fullmatch(str(u.get("id")))
+                    or u.get("id") == "every"):  # taken: the weekly lines are ticked as pid:every:…
                 raise Bad(400, "plan")
             if not DATE_RE.fullmatch(str(u.get("opens"))) or (u.get("due") is not None and (
                     not DATE_RE.fullmatch(str(u["due"])) or u["due"] < u["opens"])):
@@ -1131,6 +1168,11 @@ class FakeWorker:
                   "decks": list(dict.fromkeys(u.get("decks") or [])), "cards": cards}
             if u.get("due"):
                 nu["due"] = u["due"]
+            if u.get("todo") is not None:  # Due: a date's lines to tick by hand
+                if not isinstance(u["todo"], list) or len(u["todo"]) > 8:
+                    raise Bad(400, "plan")
+                if u["todo"]:
+                    nu["todo"] = [_todo_line(x) for x in u["todo"]]
             if u.get("search"):
                 nu["search"] = list(dict.fromkeys(u["search"]))
             if u.get("sn"):
@@ -1202,20 +1244,7 @@ class FakeWorker:
         if every is not None:
             if not isinstance(every, list) or len(every) > 6:
                 raise Bad(400, "plan")
-            lines = []
-            for x in every:
-                if (not isinstance(x, dict) or not set(x) <= {"k", "t", "url", "r"} or x.get("k") not in ("watch", "read", "do")
-                        or not isinstance(x.get("t"), str) or not 0 < len(x["t"]) <= 140 or not x["t"].strip()
-                        or re.search(r"[\x00-\x1f]", x["t"]) or not isinstance(x.get("r"), str)
-                        or not re.fullmatch(r"[0-6]{1,7}", x["r"])):
-                    raise Bad(400, "plan")
-                one = {"k": x["k"], "t": x["t"].strip()}
-                if x.get("url") not in (None, ""):
-                    if not isinstance(x["url"], str) or len(x["url"]) > 500 or not re.fullmatch(r"https://[^\s\"'<>]+", x["url"]):
-                        raise Bad(400, "plan")
-                    one["url"] = x["url"]
-                one["r"] = "".join(sorted(set(x["r"])))
-                lines.append(one)
+            lines = [_todo_line(x, True) for x in every]
             if lines:
                 doc["every"] = lines
         if v.get("reviews"):

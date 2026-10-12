@@ -47,7 +47,7 @@ describe("X: the admin's page keeps its history", () => {
     await db().prepare("UPDATE users SET client_version = '3.8.0' WHERE uid = 'sam'").run();
     await db().prepare("UPDATE users SET client_version = NULL WHERE uid = 'site'").run();
     const s = (await admin(sam, "/admin/stats")).body;
-    expect(s.versions).toEqual(expect.arrayContaining([["3.8.0", 1], ["site only", 1]]));
+    expect(s.versions).toEqual(expect.arrayContaining([["3.8.0", 1], ["no add-on sync", 1]]));
     expect(s.cutover).toBeUndefined();
     expect(s.bridge).toBeUndefined();
   });

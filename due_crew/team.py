@@ -146,7 +146,7 @@ def deck_topics(tags_of, reviewed, min_n=None):
     for cid in reviewed:
         # 3.8.0: a question bank's id ("…::Step::104523") is never a topic
         tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS
-                and not str(t).rsplit(P._SEP, 1)[-1].isdigit()]
+                and not _bank_id(str(t))]
         low = [t.lower() for t in tags]
         leaves[cid] = [t for t, lt in zip(tags, low) if not any(o.startswith(lt + P._SEP) for o in low)]
     under = {}
@@ -346,6 +346,16 @@ def subjects(paths_of, know, active=None, decks=False):
     return subjects_by(paths_of, know, active, decks)[0]
 
 
+TAGS_WAY = "~tags"  # the map by tags with no resource mark, among its ways
+
+
+def _bank_id(tag):
+    """A question bank's id ("…::Step::104523"): a long run of digits at the
+    end. Never a subject; a short number ("Week::3") is."""
+    last = tag.rsplit(P._SEP, 1)[-1]
+    return last.isdigit() and len(last) >= 5
+
+
 def subjects_by(paths_of, know, active=None, decks=False, by=None):
     """3.8.0, the topic map's tiles: the cards in play (active: unsuspended,
     started or not; know's when not given) split the way that tells them
@@ -366,7 +376,7 @@ def subjects_by(paths_of, know, active=None, decks=False, by=None):
     seen, names = {}, {}  # a tag read once; a family's name as spelled
 
     def read(t):
-        if not t or t.lower() in ANKI_TAGS or t.rsplit(P._SEP, 1)[-1].isdigit():
+        if not t or t.lower() in ANKI_TAGS or (not decks and _bank_id(t)):
             return None
         segs = [x for x in t.split(P._SEP) if x]
         ri = -1
@@ -399,8 +409,9 @@ def subjects_by(paths_of, know, active=None, decks=False, by=None):
     n, m = len(ids), len(pick)
     cuts = _family_cuts(fams, m, MAP_FIT, True, max(2, _min_n(n, True) * m // max(1, n)))
     order = sorted(cuts, key=lambda f: (-cuts[f][0], -len(fams[f]), f))
-    key = lambda f: P._SEP.join(f)  # noqa: E731
-    fam = next((f for f in order if by is not None and key(f) == str(by)), order[0] if order else None)
+    key = lambda f: P._SEP.join(f) if f else TAGS_WAY  # noqa: E731
+    # a pick no longer among the ways shown falls back to the best (so one is always on)
+    fam = next((f for f in order[:4] if by is not None and key(f) == str(by)), order[0] if order else None)
     ways = [{"key": key(f), "score": round(cuts[f][0], 4), "on": f == fam,
              "name": ("Subdecks" if decks else P._word(names[f][-1]) if f else "Tags")[:NAME_MAX]} for f in order[:4]]
     if fam is None:

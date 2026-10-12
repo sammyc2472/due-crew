@@ -453,6 +453,10 @@ def main(out):
         if none.change.isEnabled():
             raise RuntimeError("map card: This week's change on with no week to compare")
         none.close()
+        part = MapCardDialog(None, "Big Step 1 · Cardio", "2026-10-12", tiles, part=True)
+        if part.change.isEnabled() or "whole deck" not in part.change_note.text():
+            raise RuntimeError("map card: a tile's parts should say the change is the deck's")
+        part.close()
 
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),

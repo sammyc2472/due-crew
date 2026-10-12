@@ -473,8 +473,6 @@ def you_decks():
 
 
 def _you_decks(col, picked=0):
-    pf = _plans_flow()
-    state = pf._state_cfg()
     out, seen = [], set()
 
     def add(did, pid=None):
@@ -484,11 +482,7 @@ def _you_decks(col, picked=0):
         full = str(col.decks.name(did) or "")
         seen.add(did)
         out.append({"did": did, "name": full.split("::")[-1] or full, "full": full, "pid": pid})
-    plans = {}
-    for p in pf.followed():
-        st = state.get(p["id"])
-        if st and pf._deck_ok(col, st.get("deck_id")):
-            plans.setdefault(int(st["deck_id"]), p["id"])
+    plans = _deck_plans(col)
     roots = {}
     for did, n in col.db.all("SELECT CASE WHEN c.odid THEN c.odid ELSE c.did END, count() FROM revlog r "
                              "JOIN cards c ON c.id = r.cid WHERE r.id >= ? AND r.ease > 0 GROUP BY 1", _since(col, T.DAYS)):
@@ -503,11 +497,25 @@ def _you_decks(col, picked=0):
             add(rid, plans.get(int(rid)))
     for did, pid in plans.items():
         add(did, pid)
-    if picked and picked not in seen:
+    if picked and picked not in seen and col.decks.get(int(picked), default=False):  # a deck since deleted takes no place
         if len(out) >= DECKS_MAX:
             out.pop()
         add(picked, plans.get(int(picked)))
     return out
+
+
+def _deck_plans(col):
+    """{deck id: the plan that sharpens its Insights}: the first plan I follow
+    on it. One view a deck (its cache, its Study and Browse), so a second plan
+    on the same deck doesn't get its own."""
+    pf = _plans_flow()
+    state = pf._state_cfg()
+    plans = {}
+    for p in pf.followed():
+        st = state.get(p["id"])
+        if st and pf._deck_ok(col, st.get("deck_id")):
+            plans.setdefault(int(st["deck_id"]), p["id"])
+    return plans
 
 
 def you_view(c):
@@ -531,13 +539,13 @@ def you_view(c):
 def plan_lines(cards):
     """3.8.0, You › Plans: each plan's line from Insights (the next exam's
     cards at risk), card["ins"] = {n, did, name, day}. Main thread."""
-    pf = _plans_flow()
-    state = pf._state_cfg()
+    if not mw.col:
+        return
+    owner = _deck_plans(mw.col)
     for card in cards or []:
-        st = state.get(card.get("id"))
-        if card.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
-            continue
-        did = int(st["deck_id"])
+        did = next((d for d, pid in owner.items() if pid == card.get("id")), None)
+        if card.get("paused") or did is None:
+            continue  # a second plan on a deck: the deck's Insights are the first's
         v = insights(did, card["id"], str(cfg().get("exam_date") or ""))
         aim = v.get("aim") or {}
         if v.get("hero"):
@@ -778,9 +786,11 @@ def _deck_rows(col, did, reviewed, stuck, forgot):
             r["find"] = {"tags": r.get("tags") or []}
         return rows
     root = str(col.decks.name(did) or "")
-    paths = {}
+    paths, names = {}, {}
     for cid, d in col.db.all(f"SELECT id, CASE WHEN odid THEN odid ELSE did END FROM cards WHERE id IN ({ids})"):
-        name = str(col.decks.name(int(d)) or "")
+        if int(d) not in names:
+            names[int(d)] = str(col.decks.name(int(d)) or "")
+        name = names[int(d)]
         if name.startswith(root + "::"):
             paths[int(cid)] = [name[len(root) + 2:]]
     topics, groups = T.deck_topics(paths, reviewed)
@@ -861,7 +871,9 @@ def _map_week(out, did, today):
     if not out.get("map"):
         return
     from . import mapcard as MC
-    way = next((w["key"] for w in out.get("map_ways") or [] if w.get("on")), "")
+    way = next((w["key"] for w in out.get("map_ways") or [] if w.get("on")), None)
+    if way is None:
+        return
     pf = _plans_flow()
     pc = pf._pcfg()
     snaps = pc.get("map_snaps") if isinstance(pc.get("map_snaps"), dict) else {}
@@ -885,7 +897,7 @@ def share_map(did):
     prev = None if trail else view.get("map_prev")
     from .ui.map_card_dialog import MapCardDialog
     dlg = MapCardDialog(mw, title, _plans_flow()._today(), cur, view.get("map_by") or "fsrs", prev,
-                        (view.get("map_since") or "") if prev else "", tooltip=tooltip)
+                        (view.get("map_since") or "") if prev else "", tooltip=tooltip, part=bool(trail))
     _state["map_card"] = dlg  # kept while it's open
     dlg.show()
 
@@ -910,12 +922,13 @@ def _find_cids(col, did, find):
     children) or its subdecks: what a topic's name opens in Browse."""
     deck = _deck_sql(col, did)
     out = set()
-    for t in (find or {}).get("tags") or []:
-        lt = str(t).lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        out |= {int(c) for c in col.db.list(
-            f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) "
-            f"AND ((' ' || lower(n.tags) || ' ') LIKE ? ESCAPE '\\' OR (' ' || lower(n.tags) || ' ') LIKE ? ESCAPE '\\')",
-            f"% {lt} %", f"% {lt}::%")}
+    want = [str(t).lower() for t in (find or {}).get("tags") or [] if str(t)]
+    if want:
+        # matched here, not in SQL: SQLite's lower() and LIKE fold ASCII only ("Анатомия", "Ökologie")
+        for cid, tags in col.db.all(f"SELECT c.id, n.tags FROM cards c JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck})"):
+            mine = str(tags or "").lower().split()
+            if any(x == lt or x.startswith(lt + "::") for lt in want for x in mine):
+                out.add(int(cid))
     root = str(col.decks.name(did) or "")
     for path in (find or {}).get("decks") or []:
         sub = col.decks.id_for_name(f"{root}::{path}")

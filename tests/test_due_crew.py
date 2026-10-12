@@ -7511,8 +7511,8 @@ def test_insights_379():
         made = []
 
         class Card:
-            def __init__(self, parent, title, day, tiles, by, prev, since, tooltip=None):
-                made.append((title, day, [t["name"] for t in tiles], by, prev, since))
+            def __init__(self, parent, title, day, tiles, by, prev, since, tooltip=None, part=False):
+                made.append((title, day, [t["name"] for t in tiles], by, prev, since, part))
 
             def show(self):
                 made.append("shown")
@@ -7535,7 +7535,8 @@ def test_insights_379():
             dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
             dc._on_js(False, "duecrew:insmapshare:30", DeckBrowser())
             check("share: opened, the parts on screen, named by the trail; the change is the deck's level only",
-                  made[-2][0] == "Unused · Cardio" and made[-2][2] == ["Valves", "Rhythm"] and made[-2][4] is None, made[-2])
+                  made[-2][0] == "Unused · Cardio" and made[-2][2] == ["Valves", "Rhythm"] and made[-2][4] is None
+                  and made[-2][6] is True and made[0][6] is False, made[-2])
             dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
         finally:
             sys.modules.pop("due_crew.ui.map_card_dialog", None)
@@ -7816,6 +7817,107 @@ def test_site_audit_v380():
     idx = open(os.path.join(REPO, "site", "public", "index.html"), encoding="utf-8").read()
     check("site audit: the landing picture has its dark one", 'srcset="/board-dark.png" media="(prefers-color-scheme: dark)"' in idx
           and os.path.exists(os.path.join(REPO, "site", "public", "board-dark.png")))
+
+
+def test_review_fixes_v380():
+    """3.8.0, the night's review: what it found stays fixed. Insights: one
+    plan a deck (a second plan's line can't act on the first's cards); a
+    tile's cards found whatever its tags' alphabet; the Tags way pickable;
+    a pick out of the ways shown falls back to the best; short numbers are
+    names, long ones a question bank's ids; tooltips not escaped twice. The
+    fake server answers as the Worker does: a date can't be "every", a
+    date's own lines are checked like the weekly ones (JavaScript's length
+    and trim), new codes have a ceiling, the routes 2.x used say 405."""
+    import sqlite3
+    from due_crew import team_flow as TF, team as T, plan_flow as PF
+    from due_crew.app import _state
+    import due_crew as dc
+    # two plans on one deck: the deck's Insights are the first plan's
+    calls = []
+    saved = (PF._state_cfg, PF.followed, PF._deck_ok, TF.cfg, TF._work_out, dc.mw.col, _state.get("insights"))
+    try:
+        PF._state_cfg = lambda c=None: {"pA": {"deck_id": 10}, "pB": {"deck_id": 10}}
+        PF.followed = lambda: [{"id": "pA"}, {"id": "pB"}]
+        PF._deck_ok = lambda col, did: True
+        TF.cfg = lambda: {}
+        heroes = {"pA": [1, 2, 3], "pB": [7, 8]}
+        TF._work_out = lambda did, pid=None, exam="": (calls.append(pid) or
+                                                       {"hero": heroes[pid], "aim": {"day": "2026-10-15", "name": "Quiz", "scoped": True}})
+        dc.mw.col = types.SimpleNamespace()
+        _state["insights"] = {}
+        for _render in range(3):
+            cards = [{"id": "pA"}, {"id": "pB"}]
+            TF.plan_lines(cards)
+        check("review: two plans on one deck, the first plan's line; worked out once, not every redraw",
+              cards[0].get("ins", {}).get("n") == 3 and "ins" not in cards[1] and calls == ["pA"], (cards, calls))
+        check("review: its Study acts on its own cards", TF._pick(10, "h")[0] == [1, 2, 3], TF._pick(10, "h"))
+    finally:
+        PF._state_cfg, PF.followed, PF._deck_ok, TF.cfg, TF._work_out, dc.mw.col, _state["insights"] = saved
+    # a tile's cards, whatever the alphabet (SQLite folds ASCII only)
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, tags in ((1, "Анатомия::Сердце"), (2, "Анатомия::Сердце::Клапаны"), (3, "Ökologie"), (4, "ökologie::Wald"),
+                      (5, "Анатомия::Мозг"), (6, "Cardio_x"), (7, "Cardio%")):
+        fakes.add_card(conn, cid, 10, tags=tags)
+    col = fakes.FakeCol(conn, 0)
+    col.decks = fakes.FakeDecks({10: "Deck"})
+    check("review: a tile's cards found with any alphabet, children too, not a sibling",
+          TF._find_cids(col, 10, {"tags": ["Анатомия::Сердце"]}) == [1, 2]
+          and TF._find_cids(col, 10, {"tags": ["ökologie"]}) == [3, 4], TF._find_cids(col, 10, {"tags": ["Анатомия::Сердце"]}))
+    check("review: _ and % in a tag are just letters", TF._find_cids(col, 10, {"tags": ["Cardio_x"]}) == [6])
+    # the Tags way can be picked
+    mixed = {c: [f"#R::^Systems::{['Cardio', 'Renal', 'Pulm', 'GI', 'Neuro'][c % 5]}::Part{c % 2}",
+                 f"{['Week1', 'Week2', 'Week3', 'Week4', 'Week5', 'Week6'][c % 6]}::Lecture"] for c in range(300)}
+    mk = {c: 0.9 for c in range(300)}
+    _tiles, ways = T.subjects_by(mixed, mk)
+    tags_way = next((w for w in ways if w["name"] == "Tags"), None)
+    check("review: the plain tags are a way, with a key a pick keeps", tags_way is not None and tags_way["key"] == T.TAGS_WAY, ways)
+    tt, tw = T.subjects_by(mixed, mk, by=T.TAGS_WAY)
+    check("review: picked, the map by the plain tags", sorted(t["name"] for t in tt)[:2] == ["Week1", "Week2"]
+          and [w["name"] for w in tw if w["on"]] == ["Tags"], (tt, tw))
+    # a pick that's dropped out of the ways shown: the best, and one is on
+    six = {c: [f"#R::^{f}::{'abcdefgh'[(c + i) % (2 + i)]}" for i, f in enumerate("ABCDEF")] for c in range(240)}
+    sk = {c: 0.9 for c in range(240)}
+    _t, all_ways = T.subjects_by(six, sk)
+    order = [w["key"] for w in all_ways]
+    hidden = next(("#r::^" + f.lower() for f in "ABCDEF" if "#r::^" + f.lower() not in order), None)
+    if hidden:
+        _t2, w2 = T.subjects_by(six, sk, by=hidden)
+        check("review: a pick no longer among the ways shown: the best way, on", w2 and w2[0]["on"], w2)
+    # numbers: a week or a lecture is a name; a question bank's long id isn't
+    lect = T.subjects_by({c: [f"{['01', '02', '03', '04'][c % 4]}"] for c in range(80)}, {c: 0.9 for c in range(80)}, decks=True)[0]
+    weeks = T.subjects({c: [f"Pharm::Week::{c % 4 + 1}"] for c in range(80)}, {c: 0.9 for c in range(80)})
+    bank = T.subjects({c: [f"Bank::Step::{104520 + c % 4}"] for c in range(80)}, {c: 0.9 for c in range(80)})
+    check("review: subdecks named 01 to 04 and tags Week::1 to 4 make a map; a bank's ids don't",
+          sorted(t["name"] for t in lect) == ["01", "02", "03", "04"] and len(weeks) >= 1 and bank == [], (lect, weeks, bank))
+    # a tile's tooltip: its apostrophe once
+    tip = board._ins_map(10, [{"key": "a", "name": "Cardio", "n": 40, "started": 40, "know": 80},
+                              {"key": "b", "name": "Renal", "n": 30, "started": 30, "know": 70}], "fsrs")
+    check("review: a tile's tooltip isn't escaped twice", "you’d remember now" in tip and "&amp;rsquo;" not in tip, tip[:300])
+    # the fake server, as the Worker
+    w = fakes.FakeWorker()
+    w.add_user("dre", "Dre")
+    unit = lambda **k: dict({"id": "u1", "name": "Heart", "opens": "2026-10-12"}, **k)  # noqa: E731
+    for bad, why in (([unit(id="every")], "a date called every"),
+                     ([unit(todo=[{"k": "do", "t": "😀" * 71}])], "a line over 140 in JavaScript's count"),
+                     ([unit(todo=[{"k": "do", "t": "x", "r": "1"}])], "a date's line with weekdays"),
+                     ([unit(todo=[{"k": "do", "t": "﻿ "}])], "a line that's only a byte-order mark")):
+        try:
+            w.add_plan("dre", "P", "Step 1", bad)
+            ok = False
+        except fakes.Bad as e:
+            ok = e.status == 400
+        check(f"review: the fake refuses {why}, as plans.ts does", ok)
+    pid, _code = w.add_plan("dre", "P", "Step 1", [unit(todo=[{"k": "read", "t": " Ch. 6\u0085"}, {"k": "do", "t": "😀" * 70}])])
+    todo = w.plans[pid]["doc"]["units"][0]["todo"]
+    check("review: a date's lines kept, trimmed as JavaScript trims", todo[0]["t"] == "Ch. 6\u0085" and len(todo) == 2, todo)
+    tok = w.session_for("dre")
+    hdr = {"Authorization": f"Bearer {tok}"}
+    got = [w.handle("POST", "https://x/codes", hdr, {}).status_code for _ in range(21)]
+    check("review: twenty new codes a day, then slow down", got[:20] == [200] * 20 and got[20] == 429, got[-3:])
+    check("review: the 2.x restore routes say 405, as the Worker's router",
+          w.handle("PUT", "https://x/friends", hdr, {"ids": []}).status_code == 405
+          and w.handle("POST", "https://x/squads/restore", hdr, {}).status_code == 405)
 
 
 def test_head_row_b_v380():

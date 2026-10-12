@@ -113,7 +113,19 @@ attach a custom domain over one.
 ## Firebase is gone (3.8.0)
 
 3.0 moved the 2.x accounts across; 3.8.0 took out the bridge, the import
-and every 2.x path. What's left is Sam's, once 3.8.0's Worker is live:
+and every 2.x path. What's left is Sam's.
+
+**Before deploying 3.8.0's Worker**, empty Firestore. Until 3.8.0 the
+bridge copied 3.x people's week, decks, heatmap, name, emoji and friend
+edges there, and deleting an account deleted its copies (`forget()`).
+3.8.0's Worker no longer can, so a copy left behind would outlive its
+account, readable by 2.x crewmates under the old rules, for as long as
+the project exists (a shut-down project is kept 30 days):
+
+0. `firebase firestore:delete --all-collections --project anki-leaderboard-f6691`
+   (or, in the console, Firestore › the database › Delete). Then deploy.
+
+Once 3.8.0's Worker is live:
 
 1. `npx wrangler secret delete FIREBASE_SA --env=""` (and `--env=dev` if
    it was set there).

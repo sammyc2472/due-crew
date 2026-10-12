@@ -200,6 +200,8 @@ export function ourPage(origin: string | null): boolean {
 
 export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // the 2.x bridge's cron can fire for a while after a deploy drops it: not housekeeping
+    if (event.cron === "*/15 * * * *") return;
     // 3.5, X: the day's counts, kept; 3.6: bingo's counts per square
     ctx.waitUntil(housekeeping(env).then(() => Ad.snapshot(env)).then(() => Bingo.keepStats(env)));
   },

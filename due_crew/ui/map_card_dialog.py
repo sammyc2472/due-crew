@@ -178,9 +178,10 @@ def _tile(p, t, look, pct):
 
 class MapCardDialog(QDialog):
     """The sheet: the card and its switches. tiles: the map's level on
-    screen; prev/since: last week's map, or None (This week's change waits)."""
+    screen; prev/since: last week's map, or None (This week's change waits);
+    part: a tile's parts are on screen (the change is kept for the top level)."""
 
-    def __init__(self, parent, deck, day, tiles, by="fsrs", prev=None, since="", tooltip=None):
+    def __init__(self, parent, deck, day, tiles, by="fsrs", prev=None, since="", tooltip=None, part=False):
         super().__init__(parent)
         attach_alive(self)
         self.setWindowTitle(f"What I know · {deck}")
@@ -202,7 +203,8 @@ class MapCardDialog(QDialog):
         if prev is not None and since:
             d = datetime.date.fromisoformat(since)
             when = f"Since {d:%a} {d.day} {d:%b}"
-        self.change_note = QLabel(when or "From next week: it needs last week's map")
+        self.change_note = QLabel(when or ("For the whole deck's map, not its parts" if part
+                                           else "From next week: it needs last week's map"))
         self.change_note.setStyleSheet("color: gray; font-size: 11px; margin-left: 22px;")
         self.light = QRadioButton("Light")
         self.dark = QRadioButton("Dark")

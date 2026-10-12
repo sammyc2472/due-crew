@@ -1847,7 +1847,7 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     from .team import map_level, map_shade
     trail, cur = map_level(tiles, at)
     big = max(int(t["n"]) for t in cur) or 1
-    how = "you&rsquo;d remember now (FSRS)" if by == "fsrs" else "right on their last review"
+    how = "you’d remember now (FSRS)" if by == "fsrs" else "right on their last review"  # escaped with the tip
     out, fresh = "", False
     for i, t in enumerate(cur):
         n, k, st = int(t["n"]), t.get("know"), int(t.get("started") or 0)

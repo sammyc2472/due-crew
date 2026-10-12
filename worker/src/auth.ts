@@ -1,5 +1,4 @@
-// Sign-in by emailed code, our own sessions, sign-out, account deletion,
-// and the one-shot identity import from Firebase Auth.
+// Sign-in by emailed code, our own sessions, sign-out and account deletion.
 //
 // Never log emails, codes or tokens. Codes and tokens are stored hashed.
 

@@ -120,7 +120,7 @@ export async function stats(s: Session, env: Env): Promise<Response> {
   return json({
     ...c,
     codes: { sent: code.sent ?? 0, ok: code.ok ?? 0, wrong: code.wrong ?? 0, out: code.out ?? 0, limited: code.limited ?? 0 },
-    versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "site only", r.n]),
+    versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "no add-on sync", r.n]),
     feedbackOpen: (fbOpen.results[0] as { n: number }).n,
     emailChanges: (moving.results as { uid: string; name: string | null; at: number }[]).map((r) => ({ uid: r.uid, name: r.name || "?", at: r.at })),
     housekeeping: await Quiet.counts(env),  // Q6: folded, quiet past the trim, due to go in 30 days

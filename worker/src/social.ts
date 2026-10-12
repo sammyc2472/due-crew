@@ -16,6 +16,7 @@ export const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 export const CODE_LEN = 6;
 const CODE_RE = /^[A-Z0-9]{6}$/;
 const UID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+export const NEW_CODES_PER_DAY = 20;  // POST /codes, per account
 
 export function checkUid(uid: string): string {
   if (!UID_RE.test(uid)) throw new HttpError(404, "no_user");
@@ -133,6 +134,7 @@ function drawCode(): string {
 /** POST /codes: a new friend code for me, and the old one stops working.
  *  The body is ignored (3.0's first sync once asked for its 2.x code back). */
 export async function newCode(_req: Request, s: Session, env: Env): Promise<Response> {
+  await limitOrThrow(env, `newcode:${s.uid}`, NEW_CODES_PER_DAY, 86400);  // a click; each writes four rows
   for (let i = 0; i < 5; i++) {
     const code = drawCode();
     const r = await env.DB.prepare("INSERT INTO codes (code, uid) VALUES (?, ?) ON CONFLICT DO NOTHING")

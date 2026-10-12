@@ -106,7 +106,8 @@ function todoLine(x: unknown, every = false): Obj {
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
   for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
-  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  // "every" is taken: a plan's weekly lines are ticked as pid:every:… (3.8.0)
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id) || v.id === "every") throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
   const out: Obj = { id: v.id, name: V.displayName(v.name), opens: v.opens };
   if (v.due !== undefined && v.due !== null) {

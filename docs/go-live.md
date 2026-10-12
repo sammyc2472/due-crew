@@ -5,7 +5,9 @@ Production already runs 3.x: the API at `api.duecrew.com` and the site at
 always stood down, because the GitHub secrets (§0, `CLOUDFLARE_API_TOKEN`
 and `CLOUDFLARE_ACCOUNT_ID`) aren't set. So a tag deploys nothing: deploy
 by hand (step 2b). The 2.x accounts were imported at 3.0; Firebase is gone
-since 3.8.0 (`docs/cloudflare-setup.md`, "Firebase is gone").
+since 3.8.0 (`docs/cloudflare-setup.md`, "Firebase is gone"): empty
+Firestore before 3.8.0's Worker goes live, since it can no longer delete
+a deleted account's copies there.
 
 What 3.3.0 adds: migration 0006, the API, the site, and the add-on on
 AnkiWeb. Commands run from the repo root unless they say `cd worker`.
