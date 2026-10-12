@@ -1163,7 +1163,7 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
@@ -1216,7 +1216,7 @@ class FakeWorker:
                 raise Bad(400, "plan")
             out = []
             for t in tags:
-                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "tags", "decks", "search", "n"}
+                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "cards", "tags", "decks", "search", "n"}
                         or not self.UNIT_ID.fullmatch(str(t.get("id"))) or not isinstance(t.get("name"), str)
                         or not t["name"].strip() or len(t["name"]) > 40):
                     raise Bad(400, "plan")
@@ -1232,7 +1232,13 @@ class FakeWorker:
                     raise Bad(400, "plan")
                 if notes:
                     nt["notes"] = list(dict.fromkeys(notes))
-                if not any(k in nt for k in ("tags", "decks", "search", "notes")):
+                cards = t.get("cards") or []  # 3.8.1: single cards, guid + card number
+                if not isinstance(cards, list) or len(cards) > 5000 or not all(
+                        isinstance(c, (list, tuple)) and len(c) == 2 and isinstance(c[0], str) and c[0] and _is_int(c[1], 0, 1000) for c in cards):
+                    raise Bad(400, "plan")
+                if cards:
+                    nt["cards"] = [list(c) for c in dict.fromkeys((c[0], c[1]) for c in cards)]
+                if not any(k in nt for k in ("tags", "decks", "search", "notes", "cards")):
                     raise Bad(400, "plan")
                 if t.get("n") is not None:
                     if not _is_int(t["n"], 0, 1_000_000):
@@ -1246,7 +1252,7 @@ class FakeWorker:
                 if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
                     raise Bad(400, "plan")
                 doc["tagroot"], doc["tags"] = root, out
-                picks += sum(len(t.get("notes") or []) for t in out)
+                picks += sum(len(t.get("notes") or []) + len(t.get("cards") or []) for t in out)
         if "tags" not in doc and v.get("tagroot") is not None:
             root = v["tagroot"]
             if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
@@ -1292,6 +1298,19 @@ class FakeWorker:
                 nu["search"] = list(dict.fromkeys(u["search"]))
             if u.get("sn"):
                 nu["sn"] = dict(u["sn"])
+            if u.get("cut") is not None:  # 3.8.1: a tag kept to a plan tag's cards; its search for older add-ons
+                cut, seen = [], set()
+                if not isinstance(u["cut"], list) or len(u["cut"]) > 10:
+                    raise Bad(400, "plan")
+                for c in u["cut"]:
+                    if (not isinstance(c, dict) or not set(c) <= {"tag", "in", "q"} or not isinstance(c.get("tag"), str) or not c["tag"]
+                            or not self.UNIT_ID.fullmatch(str(c.get("in"))) or c.get("q") not in (nu.get("search") or [])):
+                        raise Bad(400, "plan")
+                    if (c["tag"], c["in"]) not in seen:
+                        seen.add((c["tag"], c["in"]))
+                        cut.append({"tag": c["tag"], "in": c["in"], "q": c["q"]})
+                if cut:
+                    nu["cut"] = cut
             if u.get("ids"):
                 nu["ids"] = list(dict.fromkeys(u["ids"]))
             for k in ("nids", "cids"):  # E1
@@ -1343,6 +1362,18 @@ class FakeWorker:
         doc = {"deck": v["deck"], "units": out}
         self._plan_tags(v, doc, sum(len(u["cards"]) + len(u.get("notes") or []) + len(u.get("nids") or []) + len(u.get("cids") or [])
                                     for u in out))
+        ids = {t["id"] for t in doc.get("tags") or []}
+        for u in out:  # 3.8.1: a cut whose plan tag went is its whole tag again, its search with it
+            if not u.get("cut"):
+                continue
+            for c in [c for c in u["cut"] if c["in"] not in ids]:
+                u["tags"] = list(dict.fromkeys(u["tags"] + [c["tag"]]))
+                u["search"] = [q for q in u.get("search") or [] if q != c["q"]]
+                (u.get("sn") or {}).pop(c["q"], None)
+            u["cut"] = [c for c in u["cut"] if c["in"] in ids]
+            for k in ("cut", "search", "sn"):
+                if k in u and not u[k]:
+                    del u[k]
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
@@ -1541,9 +1572,13 @@ class FakeWorker:
                         u["idr"] = [list(r) for r in refs]
                     else:
                         u.pop("idr", None)
-            for uid, (tags, decks, ids) in (body.get("units") or {}).items():
+            for uid, v in (body.get("units") or {}).items():
+                if not isinstance(v, list) or len(v) not in (3, 4):
+                    raise Bad(400, "ids")
+                tags, decks, ids = v[:3]
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
-                if u and u["tags"] == tags and u["decks"] == decks:
+                cut = [[c["tag"], c["in"]] for c in (u or {}).get("cut") or []]
+                if u and u["tags"] == tags and u["decks"] == decks and (len(v) == 3 or v[3] == cut):  # 3.8.1: and its cuts
                     if ids:
                         u["ids"] = list(ids)
                     else:
@@ -1580,9 +1615,13 @@ class FakeWorker:
                 t["notes"] = notes
             else:
                 t.pop("notes", None)
+            if t.get("cards"):  # 3.8.1: a note taken off takes its single cards
+                t["cards"] = [c for c in t["cards"] if c[0] not in set(remove)]
+                if not t["cards"]:
+                    del t["cards"]
             if body.get("n") is not None:
                 t["n"] = body["n"]
-            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "tags", "decks", "search"))]
+            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "cards", "tags", "decks", "search"))]
             if not doc["tags"]:
                 doc.pop("tags")
             if not doc.get("tagroot"):
@@ -1814,7 +1853,7 @@ class FakeWorker:
                   and (pid, me) not in self.follows]
         authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
-                 **{k: u[k] for k in ("nids", "cids", "notes", "opens") if u.get(k)})
+                 **{k: u[k] for k in ("nids", "cids", "notes", "opens", "cut") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
             or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags") if p["doc"].get(k)})}  # 3.8.0: its own tags
             for pid, p in sorted(self.plans.items()) if p["owner"] == me or me in (p.get("editors") or ())]

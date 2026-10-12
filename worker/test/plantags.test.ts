@@ -129,3 +129,82 @@ describe("3.8.0: plan tags", () => {
     expect(copy.body.doc.tags[0].notes).toEqual(["g1"]);
   });
 });
+
+// 3.8.1, round two: a date's cut (a tag kept to one of the plan's own tags'
+// cards) and a plan tag's single cards
+describe("3.8.1: cuts and single cards", () => {
+  const VIDEO = "Step1_v12::#Videos::Pharm::Cephalosporins";
+  const Q = '"tag:DueCrew::MS2\\_Block\\_1::SLG\\_12" "tag:Step1\\_v*::#Videos::Pharm::Cephalosporins"';
+  const TAGS = [{ id: "t12", name: "SLG 12", notes: ["g1", "g2"], cards: [["g3", 1], ["g3", 1], ["g4", 2]] }];
+
+  it("a date keeps a cut whose search it also holds; a cut with no such search, or another shape, is refused", async () => {
+    const { dre, p } = await plan();
+    const unit = { id: "c1", name: "Cephalosporins", opens: "2026-10-08", tags: [], search: [Q], cut: [{ tag: VIDEO, in: "t12", q: Q }] };
+    const put = (units: unknown[], v = p.version) => dre.call("PUT", `/plans/${p.id}`, { version: v, doc: { deck: "Step 1", tagroot: "MS2_Block_1", tags: TAGS, units } });
+    const ok = await put([unit]);
+    expect(ok.status).toBe(200);
+    const u = ok.body.doc.units[0];
+    expect(u.cut).toEqual([{ tag: VIDEO, in: "t12", q: Q }]);
+    expect(u.search).toEqual([Q]);
+    // single cards on a tag: kept once each, and counted with its notes
+    expect(ok.body.doc.tags[0].cards).toEqual([["g3", 1], ["g4", 2]]);
+    const v = ok.body.version;
+    expect((await put([{ ...unit, search: [] }], v)).status).toBe(400);  // its search, for an older add-on
+    expect((await put([{ ...unit, cut: [{ tag: VIDEO, in: "t12", q: Q, text: "x" }] }], v)).status).toBe(400);
+    expect((await put([{ ...unit, cut: [{ tag: VIDEO, in: "T 12", q: Q }] }], v)).status).toBe(400);
+    expect((await put([{ ...unit, cut: "x" }], v)).status).toBe(400);
+  });
+
+  it("a cut whose plan tag is gone is the whole tag again; its search and count go", async () => {
+    const { dre, p } = await plan();
+    const unit = { id: "c1", name: "Cephalosporins", opens: "2026-10-08", tags: ["Other::Tag"], search: [Q, "tag:Keep"], sn: { [Q]: 38, "tag:Keep": 5 },
+      cut: [{ tag: VIDEO, in: "gone1", q: Q }] };
+    const r = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", tagroot: "MS2_Block_1", tags: TAGS, units: [unit] } });
+    expect(r.status).toBe(200);
+    const u = r.body.doc.units[0];
+    expect(u.cut).toBeUndefined();
+    expect(u.tags).toEqual(["Other::Tag", VIDEO]);
+    expect(u.search).toEqual(["tag:Keep"]);
+    expect(u.sn).toEqual({ "tag:Keep": 5 });
+  });
+
+  it("a tag of single cards alone is a tag; taking its note off in Anki takes its cards", async () => {
+    const { dre, p } = await plan();
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", tagroot: "MS2_Block_1", units: UNITS,
+      tags: [{ id: "t1", name: "SLG 1", cards: [["g3", 1]] }, { id: "t2", name: "SLG 2", notes: ["g5"], cards: [["g3", 2]] }] } });
+    expect(put.status).toBe(200);
+    const r = await dre.call("POST", `/plans/${p.id}/tags`, { name: "SLG 2", remove: ["g3"] });
+    expect(r.body.doc.tags.find((t: any) => t.name === "SLG 2")).toEqual({ id: "t2", name: "SLG 2", notes: ["g5"] });
+    const r2 = await dre.call("POST", `/plans/${p.id}/tags`, { name: "SLG 1", remove: ["g3"] });
+    expect(r2.body.doc.tags.map((t: any) => t.name)).toEqual(["SLG 2"]);
+    expect(await dre.status("PUT", `/plans/${p.id}`, { version: r2.body.version, doc: { ...r2.body.doc,
+      tags: [{ id: "t9", name: "Bad", cards: [["g1", "two"]] }] } })).toBe(400);
+  });
+
+  it("the author's note ids for a date with a cut need its cuts to match; a copy's root reaches the cut's search", async () => {
+    const { dre, maya, p } = await plan();
+    const unit = { id: "c1", name: "Cephalosporins", opens: "2026-10-08", tags: [], search: [Q], cut: [{ tag: VIDEO, in: "t12", q: Q }] };
+    const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", tagroot: "MS2_Block_1", tags: TAGS, units: [unit] } });
+    expect(put.status).toBe(200);
+    const ids = (body: unknown) => dre.call("PUT", `/plans/${p.id}/ids`, body);
+    expect((await ids({ units: { c1: [[], [], ["n1"], [[VIDEO, "other"]]] } })).status).toBe(200);
+    let doc = (await dre.call("GET", `/plans/${p.id}`)).body.doc;
+    expect(doc.units[0].ids).toBeUndefined();  // another cut: worked out from what it no longer is
+    expect((await ids({ units: { c1: [[], [], ["n1", "n2"], [[VIDEO, "t12"]]] } })).status).toBe(200);
+    doc = (await dre.call("GET", `/plans/${p.id}`)).body.doc;
+    expect(doc.units[0].ids).toEqual(["n1", "n2"]);
+    expect((await ids({ units: { c1: [[], [], ["n1"], [], "x"] } })).status).toBe(400);
+    // listed and copied: the copy's own root, in the cut's search as in the date's
+    const cur = await dre.call("GET", `/plans/${p.id}`);
+    await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true });
+    const other = await maya.call("POST", "/plans", { name: "MS2 Block 1", deck: "Step 1" });
+    await maya.call("POST", `/plans/${other.body.id}/tags`, { name: "Mine", add: ["z"] });  // holds MS2_Block_1_2
+    const copy = await maya.call("POST", `/plans/${p.id}/copy`, { start: "2026-11-02" });
+    expect(copy.status).toBe(200);
+    const cu = copy.body.doc.units[0];
+    expect(cur.body.doc.tagroot).toBe("MS2_Block_1");
+    expect(copy.body.doc.tagroot).not.toBe("MS2_Block_1");
+    expect(cu.cut[0].q).toBe(cu.search[0]);
+    expect(cu.cut[0].q).toContain(copy.body.doc.tagroot.replace(/_/g, "\\_"));
+  });
+});

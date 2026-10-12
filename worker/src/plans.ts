@@ -113,7 +113,7 @@ function todoLine(x: unknown, every = false): Obj {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut"].includes(k)) throw V.bad("plan");
   // "every" is taken: a plan's weekly lines are ticked as pid:every:… (3.8.0)
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id) || v.id === "every") throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
@@ -157,6 +157,20 @@ function unit(v: unknown): Obj {
     if (!V.isObj(v.sn) || Object.keys(v.sn).length > SEARCH_MAX
         || !Object.entries(v.sn).every(([q, n]) => (out.search as string[] | undefined)?.includes(q) && V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
     if (Object.keys(v.sn).length) out.sn = v.sn;
+  }
+  if (v.cut !== undefined && v.cut !== null) {
+    // 3.8.1: a tag kept to the cards of one of the plan's own tags ("Cephalosporins
+    // in SLG 12"): {tag, in: that plan tag's id, q: the same as an Anki search,
+    // which stays in `search` so an add-on before 3.8.1 opens the same cards}
+    if (!Array.isArray(v.cut) || v.cut.length > SEARCH_MAX) throw V.bad("plan");
+    const qs = (out.search as string[] | undefined) || [];
+    const seen = new Set<string>();
+    const cut = v.cut.map((c) => {
+      if (!V.isObj(c) || Object.keys(c).some((k) => !["tag", "in", "q"].includes(k))) throw V.bad("plan");
+      if (!V.isStr(c.in, 12) || !UNIT_ID.test(c.in as string) || !V.isStr(c.q, SEARCH_LEN, 1) || !qs.includes(c.q as string)) throw V.bad("plan");
+      return { tag: path(c.tag), in: c.in as string, q: c.q as string };
+    }).filter((c) => !seen.has(`${c.tag}\u0000${c.in}`) && seen.add(`${c.tag}\u0000${c.in}`));
+    if (cut.length) out.cut = cut;
   }
   if (v.ids !== undefined && v.ids !== null) {
     // 3.3, C5: the note ids behind its tags and subdecks in the author's Anki
@@ -245,6 +259,7 @@ export function reroot(doc: Obj, from: string, to: string): Obj {
     if (Array.isArray(o.tags)) o.tags = (o.tags as unknown[]).map((t) => typeof t === "string" ? tag(t) : t);
     if (Array.isArray(o.search)) o.search = (o.search as unknown[]).map((x) => typeof x === "string" ? q(x) : x);
     if (o.sn && typeof o.sn === "object") o.sn = Object.fromEntries(Object.entries(o.sn as Obj).map(([k, v]) => [q(k), v]));
+    if (Array.isArray(o.cut)) o.cut = (o.cut as Obj[]).map((c) => ({ ...c, tag: tag(String(c.tag)), q: q(String(c.q)) }));
   };
   const out = JSON.parse(JSON.stringify(doc)) as Obj;
   for (const u of (out.units as Obj[] | undefined) || []) fix(u);
@@ -277,12 +292,12 @@ export function rootTaken(e: unknown): never {
   throw e;
 }
 
-/** A plan tag: {id, name, notes?, tags?, decks?, search?, n?}: what it
+/** A plan tag: {id, name, notes?, cards?, tags?, decks?, search?, n?}: what it
  *  holds is exact notes, or a tag's, a subdeck's or a search's cards in
  *  each follower's copy; `n` how many cards the author's Anki found. */
 function planTag(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "notes", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "notes", "cards", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   const name = V.displayName(v.name);
   if (name.length > TAG_NAME_MAX) throw V.bad("plan");
@@ -299,7 +314,14 @@ function planTag(v: unknown): Obj {
   const notes = v.notes ?? [];
   if (!Array.isArray(notes) || notes.length > IDLIST_MAX || !notes.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
   if (notes.length) out.notes = [...new Set(notes as string[])];
-  if (!out.tags && !out.decks && !out.search && !out.notes) throw V.bad("plan");  // a tag holds something
+  // 3.8.1: single cards, as a date's are (guid + card number): the tag goes on
+  // their notes in Anki (Anki tags notes), and Due Crew uses just these cards
+  const cards = v.cards ?? [];
+  if (!Array.isArray(cards) || cards.length > IDLIST_MAX) throw V.bad("plan");
+  const seenCard = new Set<string>();
+  const refs = cards.map(cardRef).filter(([g, o]) => !seenCard.has(`${g}:${o}`) && seenCard.add(`${g}:${o}`));
+  if (refs.length) out.cards = refs;
+  if (!out.tags && !out.decks && !out.search && !out.notes && !out.cards) throw V.bad("plan");  // a tag holds something
   if (v.n !== undefined && v.n !== null) {
     if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
     out.n = v.n;
@@ -381,7 +403,7 @@ export function planDoc(v: unknown): Obj {
       if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
       out.tagroot = v.tagroot;
       out.tags = tags;
-      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0), 0);
+      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0) + ((t.cards as unknown[] | undefined)?.length ?? 0), 0);
     }
   }
   if (!out.tags && v.tagroot !== undefined && v.tagroot !== null) {
@@ -426,6 +448,21 @@ export function planDoc(v: unknown): Obj {
     if (!Array.isArray(v.every) || v.every.length > EVERY_MAX) throw V.bad("plan");
     const every = v.every.map((x) => todoLine(x, true));
     if (every.length) out.every = every;
+  }
+  // 3.8.1: a cut whose plan tag went (in a merge, or its last note taken off
+  // in Anki) is its whole tag again, and its search goes with it
+  const tagIds = new Set(((out.tags as Obj[] | undefined) || []).map((t) => t.id as string));
+  for (const u of units) {
+    if (!u.cut) continue;
+    const keep = (u.cut as Obj[]).filter((c) => tagIds.has(c.in as string));
+    for (const c of (u.cut as Obj[]).filter((x) => !keep.includes(x))) {
+      u.tags = [...new Set([...(u.tags as string[]), c.tag as string])];
+      if (u.search) u.search = (u.search as string[]).filter((q) => q !== c.q);
+      if (u.sn) delete (u.sn as Obj)[c.q as string];
+    }
+    if (keep.length) u.cut = keep; else delete u.cut;
+    if (u.search && !(u.search as string[]).length) delete u.search;
+    if (u.sn && !Object.keys(u.sn as Obj).length) delete u.sn;
   }
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
@@ -874,9 +911,11 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   const doc = JSON.parse(p.doc) as Obj & { units: Obj[] };
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   for (const [uid, v] of Object.entries(body.units)) {
-    if (!Array.isArray(v) || v.length !== 3 || !Array.isArray(v[2])) throw V.bad("ids");
+    if (!Array.isArray(v) || (v.length !== 3 && v.length !== 4) || !Array.isArray(v[2])) throw V.bad("ids");
     const u = doc.units.find((x) => x.id === uid);
     if (!u || !same(u.tags, v[0]) || !same(u.decks, v[1])) continue;  // changed since: the next refresh sends it again
+    // 3.8.1: and its cuts, [[tag, in]], from an add-on that knows them
+    if (v.length === 4 && !same(((u.cut as Obj[] | undefined) || []).map((c) => [c.tag, c.in]), v[3])) continue;
     if (v[2].length) u.ids = v[2]; else delete u.ids;
   }
   // 3.6.5: the cards a date's pasted ids are here, as guid + card number,
@@ -1139,8 +1178,12 @@ export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[
   const notes = [...new Set([...had, ...add])].filter((g) => !remove.has(g));
   if (notes.length > IDLIST_MAX) throw new HttpError(400, "too_many");
   if (notes.length) t.notes = notes; else delete t.notes;
+  if (t.cards) {  // 3.8.1: a note taken off takes its single cards with it
+    const left = (t.cards as [string, number][]).filter(([g]) => !remove.has(g));
+    if (left.length) t.cards = left; else delete t.cards;
+  }
   if (body.n !== undefined) t.n = body.n;
-  doc.tags = tags.filter((x) => x.notes || x.tags || x.decks || x.search);
+  doc.tags = tags.filter((x) => x.notes || x.cards || x.tags || x.decks || x.search);
   if (!doc.tags.length) delete doc.tags;
   if (!doc.tagroot) doc.tagroot = p.tagroot || tagRoot(p.name);
   const r0 = await rooted(env, id, p.tagroot, planDoc(doc));
@@ -1521,7 +1564,8 @@ export async function forBoard(env: Env, uid: string) {
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
-                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens')))
+                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens'),
+                      'cut', json_extract(x.value, '$.cut')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)

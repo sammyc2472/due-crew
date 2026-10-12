@@ -340,10 +340,10 @@ def parts(col, idxs, today):
             if P.own_pace(p):  # 3.8.0: at my own pace, the dates I opened
                 opens = today if P.opened_here(applied, u, prog) else "9999"
             if opens == today or (opens < today and (a or running) and not str(a).startswith("skip:")):
-                got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
+                got = P.parts(idx, u, pf._swap(st), doc)
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
-                sib = idx.siblings(idx.match(u, pf._swap(st), doc.get("deck", "")))
+                sib = idx.siblings(idx.match(u, pf._swap(st), doc))
                 if sib[0]:
                     sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
     _state["plan_parts"] = out

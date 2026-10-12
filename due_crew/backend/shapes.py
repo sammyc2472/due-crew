@@ -6,6 +6,7 @@ that), and no Qt.
 
 import datetime
 import hashlib
+import json
 import re
 
 from ..room_model import clean_room, is_over
@@ -497,6 +498,9 @@ def _clean_unit(u):
     search = [q for q in u.get("search") or [] if isinstance(q, str) and q.strip()][:10]
     if search:
         out["search"] = search  # 3.3, C3: Anki searches, run here
+    cut = _cuts(u.get("cut"), search)
+    if cut:
+        out["cut"] = cut  # 3.8.1: a tag kept to one of the plan's own tags' cards
     ids = [g for g in u.get("ids") or [] if isinstance(g, str) and g][:50000]
     if ids:
         out["ids"] = ids  # 3.3, C5: the note ids behind its tags, from the author's Anki
@@ -520,6 +524,19 @@ def _clean_unit(u):
     if todo:
         out["todo"] = todo[:8]
     return out
+
+
+def _cuts(cut, search):
+    """3.8.1: a date's cuts, [{tag, in, q}]: a tag kept to the cards of the plan
+    tag `in`; q is the same as an Anki search, one of the date's searches (an
+    add-on before 3.8.1 opens it), which this one leaves to the cut."""
+    out, seen = [], set()
+    for c in cut if isinstance(cut, list) else []:
+        if (isinstance(c, dict) and isinstance(c.get("tag"), str) and c["tag"] and _UNIT_ID.fullmatch(str(c.get("in") or ""))
+                and c.get("q") in (search or []) and (c["tag"], c["in"]) not in seen):
+            seen.add((c["tag"], c["in"]))
+            out.append({"tag": c["tag"], "in": c["in"], "q": c["q"]})
+    return out[:10]
 
 
 def _todo_text(t):
@@ -568,7 +585,7 @@ def clean_sched(s):
 
 
 def _clean_plan_tag(t):
-    """3.8.0: one of a plan's tags, {id, name, notes?, tags?, decks?, search?, n?}:
+    """3.8.0: one of a plan's tags, {id, name, notes?, cards?, tags?, decks?, search?, n?}:
     names and note guids, never card text. None if it holds nothing."""
     if not isinstance(t, dict) or not _UNIT_ID.fullmatch(str(t.get("id") or "")):
         return None
@@ -583,9 +600,38 @@ def _clean_plan_tag(t):
     notes = [g for g in t.get("notes") or [] if isinstance(g, str) and g][:5000]
     if notes:
         out["notes"] = notes
+    cards = [[c[0], c[1]] for c in t.get("cards") or []  # 3.8.1: single cards, guid + card number
+             if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str) and c[0]
+             and isinstance(c[1], int) and not isinstance(c[1], bool) and 0 <= c[1] <= 1000][:5000]
+    if cards:
+        out["cards"] = cards
     if isinstance(t.get("n"), int) and not isinstance(t.get("n"), bool) and t["n"] >= 0:
         out["n"] = t["n"]
-    return out if any(k in out for k in ("tags", "decks", "search", "notes")) else None
+    return out if any(k in out for k in ("tags", "decks", "search", "notes", "cards")) else None
+
+
+def _plan_tag_refs(doc):
+    """3.8.1: a date that uses the plan's own tags (a cut, or the tag itself)
+    carries `ptv`, what those tags hold, so it reads as changed (and its new
+    cards open, as any update's do) when they change; a cut carries its tag's
+    name for the page. A cut whose tag is gone is left to its search."""
+    from ..plans import tag_part  # here: plans reads this module as it loads
+    by_id = {t["id"]: t for t in doc.get("tags") or []}
+    root = doc.get("tagroot")
+    base = f"duecrew::{root}::".lower() if root else None
+    by_part = {f"{base}{tag_part(t['name']).lower()}": t for t in by_id.values()} if base else {}
+    for u in doc.get("units") or []:
+        cut = [c for c in u.get("cut") or [] if c["in"] in by_id]
+        if u.get("cut"):
+            if cut:
+                u["cut"] = [dict(c, nm=by_id[c["in"]]["name"]) for c in cut]
+            else:
+                del u["cut"]
+        used = {c["in"] for c in cut} | {by_part[t.lower()]["id"] for t in u.get("tags") or [] if t.lower() in by_part}
+        if used:
+            blob = json.dumps([[k, {x: by_id[k].get(x) for x in ("notes", "cards", "tags", "decks", "search")}]
+                               for k in sorted(used)], sort_keys=True)
+            u["ptv"] = hashlib.sha1(blob.encode()).hexdigest()[:10]
 
 
 def _own_tags(doc):
@@ -620,6 +666,7 @@ def clean_plan_doc(doc):
     if every:
         out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
     out.update(_own_tags(doc))  # 3.8.0: the plan's own tags
+    _plan_tag_refs(out)
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -654,7 +701,8 @@ def clean_authored(a):
                  for k in ("nids", "cids") if u.get(k)},  # E1
               **({"notes": [g for g in u["notes"] if isinstance(g, str) and g][:5000]}
                  if isinstance(u.get("notes"), list) else {}),  # 3.6.5
-              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
+              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {}),  # P1
+              **({"cut": _cuts(u.get("cut"), u.get("search"))} if u.get("cut") else {})}  # 3.8.1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "name": clean_note(a.get("name"), 60) or "Plan",
             "doc": {"deck": str(d.get("deck") or ""), "units": units, **_own_tags(d)}}  # 3.8.0: and its own tags

@@ -67,19 +67,25 @@ def units(doc):
     return [u for u in (doc or {}).get("units") or [] if isinstance(u, dict) and u.get("id")]
 
 
-def unit_sources(unit, deck_id=None, swap=None):
+def unit_sources(unit, deck_id=None, swap=None, pt=None):
     """What a unit matched with when it was applied here: its deck, swap and
-    sources. A later change opens only what the new sources add."""
+    sources. A later change opens only what the new sources add. pt (3.8.1):
+    the cards it had then from the plan's own tags (DeckIndex.plan_part), so
+    a change to those tags opens just what it adds; a cut's search is the cut's."""
     out = [deck_id, list(swap or []), list(unit.get("tags") or []), list(unit.get("decks") or []),
            [list(c) for c in unit.get("cards") or []]]
-    if unit.get("search"):
-        out.append(list(unit["search"]))  # 3.3, C3
+    cut_q = {c.get("q") for c in unit.get("cut") or []} if pt is not None else set()
+    search = [q for q in unit.get("search") or [] if q not in cut_q]
+    if search:
+        out.append(search)  # 3.3, C3
     if unit.get("nids") or unit.get("cids"):
         out.append([list(unit.get("nids") or []), list(unit.get("cids") or [])])  # E1
     if unit.get("notes") or unit.get("idr"):
         out.append({"notes": list(unit.get("notes") or []), "idr": [list(r) for r in unit.get("idr") or []]})  # 3.6.5
     if unit.get("ids"):
         out.append({"ids": list(unit["ids"])})  # 3.7.2: C5's note ids, so ones arriving later open what they add
+    if pt is not None:
+        out.append({"pt": sorted(int(c) for c in pt)})  # 3.8.1
     return out
 
 
@@ -102,7 +108,10 @@ def unit_sig(unit, deck_id=None, swap=None):
                       + ([sorted(unit["search"])] if unit.get("search") else [])
                       + ([sorted(unit.get("nids") or []), sorted(unit.get("cids") or [])]
                          if unit.get("nids") or unit.get("cids") else [])
-                      + ([{"ids": sorted(str(g) for g in unit["ids"])}] if unit.get("ids") else []))
+                      + ([{"ids": sorted(str(g) for g in unit["ids"])}] if unit.get("ids") else [])
+                      # 3.8.1: its cuts, and what the plan's own tags it uses hold (shapes' ptv)
+                      + ([{"cut": sorted(f"{str(c.get('tag')).lower()}|{c.get('in')}" for c in unit["cut"])}] if unit.get("cut") else [])
+                      + ([{"ptv": unit["ptv"]}] if unit.get("ptv") else []))
     return hashlib.sha1(blob.encode()).hexdigest()[:12]
 
 
@@ -196,6 +205,7 @@ class DeckIndex:
         self.fell_back = set()  # unit ids matched by their note ids (C5)
         self._started = None  # note ids with a card answered: siblings wait on these
         self._fresh = {}  # a search about my own reviews: this refresh only
+        self._ptc = {}  # 3.8.1: what each of a plan's own tags holds here, this refresh
 
     def _read_static(self, col, tree, where):
         rows = col.db.all(
@@ -287,14 +297,30 @@ class DeckIndex:
             kept[q] = {c for c in found if c in self.cards}
         return kept[q]
 
-    def match(self, unit, swap=None, plan_deck=""):
-        """{cid} for one unit on this deck."""
+    def match(self, unit, swap=None, plan=""):
+        """{cid} for one unit on this deck. plan: the plan's doc, or the name
+        of its deck. With the doc (3.8.1), a tag of the plan's own reads what
+        that tag holds, single cards and all, and a cut reads its tag kept to
+        one; without it, they're read as the Anki tag and the cut's search."""
+        doc = plan if isinstance(plan, dict) else None
+        plan_deck = str(doc.get("deck") or "") if doc is not None else plan
+        own = plan_tag_map(doc)
         out = set()
         missing = False
         for t in unit.get("tags") or []:
-            got = self.tag_cards(swapped(t, swap))
+            pt = own.get(str(t).lower())
+            got = self.plan_tag_cards(doc, pt, swap) if pt else self.tag_cards(swapped(t, swap))
             missing = missing or not got
             out |= got
+        cut_q = set()
+        for c in unit.get("cut") or []:
+            pt = own.get(("id", c.get("in")))
+            if not pt:
+                continue  # its tag went: its search reads it, as an older add-on does
+            cut_q.add(c.get("q"))
+            got = self.tag_cards(swapped(c.get("tag"), swap))
+            missing = missing or not got
+            out |= got & self.plan_tag_cards(doc, pt, swap)
         for d in unit.get("decks") or []:
             got = self.deck_cards(d, plan_deck)
             missing = missing or not got
@@ -307,12 +333,45 @@ class DeckIndex:
                 self.fell_back.add(unit.get("id"))
                 out |= by_id
         for q in unit.get("search") or []:
-            out |= self.search_cards(q)
+            if q not in cut_q:
+                out |= self.search_cards(q)
         for g, o in unit.get("cards") or []:
             cid = self.by_ref.get((str(g), int(o)))
             if cid is not None:
                 out.add(cid)
         out |= self.id_cards(unit)
+        return out
+
+    def plan_tag_cards(self, doc, tag, swap=None):
+        """3.8.1: the cards one of the plan's own tags holds here: every card
+        of the notes it holds whole (as its Anki tag does) and just the
+        single cards it names (Anki's tag is on their notes too)."""
+        key = (str(tag.get("id")), json.dumps({k: tag.get(k) for k in ("notes", "cards", "tags", "decks", "search")},
+                                               sort_keys=True), tuple(swap or ()))
+        got = self._ptc.get(key)
+        if got is None:
+            got = {c for n in tag_whole_notes(self, doc, tag, swap) for c in self.by_nid.get(n, ())}
+            for g, o in tag.get("cards") or []:
+                cid = self.by_ref.get((str(g), int(o)))
+                if cid is not None:
+                    got.add(cid)
+            self._ptc[key] = got
+        return got
+
+    def plan_part(self, unit, doc, swap=None):
+        """3.8.1: the cards a unit has from the plan's own tags now (the tags
+        it names, its cuts), or None when it has none: kept when it opens,
+        so a later change to those tags opens just what the change adds."""
+        own = plan_tag_map(doc)
+        used = [own[str(t).lower()] for t in unit.get("tags") or [] if str(t).lower() in own]
+        cuts = [(c, own[("id", c.get("in"))]) for c in unit.get("cut") or [] if ("id", c.get("in")) in own]
+        if not used and not cuts:
+            return None
+        out = set()
+        for pt in used:
+            out |= self.plan_tag_cards(doc, pt, swap)
+        for c, pt in cuts:
+            out |= self.tag_cards(swapped(c.get("tag"), swap)) & self.plan_tag_cards(doc, pt, swap)
         return out
 
     def pasted_cards(self, unit):
@@ -500,7 +559,7 @@ def nest(rows, budget=TREE_BUDGET):
 
 def unit_matches(idx, doc, swap=None):
     """{unit id: {cid}} for a whole plan on one deck."""
-    return {u["id"]: idx.match(u, swap, doc.get("deck", "")) for u in units(doc)}
+    return {u["id"]: idx.match(u, swap, doc) for u in units(doc)}
 
 
 def progress(idx, doc, swap=None):
@@ -580,7 +639,7 @@ def match_rows(idx, doc, swap=None, shown=5):
             continue
         name = u.get("name") or "?"
         if u.get("tags") or u.get("decks"):
-            n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc.get("deck", "")))
+            n = len(idx.match(dict(u, cards=[], nids=[], cids=[], notes=[], idr=[]), swap, doc))
             of = u.get("n")  # the author's count, when the builder saved one
             text = (f"{n:,} of {of:,}" if isinstance(of, int) and of else _cards(n)) if n else "not in your copy"
             rows.append((name, text, not n))
@@ -595,7 +654,7 @@ def match_rows(idx, doc, swap=None, shown=5):
     if rest:
         cids = set()
         for u in rest:
-            cids |= idx.match(u, swap, doc.get("deck", ""))
+            cids |= idx.match(u, swap, doc)
         rows.append((f"… {len(rest)} more date{'s' if len(rest) != 1 else ''}", _cards(len(cids)), False))
     return rows
 
@@ -873,7 +932,7 @@ def holdable(idx, doc, today, swap=None, applied=None, own=False):
     applied = applied or {}
     opened, later = set(), set()
     for u in units(doc):
-        cids = idx.match(u, swap, doc.get("deck", ""))
+        cids = idx.match(u, swap, doc)
         have = applied.get(u["id"])
         done = isinstance(have, str) and not have.startswith("skip:")
         (opened if done or (not own and str(u.get("opens") or "") <= today) else later).update(cids)
@@ -911,17 +970,20 @@ def dates_with(idx, doc, cids, swap=None):
     """3.8.0, Browse › Show on my plan: the dates of a plan (my days) whose
     cards include any of `cids`, in plan order."""
     want = {int(c) for c in cids}
-    return [u for u in units(doc) if want & idx.match(u, swap, (doc or {}).get("deck", ""))]
+    return [u for u in units(doc) if want & idx.match(u, swap, doc or {})]
 
 
-def note_ids(idx, unit, plan_deck=""):
+def note_ids(idx, unit, plan=""):
     """3.3, C5: the note ids behind a unit's tags and subdecks here, for the
-    author's Anki to keep on the plan."""
+    author's Anki to keep on the plan; 3.8.1, and its cuts' (plan: the doc)."""
+    plan_deck = str(plan.get("deck") or "") if isinstance(plan, dict) else plan
     got = set()
     for t in unit.get("tags") or []:
         got |= idx.tag_cards(t)
     for d in unit.get("decks") or []:
         got |= idx.deck_cards(d, plan_deck)
+    if unit.get("cut") and isinstance(plan, dict):
+        got |= idx.match({"cut": unit["cut"]}, None, plan)
     return sorted({idx.guid_of[c] for c in got if c in idx.guid_of})
 
 
@@ -962,7 +1024,18 @@ def topic_items(us):
             put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", _word(segs[-1]), {"tags": [t]})
         for d in u.get("decks") or []:
             put("", _word(str(d).split(_SEP)[-1]), {"decks": [d]})
+        cut_q = set()
+        for c in u.get("cut") or []:
+            if not c.get("nm"):
+                continue  # its tag went: its search names it
+            cut_q.add(c.get("q"))
+            segs = str(c.get("tag")).split(_SEP)
+            ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+            put(_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "", f"{_word(segs[-1])} \u00b7 {c['nm']}",
+                {"cut": [dict(c)], "search": [c.get("q")]})  # 3.8.1: "Cephalosporins · SLG 12"
         for q in u.get("search") or []:
+            if q in cut_q:
+                continue
             put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
         notes = len(u.get("notes") or []) + len(u.get("nids") or [])
         if notes:
@@ -989,18 +1062,26 @@ def topics(unit):
     return [[g, [x for x, _i in xs]] for g, xs in topic_view([unit])]
 
 
-def parts(idx, unit, swap=None, plan_deck=""):
+def parts(idx, unit, swap=None, plan=""):
     """Due: [[group, seen, total]] for a date's resources here, grouped as
     `topics` groups its tags (a video series, a book); what else it opens
     (subdecks, searches, picks) is "Other". [] when there's one group or
     none: then the date's own numbers say it all."""
     groups = {}
+    own = plan_tag_map(plan) if isinstance(plan, dict) else {}
     for t in unit.get("tags") or []:
         segs = str(t).split(_SEP)
         ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
         g = _word(segs[ri]) if 0 <= ri < len(segs) - 1 else ""
-        groups.setdefault(g, set()).update(idx.tag_cards(swapped(t, swap)))
-    rest = idx.match(unit, swap, plan_deck) - set().union(*groups.values()) if groups else set()
+        groups.setdefault(g, set()).update(idx.match({"tags": [t]}, swap, plan))
+    for c in unit.get("cut") or []:  # 3.8.1: a video kept to an SLG counts in the video's group
+        if ("id", c.get("in")) not in own:
+            continue
+        segs = str(c.get("tag")).split(_SEP)
+        ri = next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+        g = _word(segs[ri]) if 0 <= ri < len(segs) - 1 else ""
+        groups.setdefault(g, set()).update(idx.match({"cut": [c]}, swap, plan))
+    rest = idx.match(unit, swap, plan) - set().union(*groups.values()) if groups else set()
     if rest:
         groups.setdefault("", set()).update(rest)
     named = [(g, c) for g, c in groups.items() if c]
@@ -1041,10 +1122,9 @@ def date_counts(idx, lean_doc):
     ones an earlier date already opens, and its picked notes this copy
     doesn't have. Single cards aren't in the lean doc and count apart."""
     seen, out = set(), {}
-    deck = str(lean_doc.get("deck") or "")
     units = sorted(lean_doc.get("units") or [], key=lambda u: str(u.get("opens") or ""))
     for u in units:
-        cids = idx.match(dict(u, cards=[], ids=[]), None, deck)
+        cids = idx.match(dict(u, cards=[], ids=[]), None, lean_doc)
         new = len(cids - seen)
         seen |= cids
         miss = sum(1 for g in u.get("notes") or [] if str(g) not in idx.by_guid)
@@ -1057,11 +1137,13 @@ def ids_snapshot(idx, lean_doc, cap=50000):
     at most `cap` ids in all."""
     out, n = {}, 0
     for u in lean_doc.get("units") or []:
-        if not (u.get("tags") or u.get("decks")):
+        if not (u.get("tags") or u.get("decks") or u.get("cut")):
             continue  # a date of searches only: its count is enough (search_counts)
-        ids = note_ids(idx, u, lean_doc.get("deck", ""))[:max(0, cap - n)]
+        ids = note_ids(idx, u, lean_doc)[:max(0, cap - n)]
         n += len(ids)
         out[u["id"]] = [list(u.get("tags") or []), list(u.get("decks") or []), ids]
+        if u.get("cut"):  # 3.8.1: kept only while the date's cuts are these
+            out[u["id"]].append([[c.get("tag"), c.get("in")] for c in u["cut"]])
     return out
 
 
@@ -1347,15 +1429,37 @@ def tag_search(path):
     return f'"tag:{esc}'
 
 
-def tag_notes(idx, doc, tag, swap=None):
-    """(the note ids the tag holds in this copy, how many of its exact notes
-    this copy doesn't have): its notes by guid, and what its tags, subdecks
-    and searches find, inside the plan's deck."""
+def plan_tag_map(doc):
+    """3.8.1: the plan's own tags by their Anki tag (lowercased) and by
+    ("id", id), for DeckIndex.match. {} for a plan without them."""
+    out = {}
+    for t in plan_tags(doc) if isinstance(doc, dict) and doc.get("tags") else ():
+        out[tag_path(doc, t).lower()] = t
+        out[("id", t.get("id"))] = t
+    return out
+
+
+def tag_whole_notes(idx, doc, tag, swap=None):
+    """3.8.1: the note ids a plan tag holds whole in this copy: its notes by
+    guid, and what its tags, subdecks and searches find, in the plan's deck."""
     unit = {"tags": tag.get("tags") or [], "decks": tag.get("decks") or [],
             "search": tag.get("search") or [], "notes": tag.get("notes") or []}
     cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
-    missing = sum(1 for g in tag.get("notes") or [] if str(g) not in idx.by_guid)
-    return {idx.nid_of[c] for c in cids if c in idx.nid_of}, missing
+    return {idx.nid_of[c] for c in cids if c in idx.nid_of}
+
+
+def tag_notes(idx, doc, tag, swap=None):
+    """(the note ids the tag goes on in this copy, how many of its exact notes
+    this copy doesn't have): what it holds whole, and the notes of its single
+    cards (3.8.1: Anki tags notes; Due Crew reads just those cards)."""
+    nids = tag_whole_notes(idx, doc, tag, swap)
+    for g, o in tag.get("cards") or []:
+        cid = idx.by_ref.get((str(g), int(o)))
+        if cid is not None and cid in idx.nid_of:
+            nids.add(idx.nid_of[cid])
+    exact = set(str(g) for g in tag.get("notes") or []) | {str(g) for g, _o in tag.get("cards") or []}
+    missing = sum(1 for g in exact if g not in idx.by_guid)
+    return nids, missing
 
 
 def _tagged(col, path):
@@ -1533,11 +1637,11 @@ def export_scope(idx, doc, scope, swap=None):
         keys = list(((doc or {}).get("pace") or {}).get("cover") or [])
         unit = {"tags": [k[4:] for k in keys if str(k).startswith("tag:")],
                 "decks": [k[5:] for k in keys if str(k).startswith("deck:")]}
-        cids = idx.match(unit, swap, (doc or {}).get("deck", ""))
+        cids = idx.match(unit, swap, doc or {})
     else:
         cids = set()
         for u in units(doc or {}):
-            cids |= idx.match(u, swap, (doc or {}).get("deck", ""))
+            cids |= idx.match(u, swap, doc or {})
     return {n for n, cs in idx.by_nid.items() if any(c in cids for c in cs)}
 
 

@@ -218,11 +218,17 @@ def skip_past(st, plan, today):
     return st
 
 
-def _unit_cids(idx, st, u, deck, whole=False):
+def _src(idx, st, u, doc):
+    """P.unit_sources for a date opening now, with (3.8.1) the cards it has
+    from the plan's own tags, so a change to them opens just what it adds."""
+    return P.unit_sources(u, st.get("deck_id"), st.get("swap"), idx.plan_part(u, doc, _swap(st)))
+
+
+def _unit_cids(idx, st, u, doc, whole=False):
     """The cards applying `u` opens: its match, or, when it was applied
     before on this deck and the author changed it since, only the cards the
     change adds (a card suspended since by hand, or by Anki, stays so)."""
-    cids = idx.match(u, _swap(st), deck)
+    cids = idx.match(u, _swap(st), doc)
     was = (st.get("src") or {}).get(u["id"])
     have = (st.get("applied") or {}).get(u["id"])
     if whole or not was or not isinstance(have, str) or have.startswith("skip:"):
@@ -234,8 +240,11 @@ def _unit_cids(idx, st, u, deck, whole=False):
     # what came after the first five (P.unit_sources): a date's searches
     # (3.3, C3: a list of strings), its pasted ids (E1: [nids, cids]), its
     # notes and the refs behind its ids (3.6.5: a dict), C5's note ids (3.7.2: {"ids"})
+    pt = None
     for extra in was[5:]:
         if isinstance(extra, dict):
+            if "pt" in extra:
+                pt = {int(c) for c in extra.get("pt") or []}  # 3.8.1: what the plan's own tags held then
             if "ids" in extra:
                 before["ids"] = extra.get("ids") or []
             if "notes" in extra or "idr" in extra:
@@ -244,7 +253,11 @@ def _unit_cids(idx, st, u, deck, whole=False):
             before["search"] = extra
         elif isinstance(extra, list) and len(extra) == 2 and all(isinstance(x, list) for x in extra):
             before["nids"], before["cids"] = extra
-    old = idx.match(before, _swap(st), deck)
+    if pt is not None:
+        # the plan's own tags as they were when it opened, not as they read now
+        before["tags"] = [t for t in before["tags"] if not str(t).lower().startswith(P.TAG_PARENT.lower() + "::")]
+        return cids - idx.match(before, _swap(st), str(doc.get("deck") or "")) - pt
+    old = idx.match(before, _swap(st), str(doc.get("deck") or "") if isinstance(doc, dict) else doc)
     return cids - old
 
 
@@ -328,10 +341,10 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
         pnames, pcids = [], set()
         for u, how in items:
             if how == "open" and mode != "skip":
-                cids = idx.openable(_unit_cids(idx, st, u, doc.get("deck", ""), whole=everything))
-                _tally(idx, st, u, doc.get("deck", ""))
+                cids = idx.openable(_unit_cids(idx, st, u, doc, whole=everything))
+                _tally(idx, st, u, doc)
                 applied[u["id"]] = sig(u)
-                src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+                src[u["id"]] = _src(idx, st, u, doc)
                 if cids:
                     pnames.append(u.get("name") or "?")
                     pcids |= cids
@@ -356,10 +369,10 @@ def open_one(col, plan, st, uid, today, first=False):
     if u is None or not st or not _deck_ok(col, st.get("deck_id")):
         return {"n": 0, "names": [], "label": ""}
     idx = P.DeckIndex(col, st["deck_id"])
-    cids = idx.openable(_unit_cids(idx, st, u, p["doc"].get("deck", "")))
-    _tally(idx, st, u, p["doc"].get("deck", ""))
+    cids = idx.openable(_unit_cids(idx, st, u, p["doc"]))
+    _tally(idx, st, u, p["doc"])
     st.setdefault("applied", {})[uid] = _sig(st)(u)
-    st.setdefault("src", {})[uid] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+    st.setdefault("src", {})[uid] = _src(idx, st, u, p["doc"])
     (st.get("later") or {}).pop(uid, None)
     name = u.get("name") or "?"
     label = P.step_label([name])
@@ -415,7 +428,7 @@ def _spread(col, p, st, today, now=None):
         if day < first:
             continue
         later.pop(u["id"], None)
-        cids = _unit_cids(idx, st, u, doc.get("deck", ""))
+        cids = _unit_cids(idx, st, u, doc)
         if have:  # applied whole before, and the author changed it: what's new opens
             chosen = idx.openable(cids)
             done = True
@@ -427,8 +440,8 @@ def _spread(col, p, st, today, now=None):
             done = want >= len(cids)
         if done:
             applied[u["id"]] = s
-            src[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
-            _tally(idx, st, u, doc.get("deck", ""))
+            src[u["id"]] = _src(idx, st, u, doc)
+            _tally(idx, st, u, doc)
         if chosen:
             names.append(u.get("name") or "?")
             cids_out |= set(chosen)
@@ -448,7 +461,7 @@ def waiting(col, plan, st, today):
     idx = P.DeckIndex(col, st["deck_id"])
     cids = set()
     for u in due:
-        cids |= _unit_cids(idx, st, u, plan["doc"].get("deck", ""))
+        cids |= _unit_cids(idx, st, u, plan["doc"])
     return len(due), len(cids)
 
 
@@ -1235,7 +1248,7 @@ def study_date(pid, uid):
     if not u:
         return
     idx = P.DeckIndex(mw.col, st["deck_id"])
-    cids = check_cards(mw.col, idx, idx.match(u, _swap(st), p["doc"].get("deck", "")), 9999)
+    cids = check_cards(mw.col, idx, idx.match(u, _swap(st), p["doc"]), 9999)
     if not cids:
         tooltip("Nothing from this date studied yet.")
         return
@@ -1355,7 +1368,7 @@ def build_checks(plan_list):
         for key, name, span, cap in due:
             pool = set()
             for u in span:
-                pool |= idx.match(u, _swap(st), p["doc"].get("deck", ""))
+                pool |= idx.match(u, _swap(st), p["doc"])
             cids = check_cards(mw.col, idx, pool, cap)
             ok = bool(cids) and _filtered(mw.col, _deck_name(name), cids)
             st.setdefault("checks", {})[key] = {"day": today, "at": int(_time.time() * 1000), "name": name,
@@ -1792,7 +1805,7 @@ def browse_date(pid, uid):
     if u is None:
         return
     try:
-        cids = P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"].get("deck", ""))
+        cids = P.DeckIndex(mw.col, st["deck_id"]).match(u, _swap(st), pm["doc"])
     except Exception:
         traceback.print_exc()
         return
@@ -1818,9 +1831,18 @@ def browse_tags(pid):
     if len(parts) < 3:
         tooltip("Its tags aren't in your Anki yet.")
         return
-    import aqt
-    browser = aqt.dialogs.open("Browser", mw)
-    browser.search_for(P.tag_search("::".join(parts[:2])) + "::*\"")
+    got = _plan_idx(pid)
+    if got and any(t.get("cards") for t in P.plan_tags(got[2])):
+        # 3.8.1: a tag with single cards: just those, where Anki's tag shows their whole notes
+        _p, st2, doc, idx = got
+        cids = set()
+        for t in P.plan_tags(doc):
+            cids |= idx.plan_tag_cards(doc, t, _swap(st2))
+        _browse(cids)
+    else:
+        import aqt
+        browser = aqt.dialogs.open("Browser", mw)
+        browser.search_for(P.tag_search("::".join(parts[:2])) + "::*\"")
     tags_seen(pid, swap=False)
 
 
@@ -1861,7 +1883,7 @@ def browse_left(pid, uids=()):
     try:
         cids = set()
         for u in us:
-            cids |= idx.match(u, _swap(st), doc.get("deck", ""))
+            cids |= idx.match(u, _swap(st), doc)
         left = idx.unseen(cids)
         if not uids:
             left = {c for c in left if idx.cards[c][0] != -1}  # behind: opened, so waiting in my Anki now
@@ -1887,7 +1909,7 @@ def browse_topic(pid, uids, i):
         return
     src = items[i][2]
     try:
-        cids = P.DeckIndex(mw.col, st["deck_id"]).match(src, _swap(st), pm["doc"].get("deck", ""))
+        cids = P.DeckIndex(mw.col, st["deck_id"]).match(src, _swap(st), pm["doc"])
     except Exception:
         traceback.print_exc()
         return
@@ -1997,7 +2019,7 @@ def open_next(pid, study=False):
     refresh_progress()
     if study:
         idx = P.DeckIndex(mw.col, st["deck_id"])
-        new = [c2 for c2 in idx.match(u, _swap(st), p["doc"].get("deck", "")) if idx.cards[c2] == (0, 0)]
+        new = [c2 for c2 in idx.match(u, _swap(st), p["doc"]) if idx.cards[c2] == (0, 0)]
         name = _deck_name(u.get("name") or "date")
         if new and _filtered(mw.col, name, new, order=6):
             _after_change()
@@ -2022,7 +2044,7 @@ def put_back_own(pid):
     if not u or not P.opened_here(applied, u):
         return
     idx = P.DeckIndex(mw.col, st["deck_id"])
-    deck = doc.get("deck", "")
+    deck = doc
     others = set()
     for x in P.units(doc):
         if x["id"] != u["id"] and P.opened_here(applied, x):
@@ -2954,7 +2976,7 @@ def _on_plans(cids):
             continue
         idx = P.DeckIndex(mw.col, st["deck_id"])
         names = [str(u.get("name") or "?") for u in P.units(p["doc"])
-                 if idx.match(u, _swap(st), p["doc"].get("deck", "")) & want]
+                 if idx.match(u, _swap(st), p["doc"]) & want]
         if names:
             out.append(f"On {p.get('name') or 'a plan'}: {', '.join(names[:3])}"
                        + (f" and {len(names) - 3} more" if len(names) > 3 else "") + ", which count them")
@@ -3021,11 +3043,11 @@ def _claim_opened():
         idx = P.DeckIndex(mw.col, st["deck_id"])
         sig = _sig(st)
         for u in P.up_next(p["doc"], st.get("applied")):
-            cids = idx.match(u, _swap(st), p["doc"].get("deck", ""))
+            cids = idx.match(u, _swap(st), p["doc"])
             shut = [c2 for c2 in cids if idx.cards[c2][0] == -1 and c2 not in idx.leech]
             if cids and not shut:
                 st.setdefault("applied", {})[u["id"]] = sig(u)
-                st.setdefault("src", {})[u["id"]] = P.unit_sources(u, st.get("deck_id"), st.get("swap"))
+                st.setdefault("src", {})[u["id"]] = _src(idx, st, u, p["doc"])
                 st.setdefault("own_opened", {})[u["id"]] = today
                 changed = True
     if changed:

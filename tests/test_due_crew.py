@@ -8608,6 +8608,77 @@ def test_plan_tags_v380():
     check("tags: only under DueCrew, ever", P.drop_tags(col, "mine::x", "x") == 0 and "mine" in _tags_of(col, 6))
 
 
+def test_plan_tags_round_two_v381():
+    """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
+    video's tag to the cards one of the plan's own tags holds (a cut, named
+    for both, in the video's row); a plan tag can name single cards (Anki's
+    tag goes on their notes; Due Crew reads just those cards); an SLG that
+    changes reaches dates that opened, opening just what it adds."""
+    from due_crew import plans as P, plan_flow as F
+    from due_crew.backend import shapes
+    video = "Step1_v12::#Videos::Pharm::Cephalosporins"
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, nid, ord_, tags in ((1, 1, 0, video), (11, 1, 1, video), (12, 1, 2, video), (2, 2, 0, video), (3, 3, 0, video),
+                                 (4, 4, 0, "#Book::Ch07"), (5, 5, 0, "#Book::Ch07"), (6, 6, 0, "")):
+        fakes.add_card(conn, cid, did=10, tags=tags, nid=nid, ord_=ord_)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    q = '"tag:DueCrew::MS2\\_Block\\_1::SLG\\_12" "tag:Step1\\_v*::#Videos::Pharm::Cephalosporins"'
+    raw = {"deck": "Step 1", "tagroot": "MS2_Block_1",
+           "tags": [{"id": "t12", "name": "SLG 12", "notes": ["guid000002", "guid000004"], "cards": [["guid000001", 1], ["gone", 0]]},
+                    {"id": "t13", "name": "SLG 13", "cards": [["guid000005", 0]]}],
+           "units": [{"id": "u1", "name": "Cephalosporins", "opens": "2026-10-08", "tags": [], "decks": [], "cards": [],
+                      "search": [q, "tag:Other"], "cut": [{"tag": video, "in": "t12", "q": q}, {"tag": video, "in": "nope", "q": "tag:Other"}]},
+                     {"id": "u2", "name": "SLG 12", "opens": "2026-10-09", "tags": ["DueCrew::MS2_Block_1::SLG_12"], "decks": [], "cards": []},
+                     {"id": "u3", "name": "Book", "opens": "2026-10-10", "tags": ["#Book::Ch07"], "decks": [], "cards": []}]}
+    doc = shapes.clean_plan_doc(raw)
+    u1, u2, u3 = doc["units"]
+    check("r2: a cut is kept with its tag's name; one whose tag is gone is left to its search",
+          u1.get("cut") == [{"tag": video, "in": "t12", "q": q, "nm": "SLG 12"}], str(u1.get("cut")))
+    check("r2: a tag of single cards alone is a tag; its cards are kept", doc["tags"][1].get("cards") == [["guid000005", 0]], str(doc["tags"]))
+    check("r2: a date using the plan's tags carries what they hold (ptv); one that doesn't, nothing",
+          bool(u1.get("ptv")) and bool(u2.get("ptv")) and "ptv" not in u3)
+    idx = P.DeckIndex(col, 10)
+    check("r2: a cut is the video's cards the SLG holds: a whole note's, and just the single cloze named",
+          idx.match(u1, None, doc) == {2, 11}, str(idx.match(u1, None, doc)))
+    check("r2: a date naming the plan's tag reads what it holds: the single card, never its siblings",
+          idx.match(u2, None, doc) == {2, 4, 11}, str(idx.match(u2, None, doc)))
+    check("r2: without the doc, the Anki tag and the search are read, as an older add-on does",
+          idx.match(u2, None, "Step 1") == set())  # the tag isn't on any note yet
+    items = P.topic_items([u1])
+    check("r2: a cut is named for both, in its video's group; its search isn't listed again",
+          [(g, x) for g, x, _s in items] == [("Videos", "Cephalosporins \u00b7 SLG 12"), ("Search", "tag:Other")], str(items))
+    check("r2: a cut's topic finds its cards, as the date does", idx.match(items[0][2], None, doc) == {2, 11})
+    got = P.parts(idx, dict(u1, tags=["#Book::Ch07"]), None, doc)
+    check("r2: a cut counts in its video's row of Due's progress",
+          sorted(g for g, _s, _t in got) == ["Other", "Videos"] and dict((g, t) for g, _s, t in got)["Videos"] == 2, str(got))
+    applied, res = P.sync_tags(col, idx, doc, {}, "Due Crew: tags")
+    check("r2: the tag goes on the notes of its single cards (Anki tags notes); missing ones are counted",
+          "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 1) and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 2)
+          and "DueCrew::MS2_Block_1::SLG_13" in _tags_of(col, 5) and res["missing"] == {"SLG 12": 1}, str(res))
+    check("r2: with the tag on, a date naming it still reads just the single card", P.DeckIndex(col, 10).match(u2, None, doc) == {2, 4, 11})
+    idx = P.DeckIndex(col, 10)
+    pt = idx.plan_part(u1, doc)
+    src = P.unit_sources(u1, 10, None, pt)
+    check("r2: an opened date keeps what the plan's tags held then; a cut's search is the cut's",
+          pt == {2, 11} and src[5] == ["tag:Other"] and src[-1] == {"pt": [2, 11]} and idx.plan_part(u3, doc) is None, str(src))
+    # the SLG grows by a note: the date reads as changed, and opening it opens just the new card
+    raw2 = json.loads(json.dumps(raw))
+    raw2["tags"][0]["notes"].append("guid000003")
+    doc2 = shapes.clean_plan_doc(raw2)
+    v1, v2 = doc2["units"][0], doc["units"][0]
+    check("r2: an SLG that changes makes the dates using it read as changed", P.unit_sig(v1, 10) != P.unit_sig(v2, 10)
+          and P.unit_sig(doc2["units"][2], 10) == P.unit_sig(u3, 10))
+    st = {"deck_id": 10, "applied": {"u1": P.unit_sig(u1, 10)}, "src": {"u1": src}}
+    check("r2: opening the changed date opens just what the SLG added", F._unit_cids(P.DeckIndex(col, 10), st, v1, doc2) == {3},
+          str(F._unit_cids(P.DeckIndex(col, 10), st, v1, doc2)))
+    lean = shapes.clean_authored({"id": "p" + "0" * 15, "version": 1, "name": "MS2 Block 1", "doc": raw})
+    snap = P.ids_snapshot(P.DeckIndex(col, 10), shapes.clean_plan_doc(dict(raw, units=lean["doc"]["units"])))
+    check("r2: the author's note ids for a cut date go up with its cuts, so the Worker keeps them only while they're these",
+          snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
+
+
 def test_plan_tags_glue_v380():
     """3.8.0, plan tags in the add-on: Browse sends the picked notes' guids
     to the plan (owner or co-author) and tags them here; a follower's Anki
