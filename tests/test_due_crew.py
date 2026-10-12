@@ -8327,6 +8327,40 @@ def test_every_site_twin_v380():
           (out.stdout, out.stderr, want))
 
 
+def test_find_a_setting_v380():
+    """3.8.0, pick 28: a box atop Settings finds a setting on any tab by a
+    word (its label, its section, a few plain synonyms); the index is read
+    from the tabs as drawn, holds none of the person's own names, and a
+    pick on another tab asks for that tab (an existing command)."""
+    import html as H
+    view = {"signed_in": True, "name": "Sammy Q", "emoji": "🦊", "status": "secret plans", "crew": 3,
+            "squads": ["busm <b>"], "decks": ["Private Deck"], "sync": "now", "tab": "board"}
+    ix = board.settings_index(view, {})
+    by = {x["l"]: x for x in ix}
+    check("find: rows from all three tabs, each with where it lives",
+          by["Accent"]["t"] == "board" and by["Accent"]["w"] == "Board \u203a How it looks"
+          and by["\u2708\ufe0f Away"]["t"] == "privacy" and by["Sign out"]["t"] == "you" and len(ix) >= 30, sorted(by))
+    words = lambda q: [x["l"] for x in ix if all((" " + x["k"]).find(" " + w) >= 0 for w in q.split())]  # noqa: E731
+    check("find: by label, by a word it doesn't say (colour, holiday, test, log out), by its section",
+          words("accent") == ["Accent"] and words("colour") == ["Accent"] and words("holiday") == ["\u2708\ufe0f Away"]
+          and "\U0001f4d6 Exam" in words("test") and words("log out") == ["Sign out"] and "Study time" in words("study time"),
+          (words("colour"), words("holiday"), words("test")))
+    check("find: a switch is found whichever way it's set (its command without the state)",
+          by["Study time"]["f"] == "set:share_time:" and by["Compact rows"]["f"] == "set:compact:")
+    text = repr(ix)
+    check("find: the person's name, status, squads and decks stay out of it",
+          not any(x in text for x in ("Sammy", "secret", "busm", "Private Deck")), text[:300])
+    page = board.settings_html(view, {})
+    got = re.search(r'<input type="search" class="st-in" placeholder="Find a setting"[^>]*data-ix="([^"]*)"', page)
+    check("find: the box sits in Settings' bar with its index, which reads back the same",
+          got and json.loads(H.unescape(got.group(1))) == ix and 'oninput="dcFind.type(this)"' in page)
+    js = board.FIND_JS
+    check("find: what's found is written as text, never markup; another tab is asked for by a command the add-on has",
+          "innerHTML" not in js and "textContent = h.l" in js and "pycmd('duecrew:settab:' + h.t)" in js
+          and js in board.keep_me_in_view_js()
+          and 'cmd == "settab"' in open(os.path.join(REPO, "due_crew", "__init__.py")).read())
+
+
 def test_board_motion_v380():
     """3.8.0, "Board in Motion" (all seventeen): one motion.js, byte for byte
     on the board and duecrew.com; the swap notes the board before and moves

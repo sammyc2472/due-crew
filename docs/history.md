@@ -1020,6 +1020,15 @@ every release that changes how something works.
   (Edit › Undo takes it back), then reads again; `ui/why_dialog.py` is the
   sheet, every line plain text. `tools/real_anki.py` checks it on Anki's
   engine: each state, each fix, and that the raise reaches the card.
+  Find a setting (pick 28 of The First Month): a box in Settings' bar.
+  A word finds a setting on any of the three tabs, by its label, its
+  section or a plain synonym (`FIND_WORDS`: colour finds Accent, holiday
+  finds Away, log out finds Sign out); Enter takes the first. The index
+  (`settings_index`) is read from the tabs as they're drawn, so a new row
+  is findable at once, and holds none of the person's own names, status,
+  squads or decks. A pick on the tab on screen lights its row; on another
+  tab it asks for that tab (`settab`) and the next draw lands there
+  (`FIND_JS`, `dcFind`), the row lit (still, with Reduce motion).
   Board in Motion (Sam picked all seventeen on the mock page): the board
   is redrawn whole (`board.swap_js`), so `motion.js` (one file, byte for
   byte the same as `site/public/motion.js`) notes before each swap what

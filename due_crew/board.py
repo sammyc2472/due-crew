@@ -1263,6 +1263,68 @@ def swap_js(html_out):
     """ % _json.dumps(html_out)
 
 
+# 3.8.0, pick 28: Find a setting. The box's index (settings_index) is in its
+# data-ix; a pick on another tab asks for that tab, and the next draw lands on it.
+FIND_JS = r"""
+(function () {
+  if (!window.dcFind) {
+    window.dcFind = {
+      want: null,
+      ix: function (inp) { try { return JSON.parse(inp.getAttribute('data-ix') || '[]'); } catch (e) { return []; } },
+      type: function (inp) {
+        var box = inp.nextElementSibling, q = inp.value.toLowerCase().match(/[a-z0-9]+/g) || [], self = this;
+        while (box.firstChild) { box.removeChild(box.firstChild); }
+        if (!q.length) { box.hidden = true; return; }
+        var hits = this.ix(inp).filter(function (x) {
+          var k = ' ' + x.k;
+          return q.every(function (w) { return k.indexOf(' ' + w) >= 0; });
+        }).slice(0, 7);
+        if (!hits.length) {
+          var n = document.createElement('span'); n.className = 'st-none'; n.textContent = 'Nothing by that name';
+          box.appendChild(n);
+        }
+        hits.forEach(function (h, i) {
+          var b = document.createElement('button'), l = document.createElement('b'), w = document.createElement('small');
+          b.type = 'button'; b.setAttribute('role', 'option'); if (!i) { b.className = 'on'; }
+          l.textContent = h.l; w.textContent = h.w; b.appendChild(l); b.appendChild(w);
+          b.addEventListener('click', function () { box.hidden = true; inp.value = ''; self.go(h); });
+          box.appendChild(b);
+        });
+        box.hidden = false;
+      },
+      key: function (e, inp) {
+        var box = inp.nextElementSibling;
+        if (e.key === 'Escape') { inp.value = ''; box.hidden = true; return; }
+        if (e.key === 'Enter') { e.preventDefault(); var b = box.querySelector('button'); if (b) { b.click(); } }
+      },
+      go: function (h) {
+        var on = document.querySelector('#due-crew .dc-head .dc-pill.on');
+        var tab = on ? (on.getAttribute('data-f') || '').split(':')[1] : '';
+        if (tab === h.t) { this.land(h.f); return; }
+        this.want = {f: h.f, at: Date.now()};
+        pycmd('duecrew:settab:' + h.t);
+      },
+      land: function (f) {
+        var el = document.querySelector('#due-crew [data-f="' + f + '"]') || document.querySelector('#due-crew [data-f^="' + f + '"]');
+        if (!el) { return; }
+        var row = el.closest('.st-row, .st-radio, .st-acts, .st-foot') || el;
+        var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        row.scrollIntoView({block: 'center', behavior: still ? 'auto' : 'smooth'});
+        row.classList.remove('st-hit'); void row.offsetWidth; row.classList.add('st-hit');
+        setTimeout(function () { row.classList.remove('st-hit'); }, 2400);
+        try { el.focus({preventScroll: true}); } catch (e) {}
+      },
+      after: function () {
+        var w = this.want, self = this;
+        this.want = null;
+        if (w && Date.now() - w.at < 4000) { setTimeout(function () { self.land(w.f); }, 0); }  // after the swap's own focus
+      }
+    };
+  }
+  window.dcFind.after();
+})();
+"""
+
 # 3.8.0: the board's motion, one file shared with duecrew.com (site/public/motion.js, byte for byte)
 with open(_os.path.join(_os.path.dirname(__file__), "motion.js"), encoding="utf-8") as _f:
     MOTION_JS = _f.read()
@@ -1281,7 +1343,7 @@ def keep_me_in_view_js():
         var want = me.offsetTop - (box.clientHeight - me.offsetHeight) / 2;
         if (want > 0) { box.scrollTop = want; }
     })();
-    """ + DUE_JS + MOTION_JS
+    """ + DUE_JS + MOTION_JS + FIND_JS
 
 
 # a deck row without a "+N today" line holds its place, filled when another
@@ -2993,6 +3055,21 @@ SETTINGS_CSS = """
       margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11.5px; }
     #due-crew button:focus-visible, #due-crew a:focus-visible, #due-crew input:focus-visible {
       outline: 2px solid var(--dc-accent); outline-offset: 2px; }
+    /* 3.8.0, pick 28: Find a setting */
+    #due-crew .st-find { margin-left: auto; position: relative; text-align: left; }
+    #due-crew .st-find input { width: 150px; max-width: 42vw; }
+    #due-crew .st-hits { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 240px; max-width: 80vw;
+      display: grid; background: var(--dc-bg); border: 1px solid var(--dc-line); border-radius: 10px; padding: 4px;
+      box-shadow: 0 6px 22px rgba(0,0,0,.14); }
+    #due-crew .st-hits[hidden] { display: none; }
+    #due-crew .st-hits button { all: unset; display: grid; gap: 1px; padding: 6px 9px; border-radius: 7px; cursor: pointer; text-align: left; }
+    #due-crew .st-hits button:hover, #due-crew .st-hits button.on { background: var(--dc-you-bg); }
+    #due-crew .st-hits b { font-size: 12.5px; color: var(--dc-ink); }
+    #due-crew .st-hits small { font-size: 11px; color: var(--dc-muted); }
+    #due-crew .st-hits .st-none { padding: 6px 9px; font-size: 12px; color: var(--dc-muted); }
+    @keyframes sthit { from { background-color: color-mix(in srgb, var(--dc-accent) 26%, transparent); } to { background-color: transparent; } }
+    @media (prefers-reduced-motion: no-preference) { #due-crew .st-hit { animation: sthit 1.8s ease-out; } }
+    @media (prefers-reduced-motion: reduce) { #due-crew .st-hit { outline: 2px solid var(--dc-accent); outline-offset: 1px; } }
 """
 SETTINGS_TABS = (("you", "You"), ("board", "Board"), ("privacy", "Privacy"))
 
@@ -3146,6 +3223,71 @@ def _st_toggle_cmd(cmd, on, label):
             f'aria-label="{label}" {_st_click(cmd)}></button>')
 
 
+# 3.8.0, pick 28 (Find a setting): words people use for a setting that its own label doesn't say
+FIND_WORDS = {
+    "set:theme:": "dark light night mode", "set:accent:": "colour color green purple blue", "set:compact:": "dense small",
+    "set:sync_notifications:": "notify notification alert", "set:show_leaderboard:": "hide off board decks screen",
+    "settabs:": "tabs hide squads decks plans insights", "set:due_suggest:": "hard habit misses again",
+    "set:due_leeches:": "leech suspended", "set:shortcuts:": "keys keyboard", "set:share_time:": "minutes hours privacy private",
+    "set:share_reviews:": "cards numbers privacy private", "set:share_heatmap:": "year squares", "exam": "test date countdown",
+    "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
+    "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
+    "setreset": "default", "friends": "crew code invite", "decks": "share deck",
+}
+
+
+def _find_key(f):
+    """A control's data-f, without the state at its end ("set:share_time:0"
+    finds the switch whichever way it's set)."""
+    bits = f.split(":")
+    return ":".join(bits[:2]) + ":" if bits[0] in ("set", "settabs") and len(bits) > 2 else f
+
+
+def settings_index(view, cfg):
+    """3.8.0, pick 28: every setting a word can find, across Settings' three
+    tabs: [{t: tab, f: the control's data-f (its start), l: its label,
+    w: where ("Board › How it looks"), k: words to match}]. Read from the
+    tabs as they're drawn, so a new row is findable as soon as it's there.
+    Labels and headings are the add-on's own words; the people, squads and
+    decks the You tab names stay out."""
+    import html as H
+    names = dict(SETTINGS_TABS)
+    out, seen = [], set()
+
+    def add(tab, f, label, where, extra=""):
+        label = " ".join(_re.sub(r"<[^>]+>", "", H.unescape(label)).split())
+        key = (tab, _find_key(f))
+        if not label or key in seen:
+            return
+        seen.add(key)
+        words = " ".join([label, where, extra] + [w for k, w in FIND_WORDS.items() if f.startswith(k)])
+        out.append({"t": tab, "f": _find_key(f), "l": label, "w": where, "k": " ".join(_re.findall(r"[a-z0-9]+", words.lower()))})
+    for tab in ("you", "board", "privacy"):
+        body = (_settings_you(dict(view, name="", status="", emoji="")) if tab == "you"
+                else _settings_board(cfg) if tab == "board" else _settings_privacy(cfg))
+        sections = _re.split(r'<div class="st-h">', body)
+        for i, sec in enumerate(sections):
+            head = H.unescape(sec.split("</div>", 1)[0]) if i else ""
+            where = names[tab] + (f" › {head}" if head else "")
+            rows = list(_re.finditer(r'<div class="st-row"><span class="st-l"><span>(.*?)</span>(?:<small>(.*?)</small>)?', sec))
+            for j, m in enumerate(rows):
+                end = rows[j + 1].start() if j + 1 < len(rows) else len(sec)
+                f = _re.search(r'data-f="([^"]+)"', sec[m.end():end])
+                sub = H.unescape(m.group(2) or "") if tab != "you" else ""  # the You tab's lines name people and squads
+                if f:
+                    add(tab, f.group(1), m.group(1), where, sub)
+                for pf, pt in _re.findall(r'<button class="st-pill[^"]*"[^>]*data-f="([^"]+)"[^>]*>(.*?)</button>', sec[m.end():end]):
+                    add(tab, pf, pt, where + " › " + H.unescape(m.group(1)))
+            for f, b, small in _re.findall(r'<button class="st-radio[^"]*"[^>]*data-f="([^"]+)"[^>]*><i></i><span><b>(.*?)</b>(?:<small>(.*?)</small>)?', sec):
+                add(tab, f, b, where, H.unescape(small))
+            for f, t in _re.findall(r'<button class="st-pill[^"]*"[^>]*data-f="([^"]+)"[^>]*>(.*?)</button>', sec):
+                add(tab, f, t, where)
+            for f, t in _re.findall(r'<a class="st-lk[^"]*" href="#" data-f="([^"]+)"[^>]*>(.*?)</a>', sec):
+                if t.strip() not in ("Open", "Send&hellip;"):
+                    add(tab, f, t, where)
+    return out
+
+
 def settings_html(view, cfg):
     """3.5.0: Settings in place of the board.
     view: {tab, signed_in, name, emoji, status, sync, crew, squads, decks},
@@ -3158,7 +3300,12 @@ def settings_html(view, cfg):
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
     return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
-            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b></div>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b>'
+            # 3.8.0, pick 28: a word finds a setting on any tab (FIND_JS)
+            f'<span class="st-find"><input type="search" class="st-in" placeholder="Find a setting" aria-label="Find a setting" '
+            f'autocomplete="off" data-ix="{_html.escape(_json.dumps(settings_index(view, cfg)), quote=True)}" '
+            f'oninput="dcFind.type(this)" onkeydown="dcFind.key(event, this)">'
+            f'<span class="st-hits" role="listbox" aria-label="Settings found" hidden></span></span></div>'
             f'{body}'
             f'{f"<div class=st-note>{foot}</div>" if foot else ""}</div>')
 
