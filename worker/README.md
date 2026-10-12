@@ -213,7 +213,10 @@ tag as `DueCrew::<tagroot>::<tagPart(name)>`. `POST /plans/{id}/tags
 {name, add?, remove?, n?}` (the owner and co-authors; guids): puts notes on
 a tag, made if new, or takes them off (`404 no_tag` taking off a tag that
 isn't there; a tag left with nothing goes); `400 too_many` past 5,000; a
-plan version like any save, with a line in the plan's history.
+plan version like any save, with a line in the plan's history. The
+board's `authored` (the plans I write or co-author) carries each plan's
+`name`, and its doc `tagroot` and `tags`, so the author's Anki writes them
+too.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

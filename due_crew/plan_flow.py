@@ -791,6 +791,67 @@ def apply_tags(plan_list, toast=True):
     return line
 
 
+def apply_authored_tags(toast=True):
+    """3.8.0, main thread: the plans I write or co-author and don't follow carry
+    their own tags in my Anki too, so a tag made on duecrew.com counts in my
+    builder and its dates' note ids reach followers on an older add-on. The
+    same moment and rules as a follower's (after the day's AnkiWeb sync, on
+    Decks; one undo step a plan; DueCrew::<the plan> only), on the deck named
+    like the plan's. State: plans.json's `authored_tags` {plan id: {deck_id,
+    tags, tags_sig, tags_day}}. A plan I no longer write takes its tags along;
+    one I now follow hands them to my follow. Returns the line to say, or None."""
+    auth = client().session.get("plans_authored")
+    if auth is None or not mw.col:  # not heard yet: nothing is gone
+        return None
+    c = _pcfg()
+    mine = dict(c.get("authored_tags") or {})
+    followed = _state_cfg(c)
+    today = _today()
+    names = {n.lower(): d for d, n in P.deck_choices(mw.col)}
+    said, changed, moved = [], False, False
+    ids = {a["id"] for a in auth}
+    for pid in [k for k in mine if k not in ids or k in followed]:
+        st = mine.pop(pid)
+        changed = True
+        if pid in followed:
+            if st.get("tags") and not followed[pid].get("tags"):
+                followed[pid]["tags"] = st["tags"]  # my follow has them already: not new
+        elif _drop_plan_tags(st, "a plan you wrote"):
+            moved = True
+    for a in auth:
+        pid, doc = a["id"], a["doc"]
+        st = mine.get(pid) or {}
+        if pid in followed or not (P.plan_tags(doc) or st.get("tags")):
+            continue
+        did = names.get(str(doc.get("deck") or "").lower())
+        sig = P.tags_sig(doc)
+        if did is None or (st.get("tags_sig") == sig and st.get("tags_day") == today and st.get("deck_id") == did):
+            continue
+        try:
+            applied, res = P.sync_tags(mw.col, P.DeckIndex(mw.col, did), doc, st.get("tags"),
+                                       f"Due Crew: {a.get('name') or 'plan'}'s tags")
+        except Exception:
+            traceback.print_exc()
+            continue
+        if res["added"] or res["removed"] or applied != (st.get("tags") or {}):
+            moved = True
+        mine[pid] = {"deck_id": did, "tags_sig": sig, "tags_day": today, **({"tags": applied} if applied else {})}
+        changed = True
+        if res["new"]:
+            said.append(f"{html.escape(a.get('name') or 'Your plan')}'s tags are in your Anki: "
+                        + ", ".join(html.escape(x) for x in res["new"][:3]) + (" and more" if len(res["new"]) > 3 else "") + ".")
+    if changed:
+        c["authored_tags"], c["plans"] = mine, followed
+        _psave(c)
+    if moved:
+        _tags_changed()
+        send_ids()  # the dates' note ids and counts, now with the tags
+    line = " ".join(said) or None
+    if line and toast:
+        tooltip(line, period=5000)
+    return line
+
+
 def _drop_plan_tags(st, name):
     """A plan I no longer follow takes its tags off my notes (one undo step)."""
     tags = (st or {}).get("tags") or {}
@@ -877,7 +938,8 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         _psave(c)
         if tidy_decks(mw.col):
             _after_change()
-        tagged = apply_tags(plan_list, toast=False)  # 3.8.0: a date can use one of its plan's tags
+        tagged = " ".join(x for x in (apply_tags(plan_list, toast=False),  # 3.8.0: a date can use one of its plan's tags
+                                      apply_authored_tags(toast=False)) if x) or None  # and the plans I write
         line = opened_line(_open_now([p for p in plan_list if not p.get("paused")], toast=toast))
         if tagged:
             line = f"{line} {tagged}" if line else tagged
@@ -929,6 +991,7 @@ def midday(plan_list, toast=True):
         return None
     _state["plans_midday"] = False
     apply_tags(plan_list, toast=toast)  # 3.8.0: as soon as the update is here, before what it opens
+    apply_authored_tags(toast=toast)
     c = _pcfg()
     state = _state_cfg(c)
     today = _today()
@@ -2755,8 +2818,11 @@ def tag_for_plan(browser):
         st = _state_cfg(c).get(plan.get("id"))
         doc = _plan_doc(plan)
         t = next((x for x in P.plan_tags(doc) if P.tag_path(doc, x).lower() == path.lower()), None)
-        if st is not None and t and not taken:
-            st.setdefault("tags", {})[str(t["id"])] = path
+        if t and not taken:
+            if st is not None:
+                st.setdefault("tags", {})[str(t["id"])] = path
+            else:  # a plan I write: its pass here doesn't call it new either
+                c.setdefault("authored_tags", {}).setdefault(plan.get("id"), {}).setdefault("tags", {})[str(t["id"])] = path
             _psave(c)
         n = len(added or taken)
         tooltip((f"Took {n:,} note{'s' if n != 1 else ''} off {html.escape(name)}."

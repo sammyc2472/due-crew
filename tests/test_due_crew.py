@@ -8739,6 +8739,37 @@ def test_plan_tags_glue_v380():
                 sys.modules.pop("due_crew.ui.tag_dialog", None)
             else:
                 sys.modules["due_crew.ui.tag_dialog"] = was_mod
+        # the plans I write and don't follow carry their tags in my Anki too (counts, older followers' ids)
+        col2 = _tag_col()
+        dc_mw().col = col2
+        pc2 = {"plans": {}}
+        F._pcfg = lambda: pc2
+        dre.fetch_board([TODAY.isoformat()], with_decks=True)
+        lean = next(a for a in dre.session["plans_authored"] if a["id"] == pid)
+        sent, reads = [], []
+        was_cl, was_ids, real_idx = F.client, F.send_ids, P.DeckIndex
+        F.client, F.send_ids = (lambda: dre), (lambda: sent.append(1))
+        P.DeckIndex = lambda *a, **k: reads.append(1) or real_idx(*a, **k)
+        try:
+            line = F.apply_authored_tags(toast=False)
+            mine = pc2.get("authored_tags", {}).get(pid) or {}
+            check("authored tags: the plan's tags come with its name; my notes carry them, my ids go again, said once",
+                  lean["name"] == "MS2 Block 1" and lean["doc"]["tagroot"] == "MS2_Block_1" and len(lean["doc"]["tags"]) == 2
+                  and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col2, 1) and "DueCrew::MS2_Block_1::SLG_15" in _tags_of(col2, 4)
+                  and len(mine.get("tags") or {}) == 2 and sent == [1] and line and "MS2 Block 1" in line, str((line, mine, sent)))
+            reads.clear()
+            check("authored tags: the same day, nothing new: the deck isn't read", F.apply_authored_tags(toast=False) is None and not reads and sent == [1])
+            pc2["plans"][pid] = {"deck_id": 10}
+            F.apply_authored_tags(toast=False)
+            check("authored tags: following my own plan hands them to the follow (not new there)",
+                  pid not in pc2["authored_tags"] and len(pc2["plans"][pid].get("tags") or {}) == 2)
+            pc2["authored_tags"] = {pid: {"deck_id": 10, "tags": pc2["plans"].pop(pid)["tags"]}}
+            dre.session["plans_authored"] = []
+            F.apply_authored_tags(toast=False)
+            check("authored tags: a plan I no longer write takes them off my notes",
+                  pid not in pc2["authored_tags"] and not any(t.startswith("DueCrew") for n in (1, 2, 4, 5) for t in _tags_of(col2, n)))
+        finally:
+            F.client, F.send_ids, P.DeckIndex = was_cl, was_ids, real_idx
     finally:
         F._pcfg, F._psave, dc_mw().col, F._today, F.tooltip = saved
     menu = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()

@@ -866,6 +866,20 @@ async function builder(id) {
         doc.every = [...lines, { k: "do", t: "", r: "4" }]; mark(); draw(); } }, "+ Add a line") : null);
   }
 
+  /** 3.8.0: a follower sees the plan's own tags: their names, where they sit in
+   *  Anki (each follower's Anki adds them with the plan's updates), and a search
+   *  to paste into Browse. */
+  function followTags() {
+    const list = ptags();
+    if (author || !list.length) return null;
+    return h("div", { class: "every2 ptagsf" },
+      h("span", { class: "pi" }, h("b", {}, "This plan's tags"),
+        h("small", { class: "muted" }, ` in your Anki under DueCrew › ${tagRootNow()}, with the plan's updates`)),
+      h("div", { class: "ptf" }, list.map((t) => h("span", { class: "ptf1" }, h("b", {}, t.name),
+        h("button", { class: "linkish cps", title: "Copy a search to paste into Anki's Browse", "aria-label": `Copy a search for ${t.name}`,
+          onclick: (e) => copy(Tags.ankiSearch("tag", ptagPath(t)), e.currentTarget) }, "Copy search")))));
+  }
+
   // ---- the calendar ----
   // 3.3: "Month" is the next five weeks from the week in view, so what's
   // coming is always on screen (a calendar month hides a plan starting on the 28th)
@@ -1926,7 +1940,7 @@ async function builder(id) {
       : sideDay ? calendar()
       : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel());
     const main = h("div", { class: "main2" },
-      paceBox, view === "print" ? null : everyBox(),
+      paceBox, view === "print" ? null : everyBox(), view === "print" ? null : followTags(),
       h("div", { class: "calcard" }, nav, fillRow, view === "text" || view === "print" ? null : heavyNote(), inner));
     if (!author) return main;
     if (sideDay) {

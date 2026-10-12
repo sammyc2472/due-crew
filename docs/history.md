@@ -1223,3 +1223,13 @@ every release that changes how something works.
   add-on before 3.8.0 gets no tags but still finds the dates' cards (the
   author's uploaded ids). No new request on refresh or sync: the tags
   ride the plan doc. `tools/real_anki.py` runs it on Anki's engine.
+  The author's Anki carries them too (Sam's pick, after the build): the
+  plans I write or co-author come on the day's first board with their
+  name and own tags (`authored`), and `plan_flow.apply_authored_tags`
+  writes them on the deck named like the plan's, at the follower's moment
+  and by the same rules, for plans I don't follow (a follow takes them
+  over; a plan I no longer write takes them off). So a tag made on the
+  site counts in the builder, and its dates' note ids (`send_ids`, sent
+  again when tags moved) reach followers on an older add-on. Followers
+  see the tags on the plan's page too ("This plan's tags", each with Copy
+  search for Browse; `followTags` in builder.js).

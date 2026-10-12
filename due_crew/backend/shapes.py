@@ -588,6 +588,16 @@ def _clean_plan_tag(t):
     return out if any(k in out for k in ("tags", "decks", "search", "notes")) else None
 
 
+def _own_tags(doc):
+    """3.8.0: {tagroot, tags}: a plan's own tags and the part of the tag they live under."""
+    tags = [t for t in map(_clean_plan_tag, doc.get("tags") or []) if t][:100]
+    root = doc.get("tagroot")
+    if not (isinstance(root, str) and 0 < len(root) <= 60 and not re.search(r'[\s"*\\%:]', root)
+            and not re.match(r"[_-]|.*[_-]$", root)):
+        return {}
+    return {"tagroot": root, **({"tags": tags} if tags else {})}
+
+
 def clean_plan_doc(doc):
     """{deck, units}: units sorted by when they open, as plans.py reads them."""
     doc = doc if isinstance(doc, dict) else {}
@@ -609,13 +619,7 @@ def clean_plan_doc(doc):
     every = _todo_lines(doc.get("every"), every=True)
     if every:
         out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
-    tags = [t for t in map(_clean_plan_tag, doc.get("tags") or []) if t][:100]  # 3.8.0: the plan's own tags
-    root = doc.get("tagroot")
-    if (isinstance(root, str) and 0 < len(root) <= 60 and not re.search(r'[\s"*\\%:]', root)
-            and not re.match(r"[_-]|.*[_-]$", root)):
-        out["tagroot"] = root
-        if tags:
-            out["tags"] = tags
+    out.update(_own_tags(doc))  # 3.8.0: the plan's own tags
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -652,7 +656,8 @@ def clean_authored(a):
                  if isinstance(u.get("notes"), list) else {}),  # 3.6.5
               **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
-    return {"id": a["id"], "version": int(a.get("version") or 0), "doc": {"deck": str(d.get("deck") or ""), "units": units}}
+    return {"id": a["id"], "version": int(a.get("version") or 0), "name": clean_note(a.get("name"), 60) or "Plan",
+            "doc": {"deck": str(d.get("deck") or ""), "units": units, **_own_tags(d)}}  # 3.8.0: and its own tags
 
 
 def clean_plan(p):

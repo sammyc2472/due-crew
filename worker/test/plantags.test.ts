@@ -54,6 +54,12 @@ describe("3.8.0: plan tags", () => {
     expect(await dre.status("POST", `/plans/${p.id}/tags`, { name: "SLG 99", remove: ["g1"] })).toBe(404);
     const log = await dre.call("GET", `/plans/${p.id}/log`);
     expect(log.body.log.slice(0, 2).map((x: any) => x.summary)).toEqual(["took 2 notes off SLG 12 in Anki", "tagged 1 note as SLG 13 in Anki"]);
+    // the day's first board: the plans I write or co-author carry their own tags, so my Anki can too
+    for (const who of [dre, maya]) {
+      const a = (await who.call("GET", "/board?decks=1")).body.authored.find((x: any) => x.id === p.id);
+      expect(a).toMatchObject({ name: "MS2 Block 1", doc: { tagroot: "MS2_Block_1", tags: [{ name: "SLG 13", notes: ["g9"] }] } });
+    }
+    expect((await kai.call("GET", "/board?decks=1")).body.authored.find((x: any) => x.id === p.id)).toBeUndefined();
   });
 
   it("refuses what isn't a note list, past the ceilings", async () => {

@@ -1508,7 +1508,8 @@ export async function forBoard(env: Env, uid: string) {
   // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their
   // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
-    `SELECT p.id, p.version, json_extract(p.doc, '$.deck') AS deck,
+    `SELECT p.id, p.version, p.name, json_extract(p.doc, '$.deck') AS deck,
+            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
@@ -1518,7 +1519,7 @@ export async function forBoard(env: Env, uid: string) {
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
                     + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
-  ).bind(uid).all<{ id: string; version: number; deck: string; units: string }>();
+  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; units: string }>();
   // 3.7.3: the newest posts per plan, and this version reached me
   const posts = new Map<string, Obj[]>();
   if (mineRows.results.length) {
@@ -1538,10 +1539,12 @@ export async function forBoard(env: Env, uid: string) {
       "UPDATE plan_follows SET seen_version = ?1 WHERE plan = ?2 AND uid = ?3 AND seen_version IS NOT ?1",
     ).bind(r.version, r.id, uid)));
   }
-  const lean = (r: { deck: string; units: string }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })) });
+  // 3.8.0: with the plan's own tags, so my Anki carries them too (counts, and older followers' note ids)
+  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
+    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
+    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}) });
   return {
-    authored: authored.results.map((r) => ({ id: r.id, version: r.version, doc: lean(r) })),
+    authored: authored.results.map((r) => ({ id: r.id, version: r.version, name: r.name, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),

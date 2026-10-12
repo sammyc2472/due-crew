@@ -439,6 +439,11 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 .every2 .todo { display: grid; grid-template-columns: auto minmax(0, 1.4fr) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .every2 .todo input, .every2 .todo select { min-width: 0; font-size: 13px; padding: 3px 6px; }
 .every2 > .linkish { justify-self: start; }
+.ptagsf .ptf { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.ptagsf .ptf1 { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.ptagsf .ptf1 b { color: var(--accent); }
+.ptagsf .cps { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ptagsf .cps:hover { color: var(--accent); }
 @media (max-width: 560px) { .every2 .todo { grid-template-columns: auto minmax(0, 1fr) auto; } .every2 .todo .wdays { grid-column: 1 / -1; } .every2 .todo input + .wdays + input { grid-column: 1 / 3; } }
 .addc .todo { display: grid; grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .addc .todo input, .addc .todo select { min-width: 0; }

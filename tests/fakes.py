@@ -1791,12 +1791,12 @@ class FakeWorker:
                   for pid, p in sorted(self.plans.items())
                   if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
                   and (pid, me) not in self.follows]
-        authored = [{"id": pid, "version": p["version"], "doc": {"deck": p["doc"]["deck"], "units": [
+        authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
                  **{k: u[k] for k in ("nids", "cids", "notes", "opens") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
-            or u.get("notes")]}}
-            for pid, p in sorted(self.plans.items()) if p["owner"] == me]
+            or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags") if p["doc"].get(k)})}  # 3.8.0: its own tags
+            for pid, p in sorted(self.plans.items()) if p["owner"] == me or me in (p.get("editors") or ())]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 
     def _delete_account(self, me):
