@@ -7591,6 +7591,32 @@ def test_one_settings_keys_study_v380():
         _state["study_walk"] = None
 
 
+def test_site_audit_v380():
+    """3.8.0, the site audit: what was fixed stays fixed. The lone row
+    takes no medal on either side (a twin); the rest is the site's CSS."""
+    T0 = TODAY.isoformat()
+    lone = board.render({"entries": [{"user_id": "me", "name": "Sam", "you": True, "paused": False, "last_updated": "",
+                                      "days": {}}], "labels": [T0], "tomorrow": "", "pending": []}, {"period": "week"}, 0)
+    check("site audit: alone with nothing yet, no medal (the add-on)", "&#129351;" not in lone and "&mdash;" in lone)
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(REPO, "site", "public", "app.css"), encoding="utf-8").read()
+    check("site audit: alone with nothing yet, no medal (the site, its twin)",
+          "if (blank(r)) return tr(r, \"—\")" in js)
+    check("site audit: columns hide by name, so a squad's two-column line can't shift them",
+          ".brdt .k-time, .brdt .k-retention { display: none; }" in css and "nth-child(4)" not in css
+          and 'class: "n k-time"' in js and "k-${k}" in js)
+    check("site audit: the rail can't widen the page; a long word wraps",
+          "grid-template-columns: minmax(0, 1fr); }  /* a long word" in css and "min-width: 0; overflow-wrap: anywhere; }" in css)
+    check("site audit: the cheer popup sits on the page, not in the table's scroll box",
+          "document.body.append(pop);" in js and 'position: "fixed"' in js)
+    check("site audit: picker underline straight, long squad names cut, text not faint, one tile a tile wide",
+          "border-radius: 0; padding-bottom: 3px; max-width: 180px" in css and ".brdt tr.dim td { color: var(--muted); }" in css
+          and "repeat(auto-fill, minmax(190px" in css and "nav .navme summary::after { content: none; }" in css)
+    idx = open(os.path.join(REPO, "site", "public", "index.html"), encoding="utf-8").read()
+    check("site audit: the landing picture has its dark one", 'srcset="/board-dark.png" media="(prefers-color-scheme: dark)"' in idx
+          and os.path.exists(os.path.join(REPO, "site", "public", "board-dark.png")))
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

@@ -1,6 +1,6 @@
 # Due Crew
 
-Use **Tools → Due Crew** to change settings — it's the same keys with a real UI.
+Use **Tools → Due Crew → Settings…** to change settings (the board's own, on the Decks screen): the same keys with a real UI.
 Raw keys, for reference:
 
 | Key | Values | Meaning |
@@ -28,6 +28,7 @@ Raw keys, for reference:
 | `hidden_tabs` | list of decks / squads / plans / insights | What this computer doesn't show (Settings › Shows); Crew always shows |
 | `due_tab` | today / upcoming / later / plans / insights | The tab open in the box above the board |
 | `due_show` | true/false | Today, Upcoming and Later in that box (Plans and Insights stay) |
+| `shortcuts` | true/false | Ctrl+Shift+S (study what's next) and Ctrl+Shift+Q (ask the squad about this card), on this computer |
 | `ins_deck` | deck id | The deck Insights shows on this computer |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 

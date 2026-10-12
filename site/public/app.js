@@ -899,8 +899,14 @@ const Board = (() => {
       try { await api("POST", `/cheers/${uid}`, { emoji: e }); anchor.textContent = "✓"; anchor.title = "Cheered"; }
       catch { anchor.title = "Couldn't send. Try again."; }
     } }, e)));
-    anchor.after(pop);
-    setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { pop.remove(); document.removeEventListener("click", off); } }), 0);
+    // 3.8.0: on the page, not in the table's scroll box (which clipped it), opening up near the bottom
+    document.body.append(pop);
+    const at = anchor.getBoundingClientRect(), ph = pop.offsetHeight;
+    Object.assign(pop.style, { position: "fixed", right: `${Math.max(8, window.innerWidth - at.right)}px`,
+      top: `${at.bottom + 4 + ph > window.innerHeight ? Math.max(8, at.top - ph - 4) : at.bottom + 4}px` });
+    const close = () => { pop.remove(); window.removeEventListener("scroll", close, true); };
+    window.addEventListener("scroll", close, true);
+    setTimeout(() => document.addEventListener("click", function off(ev) { if (!pop.contains(ev.target) && ev.target !== anchor) { close(); document.removeEventListener("click", off); } }), 0);
   }
 
   /** board.plan_target: a status that starts with a number is a plan. */
@@ -943,7 +949,7 @@ const Board = (() => {
     const kept = store("dc-sort") || "reviews";  // "week" is the squads' own column
     const sort = HEADS.some(([k]) => k === kept) ? kept : "reviews";
     const [fresh, dormant] = rows(people, period, sort, today);
-    const head = h("tr", {}, h("th"), h("th"), HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+    const head = h("tr", {}, h("th"), h("th"), HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : "")))), h("th"));
     let n = 0;
     const tr = (r, rank) => {
@@ -953,8 +959,8 @@ const Board = (() => {
       const cheer = r.you ? h("td") : h("td", { class: "chc" }, h("button", { class: "linkish cheer", title: "Send a cheer", onclick: (e) => cheerMenu(r.p.uid, e.currentTarget) }, "🎉"));
       return h("tr", { class: [r.you ? "you" : "", r.stale || r.quiet || r.paused || r.notyet ? "dim" : ""].join(" ").trim() },
         h("td", { class: "rk" }, rank), nameCell(r, period),
-        h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n" }, dash || r.time === null ? "—" : fmtTime(r.time)),
-        h("td", { class: "n" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
+        h("td", { class: "n" }, dash ? "—" : rv), h("td", { class: "n k-time" }, dash || r.time === null ? "—" : fmtTime(r.time)),
+        h("td", { class: "n k-retention" }, dash || r.retention === null ? "—" : `${r.retention.toFixed(1)}%`),
         h("td", { class: "n" }, dash || r.streak === null ? "—" : String(r.streak)), cheer);
     };
     // Q3: friends with no sync in 90+ days fold into one line, as board.py's _quiet_fold
@@ -970,7 +976,9 @@ const Board = (() => {
         h("span", { class: "ago faded" }, ` · ${who} ${longQ.length === 1 ? "hasn't" : "haven't"} been here since ${since}`))));
       for (const r of longQ) { const row = tr(r, "—"); row.classList.add("qh"); fold.push(row); }
     }
-    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
+    // board.py: nothing to rank (me alone, the day I joined) takes no medal
+    const blank = (r) => [r.reviews, r.time, r.retention, r.streak].every((v) => v === null);
+    const body = [...fresh.map((r) => { if (r.showup) return tr(r, "✓"); if (blank(r)) return tr(r, "—"); n++; return tr(r, n <= 3 ? MEDALS[n - 1] : `#${n}`); }),
       ...dormant.filter((r) => !longQ.includes(r)).map((r) => tr(r, "—")), ...fold];
     tbl.append(h("thead", {}, head), h("tbody", {}, body));
     return h("div", { class: "scrollx" }, tbl);
@@ -1061,7 +1069,7 @@ const Board = (() => {
     const together = live.reduce((n, r) => n + (r.reviews || 0), 0);
     let line = `${rows.length.toLocaleString()} in ${sq.name}` + (sq.open === false ? " · locked" : "");
     if (live.length) line += showUp ? ` · ${live.length.toLocaleString()} showed up today` : ` · ${live.length.toLocaleString()} studying today · ${together.toLocaleString()} reviews together`;
-    const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: k === sort ? "on" : "" },
+    const heads = showUp ? [h("th", {}, "📅 7 days")] : SQUAD_HEADS.map(([k, l]) => h("th", { class: `k-${k}${k === sort ? " on" : ""}` },
       h("button", { class: "linkish", onclick: () => { store("dc-sort", k); onSort(); } }, l + (k === sort ? " ▾" : ""))));
     const numberless = (r) => ["reviews", "studyTimeMs", "accuracy", "streak"].every((k) => r[k] == null);
     let n = 0;
@@ -1076,10 +1084,10 @@ const Board = (() => {
       else if (nyet) notes.push(h("span", { class: "ago faded" }, " · nothing yet today"));
       const rank = !today ? "" : nyet ? "—" : showUp || numberless(r) ? "✓" : `#${++n}`;
       const wk7 = h("td", { class: "n" }, r.week != null ? `${r.week}/7` : "—");
-      const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
+      const cells = showUp ? [wk7] : nyet ? [h("td", { class: "n" }, "—"), h("td", { class: "n k-time" }, "—"), h("td", { class: "n k-retention" }, "—"), h("td", { class: "n" }, "—"), wk7] : [
         h("td", { class: "n" }, r.reviews == null ? "—" : h("span", {}, r.reviews.toLocaleString(), r.newCards > 0 && r.reviews > 0 ? h("small", {}, r.newCards >= r.reviews ? "all new" : `${r.newCards.toLocaleString()} new`) : null)),
-        h("td", { class: "n" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
-        h("td", { class: "n" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
+        h("td", { class: "n k-time" }, r.studyTimeMs != null ? fmtTime(r.studyTimeMs) : "—"),
+        h("td", { class: "n k-retention" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
         h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"), wk7];
       return h("tr", { class: [you ? "you" : "", today && !nyet ? "" : "dim"].join(" ").trim() },
         h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), notes), cells);
@@ -1371,7 +1379,7 @@ function duePanel(followed, set, t) {
   for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, tm) : x.d === tm && !x.done))) tomorrow.push(x.t);
   const behind = items.filter((x) => !dueRepeats(x) && x.d && x.d < t && !x.done).length;
   if (!rows.length && !behind && !tomorrow.length) return null;
-  return h("section", { class: "panel due" }, h("h4", {}, "Due today"),
+  return h("section", { class: "panel due", title: "Ticked in Anki, as you study" }, h("h4", {}, "Due today"),
     behind ? h("small", { class: "warn" }, `${behind} of yours from earlier days`) : null,
     rows.length ? rows : h("small", { class: "muted" }, "Nothing due today."),
     tomorrow.length ? h("small", { class: "muted" }, h("b", {}, "Tomorrow: "), tomorrow.slice(0, 3).join(", "), tomorrow.length > 3 ? ` and ${tomorrow.length - 3} more` : "") : null);

@@ -122,14 +122,14 @@ same commit, each with its test:
 | The board, your people: Crew (Today · Week · Decks picker) and Squads | `board.py`, `__init__.py`, `backend/api.py`, `stats/` | `board.ts`, `social.ts`; `Board` in app.js |
 | The You bubble over it (3.8.0): Today, Upcoming, Later, Plans, Insights | `board.you_html`, `__init__._you`, `due_flow.py` | the rail on /home |
 | Cheers, status, profile card | `social.py`, `wrap.py` | `social.ts` |
-| Settings | `settings_model.py`, `account.py`, `board.settings_html`, `ui/settings_dialog.py` | `GET/PUT /settings` |
+| Settings (one: the board's, 3.8.0) | `settings_model.py`, `account.py`, `board.settings_html` | `GET/PUT /settings` |
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
-| Insights (a deck's, plan or not; You › Insights) | `team.py`, `team_flow.py` | never sent |
-| Due (the bubble's Today, Upcoming, Later) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
+| Insights (a deck's, plan or not; You › Insights; the topic map) | `team.py`, `team_flow.py` | never sent |
+| Due (the bubble's Today, Upcoming, Later; Study today, 3.8.0) | `due.py`, `due_flow.py`, `board._due_html` | settings doc |
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards | `share.py`, `shares.py` | `site/public/cards.js` |

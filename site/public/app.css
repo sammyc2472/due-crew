@@ -85,8 +85,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 /* 3.3: the board, as the add-on draws it, and a narrow column beside it */
 .wb { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: start; }
 @media (max-width: 860px) { .wb { grid-template-columns: 1fr; } }
-.rail { display: grid; gap: 12px; align-content: start; }
-.brd { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 10px; background: var(--card); display: grid; gap: 8px; }
+.rail { display: grid; gap: 12px; align-content: start; grid-template-columns: minmax(0, 1fr); }  /* a long word never widens the page */
+.brd { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 10px; background: var(--card); display: grid; gap: 8px;
+  min-height: 300px; align-content: start; }  /* 3.8.0: a short tab (Decks, nothing yet) doesn't pull the page up */
 .brd .top2 { display: flex; justify-content: flex-end; margin-bottom: 4px; }
 .brd .pills { max-width: 100%; overflow-x: auto; }
 .scrollx { overflow-x: auto; }
@@ -103,11 +104,11 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .brdt td.n small { display: block; color: var(--muted); font-size: 11.5px; }
 .brdt td.sqc { text-align: center; padding: 9px 2px; }
-.brdt tr.you td { background: var(--you); }
+.brdt tr.you td { background: var(--you); border-top-color: var(--you); }
 .brdt tr.you td.nm .who { font-weight: 700; }
-.brdt tr.dim td { color: var(--faint); }
+.brdt tr.dim td { color: var(--muted); }
 .brdt .ago { font-size: 12px; font-weight: 700; }
-.brdt .ago.fresh { color: var(--accent); } .brdt .ago.hours { color: var(--warn); } .brdt .ago.faded { color: var(--faint); font-weight: 400; }
+.brdt .ago.fresh { color: var(--accent); } .brdt .ago.hours { color: var(--warn); } .brdt .ago.faded { color: var(--muted); font-weight: 400; }
 .brdt .badge, .brdt .note { font-size: 12px; color: var(--muted); }
 .brdt .chip { font-size: 12px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
 .brdt .chip.live { color: var(--accent); font-weight: 700; }
@@ -132,10 +133,10 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .dkey i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin: 0 4px 0 10px; }
 .dkey i:first-child { margin-left: 0; }
 .dtrack .fo, .dkey .fo { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--accent) 3px 4px); opacity: 0.45; }
-@media (max-width: 560px) { .brdt th:nth-child(4), .brdt td:nth-child(4), .brdt th:nth-child(5), .brdt td:nth-child(5) { display: none; } .dr { grid-template-columns: 80px 1fr 80px; } }
+@media (max-width: 560px) { .brdt .k-time, .brdt .k-retention { display: none; } .dr { grid-template-columns: 80px 1fr 80px; } }
 .panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--card); display: grid; gap: 8px; }
 .panel h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
-.panel h4 a { text-decoration: none; font-weight: 700; }
+.panel h4 a { text-decoration: none; font-weight: 700; font-size: 12.5px; }
 .panel h3 { font-size: 14px; margin: 6px 0 0; }
 .sqs { display: inline-flex; gap: 3px; }
 .sqs i { width: 12px; height: 12px; border-radius: 2px; background: var(--well); display: inline-block; }
@@ -171,7 +172,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .key .k-plan { border-top: 2px dashed var(--muted); }
 .rail .prow { grid-template-columns: 1fr; gap: 4px; margin-bottom: 10px; }
 .rail .prow .bar { width: 100%; }
-.brdt th.sqt { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); }  /* a squad's own line; .sqh is a day's letter */
+.brdt th.sqt { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); white-space: normal; }  /* a squad's own line; .sqh is a day's letter */
 .sqb + .sqb { margin-top: 18px; }
 @media (max-width: 560px) {
   .brdt td.nm { white-space: normal; overflow: visible; min-width: 100px; }
@@ -342,6 +343,7 @@ nav .navme { display: none; position: relative; white-space: nowrap; }  /* the i
 @media (max-width: 700px) { nav .navme { display: block; } }
 nav .navme summary { list-style: none; width: 26px; height: 26px; border-radius: 50%; background: var(--well); display: grid; place-items: center; font-weight: 700; font-size: 12px; cursor: pointer; }
 nav .navme summary::-webkit-details-marker { display: none; }
+nav .navme summary::after { content: none; }
 nav .navme .calpop { right: 0; left: auto; }
 .pdates { display: grid; gap: 4px; margin: 6px 0 4px; max-width: 560px; }
 .pdates > div { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--well); font-size: 13.5px; }
@@ -539,13 +541,13 @@ button[hidden] { display: none; }
 .state { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 8px; background: var(--well); color: var(--muted); }
 .state.showing { background: var(--you); color: var(--accent); }
 /* 3.5, H: the home */
-.tstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 4px 0 14px; }
+.tstrip { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 4px 0 14px; }
 .ts { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px 12px; display: grid; gap: 2px; align-content: start; font-size: 13.5px; }
 .ts.on { background: var(--you); border-color: transparent; }
 .ts > small:first-child { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; font-weight: 700; color: var(--muted); }
 .ts > b { font-size: 20px; }
 .feed .fi { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 13.5px; padding-top: 8px; border-top: 1px solid var(--line); }
-.feed .fi > div { display: grid; gap: 2px; justify-items: start; }
+.feed .fi > div { display: grid; gap: 2px; justify-items: start; min-width: 0; overflow-wrap: anywhere; }
 .feed .fi .ic { text-align: center; }
 .heatwrap { overflow-x: auto; display: grid; gap: 6px; }
 .heat { display: grid; grid-template-columns: 28px max-content; grid-template-rows: auto auto; gap: 2px 4px; font-size: 10.5px; color: var(--muted); }
@@ -691,7 +693,7 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .solo { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 6px; }
 .solo .codepill { background: var(--well); border-radius: 6px; padding: 3px 9px; font-weight: 700; }
 .sqsw { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
-.sqsw .linkish { color: var(--muted); font-weight: 600; } .sqsw .linkish.on { color: var(--ink); text-decoration: none; box-shadow: inset 0 -2px var(--accent); }  /* board.py .dc-sw, 3.8.0 */ .sqsw .linkish.add { color: var(--accent); }
+.sqsw .linkish { color: var(--muted); font-weight: 600; border-radius: 0; padding-bottom: 3px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sqsw .linkish.on { color: var(--ink); text-decoration: none; box-shadow: inset 0 -2px var(--accent); }  /* board.py .dc-sw, 3.8.0 */ .sqsw .linkish.add { color: var(--accent); }
 .sqline { text-align: center; font-size: 13px; margin-top: 8px; } .sqline .linkish { font-size: 13px; }
 /* 3.8.0: a plan's squad on the Squads tab: who showed up, its bingo, then its questions */
 .psq { display: grid; gap: 12px; text-align: left; max-width: 680px; margin: 0 auto; }

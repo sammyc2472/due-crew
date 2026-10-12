@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=5" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=6" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your friends on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -58,10 +58,12 @@ ticking itself as you review, the lecture or chapter that goes with it,
 and your own to-dos, for a day or every Monday. **Upcoming** shows the next two weeks;
 anything left undone waits under Behind. **Plans** has each plan's week,
 and **Insights**, for any deck, plan or not, shows the cards Anki won't
-show you before your exam, what isn't sticking yet, and your week in
-time, worked out in your Anki. The board under it is your people.
+show you before your exam, what isn't sticking yet, what you know by
+topic, and your week in time, worked out in your Anki. **Study today**
+goes through the day's decks, your plans' first (Ctrl+Shift+S). The
+board under it is your people.
 
-<img alt="Plans, above the board: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=5" width="600">
+<img alt="Plans, above the board: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=6" width="600">
 
 ## Install
 

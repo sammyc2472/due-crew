@@ -1095,6 +1095,8 @@ def _table_html(data, cfg, period):
     for row in fresh:
         if row.get("showup"):
             rank = "&#10003;"
+        elif all(row.get(k) is None for k in ("reviews", "time_ms", "retention", "streak")):
+            rank = "&mdash;"  # 3.8.0: nothing to rank (me alone, the day I joined), no medal
         else:
             n += 1
             rank = MEDALS[n - 1] if n <= 3 else f"#{n}"

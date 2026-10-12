@@ -884,3 +884,47 @@ every release that changes how something works.
   until the pointer leaves, then eases back; a part still fetching
   (`.dc-wait`) holds either way; Hide folds at once. The board sits under
   Anki's deck list, so the decks never moved.
+  One Settings (3.8.0, Sam's pick from the mocks): Tools › Due Crew ›
+  Settings… and the add-on's Config button open the board's Settings on
+  the Decks screen (`open_settings`), from any screen, signed out or with
+  the board turned off too (`_on_render` draws Settings first: it's how the
+  board comes back). The Qt window (`ui/settings_dialog.py`, 570 lines that
+  said it all twice) is gone. Tools › Due Crew › Show on the Decks screen
+  is a check, the way back from the menu.
+  Two keys (3.8.0): Ctrl+Shift+S, Study what's next (the menu's first item
+  carries it), and Ctrl+Shift+Q, the reviewer's Ask the squad for the card
+  on screen (`team_flow.ask_this_card`; off the review screen, a line says
+  what it's for). Both clear of Anki's own (Ctrl+Shift+S is Reposition only
+  inside Browse, its own window). Settings › Board › Shortcuts lists them
+  with one switch (`shortcuts`, per computer; `_apply_keys`).
+  Study today (3.8.0, Easier Anki §3): one button in the box's head and on
+  its folded line, and Ctrl+Shift+S. The walk (`due.study_next`,
+  `due_flow.study_today`): each plan's deck in plan order, then the deck
+  with the most due (Anki's deck tree, its limits), then today's misses
+  once (a filtered deck), each in Anki's own review; when Anki's review
+  hands over to the overview with nothing left (`state_did_change`, the
+  deck's counts at 0) it goes on, said in a line ("Next: Year 2"); leaving
+  the review any other way ends it. Inside a deck, Anki orders reviews and
+  new cards by the deck's options. At the end: "Done for today", or the
+  learning cards back later.
+  The topic map (3.8.0, Easier Anki §9, Sam: "you made a … plan thing by
+  topic, where did those go?"): in Insights, each topic a tile sized by
+  its started cards and shaded by how much I know now, FSRS's recall today
+  (stability, days since its last answer) or with FSRS off the share whose
+  last answer was right; 70/80/90% shades. Topics are the plan's
+  (`topic_list`), else the deck's tags (`deck_topics` at 20 started
+  cards), else its subdecks; twelve tiles at most, biggest first. A click
+  opens the topic's weakest in Browse (`insmap`). About 1 s on a big shared
+  deck's size, in Insights' ten-minute cache. A question bank's id tags
+  ("…::Step::104523") are never a topic, in Not sticking yet too.
+  The site, audited (3.8.0): a long word in the rail no longer widens the
+  page; Squads hides columns by name (its line spans two, which hid the
+  wrong ones under 560 px) and its line wraps; the cheer popup sits on the
+  page (the table's scroll box clipped it) and opens upward near the
+  bottom; the avatar has no stray ▾; the picker's underline is straight and
+  a long squad name ends in an ellipsis; dim rows and faded notes read at
+  the muted colour (the faint one was 2.4:1); a lone tile keeps a tile's
+  width; the board keeps 300 px so a short tab doesn't pull the page up.
+  Alone with nothing yet, my row has no medal, on the site and in Anki
+  (the twin). The landing picture is the sample crew (it had the stress
+  test's row), with a dark one; the README's are re-rendered too.

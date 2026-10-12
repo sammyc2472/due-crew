@@ -616,3 +616,11 @@ In Anki (as a follower):
 - [ ] Repeating to-dos: add "Practice block every tue" (the add box previews "→ every Tue"; × keeps the words). On a Tuesday it's on Today with "every Tue ▾"; tick it, and Upcoming shows next Tuesday's (no tick on that one). Its ▾ has Edit…, Stop repeating (a one-off today), Delete. "every mon: X", "X daily", "X weekdays", "X mondays" work too. duecrew.com's Due panel shows it on its days.
 - [ ] No jumps: with the pointer on the box, flick Today → Insights → Later: the board under it stays put while the pointer stays on Due Crew; move it off and the box eases to its size. Squads while fetching keeps its height. Hide still folds at once.
 
+
+### 3.8.0: one Settings, two keys, Study today, the topic map
+
+- [ ] Tools › Due Crew › Settings… from the review screen: Anki goes to the Decks screen with Settings open. The add-on's Config button (Tools › Add-ons) does the same and the Add-ons window closes. Signed out, Settings still opens (Sign in… on You).
+- [ ] Turn "Due Crew on the Decks screen" off: the board goes; Tools › Due Crew › Show on the Decks screen (a check) brings it back.
+- [ ] Ctrl+Shift+S from the Decks screen, a deck's overview and Browse's main window: Study today starts. Ctrl+Shift+Q while reviewing a plan's card in its squad asks the squad; elsewhere it says what it's for. Settings › Board › Shortcuts › off: neither key does anything; on again, both do.
+- [ ] Study today with a plan and two other decks due: the plan's deck first; when it's done Anki goes straight to the next deck ("Next: …"), then today's misses, then "Done for today" on the Decks screen. Press Escape mid-deck: the walk stops there.
+- [ ] Insights › What you know: tiles for the deck's topics, the big ones big, shaded by how well you know them; a tile opens its weakest cards in Browse. FSRS off: the tooltip says "right on their last review".
