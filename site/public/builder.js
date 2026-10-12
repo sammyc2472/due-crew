@@ -55,6 +55,18 @@ const Todo = (() => {
   return { MAX, LABEL, okUrl, parse, clean };
 })();
 
+/** 3.8.0: the plan's lines every week ({k, t, url, r}: r its weekdays,
+ *  Monday "0"), as the Worker keeps them (plans.ts, EVERY_MAX). */
+const Every = (() => {
+  const MAX = 6;
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  /** what a save sends: lines with words and days, at most MAX */
+  const clean = (lines) => (lines || []).filter((x) => x && /^[0-6]{1,7}$/.test(x.r || "") && Todo.LABEL[x.k] && String(x.t || "").trim())
+    .slice(0, MAX).map((x) => ({ ...Todo.clean([x])[0], r: [...new Set(x.r)].sort().join("") }));
+  const label = (r) => (r === "0123456" ? "every day" : r === "01234" ? "weekdays" : "every " + [...r].map((k) => DAYS[Number(k)]).join(", "));
+  return { MAX, DAYS, clean, label };
+})();
+
 /** Searches about one person's own Anki (due_crew/plans.py, _PERSONAL). */
 const PERSONAL = /(?:^|[\s("-])(?:deck:current|is:(?:due|new|learn|review|suspended|buried|susp)|rated:|prop:|introduced:|added:|edited:|resched:|flag:|nid:|cid:)/i;
 
@@ -701,6 +713,36 @@ async function builder(id) {
       h("span", { class: "pi" }, "Starts ", startIn), h("span", { class: "psep" }),
       h("span", { class: "pi" }, "Study days ", dayBtns), h("span", { class: "psep" }),
       h("span", { class: "pi" }, kind, how));
+  }
+
+  /** 3.8.0: lines that come every week ("every Fri: practice questions"),
+   *  from the plan's first date to its last; each follower ticks each
+   *  day's in Due. Authors edit them here; followers see them. */
+  function everyBox() {
+    const lines = doc.every || [];
+    if (!author) {
+      return lines.length ? h("div", { class: "every2" }, h("b", {}, "Every week"),
+        lines.map((x) => h("span", { class: "small" }, h("b", {}, Todo.LABEL[x.k]), ` · ${x.t} · ${Every.label(x.r || "")}`,
+          x.url && Todo.okUrl(x.url) ? [" ", h("a", { href: x.url, target: "_blank", rel: "noopener" }, "link")] : null))) : null;
+    }
+    const set = () => { if (lines.length) doc.every = lines; else delete doc.every; mark(); };
+    const rows = lines.map((x, i) => h("div", { class: "todo" },
+      h("select", { "aria-label": "Kind", onchange: (e) => { x.k = e.target.value; set(); } },
+        Object.entries(Todo.LABEL).map(([k, lb]) => h("option", { value: k, selected: x.k === k }, lb))),
+      h("input", { value: x.t, maxlength: 140, placeholder: "Practice questions", "aria-label": "What to do",
+        oninput: (e) => { x.t = e.target.value; set(); } }),
+      h("span", { class: "wdays", role: "group", "aria-label": "Days" }, ["M", "T", "W", "T", "F", "S", "S"].map((l, k) =>
+        h("button", { class: (x.r || "").includes(String(k)) ? "on" : "", "aria-pressed": String((x.r || "").includes(String(k))), title: Every.DAYS[k],
+          onclick: () => { const r = new Set((x.r || "").split("")); if (r.has(String(k))) r.delete(String(k)); else r.add(String(k));
+            if (r.size) { x.r = [...r].sort().join(""); set(); draw(); } } }, l))),
+      h("input", { value: x.url || "", maxlength: 500, placeholder: "https:// (optional)", "aria-label": "A link",
+        onchange: (e) => { const v = e.target.value.trim(); if (!v) delete x.url; else if (Todo.okUrl(v)) x.url = v; else { e.target.value = x.url || ""; e.target.placeholder = "A link starts with https://"; } set(); } }),
+      h("button", { class: "x", "aria-label": "Take this line off", onclick: () => { lines.splice(i, 1); set(); draw(); } }, "×")));
+    return h("div", { class: "every2" },
+      h("span", { class: "pi" }, h("b", {}, "Every week"), h("small", { class: "muted" }, " lines followers tick in Due on those days, from the first date to the last")),
+      rows,
+      lines.length < Every.MAX ? h("button", { class: "linkish", onclick: () => {
+        doc.every = [...lines, { k: "do", t: "", r: "4" }]; mark(); draw(); } }, "+ Add a line") : null);
   }
 
   // ---- the calendar ----
@@ -1644,7 +1686,7 @@ async function builder(id) {
       : sideDay ? calendar()
       : h("div", { class: `calwrap${picked ? " has-day" : ""}` }, calendar(), dayPanel());
     const main = h("div", { class: "main2" },
-      paceBox,
+      paceBox, view === "print" ? null : everyBox(),
       h("div", { class: "calcard" }, nav, fillRow, view === "text" || view === "print" ? null : heavyNote(), inner));
     if (!author) return main;
     if (sideDay) {
@@ -1987,7 +2029,7 @@ async function builder(id) {
     if (added.length === 1) out.push(`added ${added[0].name} on ${pretty(added[0].opens)}`); else if (added.length) out.push(`added ${added.length} dates`);
     if (gone.length === 1) out.push(`took off ${gone[0].name}`); else if (gone.length) out.push(`took off ${gone.length} dates`);
     if (changed.length === 1) out.push(`changed ${changed[0].name}`); else if (changed.length) out.push(`changed ${changed.length} dates`);
-    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"], ["events", "the events"]]) {
+    for (const [k, w] of [["pace", "the pace"], ["end", "the end date"], ["phases", "catch-up weeks"], ["reviews", "the review days"], ["events", "the events"], ["every", "the weekly lines"]]) {
       if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null) && !(k === "pace" && out.length)) out.push(`changed ${w}`);
     }
     return (out.join("; ") || "changed the plan").slice(0, 120);
@@ -2005,7 +2047,7 @@ async function builder(id) {
       units = units.filter((x) => x.id !== uid).concat([structuredClone(u)]);
     }
     out.units = units.sort((x, y) => x.opens.localeCompare(y.opens));
-    for (const k of ["pace", "end", "phases", "reviews", "events"]) {
+    for (const k of ["pace", "end", "phases", "reviews", "events", "every"]) {
       if (JSON.stringify(mine[k] ?? null) !== JSON.stringify(mineBase[k] ?? null)) { if (mine[k] === undefined) delete out[k]; else out[k] = structuredClone(mine[k]); }
     }
     // a review day of a date one of us took off goes with it
@@ -2038,10 +2080,10 @@ async function builder(id) {
       if (doc.phases && !doc.phases.taper && !doc.phases.catchup) delete doc.phases;
       const summary = describe(base, doc);
       // 3.6.5: `idr` is the server's (from the author's Anki) and kept there; sending it back only costs size
-      const lean = (d) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, todo, ...u }) => {
+      const lean = ({ every, ...d }) => ({ ...d, units: (d.units || []).map(({ idr: _idr, pn: _pn, todo, ...u }) => {
         const t = Todo.clean(todo);  // Due: a line with no words yet isn't sent
         return t.length ? { ...u, todo: t } : u;
-      }) });
+      }), ...(Every.clean(every).length ? { every: Every.clean(every) } : {}) });
       const body = { version: plan.version, name: meta.name.trim() || plan.name, line: meta.line, doc: lean(doc), summary };
       if (tell.value.trim()) body.post = tell.value.trim();  // 3.7.3
       if (owner && meta.squad !== (plan.squad || "")) body.squad = meta.squad || null;

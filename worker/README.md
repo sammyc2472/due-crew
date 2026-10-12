@@ -194,6 +194,9 @@ copy, in date order); kept as `pn` the same way as `idr`, while the date's
 Due: a date may carry `todo: [{k, t, url?}]` (up to 8): `k` watch, read
 or do, `t` up to 140 characters, `url` an https link. Followers tick them
 by hand in the add-on; the ticks are theirs (`due_ticks` in their settings).
+3.8.0: the doc may carry `every: [{k, t, url?, r}]` (up to 6), the same
+lines with `r`, their weekdays (Monday "0", kept sorted): on those days
+from the plan's first date to its last, each follower ticks each day's.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

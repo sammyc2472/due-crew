@@ -3924,6 +3924,22 @@ def _due_mine(r, short=False):
             f'<span class="end">{do}{tag}</span></div>')
 
 
+def _due_every(r, short=False):
+    """3.8.0: a plan's weekly line ("Do · Practice questions", every Fri),
+    ticked by hand for the day; a day ahead's ticks on that day."""
+    e = _html.escape
+    text = e(r["text"])
+    if r.get("url", "").startswith("https://"):
+        text = f'<a href="#" title="{e(r["url"])}" onclick="{_pycmd("duelink:" + r["key"])}">{text}</a>'
+    tick = ('<span class="du-bx"></span>' if r.get("ahead")
+            else _due_tick(f'duetodo:{r["key"]}', r["done"], "Done" if not r["done"] else "Not done"))
+    if short:
+        return (f'<div class="du-ln{" done" if r["done"] else ""}">{tick}<span><b>{e(r["label"])}</b> &middot; {text}'
+                f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["tag"])}</span></div>')
+    return (f'<div class="du-r{" done" if r["done"] else ""}">{tick}<span class="t"><span class="x"><b>{e(r["label"])}</b> '
+            f'&middot; {text}</span><small>{e(r["plan"])} &middot; {e(r["tag"])}</small></span><span class="end"></span></div>')
+
+
 def _due_plan(r):
     """A plan's date on Today, in full: its resources (each with its topics,
     3.8.0), the author's lines, its bar."""
@@ -3982,6 +3998,8 @@ def _due_short(r):
     e = _html.escape
     if r["kind"] == "mine":
         return _due_mine(r, short=True)
+    if r["kind"] == "every":
+        return _due_every(r, short=True)
     box = _due_box("on" if r["done"] else "part" if r["part"] else "", auto=True)
     return (f'<div class="du-ln{" done" if r["done"] else ""}">{box}<span><b>{e(r["name"])}</b>'
             f' <span class="du-m">&middot; {e(r["plan"])}</span></span><span class="n">{e(r["n"])}</span></div>')
@@ -4108,6 +4126,8 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                          f'<span class="t"><b>Reviews</b></span><span class="end"><span class="n">{n}</span></span></div>')
             elif r["kind"] == "plan":
                 body += _due_plan(r)
+            elif r["kind"] == "every":
+                body += _due_every(r)
             else:
                 body += _due_mine(r)
         body += _opened_line(v.get("opened"))

@@ -7763,6 +7763,135 @@ def test_squad_week_v380():
           json.loads(out.stdout or "null") == list(board.squad_week(jsrows)), (out.stdout, out.stderr))
 
 
+def test_every_lines_v380():
+    """3.8.0: a plan's lines every week ("every Fri: practice questions"):
+    on their weekdays from the plan's first date to its last, ticked by hand
+    for the day, never behind; kept as they arrive; drawn escaped; a tick
+    and a link through the board's own handler."""
+    from due_crew import due as D, due_flow as F, app as appmod
+    from due_crew.backend import shapes
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    T = "2026-10-03"  # a Saturday ("5")
+    lines = [{"k": "do", "t": "Practice <q>", "r": "5"}, {"k": "watch", "t": "Review", "r": "1", "url": "https://x.example/v"}]
+    every = [{"pid": "p1", "plan": "Step <b>", "first": "2026-09-28", "last": "2026-10-31", "lines": lines}]
+    keys = D.every_keys("p1", lines)
+    check("every: keyed by what each says, a tick key Due keeps", keys[0].startswith("p1:every:")
+          and D.clean_ticks({keys[0]: T}) == {keys[0]: T})
+    v = D.view(T, [], [], {}, every=every)
+    today = [r for r in v["rows"] if r["kind"] == "every"]
+    check("every: today's on its weekday, with the plan and the days said",
+          [(r["text"], r["plan"], r["tag"], r["done"]) for r in today] == [("Practice <q>", "Step <b>", "every Sat", False)], today)
+    days = {dd["day"]: [r["text"] for r in dd["rows"] if r["kind"] == "every"] for dd in v["days"] if "day" in dd}
+    check("every: Upcoming, each once, on its next day", days.get(T) == ["Practice <q>"] and days.get("2026-10-06") == ["Review"]
+          and "Practice <q>" not in days.get("2026-10-10", []), days)
+    vt = D.view(T, [], [], {keys[0]: T}, every=every)
+    dt = {dd["day"]: [r["text"] for r in dd["rows"] if r["kind"] == "every"] for dd in vt["days"] if "day" in dd}
+    check("every: ticked, done for today; Upcoming shows its next one too",
+          [r["done"] for r in vt["rows"] if r["kind"] == "every"] == [True] and dt.get("2026-10-10") == ["Practice <q>"], dt)
+    check("every: yesterday's tick isn't today's", [r["done"] for r in D.view(T, [], [], {keys[0]: "2026-09-26"}, every=every)["rows"]
+                                                    if r["kind"] == "every"] == [False])
+    gone = D.view(T, [], [], {}, every=[dict(every[0], last="2026-10-02")])
+    check("every: after the plan's last day, none", not [r for r in gone["rows"] if r["kind"] == "every"]
+          and not any(r["kind"] == "every" for dd in gone["days"] for r in dd.get("rows", [])))
+    check("every: before its first day, none", not [r for r in D.view(T, [], [], {}, every=[dict(every[0], first="2026-10-04")])["rows"]
+                                                    if r["kind"] == "every"])
+    check("every: never behind", D.view("2026-10-05", [], [], {}, every=every)["behind_n"] == 0)
+    doc = shapes.clean_plan_doc({"deck": "D", "units": [], "every": [{"k": "do", "t": " Practice\nquestions ", "r": "414"},
+                                                                     {"k": "do", "t": "No days"}, {"k": "do", "t": "x", "r": "9"},
+                                                                     {"k": "read", "t": "y", "r": "0", "url": "javascript:alert(1)"}]
+                                  + [{"k": "do", "t": str(i), "r": "0"} for i in range(9)]})
+    check("every: arrives clean: weekdays sorted, none without them, https only, 6 at most",
+          doc["every"][0] == {"k": "do", "t": "Practice questions", "r": "14"} and doc["every"][1] == {"k": "read", "t": "y", "r": "0"}
+          and len(doc["every"]) == 6, doc.get("every"))
+    # drawn
+    h = board._due_html(v)
+    up = board._due_html(dict(v, tab="upcoming"))
+    check("every: on Today, escaped, ticked by hand", "Practice &lt;q&gt;" in h and "Step &lt;b&gt;" in h and "<q>" not in h
+          and f"duecrew:duetodo:{keys[0]}" in h and "every Sat" in h, h[:2000])
+    check("every: in Upcoming, a day ahead's box ticks on that day; its link opens through Anki",
+          f"duecrew:duelink:{keys[1]}" in up and up.count(f"duecrew:duetodo:{keys[1]}") == 0 and ">Review</a>" in up)
+    # clicks, through the add-on's own handler
+    conf = {"due_items": [], "due_tab": "today"}
+    opened = []
+    saved = (F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_every, F.plan_dates)
+    import aqt.utils as AU
+    saved_open = getattr(AU, "openLink", None)
+    F.cfg = lambda: conf
+    F.save_cfg = lambda c, **k: conf.update(c)
+    appmod.swap = lambda c, focus=None: None
+    F._today = lambda: T
+    F.plan_every = lambda today: every
+    F.plan_dates = lambda today: ([], [], [])
+    AU.openLink = opened.append
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("duetodo:" + keys[0])
+        check("every tick: for today", F._ticks(conf).get(keys[0]) == T, conf.get("due_ticks"))
+        send("duetodo:" + keys[0])
+        check("every untick", keys[0] not in F._ticks(conf))
+        send("duetodo:" + keys[1])
+        check("every tick: not on a day it isn't", keys[1] not in F._ticks(conf))
+        send("duetodo:p1:every:00000000")
+        check("every tick: a key no line has does nothing", "p1:every:00000000" not in F._ticks(conf))
+        send("duelink:" + keys[1])
+        send("duelink:" + keys[0])
+        check("every link: only a line's https one", opened == ["https://x.example/v"], opened)
+    finally:
+        F.cfg, F.save_cfg, appmod.swap, F._today, F.plan_every, F.plan_dates = saved
+        if saved_open is not None:
+            AU.openLink = saved_open
+    # the glue: from the plans I follow, as I run them
+    PF = F._pf()
+    saved2 = (PF.followed, PF._state_cfg, PF._deck_ok, F.mw.col)
+    units = [{"id": "a", "name": "A", "opens": "2026-10-01"}, {"id": "b", "name": "B", "opens": "2026-10-20"}]
+    PF.followed = lambda: [{"id": "p1", "name": "Step", "doc": {"deck": "D", "units": units, "every": lines,
+                                                                "events": [{"id": "e", "day": "2026-11-02", "name": "Exam"}]}},
+                           {"id": "p2", "name": "Paused", "paused": True, "doc": {"deck": "D", "units": units, "every": lines}},
+                           {"id": "p3", "name": "None", "doc": {"deck": "D", "units": units}},
+                           {"id": "p4", "name": "Gone", "doc": {"deck": "D", "units": units, "every": lines}}]
+    PF._state_cfg = lambda c=None: {"p1": {"deck_id": 10}, "p2": {"deck_id": 10}, "p3": {"deck_id": 10}}
+    PF._deck_ok = lambda col, did: True
+    F.mw.col = object()
+    try:
+        got = F.plan_every(T)
+        check("every glue: the plans I run here with lines, paused ones not, from my first date to the last event",
+              [(x["pid"], x["first"], x["last"], x["lines"]) for x in got] == [("p1", "2026-10-01", "2026-11-02", lines)], got)
+    finally:
+        PF.followed, PF._state_cfg, PF._deck_ok, F.mw.col = saved2
+
+
+def test_every_site_twin_v380():
+    """3.8.0: the site's Due panel reads a plan's weekly lines as due.py
+    does: the same days (dueEveryOn ↔ every_on), keys (dueLineKeys with
+    "every" ↔ every_keys) and words (dueRepeatLabel ↔ repeat_label). Needs node."""
+    import shutil
+    import subprocess
+    from due_crew import due as D
+    js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    check("every site: the panel draws them, ticked for the day", "dueEveryOn(span, ln, t)" in js
+          and "ticks[keys[i]] === t" in js and 'dueLineKeys(p.id, "every", every)' in js)
+    node = shutil.which("node")
+    if not node:
+        print("SKIP every site twin: no node")
+        return
+    src = js[js.index("const parseIso"):js.index("\n", js.index("const parseIso"))] + "\n" + \
+        js[js.index("function dueLineHash"):js.index("/** Due, as the site can show it")]
+    span = {"first": "2026-10-02", "last": "2026-10-20"}
+    lines = [{"k": "do", "t": "Practice questions", "r": "4"}, {"k": "watch", "t": "Review ✓", "r": "0123456"},
+             {"k": "read", "t": "Practice questions", "r": "4"}, {"k": "do", "t": "Practice questions", "r": "4"},
+             {"k": "do", "t": "x", "r": "01234"}, {"k": "do", "t": "y", "r": "9"}, {"k": "do", "t": "z"}]
+    days = ["2026-10-01", "2026-10-02", "2026-10-09", "2026-10-12", "2026-10-20", "2026-10-21"]
+    want = {"on": [[D.every_on(span, ln, d) for d in days] for ln in lines], "keys": D.every_keys("p1", lines),
+            "labels": [D.repeat_label(r) for r in ("0123456", "01234", "4", "036")]}
+    prog = (src + f"\nconst span = {json.dumps(span)}, lines = {json.dumps(lines)}, days = {json.dumps(days)};"
+            "\nconsole.log(JSON.stringify({on: lines.map((ln) => days.map((d) => dueEveryOn(span, ln, d))),"
+            " keys: dueLineKeys('p1', 'every', lines), labels: ['0123456', '01234', '4', '036'].map(dueRepeatLabel)}));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=20)
+    check("every site: the same days, keys and words as the add-on (the twin)", json.loads(out.stdout or "null") == want,
+          (out.stdout, out.stderr, want))
+
+
 def test_learning_back_flip_v380():
     """3.8.0: the box flips "4 back at 9:42" to due when they come back:
     one timer, the earliest, a redraw on the Decks screen; none after the

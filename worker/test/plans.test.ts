@@ -70,6 +70,27 @@ describe("plans: authoring", () => {
     expect(ok.body.doc.units[0].todo).toEqual([{ k: "watch", t: "Lecture 14", url: "https://example.com/l14" }, { k: "read", t: "Chapter 6" }]);
   });
 
+  it("3.8.0: the plan's lines every week: a date's line with its weekdays, 6 at most", async () => {
+    const { dre, plan } = await authored();
+    const put = (every: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [UNITS[0]], every } });
+    expect((await put([{ k: "do", t: "Practice questions" }])).status).toBe(400);  // no days
+    expect((await put([{ k: "do", t: "x", r: "7" }])).status).toBe(400);
+    expect((await put([{ k: "do", t: "x", r: "" }])).status).toBe(400);
+    expect((await put([{ k: "do", t: "x", r: 4 }])).status).toBe(400);
+    expect((await put([{ k: "do", t: "", r: "4" }])).status).toBe(400);
+    expect((await put([{ k: "do", t: "x", r: "4", url: "http://plain.example" }])).status).toBe(400);
+    expect((await put([{ k: "do", t: "x", r: "4", day: "2026-10-02" }])).status).toBe(400);
+    expect((await put(Array.from({ length: 7 }, () => ({ k: "do", t: "x", r: "4" })))).status).toBe(400);
+    const dateLine = await dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc: { deck: "Step 1", units: [{ ...UNITS[0], todo: [{ k: "do", t: "x", r: "4" }] }] } });
+    expect(dateLine.status).toBe(400);  // a date's own line has no weekdays
+    const ok = await put([{ k: "do", t: " Practice questions ", r: "414" }, { k: "watch", t: "Review video", r: "0", url: "https://example.com/v" }]);
+    expect(ok.status).toBe(200);
+    expect(ok.body.doc.every).toEqual([{ k: "do", t: "Practice questions", r: "14" }, { k: "watch", t: "Review video", url: "https://example.com/v", r: "0" }]);
+    const none = await dre.call("PUT", `/plans/${plan.id}`, { version: ok.body.version, doc: { deck: "Step 1", units: [UNITS[0]], every: [] } });
+    expect(none.status).toBe(200);
+    expect(none.body.doc.every).toBeUndefined();
+  });
+
   it("3.3: an even split needs a window; the pace is the builder's, shaped", async () => {
     const { dre, plan } = await authored();
     const put = (doc: unknown) => dre.call("PUT", `/plans/${plan.id}`, { version: 2, doc });

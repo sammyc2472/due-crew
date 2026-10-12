@@ -427,6 +427,36 @@ def _date_row(x, ticks, today, short=False):
             "crew": x.get("crew"), "prep": x.get("prep"), "upd": int(x.get("upd") or 0)}
 
 
+# ---- 3.8.0: a plan's lines every week ----
+#
+# As due_flow hands them over: {pid, plan, first, last, lines: [{k, t, url,
+# r}]}, on their weekdays (Monday "0") from the plan's first date to its
+# last, as I run it. Ticked by hand for the day ("pid:every:hash": day), so
+# each day starts unticked; never behind: they come again.
+
+def every_keys(pid, lines):
+    """A tick's key per line, from what it says (line_keys, uid "every")."""
+    return line_keys(pid, "every", lines)
+
+
+def every_on(p, ln, day):
+    """A plan's weekly line falls on `day`."""
+    r = _rule(ln.get("r"))
+    return bool(r) and str(p.get("first") or "") <= day <= str(p.get("last") or "") and str(d(day).weekday()) in r
+
+
+def _every_row(p, ln, key, ticks, today, day):
+    return {"kind": "every", "pid": p["pid"], "plan": p.get("plan") or "", "label": TODO_KINDS.get(ln.get("k"), "Do"),
+            "text": str(ln.get("t") or ""), "url": str(ln.get("url") or ""), "key": key, "day": day,
+            "done": ticks.get(key) == day, "tag": repeat_label(_rule(ln.get("r"))), "ahead": day > today}
+
+
+def _every_all(every):
+    for p in every or ():
+        for ln, key in zip(p.get("lines") or [], every_keys(p["pid"], p.get("lines") or [])):
+            yield p, ln, key
+
+
 def _item_row(it, today, day=None):
     """One of my items, on `day` (a repeat's; today's when None)."""
     if it.get("r"):
@@ -461,7 +491,7 @@ def behind(dates, items, ticks, today):
 
 
 def view(today, dates, items, ticks, tab="today", events=(), review_days=(), reviews=None,
-         suggestions=(), notes=(), folded=False):
+         suggestions=(), notes=(), folded=False, every=()):
     """What board._due_html draws. `reviews`: {due, done, back, at} or None (not
     counted here); `suggestions`: [{key, text, go}]; `notes`: one-line
     notices (recovered leeches). Strings raw; the board escapes."""
@@ -472,6 +502,7 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
     todays = [x for x in dates if x["opens"] == today]
     today_rows = [_date_row(x, ticks, today) for x in todays]
     today_rows += [_item_row(it, today) for it in items if (on_day(it, today) if it.get("r") else it["d"] == today)]
+    today_rows += [_every_row(p, ln, key, ticks, today, today) for p, ln, key in _every_all(every) if every_on(p, ln, today)]
     if reviews is not None:
         # 3.8.0: learning cards back later today keep the row open
         due_r, back = int(reviews.get("due") or 0), int(reviews.get("back") or 0)
@@ -509,6 +540,13 @@ def view(today, dates, items, ticks, tab="today", events=(), review_days=(), rev
                     by_day.setdefault(day, []).append(_item_row(it, today, day))
                     if day != today or not done_on(it, today):
                         break
+    for p, ln, key in _every_all(every):  # 3.8.0: a plan's weekly line once, as a repeat
+        for i in range(AHEAD + 1):
+            day = iso(t + datetime.timedelta(days=i))
+            if every_on(p, ln, day):
+                by_day.setdefault(day, []).append(_every_row(p, ln, key, ticks, today, day))
+                if day != today or ticks.get(key) != today:
+                    break
     for i in range(AHEAD + 1):
         day = iso(t + datetime.timedelta(days=i))
         rows, ev, rv = by_day.get(day, []), evs.get(day, []), revs.get(day, [])

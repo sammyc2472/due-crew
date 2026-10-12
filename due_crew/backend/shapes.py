@@ -516,15 +516,26 @@ def _clean_unit(u):
         out["n"] = u["n"]
     if isinstance(u.get("for"), str) and u["for"]:
         out["for"] = u["for"][:12]  # F1: the event it preps for
-    todo = []
-    for x in u.get("todo") or []:  # Due: the author's lines to tick by hand
+    todo = _todo_lines(u.get("todo"))  # Due: the author's lines to tick by hand
+    if todo:
+        out["todo"] = todo[:8]
+    return out
+
+
+def _todo_lines(lines, every=False):
+    """Due: lines to tick by hand, {k, t, url?}; with every (3.8.0, a plan's
+    weekly ones) each keeps its weekdays `r` (Monday "0") or is dropped."""
+    out = []
+    for x in lines if isinstance(lines, list) else []:
         if isinstance(x, dict) and x.get("k") in ("watch", "read", "do") and clean_note(x.get("t"), 140):
             one = {"k": x["k"], "t": clean_note(x["t"], 140)}
             if isinstance(x.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,500}", x["url"]):
                 one["url"] = x["url"]
-            todo.append(one)
-    if todo:
-        out["todo"] = todo[:8]
+            if every:
+                if not isinstance(x.get("r"), str) or not re.fullmatch(r"[0-6]{1,7}", x["r"]):
+                    continue
+                one["r"] = "".join(sorted(set(x["r"])))
+            out.append(one)
     return out
 
 
@@ -564,6 +575,9 @@ def clean_plan_doc(doc):
               if isinstance(e, dict) and e.get("id") and _ISO.fullmatch(str(e.get("day") or ""))][:200]
     if events:
         out["events"] = sorted(events, key=lambda e: e["day"])  # F1: named days the dates prep for
+    every = _todo_lines(doc.get("every"), every=True)
+    if every:
+        out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over

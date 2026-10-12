@@ -972,6 +972,17 @@ every release that changes how something works.
   7 added up (`board.squad_week`, its twin `squadWeek` in app.js), on
   both sides, in the show-up view too. Totals only: nobody's ahead of
   anybody. Nothing new is sent or fetched: it's the rows' week.
+  A plan's weekly lines (3.8.0, Sam's pick: "every Fri: practice
+  questions"): the doc's `every`, a date's line with its weekdays (six at
+  most; `plans.ts` todoLine, `fakes.FakeWorker`, `shapes.clean_plan_doc`).
+  Authors add them under the pace in the builder (kind, words, M–S, a
+  link); followers see them there. In Due they come on their weekdays
+  from the plan's first date as I run it to its last (or its last event,
+  or end date; `due_flow.plan_every`), on Today and once in Upcoming, as
+  my own repeats do; each is ticked for the day (`duetodo`, its key
+  `pid:every:hash`, `due.every_keys`) and never behind. The site's Due
+  panel shows them too (`dueEveryOn`, its twin). No new request: they
+  ride the plan doc.
   The site, audited (3.8.0): a long word in the rail no longer widens the
   page; Squads hides columns by name (its line spans two, which hid the
   wrong ones under 560 px) and its line wraps; the cheer popup sits on the

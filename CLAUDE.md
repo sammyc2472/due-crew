@@ -108,7 +108,8 @@ same commit, each with its test:
 - `schedule.py` ↔ `Sched` in app.js (a date's window, quota, behind)
 - `bingo.evaluate` ↔ `evaluate` in `worker/src/bingo.ts`
 - `due.parse` ↔ `board.DUE_JS` (the add box's preview)
-- `due.line_keys` ↔ `dueLineKeys` in app.js
+- `due.line_keys` ↔ `dueLineKeys` in app.js; `due.every_on` ↔ `dueEveryOn`
+  (a plan's weekly lines, 3.8.0)
 - `board.face` ↔ `face` in `site/public/builder.js`
 - `team.bingo_line` ↔ `bingoLine` in builder.js (`PlanSquad`)
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)

@@ -123,6 +123,39 @@ def plan_dates(today):
     return dates, events, reviews
 
 
+def plan_every(today):
+    """3.8.0: the weekly lines of the plans I follow and run here, as
+    due.view takes them: {pid, plan, first, last, lines}, from my first date
+    to my last (or the plan's last event or end date, if later)."""
+    pf = _pf()
+    state = pf._state_cfg()
+    out = []
+    for p in pf.followed():
+        st = state.get(p["id"])
+        doc = p["doc"]
+        lines = [x for x in doc.get("every") or [] if isinstance(x, dict)]
+        if not lines or p.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
+            continue
+        days = [str(u.get("opens") or "") for u in P.units(doc) if u.get("opens")]
+        if not days:
+            continue
+        ends = days + [str(e.get("day") or "") for e in doc.get("events") or [] if isinstance(e, dict)]
+        ends += [str(doc["end"])] if doc.get("end") else []
+        out.append({"pid": p["id"], "plan": P.plan_title(p), "first": min(days), "last": max(ends), "lines": lines})
+    return out
+
+
+def _every_line(key, today, any_day=False):
+    """(plan, line) for a weekly line's key, on today (or any day), else (None, None)."""
+    pid = key.split(":")[0]
+    for p in plan_every(today):
+        if p["pid"] == pid:
+            keys = D.every_keys(pid, p["lines"])
+            if key in keys and (any_day or D.every_on(p, p["lines"][keys.index(key)], today)):
+                return p, p["lines"][keys.index(key)]
+    return None, None
+
+
 def _reviews():
     """{due, done, back, at}: reviews and learning due now across my decks,
     whether I've reviewed today, and the learning cards back later today
@@ -252,7 +285,7 @@ def view(c):
         items = D.prune(_items(c), today)
         v = D.view(today, dates, items, _ticks(c), tab=c.get("due_tab", "today"), events=events,
                    review_days=revs, reviews=_reviews() if mw.col else None,
-                   suggestions=suggestions(c, today), notes=notes())
+                   suggestions=suggestions(c, today), notes=notes(), every=plan_every(today))
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
         v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
@@ -517,9 +550,22 @@ def tick(c, ident):
 
 
 def todo_tick(c, key):
-    """An author's line, ticked by hand (only once its date has opened)."""
+    """An author's line, ticked by hand (only once its date has opened); a
+    weekly one (3.8.0) for today, on its day."""
     today = _today()
     pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
+    if uid == "every":
+        p, _ln = _every_line(key, today)
+        if not p:
+            return
+        ticks = _ticks(c)
+        if ticks.get(key) == today:
+            ticks.pop(key, None)
+        else:
+            ticks[key] = today
+        _save(c, ticks=D.clean_ticks(ticks))
+        _swap(c)
+        return
     dates, _e, _r = plan_dates(today)
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
     keys = D.line_keys(pid, uid, (x or {}).get("todo"))
@@ -539,6 +585,12 @@ def todo_tick(c, key):
 def open_link(key):
     """An author's line's link, in the browser: only an https one on a date I follow."""
     pid, uid, _h = (key.split(":") + ["", "", ""])[:3]
+    if uid == "every":
+        _p, ln = _every_line(key, _today(), any_day=True)
+        if ln and str(ln.get("url") or "").startswith("https://"):
+            from aqt.utils import openLink
+            openLink(ln["url"])
+        return
     dates, _e, _r = plan_dates(_today())
     x = next((x for x in dates if x["pid"] == pid and x["uid"] == uid), None)
     todo = (x or {}).get("todo") or []

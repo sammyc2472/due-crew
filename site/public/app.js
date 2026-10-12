@@ -1346,6 +1346,19 @@ function dueLineKeys(pid, uid, todo) {
 function dueRepeats(x) { return typeof x?.r === "string" && /^[0-6]{1,7}$/.test(x.r) ? x.r : ""; }
 /** due.on_day: a repeat falls on `d` (one of its weekdays, from its start). */
 function dueOnDay(x, d) { const r = dueRepeats(x); return !!r && r.includes(String((parseIso(d).getUTCDay() + 6) % 7)) && (!x.d || d >= x.d); }
+/** due.every_on (3.8.0): a plan's weekly line falls on `d`: one of its
+ *  weekdays, between the plan's first date and its last, as I run it. */
+function dueEveryOn(span, ln, d) { const r = dueRepeats(ln); return !!r && span.first <= d && d <= span.last && r.includes(String((parseIso(d).getUTCDay() + 6) % 7)); }
+/** plan_every's span: my first date of the plan to my last, its last event or its end, if later. */
+function dueEverySpan(p) {
+  const shift = p.following?.shift || 0, skipped = new Set(p.following?.skipped || []), moved = p.following?.moved || {};
+  const days = Sched.units(p.doc).filter((u) => !skipped.has(u.id)).map((u) => { const by = shift + (moved[u.id] || 0); return by ? addDays(u.opens, by) : u.opens; });
+  if (!days.length) return null;
+  const ends = [...days, ...(p.doc.events || []).map((e) => e.day).filter(Boolean), ...(p.doc.end ? [shift ? addDays(p.doc.end, shift) : p.doc.end] : [])];
+  return { first: days.reduce((a, x) => (x < a ? x : a)), last: ends.reduce((a, x) => (x > a ? x : a)) };
+}
+/** due.repeat_label: "every day", "weekdays", "every Mon, Thu". */
+function dueRepeatLabel(r) { return r === "0123456" ? "every day" : r === "01234" ? "weekdays" : "every " + [...r].map((k) => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][Number(k)]).join(", "); }
 
 /** Due, as the site can show it: today's dates from the
  *  plans I follow (my own numbers when I share them), their authors' lines,
@@ -1379,6 +1392,21 @@ function duePanel(followed, set, t) {
       rows.push(h("div", { class: "duer" }, h("i", { class: `dbx auto${done ? " on" : ""}`, "aria-hidden": "true" }),
         h("span", {}, h("b", {}, u.name), h("small", { class: "muted" }, p.name), lines),
         h("small", { class: "muted" }, pr && pr[2] ? `${pr[1].toLocaleString()} / ${pr[2].toLocaleString()}` : "")));
+    }
+    // 3.8.0: the plan's weekly lines, ticked in Anki for the day (due.every_keys)
+    const every = (p.doc.every || []).filter((x) => x && typeof x.t === "string");
+    const span = every.length ? dueEverySpan(p) : null;
+    if (span) {
+      const keys = dueLineKeys(p.id, "every", every);
+      every.forEach((ln, i) => {
+        if (dueEveryOn(span, ln, tm)) tomorrow.push(ln.t);
+        if (!dueEveryOn(span, ln, t)) return;
+        rows.push(h("div", { class: "duer" }, h("i", { class: `dbx${ticks[keys[i]] === t ? " on" : ""}`, "aria-hidden": "true" }),
+          h("span", {}, h("span", {}, h("b", {}, { watch: "▶ Watch", read: "Read", do: "Do" }[ln.k] || "Do"), " · ",
+            ln.url && /^https:\/\//.test(ln.url) ? h("a", { href: ln.url, target: "_blank", rel: "noopener" }, ln.t) : ln.t),
+            h("small", { class: "muted" }, `${p.name} · ${dueRepeatLabel(dueRepeats(ln))}`)),
+          h("small", {}, "")));
+      });
     }
   }
   for (const x of items.filter((x) => (dueRepeats(x) ? dueOnDay(x, t) : x.d === t))) {

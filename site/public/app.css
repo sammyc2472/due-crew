@@ -417,6 +417,12 @@ details.fmt > summary { cursor: pointer; color: var(--muted); }
 }
 .dl { display: grid; gap: 3px; margin: 0; }
 .addc { display: grid; gap: 4px; }
+/* 3.8.0: the plan's lines every week, under the pace */
+.every2 { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 10px 12px; display: grid; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+.every2 .todo { display: grid; grid-template-columns: auto minmax(0, 1.4fr) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.every2 .todo input, .every2 .todo select { min-width: 0; font-size: 13px; padding: 3px 6px; }
+.every2 > .linkish { justify-self: start; }
+@media (max-width: 560px) { .every2 .todo { grid-template-columns: auto minmax(0, 1fr) auto; } .every2 .todo .wdays { grid-column: 1 / -1; } .every2 .todo input + .wdays + input { grid-column: 1 / 3; } }
 .addc .todo { display: grid; grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .addc .todo input, .addc .todo select { min-width: 0; }
 @media (max-width: 560px) { .addc .todo { grid-template-columns: auto minmax(0, 1fr) auto; } .addc .todo input + input { grid-column: 2 / 3; } }

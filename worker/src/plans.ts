@@ -21,6 +21,7 @@ const IDR_MAX = 20000;   // 3.6.5: the cards those ids are, as note guid + card 
 const SEARCH_LEN = 500;
 const REVIEWS_MAX = 60;
 const TODO_MAX = 8;  // Due: a date's lines to tick by hand
+const EVERY_MAX = 6;  // 3.8.0: the plan's lines that come every week ("every Fri: practice questions")
 export const PLAN_BODY_MAX = 1600 * 1024;
 const SOURCES_MAX = 50;
 const PATH_MAX = 200;
@@ -84,6 +85,24 @@ function cardRef(v: unknown): [string, number] {
   return [v[0], v[1]];
 }
 
+/** Due: a line to tick by hand, {k, t, url?}; `every` (3.8.0) adds `r`,
+ *  its weekdays (Monday "0"), kept sorted. */
+function todoLine(x: unknown, every = false): Obj {
+  if (!V.isObj(x) || Object.keys(x).some((k) => !["k", "t", "url", ...(every ? ["r"] : [])].includes(k))) throw V.bad("plan");
+  if (!["watch", "read", "do"].includes(x.k as string) || !V.isStr(x.t, 140, 1) || /[\u0000-\u001f]/.test(x.t as string)) throw V.bad("plan");
+  const one: Obj = { k: x.k, t: (x.t as string).trim() };
+  if (x.url !== undefined && x.url !== null && x.url !== "") {
+    if (!V.isStr(x.url, 500, 1) || !/^https:\/\/[^\s"'<>]+$/.test(x.url as string)) throw V.bad("plan");
+    one.url = x.url;
+  }
+  if (!one.t) throw V.bad("plan");
+  if (every) {
+    if (!V.isStr(x.r, 7, 1) || !/^[0-6]+$/.test(x.r as string)) throw V.bad("plan");
+    one.r = [...new Set((x.r as string).split(""))].sort().join("");
+  }
+  return one;
+}
+
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
   for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
@@ -139,17 +158,7 @@ function unit(v: unknown): Obj {
     // Due: what a date asks that cards can't measure (a lecture to watch, a
     // chapter to read), each follower ticking it by hand; words and a link
     if (!Array.isArray(v.todo) || v.todo.length > TODO_MAX) throw V.bad("plan");
-    const todo = v.todo.map((x) => {
-      if (!V.isObj(x) || Object.keys(x).some((k) => !["k", "t", "url"].includes(k))) throw V.bad("plan");
-      if (!["watch", "read", "do"].includes(x.k as string) || !V.isStr(x.t, 140, 1) || /[\u0000-\u001f]/.test(x.t as string)) throw V.bad("plan");
-      const one: Obj = { k: x.k, t: (x.t as string).trim() };
-      if (x.url !== undefined && x.url !== null && x.url !== "") {
-        if (!V.isStr(x.url, 500, 1) || !/^https:\/\/[^\s"'<>]+$/.test(x.url as string)) throw V.bad("plan");
-        one.url = x.url;
-      }
-      if (!one.t) throw V.bad("plan");
-      return one;
-    });
+    const todo = v.todo.map((x) => todoLine(x));
     if (todo.length) out.todo = todo;
   }
   const cards = v.cards ?? [];
@@ -235,7 +244,7 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
@@ -289,6 +298,13 @@ export function planDoc(v: unknown): Obj {
     if (evs.length) out.events = evs.sort((a, b) => String(a.day).localeCompare(String(b.day)));
   }
   for (const u of units) if (u.for && !evIds.has(u.for as string)) delete u.for;
+  if (v.every !== undefined && v.every !== null) {
+    // 3.8.0: lines that come every week on their weekdays, from the plan's
+    // first date to its last (Due, each follower ticking each day's by hand)
+    if (!Array.isArray(v.every) || v.every.length > EVERY_MAX) throw V.bad("plan");
+    const every = v.every.map((x) => todoLine(x, true));
+    if (every.length) out.every = every;
+  }
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
   if (JSON.stringify(out).length > DOC_MAX) throw V.bad("plan");

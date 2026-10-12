@@ -186,7 +186,12 @@ _ITEMS = [
 ]
 _DV = _D.view(_T, _DATES, _ITEMS, {}, events=[{"day": _d(4), "name": "KSA F3-2", "plan": "Big Step 1"}],
               review_days=[{"day": _d(3), "plan": "Big Step 1"}], reviews={"due": 214, "done": 120},
-              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}])
+              suggestions=[{"key": "again", "text": "Go over today's 23 misses", "go": "Study"}],
+              # 3.8.0: a plan's lines every week
+              every=[{"pid": "p1", "plan": "Big Step 1", "first": _d(-30), "last": _d(40),
+                      "lines": [{"k": "do", "t": "Practice questions (40)", "r": "0123456"},
+                                {"k": "watch", "t": "Weekly review session", "r": str((_D.d(_T).weekday() + 3) % 7),
+                                 "url": "https://example.com/r"}]}])
 from due_crew import plans as PL  # noqa: E402
 _PT = "2026-10-07"
 _PDOC = {"pace": {"days": [1, 1, 1, 1, 1, 0, 0]},

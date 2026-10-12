@@ -1106,7 +1106,7 @@ class FakeWorker:
         p["version"] += 1
 
     def _plan_doc(self, v):
-        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events"}:
+        if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -1198,6 +1198,26 @@ class FakeWorker:
                 del u["for"]
         if v.get("end"):
             doc["end"] = v["end"]
+        every = v.get("every")  # 3.8.0: lines every week, on their weekdays (plans.ts todoLine)
+        if every is not None:
+            if not isinstance(every, list) or len(every) > 6:
+                raise Bad(400, "plan")
+            lines = []
+            for x in every:
+                if (not isinstance(x, dict) or not set(x) <= {"k", "t", "url", "r"} or x.get("k") not in ("watch", "read", "do")
+                        or not isinstance(x.get("t"), str) or not 0 < len(x["t"]) <= 140 or not x["t"].strip()
+                        or re.search(r"[\x00-\x1f]", x["t"]) or not isinstance(x.get("r"), str)
+                        or not re.fullmatch(r"[0-6]{1,7}", x["r"])):
+                    raise Bad(400, "plan")
+                one = {"k": x["k"], "t": x["t"].strip()}
+                if x.get("url") not in (None, ""):
+                    if not isinstance(x["url"], str) or len(x["url"]) > 500 or not re.fullmatch(r"https://[^\s\"'<>]+", x["url"]):
+                        raise Bad(400, "plan")
+                    one["url"] = x["url"]
+                one["r"] = "".join(sorted(set(x["r"])))
+                lines.append(one)
+            if lines:
+                doc["every"] = lines
         if v.get("reviews"):
             ids = {u["id"] for u in out}
             if not all(isinstance(r, dict) and r.get("from") in ids and r.get("to") in ids for r in v["reviews"]):
