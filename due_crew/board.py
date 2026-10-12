@@ -651,6 +651,10 @@ def _css(cfg):
     #due-crew .tmap .tm {{ position: relative; }}
     #due-crew .tmap .tm .tmb {{ position: absolute; left: 0; bottom: 0; height: 3px; background: currentColor; opacity: .45; }}
     #due-crew .tm.sn, #due-crew .sw.sn {{ background: var(--dc-well); color: var(--dc-muted); }}
+    #due-crew .ik select.tmby {{ -webkit-appearance: none; appearance: none; font: inherit; font-weight: 700;
+      color: var(--dc-accent); background: transparent; border: 0; padding: 0 0 0 2px; margin: 0; cursor: pointer;
+      text-transform: none; letter-spacing: 0; color-scheme: light dark; }}
+    #due-crew .ik .tmbv {{ font-style: normal; font-size: 9px; color: var(--dc-accent); margin-left: 2px; pointer-events: none; }}
     #due-crew .tmap .tm span i {{ font-style: normal; margin-left: 3px; opacity: .7; }}
     #due-crew .tmt {{ font-size: 11.5px; color: var(--dc-muted); margin: 1px 0 4px; text-align: left; }}
     #due-crew .tmt b {{ color: var(--dc-ink); }}
@@ -1778,7 +1782,7 @@ def _insights_html(did, v):
                     f'<span class="c"><b>{st + fg}</b> of {of}</span>'
                     f'<a href="#" onclick="{_pycmd(f"insstudy:{did}:{i}")}">Study {st + fg}</a></div>')
         out += "</div>"
-    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"))
+    out += _ins_map(did, v.get("map") or [], v.get("map_by"), v.get("map_at"), v.get("map_ways"))
     if w:
         out += _ins_week(did, w, aim, today)
     f = v.get("fsrs")
@@ -1804,14 +1808,15 @@ def _insights_html(did, v):
     return f'<div class="dc-ins">{out}</div>'
 
 
-def _ins_map(did, tiles, by, at=()):
+def _ins_map(did, tiles, by, at=(), ways=()):
     """3.8.0, the topic map: each subject a tile, sized by its cards in play,
     shaded by how much I know now of the ones I've started (a bar along its
     foot: how many I've started; none yet, "new"). A tile that splits again
     opens into its smaller ones (at: the keys opened), the trail above them
     goes back, and Browse all opens the open one's cards; a tile that
-    doesn't, its cards. Mine alone, from my own Anki. Two tiles at least,
-    or it says nothing."""
+    doesn't, its cards. ways: how else it can split (Systems, a resource,
+    Subdecks), a pick in its heading ("by Systems ▾"). Mine alone, from my
+    own Anki. Two tiles at least, or it says nothing."""
     if len(tiles) < 2:
         return ""
     e = _html.escape
@@ -1844,7 +1849,16 @@ def _ins_map(did, tiles, by, at=()):
                 f'{"" if lk is None else f", {int(lk)}%"} '
                 f'&middot; <a href="#" onclick="{_pycmd(f"insmapall:{did}")}">Browse all</a></div>')
     key = '<i class="sw s0"></i>under 70% <i class="sw s3"></i>90%+' + (' <i class="sw sn"></i>new' if fresh else "")
-    return (f'<div class="isec"><div class="ik">What you know<span>&nbsp;&middot; by topic, now</span>'
+    ways = [w for w in ways or () if isinstance(w, dict)]
+    if len(ways) > 1:  # 3.8.0: another way to split it, this deck's, on this computer
+        opts = "".join(f'<option value="{i}"{" selected" if w.get("on") else ""}>{e(str(w.get("name") or "?"))}</option>'
+                       for i, w in enumerate(ways))
+        sub = (f'<span>&nbsp;&middot; by <select class="tmby" aria-label="Split by" '
+               f'onchange="pycmd(\'duecrew:insmapby:{int(did)}:\'+this.value);">{opts}</select>'
+               f'<i class="tmbv" aria-hidden="true">&#9662;</i></span>')
+    else:
+        sub = "<span>&nbsp;&middot; by topic, now</span>"
+    return (f'<div class="isec"><div class="ik">What you know{sub}'
             f'<span class="ikey">{key}</span></div>'
             f'{path}<div class="tmap">{out}</div></div>')
 

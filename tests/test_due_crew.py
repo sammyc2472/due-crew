@@ -7214,6 +7214,18 @@ def test_insights_379():
           [(t["name"], t["n"], t["started"]) for t in bk] == [("Cardio · Physiology", 80, 40), ("Cardio · Pathology", 70, 35),
                                                               ("Cardio · Pharm", 50, 25), ("Renal · Physiology", 30, 15),
                                                               ("Pulm · Pathology", 20, 10)], bk)
+    # Sam: yield tiers split a deck evenly, and say nothing about what's in it
+    tiers = ["1-HighYield", "2-RelativelyHighYield", "3-HighYield-temporary", "4-LowerYield", "5-LowYield"]
+    yt = {c: [f"{R}::$HighYield::{tiers[c % 5]}", f"{R}::^Systems::{sy[c % 6]}::{['Anatomy', 'Pathology'][c // 6 % 2]}"]
+          for c in range(300)}
+    yk = {c: 0.9 for c in range(300)}
+    ytiles, yways = T.subjects_by(yt, yk)
+    check("map: a topic tree beats a flat rating that splits as evenly; the rating stays a way to pick",
+          [t["name"] for t in ytiles][:2] == ["Cardio", "GI"] and [(w["name"], w["on"]) for w in yways] == [("Systems", True), ("HighYield", False)]
+          and yways[0]["score"] > yways[1]["score"], (ytiles[:2], yways))
+    pt, pw = T.subjects_by(yt, yk, by=yways[1]["key"])
+    check("map: picked, the other way", sorted(t["name"] for t in pt) == sorted(tiers) and [w["on"] for w in pw] == [False, True], pw)
+    check("map: a pick that's no longer there, the best way", T.subjects_by(yt, yk, by="gone")[1][0]["on"] is True)
     fresh = T.subjects({c: [f"Deck::{'Verbs' if c < 30 else 'Nouns' if c < 60 else 'Phrases'}"] for c in range(90)},
                        {c: 0.8 for c in range(30)}, active=range(90))
     check("map: the cards in play, started or not; a subject with none started yet has no score",
@@ -7262,6 +7274,11 @@ def test_insights_379():
           'class="tm sn"' in nw and "<b>new</b>" in nw and '<i class="sw sn"></i>new' in nw
           and '<i class="tmb" style="width:50%"></i>' in nw and "40 cards, 20 started, 80%" in nw
           and "30 cards, none started yet" in nw and '<i class="sw sn">' not in mh, nw)
+    wy = board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}, {"key": "b", "name": "<Yield>", "on": False}])
+    check("map: more than one way, a pick in the heading, the one on screen chosen, escaped",
+          'aria-label="Split by"' in wy and "duecrew:insmapby:10:" in wy and '<option value="0" selected>Systems</option>' in wy
+          and '<option value="1">&lt;Yield&gt;</option>' in wy and "by topic, now" not in wy
+          and "Split by" not in board._ins_map(10, nest, "fsrs", (), [{"key": "a", "name": "Systems", "on": True}]), wy)
     check("map: one tile says nothing", board._ins_map(10, nest[:1], "fsrs") == ""
           and "right on their last review" in board._ins_map(10, nest, "right"))
     check("insights: nothing yet says so", "Insights fill in after a week of reviews." in board._insights_html(10, {"right": {"now": [1, 2]}}))
@@ -7457,7 +7474,8 @@ def test_insights_379():
         for i in range(80):  # a lecture's tag on some: the systems sort them all
             tag = ("Med::^Sys::Cardio::Valves", "Med::^Sys::Cardio::Rhythm", "Med::^Sys::Renal::Tubule", "Med::^Sys::Pulm")[i // 20]
             fakes.add_card(conn, 900 + i, did=30, ctype=2, queue=2, ivl=4, due=1050,
-                           tags=tag + (" Med::#Lectures::L%d" % (i % 7) if i % 3 == 0 else ""))
+                           tags=tag + (" Med::#Lectures::L%d" % (i % 7) if i % 3 == 0 else "")
+                           + (" Med::$Yield::High" if i % 2 else " Med::$Yield::Low"))
             fakes.add_review(conn, at(2), ease=3, cid=900 + i)
         fakes.add_card(conn, 990, did=30, tags="Med::^Sys::Cardio::Valves")  # new: not on the map, in Browse
         m = TF.insights(30).get("map") or []
@@ -7477,6 +7495,18 @@ def test_insights_379():
               shown == [list(range(900, 920)) + [990], list(range(900, 940)) + [990]], shown)
         dc._on_js(False, "duecrew:insmapup:30:0", DeckBrowser())
         check("map: All goes back to the top", (_state.get("map_at") or {}).get(30) == [])
+        ways = TF.insights(30).get("map_ways") or []
+        check("map: its ways, the systems first, the yield tiers to pick", [(w["name"], w["on"]) for w in ways]
+              == [("Sys", True), ("Yield", False)], ways)
+        dc._on_js(False, "duecrew:insmap:30:0", DeckBrowser())
+        dc._on_js(False, "duecrew:insmapby:30:1", DeckBrowser())
+        yv = TF.you_view(dict(conf, ins_deck=30))
+        check("map: picked by Yield, this deck's, kept on this computer; it starts from the top",
+              (conf.get("ins_map_by") or {}).get("30") == ways[1]["key"] and sorted(t["name"] for t in yv["view"].get("map") or [])
+              == ["High", "Low"] and not (_state.get("map_at") or {}).get(30), (conf.get("ins_map_by"), yv["view"].get("map")))
+        dc._on_js(False, "duecrew:insmapby:30:9", DeckBrowser())
+        check("map: no such way, nothing", (conf.get("ins_map_by") or {}).get("30") == ways[1]["key"])
+        dc._on_js(False, "duecrew:insmapby:30:0", DeckBrowser())
         dc._on_js(False, "duecrew:insmap:30:9", DeckBrowser())
         dc._on_js(False, "duecrew:insmapall:30", DeckBrowser())
         check("map: no such tile, or nothing open: nothing", len(shown) == 2 and not (_state.get("map_at") or {}).get(30))

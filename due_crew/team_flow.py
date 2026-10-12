@@ -671,7 +671,7 @@ def _work_out(did, pid=None, exam=""):
 
     # 3.8.0, the topic map: what I know now, by topic
     try:
-        out["map"], out["map_by"], out["_map_know"] = _map(col, did, deck, cutoff)
+        out["map"], out["map_by"], out["_map_know"], out["map_ways"] = _map(col, did, deck, cutoff)
     except Exception:
         traceback.print_exc()
 
@@ -817,20 +817,20 @@ def _know(col, deck, cutoff):
 
 
 def _map(col, did, deck, cutoff):
-    """(tiles, by, know) for the topic map: the deck's cards in play (unsuspended,
-    started or not) split by its own tags the way that tells them apart
-    best (T.subjects), plan or not; with no tags to say, its subdecks.
-    Shaded by what I know now of the started ones."""
+    """(tiles, by, know, ways) for the topic map: the deck's cards in play
+    (unsuspended, started or not) split by its own tags or its subdecks,
+    the way that tells them apart best (T.subjects_by), plan or not, or
+    the way I picked (cfg ins_map_by, this computer's, per deck). Shaded by
+    what I know now of the started ones."""
     know, by = _know(col, deck, cutoff)
     rows = col.db.all(f"SELECT c.id, n.tags, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
                       f"JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) AND c.queue != -1")
     if not rows or not know:
-        return [], by, know
+        return [], by, know, []
+    pick = str((cfg().get("ins_map_by") or {}).get(str(did)) or "") or None
     active = {int(cid) for cid, _t, _d in rows}
     tags_of = {int(cid): str(tags or "").split() for cid, tags, _d in rows}
-    tiles = T.subjects(tags_of, know, active)
-    if len(tiles) >= 2:
-        return tiles, by, know
+    tiles, ways = T.subjects_by(tags_of, know, active, by=None if pick == DECKS_WAY else pick)
     root = str(col.decks.name(did) or "")
     names, paths = {}, {}
     for cid, _t, d in rows:
@@ -839,7 +839,33 @@ def _map(col, did, deck, cutoff):
         name = names[int(d)]
         if name.startswith(root + "::"):
             paths[int(cid)] = [name[len(root) + 2:]]
-    return T.subjects(paths, know, active, decks=True), by, know
+    dtiles, dways = T.subjects_by(paths, know, active, decks=True) if paths else ([], [])
+    best = ways[0]["score"] if ways else 0.0
+    by_decks = bool(dtiles) and (pick == DECKS_WAY or (pick not in {w["key"] for w in ways} and dways[0]["score"] > best)
+                                 or len(tiles) < 2)
+    if dtiles:
+        ways = [dict(w, on=not by_decks and w["on"]) for w in ways]
+        ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
+        ways.sort(key=lambda w: -w["score"])
+    return (dtiles if by_decks else tiles), by, know, ways
+
+
+DECKS_WAY = "~decks"  # the map by the deck's subdecks, among its ways
+
+
+def pick_map(did, i):
+    """The map's "by": another way to split it, remembered for this deck
+    on this computer; the map starts again from the top."""
+    view = ((_state.get("insights") or {}).get(did) or {}).get("view") or {}
+    ways = view.get("map_ways") or []
+    if not 0 <= i < len(ways):
+        return
+    c = cfg()
+    c["ins_map_by"] = dict(c.get("ins_map_by") or {}, **{str(did): ways[i]["key"]})
+    save_cfg(c)
+    (_state.get("map_at") or {}).pop(did, None)
+    (_state.get("insights") or {}).pop(did, None)
+    app.swap(cfg())
 
 
 def _find_cids(col, did, find):
@@ -1069,6 +1095,8 @@ def on_message(cmd, parts):
             map_up(did, int(x))
         elif cmd == "insmapall":
             browse_map(did)
+        elif cmd == "insmapby" and x.isdigit():
+            pick_map(did, int(x))
         elif cmd == "inshardno":
             _put_away("ins_hard_hide")
         elif cmd == "insleeches":

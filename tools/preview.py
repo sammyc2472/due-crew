@@ -275,7 +275,9 @@ _MAP = [_tile("Cardio · Physiology", 412, 86, [_tile("Cardiac output", 160, 91)
         _tile("Cardio · Pathology", 318, 77, st=240), _tile("Cardio · Pharm", 260, 84, st=120), _tile("Renal · Physiology", 190, 66),
         _tile("Pulm · Pathology", 150, 88), _tile("Heme", 120, None, st=0), _tile("Endo", 96, 71, st=60), _tile("MSK", 64, 94)]
 _PLAN_INS = {"decks": _DECKS, "did": 10, "exam": True, "plan": {"id": "p1", "name": "MS2 Block 1 · Dre's plan"},
-             "view": dict(_INS, did=10, pid="p1", leeches=3, week=dict(_INS["week"], src="plan"), map=_MAP, map_by="fsrs")}
+             "view": dict(_INS, did=10, pid="p1", leeches=3, week=dict(_INS["week"], src="plan"), map=_MAP, map_by="fsrs",
+                          map_ways=[{"key": "s", "name": "Systems", "on": True}, {"key": "b", "name": "B&B", "on": False},
+                                    {"key": "y", "name": "HighYield", "on": False}, {"key": "~decks", "name": "Subdecks", "on": False}])}
 sections.append("<h3>3.8.0: You › Insights, a deck with my plan on it (Sam's numbers)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("insights", insights=_PLAN_INS)))
 _DECK_INS = dict(_INS, did=20, behind=0, leeches=0, fsrs=None,

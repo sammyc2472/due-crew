@@ -960,6 +960,14 @@ every release that changes how something works.
   opens (`team.expand`). On a big deck the cut is chosen on an even
   sample of 3,000 cards, then made of all of them: about 1.6 s with
   24,000 in play, in Insights' ten-minute cache.
+  The map, round four (Sam, with yield tiers for tiles: "still giving me
+  bad tag choices … a tough puzzle to crack"): a rating splits a deck as
+  evenly as a topic does, so a cut now scores half when its cards have
+  nothing below it (`_score`: a topic opens into parts, "1-HighYield"
+  doesn't), and "$" and "!" mark a resource too. And the person decides:
+  the map's heading says "by Systems ▾", a pick of the best few ways (each
+  tag family that splits, and Subdecks), kept per deck on this computer
+  (`ins_map_by`, `insmapby`); a pick no longer there falls back to the best.
   Its head (Sam: "the exam thing … looks bad"; "the overall deck name
   doesn't show"): the deck's name always shows (one deck, its name; more,
   the picker), and the exam date is a link, Add exam date, that opens the

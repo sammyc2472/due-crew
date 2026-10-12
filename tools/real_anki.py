@@ -304,7 +304,7 @@ def check(path):
     # 3.8.0: the topic map on a big deck's size, and Study today's counts from Anki's tree
     from due_crew import due_flow as DF
     t = tm()
-    tiles, by, _kn = TF._map(col, did, TF._deck_sql(col, did), int(col.sched.day_cutoff))
+    tiles, by, _kn, _ways = TF._map(col, did, TF._deck_sql(col, did), int(col.sched.day_cutoff))
     t_map = tm() - t
     ok("map: the deck's broad subjects as tiles, what I know now, in one pass", len(tiles) >= 2 and t_map < 2.0,
        f"{[(x['name'], x['n'], x['know']) for x in tiles[:4]]}, by {by}, {t_map*1000:.0f} ms")
