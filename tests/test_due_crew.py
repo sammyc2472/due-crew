@@ -8327,6 +8327,156 @@ def test_every_site_twin_v380():
           (out.stdout, out.stderr, want))
 
 
+def test_why_not_showing_v380():
+    """3.8.0, pick 9: Browse › why isn't it showing? (why, pure): one plain
+    sentence a card, in Anki's words, and Anki's own fix beside it;
+    alike cards together."""
+    from due_crew import why as W
+    rooms = {1: {"new": 0, "rev": 30, "new_limit": 20, "rev_limit": 200},
+             2: {"new": 5, "rev": 0, "new_limit": 20, "rev_limit": 100},
+             3: {"new": 0, "rev": 0, "new_limit": 0, "rev_limit": 0}}
+    names = {1: "Anatomy", 2: "Pharm", 3: "Archive", 9: "Custom Study Session"}
+    ranks = {}
+    ctx = {"today": 500, "now": 1_000_000, "ahead": 1200, "deck": lambda d: names.get(d, "?"),
+           "left": lambda d: rooms.get(d, {}), "rank": lambda c: ranks.get(c["id"], 1),
+           "size": lambda d: 12, "day": lambda n: f"day {n}", "clock": lambda t: "15:40", "fsrs": True}
+    card = lambda i, **kw: dict({"id": i, "did": 1, "odid": 0, "queue": 0, "due": 0, "lapses": 0, "leech": False}, **kw)  # noqa: E731
+    r = lambda c: W.reason(c, ctx)  # noqa: E731
+    check("why: suspended, and a leech says how often it was forgotten; both unsuspend",
+          r(card(1, queue=-1))["say"] == "Suspended, so Anki never shows it." and r(card(1, queue=-1))["fix"] == ("unsuspend",)
+          and r(card(2, queue=-1, leech=True, lapses=8))["say"] == "Suspended as a leech: forgotten 8 times.")
+    check("why: buried by a sibling or by me, both shown today with Anki's unbury",
+          "another card from its note" in r(card(1, queue=-2))["say"] and r(card(1, queue=-3))["say"] == "Buried by you till tomorrow."
+          and r(card(1, queue=-3))["fix"] == ("unbury",))
+    f = r(card(1, did=9, odid=1, queue=2, due=400))
+    check("why: in a filtered deck, named, with how many go home if it's emptied",
+          f["say"] == "In Custom Study Session, a filtered deck, not in Anatomy: it shows when you study Custom Study Session. "
+          "Emptying it sends its 12 cards home." and f["fix"] == ("empty", 9), f)
+    ranks[5] = 43
+    n1 = r(card(5))
+    check("why: new, past today's limit: the limit's done, and enough more to reach it",
+          n1["say"] == "New: today's 20 new cards in Anatomy are done." and n1["fix"] == ("more_new", 1, 43), n1)
+    ranks[6] = 9
+    n2 = r(card(6, did=2))
+    check("why: new, further in line than what's left: how far, and the difference",
+          n2["say"] == "New: about 8 new cards come before it, and Pharm has 5 left today." and n2["fix"] == ("more_new", 2, 4), n2)
+    ranks[7] = 3
+    check("why: new and within today's: study the deck",
+          r(card(7, did=2))["fix"] == ("study", 2) and "in today's new cards" in r(card(7, did=2))["say"])
+    check("why: a deck that takes no new cards says so", r(card(8, did=3))["say"] == "New, and Archive takes no new cards a day.")
+    check("why: learning, back at a time; nothing to do",
+          r(card(1, queue=1, due=1_000_000 + 3600))["say"].startswith("Learning: back at 15:40.")
+          and r(card(1, queue=1, due=1_000_000 + 3600))["fix"] is None
+          and r(card(1, queue=1, due=1_000_000 + 600))["fix"] == ("study", 1))
+    nd = r(card(1, queue=2, due=505))
+    check("why: a review not due yet, by FSRS; Study it now sets its due date to today",
+          nd["say"] == "Not due till day 505, by FSRS." and nd["fix"] == ("due_now",)
+          and W.label(nd["fix"], 1, ctx) == "Study it now" and W.label(nd["fix"], 3, ctx) == "Study them now")
+    rd = r(card(1, did=2, queue=2, due=499))
+    check("why: due, but the day's reviews are done: more reviews today",
+          rd["say"] == "Due, but today's 100 reviews in Pharm are done." and rd["fix"] == ("more_rev", 2, W.REV_MORE))
+    check("why: due and within today's: study the deck", r(card(1, queue=2, due=500))["fix"] == ("study", 1))
+    ranks.update({11: 30, 12: 50})
+    gs = W.groups([card(10, queue=-1), card(11), card(12), card(13, queue=-1, leech=True), card(14, queue=-1),
+                   card(15, queue=2, due=510), card(16, queue=2, due=503)], ctx)
+    by = {g["group"]: g for g in gs}
+    check("why: alike cards together, the most first, said by how many",
+          gs[0]["group"] == "suspended" and by["suspended"]["say"] == "3 suspended, 1 of them as leeches."
+          and by["suspended"]["label"] == "Unsuspend them" and by["suspended"]["cids"] == [10, 13, 14]
+          and by["not_due"]["say"] == "2 not due yet, the soonest day 503.", [(g["group"], g["say"]) for g in gs])
+    check("why: new cards past the limit get enough for the furthest in line",
+          by["new:1"]["fix"] == ("more_new", 1, 50) and by["new:1"]["label"] == "50 more new today"
+          and by["new:1"]["say"] == "2 new, past today's 20 new cards in Anatomy.", by["new:1"])
+    one = W.groups([card(1, did=9, odid=1, queue=2)], ctx)
+    check("why: one card says its own sentence; Empty names the deck", one[0]["say"].startswith("In Custom Study Session")
+          and one[0]["label"] == "Empty Custom Study Session")
+
+
+def test_why_not_showing_glue_v380():
+    """3.8.0, pick 9: the glue reads the picked cards (a leech by its tag,
+    the order kept), asks Anki's deck tree for each deck's room, and runs
+    each fix as Anki's own operation, then reads again; Browse's menu has
+    it signed in or not."""
+    from due_crew import why_flow as WF, plan_flow as PF
+    col = make_user_col([TODAY])
+    conn = col.db.conn
+    for cid, nid, q, due, tags in ((1, 1, -1, 0, " leech marked "), (2, 2, 0, 7, ""), (3, 3, 0, 3, ""), (4, 4, 2, 9999, "")):
+        conn.execute("INSERT INTO notes (id, guid, tags) VALUES (?, ?, ?)", (nid, f"g{nid}", tags))
+        conn.execute("INSERT INTO cards (id, nid, did, queue, due, lapses) VALUES (?, ?, 1, ?, ?, 4)", (cid, nid, q, due))
+    got = WF.facts(col, [4, 1, 99, 2])
+    check("glue: the picked cards in order, a leech by its tag, one not there left out",
+          [c["id"] for c in got] == [4, 1, 2] and got[1]["leech"] and not got[0]["leech"] and got[1]["lapses"] == 4, got)
+    node = types.SimpleNamespace(new_count=1, review_count=0)
+    col.decks = types.SimpleNamespace(name=lambda d: "Big Step 1::Anatomy", find_deck_in_tree=lambda tree, d: node,
+                                      config_dict_for_deck_id=lambda d: {"new": {"perDay": 20}, "rev": {"perDay": 200}},
+                                      deck_and_child_ids=lambda d: [1])
+    col.sched.deck_due_tree = lambda: "tree"
+    ctx = WF.context(col)
+    check("glue: a deck by its own name, its room today from Anki's tree, a new card's place in line",
+          ctx["deck"](1) == "Anatomy" and ctx["left"](1) == {"new": 1, "rev": 0, "new_limit": 20, "rev_limit": 200}
+          and ctx["rank"]({"id": 2, "did": 1, "due": 7}) == 2 and ctx["rank"]({"id": 3, "did": 1, "due": 3}) == 1)
+    gs = WF.W.groups(WF.facts(col, [1, 2, 3]), ctx)
+    check("glue: the leech, the new card past what's left, the one in today's",
+          [g["group"] for g in gs] == ["new:1", "study:1", "suspended"] and gs[2]["say"] == "Suspended as a leech: forgotten 4 times.",
+          [(g["group"], g["say"]) for g in gs])
+    ran, shown = [], []
+    saved = sys.modules.get("aqt.operations")
+
+    class Op:
+        def __init__(self, parent=None, op=None):
+            self.op = op
+
+        def success(self, f):
+            self.f = f
+            return self
+
+        def run_in_background(self):
+            ran.append(self.op(types.SimpleNamespace(sched=types.SimpleNamespace(
+                unsuspend_cards=lambda ids: ("unsuspend", ids), unbury_cards=lambda ids: ("unbury", ids),
+                set_due_date=lambda ids, d: ("due", ids, d), empty_filtered_deck=lambda d: ("empty", d),
+                custom_study=lambda req: ("custom", req)))))
+            self.f(None)
+    sys.modules["aqt.operations"] = types.SimpleNamespace(CollectionOp=Op)
+    sys.modules["anki.scheduler.base"] = types.SimpleNamespace(CustomStudyRequest=lambda **kw: kw)
+    dlg = types.SimpleNamespace(show_groups=lambda gs: shown.append([g["group"] for g in gs]))
+    saved_col = sys.modules["aqt"].mw.col
+    sys.modules["aqt"].mw.col = col
+    try:
+        WF.fix({"fix": ("unsuspend",), "cids": [1]}, dlg, [1, 2])
+        WF.fix({"fix": ("due_now",), "cids": [4]}, dlg, [4])
+        WF.fix({"fix": ("more_new", 1, 6), "cids": [2]}, dlg, [2])
+        WF.fix({"fix": ("more_rev", 1, 50), "cids": [4]}, dlg, [4])
+        WF.fix({"fix": ("empty", 9), "cids": [4]}, dlg, [4])
+        WF.fix({"fix": ("unbury",), "cids": [3]}, dlg, [3])
+        check("glue: each fix is Anki's own (unsuspend, due today, more new or reviews today, empty, unbury), then a fresh read",
+              ran == [("unsuspend", [1]), ("due", [4], "0"), ("custom", {"deck_id": 1, "new_limit_delta": 6}),
+                      ("custom", {"deck_id": 1, "review_limit_delta": 50}), ("empty", 9), ("unbury", [3])] and len(shown) == 6, ran)
+    finally:
+        sys.modules["aqt"].mw.col = saved_col
+        if saved is None:
+            sys.modules.pop("aqt.operations", None)
+        else:
+            sys.modules["aqt.operations"] = saved
+        sys.modules.pop("anki.scheduler.base", None)
+    acts = []
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved_client = PF.client
+    PF.client = lambda: types.SimpleNamespace(signed_in=False)
+    try:
+        PF.browser_menu(types.SimpleNamespace(), Menu())
+    finally:
+        PF.client = saved_client
+    check("glue: Browse's right-click asks why, signed out too (Anki help, not the account)",
+          acts == ["Due Crew: why isn't it showing?"], acts)
+
+
 def test_card_set_links_one_look_v380():
     """3.8.0 (Sam: "the linked card sets appear differently on plan vs
     today/upcoming... pick one style and stick with it"): a link that

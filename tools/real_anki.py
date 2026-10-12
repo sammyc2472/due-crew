@@ -341,6 +341,37 @@ def check(path):
     t_days = tm() - t
     ok("team: the last eight days with a plan card answered, every sync", len(days) == 8 and t_days < 0.05,
        f"{t_days*1000:.0f} ms")
+    # 3.8.0, pick 9: why a card isn't showing, read from Anki's own state, and each fix done by Anki
+    from due_crew import why as W, why_flow as WF
+    new_ids = col.db.list(f"SELECT id FROM cards WHERE did = {did} AND queue = 0 ORDER BY due DESC, id DESC LIMIT 5")
+    c_susp, c_bury, c_rev, c_filt, c_last = new_ids
+    col.sched.suspend_cards([c_susp])
+    col.sched.bury_cards([c_bury], manual=True)
+    col.sched.set_due_date([c_rev], "6")
+    F._filtered(col, "Due Crew::Why check", [c_filt])
+    t = tm()
+    gs = {g["cids"][0]: g for g in W.groups(WF.facts(col, [c_susp, c_bury, c_rev, c_filt, c_last]), WF.context(col))}
+    t_why = tm() - t
+    ok("why: suspended, buried, not due, in a filtered deck, new and far down the line, each in its words",
+       gs[c_susp]["fix"] == ("unsuspend",) and gs[c_bury]["say"] == "Buried by you till tomorrow."
+       and gs[c_rev]["say"].startswith("Not due till") and gs[c_filt]["fix"][0] == "empty"
+       and gs[c_last]["fix"][0] == "more_new" and t_why < 0.5,
+       f"{[g['say'] for g in gs.values()]}, {t_why*1000:.0f} ms")
+    col.sched.unsuspend_cards([c_susp])
+    col.sched.unbury_cards([c_bury])
+    col.sched.set_due_date([c_rev], "0")
+    col.sched.empty_filtered_deck(gs[c_filt]["fix"][1])
+    again = {g["cids"][0]: g for g in W.groups(WF.facts(col, [c_susp, c_bury, c_rev, c_filt]), WF.context(col))}
+    ok("why: after Anki's fixes, none of them is suspended, buried, filtered or not due",
+       all(g["fix"] and g["fix"][0] in ("more_new", "study", "more_rev") for g in again.values()),
+       f"{[g['say'] for g in again.values()]}")
+    from anki.scheduler.base import CustomStudyRequest
+    need = gs[c_last]["fix"][2]
+    before = WF.context(col)["left"](did)["new"]
+    col.sched.custom_study(CustomStudyRequest(deck_id=did, new_limit_delta=need))
+    after = WF.context(col)["left"](did)["new"]
+    ok("why: N more new today raises today's room by N in Anki's own tree", after >= min(before + need, 9999) - 1,
+       f"{before} → {after} (asked {need:,} more)")
     col.close()
 
 

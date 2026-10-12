@@ -136,6 +136,7 @@ same commit, each with its test:
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
 | Admin, notices, feedback | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts` |
+| Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 
 ## Releasing

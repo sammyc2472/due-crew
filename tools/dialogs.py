@@ -503,11 +503,35 @@ def main(out):
                     tag = data.get("year") if kind == "year" else ""
                     img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
 
+    def why():
+        # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
+        from due_crew.ui.why_dialog import WhyDialog
+        gs = [{"say": "3 suspended, 1 of them as leeches.", "fix": ("unsuspend",), "label": "Unsuspend them", "n": 3},
+              {"say": "New: today's 20 new cards in Anatomy are done.", "fix": ("more_new", 1, 43), "label": "43 more new today", "n": 1},
+              {"say": "Not due till Fri 16 Oct, by FSRS.", "fix": ("due_now",), "label": "Study it now", "n": 1},
+              {"say": "Learning: back at 15:40. Nothing to do: it comes back on its own.", "fix": None, "label": "", "n": 1},
+              {"say": "In <b>Custom</b> Study Session, a filtered deck, not in Anatomy: it shows when you study it.",
+               "fix": ("empty", 9), "label": "Empty Custom Study Session", "n": 1}]
+        fixed = []
+        dlg = WhyDialog(None, gs, fixed.append)
+        shoot(dlg, os.path.join(out, "why.png"))
+        if len([b for _s, b in dlg.rows if b]) != 4 or "Undo" not in dlg.note.text():
+            raise RuntimeError("why: a fix a reason, the undo note")
+        if dlg.rows[4][0].textFormat() != QtCore.Qt.TextFormat.PlainText:
+            raise RuntimeError("why: a deck's name must be plain text")
+        dlg.rows[0][1].click()
+        if fixed[-1]["label"] != "Unsuspend them" or dlg.rows[0][1].isEnabled():
+            raise RuntimeError("why: the fix runs once")
+        dlg.show_groups(gs[3:4])
+        if len(dlg.rows) != 1 or dlg.note.isVisible():
+            raise RuntimeError("why: read again after a fix")
+        dlg.close()
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card)):
+                         ("share card", share_card), ("why", why)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

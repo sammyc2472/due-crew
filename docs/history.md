@@ -1003,6 +1003,23 @@ every release that changes how something works.
   alone; an older Worker ignores it and sends the whole log, cheers in
   it), and the switch says "counting…", "sign in to count" or "couldn't
   count" until then.
+  Why isn't this card showing? (pick 9 of The First Month): Browse ›
+  right-click › "Due Crew: why isn't it showing?", signed in or not (it's
+  Anki help). A suspended card, a buried one, one in a filtered deck, a
+  new card past today's limit and a review not due till Friday all look
+  the same in Anki: not there. `why.py` (pure) gives each its sentence in
+  Anki's own words (Suspended, Buried, filtered deck) and Anki's own fix:
+  Unsuspend, Show it today (unbury), Empty the filtered deck (it says how
+  many cards go home: Anki can't send one alone), N more new or reviews
+  today (Custom Study's own raise, by enough to reach the furthest card,
+  its place counted among its deck's new cards), Study it now (Set Due
+  Date 0), or Study the deck; a learning card comes back by itself.
+  Alike cards go together ("3 suspended, 1 of them as leeches"), the first
+  2,000 picked are read. `why_flow.py` reads the cards and each deck's
+  room today from Anki's deck tree and runs a fix as one CollectionOp
+  (Edit › Undo takes it back), then reads again; `ui/why_dialog.py` is the
+  sheet, every line plain text. `tools/real_anki.py` checks it on Anki's
+  engine: each state, each fix, and that the raise reaches the card.
   One look for a set of cards (Sam: "the linked card sets appear
   differently on plan vs today/upcoming... pick one style and stick with
   it"): every link that opens cards in Browse (`a.tp`: a topic, "16

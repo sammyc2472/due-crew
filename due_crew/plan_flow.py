@@ -2429,10 +2429,14 @@ def site_base():
 # ---- Anki's browser ----
 
 def browser_menu(browser, menu):
-    """gui_hooks.browser_will_show_context_menu: single cards onto a date."""
+    """gui_hooks.browser_will_show_context_menu: why a card isn't showing
+    (3.8.0, signed in or not: it's Anki help); single cards onto a date."""
+    menu.addSeparator()
+    from . import why_flow
+    why = menu.addAction("Due Crew: why isn't it showing?")
+    why.triggered.connect(lambda: why_flow.explain(browser))
     if not client().signed_in:
         return
-    menu.addSeparator()
     action = menu.addAction("Due Crew: add to a plan…")
     action.triggered.connect(lambda: add_to_plan(browser))
     copy = menu.addAction("Due Crew: copy as plan selector")
