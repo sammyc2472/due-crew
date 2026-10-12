@@ -1689,6 +1689,15 @@ async function builder(id) {
   /** 3.8.0: Tag by objective: the person's objectives and their own export
    *  in, the plan's tags out (tag | NAME | notes:…). Names and counts only. */
   function tagPrompt() {
+    // the plan's tags as Edit the whole plan writes them; past 2,000 IDs in all, a tag's lists are a count
+    const standing = { lines: [], cut: false };
+    let ids = 0;
+    for (const t of ptags()) {
+      const m = (t.notes || []).length + (t.cards || []).length;
+      if (ids + m <= 2000) { ids += m; standing.lines.push(tagLine(t)); continue; }
+      standing.cut = true;
+      standing.lines.push(`${["tag", t.name, ptagFrom(t).join(", ")].filter(Boolean).join(" | ")} (${ptagSize(t)})`);
+    }
     const tagList = [...count.keys()].filter((k) => kindOf(k) === "tag" && !pathOf(k).startsWith("DueCrew::"))
       .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)).slice(0, 300)
       .map((k) => `tag:${pathOf(k)}  (${n(k).toLocaleString()} cards)`);
@@ -1723,7 +1732,8 @@ async function builder(id) {
       "My objectives (edit this part):",
       "",
       "",
-      ptags().length ? ["This plan's tags as they stand:", ...ptags().map(tagLine), ""] : [],
+      ptags().length ? ["This plan's tags now, as they stand (a line with the same name adds to one):", ...standing.lines,
+        standing.cut ? "A tag above with a count in brackets has more IDs than fit here; the whole lists are in Text › Edit the whole plan." : null, ""] : [],
       "Tags in my deck, for whole-tag answers (tag, card count):",
       ...tagList,
     ].flat().filter((x) => x !== null).join("\n");

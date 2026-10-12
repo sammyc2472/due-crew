@@ -217,6 +217,17 @@ plan version like any save, with a line in the plan's history. The
 board's `authored` (the plans I write or co-author) carries each plan's
 `name`, and its doc `tagroot` and `tags`, so the author's Anki writes them
 too.
+3.8.1: a plan tag may carry `cards: [[guid, ord]]` (5,000 a tag, counted
+with its notes into the plan's 50,000): Anki's tag goes on their notes,
+Due Crew reads just those cards; `POST /plans/{id}/tags {remove}` takes a
+note's single cards off with it. A date may carry `cut: [{tag, in, q}]`
+(up to 10): `tag` a deck tag kept to the cards of the plan tag `in` (its
+id), `q` the same as an Anki search and one of the date's `search`. A
+cut whose plan tag isn't in the doc is dropped, its tag back in the
+date's `tags` and its `q` out of `search` and `sn`; a copy's new root
+rewrites `tag` and `q`. `PUT /plans/{id}/ids` takes a fourth item a
+date, `[[tag, in]]`, its cuts as the author's Anki read them; the note
+ids are kept only while they match.
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.

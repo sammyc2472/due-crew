@@ -1284,3 +1284,39 @@ every release that changes how something works.
   list scrolls in its own box now (`.ptlist`, at most 40% of the screen),
   and the side's two lists keep their place through a redraw (`draw()`),
   so Rename or + on a tag low in the list doesn't jump back to the top.
+- 3.8.1 plan tags, round two (Sam's picks on the Plan Tags, Round Two
+  mock). A video cut to an SLG: a date's `cut: [{tag, in, q}]` keeps a
+  deck tag to the cards one of the plan's own tags holds (`in`, its id).
+  `q` is the same as an Anki search (both tags) and stays in the date's
+  `search`, so a 3.8.0 add-on opens the same cards; the Worker drops a cut
+  whose plan tag went and gives the date its whole tag back
+  (`planDoc`), a copy's new root reaches it (`reroot`), and `PUT
+  /plans/{id}/ids` keeps a cut date's note ids only while its cuts match
+  (a fourth item, `[[tag, in]]`). The add-on reads it in the video's row,
+  "Cephalosporins · SLG 12" (`P.topic_items`, `nm` set by
+  `shapes._plan_tag_refs`). In the builder: the chip's All of it / Only
+  SLG 12, Overlap's and with a deck tag, or `tag:PATH in SLG 12` in the
+  text; a rename follows it, a deleted tag gives the whole tag back.
+  One cloze, not its siblings: a plan tag's `cards: [[guid, ord]]` (5,000
+  a tag, counted with its notes into the plan's 50,000). Anki tags notes,
+  so the tag goes on their notes; Due Crew reads just those cards
+  (`P.plan_tag_cards`: all cards of whole notes and these), on a date and
+  in Browse them. A tag line takes `cards:`; Tag for a plan in Browse still
+  tags notes. An SLG that changes reaches dates that opened: a date that
+  uses plan tags carries a fingerprint of them (`ptv`, in `unit_sig`), and
+  what they held when it opened (`pt` in its sources), so opening it again
+  opens just what the SLG added (`plan_flow._unit_cids`).
+  Taking a tag off: Edit the whole plan names the dates in the text still
+  using a tag it takes off (a date's tag, a cut, a search), with Take them
+  off those dates too (a tag and its searches go, a cut is its whole tag,
+  a date left with nothing goes), Keep the tags (their lines back in the
+  text) or Replace anyway. What a date opened stays open.
+  What the AI is given: the tagging prompt says the plan's root
+  (DueCrew::<root>::NAME), lists the tags as they stand (their lines) and
+  the `cards:` rule; Export cards for my AI has a `#cards` column (each
+  note's card numbers from 1); the plan prompt gives the cut syntax.
+  Insights and plan tags: a plan's DueCrew tags stay out of Insights' own
+  picks (`team._ours`: topics and the map's first way); the map's "by"
+  gets one way a plan, "<plan>'s tags" (`team_flow._plan_ways`, each tag
+  a tile, `team.plan_tiles`), with the tags no card in the deck carries.
+  No new request; the Worker changed (deploy it before the add-on).

@@ -8706,7 +8706,8 @@ def test_plan_tags_builder_v381():
           and "What these dates already opened stays open." in builder)
     check("r2 site: the tagging prompt gives the root, the tags as they stand and the #cards rule",
           "In Anki each one becomes the tag DueCrew::${tagRootNow()}::NAME" in builder
-          and "This plan's tags as they stand:" in builder and "#cards column" in builder)
+          and "This plan's tags now, as they stand" in builder and "#cards column" in builder
+          and "if (ids + m <= 2000)" in builder)
 
 
 def test_plan_tags_insights_v381():

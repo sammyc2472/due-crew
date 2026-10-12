@@ -222,8 +222,9 @@ def check(path):
     head = text.splitlines()[:6]
     ok("export: the whole deck in Anki's own format, guid first", n_out == 35000 and head[2] == "#guid column:1",
        f"{len(text)/1024/1024:.1f} MB, {t_exp*1000:.0f} ms")
-    row = text.splitlines()[6].split("\t")
-    ok("export: notetype and deck names from Anki", row[1] == "Basic" and row[2] == "Step Deck", str(row[:3]))
+    row = next(x for x in text.splitlines() if not x.startswith("#")).split("\t")
+    ok("export: notetype and deck names from Anki; 3.8.1, each note's card numbers",
+       row[1] == "Basic" and row[2] == "Step Deck" and row[4] == "1" and "#cards column:5" in head + text.splitlines()[6:7], str(row[:5]))
     est = P.export_size(col, nids_all)
     ok("export: the size estimate errs high, not wildly", len(text) <= est <= 3 * len(text), f"{est/1024/1024:.1f} MB est")
     t = tm(); dates = P.export_scope(idx2, doc, "dates"); t_scope = tm() - t
@@ -434,6 +435,49 @@ def check(path):
        and col.undo_status().undo == label, f"{t_up*1000:.0f} ms")
     col.undo()
     ok("plan tags: Edit › Undo puts the last update back", len(find(p12)) == 3000 and not find(p12b) and find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    # 3.8.1, round two: a plan tag holding one cloze of a note: Anki's tag is on the whole note,
+    # Due Crew reads just that card; a date's cut (a lecture kept to SLG 19) is the lecture's
+    # cards in SLG 19, its Anki search the same but for those siblings (what an older add-on opens)
+    from anki.collection import AddNoteRequest
+    cz = col.models.by_name("Cloze")
+    reqs = []
+    for i in range(3):
+        n = col.new_note(cz)
+        n["Text"] = "{{c1::one}} {{c2::two}} {{c3::three}} %d" % i
+        n.tags = [lect[0]]
+        reqs.append(AddNoteRequest(n, did))
+    col.add_notes(reqs)
+    cz_nids = sorted(col.find_notes('"note:Cloze"'))
+    cz_guids = col.db.list(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, cz_nids))}) ORDER BY id")
+    lect_nids = sorted(set(col.find_notes(P.tag_search(lect[0]) + '"')) - set(cz_nids))
+    half_nids = lect_nids[: len(lect_nids) // 2]
+    half = col.db.list(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, half_nids))})")
+    r2 = {"deck": "Step Deck", "tagroot": "Block_2", "units": [], "tags": [
+        {"id": "s19", "name": "SLG 19", "notes": half, "cards": [[cz_guids[0], 1], [cz_guids[1], 0]]}]}
+    label2 = "Due Crew: Block 2's tags"
+    P.sync_tags(col, P.DeckIndex(col, did), r2, {}, label2)
+    p19 = "DueCrew::Block_2::SLG_19"
+    idx8 = P.DeckIndex(col, did)
+    t = tm(); exact = idx8.plan_tag_cards(r2, r2["tags"][0]); t_ptc = tm() - t
+    cz_cards = {c: (col.get_card(c).nid, col.get_card(c).ord) for c in col.find_cards('"note:Cloze"')}
+    single = {c for c, k in cz_cards.items() if k in ((cz_nids[0], 1), (cz_nids[1], 0))}
+    siblings = {c for c, (nid, _) in cz_cards.items() if nid in cz_nids[:2]} - single
+    half_cards = set(col.find_cards(f"nid:{','.join(map(str, half_nids))}"))
+    anki19 = set(col.find_cards(P.tag_search(p19) + '"'))
+    ok("r2: one cloze of a note: Anki's tag is on the whole note, Due Crew reads just that card",
+       anki19 == half_cards | single | siblings and exact == half_cards | single and len(siblings) == 4,
+       f"{len(exact):,} cards, {t_ptc*1000:.0f} ms")
+    q = P.tag_search(p19) + '" ' + P.tag_search(lect[0]) + '"'
+    cut_u = {"id": "c1", "name": "Lecture · SLG 19", "opens": "2026-10-03", "tags": [], "decks": [], "cards": [],
+             "search": [q], "cut": [{"tag": lect[0], "in": "s19", "q": q}]}
+    got = idx8.match(cut_u, None, r2)
+    by_search = set(col.find_cards(q))
+    ok("r2: a cut is the lecture's cards in SLG 19, the single cloze and not its siblings",
+       got == half_cards | single and 0 < len(got) < len(idx8.tag_cards(lect[0])), f"{len(got):,} of {len(idx8.tag_cards(lect[0])):,}")
+    ok("r2: an add-on before 3.8.1 reads the cut's search: the same cards, but for the siblings Anki's tag carries",
+       idx8.match(cut_u, None, "Step Deck") == by_search == got | siblings)
+    col.undo()
+    ok("r2: Edit › Undo takes the single-card tag off in one step", not col.find_notes(P.tag_search(p19) + '"'))
     n_drop = P.drop_tags(col, pt, "Due Crew: stop following MS2 Block 1")
     ok("plan tags: unfollowing takes every one of them off; my own tags stay",
        n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
