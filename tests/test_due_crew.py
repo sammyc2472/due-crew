@@ -8629,6 +8629,10 @@ def test_plan_tags_glue_v380():
     check("tags: a co-author tags too", maya.tag_plan_notes(pid, "SLG 13", add=["guid000003"])[1] == 200)
     kai = new_client(w, "kai", "Kai")
     check("tags: anyone else can't", kai.tag_plan_notes(pid, "SLG 12", add=["guid000009"])[1] == 403)
+    kpid, _kc = w.add_plan("kai", "ms2 block 1", "Step 1", [])
+    check("tags: another plan of the same name (any case) gets a root of its own",
+          kai.tag_plan_notes(kpid, "SLG 1", add=["guid000009"])[0]["doc"]["tagroot"] == "ms2_block_1_2")
+    del w.plans[kpid]
     check("tags: taken off, the last one takes the tag", maya.tag_plan_notes(pid, "slg 13", remove=["guid000003"])[0]["doc"]["tags"][0]["name"] == "SLG 12")
     # a follower's Anki: the morning, an update, a new follow
     col = _tag_col()

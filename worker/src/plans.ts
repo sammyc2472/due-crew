@@ -63,7 +63,7 @@ const TAG_ROOT_MAX = 60;
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
-  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null };
+  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -228,6 +228,53 @@ export function tagPart(name: string): string {
  *  plans.py tag_root and Tags.root in builder.js. */
 export function tagRoot(planName: string): string {
   return slug(planName).slice(0, TAG_ROOT_MAX).replace(/[_-]+$/, "") || "plan";
+}
+
+const escRe = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The doc with its plan tags moved from DueCrew::{from} to DueCrew::{to}:
+ *  the root, and every date, plan tag and pace pick that names one, as a tag
+ *  or inside a search (escaped as Tags.ankiSearch writes it, or not). */
+export function reroot(doc: Obj, from: string, to: string): Obj {
+  const plain = new RegExp(`(^|[\\s"(:-])DueCrew::${escRe(from)}(?=::|$|[\\s")])`, "gi");
+  const esc = new RegExp(`DueCrew::${escRe(from.replace(/_/g, "\\_"))}(?=::|$|[\\s")])`, "gi");
+  const tag = (t: string) => t.toLowerCase() === `duecrew::${from.toLowerCase()}` || t.toLowerCase().startsWith(`duecrew::${from.toLowerCase()}::`)
+    ? `DueCrew::${to}${t.slice(`DueCrew::${from}`.length)}` : t;
+  const q = (x: string) => x.replace(esc, `DueCrew::${to.replace(/_/g, "\\_")}`).replace(plain, (_m, pre) => `${pre}DueCrew::${to}`);
+  const fix = (o: Obj) => {
+    if (Array.isArray(o.tags)) o.tags = (o.tags as unknown[]).map((t) => typeof t === "string" ? tag(t) : t);
+    if (Array.isArray(o.search)) o.search = (o.search as unknown[]).map((x) => typeof x === "string" ? q(x) : x);
+    if (o.sn && typeof o.sn === "object") o.sn = Object.fromEntries(Object.entries(o.sn as Obj).map(([k, v]) => [q(k), v]));
+  };
+  const out = JSON.parse(JSON.stringify(doc)) as Obj;
+  for (const u of (out.units as Obj[] | undefined) || []) fix(u);
+  for (const t of (out.tags as Obj[] | undefined) || []) fix(t);
+  const pace = out.pace as Obj | undefined;
+  if (pace && Array.isArray(pace.cover)) pace.cover = (pace.cover as unknown[]).map((c) => typeof c === "string" && c.startsWith("tag:") ? `tag:${tag(c.slice(4))}` : c);
+  out.tagroot = to;
+  return out;
+}
+
+/** The plan's tag root, its own: the one it holds (a save never moves it),
+ *  or, with its first tag, the one asked for, or _2, _3… when another plan
+ *  has it (case aside). The doc comes back with its dates following. */
+export async function rooted(env: Env, id: string, held: string | null | undefined, doc: Obj): Promise<{ doc: Obj; root: string | null }> {
+  const want = doc.tagroot as string | undefined;
+  if (!want) return { doc, root: held ?? null };
+  if (held) return { doc: want === held ? doc : reroot(doc, want, held), root: held };
+  for (let i = 1; i <= 50; i++) {
+    const sfx = i === 1 ? "" : `_${i}`;
+    const r = `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
+    const taken = await env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id).first("x");
+    if (!taken) return { doc: r === want ? doc : reroot(doc, want, r), root: r };
+  }
+  throw new HttpError(503, "try_again");
+}
+
+/** Two saves took the same root at once: the second saves again (409), and gets _2. */
+export function rootTaken(e: unknown): never {
+  if (String((e as Error)?.message || e).includes("UNIQUE") && String((e as Error)?.message || e).includes("tagroot")) throw new HttpError(409, "stale");
+  throw e;
 }
 
 /** A plan tag: {id, name, notes?, tags?, decks?, search?, n?}: what it
@@ -734,7 +781,13 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     audience: p.audience,
     squad: p.squad,
     doc: body.doc !== undefined ? JSON.stringify(keepIdr(planDoc(body.doc), p.doc)) : p.doc,
+    tagroot: p.tagroot ?? null,
   };
+  if (body.doc !== undefined) {  // 3.8.0: its tags' root is its own
+    const r = await rooted(env, id, p.tagroot, JSON.parse(next.doc));
+    next.doc = JSON.stringify(r.doc);
+    next.tagroot = r.root;
+  }
   if (body.audience !== undefined) {
     if (body.audience !== "code" && body.audience !== "squad") throw V.bad("audience");
     next.audience = body.audience;
@@ -758,9 +811,9 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
   }
   const r = await env.DB.prepare(
-    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, version = version + 1, updated_at = ?
+    `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
-  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, nowSec(), id, body.version).run();
+  ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
   // the save stands either way; a post past the day's ceiling is said, not lost silently
@@ -1086,12 +1139,13 @@ export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[
   if (body.n !== undefined) t.n = body.n;
   doc.tags = tags.filter((x) => x.notes || x.tags || x.decks || x.search);
   if (!doc.tags.length) delete doc.tags;
-  if (!doc.tagroot) doc.tagroot = tagRoot(p.name);
-  const clean = JSON.stringify(planDoc(doc));
+  if (!doc.tagroot) doc.tagroot = p.tagroot || tagRoot(p.name);
+  const r0 = await rooted(env, id, p.tagroot, planDoc(doc));
+  const clean = JSON.stringify(r0.doc);
   if (clean === p.doc) return json(await view(env, p, s.uid));
   await roomFor(env, p.owner, clean.length - p.doc.length);
-  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, keepLib(p, clean), r0.root, nowSec(), id, p.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   const added = notes.filter((g) => !had.has(g)).length, taken = [...had].filter((g) => remove.has(g)).length;
   await logSave(env, id, p.version + 1, s.uid, added

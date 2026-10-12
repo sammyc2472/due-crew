@@ -89,4 +89,37 @@ describe("3.8.0: plan tags", () => {
     const big = (i: number) => ({ id: `b${i}`, name: `B${i}`, notes: Array.from({ length: 5000 }, (_, j) => `g${i}-${j}`) });
     expect(await bad({ deck: "Step 1", units: UNITS, tagroot: "R", tags: Array.from({ length: 11 }, (_, i) => big(i)) })).toBe(400);
   });
+
+  it("a plan's root is its own: another plan's, any case, makes _2 with its dates following; a save never moves it; a copy gets its own", async () => {
+    const { dre, maya, p } = await plan();
+    const first = await dre.call("POST", `/plans/${p.id}/tags`, { name: "SLG 12", add: ["g1"] });
+    expect(first.body.doc.tagroot).toBe("MS2_Block_1");
+    // Maya's own plan of the same name, from the site: the builder asks for the same root
+    const mine = await maya.call("POST", "/plans", { name: "ms2 block 1", deck: "Step 1" });
+    const doc = { deck: "Step 1", tagroot: "ms2_block_1", tags: [{ id: "t1", name: "SLG 12", tags: ["Step1::Cardio"] }],
+      pace: { mode: "placed", days: [1, 1, 1, 1, 1, 1, 1], cover: ["tag:DueCrew::ms2_block_1::SLG_12", "tag:Step1::Cardio"] },
+      units: [{ id: "u1", name: "SLG 12 but not Pharm", opens: "2026-10-05", tags: ["DueCrew::ms2_block_1::SLG_12"],
+        search: ['"tag:DueCrew::ms2\\_block\\_1::SLG\\_12" -"tag:Step1::Pharm"', "tag:DueCrew::ms2_block_1::SLG_12 is:new"] }] };
+    const put = await maya.call("PUT", `/plans/${mine.body.id}`, { version: 1, doc });
+    expect(put.status).toBe(200);
+    expect(put.body.doc.tagroot).toBe("ms2_block_1_2");
+    expect(put.body.doc.units[0].tags).toEqual(["DueCrew::ms2_block_1_2::SLG_12"]);
+    expect(put.body.doc.units[0].search).toEqual(['"tag:DueCrew::ms2\\_block\\_1\\_2::SLG\\_12" -"tag:Step1::Pharm"',
+      "tag:DueCrew::ms2_block_1_2::SLG_12 is:new"]);
+    expect(put.body.doc.pace.cover).toEqual(["tag:DueCrew::ms2_block_1_2::SLG_12", "tag:Step1::Cardio"]);
+    // a stale page asking for the old root again: the plan keeps the one it holds
+    const again = await maya.call("PUT", `/plans/${mine.body.id}`, { version: put.body.version, doc: { ...doc, units: [{ ...doc.units[0], name: "Renamed" }] } });
+    expect(again.body.doc.tagroot).toBe("ms2_block_1_2");
+    expect(again.body.doc.units[0].tags).toEqual(["DueCrew::ms2_block_1_2::SLG_12"]);
+    // Dre's plan, listed, with a date on its tag; Maya's copy has its own root, its date following
+    const withTag = await dre.call("PUT", `/plans/${p.id}`, { version: first.body.version, doc: { ...first.body.doc,
+      units: [...UNITS, { id: "s1", name: "SLG 12", opens: "2026-10-06", tags: ["DueCrew::MS2_Block_1::SLG_12"] }] } });
+    expect(withTag.status).toBe(200);
+    expect((await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true })).status).toBe(200);
+    const copy = await maya.call("POST", `/plans/${p.id}/copy`, { start: "2026-11-02" });
+    expect(copy.status).toBe(200);
+    expect(copy.body.doc.tagroot).toBe("MS2_Block_1_3");
+    expect(copy.body.doc.units.find((u: { id: string }) => u.id === "s1").tags).toEqual(["DueCrew::MS2_Block_1_3::SLG_12"]);
+    expect(copy.body.doc.tags[0].notes).toEqual(["g1"]);
+  });
 });

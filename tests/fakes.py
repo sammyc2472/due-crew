@@ -1564,7 +1564,12 @@ class FakeWorker:
             doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "tags", "decks", "search"))]
             if not doc["tags"]:
                 doc.pop("tags")
-            doc.setdefault("tagroot", self._tag_root(p["name"]))
+            if not doc.get("tagroot"):
+                # plans.ts rooted: a plan's root is its own (case aside), else _2, _3…
+                want = self._tag_root(p["name"])
+                taken = {str(q["doc"].get("tagroot") or "").lower() for k, q in self.plans.items() if k != pid}
+                doc["tagroot"] = next(r for r in (want if i == 1 else f"{want[:60 - len(str(i)) - 1].rstrip('_-')}_{i}"
+                                                  for i in range(1, 52)) if r.lower() not in taken)
             clean = self._plan_doc(doc)
             if clean != p["doc"]:
                 p["doc"] = clean

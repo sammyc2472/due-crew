@@ -118,7 +118,7 @@ export async function copy(req: Request, s: Session, env: Env, [id]: string[]): 
   const doc = JSON.parse(p.doc) as Obj & { units: Obj[] };
   const firsts = [...doc.units.map((u) => u.opens as string), ...((doc.events as Obj[] | undefined) || []).map((e) => e.day as string)].sort();
   const n = firsts.length ? Math.round((Date.parse(body.start as string) - Date.parse(firsts[0])) / 86400000) : 0;
-  const clean = JSON.stringify(P.planDoc(shifted(doc, n)));
+  let clean = JSON.stringify(P.planDoc(shifted(doc, n)));
   await P.roomFor(env, s.uid, clean.length);  // 3.7.2
   const owner = await env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner).first<string>("name");
   const credit = JSON.stringify({ id: p.id, name: p.name, owner: owner || "?" });
@@ -126,10 +126,16 @@ export async function copy(req: Request, s: Session, env: Env, [id]: string[]): 
   const now = nowSec();
   for (let i = 0; i < 3; i++) {
     const nid = P.draw(16).toLowerCase();
+    // 3.8.0: a copy's tags are its own: its root from its own name, its dates following
+    const parsed = JSON.parse(clean) as Obj;
+    const { doc: own, root } = parsed.tagroot
+      ? await P.rooted(env, nid, null, P.reroot(parsed, parsed.tagroot as string, P.tagRoot(name)))
+      : { doc: parsed, root: null };
+    clean = JSON.stringify(own);
     const r = await env.DB.prepare(
-      `INSERT INTO plans (id, code, owner, name, line, doc, based_on, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-    ).bind(nid, P.draw(P.PLAN_CODE_LEN), s.uid, name, p.line, clean, p.owner === s.uid ? null : credit, now, now).run();
+      `INSERT INTO plans (id, code, owner, name, line, doc, based_on, tagroot, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+    ).bind(nid, P.draw(P.PLAN_CODE_LEN), s.uid, name, p.line, clean, p.owner === s.uid ? null : credit, root, now, now).run();
     if (r.meta.changes) {
       await P.logSave(env, nid, 1, s.uid, V.oneLine(`copied from ${p.name}`, 120), null);
       return json(await P.view(env, await P.getPlan(env, nid), s.uid));

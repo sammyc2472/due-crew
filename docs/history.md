@@ -1196,7 +1196,11 @@ every release that changes how something works.
   notes by guid, or tags/decks/searches it is made from}, 100 at most,
   5,000 notes each, counted into the doc's card ceiling) and `tagroot`,
   the plan's part fixed from its name when the first tag is made (so a
-  renamed plan keeps its tags where they are). In Anki each one is
+  renamed plan keeps its tags where they are), and its alone: two plans
+  followed in one Anki must never share it, so a root another plan holds
+  (case aside) makes `_2`, `_3`, with the dates that name it following
+  (`plans.tagroot`, unique, migration 0023; `rooted`, `reroot`), and a
+  library copy gets its own. In Anki each one is
   `DueCrew::<tagroot>::<name>` (MS2_Block_1::SLG_12); the name as a tag
   part is a twin of three: `plans.ts` tagPart/tagRoot, `plans.tag_part`,
   `Tags.part` in builder.js. The author tags in Browse (right-click ›

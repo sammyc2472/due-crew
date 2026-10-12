@@ -205,7 +205,10 @@ decks?, search?, n?}]` (up to 100; a name up to 40 characters, unique as
 an Anki tag part; `notes` are guids, 5,000 a tag, counted into the plan's
 50,000; `tags`/`decks`/`search` make a tag from what they find in each
 copy) and `tagroot`, the plan's own part (`tagRoot` of its name, set with
-the first tag and never changed by a save). Each follower's Anki writes a
+the first tag and never changed by a save; unique among plans, case aside,
+in `plans.tagroot` (migration 0023): one another plan holds becomes `_2`,
+`_3`, and the doc's dates, plan tags and pace picks naming it follow; a
+copy gets a root of its own the same way). Each follower's Anki writes a
 tag as `DueCrew::<tagroot>::<tagPart(name)>`. `POST /plans/{id}/tags
 {name, add?, remove?, n?}` (the owner and co-authors; guids): puts notes on
 a tag, made if new, or takes them off (`404 no_tag` taking off a tag that
