@@ -29,7 +29,7 @@ const TEAM_MAX = P.TEAM_MAX;
  *  follower (of a squad's plan, while in the squad). Losing that ends what
  *  the team shows of them and to them, without a write. `t` is plan_team. */
 const STILL_IN = `(EXISTS (SELECT 1 FROM plans o WHERE o.id = t.plan AND o.owner = t.uid)
-  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid)
+  OR EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = t.plan AND e.uid = t.uid AND e.accepted_at IS NOT NULL)
   OR EXISTS (SELECT 1 FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.plan = t.plan AND f.uid = t.uid
              AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = t.uid))))`;
 

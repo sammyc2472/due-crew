@@ -45,7 +45,7 @@ describe("the October bug run", () => {
     for (let i = 0; i < 120; i++) {
       stmts.push(db().prepare("INSERT INTO plans (id, code, owner, name, line, audience, doc, version, created_at, updated_at) VALUES (?, ?, 'owner', ?, '', 'code', ?, 1, ?, ?)")
         .bind(`plan${String(i).padStart(10, "0")}`, `C${String(i).padStart(7, "0")}`, `P${i}`, JSON.stringify({ deck: "D", units: [] }), now, now));
-      stmts.push(db().prepare("INSERT INTO plan_editors (plan, uid, at) VALUES (?, 'kai', ?)").bind(`plan${String(i).padStart(10, "0")}`, now));
+      stmts.push(db().prepare("INSERT INTO plan_editors (plan, uid, at, accepted_at) VALUES (?, 'kai', ?, ?)").bind(`plan${String(i).padStart(10, "0")}`, now, now));
     }
     await db().batch(stmts);
     const r = await kai.call("GET", "/plans/mine");

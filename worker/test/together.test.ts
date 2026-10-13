@@ -24,7 +24,9 @@ describe("3.3: plans together", () => {
     expect(await dre.status("POST", `/plans/${p.id}/editors`, { uid: kai.uid })).toBe(403);  // not crew
     expect(await maya.status("POST", `/plans/${p.id}/editors`, { uid: maya.uid })).toBe(403);  // only the owner adds
     const added = await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
-    expect(added.body.editors).toEqual([{ uid: "maya", name: "Maya", emoji: "" }]);
+    // 3.8.1: an invite until she says yes
+    expect(added.body.editors).toEqual([{ uid: "maya", name: "Maya", emoji: "", pending: true }]);
+    expect((await maya.call("POST", `/plans/${p.id}/invite`, { yes: true })).body.editors).toEqual([{ uid: "maya", name: "Maya", emoji: "" }]);
     const mine = await maya.call("GET", "/plans/mine");
     expect(mine.body.plans.map((x: any) => [x.id, x.role])).toEqual([[p.id, "editor"]]);
     const seen = await maya.call("GET", `/plans/${p.id}`);
@@ -43,6 +45,7 @@ describe("3.3: plans together", () => {
   it("history: each save with who and what; the latest one undoes", async () => {
     const { dre, maya, p } = await plan();
     await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
+    await maya.call("POST", `/plans/${p.id}/invite`, { yes: true });  // 3.8.1
     const moved = await maya.call("PUT", `/plans/${p.id}`, { version: p.version, summary: "moved Arrhythmia to Wed",
       doc: { deck: "Step 1", units: [UNITS[0], { ...UNITS[1], opens: "2026-10-07" }] } });
     const log = await dre.call("GET", `/plans/${p.id}/log`);
@@ -144,6 +147,7 @@ describe("3.3: a class through Step (C1–C5)", () => {
     const put = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", end: "2026-12-01", units } });
     await dre.call("PUT", `/plans/${p.id}/ids`, { units: { hf: [UNITS[0].tags, [], ["g1"]] } });
     await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
+    await maya.call("POST", `/plans/${p.id}/invite`, { yes: true });  // 3.8.1
     await maya.call("POST", "/plans/follow", { code: p.code, team: true });
     const [row] = (await maya.call("GET", "/plans/mine")).body.plans;
     expect(row.doc).toEqual({ deck: "Step 1", end: "2026-12-01", units: [

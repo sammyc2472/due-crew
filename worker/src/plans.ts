@@ -62,12 +62,20 @@ const UNIT_ID = /^[a-z0-9]{1,12}$/;
 const TAGS_MAX = 100;
 const TAG_NAME_MAX = 40;
 const TAG_ROOT_MAX = 60;
+// 3.8.1: where to get the deck (a link), and the authors' notes on a tag or
+// a card (`remarks`), riding the doc: words and a link, never card text
+const DECK_URL_MAX = 300;
+const DECK_URL = /^https:\/\/[^\s"'<>\/\u0000-\u001f\u007f][^\s"'<>\u0000-\u001f\u007f]*$/;
+const REMARKS_MAX = 300;
+const REMARK_TEXT_MAX = 280;
+const LABELS_MAX = 3;  // 3.8.1: the deck tags a date's picked cards sit under (`pl`)
+const INVITES_ON_BOARD = 10;  // 3.8.1: my pending co-author invites and hand-overs a board carries
 
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
   listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null;
-  totals?: string | null; totals_at?: number | null };
+  totals?: string | null; totals_at?: number | null; handover?: string | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -117,7 +125,7 @@ function todoLine(x: unknown, every = false): Obj {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut", "pl"].includes(k)) throw V.bad("plan");
   // "every" is taken: a plan's weekly lines are ticked as pid:every:… (3.8.0)
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id) || v.id === "every") throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
@@ -228,6 +236,39 @@ function unit(v: unknown): Obj {
     if (!Array.isArray(v.pn) || v.pn.length !== 3 || !v.pn.every((n) => V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
     out.pn = v.pn;
   }
+  // 3.8.1: what its picked cards are: the deck tags they sit under in the
+  // author's copy, with how many (PUT /plans/{id}/ids "#lbl"), while it has picks
+  if (v.pl !== undefined && v.pl !== null) {
+    const pl = labels(v.pl);
+    if (!pl) throw V.bad("plan");
+    if (pl.length && hasPicks(out)) out.pl = pl;
+  }
+  return out;
+}
+
+/** 3.8.1: `pl`, [[tag path, n]], at most LABELS_MAX; null when it isn't that. */
+function labels(v: unknown): [string, number][] | null {
+  if (!Array.isArray(v) || v.length > LABELS_MAX) return null;
+  const ok = v.every((x) => Array.isArray(x) && x.length === 2 && V.isStr(x[0], PATH_MAX, 1) && !/[\u0000-\u001f]/.test(x[0])
+    && V.isInt(x[1], 0, 1_000_000));
+  return ok ? (v as [string, number][]).map(([t, n]) => [t, n]) : null;
+}
+
+/** A date's picked cards: single cards, notes, pasted ids. */
+const hasPicks = (u: Obj) => !!(((u.cards as unknown[] | undefined) || []).length || u.notes || u.nids || u.cids);
+const picksOf = (u: Obj) => [u.cards ?? [], u.notes ?? [], u.nids ?? [], u.cids ?? []];
+
+/** 3.8.1: a remark, {id, tag | card, text}: an author's note on a deck tag
+ *  (or a plan tag's DueCrew:: path) or on one card, for followers. One line. */
+function remark(v: unknown): Obj {
+  if (!V.isObj(v) || Object.keys(v).some((k) => !["id", "tag", "card", "text"].includes(k))) throw V.bad("plan");
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  const tag = v.tag !== undefined && v.tag !== null, card = v.card !== undefined && v.card !== null;
+  if (tag === card) throw V.bad("plan");  // exactly one
+  const out: Obj = { id: v.id, ...(tag ? { tag: path(v.tag) } : { card: cardRef(v.card) }) };
+  if (!V.isStr(v.text, REMARK_TEXT_MAX, 1)) throw V.bad("plan");
+  out.text = V.oneLine(v.text, REMARK_TEXT_MAX);
+  if (!out.text) throw V.bad("plan");
   return out;
 }
 
@@ -270,6 +311,8 @@ export function reroot(doc: Obj, from: string, to: string): Obj {
   for (const t of (out.tags as Obj[] | undefined) || []) fix(t);
   const pace = out.pace as Obj | undefined;
   if (pace && Array.isArray(pace.cover)) pace.cover = (pace.cover as unknown[]).map((c) => typeof c === "string" && c.startsWith("tag:") ? `tag:${tag(c.slice(4))}` : c);
+  // 3.8.1: an author's note on a plan tag follows it
+  for (const r of (out.remarks as Obj[] | undefined) || []) if (typeof r.tag === "string") r.tag = tag(r.tag);
   out.tagroot = to;
   return out;
 }
@@ -383,8 +426,13 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "deckUrl", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot", "remarks"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
+  if (v.deckUrl !== undefined && v.deckUrl !== null && v.deckUrl !== "") {
+    // 3.8.1: where to get the deck, for a follower whose Anki has none by its name
+    if (!V.isStr(v.deckUrl, DECK_URL_MAX, 9) || !DECK_URL.test(v.deckUrl)) throw V.bad("plan");
+    out.deckUrl = v.deckUrl;
+  }
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
     if (!V.isDate(v.end)) throw V.bad("plan");
@@ -462,6 +510,14 @@ export function planDoc(v: unknown): Obj {
     if (!Array.isArray(v.every) || v.every.length > EVERY_MAX) throw V.bad("plan");
     const every = v.every.map((x) => todoLine(x, true));
     if (every.length) out.every = every;
+  }
+  if (v.remarks !== undefined && v.remarks !== null) {
+    // 3.8.1: the authors' notes on a tag or a card, each follower's Anki
+    // showing them where that tag or card comes up
+    if (!Array.isArray(v.remarks) || v.remarks.length > REMARKS_MAX) throw V.bad("plan");
+    const rs = v.remarks.map(remark);
+    if (new Set(rs.map((r) => r.id)).size !== rs.length) throw V.bad("plan");
+    if (rs.length) out.remarks = rs;
   }
   // 3.8.1: a cut whose plan tag went (in a merge, or its last note taken off
   // in Anki) is its whole tag again, and its search goes with it
@@ -588,7 +644,8 @@ function followDays(f: { shift?: number | null; pause_until?: string | null; pau
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
 async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<boolean> {
-  if (p.owner === uid || (await isEditor(env, p.id, uid))) return true;
+  // 3.8.1: someone asked to co-write it may look before saying yes
+  if (p.owner === uid || (await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(p.id, uid).first())) return true;
   if (p.audience === "squad") return isMember(env, p.squad, uid);  // leaving the squad ends it, follow or not
   if (p.listed === 1) return true;  // 3.5, B: in the library, for anyone signed in
   if (await following(env, p.id, uid)) return true;
@@ -596,10 +653,14 @@ async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<b
 }
 
 /** 3.3: the owner and co-authors edit; the owner alone deletes, picks the
- *  audience and the co-authors. */
+ *  audience and the co-authors. 3.8.1: a co-author is one who said yes
+ *  (accepted_at); until then a plan_editors row is an invite, and nothing more. */
 export async function isEditor(env: Env, plan: string, uid: string): Promise<boolean> {
-  return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(plan, uid).first());
+  return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ? AND accepted_at IS NOT NULL").bind(plan, uid).first());
 }
+
+/** The plans I co-author (said yes to), as SQL; ?1 is my uid. */
+export const COAUTHORED = "SELECT plan FROM plan_editors WHERE uid = ?1 AND accepted_at IS NOT NULL";
 
 async function authorOnly(env: Env, id: string, s: Session): Promise<Plan> {
   const p = await getPlan(env, id);
@@ -625,16 +686,23 @@ type Follow = { share: number; paused: number; sched: string | null; progress: s
   shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null;
   moved?: string | null; own?: string | null;
   team_ask?: number };
-type Editor = { uid: string; name: string; emoji: string };
+type Editor = { uid: string; name: string; emoji: string; pending?: true };
+type EditorRow = { plan: string; uid: string; name: string | null; emoji: string | null; accepted_at: number | null };
+const editorOf = (e: EditorRow): Editor => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "", ...(e.accepted_at === null ? { pending: true as const } : {}) });
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
- *  a list of plans reads it in a few queries, not a few per plan. */
+ *  a list of plans reads it in a few queries, not a few per plan. 3.8.1:
+ *  `editors` holds the invites too (pending); only its authors see those,
+ *  and who the owner offered it to (`handover`). */
 function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unknown,
                ctx: { f: Follow | null; n: number; editors: Editor[]; mySquads: Set<string> }) {
-  const { f, editors } = ctx;
-  const r = p.owner === uid ? "owner" : editors.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
+  const { f } = ctx;
+  const said = ctx.editors.filter((e) => !e.pending);
+  const r = p.owner === uid ? "owner" : said.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
+  const authors = r === "owner" || r === "editor";
   return {
-    role: r, editors,
+    role: r, editors: authors ? ctx.editors : said,
+    ...(authors && p.handover ? { handover: p.handover } : {}),
     id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: p.owner_name || (p.owner ? "?" : "a former member"),
     audience: p.audience, version: p.version, doc, followers: ctx.n,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
@@ -661,9 +729,9 @@ async function inChunks<T>(ids: string[], q: (part: string[]) => Promise<{ resul
 }
 
 const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.prepare(
-  `SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid
+  `SELECT e.plan, e.uid, u.name, u.emoji, e.accepted_at FROM plan_editors e JOIN users u ON u.uid = e.uid
     WHERE e.plan IN (${part.map(() => "?").join(",")}) ORDER BY e.at`,
-).bind(...part).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>());
+).bind(...part).all<EditorRow>());
 
 /** A plan's totals (migration 0025), as its readers show them: `n` follow
  *  it, `m` of them not its owner, `r` of those have version `v` in their
@@ -727,14 +795,14 @@ export async function totals(env: Env, plans: Counted[]): Promise<Map<string, To
 export async function view(env: Env, p: Plan, uid: string) {
   const [[f, eds, owner, member], tot] = await Promise.all([env.DB.batch<any>([
     env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
-    env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
+    env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji, e.accepted_at FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
     env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
     env.DB.prepare("SELECT squad FROM members WHERE squad = ? AND uid = ?").bind(p.squad ?? "", uid),
   ]), totals(env, [p])]);
   const t = tot.get(p.id)!;
   const out = shape({ ...p, owner_name: owner.results[0]?.name }, uid, JSON.parse(p.doc), {
     f: (f.results[0] as Follow) ?? null, n: t.n,
-    editors: eds.results.map((e: any) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" })),
+    editors: eds.results.map((e: any) => editorOf(e)),
     mySquads: new Set(member.results.map((m: any) => m.squad)),
   });
   // 3.7.3: the authors see "reached 18 of 23": followers whose Anki has this version (a count).
@@ -879,9 +947,23 @@ export function keepIdr(doc: Obj, was: string | null): Obj {
     delete u.idr;
     delete u.pn;
     delete u.ids;
+    delete u.pl;
     if (o?.idr && same(o.nids, u.nids) && same(o.cids, u.cids)) u.idr = o.idr;
     if (o?.pn && same(picks(o), picks(u))) u.pn = o.pn;
     if (o?.ids && same(from(o), from(u))) u.ids = o.ids;
+    // 3.8.1: what its picked cards are, while they're the same cards
+    if (o?.pl && same(picksOf(o), picksOf(u))) u.pl = o.pl;
+  }
+  return doc;
+}
+
+/** 3.8.1: a date whose picks changed (cards added in Anki) loses its `pl`;
+ *  the author's Anki names them again. */
+function stalePl(doc: Obj, was: string) {
+  const old = new Map(((JSON.parse(was).units || []) as Obj[]).map((u) => [u.id, u]));
+  for (const u of doc.units as Obj[]) {
+    const o = old.get(u.id);
+    if (u.pl && (!o || JSON.stringify(picksOf(o)) !== JSON.stringify(picksOf(u)))) delete u.pl;
   }
   return doc;
 }
@@ -1034,6 +1116,14 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
       if (q === "#ids") { if ((u.nids || u.cids || u.notes) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
       // 3.6.5, P1: new to this date, already on an earlier one, picked notes not in the deck
       if (q === "#pn") { if (Array.isArray(n) && n.length === 3 && n.every((x) => V.isInt(x, 0, 1_000_000))) u.pn = n; continue; }
+      // 3.8.1: the deck tags its picked cards sit under here, with how many;
+      // kept as the date's `pl` while its picks are the same (keepIdr). Only
+      // that shape is kept, and only on a date with picks; anything else is skipped
+      if (q === "#lbl") {
+        const pl = labels(n);
+        if (pl && hasPicks(u)) { if (pl.length) u.pl = pl; else delete u.pl; }
+        continue;
+      }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -1087,7 +1177,10 @@ export async function undo(req: Request, s: Session, env: Env, [id]: string[]): 
 
 // ---- co-authors ----
 
-/** POST /plans/{id}/editors {uid}: the owner adds a co-author from their crew. */
+/** POST /plans/{id}/editors {uid}: the owner asks someone from their crew
+ *  (a mutual friend) to co-write it. 3.8.1: an invite (accepted_at NULL)
+ *  until they say yes (POST /plans/{id}/invite); invites count toward the
+ *  plan's EDITORS_MAX. Asking a co-author again changes nothing. */
 export async function addEditor(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await ownerOnly(env, id, s);
   const body = await readJson(req);
@@ -1102,12 +1195,142 @@ export async function addEditor(req: Request, s: Session, env: Env, [id]: string
   return json(await view(env, p, s.uid));
 }
 
-/** DELETE /plans/{id}/editors/{uid}: the owner removes a co-author, or one leaves. */
+/** DELETE /plans/{id}/editors/{uid}: the owner removes a co-author or takes
+ *  back an invite, or anyone leaves (or says no). 3.8.1: the plan offered to
+ *  them isn't any more. */
 export async function removeEditor(s: Session, env: Env, [id, uid]: string[]): Promise<Response> {
   const p = await getPlan(env, id);
   if (p.owner !== s.uid && uid !== s.uid) throw new HttpError(403, "not_owner");
-  await env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid),
+    env.DB.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, uid),
+  ]);
   return json({ ok: true });
+}
+
+/** POST /plans/{id}/owner {uid}: 3.8.1, the owner offers the plan to one of
+ *  its co-authors (one who said yes); {uid: null} takes the offer back. It's
+ *  theirs when they say yes (POST /plans/{id}/invite). */
+export async function offerPlan(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await ownerOnly(env, id, s);
+  const body = await readJson(req);
+  if (Object.keys(body).some((k) => k !== "uid") || !("uid" in body)) throw V.bad("owner");
+  const to = body.uid;
+  if (to !== null && !V.isStr(to, 128, 1)) throw V.bad("owner");
+  if (to !== null && !(await isEditor(env, id, to as string))) throw new HttpError(400, "not_coauthor");
+  if ((to ?? null) !== (p.handover ?? null)) {
+    await env.DB.prepare("UPDATE plans SET handover = ? WHERE id = ? AND owner = ?").bind(to, id, s.uid).run();
+  }
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+/** POST /plans/{id}/invite {yes}: 3.8.1, the invitee's answer. To an invite
+ *  to co-write it: yes makes me a co-author, no takes the invite away. To the
+ *  plan offered to me (I co-write it): yes makes it mine, and its owner a
+ *  co-author (its code, tag root and followers stay); no leaves it theirs.
+ *  404 no_invite when there's neither. */
+export async function answerInvite(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const body = await readJson(req);
+  if (typeof body.yes !== "boolean" || Object.keys(body).some((k) => k !== "yes")) throw V.bad("invite");
+  const p = await getPlan(env, id);
+  const row = await env.DB.prepare("SELECT accepted_at FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, s.uid)
+    .first<{ accepted_at: number | null }>();
+  const db = env.DB;
+  const now = nowSec();
+  if (row && row.accepted_at !== null && p.handover === s.uid && p.owner) {
+    if (body.yes) {
+      // what an owner keeps has a ceiling (create, copy): a plan handed over counts too
+      const mine = await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ?").bind(s.uid).first<number>("n");
+      if ((mine ?? 0) >= PLANS_MAX) throw new HttpError(409, "too_many_plans");
+      await roomFor(env, s.uid, p.doc.length + (p.lib?.length ?? 0));
+      // one transaction; each step only while the swap is the one asked for
+      const [swap] = await db.batch([
+        db.prepare("UPDATE plans SET owner = ?1, handover = NULL WHERE id = ?2 AND owner = ?3 AND handover = ?1").bind(s.uid, id, p.owner),
+        db.prepare("DELETE FROM plan_editors WHERE plan = ?1 AND uid = ?2 AND EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?2)").bind(id, s.uid),
+        db.prepare(
+          `INSERT INTO plan_editors (plan, uid, at, accepted_at) SELECT ?1, ?2, ?3, ?3 WHERE EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?4)
+           ON CONFLICT(plan, uid) DO UPDATE SET accepted_at = COALESCE(plan_editors.accepted_at, excluded.accepted_at)`,
+        ).bind(id, p.owner, now, s.uid),
+      ]);
+      if (!swap.meta.changes) throw new HttpError(404, "no_invite");
+    } else {
+      await db.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, s.uid).run();
+    }
+  } else if (row && row.accepted_at === null) {
+    await (body.yes
+      ? db.prepare("UPDATE plan_editors SET accepted_at = ? WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(now, id, s.uid)
+      : db.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(id, s.uid)).run();
+  } else {
+    throw new HttpError(404, "no_invite");
+  }
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+/** 3.8.1: my invites waiting for an answer, as the day's first board (and
+ *  the site's home) carry them: to co-write a plan, or a plan offered to me.
+ *  Who asked by name and emoji only. Offers first, then the newest invites. */
+const INVITES_SQL = `SELECT p.id, p.name, 'owner' AS kind, u.name AS by_name, u.emoji AS by_emoji, 0 AS k, 0 AS at
+     FROM plans p LEFT JOIN users u ON u.uid = p.owner
+    WHERE p.handover = ?1 AND p.owner != ''
+      AND EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = p.id AND e.uid = ?1 AND e.accepted_at IS NOT NULL)
+   UNION ALL
+   SELECT p.id, p.name, 'coauthor', u.name, u.emoji, 1, e.at
+     FROM plan_editors e JOIN plans p ON p.id = e.plan LEFT JOIN users u ON u.uid = p.owner
+    WHERE e.uid = ?1 AND e.accepted_at IS NULL AND p.owner != ''
+   ORDER BY k, at DESC, id LIMIT ${INVITES_ON_BOARD}`;
+type InviteRow = { id: string; name: string; kind: "owner" | "coauthor"; by_name: string | null; by_emoji: string | null };
+const inviteOf = (r: InviteRow) => ({ id: r.id, name: r.name, kind: r.kind, by: { name: r.by_name || "?", emoji: r.by_emoji || "" } });
+
+export async function planInvites(env: Env, uid: string) {
+  return (await env.DB.prepare(INVITES_SQL).bind(uid).all<InviteRow>()).results.map(inviteOf);
+}
+
+/** POST /plans/{id}/remarks {add: {tag | card, text}} or {remove: id}: 3.8.1,
+ *  an author's note for followers on a card (or a tag), from Anki's Browse.
+ *  A save, as tagNotes is: a new version, a line in History, room for Undo's
+ *  copy, the saves' daily ceiling. A note on a card or tag that has one
+ *  already changes its text (one note there, edited). Never card text. */
+export async function remarks(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
+  const body = await readJson(req);
+  const keys = Object.keys(body);
+  if (keys.length !== 1 || !["add", "remove"].includes(keys[0])) throw V.bad("remark");
+  const doc = JSON.parse(p.doc) as Obj;
+  let list = ((doc.remarks as Obj[] | undefined) || []).map((r) => ({ ...r }));
+  const target = (r: Obj) => (r.tag !== undefined ? `tag:${String(r.tag).toLowerCase()}` : `card:${JSON.stringify(r.card)}`);
+  const where = (r: Obj) => (r.tag !== undefined ? String(r.tag).split("::").pop()!.replace(/_/g, " ") : "a card");
+  let summary: string;
+  if (body.add !== undefined) {
+    if (!V.isObj(body.add) || "id" in body.add) throw V.bad("remark");
+    const r = remark({ ...body.add, id: "new" });
+    const had = list.find((x) => target(x) === target(r));
+    if (had) {
+      if (had.text === r.text) return json(await view(env, p, s.uid));
+      had.text = r.text;
+      summary = `changed a note on ${where(had)} in Anki`;
+    } else {
+      if (list.length >= REMARKS_MAX) throw new HttpError(409, "too_many_remarks");
+      list.push({ ...r, id: newUnitId() });
+      summary = `added a note on ${where(r)} in Anki`;
+    }
+  } else {
+    if (!V.isStr(body.remove, 12) || !UNIT_ID.test(body.remove)) throw V.bad("remark");
+    const r = list.find((x) => x.id === body.remove);
+    if (!r) return json(await view(env, p, s.uid));  // gone already
+    list = list.filter((x) => x !== r);
+    summary = `took off a note on ${where(r)} in Anki`;
+  }
+  if (list.length) doc.remarks = list; else delete doc.remarks;
+  const clean = JSON.stringify(planDoc(doc));
+  if (clean === p.doc) return json(await view(env, p, s.uid));
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2: and the doc it replaces, kept for Undo
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, lib, nowSec(), id, p.version).run();
+  if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  await logSave(env, id, p.version + 1, s.uid, V.oneLine(summary, SUMMARY_MAX), p.doc);
+  return json(await view(env, await getPlan(env, id), s.uid));
 }
 
 // ---- notes on a day ----
@@ -1135,7 +1358,7 @@ export async function notes(s: Session, env: Env, [id]: string[]): Promise<Respo
 
 /** The owner and co-authors. */
 export async function authorUids(env: Env, p: Plan): Promise<Set<string>> {
-  const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ?").bind(p.id).all<{ uid: string }>();
+  const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ? AND accepted_at IS NOT NULL").bind(p.id).all<{ uid: string }>();
   return new Set([p.owner, ...eds.results.map((e) => e.uid)]);
 }
 
@@ -1245,7 +1468,7 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
     u.search = [...new Set([...((u.search as string[]) || []), search as string])];
     u.sn = { ...((u.sn as Obj) || {}), [search as string]: body.n };
   }
-  const clean = JSON.stringify(planDoc(doc));  // dedupes, re-sorts, enforces the caps
+  const clean = JSON.stringify(stalePl(planDoc(doc), p.doc));  // dedupes, re-sorts, enforces the caps
   if (clean === p.doc) return json(await view(env, p, s.uid));
   const lib = keepLib(p, clean);
   await roomForSave(env, p, clean, lib);  // 3.7.2, as a save's
@@ -1408,13 +1631,14 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string;
                        totals: string | null; totals_at: number | null; owner_name: string | null }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
-  const doc = JSON.parse(p.doc) as { deck: string; units: Obj[]; events?: { day: string; name: string }[] };
+  const doc = JSON.parse(p.doc) as { deck: string; deckUrl?: string; units: Obj[]; events?: { day: string; name: string }[] };
   const n = unitCount;
   const followers = (await totals(env, [p])).get(p.id)!.n;  // its totals, up to an hour old
   return json({
     name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers,
     // 3.5, A: the version keys the link's preview picture; events are in the calendar feed already
     v: p.version, events: (doc.events || []).map((e) => ({ day: e.day, name: e.name })),
+    ...(doc.deckUrl ? { deckUrl: doc.deckUrl } : {}),  // 3.8.1: where to get the deck
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
   });
 }
@@ -1532,12 +1756,12 @@ export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.i
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
-            p.listed, p.listed_note, p.based_on, p.totals, p.totals_at,
+            p.listed, p.listed_note, p.based_on, p.totals, p.totals_at, p.handover,
             json_remove(p.doc, '$.units') AS rest,
             (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
       WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${FOLLOWED}
-                     UNION SELECT plan FROM plan_editors WHERE uid = ?1)
+                     UNION ${COAUTHORED})
       ORDER BY p.updated_at DESC`,  // each part by index, not a scan of every plan
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
   const ids = rows.results.map((p) => p.id);
@@ -1552,7 +1776,7 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   const follows = new Map(fs.results.map((f) => [f.plan, f]));
   const counts = new Map([...tot].map(([id, t]) => [id, t.n]));
   const editors = new Map<string, Editor[]>();
-  for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), { uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }]);
+  for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), editorOf(e)]);
   const mySquads = new Set(sq.results.map((m) => m.squad));
   return json({ plans: rows.results.map((p) => {
     const units = (JSON.parse(p.units) as Obj[]).sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
@@ -1644,13 +1868,17 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
               (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
          FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1 AND ${SEES("p")} ORDER BY p.id`).bind(uid),
     env.DB.prepare(
-      `SELECT p.id, p.version FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)
+      `SELECT p.id, p.version FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})
         ORDER BY p.id`).bind(uid),
     env.DB.prepare(
       `SELECT p.id, p.version, p.squad FROM plans p JOIN members m ON m.squad = p.squad AND m.uid = ?1
         WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1) ORDER BY p.id`).bind(uid),
+    // 3.8.1: my invites, as the board lists them (planInvites): one arriving or going moves it
+    env.DB.prepare(INVITES_SQL).bind(uid),
   ]);
-  const bytes = new TextEncoder().encode(JSON.stringify(rows.map((r) => r.results.map((x) => Object.values(x as Obj)))));
+  // with none, the stamp is what it was before 3.8.1 (no refresh reloads its plans for them)
+  const parts = rows[3].results.length ? rows : rows.slice(0, 3);
+  const bytes = new TextEncoder().encode(JSON.stringify(parts.map((r) => r.results.map((x) => Object.values(x as Obj)))));
   const h = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes));
   return Array.from(h.slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1678,7 +1906,7 @@ export async function forBoard(env: Env, uid: string) {
   // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
     `SELECT p.id, p.version, p.name, json_extract(p.doc, '$.deck') AS deck,
-            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags,
+            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags, json_extract(p.doc, '$.remarks') AS remarks,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
@@ -1688,8 +1916,8 @@ export async function forBoard(env: Env, uid: string) {
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
                     + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
-       FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
-  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; units: string }>();
+       FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})`,
+  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; remarks: string | null; units: string }>();
   // 3.7.3: the newest posts per plan, and this version reached me
   const posts = new Map<string, Obj[]>();
   if (mineRows.results.length) {
@@ -1710,9 +1938,11 @@ export async function forBoard(env: Env, uid: string) {
     ).bind(r.version, r.id, uid)));
   }
   // 3.8.0: with the plan's own tags, so my Anki carries them too (counts, and older followers' note ids)
-  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
+  // 3.8.1: and its notes on cards and tags, so my Anki's Browse can show and change them
+  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null; remarks: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
     .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
-    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}) });
+    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}),
+    ...(r.remarks ? { remarks: JSON.parse(r.remarks) } : {}) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, name: r.name, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
@@ -1720,5 +1950,6 @@ export async function forBoard(env: Env, uid: string) {
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.n ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
+    planInvites: await planInvites(env, uid),  // 3.8.1
   };
 }

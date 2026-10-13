@@ -262,6 +262,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plan_follows WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     // 3.3: my plans' co-authors, notes and history, and mine on others' plans
     "DELETE FROM plan_editors WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    // 3.8.1: a plan offered to me isn't any more
+    "UPDATE plans SET handover = NULL WHERE handover = ?1",
     "DELETE FROM plan_notes WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_log WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_posts WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",  // 3.7.3

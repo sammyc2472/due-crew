@@ -297,7 +297,7 @@ describe("the plans' stamp moves with all the board carries", () => {
     const dre = await person("dre");
     const maya = await person("maya");
     const p = await plan(dre);
-    await db().prepare("INSERT INTO plan_editors (plan, uid, at) VALUES (?, 'maya', 0)").bind(p.id).run();
+    await db().prepare("INSERT INTO plan_editors (plan, uid, at, accepted_at) VALUES (?, 'maya', 0, 0)").bind(p.id).run();
     const board = (pv: string) => maya.call("GET", `/board?pv=${pv}`).then((r) => r.body);
     const b0 = await board("");
     expect(b0.authored.map((a: any) => a.id)).toEqual([p.id]);

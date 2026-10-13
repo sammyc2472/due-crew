@@ -44,6 +44,7 @@ describe("3.8.0: plan tags", () => {
     expect(more.body.version).toBe(first.body.version + 1);
     // a co-author can; a follower can't
     expect((await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid })).status).toBe(200);
+    expect(await maya.status("POST", `/plans/${p.id}/invite`, { yes: true })).toBe(200);  // 3.8.1: a co-author says yes
     expect(await maya.status("POST", `/plans/${p.id}/tags`, { name: "SLG 13", add: ["g9"] })).toBe(200);
     const kai = await person("kai");
     await kai.call("POST", "/plans/follow", { code: p.code });

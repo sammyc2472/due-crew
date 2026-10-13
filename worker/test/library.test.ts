@@ -53,6 +53,7 @@ describe("the library (3.5, B)", () => {
     const kai = await person("kai");  // a co-author
     await befriend(dre, { uid: "kai" }); await befriend(kai, { uid: "dre" });
     expect(await dre.status("POST", `/plans/${p.id}/editors`, { uid: "kai" })).toBe(200);
+    expect(await kai.status("POST", `/plans/${p.id}/invite`, { yes: true })).toBe(200);  // 3.8.1: a co-author says yes
     const zed = await person("zed");  // a stranger who follows from the code, before it's listed
     await zed.call("POST", "/plans/follow", { code: p.code });
     expect(await zed.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "early note" })).toBe(200);
