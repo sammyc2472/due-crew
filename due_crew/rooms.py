@@ -203,11 +203,35 @@ def refresh_widgets():
     data = room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side"))
-    where = (room_model.placement(_bar_hidden("top"), _bar_hidden("bottom"))
-             if mw.state == "review" else "chip")
+    where = _where()
     _eval(top, room_model.widget_js("chip", data if where == "chip" else None))
     _eval(bottom, room_model.widget_js("bottom", data if where == "bottom" else None))
     _eval(main, room_model.widget_js("gutter", data if where == "gutter" else None))
+    if _state.get("room_card"):
+        if _state["room_card"] == where:
+            _card_still_out(where)
+        else:
+            _state["room_card"] = None  # it moved (a review began or ended): the card went with the page
+
+
+def _where():
+    """Which little one shows the room now: the top bar's chip, or while
+    reviewing the bottom bar's or the margin's."""
+    return (room_model.placement(_bar_hidden("top"), _bar_hidden("bottom"))
+            if mw.state == "review" else "chip")
+
+
+def _card_web():
+    return mw.reviewer.web if mw.state == "review" else mw.web
+
+
+def _little_shown(where, on):
+    """3.8.1: the chip (or the bar's, or the margin's) hides while its card
+    is out, and comes back when the card closes."""
+    top, main, bottom = _webs()
+    web = {"chip": top, "bottom": bottom, "gutter": main}.get(where)
+    _eval(web, "(function(){var e=document.getElementById('dc-room-%s');if(e){e.style.visibility='%s';}})();"
+          % (where, "" if on else "hidden"))
 
 
 def show_card():
@@ -215,11 +239,36 @@ def show_card():
     if room is None:
         return
     c = cfg()
+    where = _where()
+    # 3.8.1: it opens at the chip's end (the left one too); the bars' and the margin's are the right's
     data = room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
-                                  side=c.get("room_chip_side"))
-    web = mw.reviewer.web if mw.state == "review" else mw.web
-    _eval(web, room_model.widget_js("card", data))
+                                  side=c.get("room_chip_side") if where == "chip" else "right")
+    _eval(_card_web(), room_model.widget_js("card", data))
+    _state["room_card"] = where
+    _little_shown(where, False)
+
+
+def card_closed():
+    """The card closed (×, a click outside, Tuck, Leave): its chip comes back."""
+    where = _state.get("room_card")
+    _state["room_card"] = None
+    if where:
+        _little_shown(where, True)
+
+
+def _card_still_out(where):
+    """After a redraw: the little one stays hidden while the card is out; a
+    page that went away took the card with it, and the chip comes back."""
+    _little_shown(where, False)
+
+    def seen(there):
+        if not there and _state.get("room_card") == where:
+            card_closed()
+    try:
+        _card_web().evalWithCallback("!!document.getElementById('dc-room-card')", seen)
+    except Exception:
+        card_closed()
 
 
 # ---- the break ----
@@ -393,6 +442,8 @@ def on_message(cmd, parts):
         dismiss_done()
     elif cmd == "roomcard":
         show_card()
+    elif cmd == "roomcardoff":
+        card_closed()
     elif cmd == "roomtuck":
         tuck()
     elif cmd == "roomskip":

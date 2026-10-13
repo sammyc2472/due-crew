@@ -160,6 +160,7 @@ installing — add-ons load at launch).
 - [ ] After the last round: the chip goes, and the board says "Room done: … together with …", with Share (copies a line) and × .
 - [ ] "At 20:00": the invite says "starts at 20:00"; the chip shows "starts 20:00" until then.
 - [ ] Night mode: chip, bottom bar, margin card, break and room card all read well.
+- [ ] 3.8.1: Settings → Room chip → Left. On a break, the chip's ring and the board's fill the same way (as the break passes) and both say the minutes left. Click the chip: the room card opens at the left and the chip hides; drag the card by its squares row (it stays on screen), close it with ×, then open it again: back where you left it, and the chip shows again whenever the card is closed (×, a click outside, Tuck, Leave, or going to another screen). Right: the same at the right.
 
 ## 2.13: settings follow the account (rules-v11)
 

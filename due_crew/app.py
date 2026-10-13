@@ -95,6 +95,7 @@ _state = {
     "settings_tab": None,  # 3.5.0: Settings open in the board, on this tab
     "room_dismissed": set(),  # study-room invites waved off this session
     "room_skip": None,     # (room key, round): the break I skipped
+    "room_card": None,     # 3.8.1: the room's card is out, from the chip ("chip", "bottom", "gutter"), which hides
     "room_break": False,   # the break is on screen (review shortcuts are off)
     "room_refreshed": None,  # (room key, round): that break's one refresh
     "settings_ready": False,   # 2.13: my account settings were pulled (or can't be)

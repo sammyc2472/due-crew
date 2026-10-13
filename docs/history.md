@@ -1477,3 +1477,8 @@ every release that changes how something works.
   rings all fill as their time passes, a break's too (on the Decks screen
   the top bar's chip filled while the board's drained); the number is
   what's left.
+  The room's card pops out at the chip's end of the screen (Sam: with the
+  chip on the left it opened on the right), the chip hides while it's out
+  (`rooms._little_shown`; the card says `roomcardoff` as it closes, and a
+  redraw that finds the page took the card along brings the chip back),
+  and it moves by its top row, kept on screen and remembered per side.

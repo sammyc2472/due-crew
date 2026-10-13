@@ -501,11 +501,43 @@ _RUNTIME = r"""
         'Round ' + (p.round + 1) + ' starts at ' + hm(p.until) + '.';
     };
   } else if (KIND === 'card') {
-    root = el('div', 'position:fixed;right:12px;top:10px;width:330px;box-sizing:border-box;border:1px solid ' + c.line +
+    // 3.8.1: it opens at the chip's end of the screen (the left one too), and moves by its top row
+    root = el('div', 'position:fixed;__SIDE__:12px;top:10px;width:330px;box-sizing:border-box;border:1px solid ' + c.line +
       ';border-radius:14px;background:' + c.bg + ';color:' + c.ink + ';box-shadow:0 12px 34px rgba(0,0,0,.2);padding:12px 14px;' +
       'display:grid;gap:10px;font:13px -apple-system,Segoe UI,sans-serif;z-index:10000;text-align:left;');
-    var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;'), x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
+    var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
+        x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
+    hd.title = 'Drag to move';
     hd.appendChild(squares(c, 70)); hd.appendChild(x);
+    var AT = 'dcRoomCardAt';
+    function put(px, py) {
+      var w = root.offsetWidth, h = root.offsetHeight;
+      root.style.right = 'auto';
+      root.style.left = Math.max(4, Math.min(window.innerWidth - w - 4, px)) + 'px';
+      root.style.top = Math.max(4, Math.min(window.innerHeight - h - 4, py)) + 'px';
+    }
+    root.place = function () {
+      // where it was last dragged to, on this side; on this page, or kept by the browser
+      var at = window[AT];
+      if (!at) { try { at = JSON.parse(localStorage.getItem(AT) || 'null'); } catch (e) { at = null; } }
+      if (at && at.side === D.side && isFinite(at.x) && isFinite(at.y)) { put(at.x, at.y); }
+    };
+    hd.addEventListener('mousedown', function (ev) {
+      if (ev.target === x || ev.button !== 0) { return; }
+      ev.preventDefault();
+      var r = root.getBoundingClientRect(), dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+      hd.style.cursor = 'grabbing';
+      function mv(e) { put(e.clientX - dx, e.clientY - dy); }
+      function up() {
+        document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+        hd.style.cursor = 'grab';
+        var at = {x: parseFloat(root.style.left), y: parseFloat(root.style.top), side: D.side};
+        if (!isFinite(at.x)) { return; }
+        window[AT] = at;
+        try { localStorage.setItem(AT, JSON.stringify(at)); } catch (e) {}
+      }
+      document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+    });
     var row = el('div', 'display:flex;gap:10px;align-items:center;'), rg5 = ring(44, c), rt = el('div', 'display:grid;'),
         k1 = el('b', '', D.title), k2 = el('small', 'color:' + c.mut + ';font-size:12px;');
     rt.appendChild(k1); rt.appendChild(k2); row.appendChild(rg5); row.appendChild(rt);
@@ -522,14 +554,16 @@ _RUNTIME = r"""
     var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'), leave = el('span', 'cursor:pointer;', 'Leave room');
     ft.appendChild(tuck); ft.appendChild(leave);
     root.appendChild(hd); root.appendChild(row); root.appendChild(bar); root.appendChild(who); root.appendChild(ft);
-    x.onclick = function () { drop('card'); };
-    tuck.onclick = function () { drop('card'); send('roomtuck'); };
-    leave.onclick = function () { drop('card'); send('roomleave'); };
+    // closed, the chip it popped out of comes back (3.8.1: it hides while this is out)
+    function shut() { drop('card'); send('roomcardoff'); }
+    x.onclick = shut;
+    tuck.onclick = function () { shut(); send('roomtuck'); };
+    leave.onclick = function () { shut(); send('roomleave'); };
     setTimeout(function () {
       document.addEventListener('mousedown', function out(ev) {
         // a card closed some other way (×, Tuck, Leave, redrawn) takes this with it
         if (!root.isConnected) { document.removeEventListener('mousedown', out); return; }
-        if (!root.contains(ev.target)) { drop('card'); document.removeEventListener('mousedown', out); }
+        if (!root.contains(ev.target)) { shut(); document.removeEventListener('mousedown', out); }
       });
     }, 0);
     update = function (p) {
@@ -547,6 +581,7 @@ _RUNTIME = r"""
   }
   if (KIND !== 'bottom') { document.body.appendChild(root); }
   root.id = 'dc-room-' + KIND;
+  if (root.place) { root.place(); }
   function tick() {
     var p = phase(Date.now());
     if (p.state === 'done' && KIND !== 'break') { drop(KIND); return; }
@@ -581,7 +616,7 @@ def widget_js(kind, data=None):
 
 # what the widgets send from the reviewer's page (the margin card, the
 # break, the room's card, the Ask card): nothing else is ever taken from there
-CARD_PAGE_CMDS = ("roomcard", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave",
+CARD_PAGE_CMDS = ("roomcard", "roomcardoff", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave",
                   # the Ask card above the bar (cards.py): opening a dialog or a
                   # menu (Tip asks for its line), moving the chip to the bar, and This
                   # helped, which asks first

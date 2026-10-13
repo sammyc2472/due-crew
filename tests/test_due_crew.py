@@ -3085,6 +3085,60 @@ def test_room_commands_from_the_card_page_need_the_key():
           and rm.trusted("duecrew:knowshelped:u", True)[1] is False)
 
 
+
+def test_room_card_pops_out_on_the_chips_side_v381():
+    """3.8.1 (Sam): the room's card opened on the right even with the chip on
+    the left. It opens at the chip's end, the chip hides while it's out and
+    comes back when it closes (×, a click outside, Tuck, Leave, or the page
+    going away), and it moves by its top row, remembered on that side."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import room_model as rm, rooms as R
+    from due_crew.app import _state
+    left = rm.widget_js("card", {"title": "x", "side": "left", "rounds": 2, "round": 25, "brk": 5, "start": 0,
+                                 "names": [], "line": "", "accent": ["#2e7d32", "#81c784"]})
+    right = rm.widget_js("card", {"title": "x", "side": "right"})
+    check("card: at the chip's end, the left one too", "position:fixed;left:12px;top:10px" in left
+          and "position:fixed;right:12px;top:10px" in right)
+    check("card: closing it says so (the chip comes back), keyed, and that's one of the widget's own",
+          "send('roomcardoff')" in left and "roomcardoff" in rm.CARD_PAGE_CMDS)
+    check("card: moves by its top row, kept on screen, remembered for that side",
+          "Drag to move" in left and "dcRoomCardAt" in left and "at.side === D.side" in left and "innerWidth - w - 4" in left)
+    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data)
+    tops = types.SimpleNamespace(name="top")
+    main = types.SimpleNamespace(name="main", evalWithCallback=lambda js, cb: cb(False))
+    try:
+        R._webs = lambda: (tops, None, None)
+        R._eval = lambda web, js: evals.append((getattr(web, "name", None), js))
+        R.my_room = lambda: {"host": "sam"}
+        R.cfg = lambda: {"room_chip_side": "left"}
+        R._where = lambda: "chip"
+        R._card_web = lambda: main
+        sides = []
+        R.room_model.widget_data = lambda room, entries, acc, compact=False, side="right": (sides.append(side), {"side": side})[1]
+        R.show_card()
+        hid = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
+        check("card: popped out on the chip's side; the chip hides", sides == ["left"] and hid and "'hidden'" in hid[-1]
+              and _state["room_card"] == "chip", str(sides))
+        evals.clear()
+        dc._on_js(False, "duecrew:roomcardoff", DeckBrowser())
+        back = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
+        check("card: closed (through _on_js, as the card sends it), the chip is back",
+              back and "visibility=''" in back[-1] and _state["room_card"] is None, str(back))
+        R.show_card()
+        evals.clear()
+        R._card_still_out("chip")  # a redraw finds the page went away with the card
+        check("card: a page that went away took the card: the chip comes back",
+              _state["room_card"] is None and "visibility=''" in [js for w, js in evals if w == "top"][-1])
+        R._where = lambda: "bottom"
+        sides.clear()
+        R.show_card()
+        check("card: from the review bar's little one it opens at the right, and that one hides",
+              sides == ["right"] and _state["room_card"] == "bottom")
+    finally:
+        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data = saved
+        _state["room_card"] = None
+
 def test_only_our_pages_act_bare():
     """3.7.1 review: a card's own script runs in the browser's preview and
     in Cards… too, not only on the review screen. Only the pages Due Crew
@@ -3124,9 +3178,9 @@ def test_room_chip_side_v301():
     check("chip: right is the default, as before",
           "position:fixed;right:10px;top:50%" in right and "left:10px;top:50%" not in right)
     check("chip: anything else is right", rm.chip_side("middle") == "right" and rm.chip_side(None) == "right")
-    check("chip: the rest of the runtime is unchanged by the side",
-          left.replace("left:10px;top:50%", "X").replace('"side": "left"', "S")
-          == right.replace("right:10px;top:50%", "X").replace('"side": "right"', "S"))
+    check("chip: the rest of the runtime is unchanged by the side (but the card's end, 3.8.1)",
+          left.replace("left:10px;top:50%", "X").replace("left:12px;top:10px", "Y").replace('"side": "left"', "S")
+          == right.replace("right:10px;top:50%", "X").replace("right:12px;top:10px", "Y").replace('"side": "right"', "S"))
     check("chip: removing a widget needs no side", "__SIDE__" not in rm.widget_js("off"))
     check("chip: a per-computer setting, like the accent", "room_chip_side" not in account.ACCOUNT_KEYS)
 
