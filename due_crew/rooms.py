@@ -44,7 +44,7 @@ def my_room():
     room = room_model.clean_room(cl.session.get("room"))
     if room is None:
         return None
-    if not room_model.is_over(room):
+    if not room_model.is_over(room, _now()):
         return room
     if room_model.is_fifteen(room):
         _end_fifteen(room, walked=True)  # no answer to its question: the session ends quietly
@@ -76,7 +76,7 @@ def board_view():
     """For board.render(room=...). 3.8.1: a fifteen's question shows its
     cards; the session's line, when one ended today."""
     room = my_room()
-    out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done())
+    out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done(), now=_now())
     mine = out.get("mine")
     if mine and mine.get("fifteen"):
         if mine["state"] == "ask":
@@ -126,7 +126,7 @@ def open_room():
 def join(key):
     for e in _state["entries"] or []:
         r = e.get("room")
-        if r and room_model.cmd_key(r) == key and not room_model.is_over(r):
+        if r and room_model.cmd_key(r) == key and not room_model.is_over(r, _now()):
             from .bingo_flow import bump
             bump("rm")  # 3.6
             _set_room(dict(r), f"You're in {html.escape(room_model.title(_state['entries'], r))}.")  # a crewmate's name
@@ -314,7 +314,7 @@ def _card_still_out(where):
 # ---- the break ----
 
 def _break_due(room):
-    p = room_model.phase(room)
+    p = room_model.phase(room, _now())
     return (p["state"] == "break"
             and _state["room_skip"] != (room_model.room_key(room), p["round"]))
 
@@ -344,7 +344,7 @@ def _show_break(room):
     # one refresh per break: who's in the room now, for the chip. At most
     # one light fetch a round (a doc per friend), and only while reviewing.
     # 3.8.1: none for a fifteen: nobody else is in it
-    mark = (room_model.room_key(room), room_model.phase(room)["round"])
+    mark = (room_model.room_key(room), room_model.phase(room, _now())["round"])
     if _state["room_refreshed"] != mark and not room_model.is_fifteen(room):
         _state["room_refreshed"] = mark
         app.sync(light=True, fetch=True)
@@ -432,7 +432,7 @@ def on_close():
 def skip_break():
     room = my_room()
     if room:
-        _state["room_skip"] = (room_model.room_key(room), room_model.phase(room)["round"])
+        _state["room_skip"] = (room_model.room_key(room), room_model.phase(room, _now())["round"])
     _remove_break()
 
 
@@ -457,7 +457,7 @@ def on_question(card):
     room = my_room()
     if room and _break_due(room):
         _show_break(room)
-    elif room_model.is_fifteen(room) and room_model.phase(room)["state"] == "ask":
+    elif room_model.is_fifteen(room) and room_model.phase(room, _now())["state"] == "ask":
         _show_ask(room)
 
 
@@ -575,6 +575,7 @@ def _studied_today():
 
 
 def _now():
+    # every "is it over yet" here asks this one clock (the suite sets it)
     return datetime.datetime.now(datetime.timezone.utc)
 
 

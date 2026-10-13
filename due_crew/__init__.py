@@ -720,8 +720,12 @@ def _our_page(context):
     the browser's preview, Cards…, another add-on's page) gets the card
     page's rules: the widgets' keyed commands only."""
     ours = [DeckBrowser]
-    # not Overview: it puts a deck's description in as it is, script and all
-    for mod, name in (("aqt.toolbar", "Toolbar"),
+    # not Overview: it puts a deck's description in as it is, script and all.
+    # 3.8.1: the top bar's messages come with a TopToolbar (a wrapper Anki's
+    # Toolbar.draw makes), not the Toolbar: until then the top bar counted as
+    # a card's page, and only the widgets' own commands got through
+    # (▶ Fifteen? clicked to nothing)
+    for mod, name in (("aqt.toolbar", "TopToolbar"), ("aqt.toolbar", "Toolbar"),
                       ("aqt.reviewer", "ReviewerBottomBar")):
         try:
             ours.append(getattr(__import__(mod, fromlist=[name]), name))

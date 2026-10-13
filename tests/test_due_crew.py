@@ -12280,6 +12280,35 @@ def test_sev_by_the_logo_is_a_moment_v381():
         _state.update(st)
 
 
+def test_top_bar_is_our_page_v381():
+    """Sam: clicking ▶ Fifteen? did nothing. Anki tags the top bar's
+    messages with a TopToolbar (Toolbar.draw's wrapper), and only Toolbar
+    counted as ours: the top bar got a card page's rules, and room15 (not
+    one of the widgets' own) was dropped. The chip's phase tick too."""
+    import due_crew as dc
+    from due_crew import rooms as R, room_model as rm
+    saved_mod, saved_on = sys.modules.get("aqt.toolbar"), R.on_message
+    tb = types.ModuleType("aqt.toolbar")
+    tb.TopToolbar = type("TopToolbar", (), {"__init__": lambda self, toolbar=None: None})
+    tb.Toolbar = type("Toolbar", (), {})
+    sys.modules["aqt.toolbar"] = tb
+    got = []
+    R.on_message = lambda cmd, parts: (got.append(cmd), True)[1]
+    try:
+        check("the top bar (as Anki tags it) is one of our pages", dc._our_page(tb.TopToolbar()))
+        dc._on_js(False, f"duecrew:room15|{rm.CMD_KEY}", tb.TopToolbar())  # as the chip sends it, keyed
+        dc._on_js(False, "duecrew:roomtick", tb.TopToolbar())
+        dc._on_js(False, "duecrew:room15", type("Previewer", (), {})())  # a card's page: still not
+    finally:
+        R.on_message = saved_on
+        if saved_mod is None:
+            sys.modules.pop("aqt.toolbar", None)
+        else:
+            sys.modules["aqt.toolbar"] = saved_mod
+    check("▶ Fifteen? and the chip's tick reach the glue from the top bar; a card's page can't start one",
+          got == ["room15", "roomtick"], got)
+
+
 def test_fifteen_board_v381():
     """The board: the lobby's question, the session's line, the nudge, Sev
     beside the logo, and the Settings that turn it all off."""

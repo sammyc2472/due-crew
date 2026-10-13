@@ -1538,3 +1538,12 @@ every release that changes how something works.
   on the board and in the top bar's and review bar's chips. The question
   and the break leave room under Sev's shadow; beside the logo it's a
   size smaller, its feet on the logo's line.
+  ▶ Fifteen? clicked to nothing (Sam, in Anki): Anki tags the top bar's
+  messages with a `TopToolbar` (a wrapper `Toolbar.draw` makes), and
+  `_our_page` knew only `Toolbar`, so the top bar got a card page's rules
+  and only the widgets' keyed commands passed; `room15` and the chip's
+  `roomtick` were dropped. `TopToolbar` counts now, and the suite sends
+  both from one (`test_top_bar_is_our_page_v381`); nothing had sent from
+  the top bar as Anki tags it, which is how the suite missed it. Also: rooms.py
+  asks one clock (`rooms._now`) whether a room is over, so the suite's
+  fixed clock holds on any real date.

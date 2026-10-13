@@ -668,7 +668,7 @@ In Anki (as a follower):
 ### 3.8.1: the Fifteen and Sev
 
 - [ ] Signed in, in no room: ▶ Fifteen? (with Sev) at the chip's end of the top bar, on the Decks screen, Overview and Review; Settings › Room chip Left moves it; Settings › Fifteen and Sev › Fifteen? off takes it away.
-- [ ] Click it: the chip becomes Fifteen · 15 min left (Sev jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join).
+- [ ] Click it (from the Decks screen, Overview and Review: each must start one): the chip becomes Fifteen · 15 min left (Sev jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join).
 - [ ] At 15 minutes, mid-card: nothing until you answer; then "That's fifteen." takes the next card's place, with how many cards; Space and the answer keys do nothing under it.
 - [ ] Take five, then another fifteen: the break (Sev breathing along a square, four counts a side; Settings › On a break › Stretch gives a stretch), Start now starts the next at once; otherwise at five it ends and the card comes back.
 - [ ] Another fifteen now: the card comes back and the chip says Fifteen 2 · 15 min left.
