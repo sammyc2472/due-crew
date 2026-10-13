@@ -8882,6 +8882,22 @@ def test_morning_keeps_unchanged_plan_docs_v381():
     back = maya.fetch_board(labels)
     check("lean plans: the next refresh brings them all", back["plans_fresh"] and maya.session["plans"]
           and maya.session["plans"][0]["doc"]["units"] and maya.session.get("plans_pv"))
+    # a kept doc goes through clean_plan again: cleaning must change nothing, or the morning would read an update
+    q = '"tag:#V::Ceph" "tag:DueCrew::MS2::SLG_12"'
+    rich = {"deck": "Big Step 1", "deckUrl": "https://example.com/deck", "tagroot": "MS2", "end": "2026-12-01",
+            "phases": {"catchup": 3, "taper": 7}, "pace": {"mode": "daily", "daily": 20, "days": [1, 1, 1, 1, 1, 0, 0]},
+            "reviews": [{"day": "2026-10-20", "from": "u1", "to": "u2"}], "events": [{"id": "q", "name": "Heme <quiz>", "day": "2026-10-16"}],
+            "every": [{"k": "do", "t": "Practice questions", "r": "4"}],
+            "tags": [{"id": "t12", "name": "SLG 12", "notes": ["guid000002"], "cards": [["guid000001", 1]], "tags": ["#V::Pharm"]}],
+            "remarks": [{"id": "r1", "tag": "#V::Pharm", "text": "Read chapter 6 first"}, {"id": "r2", "card": ["guid000005", 1], "text": "Two"}],
+            "units": [{"id": "u1", "name": "Ceph", "opens": "2026-10-08", "due": "2026-10-12", "even": True, "tags": [], "decks": [],
+                       "cards": [["guid000009", 0]], "search": [q], "sn": {q: 12}, "cut": [{"tag": "#V::Ceph", "in": "t12", "q": q}], "for": "q",
+                       "todo": [{"k": "read", "t": "Chapter 6"}], "notes": ["Ab3$kL9qZ1"], "nids": [1690000000000], "idr": [["Ab3$kL9qZ1", 0]],
+                       "ids": ["guid000002"], "pl": [["#V::Pharm::Ceph", 12]]},
+                      {"id": "u2", "name": "SLG 12", "opens": "2026-10-09", "tags": ["DueCrew::MS2::SLG_12"], "decks": ["Big Step 1::Extras"]}]}
+    once = shapes.clean_plan({"id": "abcdefgh12", "version": 3, "doc": rich, "share": True})
+    check("lean plans: a kept doc cleaned again is the same doc (every part of a rich plan)",
+          once == shapes.clean_plan({"id": "abcdefgh12", "version": 3, "doc": once["doc"], "share": True}))
     old = store.handle("GET", f"{api.API_BASE}/board?decks=1&wk=&got=0&pv={maya.session['plans_pv']}",
                        {"Authorization": f"Bearer {store.session_for('maya')}"})
     body = old.json()
