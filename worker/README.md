@@ -259,17 +259,24 @@ the plan id.
 `plans.handover`): `POST /plans/{id}/editors {uid}` (owner only, a mutual
 friend, counting toward 10) is an invite: not a co-author anywhere until
 a yes. A pending invitee may read the plan as `reader`. `POST
-/plans/{id}/invite {yes}` answers a co-author invite or an offer of the
-plan (404 `no_invite`; a yes to an offer swaps owner and co-author in one
-batch, 409 `too_many_plans`/`plans_full` for the new owner's ceilings).
-`POST /plans/{id}/owner {uid|null}` offers the plan to an accepted
-co-author (400 `not_coauthor`, 403 `not_author`) or takes it back.
+/plans/{id}/invite {yes, kind?}` answers a co-author invite or an offer of
+the plan; `kind` (`coauthor` | `owner`, as the board showed it) keeps a
+stale answer from answering the other question (400 `bad_invite` for any
+other kind, 404 `no_invite` when there's no such question). A yes to an
+offer swaps owner and co-author in one batch and drops the plan's pending
+invites (409 `too_many_plans`/`plans_full`/`too_many_listed` for the new
+owner's ceilings, its Undo copies counted). `POST /plans/{id}/owner
+{uid|null}` offers the plan to a co-author who said yes (400
+`not_coauthor`, 403 `not_author`) or takes it back. Invites and offers
+share 30 a day an owner (429).
 `DELETE /plans/{id}/editors/{uid}` also takes back an invite and ends an
 offer. The view's `editors[]` carry `pending: true` and the view
 `handover`, for the owner and accepted co-authors only. The board's
 `planInvites: [{id, name, kind: coauthor|owner, by: {name, emoji}}]`
 (at most 10) comes on `decks=1`, `keep=1` and a moved stamp; the stamp
-counts them only when there are some. A plan's doc may carry `deckUrl`
+counts them only when there are some, and names each followed plan's
+owner, so a hand-over moves it. A `deckUrl` is printable ASCII: no
+spaces, quotes or angle brackets. A plan's doc may carry `deckUrl`
 (https, 300 characters, in `/plans/public` too) and `remarks: [{id, tag |
 card, text}]` (300 a plan, 280 characters each, rerooted like any tag);
 `POST /plans/{id}/remarks {add: {tag | card, text}} | {remove: id}` is a

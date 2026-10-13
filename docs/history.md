@@ -1423,3 +1423,17 @@ every release that changes how something works.
   first (`plans.quiz`, `planquiz:`). The morning keeps the plan docs it
   has: `same=1` on the day's first board, and an unmoved stamp sends each
   plan without its doc (a doc not kept here lets the stamp go).
+  Two review rounds, fixed with tests: the add-on uses its kept docs only
+  if the same add-on version kept them (`plans_by`), so an update that
+  cleans docs differently fetches them whole once. The stamp names each
+  plan's owner, so a hand-over reaches followers. An answer to an invite
+  says which question it answers (`kind`), so a stale "co-write?" Yes
+  never takes the plan. A hand-over drops the plan's pending invites and
+  counts the new owner's listed plans and Undo copies. Invites have a
+  ceiling, and a plan is offered only to a co-author who said yes. A deck
+  link is printable ASCII. Hold back's sheet counts only cards still held
+  (not ones on a date that opened). Study for a quiz takes only dates
+  open by today. Editing a note never deletes it. A day's line says
+  "opens N cards". The builder's suggestions keep a tag's numbers ("Week
+  2"), a renamed tag's text follows it in the description, and Without
+  extras keeps the tag.
