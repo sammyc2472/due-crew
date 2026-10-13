@@ -72,17 +72,30 @@ day's cards each morning. Behind? **Catch up** or **Push my dates back**.
 
 <img alt="You › Plans: a plan's week" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/plans.png?v=6" width="600">
 
+- **Each morning, in Anki.** Cards open in Anki on your computer, after
+  its sync; sync again and your phone has them. Studying on your phone
+  first? The plan's ··· menu › Open early.
+- **Hold back.** A deck with every card showing? Follow holds the later
+  dates back until their day.
+- **Study a date, or a quiz.** Each date has **Study**: its cards in one
+  deck, a cram before class. Three days before a quiz, **Study for it**
+  puts every date that preps for it in one deck, the shakiest first.
 - **Your own pace.** Follow a plan with its cards opening **When I'm
   ready**: **Up next** opens the next date, first in Anki's line of new
   cards, or opens it by itself once you've seen most of the last one.
   Your pace and when it gets you to the end show underneath.
+- **Draft it with your own AI.** Tools → Due Crew → Export cards for my
+  AI, then the prompt in the plan's Text tab
+  ([the format](https://duecrew.com/plan-text)). Your cards stay on your
+  computer.
 - **Plan tags.** A plan can put its own tags on your notes
   (`DueCrew::Block_1::Lecture_12`), so a lecture's cards are one click
   away in Browse. Its authors make them in Anki or on duecrew.com.
 - **A plan's squad.** See who showed up today, ask and answer questions,
   and play bingo with everyone on the plan.
-- Plans can have co-authors and notes, go in your calendar app, and be
-  shared in the library.
+- Plans can have co-authors (each says yes first), notes for followers
+  on a video or a card, go in your calendar app, and be shared in the
+  library.
 
 ## In Anki's browser
 

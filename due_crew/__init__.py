@@ -392,6 +392,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     toasts += together.keep(luck, tips, my_exam, today_lb)
     if fresh:
         _pending_cheers.extend(fresh)
+        _state["sev_cheer"] = time.time()  # 3.8.1: Sev catches it by the logo, once
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -537,7 +538,8 @@ def _board_html(c):
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
                         room=rooms.board_view(), plans=plans,
-                        due=due, you=_you(c, due, plans), sticking=_sticking(c))
+                        due=due, you=_you(c, due, plans), sticking=_sticking(c),
+                        sev=rooms.board_sev(c, due))
 
 
 def _you(c, due, plans):
@@ -554,7 +556,7 @@ def _you(c, due, plans):
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
             if not due and mw.col:
-                you["opened"] = plan_flow.morning_opened()  # Due off: Put off to tomorrow is here
+                you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
             you["insights"] = team_flow.you_view(c)
     except Exception:
@@ -718,8 +720,12 @@ def _our_page(context):
     the browser's preview, Cards…, another add-on's page) gets the card
     page's rules: the widgets' keyed commands only."""
     ours = [DeckBrowser]
-    # not Overview: it puts a deck's description in as it is, script and all
-    for mod, name in (("aqt.toolbar", "Toolbar"),
+    # not Overview: it puts a deck's description in as it is, script and all.
+    # 3.8.1: the top bar's messages come with a TopToolbar (a wrapper Anki's
+    # Toolbar.draw makes), not the Toolbar: until then the top bar counted as
+    # a card's page, and only the widgets' own commands got through
+    # (▶ Fifteen? clicked to nothing)
+    for mod, name in (("aqt.toolbar", "TopToolbar"), ("aqt.toolbar", "Toolbar"),
                       ("aqt.reviewer", "ReviewerBottomBar")):
         try:
             ours.append(getattr(__import__(mod, fromlist=[name]), name))
@@ -1189,7 +1195,8 @@ def _apply_settings(changed, focus=None):
     sharing change goes out a moment later (one sync for a run of clicks)."""
     c = cfg()
     push = any(k in changed and changed[k] != c.get(k) for k in SHARE_KEYS)
-    chip = "room_chip_side" in changed and changed["room_chip_side"] != c.get("room_chip_side")
+    chip = any(k in changed and changed[k] != c.get(k, d) for k, d in
+               (("room_chip_side", "right"), ("fifteen", True), ("sev", True), ("sev_break", "breathe")))  # 3.8.1
     leeches = changed.get("due_leeches") is True and not c.get("due_leeches")
     c.update(changed)
     save_cfg(c)

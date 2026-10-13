@@ -1284,3 +1284,319 @@ every release that changes how something works.
   list scrolls in its own box now (`.ptlist`, at most 40% of the screen),
   and the side's two lists keep their place through a redraw (`draw()`),
   so Rename or + on a tag low in the list doesn't jump back to the top.
+- 3.8.1 plan tags, round two (Sam's picks on the Plan Tags, Round Two
+  mock). A video cut to an SLG: a date's `cut: [{tag, in, q}]` keeps a
+  deck tag to the cards one of the plan's own tags holds (`in`, its id).
+  `q` is the same as an Anki search (both tags) and stays in the date's
+  `search`, so a 3.8.0 add-on opens the same cards; the Worker drops a cut
+  whose plan tag went and gives the date its whole tag back
+  (`planDoc`), a copy's new root reaches it (`reroot`), and `PUT
+  /plans/{id}/ids` keeps a cut date's note ids only while its cuts match
+  (a fourth item, `[[tag, in]]`). The add-on reads it in the video's row,
+  "Cephalosporins · SLG 12" (`P.topic_items`, `nm` set by
+  `shapes._plan_tag_refs`). In the builder: the chip's All of it / Only
+  SLG 12, Overlap's and with a deck tag, or `tag:PATH in SLG 12` in the
+  text; a rename follows it, a deleted tag gives the whole tag back.
+  One cloze, not its siblings: a plan tag's `cards: [[guid, ord]]` (5,000
+  a tag, counted with its notes into the plan's 50,000). Anki tags notes,
+  so the tag goes on their notes; Due Crew reads just those cards
+  (`P.plan_tag_cards`: all cards of whole notes and these), on a date and
+  in Browse them. A tag line takes `cards:`; Tag for a plan in Browse still
+  tags notes. An SLG that changes reaches dates that opened: a date that
+  uses plan tags carries a fingerprint of them (`ptv`, in `unit_sig`), and
+  what they held when it opened (`pt` in its sources), so opening it again
+  opens just what the SLG added (`plan_flow._unit_cids`).
+  Taking a tag off: Edit the whole plan names the dates in the text still
+  using a tag it takes off (a date's tag, a cut, a search), with Take them
+  off those dates too (a tag and its searches go, a cut is its whole tag,
+  a date left with nothing goes), Keep the tags (their lines back in the
+  text) or Replace anyway. What a date opened stays open.
+  What the AI is given: the tagging prompt says the plan's root
+  (DueCrew::<root>::NAME), lists the tags as they stand (their lines) and
+  the `cards:` rule; Export cards for my AI has a `#cards` column (each
+  note's card numbers from 1); the plan prompt gives the cut syntax.
+  Insights and plan tags: a plan's DueCrew tags stay out of Insights' own
+  picks (`team._ours`: topics and the map's first way); the map's "by"
+  gets one way a plan, "<plan>'s tags" (`team_flow._plan_ways`, each tag
+  a tile, `team.plan_tiles`), with the tags no card in the deck carries.
+  An add-on before 3.8.1 opens a cut by its search, leaves a tag's single
+  cards out, and doesn't see a tag made only of single cards.
+  Found by the plans review before release (builder): a plan tag inside
+  a search is matched whole (`tagRe`, bounded as `reroot` is), so
+  renaming SLG 1 no longer rewrites SLG 12; a tag line writes each
+  search as its own part, so Edit the whole plan reads it back; a cut
+  chip dragged to another day moves as a cut; a cut's search is never
+  trimmed off a full date (10 searches and cuts, said); a heavy day's
+  Split takes only a whole tag or subdeck; and a redraw keeps the page
+  where it was (on a phone the day panel is under the calendar).
+  No new request; the Worker changed (deploy it before the add-on).
+- 3.8.1, the plans review (the "Plans, Reviewed" page: four readers, every
+  finding checked in the code; Sam's calls). A follower's Anki: Hold back's
+  yes is its own flag (`hold_yes`); Put back's cards still sit in `held`
+  for Stop but are never a yes (one Put back used to hold every later
+  date's new cards each morning; a 3.8.0 state counts as a yes on the
+  plan's dates, a no at my own pace). A card a date opened is never held,
+  even after an author moves it. At my own pace: a plan first seen on a
+  computer counts its all-open dates as opened instead of skipping every
+  date that passed (`first_here`); an open from Browse claims only the
+  dates it opened (`_claim_opened(touched)`); Not today keeps the date
+  and opens the author's addition tomorrow; ending a pause doesn't ask;
+  the week's Open now is Up next's Open. The morning's Hold back, catch-up
+  and review-day steps come before its open, so Not today stays (the
+  catch-up's limit was an undo step of its own). A date shut with Edit ›
+  Undo offers Open now and opens whole. Move… names its event (by id). The
+  3.2 missed-days answer has its own key (`missed`). One name each: Not
+  today; Push my dates back; "once I've seen most of the last". Browse's
+  authoring items show only for someone who writes a plan. The deck's tag
+  tree goes up at the day's first refresh when it changed (`send_trees`,
+  `trees_sent`; one PUT a changed deck, `test_request_budget`), and the
+  builder says "Tags as of". Export cards for my AI asks for a plan I
+  write but don't follow whole (`api.plan`): /plans/mine leaves a date's
+  single cards out.
+  The Worker: a tag root past `_50` takes the plan's id; a site save keeps
+  a date's `ids` only while its tags, subdecks and cuts are the same; a
+  post sent with a save that changes nothing is written; the 20 follows
+  are those I can see (100 rows in all); each plan's totals (migration
+  0025) are read from its row and counted again when over an hour old, so
+  a board, the library and a link read one row, not every follower's (an
+  author's `reached` and Progress stay live); adding cards from Anki and
+  the ids upload have daily limits, and tagging counts the doc kept for
+  Undo; Undo survives the author's daily ids upload; the refresh stamp
+  covers plans I write and squad offers. The fake matches it.
+  duecrew.com: Fill to a date stops there (the pace rises up to about
+  double first, then it names what didn't fit); a new plan is named for
+  the deck's last part and says why it failed; History › Undo and every
+  save reload the pace; Edit the whole plan keeps a moved or renamed
+  date's id (followers keep their progress) and reads the part after the
+  date as its name; a plan tag's × names its dates first; the server's
+  limits are said where they're hit, each refusal in its own words;
+  Starts moves review days, events and the end; Move this day merges
+  everything; failures say so. Undo (20 steps, Ctrl/Cmd+Z), Follow on a
+  plan's link page, "Tags as of". Words: the day panel's refresh line,
+  "one of my squads", neutral examples beside the med ones, a review
+  day's deck, Progress per date from three in the squad.
+  Docs: `docs/plans.md` (how plans work now), duecrew.com/plan-text (the
+  text format, linked from the Format box and both prompts), three
+  README lines, a date's id fields in the Worker README; no third-party
+  deck named in the design notes, the click-test or the preview's data.
+- 3.8.1, plans round three (Sam's eight picks on the "Plans, Round Three"
+  mock, an outside reviewer's six notes, and Study on a date; built by
+  four builders on one contract, then joined). Co-authors say yes first
+  (migration 0026: `plan_editors.accepted_at`, `plans.handover`): an
+  invite is nothing until a yes (no saves, no tags in their Anki, not in
+  the library), shown on the day's first board (`planInvites`, Yes and No
+  above the plans; Home on the site); an owner can hand the plan to a
+  co-author who said yes, who says yes too, and the code, tag root and
+  followers stay. Where to get the deck: an https link on the plan
+  (`deckUrl`), on its page, poster and in Follow when no deck has its name.
+  Notes for followers (`remarks`, in the doc): on a tag (under its topic
+  in Anki, an ⓘ on the site) or one card (on the review screen when it
+  comes up), written on the site, in Text (`note | tag:… | …`) or from
+  Browse; an edited card note keeps its id. Picked cards keep their
+  resource's name (`pl` from the author's Anki, `#lbl` on the ids upload,
+  the board's authored plans now carrying single cards): "Herpes Viruses ·
+  88 picked". A deck tag with an Extra part shows "64 + 22 extra" with
+  With extras / Without. Revisions read as revisions: "updated Fri 16 Oct",
+  "renamed 10 tags" (a renamed tag matched by what it holds keeps its id).
+  A date that opens after its event is reinforcement, "after Heme quiz",
+  and no prep day. Export cards for my AI starts with the plan (dates in
+  the text format, tags, overlaps, notes; never card text). First steps
+  on an empty plan. A follower's day: Welcome back (3 days with no study:
+  Open them, Push my dates back, Not today), what the morning opened by
+  date (each opens Browse), what Hold back keeps (Open them, Stop holding
+  back), why a date left cards shut (leeches, picks not in this copy),
+  any date in Up next opens at once with Undo, Study on every date (a
+  random cram of its open cards, one undo step), and a day's line keeps
+  what the plan opens apart from my own reviews. Anki's new filtered deck
+  came with a second search (20 new cards of the current deck) that went
+  into every Due Crew deck since 3.8.0; it's gone.
+- 3.8.1, plans rethought (the "Plans, Rethought" page: where plans fail,
+  five rules, moves mocked for Sam's call). Built: the builder reads a
+  day's work, each date spread over the study days to its due date
+  (`Work` in builder.js), so a week's date isn't "212 new on Monday"; the
+  heavy note names the date most to blame with Split or Give it till, and
+  every day's bar is its share. A date the author named shows its name
+  above its chips; a tag's last word the deck has twice reads with its
+  parent. A named date's day panel suggests the deck's tags its name
+  points at (`Suggest`; words, never card text). Study for a quiz: from
+  three days out, one deck of its prep dates' open cards, the shakiest
+  first (`plans.quiz`, `planquiz:`). The morning keeps the plan docs it
+  has: `same=1` on the day's first board, and an unmoved stamp sends each
+  plan without its doc (a doc not kept here lets the stamp go).
+  Two review rounds, fixed with tests: the add-on uses its kept docs only
+  if the same add-on version kept them (`plans_by`), so an update that
+  cleans docs differently fetches them whole once. The stamp names each
+  plan's owner, so a hand-over reaches followers. An answer to an invite
+  says which question it answers (`kind`), so a stale "co-write?" Yes
+  never takes the plan. A hand-over drops the plan's pending invites and
+  counts the new owner's listed plans and Undo copies. Invites have a
+  ceiling, and a plan is offered only to a co-author who said yes. A deck
+  link is printable ASCII. Hold back's sheet counts only cards still held
+  (not ones on a date that opened). Study for a quiz takes only dates
+  open by today. Editing a note never deletes it. A day's line says
+  "opens N cards". The builder's suggestions keep a tag's numbers ("Week
+  2"), a renamed tag's text follows it in the description, and Without
+  extras keeps the tag.
+
+- 3.8.1, the outside audit of 3.8.0 (ten findings, each checked against the
+  code; #6, the default ranking, is Sam's call and stays). Mute is a block
+  on the server too: a muted person's cheer reads as sent and goes nowhere,
+  one waiting from before is dropped as read (the site's home showed it),
+  and their knocks aren't listed (`mutedBy` in social.ts reads the `muted`
+  list in my settings; the home feed already did). Knocks have ceilings:
+  60 an hour a sender, one a day a pair, so a dismissed one isn't back
+  within the day. Reports are kept for the admin's Inbox (`reports.ts`,
+  migration 0027, 180 days, gone with either account, in Your data):
+  without `REPORT_TO` they went nowhere while the reporter was told they
+  were sent, and a mail that fails no longer fails the report. The site's
+  sign-in says what went wrong (the mail being down isn't "that doesn't
+  look like an email address"), sends one code a click, and the code box
+  tells an outage from a miss; Anki's sign-in says the same about mail.
+  Joining a squad on the site writes the settings only over a read that
+  worked (a failed read wrote a doc of squads alone over everything). On a
+  phone, the home puts people first: the board, what friends said, the
+  invite box, then my own panels, my year last, and the board is as tall
+  as its rows. `tools/real_anki.py` exits non-zero on any FAIL. A tag pass
+  reads a deck once for every plan on it (`plan_flow._deck_index`),
+  fresh again after a plan's tags move notes.
+  Settings merge across computers (the audit's #2, migration 0028): a save
+  replaced the whole doc, so two computers (or a computer and the site)
+  saving close together lost one side's change, and the server kept
+  whichever came last. Each save now moves `rev`; a save names the rev it
+  started from (`base`), and one made over an older rev is turned away
+  with the doc as it is (409). The add-on merges from the save both
+  started from (`account.merge3`, kept in the session as `settings_base`):
+  a key one side changed takes that side's; the muted, squads, shared
+  decks and to-dos merge item by item (what one side added stays, what
+  one side took off goes), ticks day by day; anything both changed takes
+  the save being made now. An edit here not yet up when a pull brings a
+  save from elsewhere merges the same way. Older add-ons and a sync's
+  settings save without `base` and win as before; against a Worker before
+  3.8.1 the add-on saves again without it. The site's squad join saves
+  over the rev it read and redoes it once on a 409. And the study room's
+  rings all fill as their time passes, a break's too (on the Decks screen
+  the top bar's chip filled while the board's drained); the number is
+  what's left.
+  The room's card pops out at the chip's end of the screen (Sam: with the
+  chip on the left it opened on the right), the chip hides while it's out
+  (`rooms._little_shown`; the card says `roomcardoff` as it closes, and a
+  redraw that finds the page took the card along brings the chip back),
+  and it moves by its top row, kept on screen and remembered per side.
+- 3.8.1, the Fifteen and Sev (the "Fifteen, Sev, Buddies" and "Sev Design"
+  pages; Sam's picks). ▶ Fifteen? sits at the chip's end of Anki's top
+  bar whenever I'm in no room, and the You box asks "Not started yet
+  today. Fifteen?" once a day, only when nothing's studied, something's
+  due and it's past my usual start (the middle of my first answers over
+  the last two weeks, from three days of them; never on away days; ×
+  says Not today). Start makes a fifteen (`room_model.make_fifteen`: a
+  room of kind fifteen, 15 + 5, one round) and Study today opens. When
+  the fifteen ends, once the card in front of me is answered, one
+  question takes the next card's place, the break's way: Take five, then
+  another fifteen (a round more after five minutes from the fifteen's
+  end: the question waits those five, `ASK`); Another fifteen now (the
+  start moves back so the next starts this minute: it's mine alone, so
+  nobody holds the old one); Stop here. Each yes adds one, up to the
+  room's eight. No answer in five minutes and it ends quietly, with the
+  same line as a stop (Sam: no "it still counts", on the question or
+  after). The Decks screen's lobby asks it too (the chip's clock tells
+  the board when a phase changes, `roomtick`), and so does the chip's
+  card. A fifteen never rides my week doc as a room (nobody joins one
+  yet: the buddy comes later): my crew sees I'm studying now, to the end
+  of its question (`room_model.live_until`), so a start, each yes and a
+  stop are one write each, and its breaks cost no refresh. The end is a
+  line on the board, a day long: fifteens begun, minutes in them, cards
+  answered since the start. room_model.phase and the widgets' JS gained
+  the question (`ask`) together; `test_fifteen_js_phase_matches_v381`
+  runs both.
+  Sev is Block (no belt, big round eyes, stubby arms, cheeks only when a
+  cheer lands), drawn once by `sev.py`: the board draws it, and the
+  widgets get its markup as data, so there's no JS twin. Every pose
+  draws the same named parts and one sheet moves them; a moment that
+  happens once (a hop, a cheer, the clock) plays once and rests when
+  drawn again; a state (a nap, heads down, a break) loops gently. The
+  still frame is the markup, and motion lives under the computer's own
+  Reduce motion (Anki's is on unless switched off, so it isn't asked:
+  Sam's call). Beside the logo, never on it, and only for a moment (Sam:
+  not always there): something just happened (a cheer landed, the first
+  day back from away, exam eve, the day done: the week's squares fly,
+  Thursday's grey), the first time the board draws it; it pops in, plays
+  it and goes after `sev.LOGO_SECONDS` (a redraw meanwhile keeps its
+  place), and the logo's alone the rest of the time. In a fifteen: a jump to start,
+  heads down (a blink every seven seconds, eyes along its card, the card
+  turns now and then), the clock at the question, breathing along with
+  the break (a square, four counts a side) or stretching, a square on
+  its head for each fifteen at the end. Settings › Fifteen and Sev: the
+  top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
+  Stretch, all on this computer. Sev on crew rows was mocked on the real
+  board and Sam said no: rows have emojis, and Sevs that differ only by
+  colour would need to be more customisable to stand for people. Not
+  yet: the buddy (Sam: still not there).
+  In a room with my crew, each member is their Sev (Sam's pick): on the
+  room's card and the Decks screen's lobby, where the initials were, each
+  in its person's accent (by day or by night, as the widget or the board
+  picks mine), and they started at different moments, so the blinks never
+  line up (`sev.started`, each its own place in the blink, `--sv-d`;
+  idle, still under Reduce motion). The accent rides `GET /board`, a
+  mutual friend's only, from their settings in the friends query (no
+  request, reads only, bounded by the crew); `shapes.clean_accent` keeps
+  only one of ours and `board.accent_pair` makes it colours (anything
+  else, the default's), so only those reach a style; a name is only a
+  seat's label, as text. Sev off, or a fifteen (no members): the initials
+  as before; the chip, the margin and the break keep them
+  (`room_model.seats`, `test_crew_room_sevs_wear_their_accents_v381`).
+  The privacy page says the crew sees my accent.
+  Sev's spacing (Sam: review it wherever it shows): its body sits low in
+  its drawing (the effects need the room above), so a box the drawing's
+  size left it low and loose: 3 to 6 px under its neighbours' middle,
+  nearly touching a chip's bottom edge, gaps that changed with the pose.
+  It goes in a slot its body fills now (`sev.SLOT`, `sev.slot`, the same
+  numbers in the widgets), and centres on its neighbours within a pixel
+  on the board and in the top bar's and review bar's chips. The question
+  and the break leave room under Sev's shadow; beside the logo it's a
+  size smaller, its feet on the logo's line.
+  ▶ Fifteen? clicked to nothing (Sam, in Anki): Anki tags the top bar's
+  messages with a `TopToolbar` (a wrapper `Toolbar.draw` makes), and
+  `_our_page` knew only `Toolbar`, so the top bar got a card page's rules
+  and only the widgets' keyed commands passed; `room15` and the chip's
+  `roomtick` were dropped. `TopToolbar` counts now, and the suite sends
+  both from one (`test_top_bar_is_our_page_v381`); nothing had sent from
+  the top bar as Anki tags it, which is how the suite missed it. Also: rooms.py
+  asks one clock (`rooms._now`) whether a room is over, so the suite's
+  fixed clock holds on any real date. Find a setting knows the new rows
+  by other words too (timer, pomodoro, mascot, stretch: `FIND_WORDS`),
+  and `tools/motion_preview.py` plays Sev's moments by the logo and the
+  session's line. The session's line (Sam: funky spacing) kept 26 px
+  over Sev for a full stack and its sparks, so one square left a gap on
+  top and the words sat low. Its Sev is padded by what's drawn now
+  (`sev.stack_reach`: one square or three, and the shadow), so the box
+  has its own even padding (8.6 px over the stack and under the shadow)
+  and the words and × centre on Sev and its stack together; its words
+  are left-aligned when they wrap. The sparks as the stack lands are
+  gone once it rests, and in the still frame, as the motion ends.
+  The week card (Sam's pick, "Sev hops across the week"): Sev lands on
+  the days I studied and hops over the rest. A picture is still, so the
+  hops are its trail, a dotted arc from each day studied to the next
+  (short between neighbours, long over days off, none over days to
+  come), and Sev stands on the last day studied so far, in the card's
+  accent. Today's card has Sev on today's square once it's studied, no
+  arcs. Nothing studied, no Sev: the card is as it was; with Sev the
+  story's squares and the numbers under them move down
+  (`sharecard.ROOM`), every word kept, and a link has room above its
+  squares already. `sev.still` is the one drawing, an SVG of its own with
+  the colours given: Qt draws it with QtSvg, and cards.js keeps a copy
+  (checked to the byte) it draws on the canvas from a data URL; Share,
+  Copy picture and Download wait until it's drawn. Where things go is the
+  twins' (`sharecard.landings`, `hops` ↔ `landings`, `hops` in cards.js,
+  each dot by the same arithmetic); `test_week_card_sev_v381` runs both.
+  In Anki the card follows Settings › Sev; the site has no switch and
+  always draws it.
+  Welcome back (Sam's pick, from the same mock): the window a plan's
+  follower gets after three or more days away has Sev waving from its
+  top left, still (a Qt window can't play the board's motion; it's the
+  frame Reduce motion shows), in the accent and Anki's theme:
+  `ui.sev_label` draws `sev.still` through the logo's SVG path
+  (`ui._svg_pixmap`, which `logo_label` uses now too). Same words and
+  buttons; Settings › Sev off, the window as it was (`plan_flow._ask_away`
+  passes `sev_on()`). And the fifteen's question with Sev off showed no
+  squares: its else sat inside a `//` comment (found merging the room
+  seats); it draws the logo's squares now, as the checklist says.

@@ -47,7 +47,9 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q(`SELECT u.name AS to_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.to_uid WHERE c.from_uid = ?1`),
     q(`SELECT u.name AS from_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.from_uid WHERE k.to_uid = ?1`),
     q(`SELECT u.name AS to_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.to_uid WHERE k.from_uid = ?1`),
-    q("SELECT p.name AS plan, e.at FROM plan_editors e JOIN plans p ON p.id = e.plan WHERE e.uid = ?1"),
+    // 3.8.1: an invite I haven't answered is kept too (pending), and a plan offered to me
+    q(`SELECT p.name AS plan, e.at, e.accepted_at IS NULL AS pending, p.handover = ?1 AS offered
+         FROM plan_editors e JOIN plans p ON p.id = e.plan WHERE e.uid = ?1`),
     q("SELECT p.name AS plan, l.version, l.summary, l.at FROM plan_log l JOIN plans p ON p.id = l.plan WHERE l.uid = ?1 ORDER BY l.at"),
     q("SELECT guid FROM tip_helped WHERE by_uid = ?1"),
     q("SELECT q.name FROM bans b JOIN squads q ON q.id = b.squad WHERE b.uid = ?1"),
@@ -58,6 +60,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q("SELECT p.name AS plan, t.joined_at, t.days, t.play FROM plan_team t JOIN plans p ON p.id = t.plan WHERE t.uid = ?1"),
     q(`SELECT p.name AS plan, a.parent IS NOT NULL AS answer, a.text, a.guid, a.ord, a.topic, a.helped, a.at
          FROM plan_asks a JOIN plans p ON p.id = a.plan WHERE a.uid = ?1 ORDER BY a.at`),
+    q("SELECT kind, reason, note, at FROM reports WHERE by_uid = ?1 ORDER BY at"),  // 3.8.1
   ]);
   const rows = (i: number) => r[i].results as Record<string, unknown>[];
   const one = (i: number) => rows(i)[0];
@@ -88,7 +91,8 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     cheersSentNotYetRead: rows(19).map((c) => ({ ...c, at: when(c.at) })),
     knocksToYou: rows(20).map((k) => ({ ...k, at: when(k.at) })),
     knocksYouSent: rows(21).map((k) => ({ ...k, at: when(k.at) })),
-    plansCoAuthored: rows(22).map((e) => ({ ...e, at: when(e.at) })),
+    plansCoAuthored: rows(22).map((e) => ({ plan: e.plan, at: when(e.at), ...(e.pending === 1 ? { pending: true } : {}),
+                                            ...(e.offered === 1 ? { offeredToYou: true } : {}) })),
     planSaves: rows(23).map((l) => ({ ...l, at: when(l.at) })),
     tipsYouSaidHelped: rows(24).map((t) => t.guid),
     squadsBlockedFrom: rows(25).map((b) => b.name),
@@ -97,6 +101,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     planPosts: rows(28).map((t) => ({ ...t, at: when(t.at) })),
     teams: rows(29).map((t) => ({ plan: t.plan, joined: when(t.joined_at), daysShowedUp: parse(t.days), bingo: parse(t.play) })),
     teamQuestionsAndAnswers: rows(30).map((a) => ({ ...a, answer: a.answer === 1, helped: a.helped === 1, at: when(a.at) })),
+    reportsYouMade: rows(31).map((x) => ({ ...x, at: when(x.at) })),
   };
   return new Response(JSON.stringify(out, null, 1), {
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -115,6 +120,6 @@ export async function deleteTodos(s: Session, env: Env): Promise<Response> {
   doc.due_ticks = {};
   // the add-on's own timestamp shape (microseconds), so newest-wins compares
   const at = new Date().toISOString().replace("Z", "000Z");
-  await env.DB.prepare("UPDATE settings SET at = ?, json = ? WHERE uid = ?").bind(at, JSON.stringify(doc), s.uid).run();
+  await env.DB.prepare("UPDATE settings SET at = ?, json = ?, rev = rev + 1 WHERE uid = ?").bind(at, JSON.stringify(doc), s.uid).run();  // rev: 3.8.1
   return json({ ok: true, at });
 }

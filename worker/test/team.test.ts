@@ -46,6 +46,7 @@ describe("a plan's team (3.7.3)", () => {
     await befriend(dre, ed);
     await befriend(ed, dre);
     expect((await dre.call("POST", `/plans/${p.id}/editors`, { uid: "ed" })).status).toBe(200);
+    expect(await ed.status("POST", `/plans/${p.id}/invite`, { yes: true })).toBe(200);  // 3.8.1: a co-author says yes
     await dre.call("POST", `/plans/${p.id}/team`);
     await ed.call("POST", `/plans/${p.id}/team`);
     await ed.call("POST", `/plans/${p.id}/asks`, { text: "secret plans" });

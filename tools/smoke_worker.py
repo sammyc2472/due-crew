@@ -121,6 +121,11 @@ check("squad: rows read back", r["reviews"] == 205 and r["new_cards"] == 20 and 
 check("squad: block", sam.block_member(sq["id"], dre.user_id) and dre.join_squad(sq["id"], sq["code"]) == 403)
 check("settings: put, get", sam.put_settings("2026-09-26T10:00:00Z", {"share_time": False})
       and sam.get_settings()[0]["settings"] == {"share_time": False})
+_doc = sam.get_settings()[0]
+_r1 = sam.put_settings("2026-09-26T10:01:00Z", {"share_time": True}, base=_doc["rev"])
+_r2 = sam.put_settings("2026-09-26T10:02:00Z", {"share_time": False}, base=_doc["rev"])
+check("settings (3.8.1): a save names its rev; one over an older rev comes back with the doc to merge",
+      _r1 and _r1.rev == _doc["rev"] + 1 and _r2.status == 409 and (_r2.conflict or {}).get("settings") == {"share_time": True})
 check("version: current", sam.check_version(labels[0], "3.1.0") is False)
 sam.session.pop("version_check", None)
 check("version: 3.0.x is behind (it can't send a squad's code)", sam.check_version(labels[0], "3.0.9") is True)
@@ -153,8 +158,13 @@ followed_plan, st = dre.follow_plan(pcode, team=True)  # 3.7.6: on its team is s
 check("plans: follow onto its team", st == 200 and followed_plan["following"] and followed_plan["share"])
 ok4, _ = dre.push(labels, cfg, plans={pid: {"hf": [3, 3, 3], "nx": [0, 0, 1]}})
 bp = dre.fetch_board(labels, tomorrow, with_decks=True)["plans"]
-check("plans: on the decks=1 board, with crew counts from my progress",
-      ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and bp[0]["crewDone"] == {"hf": 1}, str(bp))
+# 3.8.1: the board's counts are the plan's totals, up to an hour old (counted at the follow,
+# before this progress); the authors' Progress counts live
+check("plans: on the decks=1 board, with its totals' counts",
+      ok4 and [p["id"] for p in bp] == [pid] and bp[0]["followers"] == 1 and isinstance(bp[0]["crewDone"], dict), str(bp))
+_st, prog = sam._call("GET", f"/plans/{pid}/progress")
+check("plans: the author's Progress counts my progress at once",
+      _st == 200 and prog.get("units", {}).get("hf") == {"opened": 1, "done": 1}, str(prog))
 got, st = sam.add_plan_cards(pid, [["g2", 1]], unit="hf")
 check("plans: the author adds single cards", st == 200 and got["doc"]["units"][0]["cards"] == [["g2", 1]])
 check("plans: only the author", dre.add_plan_cards(pid, [["g2", 1]], opens=tomorrow)[1] == 403)

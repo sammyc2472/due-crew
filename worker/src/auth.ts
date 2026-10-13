@@ -191,7 +191,9 @@ export async function authenticate(req: Request, env: Env): Promise<Session> {
   return { uid: row.uid, tokenHash };
 }
 
-const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
+export const ACCENTS = ["green", "blue", "purple", "teal", "amber", "rose"];
+/** An accent from a settings doc, if it's one of ours; else null. */
+export const accentOf = (v: unknown): string | null => (typeof v === "string" && ACCENTS.includes(v) ? v : null);
 
 /** GET /auth/me: who this session is. */
 export async function me(s: Session, env: Env): Promise<Response> {
@@ -203,7 +205,7 @@ export async function me(s: Session, env: Env): Promise<Response> {
   ).bind(s.uid).first<{ uid: string; email: string; name: string | null; emoji: string | null; rollover: number | null; accent: unknown }>();
   if (!u) throw new HttpError(401, "auth");
   const out = { uid: u.uid, email: u.email, name: u.name, emoji: u.emoji,
-    accent: typeof u.accent === "string" && ACCENTS.includes(u.accent) ? u.accent : "green",
+    accent: accentOf(u.accent) ?? "green",
     ...(u.rollover == null ? {} : { rollover: Number(u.rollover) }) };
   return json(isAdmin(env, u.uid) ? { ...out, admin: true } : out);  // 3.2.1: the site shows Admin
 }
@@ -262,6 +264,8 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM plan_follows WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     // 3.3: my plans' co-authors, notes and history, and mine on others' plans
     "DELETE FROM plan_editors WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
+    // 3.8.1: a plan offered to me isn't any more
+    "UPDATE plans SET handover = NULL WHERE handover = ?1",
     "DELETE FROM plan_notes WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_log WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",
     "DELETE FROM plan_posts WHERE uid = ?1 OR plan IN (SELECT id FROM plans WHERE owner = ?1)",  // 3.7.3
@@ -284,6 +288,7 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM logs WHERE uid = ?1",
     "DELETE FROM cheer_counts WHERE uid = ?1",  // 3.7.1
     "DELETE FROM feedback WHERE uid = ?1",  // 3.6.5, P6
+    "DELETE FROM reports WHERE by_uid = ?1 OR (kind = 'person' AND target = ?1)",  // 3.8.1
     "DELETE FROM admin_notes WHERE uid = ?1",
     "DELETE FROM email_changes WHERE uid = ?1",
     "DELETE FROM codes WHERE uid = ?1",

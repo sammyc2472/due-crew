@@ -79,6 +79,7 @@ def plan_dates(today):
         if p.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
             continue
         doc, title = p["doc"], P.plan_title(p)
+        named = {x["id"]: x for x in P.units(P.with_picks(doc, (_state.get("plan_picks") or {}).get(p["id"])))}  # 3.8.1
         evs = {e.get("id"): e for e in doc.get("events") or [] if isinstance(e, dict)}
         applied = st.get("applied") or {}
         crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
@@ -115,9 +116,14 @@ def plan_dates(today):
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
                           "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
-                          "what": P.topics_line([u]), "topics": P.topic_view([u]),  # 3.8.0: each a link
+                          "what": P.topics_line([u]), "topics": P.topic_view([named.get(u["id"], u)]),  # 3.8.0: each a link
+                          "rm": P.topic_remarks(doc, [named.get(u["id"], u)]),  # 3.8.1: the authors' notes under its topics
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
+                          # 3.8.1: a date after its event reinforces it ("after Heme quiz"); Study
+                          # on a date with cards open (a Due Crew deck of them); view() adds both to its row
+                          "after": bool(ev) and P.reinforces(doc, u) is not None,
+                          "study": opens <= today and int(o) > 0,
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
                           # the only date the update touches; -1: one of several)
                           "upd": (0 if u["id"] not in (upd.get("units") or []) else
@@ -297,8 +303,18 @@ def view(c):
                    suggestions=suggestions(c, today), notes=notes(), every=plan_every(today))
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
-        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
+        # 3.8.0: the morning's line, with Not today; 3.8.1: and what it opened, by date
+        v["opened"] = _pf().opened_view() if mw.col else None
+        more = {(x["pid"], x["uid"]): x for x in dates}
+        for r in v.get("rows") or []:
+            x = more.get((r.get("pid"), r.get("uid"))) if r.get("kind") == "plan" else None
+            if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
+                r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
         v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
+        # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
+        from . import rooms
+        v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
+        v["nudge_sev"] = rooms.nudge_sev() if v["nudge"] else None
     except Exception:
         traceback.print_exc()
         return None
@@ -340,10 +356,10 @@ def parts(col, idxs, today):
             if P.own_pace(p):  # 3.8.0: at my own pace, the dates I opened
                 opens = today if P.opened_here(applied, u, prog) else "9999"
             if opens == today or (opens < today and (a or running) and not str(a).startswith("skip:")):
-                got = P.parts(idx, u, pf._swap(st), doc.get("deck", ""))
+                got = P.parts(idx, u, pf._swap(st), doc)
                 if got:
                     out.setdefault(p["id"], {})[u["id"]] = got
-                sib = idx.siblings(idx.match(u, pf._swap(st), doc.get("deck", "")))
+                sib = idx.siblings(idx.match(u, pf._swap(st), doc))
                 if sib[0]:
                     sibs.setdefault(p["id"], {})[u["id"]] = list(sib)
     _state["plan_parts"] = out

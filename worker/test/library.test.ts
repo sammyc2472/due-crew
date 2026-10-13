@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person, befriend } from "./helpers";
+import { anHourOn, api, db, person, befriend } from "./helpers";
 
 // 3.5, B: the plan library, and A's public peek additions
 
@@ -53,6 +53,7 @@ describe("the library (3.5, B)", () => {
     const kai = await person("kai");  // a co-author
     await befriend(dre, { uid: "kai" }); await befriend(kai, { uid: "dre" });
     expect(await dre.status("POST", `/plans/${p.id}/editors`, { uid: "kai" })).toBe(200);
+    expect(await kai.status("POST", `/plans/${p.id}/invite`, { yes: true })).toBe(200);  // 3.8.1: a co-author says yes
     const zed = await person("zed");  // a stranger who follows from the code, before it's listed
     await zed.call("POST", "/plans/follow", { code: p.code });
     expect(await zed.status("POST", `/plans/${p.id}/notes`, { day: "2026-10-05", text: "early note" })).toBe(200);
@@ -136,6 +137,7 @@ describe("the library (3.5, B)", () => {
     expect(await names("?q=step")).toEqual(["Step 1 in 12 weeks", "Cardio block"]);  // a name match first, then the deck's
     expect(await names("?q=100%25")).toEqual([]);  // % is a letter here, not a wildcard
     expect((await maya.call("GET", "/library")).body.decks).toEqual([["Big Step 1", 2], ["Micro Videos", 1]]);
+    await anHourOn();  // how many follow is the plan's totals, up to an hour old
     expect((await maya.call("GET", "/library")).body.plans[2].followers).toBe(3);
   });
 
@@ -191,7 +193,7 @@ describe("the library (3.5, B)", () => {
     expect((await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true })).body.listed).toBe(1);
   });
 
-  it("a listed plan can be reported (stores nothing); an unlisted one can't", async () => {
+  it("a listed plan can be reported (kept for the admin, 3.8.1); an unlisted one can't", async () => {
     const dre = await person("dre");
     const p = await plan(dre);
     const maya = await person("maya");
@@ -199,6 +201,8 @@ describe("the library (3.5, B)", () => {
     await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true });
     expect(await maya.status("POST", `/plans/${p.id}/report`, { reason: "rude" })).toBe(400);
     expect(await maya.status("POST", `/plans/${p.id}/report`, { reason: "spam", note: "ads" })).toBe(200);
+    expect(await db().prepare("SELECT by_uid, kind, target, reason, note FROM reports").all().then((r) => r.results))
+      .toEqual([{ by_uid: "maya", kind: "plan", target: p.id, reason: "spam", note: "ads" }]);
     expect(await dre.status("POST", `/plans/${p.id}/report`, { reason: "spam" })).toBe(400);  // your own
   });
 

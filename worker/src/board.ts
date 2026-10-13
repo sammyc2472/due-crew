@@ -2,7 +2,7 @@
 // shows, in one request) and POST /sync (everything a sync uploads, in
 // one request). Plus the lazy reads: shared decks, a heatmap, settings.
 
-import type { Session } from "./auth";
+import { accentOf, type Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
 import * as B from "./bingo";
 import * as C from "./cards";
@@ -33,7 +33,7 @@ const FEED_MAX = 20;
  *  exams come with the board already. */
 async function feed(env: Env, uid: string) {
   const since = nowSec() - FEED_DAYS * 86400;
-  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION SELECT plan FROM plan_editors WHERE uid = ?1`;
+  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION ${P.COAUTHORED}`;
   const [back, notes, saves, sett, posted] = await env.DB.batch<any>([
     env.DB.prepare(
       `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
@@ -42,7 +42,7 @@ async function feed(env: Env, uid: string) {
       `SELECT n.plan, p.name AS plan_name, n.day, n.text, n.at, n.uid, u.name, u.emoji FROM plan_notes n
          JOIN plans p ON p.id = n.plan LEFT JOIN users u ON u.uid = n.uid
         WHERE n.plan IN (${mine}) AND n.uid != ?1 AND n.at > ?2
-          AND (p.listed != 1 OR n.uid = p.owner OR n.uid IN (SELECT e.uid FROM plan_editors e WHERE e.plan = n.plan))
+          AND (p.listed != 1 OR n.uid = p.owner OR n.uid IN (SELECT e.uid FROM plan_editors e WHERE e.plan = n.plan AND e.accepted_at IS NOT NULL))
         ORDER BY n.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
     env.DB.prepare(
       `SELECT l.plan, p.name AS plan_name, l.summary, l.at, l.uid, u.name FROM plan_log l
@@ -69,8 +69,8 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP]: me, the people I added (with
- *  their week when they added me back, name and emoji only when they haven't
+/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
+ *  their week and accent when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
  *  shows the cheers waiting and leaves them for Anki to play. got= (3.7.2)
  *  says which cheers the last reply delivered (its `cheersAt`): those go now,
@@ -90,14 +90,18 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
-         (SELECT at FROM settings WHERE uid = u.uid) AS sat FROM users u
+         (SELECT at FROM settings WHERE uid = u.uid) AS sat,
+         (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
-    // a week leaves the server only for someone its owner added
+    // a week leaves the server only for someone its owner added; 3.8.1: so
+    // does their accent (from their settings: their Sev wears it in a study room)
     db.prepare(
-      `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at
+      `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
+         json_extract(t.json, '$.accent') AS accent
        FROM friends f JOIN users u ON u.uid = f.friend
        LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
        LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
+       LEFT JOIN settings t ON t.uid = f.friend AND b.owner IS NOT NULL
        WHERE f.owner = ?1 ORDER BY f.at, f.friend`).bind(s.uid),
     db.prepare(
       `SELECT c.from_uid, c.emoji, c.note, c.luck, c.guid, c.at FROM cheers c WHERE c.to_uid = ?`).bind(s.uid),
@@ -106,13 +110,17 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   if (!me) throw new HttpError(401, "auth");
   const friends = (friendsRes.results as any[]).map((f) => f.mutual
     ? { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: true,
-        week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at) }
+        week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at),
+        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}) }  // none, or not one of ours: none
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
+  // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen
+  let muted = new Set<string>();
+  try { const m = JSON.parse(me.muted || "[]"); if (Array.isArray(m)) muted = new Set(m.filter((x) => typeof x === "string")); } catch { /* none */ }
   const cheers = [];
   for (const c of cheersRes.results as any[]) {
     const from = byUid.get(c.from_uid);
-    if (!from?.mutual) continue;  // added me once, not any more (or never back): dropped
+    if (!from?.mutual || muted.has(c.from_uid)) continue;  // added me once, not any more (or never back), or muted: dropped
     cheers.push({ from: c.from_uid, name: from.name, emoji: c.emoji, note: c.note || "",
                   luck: c.luck === 1, guid: c.guid || "", at: iso(c.at) });
   }
@@ -138,9 +146,14 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const pv = params.get("pv");
   if (!keep && (withDecks || pv !== null)) {
     const stamp = await P.planStamp(env, s.uid);
-    if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid));
+    // 3.8.1: an add-on that keeps the docs it has (same=1) gets none on the day's
+    // first refresh when nothing moved: the counts and posts come, each doc doesn't
+    const same = params.get("same") === "1" && pv === stamp;
+    if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid, same));
     out.pv = stamp;
   }
+  // 3.8.1: the site's home lists my invites to co-write a plan, and plans offered to me
+  if (keep) out.planInvites = await P.planInvites(env, s.uid);
   // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad;
   // and the squads I'm in, so an add-on whose config was reset finds them
   if (withDecks && !keep) {
@@ -200,7 +213,8 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const weekDoc = "week" in body ? V.week(body.week) : null;
   const decks = "decks" in body ? JSON.stringify(V.decks(body.decks)) : null;
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
-  const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
+  // a sync's settings win as they always did (3.8.1's base is PUT /settings's)
+  const settings = "settings" in body ? { ...V.settingsDoc(body.settings), base: undefined } : null;
   const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
   const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
   const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
@@ -354,23 +368,37 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
 
 // ---- settings (2.13): mine only ----
 
-function putSettingsStmt(env: Env, uid: string, s: { v: number; at: string; json: string }) {
-  // the same save again writes nothing (3.7.2)
+function putSettingsStmt(env: Env, uid: string, s: { v: number; at: string; json: string; base?: number }) {
+  // the same save again writes nothing (3.7.2); each save that writes moves rev (3.8.1).
+  // With `base`, only over the rev it started from: someone saved since, it writes nothing
   return env.DB.prepare(
-    `INSERT INTO settings (uid, v, at, json) VALUES (?, ?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json
-       WHERE NOT (v IS excluded.v AND at IS excluded.at AND json IS excluded.json)`,
-  ).bind(uid, s.v, s.at, s.json);
+    `INSERT INTO settings (uid, v, at, json, rev) VALUES (?1, ?2, ?3, ?4, 1)
+     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json, rev = settings.rev + 1
+       WHERE NOT (settings.v IS excluded.v AND settings.at IS excluded.at AND settings.json IS excluded.json)
+         AND (?5 IS NULL OR settings.rev = ?5)`,
+  ).bind(uid, s.v, s.at, s.json, s.base ?? null);
 }
+
+type SettingsRow = { v: number; at: string; json: string; rev: number };
+const docOf = (row: SettingsRow) => ({ v: row.v, at: row.at, settings: JSON.parse(row.json), rev: row.rev });
 
 export async function getSettings(s: Session, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT v, at, json FROM settings WHERE uid = ?").bind(s.uid)
-    .first<{ v: number; at: string; json: string }>();
+  const row = await env.DB.prepare("SELECT v, at, json, rev FROM settings WHERE uid = ?").bind(s.uid).first<SettingsRow>();
   if (!row) throw new HttpError(404, "no_settings");
-  return json({ v: row.v, at: row.at, settings: JSON.parse(row.json) });
+  return json(docOf(row));
 }
 
+/** PUT /settings {v, at, settings, base?}: 3.8.1 (the audit, #2), with `base` (the rev
+ *  the client last saw): written only if nobody saved since; else 409 `conflict` with
+ *  the current doc ({v, at, settings, rev}), for the client to merge and save over.
+ *  The same doc again is no conflict. Without `base` (older add-ons), the save wins. */
 export async function putSettings(req: Request, s: Session, env: Env): Promise<Response> {
-  await putSettingsStmt(env, s.uid, V.settingsDoc(await readJson(req))).run();
-  return json({ ok: true });
+  const doc = V.settingsDoc(await readJson(req));
+  const r = await putSettingsStmt(env, s.uid, doc).run();
+  const row = await env.DB.prepare("SELECT v, at, json, rev FROM settings WHERE uid = ?").bind(s.uid).first<SettingsRow>();
+  if (!r.meta.changes && row && doc.base !== undefined && row.rev !== doc.base
+      && !(row.v === doc.v && row.at === doc.at && row.json === doc.json)) {
+    throw new HttpError(409, "conflict", docOf(row));
+  }
+  return json({ ok: true, rev: row?.rev ?? 0 });
 }

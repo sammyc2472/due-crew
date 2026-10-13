@@ -160,6 +160,7 @@ installing — add-ons load at launch).
 - [ ] After the last round: the chip goes, and the board says "Room done: … together with …", with Share (copies a line) and × .
 - [ ] "At 20:00": the invite says "starts at 20:00"; the chip shows "starts 20:00" until then.
 - [ ] Night mode: chip, bottom bar, margin card, break and room card all read well.
+- [ ] 3.8.1: Settings → Room chip → Left. On a break, the chip's ring and the board's fill the same way (as the break passes) and both say the minutes left. Click the chip: the room card opens at the left and the chip hides; drag the card by its squares row (it stays on screen), close it with ×, then open it again: back where you left it, and the chip shows again whenever the card is closed (×, a click outside, Tuck, Leave, or going to another screen). Right: the same at the right.
 
 ## 2.13: settings follow the account (rules-v11)
 
@@ -201,7 +202,7 @@ Deploy the Worker first (the tag does), dev first as for 3.0.
 - [ ] A second computer signed in to the same account: B is muted there too after its next settings pull (restart Anki).
 - [ ] B, muted, tips A's flag: the flag goes down for the crew, then comes back up at A's next sync (a muted tip doesn't count).
 - [ ] Report… on B: "Report B", three choices, a note, "Sends their name, emoji and last cheer to Due Crew. Reporting also mutes them.", Cancel / Report. Cancel does nothing. Report: tooltip says reported and muted; B is muted. With REPORT_TO set, the mail arrives with both uids, B's name and emoji, the reason, the note, and B's cheer to you if it was still unread; your address isn't in it. Without REPORT_TO, `wrangler tail` shows "report received" and no ids.
-- [ ] Settings → Board → Room chip: Left. Open a room: the chip sits at the left end of the top bar (Decks screen and while reviewing); with AMBOSS installed, the two chips don't overlap. Right puts it back. Reset Board puts it back on the right. A second computer keeps its own choice.
+- [ ] Settings → Board → Room chip: Left. Open a room: the chip sits at the left end of the top bar (Decks screen and while reviewing); with another add-on's chip in the top bar, the two don't overlap. Right puts it back. Reset Board puts it back on the right. A second computer keeps its own choice.
 
 ## 3.1: plans
 
@@ -279,7 +280,7 @@ deck both share (Settings › Shared decks).
 ### 3.3: following, the Plans tab, together (3.8.0: the tab is You › Plans, above the board)
 
 - [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
-- [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
+- [ ] Make a plan from a big shared deck: the builder's tree reaches tags five levels down (#Videos › Cardiology › 2 · Anatomy › 4 · Penetrating…).
 - [ ] Site, as the owner: + Co-author lists your crew; pick one. They see the plan under Yours (with you), can edit and save, can't see Settings. Remove them with ×.
 - [ ] A follower opens the plan on the site: the calendar, read-only, with 💬 on days with notes; click a day, add a note; the author sees it and can take it down.
 - [ ] History: each save with who and what; Undo on the latest puts it back.
@@ -298,7 +299,7 @@ deck both share (Settings › Shared decks).
 - [ ] C2: Plan ▾ › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
 - [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
 - [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
-- [ ] C5: rename a tag in a follower's copy (like a new AnKing): the date still opens its cards, and the card says the tags differ, with OK.
+- [ ] C5: rename a tag in a follower's copy (like a new version of a shared deck): the date still opens its cards, and the card says the tags differ, with OK.
 
 ### 3.4: search counts, calendar
 
@@ -653,9 +654,32 @@ In Anki (as a follower):
 - [ ] Plan tags, stopping: Stop following asks, with "Take its tags off my notes" ticked; untick it and they stay; ticked, every DueCrew::<plan> tag goes (and DueCrew too when nothing else is under it).
 - [ ] Plan tags, as an author who doesn't follow the plan: make a tag on duecrew.com from another tag (This plan's tags, or a `tag |` line in Text), save; Anki's next morning (or a refresh that brings the plan) tags your own notes DueCrew::<plan>::<tag> in one undo step and says so once; the builder's date counts it after that. Follow your own plan: nothing is announced again. Delete the plan on the site: the next morning takes the tags off your notes.
 - [ ] Plan tags on duecrew.com, as a follower: the plan's page lists This plan's tags under the pace, with "in your Anki under DueCrew › …"; Copy search copies a search Browse finds them with.
+- [ ] Round two (3.8.1), the builder: a day with a deck tag (a video) › its chip's All of it ▾ › Only SLG 12: the chip reads "Cephalosporins · SLG 12" with "38 of 64" once your Anki counts it; Rename SLG 12: the date follows; × on SLG 12 › Delete it: the date has the whole video again. Overlap › SLG 12 · and · a deck tag › Add makes the same kind of chip. Text › Add dates: `2026-10-14 | | tag:<a deck tag> in SLG 12` and `tag | SLG 13 | cards:<guid>:2` read and add.
+- [ ] Round two, taking a tag off: Text › Edit the whole plan › delete a `tag |` line a date uses › Read it: "Takes off 1 tag … N dates still use it" with each date; Take them off those dates too lists what happens to each (a date left with nothing goes); Keep the tags puts the line back; Replace anyway replaces.
+- [ ] Round two in Anki, as a follower: a date "Cephalosporins · SLG 12" opens only the video's cards that are in SLG 12, and its row reads that way in You › Plans and Due. A plan tag holding one cloze of a note: Browse them shows that card, not its siblings. The author adds a note to SLG 12 after the date opened: the next update opens just that note's cards.
+- [ ] Round two, Insights: a deck with a plan's tags: the map's "by" lists "<plan>'s tags"; pick it: one tile each, and a line naming the tags no card in the deck carries. The map's first pick and the topics never show DueCrew tags. Tools › Due Crew › Export cards for my AI: the file has a `#cards` column.
 - [ ] Your own pace: Follow a plan with "When I'm ready" (and, once, with the box under it): the late-start question goes, the line says nothing opens by itself; a deck whose later cards are open offers "Hold back N cards of later dates until you open them". The next morning opens nothing. You › Plans: "at your pace", Up next with N new, Open and Open and study, Then …, where the plan's dates are; no Behind, and Today has no Behind for it either.
 - [ ] Open: the date's cards open (no leech) and Anki's next new cards are theirs (check the Browse Due column: they're first); the card says "Opened … first in line. Undo"; Undo shuts them again and it's Up next again. Open and study goes straight into a Due Crew deck of those new cards.
 - [ ] With "the next once I've seen the last": study most of the opened date, and the next morning opens the following one by itself, only one.
 - [ ] Put back on the plan card: only the unseen cards of the last date shut again; Edit › Undo puts them back. Stop following opens them.
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
+
+### 3.8.1: the Fifteen and Sev
+
+- [ ] Signed in, in no room: ▶ Fifteen? (with Sev) at the chip's end of the top bar, on the Decks screen, Overview and Review; Settings › Room chip Left moves it; Settings › Fifteen and Sev › Fifteen? off takes it away.
+- [ ] Click it (from the Decks screen, Overview and Review: each must start one): the chip becomes Fifteen · 15 min left (Sev jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join).
+- [ ] At 15 minutes, mid-card: nothing until you answer; then "That's fifteen." takes the next card's place, with how many cards; Space and the answer keys do nothing under it.
+- [ ] Take five, then another fifteen: the break (Sev breathing along a square, four counts a side; Settings › On a break › Stretch gives a stretch), Start now starts the next at once; otherwise at five it ends and the card comes back.
+- [ ] Another fifteen now: the card comes back and the chip says Fifteen 2 · 15 min left.
+- [ ] On the Decks screen when a fifteen ends: the board asks the same question (Take five, Another now, Stop here); the chip says done · your call, and its card answers too.
+- [ ] Stop here (from the question, the break, the board or the chip's card): back on the Decks screen, "Your session: N fifteens · M m · C cards." with Sev stacking a square for each; × takes it away. Your crew stops seeing you studying at their next refresh.
+- [ ] Walk away at the question: after five minutes it ends by itself, and the session's line is there.
+- [ ] Eight fifteens: the eighth's question offers Stop here only.
+- [ ] Close Anki in a fifteen: next open, no fifteen, and the session's line is there.
+- [ ] Sev by the logo, only for a moment: Today done, back on the Decks screen it pops in, hops (the week's squares fly) and goes after a few seconds, not again that day; a cheer that lands: a gift and a blush, then gone; the night before your exam: a star; the first day back from away: a wave. Any other time the logo's alone. System Settings › Reduce motion: it shows still for those seconds, then goes.
+- [ ] The nudge: with cards due, nothing studied, past your usual start (three days of history needed), the You box's Today says "Not started yet today. Fifteen?" with Sev peeking; Start starts one; × hides it for today; not on an away day.
+- [ ] Settings › Sev off: no Sev anywhere (the chip, the question and the break show the logo's squares).
+- [ ] Welcome back (follow a plan, study nothing for 3+ days, open Anki): Sev waves, still, at the window's top left, in your accent (night mode too); the words and buttons as before. Settings › Sev off: the window without Sev.
+- [ ] Share › As a picture › My week, with a day off this week: Sev stands on the last day studied, a dotted hop from each day studied to the next (a long one over the day off), Story and Link, Light and Dark; Copy picture and Save… have it too. My day: Sev on today's square once studied, no hops. Settings › Sev off: the card as before, no Sev.
+- [ ] In a room with two crewmates who picked different accents: the Decks screen's lobby and the chip's card show each of you as a Sev in your own accent (yours is yours), blinking at different moments (still with Reduce motion), each named on hover; night mode, the night shades; Settings › Sev off: the initials again.

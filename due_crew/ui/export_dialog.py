@@ -1,7 +1,12 @@
 """Export cards for my AI (3.6.5, P3): the notes a plan covers, in Anki's
 own plain-text format with each note's unique identifier, written to a
 file the person picks. The cards go to that file only: nothing is sent.
-One request, on a click: the plans I write (my_plans), for their docs."""
+3.8.1: with a plan picked, the plan itself (its dates as its text writes
+them, with each date's cards here and what overlaps; its tags; its notes)
+as comment lines at the top, ticked by default; never a card's text there.
+One request, on a click: the plans I write (my_plans), for their docs;
+and (3.8.1) one more when I pick a plan I write but don't follow, for all
+of its doc (my_plans leaves a date's single cards out)."""
 
 import os
 import re
@@ -46,6 +51,10 @@ class ExportDialog(QDialog):
         self.plain = QCheckBox("Leave out formatting and images (smaller)")
         self.plain.setChecked(True)
         root.addWidget(self.plain)
+        # 3.8.1: the plan itself at the top of the file, as comment lines (never card text)
+        self.with_plan = QCheckBox("With the plan (its dates, tags, notes and what overlaps)")
+        self.with_plan.setChecked(True)
+        root.addWidget(self.with_plan)
         note = QLabel("Saved as a file on this computer, for you to attach to your AI chat. "
                       "Due Crew doesn't send it anywhere.")
         note.setWordWrap(True)
@@ -84,7 +93,7 @@ class ExportDialog(QDialog):
 
     def _mine(self, got):
         have = {p["id"] for p in self.plans}
-        self.plans += [p for p in got or [] if p.get("doc") and p["id"] not in have]
+        self.plans += [dict(p, _lean=True) for p in got or [] if p.get("doc") and p["id"] not in have]
         self._fill_plans()
         self._plan_changed()
 
@@ -92,8 +101,18 @@ class ExportDialog(QDialog):
         pid = self.plan.currentData()
         return next((p for p in self.plans if p["id"] == pid), None)
 
+    def _full(self, pid, got):
+        if not got or not got.get("doc"):
+            return
+        self.plans = [got if x["id"] == pid else x for x in self.plans]
+        if self.plan.currentData() == pid:
+            self._update()
+
     def _plan_changed(self, *_):
         p = self._current()
+        if p and p.get("_lean") and self.client is not None:
+            p["_lean"] = False  # once: its whole doc, for what its dates open
+            run_bg(self, lambda pid=p["id"]: self.client.plan(pid), lambda got, err, pid=p["id"]: self._full(pid, None if err else got))
         did = None
         if p:
             st = self.state.get(p["id"]) or {}
@@ -106,6 +125,7 @@ class ExportDialog(QDialog):
             if i >= 0:
                 self.deck.setCurrentIndex(i)
         self.deck.setEnabled(not p or did is None)
+        self.with_plan.setVisible(bool(p))
         self.scope.blockSignals(True)
         self.scope.clear()
         if p:
@@ -151,13 +171,24 @@ class ExportDialog(QDialog):
         path, _ = QFileDialog.getSaveFileName(self, "Export cards for my AI", start, "Text (*.txt)")
         if not path:
             return
-        save(self.col, nids, path, self.plain.isChecked(), self.on_saved)
+        save(self.col, nids, path, self.plain.isChecked(), self.on_saved, plan_lines=self.plan_lines())
         self.accept()
 
+    def plan_lines(self):
+        """3.8.1: the picked plan as comment lines for the file's top (P.export_plan_lines),
+        or None: no plan, or With the plan unticked. The plan itself, not my shifted days."""
+        p = self._current()
+        did = self.deck.currentData()
+        if not p or did is None or not self.with_plan.isChecked():
+            return None
+        swap = (self.state.get(p["id"]) or {}).get("swap") or None
+        return P.export_plan_lines(P.DeckIndex(self.col, did), p.get("plan_doc") or p["doc"], p.get("name") or "", swap)
 
-def save(col, nids, path, plain=True, on_saved=None):
-    """Write the notes to `path` (main thread: it reads the collection)."""
-    text, n = P.export_notes(col, nids, plain)
+
+def save(col, nids, path, plain=True, on_saved=None, plan_lines=None):
+    """Write the notes to `path` (main thread: it reads the collection);
+    3.8.1, with the plan's lines at the top when given."""
+    text, n = P.export_notes(col, nids, plain, plan_lines=plan_lines)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     if on_saved:

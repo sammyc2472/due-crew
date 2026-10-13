@@ -58,17 +58,23 @@ export async function run(env: Env, now = nowSec()): Promise<{ trimmed: number; 
 }
 
 /** Q6: a plan someone follows passes to its first co-author, or stays as it
- *  is with no owner ("by a former member": followable, never edited). */
+ *  is with no owner ("by a former member": followable, never edited).
+ *  3.8.1: a co-author who said yes; the invites its owner sent, and an
+ *  offer of the plan, go with the owner. */
 async function keepFollowedPlans(env: Env, uid: string) {
   const db = env.DB;
   const plans = await db.prepare(
     "SELECT id FROM plans p WHERE owner = ? AND EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid != p.owner)",
   ).bind(uid).all<{ id: string }>();
   for (const { id } of plans.results) {
-    const ed = await db.prepare("SELECT uid FROM plan_editors WHERE plan = ? AND uid != ? ORDER BY at, uid LIMIT 1").bind(id, uid).first<string>("uid");
-    await db.batch(ed
-      ? [db.prepare("UPDATE plans SET owner = ? WHERE id = ?").bind(ed, id), db.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, ed)]
-      : [db.prepare("UPDATE plans SET owner = '' WHERE id = ?").bind(id)]);
+    const ed = await db.prepare("SELECT uid FROM plan_editors WHERE plan = ? AND uid != ? AND accepted_at IS NOT NULL ORDER BY at, uid LIMIT 1")
+      .bind(id, uid).first<string>("uid");
+    await db.batch([
+      db.prepare("DELETE FROM plan_editors WHERE plan = ? AND accepted_at IS NULL").bind(id),
+      ...(ed
+        ? [db.prepare("UPDATE plans SET owner = ?, handover = NULL WHERE id = ?").bind(ed, id), db.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, ed)]
+        : [db.prepare("UPDATE plans SET owner = '', handover = NULL WHERE id = ?").bind(id)]),
+    ]);
   }
 }
 

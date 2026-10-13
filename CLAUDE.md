@@ -66,7 +66,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   from `session.week_raw` with the current Privacy switches at every sync,
   so turning a switch off takes that number off every day.
 - Consent: friendship is two edges (`friends(owner, friend)`); only mutual
-  friends read my week, decks and heatmap; a cheer lands only if its
+  friends read my week, decks, heatmap and accent; a cheer lands only if its
   recipient added the sender; a knock needs a squad in common or my code.
   Someone connected to me gets a name and an emoji, nothing more; a
   stranger's uid gets the same 404 as no account.
@@ -77,15 +77,19 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy.
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
-  server; an install pulls before it uploads (`account.ensure()`), and the
-  newest save wins. Theme, sort, tab, hidden tabs and the room chip's side
-  stay per computer.
-- Plans: the plan says what and by when; my follow (shift, skips, moves,
+  server; an install pulls before it uploads (`account.ensure()`). Since
+  3.8.1 a save names the rev it started from; one made over an older rev
+  comes back with the doc as it is, and the two merge (`account.merge3`:
+  each side's own changes, lists item by item, both: the save being made
+  now). Theme, sort, tab, hidden tabs and the room chip's side stay per
+  computer.
+- Plans (`docs/plans.md` is how they work now: the doc, a follow,
+  plans.json, the morning, the limits): the plan says what and by when; my follow (shift, skips, moves,
   pause, catch-up, and since 3.8.0 `own`, my own pace) says when for me
   (`plan_flow.mine` → `plans.my_doc`), and never changes the plan. The
   morning opens what's due once per Anki day, after the AnkiWeb sync, in
   one undo step; at my own pace it opens only what an author adds to dates
-  I opened (and, "next", the next once I've seen the last). A plan never suspends on
+  I opened (and, "next", the next once I've seen most of the last). A plan never suspends on
   its own (Hold back is the one suspend, and only when asked), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
@@ -93,8 +97,10 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json`. A plan's squad (its team on the server) shares only
-  that I showed up, my questions and answers, and bingo stamps; never a
-  number, never weak spots.
+  that I showed up, my questions and answers, and bingo stamps; never my
+  numbers by name, never weak spots. While I'm in it, my per-date progress
+  joins the counts its authors see (Progress, never named, per date only
+  from three people up).
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,
@@ -116,8 +122,15 @@ same commit, each with its test:
 - `team.bingo_line` ↔ `bingoLine` in builder.js (`PlanSquad`)
 - `plans.tag_part`/`tag_root` ↔ `tagPart`/`tagRoot` in `worker/src/plans.ts`
   ↔ `Tags.part`/`Tags.root` in builder.js (a plan tag's name in Anki, 3.8.0)
+- `plans.topic_items`' cut row ↔ `cutName` in builder.js ("Cephalosporins ·
+  SLG 12", 3.8.1); a cut's `q` ↔ `cutQ` in builder.js ↔ `reroot` in plans.ts
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
-- `room_model.phase` ↔ the room widget's JS
+- `plans.reinforces` ↔ `afterEv` in builder.js (a date after its event is
+  reinforcement, "after Heme quiz", 3.8.1)
+- `plans.topic_remarks` ↔ `remarkOn` in builder.js (a topic shows its tag's
+  note or the nearest parent's); `plans._date_line` (the export) ↔ a date's
+  line in builder.js `toText`; the picked row's "X · N picked" ↔ `picksText`
+- `room_model.phase` ↔ the room widget's JS (3.8.1: a fifteen's question too; `test_fifteen_js_phase_matches_v381`)
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
@@ -133,6 +146,8 @@ same commit, each with its test:
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
+| The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
+| Sev (3.8.1, Block): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back (not on crew rows: Sam's no) | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`), `rooms.board_sev`, `sharecard.hops`, `room_model.seats`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
@@ -140,10 +155,15 @@ same commit, each with its test:
 | Invites, codes | `__init__.py`, `ui/friends_dialog.py`, `ui/welcome_dialog.py` | `invites.ts`, `social.ts` |
 | Sign-in, sessions, quiet accounts | `ui/auth_dialog.py`, `backend/api.py` | `auth.ts`, `quiet.ts`, `mydata.ts` |
 | Shares: text, and picture cards (made in Anki since 3.8.0) | `share.py`, `shares.py`, `sharecard.py`, `ui/share_card_dialog.py` | `site/public/cards.js` |
-| Admin, notices, feedback | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts` |
+| Admin, notices, feedback, reports (kept for the Inbox, 3.8.1) | | `admin.ts`, `people.ts`, `notices.ts`, `feedback.ts`, `reports.ts` |
 | Why isn't this card showing? (Browse right-click, 3.8.0) | `why.py`, `why_flow.py`, `ui/why_dialog.py` | never sent |
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
+| Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |
 | Your own pace (Up next, Open, Put back); Browse › open its cards / open these (3.8.0) | `plans.up_next`, `plan_flow.open_next`, `plan_flow.open_cards_now`, `ui/open_dialog.py` | follow `own` (`plans.ts`); `paceBox` in builder.js |
+| Co-authors who said yes, handing a plan over (3.8.1) | `board._invite_lines`, `plan_flow.answer_invite` | `plans.ts` addEditor/answerInvite/offerPlan; `coauthorsBox` in builder.js, Home's invites |
+| Notes for followers on a tag or a card (`remarks`, 3.8.1) | `plans.topic_remarks`, `cards.remark_view`, `ui/remark_dialog.py` | `plans.ts` remarks; `Remarks`, `remarkOn` in builder.js |
+| A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
+| The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 
 ## Releasing

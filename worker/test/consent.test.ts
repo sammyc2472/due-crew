@@ -200,6 +200,22 @@ describe("friendship consent unchanged", () => {
     expect(await bob.status("GET", "/heatmap/alice"), "stats: stranger denied (the heatmap)").toBe(403);
     expect((await dave.call("GET", "/heatmap/alice")).body.counts, "stats: friend reads the heatmap").toEqual({ "2026-09-06": 10 });
   });
+
+  it("accent (3.8.1): it reaches a mutual friend, never a one-way connection", async () => {
+    const save = (p: P, accent: unknown) => p.call("PUT", "/settings", { v: 1, at: new Date().toISOString(), settings: { accent } });
+    const seen = async (p: P, uid: string) => (await p.call("GET", "/board")).body.friends.find((f: any) => f.uid === uid);
+    expect((await seen(dave, "alice")).accent, "accent: none saved, none sent").toBeUndefined();
+    await save(alice, "rose");
+    expect((await seen(dave, "alice")).accent, "accent: a mutual friend reads it (their Sev wears it in a room)").toBe("rose");
+    await befriend(carol, alice);  // carol added alice; alice hasn't added her back
+    expect(await seen(carol, "alice"), "accent: someone alice hasn't added gets a name and an emoji, nothing more")
+      .toEqual({ uid: "alice", name: "Alice", emoji: "", mutual: false });
+    await save(bob, "blue");
+    await befriend(alice, bob);  // alice added bob; he hasn't added her back
+    expect(await seen(alice, "bob"), "accent: nor someone who hasn't added me").toEqual({ uid: "bob", name: "Bob", emoji: "", mutual: false });
+    await save(alice, "</style>");
+    expect((await seen(dave, "alice")).accent, "accent: one that isn't ours isn't sent").toBeUndefined();
+  });
 });
 
 describe("retired paths: nothing answers", () => {
@@ -272,7 +288,7 @@ describe("my settings follow me (2.13): one doc, mine only", () => {
   it("settings", async () => {
     const mine = { v: 1, at: "2026-09-24T10:00:00Z", settings: { share_retention: false, status: "hi" } };
     expect(await bob.status("PUT", "/settings", mine), "settings: I save mine").toBe(200);
-    expect((await bob.call("GET", "/settings")).body, "settings: I read mine").toEqual(mine);
+    expect((await bob.call("GET", "/settings")).body, "settings: I read mine").toEqual({ ...mine, rev: 1 });  // rev: 3.8.1
     expect(await alice.status("GET", "/settings"), "settings: a friend can't read them (GET /settings is always the caller's)").toBe(404);
     await carol.call("PUT", "/settings", { ...mine, settings: { status: "carol's" } });
     expect((await bob.call("GET", "/settings")).body.settings.status, "settings: nobody else can write them").toBe("hi");

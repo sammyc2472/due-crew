@@ -104,6 +104,12 @@ S.update({
     "notein": (base, R(due=toast, you=you("today")), None), "noteout": (R(due=toast, you=you("today")), base, None),
     "studyto": (R(due=dict(DV_BASE, study_to="Pharm"), you=you("today")), R(due=dict(DV_BASE, study_to="Renal"), you=you("today")), None),
 })
+# 3.8.1: Sev by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
+from due_crew import sev as SV
+S.update({f"sev{k}": (base, R(due=DV_BASE, you=you("today"), sev={"svg": SV.svg(k), "ago": 0}), None)
+          for k in ("hop", "cheer", "exam", "hello")})
+S["fifteendone"] = (base, R(due=DV_BASE, you=you("today"), room={"mine": None, "invites": [], "done": None, "fifteen_done": {
+    "n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": SV.svg("stack", stack=3)}}), None)
 out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js()) if b else "")
            + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
 NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for today", "add": "4 A to-do lands (today)",
@@ -117,7 +123,9 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "knockout": "23 A knock goes", "roomjoin": "24 Someone joins the room", "roomleave": "24 Someone leaves the room",
          "planweek": "25 A plan week's bars grow in", "sticking": "26 A topic starts sticking",
          "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
-         "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck"}
+         "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck",
+         "sevhop": "Sev: the day's done (a hop, the week's squares fly)", "sevcheer": "Sev: a cheer lands",
+         "sevexam": "Sev: exam eve", "sevhello": "Sev: back from away", "fifteendone": "Sev: the session's line (a square a fifteen)"}
 END, SAFE = "</", "<" + "\\" + "/"  # a script ends at </; inside one it is written <\\/
 init_js = B.keep_me_in_view_js().replace(END, SAFE)
 scen_js = json.dumps(out).replace(END, SAFE)

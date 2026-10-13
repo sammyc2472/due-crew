@@ -240,6 +240,18 @@ def chip_view(info, local_tips, names, asks=(), mine=False):
     return None
 
 
+def remark_view(plans, guid, ord_):
+    """3.8.1: what the chip says for an author's note on this card (guid and
+    card number), in a plan I follow, or None. It rides the plan: no request.
+    Drawn as text (textContent), never as markup; no click of its own."""
+    from .plans import card_remarks
+    got = card_remarks(plans, guid, ord_)
+    if not got:
+        return None
+    name, text = got[0]
+    return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text}
+
+
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
@@ -262,7 +274,7 @@ _CHIP_JS = """(function () {
     var a = document.createElement('b'); a.textContent = D.act; a.style.cssText = 'flex:none;color:' + D.accent; s.appendChild(a);
     if (D.actcmd) { a.onclick = function (e) { e.stopPropagation(); try { pycmd('duecrew:' + D.actcmd); } catch (x) {} }; }
   }
-  s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} };
+  if (D.cmd) { s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }; } else { s.style.cursor = 'default'; }
   cell.appendChild(s);
 })();"""
 
@@ -295,7 +307,7 @@ _FLOAT_JS = """(function () {
   box.id = 'dc-knows-card';
   var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', D.text);
   if (D.title) { head.title = D.title; }
-  head.onclick = function () { send(D.cmd); };
+  if (D.cmd) { head.onclick = function () { send(D.cmd); }; } else { head.style.cursor = 'default'; }
   var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
   function link(text, color, bold, fn) {
     var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
@@ -419,6 +431,8 @@ def on_answer(card):
         from .together import _today
         mine = any(f["guid"] == guid for f in clean_tricky(client().session.get("tricky"), _today()))
         view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine)
+        if view is None or view.get("kind") == "knows":
+            view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
     except Exception:
         view = None
     if view:

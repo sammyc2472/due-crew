@@ -1430,6 +1430,28 @@ def test_request_budget():
           and due_crew._wants_fetch(True, True, 0, False, fetch=True) is True)
     check("push on open: goes unless something already pushed; the open's fetch is not a push",
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
+    # 3.8.1: someone who writes a plan sends its deck's tree for the builder at the moment the
+    # day's first refresh sends the plan's note ids: one PUT on a day its tags changed, none otherwise
+    store.add_plan("sam", "Step 1", "Step 1", _plan_units())
+    sam.fetch_board(labels, tomorrow, with_decks=True)
+    col = _plan_col()
+    trees = lambda: sum(1 for m, p, _s in store.log if m == "PUT" and p == "/plans/trees")
+    with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
+        refresh = lambda: g.F.maybe_morning(True, fresh=True)  # the day's first refresh, before the AnkiWeb sync
+        n = trees()
+        refresh()
+        refresh()
+        first = trees() - n
+        g.today["d"] = _day(1)
+        refresh()
+        same = trees() - n - first
+        col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Long_QT ' WHERE id = 3")
+        g.today["d"] = _day(2)
+        refresh()
+        refresh()
+        changed = trees() - n - first - same
+    check("budget: a plan's deck tree goes up once on a day its tags changed, never on a day they didn't",
+          first == 1 and same == 0 and changed == 1, (first, same, changed))
 
 
 def test_week_doc_v29():
@@ -1761,6 +1783,12 @@ def test_study_rooms_v212():
           view["mine"]["title"] == "Dre\u2019s room" and view["mine"]["label"] == "19"
           and view["mine"]["bars"][0] == 1.0 and 0 < view["mine"]["bars"][1] < 1
           and view["mine"]["initials"] == ["D", "A", "S"] and view["invites"] == [])
+    brk = rm.board_view(room, entries, now=at(26))["mine"]
+    import re as _re
+    with open(rm.__file__) as fh:
+        drains = _re.findall(r"(?<!1 - )p\.left / p\.total", fh.read())
+    check("rooms (3.8.1): a break's ring fills as it passes, as every ring does, on the board and in each widget; the number is what's left",
+          brk["brk"] and brk["frac"] == 0.2 and brk["label"] == "4" and drains == [], str((brk["frac"], drains)))
     html = board.room_html(view)
     check("lobby html: names escaped, Study and Leave",
           "Dre <K>" not in html and "roomstudy" in html and "roomleave" in html)
@@ -1798,7 +1826,7 @@ def test_study_rooms_v212():
     data = rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0"))
     js = rm.widget_js("chip", data)
     check("widgets: names ride as JSON data and go in as text",
-          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "")
+          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "").replace("w.innerHTML = D.sev[key2]", "")
           and "textContent" in js)
     check("widgets: faces are each person's own initial, mine too (not Y for 'you')",
           data["initials"] == ["D", "A", "S"] and data["names"][-1] == "you")
@@ -2674,6 +2702,36 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+
+def test_mute_on_the_server_v381():
+    """3.8.1, the audit (#3, #10): mute is an account setting, and the server
+    keeps it too, so the site never shows a muted person's cheer: it goes
+    nowhere at send, one waiting from before is dropped as read, and their
+    knocks aren't listed. Knocks have ceilings; reports are kept."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    dre = new_client(store, "dre", "Dre")
+    labels = [TODAY.isoformat()]
+    sid = "sq1"
+    store.members.update({(sid, "sam"): {}, (sid, "dre"): {}})
+    dre.send_cheer("sam", "\U0001F525", "before")
+    dre.send_knock("sam", sid)
+    check("mute: put_settings carries it to the server", sam.put_settings("2026-10-13T10:00:00Z", {"muted": ["dre"]}))
+    got = acked(sam, sam.fetch_board(labels))
+    check("mute: one waiting from before isn't delivered, nor their knock", got["cheers"] == [] and got["knocks"] == [])
+    acked(sam, sam.fetch_board(labels))
+    check("mute: and the next read lets the cheer go", not any(k[0] == "sam" for k in store.cheers))
+    dre.send_cheer("sam", "\U0001F389", "after")
+    check("mute: a new one reads as sent and isn't kept", not any(k[0] == "sam" for k in store.cheers))
+    sam.put_settings("2026-10-13T10:05:00Z", {"muted": []})
+    check("unmute: the knock that was kept shows again",
+          [k[0] for k in acked(sam, sam.fetch_board(labels))["knocks"]] == ["dre"])
+    store.knocks.clear()  # dismissed
+    check("knocks: reads as sent", dre.send_knock("sam", sid) is not False)
+    check("knocks: one a day a pair: a dismissed one isn't back today", store.knocks == {})
+    check("reports: kept", sam.report("dre", "other") and store.reports[-1]["uid"] == "dre")
+
+
 def test_not_yet_today_is_unranked():
     """A crewmate who synced but hasn't studied yet isn't a row of zeros
     with a rank: dashes, no rank, under everyone who studied, "not yet
@@ -3027,6 +3085,60 @@ def test_room_commands_from_the_card_page_need_the_key():
           and rm.trusted("duecrew:knowshelped:u", True)[1] is False)
 
 
+
+def test_room_card_pops_out_on_the_chips_side_v381():
+    """3.8.1 (Sam): the room's card opened on the right even with the chip on
+    the left. It opens at the chip's end, the chip hides while it's out and
+    comes back when it closes (×, a click outside, Tuck, Leave, or the page
+    going away), and it moves by its top row, remembered on that side."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import room_model as rm, rooms as R
+    from due_crew.app import _state
+    left = rm.widget_js("card", {"title": "x", "side": "left", "rounds": 2, "round": 25, "brk": 5, "start": 0,
+                                 "names": [], "line": "", "accent": ["#2e7d32", "#81c784"]})
+    right = rm.widget_js("card", {"title": "x", "side": "right"})
+    check("card: at the chip's end, the left one too", "position:fixed;left:12px;top:10px" in left
+          and "position:fixed;right:12px;top:10px" in right)
+    check("card: closing it says so (the chip comes back), keyed, and that's one of the widget's own",
+          "send('roomcardoff')" in left and "roomcardoff" in rm.CARD_PAGE_CMDS)
+    check("card: moves by its top row, kept on screen, remembered for that side",
+          "Drag to move" in left and "dcRoomCardAt" in left and "at.side === D.side" in left and "innerWidth - w - 4" in left)
+    evals, saved = [], (R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data)
+    tops = types.SimpleNamespace(name="top")
+    main = types.SimpleNamespace(name="main", evalWithCallback=lambda js, cb: cb(False))
+    try:
+        R._webs = lambda: (tops, None, None)
+        R._eval = lambda web, js: evals.append((getattr(web, "name", None), js))
+        R.my_room = lambda: {"host": "sam"}
+        R.cfg = lambda: {"room_chip_side": "left"}
+        R._where = lambda: "chip"
+        R._card_web = lambda: main
+        sides = []
+        R.room_model.widget_data = lambda room, entries, acc, compact=False, side="right", **kw: (sides.append(side), {"side": side})[1]
+        R.show_card()
+        hid = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
+        check("card: popped out on the chip's side; the chip hides", sides == ["left"] and hid and "'hidden'" in hid[-1]
+              and _state["room_card"] == "chip", str(sides))
+        evals.clear()
+        dc._on_js(False, "duecrew:roomcardoff", DeckBrowser())
+        back = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
+        check("card: closed (through _on_js, as the card sends it), the chip is back",
+              back and "visibility=''" in back[-1] and _state["room_card"] is None, str(back))
+        R.show_card()
+        evals.clear()
+        R._card_still_out("chip")  # a redraw finds the page went away with the card
+        check("card: a page that went away took the card: the chip comes back",
+              _state["room_card"] is None and "visibility=''" in [js for w, js in evals if w == "top"][-1])
+        R._where = lambda: "bottom"
+        sides.clear()
+        R.show_card()
+        check("card: from the review bar's little one it opens at the right, and that one hides",
+              sides == ["right"] and _state["room_card"] == "bottom")
+    finally:
+        R._webs, R._eval, R.my_room, R.cfg, R._where, R._card_web, R.room_model.widget_data = saved
+        _state["room_card"] = None
+
 def test_only_our_pages_act_bare():
     """3.7.1 review: a card's own script runs in the browser's preview and
     in Cards… too, not only on the review screen. Only the pages Due Crew
@@ -3066,9 +3178,9 @@ def test_room_chip_side_v301():
     check("chip: right is the default, as before",
           "position:fixed;right:10px;top:50%" in right and "left:10px;top:50%" not in right)
     check("chip: anything else is right", rm.chip_side("middle") == "right" and rm.chip_side(None) == "right")
-    check("chip: the rest of the runtime is unchanged by the side",
-          left.replace("left:10px;top:50%", "X").replace('"side": "left"', "S")
-          == right.replace("right:10px;top:50%", "X").replace('"side": "right"', "S"))
+    check("chip: the rest of the runtime is unchanged by the side (but the card's end, 3.8.1)",
+          left.replace("left:10px;top:50%", "X").replace("left:12px;top:10px", "Y").replace('"side": "left"', "S")
+          == right.replace("right:10px;top:50%", "X").replace("right:12px;top:10px", "Y").replace('"side": "right"', "S"))
     check("chip: removing a widget needs no side", "__SIDE__" not in rm.widget_js("off"))
     check("chip: a per-computer setting, like the accent", "room_chip_side" not in account.ACCOUNT_KEYS)
 
@@ -3190,6 +3302,101 @@ def test_plans_buried_siblings():
         {"id": "u", "name": "Cloze", "opens": _day(-1), "cards": [["guid000050", o] for o in range(5)]}]}}
     v2 = F.session_view(plan2, {"deck_id": 10}, idx, {5: 1}, _day(0))
     check("siblings: a day whose note started then, its buried sibling with it, isn't missed", _day(-1) not in v2["missed"], v2["missed"])
+
+
+def test_settings_merge_v381():
+    """3.8.1, the audit (#2): a settings save replaced the whole doc, so two
+    computers saving close together lost one side's change. A save now names
+    the rev it started from; turned away, the add-on merges (merge3) and saves
+    the merge. Keys one side changed take that side's; lists merge item by
+    item; anything both changed takes the save being made now."""
+    from due_crew import account, app as appmod
+    from due_crew.app import _state
+    m = account.merge3
+    check("merge: each side's own change kept",
+          m({"paused": False, "muted": []}, {"paused": True, "muted": []}, {"paused": False, "muted": ["dre"]})
+          == {"paused": True, "muted": ["dre"]})
+    check("merge: a list both changed: both additions, in theirs' order then mine",
+          m({"muted": ["a"]}, {"muted": ["a", "b"]}, {"muted": ["a", "c"]}) == {"muted": ["a", "c", "b"]})
+    check("merge: one side took an item off, the other added: off stays off, the new one stays",
+          m({"muted": ["a", "b"]}, {"muted": ["b"]}, {"muted": ["a", "b", "c"]}) == {"muted": ["b", "c"]})
+    x = {"id": "aaaa", "t": "Read ch 3", "d": "", "done": "", "at": ""}
+    y = {"id": "bbbb", "t": "Quiz", "d": "", "done": "", "at": ""}
+    ticked = dict(x, done="2026-10-13")
+    check("merge: to-dos item by item: theirs ticked one, mine added one",
+          m({"due_items": [x]}, {"due_items": [x, y]}, {"due_items": [ticked]}) == {"due_items": [ticked, y]})
+    check("merge: Delete my to-dos elsewhere, a new one here: the old go, the new one stays",
+          m({"due_items": [x]}, {"due_items": [x, y]}, {"due_items": []}) == {"due_items": [y]})
+    check("merge: ticks day by day",
+          m({"due_ticks": {"p:u:1": "2026-10-12"}}, {"due_ticks": {"p:u:1": "2026-10-12", "p:u:2": "2026-10-13"}},
+            {"due_ticks": {"p:u:3": "2026-10-13"}}) == {"due_ticks": {"p:u:3": "2026-10-13", "p:u:2": "2026-10-13"}})
+    check("merge: a status both changed takes mine (the save being made now); squads by id",
+          m({"status": "a", "squads": [{"id": "s1"}]}, {"status": "b", "squads": [{"id": "s1"}, {"id": "s2"}]},
+            {"status": "c", "squads": [{"id": "s3"}]}) == {"status": "b", "squads": [{"id": "s3"}, {"id": "s2"}]})
+
+    # two computers on one account, saving close together
+    saved = (account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col)
+
+    def _bg(job, done=None):
+        r = job()
+        if done:
+            done(r)
+    store = world({"sam": "Sammy"}, {})
+    a, b = new_client(store, "sam", "Sammy"), new_client(store, "sam", "Sammy")
+    boxes = {"a": {"paused": False, "muted": [], "status": ""}, "b": {"paused": False, "muted": [], "status": ""}}
+    who = {"now": "a"}
+    clients = {"a": a, "b": b}
+    try:
+        appmod._bg, appmod.swap, account.mw.col = _bg, None, None
+        account.cfg = lambda: dict(boxes[who["now"]])
+        account.client = lambda: clients[who["now"]]
+        appmod.save_cfg = lambda c, from_account=False: boxes[who["now"]].update(c)
+
+        def as_(k):
+            who["now"] = k
+            _state.update(settings_ready=True, settings_pulling=False)
+        as_("a")
+        account.push(boxes["a"])  # the account's first save
+        for k in ("a", "b"):
+            as_(k)
+            clients[k].session["settings_day"] = ""
+            _state.update(settings_ready=False)
+            account.ensure()
+        check("two computers: both start from the same save", a.session.get("settings_rev") == b.session.get("settings_rev") == 1,
+              str((a.session.get("settings_rev"), b.session.get("settings_rev"))))
+        as_("a")
+        boxes["a"]["muted"] = ["dre"]
+        account.on_change(boxes["a"])
+        as_("b")
+        boxes["b"]["paused"] = True
+        account.on_change(boxes["b"])  # over rev 1, which a has moved on from: turned away, merged, saved
+        kept = store.settings["sam"]
+        check("two computers: the second save keeps the first's change (it used to replace it)",
+              kept["settings"].get("muted") == ["dre"] and kept["settings"].get("paused") is True and kept["rev"] == 3, str(kept))
+        check("two computers: the merge is in this computer's config too, and nothing waits",
+              boxes["b"]["muted"] == ["dre"] and not b.session.get("settings_dirty") and b.session.get("settings_rev") == 3)
+        as_("a")
+        a.session["settings_day"] = ""
+        _state.update(settings_ready=False)
+        account.ensure()
+        check("two computers: the first takes the merged save at its next pull", boxes["a"]["paused"] is True and boxes["a"]["muted"] == ["dre"])
+        # a save that comes back turned away more than MERGES times stops and waits for a pull
+        n = {"puts": 0}
+        real_put = a.put_settings
+
+        def stubborn(at, settings, base=None):
+            n["puts"] += 1
+            from due_crew.backend.api import Saved
+            return Saved(409, {"error": "conflict", "v": 1, "at": "x", "settings": {"status": "elsewhere"}, "rev": 99})
+        a.put_settings = stubborn
+        boxes["a"]["status"] = "here"
+        account.on_change(boxes["a"])
+        a.put_settings = real_put
+        check("merge: turned away again and again, it stops after a few and the next pull sorts it out",
+              n["puts"] == account.MERGES + 1, str(n))
+    finally:
+        account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col = saved
+        _state.update(settings_ready=False, settings_pulling=False)
 
 
 def test_bug_squash_oct():
@@ -3406,14 +3613,17 @@ def test_export_for_my_ai_365():
     check("export: the whole deck", P.export_scope(idx, doc, "deck") == {1, 2, 3, 4, 50, 8, 9})
     text, n = P.export_notes(col, {1, 50})
     lines = text.splitlines()
-    check("export: Anki's header, the guid column first", lines[:6] == ["#separator:tab", "#html:false", "#guid column:1",
-          "#notetype column:2", "#deck column:3", "#tags column:4"] and n == 2, str(lines[:6]))
+    check("export: Anki's header, the guid column first", lines[:7] == ["#separator:tab", "#html:false", "#guid column:1",
+          "#notetype column:2", "#deck column:3", "#tags column:4", "#cards column:5"] and n == 2, str(lines[:7]))
     row = next(x for x in lines if x.startswith("guid000001"))
     cells = row.split("\t")
-    check("export: a row is guid, notetype, deck, tags, then the fields, as plain text",
-          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "Heart failure"
-          and cells[5] == '"{{c1::BNP}} rises and ""so"""', str(cells))
-    check("export: one line a note, no tabs inside a field", len(lines) == 8 and all(x.count("\t") >= 4 for x in lines[6:]))
+    check("export: a row is guid, notetype, deck, tags, its card numbers (3.8.1), then the fields, as plain text",
+          cells[2] == "Step 1" and "Step1::Cardio::Heart_failure" in cells[3] and cells[4] == "1" and cells[5] == "Heart failure"
+          and cells[6] == '"{{c1::BNP}} rises and ""so"""', str(cells))
+    col.db.conn.execute("INSERT INTO cards (id, nid, did, odid, type, queue, ivl, ord, due, lapses) VALUES (777, 1, 10, 0, 0, 0, 0, 2, 0, 0)")
+    cells = next(x for x in P.export_notes(col, {1})[0].splitlines() if x.startswith("guid000001")).split("\t")
+    check("export: a note's card numbers are the ones it has (a cloze with c1 and c3: 1 3)", cells[4] == "1 3", str(cells[4]))
+    check("export: one line a note, no tabs inside a field", len(lines) == 9 and all(x.count("\t") >= 5 for x in lines[7:]))
     raw, _ = P.export_notes(col, {1}, plain=False)
     check("export: formatting kept when asked", "#html:true" in raw and "<b>Heart</b>" in raw)
     check("export: a size estimate errs high", P.export_size(col, {1, 50}) >= len(text) - 200)
@@ -7131,7 +7341,7 @@ def test_insights_379():
     check("hero: not shown before the aim and under target, least likely first",
           T.hero({1: (0.95, False), 2: (0.5, False), 3: (0.6, True), 4: (0.7, False)}, 0.9) == [2, 4])
     check("source: the resource and the part above the topic",
-          T.source(["Big::#B&B::Basic_Pharmacology::General::Pharmacokinetics"]) == "B&B › General"
+          T.source(["Big::#Videos::Basic_Pharmacology::General::Pharmacokinetics"]) == "Videos › General"
           and T.source(["Big::#Video_Series::Renal"]) == "Video Series" and T.source(["Renal"]) == "")
     topics = [("renal", "Renal", [], ["t:r"], []), ("thin", "Thin", [], ["t:t"], [])]
     of = {"t:r": set(range(1, 31)), "t:t": set(range(40, 50))}
@@ -8608,6 +8818,2441 @@ def test_plan_tags_v380():
     check("tags: only under DueCrew, ever", P.drop_tags(col, "mine::x", "x") == 0 and "mine" in _tags_of(col, 6))
 
 
+def test_plans_review_tag_roots_and_ids_twin():
+    """3.8.1's plans review, the fake's side (worker/test/plansreview.test.ts
+    is the Worker's): a plan whose name fifty plans share still makes its
+    first tag, on a root ending in its own id; a site save keeps a date's
+    note ids only while its tags, subdecks and cuts are what they came from."""
+    w = world({"dre": "Dre", "maya": "Maya"})
+    pid, _code = w.add_plan("dre", "Block", "Step 1", [])
+    for r in ["block"] + [f"Block_{i}" for i in range(2, 51)]:  # case aside, as Anki's tags
+        other, _c = w.add_plan("someone", "Other", "Step 1", [])
+        w.plans[other]["doc"]["tagroot"] = r
+    dre = new_client(w, "dre", "Dre")
+    got, status = dre.tag_plan_notes(pid, "SLG 12", add=["guid000001"])
+    check("roots: past _50, the plan's own id makes it its own, and it fits",
+          status == 200 and got["doc"]["tagroot"] == f"Block_{pid}" and len(got["doc"]["tagroot"]) <= 60, str((status, got and got["doc"])))
+    full, _c = w.add_plan("dre", "Block", "Step 1", [])
+    for r in (f"Block_{full}", full):
+        other, _c = w.add_plan("someone", "Other", "Step 1", [])
+        w.plans[other]["doc"]["tagroot"] = r
+    try:
+        said = dre.tag_plan_notes(full, "SLG 1", add=["guid000001"])[1]
+    except shapes.TransportError as e:
+        said = e.status
+    check("roots: every one taken is try again, not a crash", said == 503, str(said))
+    # a date's note ids (3.3, C5), from the author's Anki, through a site save
+    w2 = world({"dre": "Dre"})
+    qid, _c = w2.add_plan("dre", "Cardio", "Step 1", _plan_units())
+    dre = new_client(w2, "dre", "Dre")
+    units = w2.plans[qid]["doc"]["units"]
+    snap = {u["id"]: [u["tags"], u["decks"], [f"n{i}"]] for i, u in enumerate(units) if u["id"] in ("hf", "ar")}
+    check("ids: the author's Anki sends them", dre.put_ids(qid, snap))
+    ids = lambda: {u["id"]: u.get("ids") for u in w2.plans[qid]["doc"]["units"] if u["id"] in ("hf", "ar")}
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, name="HF") if u["id"] == "hf" else u for u in doc["units"]])
+    check("ids: a save that keeps a date's tags keeps them", ids() == {"hf": ["n0"], "ar": ["n1"]}, str(ids()))
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, tags=u["tags"] + ["Step1::Cardio::Cardiomyopathy"]) if u["id"] == "hf" else u for u in doc["units"]])
+    check("ids: a tag added to a date drops its ids (worked out from the tags it had); the others stay",
+          ids() == {"hf": None, "ar": ["n1"]}, str(ids()))
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, ids=["forged"]) for u in doc["units"]])
+    check("ids: a save never sets them", ids() == {"hf": None, "ar": ["n1"]}, str(ids()))
+
+
+def test_plans_review_follows_authors_twin():
+    """3.8.1's plans review, the fake's side: the follow ceiling counts the
+    plans I can see (a squad's plan I left is hidden, kept, not counted); a
+    co-author uploads ids and adds cards as the owner does; my list carries
+    the plans I co-author; the board and its stamp move with leaving a
+    squad, a co-author's plan saved, and a plan offered to my squad."""
+    w = world({"dre": "Dre", "maya": "Maya", "jo": "Jo"})
+    dre, maya, jo = new_client(w, "dre", "Dre"), new_client(w, "maya", "Maya"), new_client(w, "jo", "Jo")
+    sq = dre.create_squad("MS2")
+    check("follows: in the squad", maya.join_squad(sq["id"], sq["code"]) == 200)
+    codes = [w.add_plan("dre", f"Week {i + 1}", "Step 1", [], audience="squad", squad=sq["id"])[1] for i in range(20)]
+    check("follows: twenty of the squad's plans", all(maya.follow_plan(c)[1] == 200 for c in codes))
+    _other, other_code = w.add_plan("jo", "Renal", "Step 1", [])
+    check("follows: twenty I can see is the ceiling", maya.follow_plan(other_code)[1] == 409)
+    labels = [_day(0)]
+    maya.fetch_board(labels, with_decks=True)
+    pv = maya.session.get("plans_pv")
+    check("follows: leaving the squad", maya.leave_squad(sq["id"]))
+    upd = maya.fetch_board(labels)
+    check("follows: its plans leave my board at the next refresh (the stamp moved)",
+          upd["plans_fresh"] and maya.session.get("plans_pv") != pv and maya.session.get("plans") == [], str(maya.session.get("plans")))
+    check("follows: and my list", maya.my_plans() == [])
+    check("follows: hidden ones don't count toward the twenty", maya.follow_plan(other_code)[1] == 200)
+    # a co-author: ids, cards, my list, my board's authored plans
+    pid, _c = w.add_plan("dre", "Cardio", "Step 1", _plan_units())
+    w.plans[pid]["editors"] = {"jo"}
+    hf = next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf")
+    check("co-author: uploads the note ids behind a date", jo.put_ids(pid, {"hf": [hf["tags"], hf["decks"], ["g1"]]})
+          and next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf").get("ids") == ["g1"])
+    check("co-author: adds cards from Anki's browser", jo.add_plan_cards(pid, [["guid000077", 0]], unit="ar")[1] == 200)
+    check("co-author: not a follower, who can't", maya.add_plan_cards(pid, [["guid000077", 0]], unit="ar")[1] == 403
+          and not maya.put_ids(pid, {}))
+    mine = jo.my_plans()
+    check("co-author: my list carries the plans I co-author, as an editor",
+          [(p["id"], p["role"]) for p in mine if p["id"] == pid] == [(pid, "editor")], str([(p["id"], p["role"]) for p in mine]))
+    jo.fetch_board(labels, with_decks=True)
+    v = next(a["version"] for a in jo.session["plans_authored"] if a["id"] == pid)
+    check("stamp: nothing moved, nothing comes", not jo.fetch_board(labels)["plans_fresh"])
+    maya.fetch_board(labels)  # her own follow since her last refresh: seen
+    w.edit_plan(pid, w.plans[pid]["doc"]["units"])
+    jo.fetch_board(labels)
+    check("stamp: a save to a plan I co-author reaches my Anki at the next refresh",
+          next(a["version"] for a in jo.session["plans_authored"] if a["id"] == pid) == v + 1)
+    check("stamp: and moves no one else's", not maya.fetch_board(labels)["plans_fresh"])
+    # a plan offered to a squad I'm in
+    check("offers: back in the squad", maya.join_squad(sq["id"], sq["code"]) == 200)
+    maya.fetch_board(labels)
+    w.add_plan("dre", "Neuro", "Step 1", [], audience="squad", squad=sq["id"])
+    maya.fetch_board(labels)
+    check("offers: a plan offered to my squad comes at the next refresh",
+          "Neuro" in [o["name"] for o in maya.session.get("plan_offers") or []], str(maya.session.get("plan_offers")))
+    check("offers: and the squad's plans I follow are back on my board",
+          len(maya.session.get("plans") or []) == 21, str(len(maya.session.get("plans") or [])))
+
+
+def test_coauthors_say_yes_v381():
+    """3.8.1, round three, the fake's side (worker/src/plans.ts): asking
+    someone to co-write a plan is an invite until they say yes: no saves, no
+    tags in their Anki, listed only to the authors. The day's first board
+    carries my invites (who asked, by name and emoji) and the stamp moves
+    with them, so an invite costs no request of its own. An owner offers the
+    plan to a co-author; a yes swaps them, the plan's code and followers stay."""
+    w = world({"dre": "Dre", "jo": "Jo", "kim": "Kim"}, friends={"dre": ["jo"], "jo": ["dre"]})
+    dre, jo, kim = new_client(w, "dre", "Dre"), new_client(w, "jo", "Jo"), new_client(w, "kim", "Kim")
+    w.users["dre"]["emoji"] = "🦊"
+    pid, code = w.add_plan("dre", "MS2 Block 1", "Step 1", _plan_units())
+    check("follow: kim follows it", kim.follow_plan(code)[1] == 200)
+    labels = [_day(0)]
+    jo.fetch_board(labels, with_decks=True)
+    pv = jo.session.get("plans_pv")
+    check("invite: a stranger to the owner can't be asked", dre._call("POST", f"/plans/{pid}/editors", {"uid": "kim"})[0] == 403)
+    st, view = dre._call("POST", f"/plans/{pid}/editors", {"uid": "jo"})
+    check("invite: the owner sees it waiting", st == 200 and view["editors"] == [{"uid": "jo", "name": "Jo", "emoji": "", "pending": True}],
+          str(view.get("editors")))
+    check("invite: a follower doesn't", kim._call("GET", f"/plans/{pid}")[1]["editors"] == [])
+    n = len(w.requests())
+    upd = jo.fetch_board(labels)
+    check("invite: it arrives with the next refresh, no request of its own (the stamp moved)",
+          upd["plans_fresh"] and jo.session.get("plans_pv") != pv and len(w.requests()) == n + 1)
+    st, b = jo._call("GET", "/board?decks=1")
+    check("invite: the day's first board names who asked, by name and emoji only",
+          b["planInvites"] == [{"id": pid, "name": "MS2 Block 1", "kind": "coauthor", "by": {"name": "Dre", "emoji": "🦊"}}],
+          str(b.get("planInvites")))
+    check("invite: and the site's home", jo._call("GET", "/board?keep=1")[1].get("planInvites") == b["planInvites"])
+    check("invite: until a yes, not a co-author: no ids, no notes, not in my Anki's authored plans",
+          not jo.put_ids(pid, {}) and jo._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["g", 0], "text": "x"}})[0] == 403
+          and b["authored"] == [] and jo.my_plans() == [])
+    check("invite: a yes", jo._call("POST", f"/plans/{pid}/invite", {"yes": True})[1].get("role") == "editor")
+    st, b = jo._call("GET", "/board?decks=1")
+    check("invite: answered, it goes; the plan is one I write", b["planInvites"] == [] and [a["id"] for a in b["authored"]] == [pid])
+    check("invite: nothing more to answer", jo._call("POST", f"/plans/{pid}/invite", {"yes": True}) == (404, {"error": "no_invite"}))
+    # the plan handed over
+    check("owner: only to a co-author who said yes",
+          dre._call("POST", f"/plans/{pid}/owner", {"uid": "kim"}) == (400, {"error": "not_coauthor"}))
+    st, view = dre._call("POST", f"/plans/{pid}/owner", {"uid": "jo"})
+    check("owner: offered, the authors see to whom", st == 200 and view.get("handover") == "jo"
+          and "handover" not in kim._call("GET", f"/plans/{pid}")[1])
+    check("owner: it waits on her board", jo._call("GET", "/board?decks=1")[1]["planInvites"]
+          == [{"id": pid, "name": "MS2 Block 1", "kind": "owner", "by": {"name": "Dre", "emoji": "🦊"}}])
+    st, view = jo._call("POST", f"/plans/{pid}/invite", {"yes": True})
+    check("owner: a yes makes it hers, its owner a co-author; its code and followers stay",
+          view["role"] == "owner" and w.plans[pid]["owner"] == "jo" and w.plans[pid]["editors"] == {"dre"}
+          and w.plans[pid]["code"] == code and (pid, "kim") in w.follows and w.plans[pid].get("handover") is None, str(view))
+    check("owner: the old owner writes it still, as a co-author", dre._call("GET", f"/plans/{pid}")[1]["role"] == "editor")
+    jo._call("POST", f"/plans/{pid}/owner", {"uid": "dre"})
+    check("owner: no leaves it hers", dre._call("POST", f"/plans/{pid}/invite", {"yes": False})[1]["role"] == "editor"
+          and w.plans[pid]["owner"] == "jo")
+    jo._call("POST", f"/plans/{pid}/owner", {"uid": "dre"})
+    check("owner: removing the one it's offered to ends the offer",
+          dre._call("DELETE", f"/plans/{pid}/editors/dre")[0] == 200 and w.plans[pid].get("handover") is None
+          and "dre" not in w.plans[pid]["editors"])
+
+
+def test_remarks_deck_link_and_picks_named_v381():
+    """3.8.1, round three, the fake's side: where to get the deck (deckUrl,
+    an https link); the authors' notes on a tag or a card (remarks), in the
+    doc and one at a time from Anki's Browse; what a date's picked cards are
+    (pl, from the author's "#lbl" counts), kept while its picks are the same."""
+    w = world({"dre": "Dre", "kim": "Kim"})
+    dre, kim = new_client(w, "dre", "Dre"), new_client(w, "kim", "Kim")
+    pid, code = w.add_plan("dre", "MS2 Block 1", "Step 1", _plan_units())
+    kim.follow_plan(code)
+    base = w.plans[pid]["doc"]
+
+    def doc_ok(**extra):
+        try:
+            return w._plan_doc(dict(base, **extra))
+        except fakes.Bad:
+            return None
+    check("deck link: an https link is kept", doc_ok(deckUrl="https://example.org/deck?v=2")["deckUrl"] == "https://example.org/deck?v=2")
+    check("deck link: none is none", "deckUrl" not in doc_ok(deckUrl=""))
+    check("deck link: not http, a space, no host, or past 300",
+          all(doc_ok(deckUrl=u) is None for u in ("http://example.org", "https://e.org/a b", "https://", "https:///x",
+                                                   "https://e.org/" + "x" * 300, 7)))
+    got = doc_ok(remarks=[{"id": "r1", "tag": "Step1::Micro::Herpes_Viruses", "text": " Watch the\nvideo first "},
+                          {"id": "r2", "card": ["guid000050", 1], "text": "Mixes up with the next"}])
+    check("remarks: a tag's and a card's, one line each", got["remarks"] == [
+        {"id": "r1", "tag": "Step1::Micro::Herpes_Viruses", "text": "Watch the video first"},
+        {"id": "r2", "card": ["guid000050", 1], "text": "Mixes up with the next"}], str(got.get("remarks")))
+    check("remarks: exactly one target, 280 at most, ids unique, 300 a plan", all(doc_ok(remarks=r) is None for r in (
+        [{"id": "r1", "tag": "T", "card": ["g", 0], "text": "both"}], [{"id": "r1", "text": "neither"}],
+        [{"id": "r1", "card": ["g", -1], "text": "x"}], [{"id": "r1", "tag": "T", "text": "x" * 281}],
+        [{"id": "r1", "tag": "T", "text": "a"}, {"id": "r1", "tag": "U", "text": "b"}],
+        [{"id": f"r{i}", "tag": "T", "text": "a"} for i in range(301)])))
+    v = w.plans[pid]["version"]
+    st, view = dre._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["guid000050", 1], "text": "Read it twice"}})
+    rid = (view.get("doc", {}).get("remarks") or [{}])[0].get("id")
+    check("remarks: one from Browse is a save", st == 200 and w.plans[pid]["version"] == v + 1 and rid, str(view.get("doc", {}).get("remarks")))
+    dre._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["guid000050", 1], "text": "Read it once"}})
+    check("remarks: a second on that card changes its text", w.plans[pid]["doc"]["remarks"] == [
+        {"id": rid, "card": ["guid000050", 1], "text": "Read it once"}])
+    check("remarks: a follower can't", kim._call("POST", f"/plans/{pid}/remarks", {"remove": rid})[0] == 403)
+    check("remarks: the author takes it off", dre._call("POST", f"/plans/{pid}/remarks", {"remove": rid})[0] == 200
+          and "remarks" not in w.plans[pid]["doc"])
+    check("remarks: a follower's board carries them with the plan",
+          dre._call("POST", f"/plans/{pid}/remarks", {"add": {"tag": "Step1::Renal", "text": "Start here"}})[0] == 200
+          and kim._call("GET", "/board?decks=1")[1]["plans"][0]["doc"]["remarks"][0]["text"] == "Start here")
+    # a date's picks, named by the author's Anki
+    lbl = [["Step1::Micro::Herpes_Viruses", 88], ["Step1::Micro::Pox", 2]]
+    check("picks: named from the author's Anki", dre.put_ids(pid, {}, counts={"cz": {"#lbl": lbl}, "hf": {"#lbl": lbl}}))
+    cz = lambda: next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "cz")
+    hf = next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf")
+    check("picks: kept as the date's pl; a date with no picks has nothing to name", cz().get("pl") == lbl and "pl" not in hf)
+    dre.put_ids(pid, {}, counts={"cz": {"#lbl": [["a", 1]] * 4}})
+    check("picks: anything else is skipped", cz().get("pl") == lbl)
+    w.edit_plan(pid, [dict(u, name="Cloze 2") if u["id"] == "cz" else u for u in w.plans[pid]["doc"]["units"]])
+    check("picks: a save with the same picks keeps it", cz().get("pl") == lbl and cz()["name"] == "Cloze 2")
+    check("picks: and its followers get it", kim._call("GET", "/board?decks=1")[1]["plans"][0]["doc"]["units"][3].get("pl") == lbl)
+    dre.add_plan_cards(pid, [["guid000051", 0]], unit="cz")
+    check("picks: cards added from Browse: gone until it's named again", "pl" not in cz())
+    dre.put_ids(pid, {}, counts={"cz": {"#lbl": lbl}})
+    w.edit_plan(pid, [dict(u, cards=[["guid000050", 1]]) if u["id"] == "cz" else u for u in w.plans[pid]["doc"]["units"]])
+    check("picks: other picks on the site: gone", "pl" not in cz())
+
+
+def test_morning_keeps_unchanged_plan_docs_v381():
+    """3.8.1 (plans, rethought): the day's first refresh asks with same=1; when
+    the plans' stamp hasn't moved, each followed plan comes without its doc and
+    the add-on keeps the one it has. A doc it doesn't have leaves its plans as
+    they are, and the next refresh brings them all again."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    labels = [_day(-i) for i in range(7)]
+    maya.follow_plan(code)
+    saw = []
+    real = store._plans_for_board
+    store._plans_for_board = lambda me, same=False: (saw.append(same), real(me, same))[1]
+    first = maya.fetch_board(labels, with_decks=True)
+    kept = json.loads(json.dumps(maya.session.get("plans")))
+    check("lean plans: the first morning brings each doc", first["plans_fresh"] and saw[-1] is False
+          and kept and kept[0]["doc"]["units"])
+    again = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: nothing moved: no doc comes, the plans stay whole", again["plans_fresh"] and saw[-1] is True
+          and maya.session.get("plans") == kept, str(saw))
+    store.add_post(pid, "dre", "Read chapter 6 first.")
+    moved = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: the stamp moved: the docs come again, with the post", moved["plans_fresh"] and saw[-1] is False
+          and maya.session["plans"][0]["posts"][0]["text"] == "Read chapter 6 first.")
+    # an older add-on's docs (its cleaner left out what it didn't know) are never kept: the first morning brings them whole
+    maya.session["plans_by"] = "3.7.9"
+    maya.session["plans"] = [dict(p, doc=dict(p["doc"], units=p["doc"]["units"][:1])) for p in maya.session["plans"]]
+    up = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: after an upgrade, the docs come whole once, and are kept from then on",
+          up["plans_fresh"] and saw[-1] is False and len(maya.session["plans"][0]["doc"]["units"]) == len(_plan_units())
+          and maya.session.get("plans_by") == api._KEPT_BY and api._KEPT_BY == json.load(open(os.path.join(REPO, "due_crew", "manifest.json")))["version"])
+    maya.fetch_board(labels, with_decks=True)
+    check("lean plans: the next morning asks with same=1 again", saw[-1] is True)
+    maya.session["plans"] = []  # a session that lost its plans but kept its stamp
+    lost = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: a doc I don't have: nothing of them is used, the stamp is let go",
+          not lost["plans_fresh"] and maya.session["plans"] == [] and maya.session.get("plans_pv") == "")
+    back = maya.fetch_board(labels)
+    check("lean plans: the next refresh brings them all", back["plans_fresh"] and maya.session["plans"]
+          and maya.session["plans"][0]["doc"]["units"] and maya.session.get("plans_pv"))
+    # a kept doc goes through clean_plan again: cleaning must change nothing, or the morning would read an update
+    q = '"tag:#V::Ceph" "tag:DueCrew::MS2::SLG_12"'
+    rich = {"deck": "Big Step 1", "deckUrl": "https://example.com/deck", "tagroot": "MS2", "end": "2026-12-01",
+            "phases": {"catchup": 3, "taper": 7}, "pace": {"mode": "daily", "daily": 20, "days": [1, 1, 1, 1, 1, 0, 0]},
+            "reviews": [{"day": "2026-10-20", "from": "u1", "to": "u2"}], "events": [{"id": "q", "name": "Heme <quiz>", "day": "2026-10-16"}],
+            "every": [{"k": "do", "t": "Practice questions", "r": "4"}],
+            "tags": [{"id": "t12", "name": "SLG 12", "notes": ["guid000002"], "cards": [["guid000001", 1]], "tags": ["#V::Pharm"]}],
+            "remarks": [{"id": "r1", "tag": "#V::Pharm", "text": "Read chapter 6 first"}, {"id": "r2", "card": ["guid000005", 1], "text": "Two"}],
+            "units": [{"id": "u1", "name": "Ceph", "opens": "2026-10-08", "due": "2026-10-12", "even": True, "tags": [], "decks": [],
+                       "cards": [["guid000009", 0]], "search": [q], "sn": {q: 12}, "cut": [{"tag": "#V::Ceph", "in": "t12", "q": q}], "for": "q",
+                       "todo": [{"k": "read", "t": "Chapter 6"}], "notes": ["Ab3$kL9qZ1"], "nids": [1690000000000], "idr": [["Ab3$kL9qZ1", 0]],
+                       "ids": ["guid000002"], "pl": [["#V::Pharm::Ceph", 12]]},
+                      {"id": "u2", "name": "SLG 12", "opens": "2026-10-09", "tags": ["DueCrew::MS2::SLG_12"], "decks": ["Big Step 1::Extras"]}]}
+    once = shapes.clean_plan({"id": "abcdefgh12", "version": 3, "doc": rich, "share": True})
+    check("lean plans: a kept doc cleaned again is the same doc (every part of a rich plan)",
+          once == shapes.clean_plan({"id": "abcdefgh12", "version": 3, "doc": once["doc"], "share": True}))
+    old = store.handle("GET", f"{api.API_BASE}/board?decks=1&wk=&got=0&pv={maya.session['plans_pv']}",
+                       {"Authorization": f"Bearer {store.session_for('maya')}"})
+    body = old.json()
+    check("lean plans: an older add-on (no same=1) still gets every doc", old.status_code == 200 and body.get("plans")
+          and all("doc" in p and not p.get("same") for p in body["plans"]), str(body)[:200])
+
+
+def test_builder_work_and_suggestions_v381():
+    """3.8.1 (plans, rethought): the builder warns about the work a day asks
+    (each date spread to its due date over the plan's days), not about what
+    opens on it; and a date's name points at the deck's tags. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP builder work: no node")
+        return
+    app = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    b = open(os.path.join(REPO, "site", "public", "builder.js")).read()
+    head = app[app.index("const MONTHS"):app.index("const today =")]
+    sched_js = app[app.index("const Sched = (() => {"):app.index("// ---- 3.2: home")]
+    work_js = b[b.index("const Work = (() => {"):b.index("/** 3.8.0: a plan's squad")]
+    doc = {"deck": "x", "units": [
+        {"id": "rp", "name": "Renal physiology", "opens": "2026-10-12"},           # to the day before the next
+        {"id": "rx", "name": "Renal pharm", "opens": "2026-10-19", "due": "2026-10-20"},
+        {"id": "pu", "name": "Pulm", "opens": "2026-10-26", "due": "2026-10-30", "even": True}]}
+    tree = [["#Videos::Renal", 900], ["#Videos::Renal::Physiology", 212], ["#Videos::Renal::Pharm", 190],
+            ["#Videos::Cardio::Physiology", 300], ["#Videos::Cardio::Arrhythmias", 61], ["#Book::Pharm::Ch07_Diuretics", 64],
+            ["Step1::Pulm", 288], ["#Videos::Heme::Herpes_Viruses", 88]]
+    prog = head + "\n" + sched_js + "\n" + work_js + (
+        f"const doc = {json.dumps(doc)}; const tree = {json.dumps(tree)};\n"
+        "const all = [1, 1, 1, 1, 1, 1, 1], wk = [1, 1, 1, 1, 1, 0, 0];\n"
+        "const tot = { rp: 212, rx: 190, pu: 288 };\n"
+        "const w = Work.map(doc, (u) => tot[u.id], all);\n"
+        "const w5 = Work.map(doc, (u) => tot[u.id], wk);\n"
+        "const sum = (m) => [...m.values()].reduce((a, x) => a + x.n, 0);\n"
+        "console.log(JSON.stringify({"
+        " rp: Work.spread(doc, doc.units[0], 212, all), mon: w.get('2026-10-12').n, sum: sum(w), sum5: sum(w5),"
+        " sat: w5.get('2026-10-17') || null, rx: Work.spread(doc, doc.units[1], 190, all),"
+        " over: Work.over(w, 20), none: Work.over(w, 0),"
+        " s1: Suggest.tags('Renal physiology', tree), s2: Suggest.tags('Cardiac physiology', tree),"
+        " s3: Suggest.tags('Lecture 14: Herpes viruses', tree), s4: Suggest.tags('Read: Chapter 3', tree),"
+        " s5: Suggest.tags('Arrhythmia', tree, (p) => p.includes('Cardio')), s6: Suggest.tags('Diuretics', tree),"
+        " s7: Suggest.tags('Cardio arrhythmia', tree), s8: Suggest.tags('Renal and cardio physiology', tree),"
+        " n1: Suggest.tags('SLG 12', [['DueCrew::B1::SLG_3', 9], ['DueCrew::B1::SLG_12', 40], ['DueCrew::B1::SLG_1', 5]]),"
+        " n2: Suggest.tags('Block 2 cardiology', [['Block_3::Cardiology', 9], ['Block_2::Cardiology', 30]]),"
+        " n3: Suggest.tags('Hemolytic anemia', [['#Path::03_Hemolytic_Anemia', 20]]),"
+        " n4: Suggest.tags('Lecture 14: Herpes viruses', [['#Videos::05_Herpes_Viruses', 88]]) }));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        r = json.loads(out.stdout)
+    except ValueError:
+        check("builder work: runs", False, out.stdout + out.stderr)
+        return
+    check("work: a week's date is its daily share, every day of its week, all of it",
+          len(r["rp"]) == 7 and sum(n for _d, n in r["rp"]) == 212 and r["mon"] == 31 and max(n for _d, n in r["rp"]) == 31, str(r["rp"]))
+    check("work: a due date makes the window; every card counted once", [d for d, _n in r["rx"]] == ["2026-10-19", "2026-10-20"]
+          and r["sum"] == 212 + 190 + 288 and r["sum5"] == 212 + 190 + 288, str(r["rx"]))
+    check("work: a day off asks nothing", r["sat"] is None)
+    check("work: days over the pace come as runs, with their most", r["over"][0]["a"] == "2026-10-12"
+          and r["over"][0]["b"] >= "2026-10-18" and r["over"][0]["top"] >= 31 and r["none"] == [], str(r["over"]))
+    check("suggest: every word of the name, one in the tag's last part",
+          r["s1"] == [["#Videos::Renal::Physiology", 212]] and r["s2"] == [["#Videos::Cardio::Physiology", 300]], str(r["s1"]) + str(r["s2"]))
+    check("suggest: lecture words and numbers aside; nothing for a chapter", r["s3"] == [["#Videos::Heme::Herpes_Viruses", 88]]
+          and r["s4"] == [], str(r["s3"]))
+    check("suggest: what's placed is left out; a word inside a part", r["s5"] == [] and r["s6"] == [["#Book::Pharm::Ch07_Diuretics", 64]])
+    check("suggest: a name's number picks its own tag (SLG 12, never SLG 3 or 1); a deck's 03_ order is no number",
+          r["n1"] == [["DueCrew::B1::SLG_12", 40]] and r["n2"] == [["Block_2::Cardiology", 30]]
+          and r["n3"] == [["#Path::03_Hemolytic_Anemia", 20]] and r["n4"] == [["#Videos::05_Herpes_Viruses", 88]], str([r["n1"], r["n2"], r["n3"], r["n4"]]))
+    check("builder: a renamed tag is followed string by string (never inside a number), a kept-without-extras tag is placed",
+          "const follow = (u) => (ren.length ? walk(u, \"\") : u);" in b and "JSON.parse(x)" not in b
+          and "const p = extrasOf(q); return p ? `tag:${p}` : null;" in b
+          and b.index("const extrasOf = (q) =>") < b.index("const placedKeys = () =>"))
+    check("suggest: half a name is noise; all but one of three words will do",
+          r["s7"] == [["#Videos::Cardio::Arrhythmias", 61]] and r["s8"] and all(p.endswith("Physiology") for p, _n in r["s8"]), str(r["s7"]) + str(r["s8"]))
+    check("builder: the heavy note and the Text preview read the day's work",
+          "const run = Work.over(work, cap)" in b and "Work.over(workMap({ ...doc, units: after }, placed), cap)" in b
+          and "e.load > cap * 1.25" not in b)
+    check("builder: a named date shows its name on the calendar; a doubled last word its parent",
+          'h("span", { class: "dname", title: u.name }, u.name)' in b and "const chipLabel = (key, placed)" in b)
+    check("builder: a named date's suggestions add a tag in one click", "Suggest.tags(u.name, tree.tags, skip)" in b
+          and "u.tags = [...(u.tags || []), p]; mark(); draw();" in b)
+
+
+def test_study_for_a_quiz_v381():
+    """3.8.1 (plans, rethought): from three days out, the plan's box offers
+    Study for a quiz: one Due Crew deck of the open cards of every date that
+    preps for it (not one after it), the shakiest first, Anki's own step."""
+    import due_crew as dc
+    from due_crew import plans as P, board
+    from aqt.deckbrowser import DeckBrowser
+    t = _day(0)
+    doc = {"units": [{"id": "a", "name": "A", "opens": _day(-2), "for": "q"}, {"id": "b", "name": "B", "opens": _day(-1), "for": "q"},
+                     {"id": "c", "name": "C", "opens": _day(4), "for": "q"},          # after the quiz: reinforcement
+                     {"id": "d", "name": "D", "opens": _day(1), "for": "q"}],         # not open yet
+           "events": [{"id": "q", "name": "Heme <quiz>", "day": _day(3)}, {"id": "z", "name": "Later", "day": _day(9)}]}
+    prog = {"a": [40, 10, 40], "b": [30, 0, 30], "c": [5, 0, 5]}
+    qz = P.quiz(doc, t, prog)
+    check("quiz: its dates open by today and before it; their opened cards counted",
+          qz == {"id": "q", "name": "Heme <quiz>", "day": _day(3), "units": ["a", "b"], "open": 70}, qz)
+    check("quiz: not four days out, not with nothing open, not after it",
+          P.quiz(doc, _day(-1), prog) is None and P.quiz(doc, t, {}) is None and P.quiz(doc, _day(4), prog) is None)
+    html = board._plan_card_html(dict({"id": "p1", "title": "Plan"}, prep={"name": "Heme <quiz>", "day": _day(3), "when": "Thu", "left": 1, "today": False},
+                                      quiz=dict(qz, when="Thu")))
+    check("quiz: one line for the event, its prep days and its cards, Study for it; its name escaped",
+          "duecrew:planquiz:p1:q" in html and "Heme &lt;quiz&gt;" in html and "Heme <quiz>" not in html
+          and html.count("Heme &lt;quiz&gt;") == 1 and "1 more day of prep &middot; 70 cards open from its dates" in html, html[-1200:])
+    html2 = board._plan_card_html(dict({"id": "p1", "title": "Plan"}, prep={"name": "Other", "day": _day(1), "when": "Tue", "left": 0},
+                                       quiz=dict(qz, when="Thu", today=False)))
+    check("quiz: beside the prep line when that names another event", "70 cards open from its dates" in html2
+          and "planquiz:p1:q" in html2 and "<b>Other</b>" in html2)
+    units = [dict(u, **{"for": "q"}) if u["id"] in ("hf", "ar") else u for u in _plan_units()]
+    store, pid, code, maya = _v381_world(units, [{"id": "q", "name": "Cardio quiz", "day": _day(2)}])
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        built, sel, moved = [], [], []
+
+        def fake_filtered(c, name, cids, order=4):
+            built.append((name, sorted(cids), order))
+            col.decks.names[98] = name
+            return True
+        saved = (F._filtered, getattr(F.mw, "moveToState", None))
+        F._filtered = fake_filtered
+        col.decks.select = sel.append
+        F.mw.moveToState = moved.append
+        try:
+            dc._on_js(False, f"duecrew:planquiz:{pid}:q", DeckBrowser())
+            dc._on_js(False, f"duecrew:planquiz:{pid}:nope", DeckBrowser())
+        finally:
+            F._filtered = saved[0]
+            if saved[1] is None:
+                F.mw.__dict__.pop("moveToState", None)
+            else:
+                F.mw.moveToState = saved[1]
+        check("quiz: one Due Crew deck of its dates' open cards, the shakiest first, and Anki's Study screen on it",
+              built == [("Due Crew::Cardio quiz", [1, 2, 3], 2)] and sel == [98] and moved == ["overview"], (built, sel, moved))
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        check("quiz: the plan's box carries it from three days out", (v.get("quiz") or {}).get("id") == "q"
+              and f"duecrew:planquiz:{pid}:q" in board._plan_card_html(v), v.get("quiz"))
+
+
+def test_plan_tags_round_two_v381():
+    """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
+    video's tag to the cards one of the plan's own tags holds (a cut, named
+    for both, in the video's row); a plan tag can name single cards (Anki's
+    tag goes on their notes; Due Crew reads just those cards); an SLG that
+    changes reaches dates that opened, opening just what it adds."""
+    from due_crew import plans as P, plan_flow as F
+    from due_crew.backend import shapes
+    video = "Step1_v12::#Videos::Pharm::Cephalosporins"
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    for cid, nid, ord_, tags in ((1, 1, 0, video), (11, 1, 1, video), (12, 1, 2, video), (2, 2, 0, video), (3, 3, 0, video),
+                                 (4, 4, 0, "#Book::Ch07"), (5, 5, 0, "#Book::Ch07"), (6, 6, 0, "")):
+        fakes.add_card(conn, cid, did=10, tags=tags, nid=nid, ord_=ord_)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Step 1"})
+    q = '"tag:DueCrew::MS2\\_Block\\_1::SLG\\_12" "tag:Step1\\_v*::#Videos::Pharm::Cephalosporins"'
+    raw = {"deck": "Step 1", "tagroot": "MS2_Block_1",
+           "tags": [{"id": "t12", "name": "SLG 12", "notes": ["guid000002", "guid000004"], "cards": [["guid000001", 1], ["gone", 0]]},
+                    {"id": "t13", "name": "SLG 13", "cards": [["guid000005", 0]]}],
+           "units": [{"id": "u1", "name": "Cephalosporins", "opens": "2026-10-08", "tags": [], "decks": [], "cards": [],
+                      "search": [q, "tag:Other"], "cut": [{"tag": video, "in": "t12", "q": q}, {"tag": video, "in": "nope", "q": "tag:Other"}]},
+                     {"id": "u2", "name": "SLG 12", "opens": "2026-10-09", "tags": ["DueCrew::MS2_Block_1::SLG_12"], "decks": [], "cards": []},
+                     {"id": "u3", "name": "Book", "opens": "2026-10-10", "tags": ["#Book::Ch07"], "decks": [], "cards": []}]}
+    doc = shapes.clean_plan_doc(raw)
+    u1, u2, u3 = doc["units"]
+    check("r2: a cut is kept with its tag's name; one whose tag is gone is left to its search",
+          u1.get("cut") == [{"tag": video, "in": "t12", "q": q, "nm": "SLG 12"}], str(u1.get("cut")))
+    check("r2: a tag of single cards alone is a tag; its cards are kept", doc["tags"][1].get("cards") == [["guid000005", 0]], str(doc["tags"]))
+    check("r2: a date using the plan's tags carries what they hold (ptv); one that doesn't, nothing",
+          bool(u1.get("ptv")) and bool(u2.get("ptv")) and "ptv" not in u3)
+    idx = P.DeckIndex(col, 10)
+    check("r2: a cut is the video's cards the SLG holds: a whole note's, and just the single cloze named",
+          idx.match(u1, None, doc) == {2, 11}, str(idx.match(u1, None, doc)))
+    check("r2: a date naming the plan's tag reads what it holds: the single card, never its siblings",
+          idx.match(u2, None, doc) == {2, 4, 11}, str(idx.match(u2, None, doc)))
+    check("r2: without the doc, the Anki tag and the search are read, as an older add-on does",
+          idx.match(u2, None, "Step 1") == set())  # the tag isn't on any note yet
+    items = P.topic_items([u1])
+    check("r2: a cut is named for both, in its video's group; its search isn't listed again",
+          [(g, x) for g, x, _s in items] == [("Videos", "Cephalosporins \u00b7 SLG 12"), ("Search", "tag:Other")], str(items))
+    check("r2: a cut's topic finds its cards, as the date does", idx.match(items[0][2], None, doc) == {2, 11})
+    got = P.parts(idx, dict(u1, tags=["#Book::Ch07"]), None, doc)
+    check("r2: a cut counts in its video's row of Due's progress",
+          sorted(g for g, _s, _t in got) == ["Other", "Videos"] and dict((g, t) for g, _s, t in got)["Videos"] == 2, str(got))
+    applied, res = P.sync_tags(col, idx, doc, {}, "Due Crew: tags")
+    check("r2: the tag goes on the notes of its single cards (Anki tags notes); missing ones are counted",
+          "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 1) and "DueCrew::MS2_Block_1::SLG_12" in _tags_of(col, 2)
+          and "DueCrew::MS2_Block_1::SLG_13" in _tags_of(col, 5) and res["missing"] == {"SLG 12": 1}, str(res))
+    check("r2: with the tag on, a date naming it still reads just the single card", P.DeckIndex(col, 10).match(u2, None, doc) == {2, 4, 11})
+    idx = P.DeckIndex(col, 10)
+    pt = idx.plan_part(u1, doc)
+    src = P.unit_sources(u1, 10, None, pt)
+    check("r2: an opened date keeps what the plan's tags held then; a cut's search is the cut's",
+          pt == {2, 11} and src[5] == ["tag:Other"] and src[-1] == {"pt": [2, 11]} and idx.plan_part(u3, doc) is None, str(src))
+    # the SLG grows by a note: the date reads as changed, and opening it opens just the new card
+    raw2 = json.loads(json.dumps(raw))
+    raw2["tags"][0]["notes"].append("guid000003")
+    doc2 = shapes.clean_plan_doc(raw2)
+    v1, v2 = doc2["units"][0], doc["units"][0]
+    check("r2: an SLG that changes makes the dates using it read as changed", P.unit_sig(v1, 10) != P.unit_sig(v2, 10)
+          and P.unit_sig(doc2["units"][2], 10) == P.unit_sig(u3, 10))
+    st = {"deck_id": 10, "applied": {"u1": P.unit_sig(u1, 10)}, "src": {"u1": src}}
+    check("r2: opening the changed date opens just what the SLG added", F._unit_cids(P.DeckIndex(col, 10), st, v1, doc2) == {3},
+          str(F._unit_cids(P.DeckIndex(col, 10), st, v1, doc2)))
+    lean = shapes.clean_authored({"id": "p" + "0" * 15, "version": 1, "name": "MS2 Block 1", "doc": raw})
+    snap = P.ids_snapshot(P.DeckIndex(col, 10), shapes.clean_plan_doc(dict(raw, units=lean["doc"]["units"])))
+    check("r2: the author's note ids for a cut date go up with its cuts, so the Worker keeps them only while they're these",
+          snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
+
+
+# ---------------------------------------------------------------- 3.8.1: the follower side of plans
+
+def _v381_world(units=None, events=None):
+    """A plan by Dre (_plan_units unless given) and Maya, who'll follow it."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", units or _plan_units())
+    if events:  # saved with the dates, so a date's `for` names one
+        store.plans[pid]["doc"] = store._plan_doc({"deck": "Step 1", "units": units or _plan_units(), "events": events})
+    return store, pid, code, new_client(store, "maya", "Maya")
+
+
+class _SyncBg:
+    """plan_flow's background jobs run at once, their done after them."""
+
+    def __init__(self, F):
+        self.F = F
+
+    def __enter__(self):
+        self.saved = self.F._bg
+        self.F._bg = lambda job, done=None: done(job()) if done else job()
+        return self
+
+    def __exit__(self, *exc):
+        self.F._bg = self.saved
+        return False
+
+
+def _undo_here(F, col, fn):
+    """fn() with Anki's undo run on the spot (an Anki without CollectionOp)."""
+    sys.modules["aqt.operations"] = None
+    was = getattr(F.mw, "undo", None)
+    F.mw.undo = col.undo
+    try:
+        fn()
+    finally:
+        sys.modules.pop("aqt.operations", None)
+        if was is None:
+            del F.mw.undo
+        else:
+            F.mw.undo = was
+
+
+def test_put_back_is_not_hold_back_v381():
+    """3.8.1: Put back (at my own pace) kept its cards in `held`, and the
+    morning read any held card as a yes to Hold back: from then on each date
+    not opened yet had its new cards suspended. The yes is its own flag now
+    (`hold_yes`: Follow's Hold back, or the question on first sight or on
+    going to my own pace); a state from before reads as a yes on the plan's
+    dates only. And a card a date opened here is never held, even when the
+    author moves it to a later date."""
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (4, 6)")  # later dates' new cards, active
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid)  # Heart failure
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        F.put_back_own(pid)
+        st = F._state_cfg()[pid]
+        check("put back: its cards shut and kept for Stop, and that's no yes to Hold back",
+              not ({1, 2} & _open(col)) and {1, 2} <= set(st.get("held") or []) and st.get("hold_yes") is False, str(st))
+        n = F.hold_new(F.followed(), F._state_cfg(), _day(0), morning=True)
+        pc = g.state()
+        pc["plans_day"] = _day(-1)
+        F._psave(pc)
+        F.maybe_morning(False)
+        check("put back: no morning holds a later date's cards after it", n == 0 and {4, 6} <= _open(col)
+              and g.state()["plans_day"] == _day(0), sorted(_open(col)))
+        asked = []
+        F.offer_hold([pid], ask=lambda name, k: asked.append(k) or True)
+        st = F._state_cfg()[pid]
+        check("hold back asked, yes: the later dates' new cards held, and the yes kept",
+              asked == [2] and not ({4, 6} & _open(col)) and st["hold_yes"] is True, (asked, st.get("hold_yes")))
+        units = _plan_units()
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # card 9 onto a later date
+        store.edit_plan(pid, units)
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 9")
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("hold back, yes: what an author adds to a later date is held too",
+              9 not in _open(col) and 9 in F._state_cfg()[pid]["held"])
+    a, b, c = {"held": [1]}, {"held": [1]}, {}
+    ya, yb, yc = F._hold_yes({"own": ""}, a), F._hold_yes({"own": "ready"}, b), F._hold_yes({"own": ""}, c)
+    check("before 3.8.1: held cards on the plan's dates were a yes; at my own pace a no until asked; settled once",
+          ya is True and a["hold_yes"] is True and yb is False and b["hold_yes"] is False
+          and yc is False and "hold_yes" not in c and F._hold_yes({"own": ""}, b) is False, (a, b, c))
+
+    store2, pid2, code2, kai = _v381_world()
+    col2 = _plan_col()
+    col2.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
+    with _PlanGlue({"B": kai}, {"B": col2}):
+        plan, _ = kai.follow_plan(code2)
+        F.on_followed(plan, 10, None, "open", hold=True)
+        st = F._state_cfg()[pid2]
+        check("follow with Hold back: today's dates open, a later date's card held, the yes kept",
+              {1, 2, 3} <= _open(col2) and 4 not in _open(col2) and st["hold_yes"] is True and st["held"] == [4], str(st))
+        units = _plan_units()
+        units[1] = dict(units[1], tags=["Step1::Cardiology"])                          # Arrhythmia's card...
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardio::Arrhythmia"])  # ...moved to a later date
+        store2.edit_plan(pid2, units)
+        kai.fetch_board([_day(0)], with_decks=True)
+        p = F.followed()[0]
+        bare = P.holdable(P.DeckIndex(col2, 10), p["doc"], _day(0), None, st["applied"])
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("moved later by the author: a card a date opened here is never held again",
+              3 in bare and 3 in _open(col2) and 3 not in F._state_cfg()[pid2]["held"], (sorted(bare), sorted(_open(col2))))
+
+
+def test_own_pace_first_seen_v381():
+    """3.8.1: a plan at my own pace, first seen on this computer (followed on
+    the site, or on another computer). The morning skipped every date before
+    today, so each left Up next for good. At my own pace no date has passed:
+    one whose cards are all open here counts as opened (of a day this
+    computer doesn't know, so not in my pace), the rest stay Up next, and
+    the hold-back question counts only those."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    # Extras opened on the other computer (AnkiWeb brought it); one of Heart failure's cards is active
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (1, 4)")
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        maya.follow_plan(code, own="ready")  # on the site
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.maybe_morning(False, fresh=True)
+        st = g.state()["plans"][pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("first seen at my own pace: nothing skipped; a date all open here counts as opened, of no day here",
+              sorted(st["applied"]) == ["ex", "rn"] and not any(v.startswith("skip:") for v in st["applied"].values())
+              and st["own_opened"] == {"ex": "", "rn": ""}, str(st))
+        check("first seen at my own pace: the earlier dates are still Up next",
+              [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ar", "cz"])
+        v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
+        check("first seen: not in my pace; Up next starts at the first date",
+              v["own"]["pace"] is None and v["own"]["next"]["uid"] == "hf", str(v["own"]))
+        asked = []
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("first seen: the hold-back question counts the dates I haven't opened, not one opened elsewhere",
+              asked == [1], asked)
+
+
+def test_browse_open_claims_only_what_it_opened_v381():
+    """3.8.1: at my own pace, an open from Browse counted every Up next date
+    whose cards were all open as opened today, so on a deck whose cards are
+    all active one open emptied Up next. Now only a date the open touched,
+    with a card shut before it, counts."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        n = F.open_cards_now([4], "Extras", first=False)
+        check("browse, a deck all active: nothing opens, and no date counts as opened",
+              n == 0 and not F._state_cfg()[pid].get("applied"), str(F._state_cfg()[pid].get("applied")))
+        col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id IN (2, 3)")
+        n = F.open_cards_now([3], "Arrhythmia", first=False)
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("browse: the date it opened counts as opened today; one still shut, or one it didn't touch, doesn't",
+              n == 1 and list(st["applied"]) == ["ar"] and st["own_opened"] == {"ar": _day(0)}
+              and [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ex", "cz", "rn"], str(st))
+
+
+def test_not_today_at_own_pace_v381():
+    """3.8.1: at my own pace, Not today after a morning took the date I had
+    opened out of `applied` (Up next again) and lost what the author had
+    added (the own-pace morning ignored `later`). Now the date stays opened
+    as it was and the addition opens tomorrow morning; a next date that
+    opened by itself is Up next again till then."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid)  # Heart failure: 1, 2
+        was_sig = F._state_cfg()[pid]["applied"]["hf"]
+        units = _plan_units()
+        units[0] = dict(units[0], tags=units[0]["tags"] + ["Step1::Cardiology"])  # the author adds card 9 to it
+        store.edit_plan(pid, units)
+        maya.fetch_board([_day(0)], with_decks=True)
+        res = F._open_now(F.followed())
+        check("own pace: the morning opens what an author added to a date I opened, with Not today",
+              res["n"] == 1 and 9 in _open(col) and (F.morning_opened() or {}).get("n") == 1, str(res))
+        _undo_here(F, col, lambda: F.undo_morning(put_off_too=True))
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("not today: the date stays opened as it was, the addition waits for tomorrow",
+              9 not in _open(col) and {1, 2} <= _open(col) and st["applied"]["hf"] == was_sig
+              and st["later"] == {"hf": _day(1)} and "hf" not in [u["id"] for u in P.up_next(p["doc"], st["applied"])], str(st))
+        state = F._state_cfg()
+        again = F.run(col, F.followed(), state, _day(0))
+        check("not today: not again today", again["n"] == 0 and 9 not in _open(col), str(again))
+        tomorrow = F.run(col, F.followed(), state, _day(1))
+        check("not today: tomorrow's morning opens it", tomorrow["n"] == 1 and 9 in _open(col)
+              and not state[pid].get("later"), str(tomorrow))
+
+    store2, pid2, code2, kai = _v381_world()
+    col2 = _plan_col()
+    with _PlanGlue({"B": kai}, {"B": col2}):
+        plan, _ = kai.follow_plan(code2, own="next")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid2)
+        col2.db.conn.execute("UPDATE cards SET type = 2, queue = 2 WHERE id IN (1, 2)")  # seen
+        pc = F._pcfg()
+        pc["plans"][pid2]["own_opened"]["hf"] = _day(-1)
+        F._psave(pc)
+        res = F._open_now(F.followed())
+        check("next: seen the last one, the morning opens the next by itself", res["names"] == ["Arrhythmia"] and 3 in _open(col2), str(res))
+        _undo_here(F, col2, lambda: F.undo_morning(put_off_too=True))
+        st = F._state_cfg()[pid2]
+        p = next(x for x in F.followed() if x["id"] == pid2)
+        check("next, not today: Up next again, opening tomorrow morning",
+              3 not in _open(col2) and "ar" not in st["applied"] and "ar" not in (st.get("own_opened") or {})
+              and P.up_next(p["doc"], st["applied"])[0]["id"] == "ar" and st["later"] == {"ar": _day(1)}, str(st))
+        state = F._state_cfg()
+        check("next, not today: not again today", F.run(col2, F.followed(), state, _day(0))["n"] == 0 and 3 not in _open(col2))
+        check("next, not today: tomorrow's morning opens it",
+              F.run(col2, F.followed(), state, _day(1))["names"] == ["Arrhythmia"] and 3 in _open(col2))
+
+
+def test_open_now_on_a_closed_date_v381():
+    """3.8.1: a date closed again with Edit › Undo stayed shut: Open now was
+    only on dates still to come, and opening a date that had opened opened
+    only what the author had changed since. Now the week offers Open now on
+    a date that opened here and has none of its cards open, and it opens
+    whole."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        opened = {1, 2, 3} <= _open(col)
+        col.undo()  # Edit › Undo
+        p = next(x for x in F.followed() if x["id"] == pid)
+        view = lambda: board._plan_card_html(dict(F.card_view(p, F._state_cfg()[pid], F.progress(col, [p], F._state_cfg())[pid],
+                                                              _day(0)), id=pid))
+        html = view()
+        check("closed by Undo: still opened here, and today's date offers Open now",
+              opened and not ({1, 2, 3} & _open(col)) and "ar" in F._state_cfg()[pid]["applied"]
+              and f"duecrew:plannow:{pid}:ar" in html, html[:300])
+        dc._on_js(False, f"duecrew:plannow:{pid}:ar", DeckBrowser())
+        check("Open now (sent as the board does): the date opens whole, in one step; then no Open now",
+              3 in _open(col) and col.undo_status().undo == "Due Crew: open Arrhythmia"
+              and f"duecrew:plannow:{pid}:ar" not in view(), col.undo_status().undo)
+
+
+def test_morning_open_is_the_last_step_v381():
+    """3.8.1: the morning held back, set the catch-up's limit and built the
+    day's checkpoints after it opened, so the open wasn't Anki's latest
+    step and Not today went missing. They come before it now."""
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open", hold=True)  # Extras' card held till its day
+        units = _plan_units()
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # a later date gains card 9
+        store.edit_plan(pid, units)
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 9")
+        g.today["d"] = _day(3)  # Extras' morning
+        maya.fetch_board([_day(3)], with_decks=True)
+        pc = g.state()
+        pc["plans_day"] = _day(2)
+        F._psave(pc)
+        F.maybe_morning(False, fresh=True)
+        steps = [s[0] for s in col.undo_steps]
+        check("morning: it holds back what the author added, then opens; the open is Anki's latest step, so Not today shows",
+              9 not in _open(col) and 4 in _open(col)
+              and steps[-2:] == ["Due Crew: hold back Step 1", "Due Crew: open Extras"]
+              and F.morning_opened() == {"n": 1, "sync": False}, steps)
+    src = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    morning = src[src.index("def maybe_morning"):src.index("def _morning_waits")]
+    mid = src[src.index("def midday"):src.index("def hold_new")]
+    check("morning: hold back, the catch-up's limit and the checkpoints come before the open; midday holds before it opens",
+          morning.index("hold_new(") < morning.index("apply_catch()") < morning.index("build_checks(")
+          < morning.index('_open_now([p for p in plan_list if not p.get("paused")]')
+          and mid.index("hold_new(") < mid.index("_open_now("))
+
+
+def test_resume_at_own_pace_v381():
+    """3.8.1: ending a pause at my own pace asked about the plan's dates, and
+    "Start from the next date" turned my own pace off inside run and
+    skipped every passed date out of Up next. At my own pace it resumes
+    without asking."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    asked = []
+    fakes_ui = {"due_crew.ui.days_dialog": types.SimpleNamespace(ask_back=lambda *a, **k: asked.append("back") or "push",
+                                                                 ask_pause=lambda *a, **k: None),
+                "due_crew.ui.follow_dialog": types.SimpleNamespace(ask_catch_up=lambda *a, **k: asked.append("catch") or "skip")}
+    saved = {k: sys.modules.get(k) for k in fakes_ui}
+    sys.modules.update(fakes_ui)
+    skipped = lambda st: [k for k, v in (st.get("applied") or {}).items() if str(v).startswith("skip:")]
+    try:
+        with _PlanGlue({"A": maya}, {"A": col}) as g, _SyncBg(g.F):
+            F = g.F
+            plan, _ = maya.follow_plan(code, own="ready")
+            F.on_followed(plan, 10, None, "open")
+            maya.set_days(pid, paused=True, since=_day(-5), until=_day(-1))
+            F.back(pid)
+            st = F._state_cfg()[pid]
+            f = store.follows[(pid, "maya")]
+            p = next(x for x in F.followed() if x["id"] == pid)
+            check("back from a pause at my own pace: nothing asked, my dates not moved, nothing skipped",
+                  asked == [] and not f.get("paused") and not f.get("shift") and not p.get("paused")
+                  and not skipped(st) and len(P.up_next(p["doc"], st.get("applied"))) == 5, (asked, f, st.get("applied")))
+            maya.set_follow(pid, paused=True)
+            F.set_paused(pid, False)
+            st = F._state_cfg()[pid]
+            check("resume at my own pace: nothing asked, nothing skipped", asked == [] and not skipped(st), (asked, st.get("applied")))
+            res = F.run(col, F.followed(), F._state_cfg(), _day(0), mode="skip")
+            check("and a run asked to skip leaves a plan at my own pace as it is",
+                  res["n"] == 0 and not skipped(F._state_cfg()[pid]), str(F._state_cfg()[pid].get("applied")))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
+def test_move_menu_names_the_event_v381():
+    """3.8.1: Move…'s days compared an event's name with a date's `for` (the
+    event's id), so "after Cardio quiz" never showed."""
+    from due_crew import plans as P
+    units = _plan_units()
+    units[1] = dict(units[1], **{"for": "q1"})
+    store, pid, code, maya = _v381_world(units=units, events=[{"id": "q1", "day": _day(2), "name": "Cardio quiz"}])
+    doc = store.plans[pid]["doc"]
+    check("event_of: by the event's id", P.event_of(doc, doc["units"][1])["name"] == "Cardio quiz"
+          and P.event_of(doc, doc["units"][0]) is None)
+    labels = []
+
+    class Menu:
+        def __init__(self, *a):
+            pass
+
+        def addAction(self, text):
+            labels.append(text)
+            return types.SimpleNamespace(setEnabled=lambda on: None, triggered=types.SimpleNamespace(connect=lambda f: None))
+
+        def exec(self, *a):
+            pass
+    qt = sys.modules["aqt.qt"]
+    saved = (qt.QMenu, qt.QCursor)
+    qt.QMenu, qt.QCursor = Menu, types.SimpleNamespace(pos=lambda: None)
+    try:
+        with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+            maya.follow_plan(code)
+            maya.fetch_board([_day(0)], with_decks=True)
+            g.F.move_menu(pid, "ar")
+    finally:
+        qt.QMenu, qt.QCursor = saved
+    check("move: from the event's day on, a day says it's after it",
+          labels[1] == P.fmt_day(_day(1)) and labels[2] == f"{P.fmt_day(_day(2))} · after Cardio quiz", labels)
+
+
+def test_catch_has_one_shape_v381():
+    """3.8.1: a plan's `catch` was G5's catch-up {until, extra} and 3.2's
+    missed-days answer {mode, day} both, so answering the question ended a
+    running catch-up. The answer is `missed`; an old plans.json moves it."""
+    from due_crew import plan_flow as F
+    store, pid, code, maya = _v381_world()
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        path = os.path.join(g.dirs["A"], "plans.json")
+        with open(path, "w") as f:
+            json.dump({"plans": {"p1": {"deck_id": 10, "catch": {"mode": "spread", "day": _day(-1)}},
+                                 "p2": {"deck_id": 10, "catch": {"until": _day(3), "extra": 4}}}}, f)
+        g.forget()
+        pc = F._pcfg()
+        with open(path) as f:
+            disk = json.load(f)
+        check("upgrade: the missed-days answer moves to `missed`, a catch-up stays `catch`, written back",
+              pc["plans"]["p1"] == {"deck_id": 10, "missed": {"mode": "spread", "day": _day(-1)}}
+              and pc["plans"]["p2"]["catch"] == {"until": _day(3), "extra": 4} and disk["plans"]["p1"].get("missed"), str(pc))
+        F.set_catch("p2", "leave")
+        st = F._state_cfg()["p2"]
+        check("the missed-days answer leaves a running catch-up be",
+              st["catch"] == {"until": _day(3), "extra": 4} and st["missed"] == {"mode": "leave", "day": _day(0)}, str(st))
+    check("session: the answer read from either shape, never from a catch-up",
+          F._missed({"missed": {"mode": "spread"}}) == {"mode": "spread"}
+          and F._missed({"catch": {"mode": "leave", "day": "x"}})["mode"] == "leave"
+          and F._missed({"catch": {"until": "x", "extra": 1}}) == {})
+
+
+def test_week_open_now_at_own_pace_v381():
+    """3.8.1: at my own pace the week's Open now opened a date without
+    counting it as opened (not in my pace, not first in line, no Undo line),
+    unlike Up next's Open. It's the same Open; a date I haven't opened
+    whose day has passed offers it too, and one I opened opens what an
+    author added since."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    for cid, due in ((1, 50), (2, 51), (3, 52), (4, 53), (5, 54), (6, 55), (9, 56)):
+        col.db.conn.execute("UPDATE cards SET due = ? WHERE id = ?", (due, cid))
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        last_week = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0), week_offset=-1)
+        check("own pace: a date I haven't opened whose day has passed offers Open now",
+              f"duecrew:plannow:{pid}:hf" in board._plan_card_html(dict(last_week, id=pid)))
+        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        st = F._state_cfg()[pid]
+        due4 = col.db.scalar("SELECT due FROM cards WHERE id = 4")
+        last = F._pcfg().get("own_last") or {}
+        check("own pace, the week's Open now is Up next's Open: opened today, first in line, its Undo line",
+              4 in _open(col) and st["own_opened"] == {"ex": _day(0)} and due4 == 0 and last.get("uid") == "ex"
+              and last.get("kind") == "open" and col.undo_status().undo == "Due Crew: open Extras", (st.get("own_opened"), last, due4))
+        units = _plan_units()
+        units[2] = dict(units[2], tags=["Step1::Cardiology"])  # the author adds card 9 to Extras
+        store.edit_plan(pid, units)
+        maya.fetch_board([_day(0)], with_decks=True)
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        check("own pace: Open now on a date I opened opens what the author added, and it stays opened as it was",
+              9 in _open(col) and F._state_cfg()[pid]["own_opened"] == {"ex": _day(0)})
+
+
+def test_plan_words_v381():
+    """3.8.1, one name per idea: Not today (the morning's line and an
+    update's), Push my dates back (the missed-days line, Welcome back), "once
+    I've seen most of the last" (90% of its open cards opens the next), Hold
+    back's question at my own pace; Browse's items for writing a plan only
+    for someone who writes one."""
+    from due_crew import plan_flow as F
+    from due_crew import ui as UI
+    line = board._opened_line({"n": 3})
+    check("words: the morning's line says Not today, and when they open",
+          "Not today</a>" in line and 'title="They open tomorrow morning"' in line and "Put off" not in line, line)
+    notes = "".join(board._plan_notes({"update": {"n": 1, "names": ["A"]},
+                                       "session": {"ask": {"days": [_day(-2), _day(-1)], "waiting": 4, "spread": 2, "push": 2}}}, "p1"))
+    check("words: an update's Not today says when; the missed days' push is Push my dates back",
+          notes.count('title="They open tomorrow morning"') == 1 and "Push my dates back 2 days</a>" in notes
+          and "Move my days" not in notes, notes)
+    src = {n: open(os.path.join(REPO, "due_crew", *n.split("/")), encoding="utf-8").read()
+           for n in ("plan_flow.py", "ui/follow_dialog.py", "ui/days_dialog.py")}
+    check("words: the next opens once I've seen most of the last, at Follow and in the plan's menu",
+          "Open the next one by itself once I've seen most of the last" in src["ui/follow_dialog.py"]
+          and "When I'm ready, the next once I've seen most of the last" in src["plan_flow.py"]
+          and "seen the last\"" not in src["ui/follow_dialog.py"] + src["plan_flow.py"])
+    check("words: Welcome back's choice is Push my dates back",
+          'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
+    said = []
+    saved = UI.confirm
+    UI.confirm = lambda parent, title, text, ok: said.append(text) or True
+    try:
+        F._ask_hold("Step 1", 3, own=True)
+        F._ask_hold("Step 1", 1)
+    finally:
+        UI.confirm = saved
+    check("words: Hold back's question at my own pace: until you open them",
+          "3 cards of its later dates until you open them?" in said[0] and "their day" not in said[0]
+          and "1 card of its later dates until their day?" in said[1], said)
+    acts = []
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved_client = F.client
+    try:
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [], "plans": []})
+        F.browser_menu(types.SimpleNamespace(), Menu())
+        reader = list(acts)
+        del acts[:]
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [{"id": "p1", "doc": {}}], "plans": []})
+        F.browser_menu(types.SimpleNamespace(), Menu())
+        writer = list(acts)
+    finally:
+        F.client = saved_client
+    check("browse: someone who writes no plan gets why and open these; an author the writing ones too",
+          reader == ["Due Crew: why isn't it showing?", "Due Crew: open these…"]
+          and writer == reader + ["Due Crew: add to a plan…", "Due Crew: tag for a plan…",
+                                  "Due Crew: copy as plan selector", "Due Crew: export for my AI…"], (reader, writer))
+
+
+def test_builder_tags_keep_up_v381():
+    """3.8.1, Sam's pick "Keep the builder's tag list current": a deck's tag
+    tree reached duecrew.com's builder only through Make a plan from a deck.
+    Now, at the day's first refresh, each deck a plan I write runs on is
+    read (once an Anki day) and its tree goes up only when it differs from
+    what this computer last sent. One that didn't go is tried again; one
+    that lands after a profile switch isn't kept; Make a plan's counts."""
+    from due_crew import plans as P
+    from due_crew import app as appmod
+    store = world({"dre": "Dre"})
+    store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    col = _plan_col()
+    puts = lambda: sum(1 for m, path, _s in store.log if m == "PUT" and path == "/plans/trees")
+    reads = []
+    real_rows = P.tree_rows
+    with _PlanGlue({"A": dre}, {"A": col}) as g, _SyncBg(g.F):
+        F = g.F
+        P.tree_rows = lambda idx: reads.append(idx.did) or real_rows(idx)
+        real_put = dre.put_tree
+        try:
+            F.send_trees()
+            sent = g.state()["trees_sent"]["step 1"]
+            check("trees: the first refresh sends the deck's tree, noted as sent today",
+                  puts() == 1 and sent["day"] == _day(0) and sent["h"]
+                  and "Arrhythmia" in json.dumps(store.plan_trees[("dre", "Step 1")]), sent)
+            F.send_trees()
+            check("trees: the same day again: not read, not sent", puts() == 1 and reads == [10], reads)
+            g.today["d"] = _day(1)
+            F.send_trees()
+            check("trees: the next day it's read; nothing changed, nothing sent",
+                  puts() == 1 and len(reads) == 2 and g.state()["trees_sent"]["step 1"]["day"] == _day(1))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Long_QT ' WHERE id = 3")
+            g.today["d"] = _day(2)
+            F.send_trees()
+            check("trees: on a day its tags changed, one request", puts() == 2
+                  and "Long_QT" in json.dumps(store.plan_trees[("dre", "Step 1")]))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia ' WHERE id = 3")
+            g.today["d"] = _day(3)
+            dre.put_tree = lambda *a: False
+            F.send_trees()
+            check("trees: one that didn't go isn't noted as sent", g.state()["trees_sent"]["step 1"]["day"] == _day(2))
+
+            def switched(*a):
+                appmod.generation += 1  # a profile switch while it was out
+                return real_put(*a)
+            dre.put_tree = switched
+            F.send_trees()
+            check("trees: tried again at the next refresh; a reply after a profile switch isn't kept",
+                  puts() == 3 and g.state()["trees_sent"]["step 1"]["day"] == _day(2))
+            dre.put_tree = real_put
+            F.send_trees()
+            check("trees: so the next refresh sends it", puts() == 4 and g.state()["trees_sent"]["step 1"]["day"] == _day(3))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Torsades ' WHERE id = 3")
+            F.note_tree("Step 1", *real_rows(P.DeckIndex(col, 10)))
+            g.today["d"] = _day(4)
+            F.send_trees()
+            check("trees: what Make a plan from a deck sent counts as sent", puts() == 4)
+        finally:
+            P.tree_rows, dre.put_tree = real_rows, real_put
+        maya = new_client(store, "maya", "Maya")
+        F.client = lambda: maya
+        F.send_trees()
+        check("trees: someone who writes no plan sends nothing", puts() == 4)
+    check("tree hash: the same tree, the same hash; a count, a name or the deck changes it",
+          P.tree_hash("Step 1", [["a", 1]], []) == P.tree_hash("Step 1", [["a", 1]], [])
+          and len({P.tree_hash("Step 1", [["a", 1]], []), P.tree_hash("Step 1", [["a", 2]], []),
+                   P.tree_hash("Step 1", [["b", 1]], []), P.tree_hash("Step 2", [["a", 1]], [])}) == 4)
+    fakes.add_card(col.db.conn, 40, did=10, queue=-1, tags="Step1::" + "x" * 200)
+    tags, _decks = P.tree_rows(P.DeckIndex(col, 10))
+    check("tree: a path the server won't take stays here", not any(len(t[0]) > 200 for t in tags)
+          and any(t[0] == "Step1::Cardio" for t in tags), [t[0] for t in tags][:6])
+
+
+def _labels_col():
+    """3.8.1, round three: a deck in a big shared deck's shapes. 1-5 Herpes
+    (1 with a child tag), each with a question id and a Systems tag; 6-8
+    Influenza; 9 a leech with a plan's own tag only; 10 a tag with no
+    resource part. SECRET in every field: never in what a plan sends."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    R = "#Big_Step1_v12"
+    for cid in range(1, 6):
+        fakes.add_card(conn, cid, did=10, queue=-1, tags=f"{R}::#Video_Series::05_Micro::Viruses::Herpes_Viruses"
+                       f"{'::HSV1' if cid == 1 else ''} {R}::#QBank::Step::{1000 + cid} {R}::^Systems::Micro")
+    for cid in range(6, 9):
+        fakes.add_card(conn, cid, did=10, queue=-1, tags=f"{R}::#Video_Series::05_Micro::Viruses::Influenza {R}::#QBank::Step::{2000 + cid}")
+    fakes.add_card(conn, 9, did=10, queue=-1, tags="leech DueCrew::Block::SLG_1")
+    fakes.add_card(conn, 10, did=10, queue=-1, tags="Step1::Renal")
+    conn.execute("UPDATE notes SET flds = 'SECRET front' || char(31) || 'SECRET back'")
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Big Step 1"})
+    return col
+
+
+def test_pick_labels_v381():
+    """3.8.1, plans round three (4): a date's picked cards keep their
+    resource's name. plans.pick_labels reads the deck tags they sit under
+    (the deepest covering the most, read from a #/^ resource part down; then
+    the next for what's left; up to 3); the author's Anki sends them with the
+    date's counts (#lbl, again only when they or the picks change); a
+    follower's Anki names the picks with its own in You › Plans and Due, and
+    a name's click opens just those cards."""
+    from due_crew import plans as P, plan_flow as F
+    from due_crew.app import _state
+    R = "#Big_Step1_v12"
+    herpes, viruses = f"{R}::#Video_Series::05_Micro::Viruses::Herpes_Viruses", f"{R}::#Video_Series::05_Micro::Viruses"
+    col = _labels_col()
+    idx = P.DeckIndex(col, 10)
+    check("labels: the deepest tag covering them all names them; a series' root, a question's id and Systems don't",
+          P.pick_labels(idx, [1, 2, 3, 4, 5]) == [[herpes, 5]], P.pick_labels(idx, [1, 2, 3, 4, 5]))
+    got = P.pick_labels(idx, range(1, 11))
+    check("labels: what covers the most first, then the next for what's left; a leech's and a plan's own tags name nothing",
+          got == [[viruses, 8], ["Step1::Renal", 1]], got)
+    check("labels: up to `most`, and none for no cards",
+          P.pick_labels(idx, [1, 6, 10], most=1) == [[viruses, 2]] and P.pick_labels(idx, []) == [], P.pick_labels(idx, [1, 6, 10], most=1))
+    # topics: without labels as before; with them, by the resource, then the rest
+    u = {"id": "u1", "name": "Viruses", "opens": _day(0), "tags": [], "decks": [],
+         "cards": [["guid000001", 0], ["guid000006", 0], ["guid000009", 0]], "notes": ["guid000010"]}
+    doc = {"deck": "Big Step 1", "units": [u]}
+    check("topics: picks with no labels read as before",
+          ["Picked by ID", ["1 note"]] in P.topics(u) and ["Picked", ["3 single cards"]] in P.topics(u), P.topics(u))
+    names = F.pick_names(col, [{"id": "p1", "doc": doc}], {"p1": {"deck_id": 10}})
+    check("labels here: each date's picks by this copy's tags, the rest counted",
+          names == {"p1": {"u1": [[viruses, 2], ["Step1::Renal", 1], ["", 1]]}}, names)
+    nu = P.units(P.with_picks(doc, names["p1"]))[0]
+    check("labels here: a copy of the doc carries them; the plan stays as it came",
+          nu.get("_pl") and "_pl" not in u and P.with_picks(doc, None) is doc)
+    check("topics: \"Viruses · 2 picked\" in its series, then the rest under it",
+          P.topics(nu) == [["Video Series", ["Viruses · 2 picked"]], ["", ["Renal · 1 picked", "1 more picked"]]], P.topics(nu))
+    items = P.topic_items([nu])
+    check("topics: each name opens just its picks here; the rest, the picks under none",
+          [P.topic_cards(idx, s, None, doc) for _g, _x, s in items] == [{1, 6}, {10}, {9}], items)
+    wk = P.week_view(P.with_picks(doc, names["p1"]), {}, _day(0), P.week_start(_day(0)))
+    row = next(r for d in wk for r in d["units"])
+    html = board._week_html({"week": wk, "week_offset": 0}, "p1")
+    check("week: the date's picks read by their resource, each a link to its cards",
+          "Viruses · 2 picked</a>" in html and "duecrew:plantopic:p1:u1:0" in html and "Picked" not in html, row["what"])
+    shown, saved = [], (F.followed, F._state_cfg, F._browse, F.mw.col)
+    try:
+        F.followed = lambda: [{"id": "p1", "doc": doc}]
+        F._state_cfg = lambda c=None: {"p1": {"deck_id": 10}}
+        F._browse = lambda cids, q=None, empty="": shown.append(sorted(cids))
+        F.mw.col = col
+        _state["plan_picks"] = names
+        F.browse_topic("p1", ["u1"], 0)
+        F.browse_topic("p1", ["u1"], 2)
+    finally:
+        (F.followed, F._state_cfg, F._browse, F.mw.col) = saved
+        _state.pop("plan_picks", None)
+    check("browse: the board's click on a named pick opens those cards, as the board drew them", shown == [[1, 6], [9]], shown)
+    # the author's Anki: the labels ride the day's ids request, once a change
+    store = world({"dre": "Dre"})
+    pid, _code = store.add_plan("dre", "Micro", "Big Step 1", [
+        {"id": "u1", "name": "Viruses", "opens": _day(0), "tags": [], "decks": [], "notes": ["guid000001", "guid000006"]},
+        {"id": "u2", "name": "Renal", "opens": _day(1), "tags": ["Step1::Renal"], "decks": []}])
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    puts = lambda: [b for m, p, b in store.bodies if m == "PUT" and p == f"/plans/{pid}/ids"]
+    with _PlanGlue({"A": dre}, {"A": col}) as g, _SyncBg(g.F):
+        g.F.send_ids()
+        first = puts()
+        g.F.send_ids()
+        same = puts()
+        col.db.conn.execute("UPDATE notes SET tags = ' Step1::Renal ' WHERE id = 6")
+        g.F.send_ids()
+        moved = puts()
+    check("#lbl: the deck tags a date's picks sit under go with its counts; a date of tags alone has none",
+          len(first) == 1 and first[0]["counts"]["u1"]["#lbl"] == [[viruses, 2]] and "#lbl" not in first[0]["counts"].get("u2", {}),
+          first)
+    check("#lbl: nothing changed, nothing sent; a tag that moved sends them again",
+          len(same) == 1 and len(moved) == 2 and moved[-1]["counts"]["u1"]["#lbl"] == [[herpes + "::HSV1", 1], ["Step1::Renal", 1]],
+          moved[-1:])
+    check("#lbl: never a card's text", "SECRET" not in json.dumps(first + moved))
+
+
+def test_plan_remarks_and_deck_link_v381():
+    """3.8.1, plans round three (2, 3): the plan doc keeps where to get its
+    deck (an https link) and its authors' notes (`remarks`, on a tag or one
+    card). A tag's note shows under the topic row that names that tag (or one
+    under it) in You › Plans and Due; a card's on the review screen when that
+    card comes up for someone following the plan, with no request of its own.
+    Authors write them from Browse, one note a card (one request on a click)."""
+    from due_crew import plans as P, plan_flow as F, cards as C, due as DUE
+    clean = shapes.clean_plan_doc
+    url = lambda v: clean({"deck": "D", "units": [], "deckUrl": v}).get("deckUrl")
+    check("deckUrl: an https link of up to 300, no spaces, is kept; anything else isn't",
+          url("https://example.com/deck?x=1") == "https://example.com/deck?x=1" and url("https://" + "a" * 292)
+          and not url("https://" + "a" * 293) and not url("http://example.com") and not url("javascript:alert(1)")
+          and not url("https://example.com/a b") and not url('https://x.com/"><b>') and not url(5))
+    rs = clean({"deck": "D", "units": [], "remarks": [
+        {"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Watch <this>\nfirst"},
+        {"id": "r2", "card": ["guid000005", 1], "text": "The second cloze is the one"},
+        {"id": "r3", "tag": "x", "card": ["g", 0], "text": "both"}, {"id": "r4", "text": "neither"},
+        {"id": "R5", "tag": "x", "text": "a bad id"}, {"id": "r6", "tag": "x", "text": "  "},
+        {"id": "r7", "card": ["g", -1], "text": "no such card"}, {"id": "r1", "tag": "y", "text": "the same id"},
+        {"id": "r8", "tag": "y" * 201, "text": "too long a tag"}, {"id": "r9", "tag": "z", "text": "w" * 300}]}).get("remarks")
+    check("remarks: one of a tag or a card, one line, 280 at most; ids unique; the rest dropped",
+          [r["id"] for r in rs] == ["r1", "r2", "r9"] and rs[0]["text"] == "Watch <this> first" and rs[1]["card"] == ["guid000005", 1]
+          and len(rs[2]["text"]) == 280, rs)
+    check("remarks: at most 300 a plan", len(clean({"deck": "D", "units": [], "remarks": [
+        {"id": f"r{i}", "tag": "t", "text": "x"} for i in range(400)]})["remarks"]) == 300)
+    # under the topics that name the tag (or one under it), in the week and in Due
+    doc = clean({"deck": "Deck", "tagroot": "Block_1", "units": [
+        {"id": "a", "name": "Inflammation", "opens": _day(0), "tags": ["#Deck::#Path_Book::02_Inflammation::Acute", "Step1::Renal"],
+         "search": ['"tag:DueCrew::Block_1::SLG_12" "tag:#Deck::#Videos::Pharm::Cephalosporins"'],
+         "cut": [{"tag": "#Deck::#Videos::Pharm::Cephalosporins", "in": "t1",
+                  "q": '"tag:DueCrew::Block_1::SLG_12" "tag:#Deck::#Videos::Pharm::Cephalosporins"'}]}],
+        "tags": [{"id": "t1", "name": "SLG 12", "notes": ["g1"]}],
+        "remarks": [{"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Watch <this> first"},
+                    {"id": "r2", "tag": "#deck::#path_book::02_inflammation::acute::deeper", "text": "under a topic, not over it"},
+                    {"id": "r3", "tag": "DueCrew::Block_1::SLG_12", "text": "SLG 12 is on the quiz"},
+                    {"id": "r4", "card": ["guid000005", 1], "text": "a card's, not a topic's"}]})
+    u = P.units(doc)[0]
+    names = [x for _g, x, _s in P.topic_items([u])]
+    rm = P.topic_remarks(doc, [u])
+    check("remarks: a tag's note goes with the topic that names it or a tag under it, a plan tag's with its cut; never a card's",
+          rm == [[names.index("Acute"), "Watch <this> first"], [names.index("Cephalosporins · SLG 12"), "SLG 12 is on the quiz"]],
+          (names, rm))
+    wk = P.week_view(doc, {}, _day(0), P.week_start(_day(0)))
+    row = next(r for d in wk for r in d["units"])
+    html = board._week_html({"week": wk, "week_offset": 0}, "p1")
+    check("week: under its topic's row, escaped, once",
+          row.get("rm") == rm and html.count("Watch &lt;this&gt; first") == 1 and "<this>" not in html
+          and '<span class="rm">&#9432; Watch &lt;this&gt; first</span>' in html, html[-900:])
+    check("week: a date with no notes has no rm (as before)", "rm" not in next(
+        r for d in P.week_view(dict(doc, remarks=[]), {}, _day(0), P.week_start(_day(0))) for r in d["units"]))
+    due_row = DUE._date_row({"pid": "p1", "uid": "a", "plan": "Block 1", "name": "Inflammation", "opens": _day(0), "seen": 0,
+                             "total": 4, "topics": P.topic_view([u]), "rm": rm}, {}, _day(0))
+    dh = board._due_plan(due_row)
+    check("Due: the same notes under the same topics, escaped", due_row["rm"] == rm and dh.count('class="du-rm"') == 2
+          and "Watch &lt;this&gt; first" in dh and "<this>" not in dh, dh)
+    # the review screen: a card's note, for the plans I follow, that card only, no request
+    plans = [{"id": "p1", "name": "Block <1>", "doc": doc}]
+    view = C.remark_view(plans, "guid000005", 1)
+    check("review: a card's note shows with the plan's name, for that card alone",
+          view and view["kind"] == "remark" and view["text"] == "\U0001F4CC Block <1>: a card's, not a topic's" and "cmd" not in view
+          and C.remark_view(plans, "guid000005", 0) is None and C.remark_view([], "guid000005", 1) is None, view)
+    js = C.chip_js(dict(view, accent="#2e7d32")) + C.float_js(dict(view, accent=["#2e7d32", "#7cc47f"]))
+    check("review: drawn as text, never markup; with no click of its own",
+          "t.textContent = D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
+          and json.dumps(view["text"]) in js, js[:200])
+    shown, saved = [], (C._bottom, C._review_web, C._show, C.client)
+    store = world({"dre": "Dre", "sam": "Sam"})
+    pid, code = store.add_plan("dre", "Block 1", "Deck", [{"id": "a", "name": "Inflammation", "opens": _day(0), "tags": ["x"], "decks": []}])
+    dre, sam = new_client(store, "dre", "Dre"), new_client(store, "sam", "Sam")
+    sam.follow_plan(code)
+    n = len(store.log)
+    got, status = dre.plan_remark(pid, add={"card": ["guid000005", 1], "text": "The second cloze"})
+    rid = (got or {}).get("doc", {}).get("remarks", [{}])[0].get("id")
+    check("remarks: an author's note on a card is one request on a click, and comes back with the plan",
+          status == 200 and len(store.log) == n + 1 and got["doc"]["remarks"][0]["card"] == ["guid000005", 1] and rid, got)
+    sam.fetch_board([_day(0)], with_decks=True)
+    check("remarks: they ride the plan to its followers (no request of their own)",
+          sam.session["plans"][0]["doc"]["remarks"][0]["text"] == "The second cloze")
+    _status, data = sam._call("POST", f"/plans/{pid}/remarks", {"add": {"tag": "x", "text": "mine"}})
+    check("remarks: a follower can't write one", _status == 403, data)
+    card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000005"), ord=1)
+    try:
+        C._bottom, C._review_web = (lambda: object()), (lambda: None)
+        C._show = lambda v: shown.append(v)
+        C.client = lambda: sam
+        n = len(store.log)
+        C.on_answer(card)
+        C.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000005"), ord=0))
+        sam.session["cards"] = {"guid000005": {"tips": [{"from": "dre", "text": "think of it as two"}]}}
+        _state_entries = C._state["entries"]
+        C._state["entries"] = [{"user_id": "dre", "name": "Dre", "you": False}]
+        C.on_answer(card)
+        C._state["entries"] = _state_entries
+        sam.session.pop("cards", None)
+    finally:
+        (C._bottom, C._review_web, C._show, C.client) = saved
+    check("review: the card's note when it comes up, another card nothing, a crewmate's tip first; no request",
+          shown[0] and shown[0]["kind"] == "remark" and "Block 1: The second cloze" in shown[0]["text"] and shown[1] is None
+          and shown[2]["kind"] == "tip" and len(store.log) == n, shown)
+    got, status = dre.plan_remark(pid, add={"card": ["guid000005", 1], "text": "The second cloze, the bigger one"})
+    rs = got["doc"]["remarks"]
+    dlg = open(os.path.join(REPO, "due_crew", "ui", "remark_dialog.py")).read()
+    check("remarks: a card's note changed in place keeps its id, and Save leaves it there (only old words go)",
+          status == 200 and len(rs) == 1 and rs[0]["id"] == rid and rs[0]["text"] == "The second cloze, the bigger one"
+          and 'if got is not None and old is not None and old.get("text") != words:' in dlg, rs)
+    got, status = dre.plan_remark(pid, remove=rid)
+    check("remarks: taken off by its id", status == 200 and not got["doc"].get("remarks"), got)
+    # Browse: for authors, on one card
+    acts, said = [], []
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved = (F.client, F.tooltip, F.mw.col)
+    try:
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [{"id": "p1", "doc": {}}], "plans": []})
+        F.browser_menu(types.SimpleNamespace(selected_cards=lambda: [5]), Menu())
+        one = list(acts)
+        del acts[:]
+        F.browser_menu(types.SimpleNamespace(selected_cards=lambda: [5, 6]), Menu())
+        two = list(acts)
+        F.tooltip = lambda msg, **k: said.append(msg)
+        F.mw.col = _plan_col()
+        F.note_for_card(types.SimpleNamespace(selected_cards=lambda: [5, 6]))
+    finally:
+        (F.client, F.tooltip, F.mw.col) = saved
+    check("browse: an author's note for one card; not for two",
+          "Due Crew: note for the plan's followers…" in one and "Due Crew: note for the plan's followers…" not in two
+          and said == ["Select one card first."], (one, two, said))
+    src = open(os.path.join(REPO, "due_crew", "ui", "follow_dialog.py"), encoding="utf-8").read()
+    check("follow: no deck named like the plan's, and a link: \"Where to get it ›\", opened in the browser from the plan's own link",
+          "Your Anki has no deck called <b>{esc(deck)}</b>. " in src and "Where to get it &rsaquo;" in src
+          and "openLink(url)" in src and "setOpenExternalLinks(False)" in src)
+
+
+def test_plan_invites_v381():
+    """3.8.1, plans round three (1): an invite to co-write a plan, or to keep
+    one its owner hands over, rides the day's first board (planInvites; no
+    request of its own) and shows as a line above the plans with Yes and No
+    (duecrew:planinvite:<pid>:yes|no), one request on the click."""
+    from due_crew import plan_flow as F
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store = world({"dre": "Dre <b>", "sam": "Sam"}, {"dre": ["sam"], "sam": ["dre"]})  # an invite goes to a mutual friend
+    pid, _code = store.add_plan("dre", "Block <1>", "Deck", [{"id": "a", "name": "A", "opens": _day(0), "tags": ["x"], "decks": []}])
+    dre, sam = new_client(store, "dre", "Dre"), new_client(store, "sam", "Sam")
+    st, _d = dre._call("POST", f"/plans/{pid}/editors", {"uid": "sam"})
+    n = len(store.log)
+    data = sam.fetch_board([_day(0)], with_decks=True)
+    inv = sam.session.get("plan_invites")
+    check("invites: they ride the day's first board, one request",
+          st == 200 and len(store.log) == n + 1 and data["plan_invites"] == inv
+          and inv == [{"id": pid, "name": "Block <1>", "kind": "coauthor", "by": {"name": "Dre <b>", "emoji": ""}}], inv)
+    check("invites: cleaned (an id, a kind, ten at most)", shapes.clean_plan_invites(
+        [{"id": "BAD!", "kind": "coauthor"}, {"id": "p1", "kind": "boss"}] + [{"id": f"p{i}", "kind": "owner"} for i in range(12)])
+        == [{"id": f"p{i}", "name": "Plan", "kind": "owner", "by": {"name": "?", "emoji": ""}} for i in range(10)])
+    html = board._you_plans({"cards": [], "offers": [], "invites": inv})
+    check("invites: a line above the plans, names escaped, Yes and No",
+          "<b>Dre &lt;b&gt;</b> asked you to co-write <b>Block &lt;1&gt;</b>. Its tags would go on your notes in Anki." in html
+          and f"duecrew:planinvite:{pid}:yes" in html and f"duecrew:planinvite:{pid}:no" in html
+          and html.index("planinvite") < html.index("Follow a plan"), html[:600])
+    col = _plan_col()
+    with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
+        check("invites: the board's view has them", F.board_view({})["invites"] == inv)
+        n = len(store.log)
+        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        sent = [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"]
+        check("invites: Yes is one request; I co-write it now (Browse's items, its tags), and the line goes",
+              len(store.log) == n + 1 and sent == [{"yes": True, "kind": "coauthor"}] and "sam" in store.plans[pid].get("editors", [])
+              and not sam.session["plan_invites"] and any(a["id"] == pid for a in sam.session["plans_authored"])
+              and g.toasts[-1] == "You co-write Block &lt;1&gt; now.", g.toasts)
+        st, _d = dre._call("POST", f"/plans/{pid}/owner", {"uid": "sam"})
+        sam.fetch_board([_day(0)])  # a later refresh: the stamp moved
+        inv2 = sam.session.get("plan_invites")
+        html = board._you_plans({"cards": [], "offers": [], "invites": inv2})
+        check("hand-over: the owner offers the plan; it comes with the next refresh, its own words",
+              st == 200 and inv2 and inv2[0]["kind"] == "owner"
+              and "<b>Dre &lt;b&gt;</b> offered you <b>Block &lt;1&gt;</b> to keep." in html, (inv2, html[:300]))
+        dc._on_js(False, f"duecrew:planinvite:{pid}:no", DeckBrowser())
+        check("hand-over: No keeps it where it was; the line goes",
+              store.plans[pid]["owner"] == "dre" and not sam.session["plan_invites"]
+              and [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"][-1] == {"yes": False, "kind": "owner"})
+        sam.session["plan_invites"] = inv2  # as if the board still showed it: the owner took it back meanwhile
+        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        check("invites: one taken back meanwhile says so, and goes", not sam.session["plan_invites"]
+              and "taken back" in g.toasts[-1] and store.plans[pid]["owner"] == "dre", g.toasts[-1:])
+        n = len(store.log)
+        dc._on_js(False, f"duecrew:planinvite:{pid}:maybe", DeckBrowser())
+        dc._on_js(False, "duecrew:planinvite:nothere:yes", DeckBrowser())
+        check("invites: anything but yes or no, or an invite I don't have, sends nothing", len(store.log) == n)
+
+
+def test_change_note_round_three_v381():
+    """3.8.1, plans round three (7): revisions read as revisions. The
+    snapshot keeps the plan's tags {id: name}; a date whose only change is
+    its name is said by its day ("updated Fri 16 Oct"); the tags by count
+    ("renamed 10 tags", "added 2 tags", "took off 1 tag"). A snapshot from
+    before has no tags: nothing is said about them then."""
+    from due_crew import plans as P
+    tag = lambda i, name=None: {"id": f"t{i}", "name": name or f"SLG {i}", "notes": [f"g{i}"]}
+    doc = {"deck": "D", "tagroot": "MS2", "units": [{"id": "a", "name": "Friday's date", "opens": "2026-10-16", "tags": ["x"]},
+                                                    {"id": "b", "name": "Renal", "opens": "2026-10-17", "tags": ["y"]}],
+           "tags": [tag(i) for i in range(1, 13)]}
+    old = P.snapshot(doc)
+    check("snapshot: the plan's tags, {id: name}, beside the dates", old[P.SNAP_TAGS] == {f"t{i}": f"SLG {i}" for i in range(1, 13)}
+          and json.loads(json.dumps(old)) == old)
+    seg = lambda o, d: "".join(t for t, _b in P.change_note("Dre", o, d) or [])
+    renamed = dict(doc, units=[dict(doc["units"][0], name="SLG 4-6 · Acid-base"), doc["units"][1]])
+    check("change: a date renamed, nothing else, is said by its day", seg(old, renamed) == "Dre updated Fri 16 Oct."
+          and ("Fri 16 Oct", True) in P.change_note("Dre", old, renamed), P.change_note("Dre", old, renamed))
+    both = dict(doc, units=[dict(doc["units"][0], name="SLG 4-6", tags=["x", "z"]), doc["units"][1]])
+    check("change: renamed and its cards changed: by its new name, as before", seg(old, both) == "Dre updated SLG 4-6.")
+    tags = dict(doc, tags=[tag(i, f"SLG {i} renal") for i in range(1, 11)] + [tag(13), tag(14)])
+    check("change: the tags by count", seg(old, tags) == "Dre renamed 10 tags, added 2 tags and took off 2 tags.", seg(old, tags))
+    check("change: a date and a tag", seg(old, dict(renamed, tags=doc["tags"][1:])) == "Dre updated Fri 16 Oct and took off 1 tag.")
+    before = {k: v for k, v in old.items() if k != P.SNAP_TAGS}
+    check("change: a snapshot from before has no tags: nothing said of them; its dates still are",
+          P.change_note("Dre", before, tags) is None and seg(before, renamed) == "Dre updated Fri 16 Oct.")
+    check("change: nothing changed, no note", P.change_note("Dre", old, doc) is None
+          and P.change_note("Dre", {"a": ["Friday's date", "2026-10-16"], "b": ["Renal", "2026-10-17"]}, doc) is None)
+
+
+def test_export_with_the_plan_v381():
+    """3.8.1, plans round three (8): Export cards for my AI, with a plan
+    picked, starts with the plan as comment lines after Anki's header lines:
+    each date as the plan's text writes it, with its cards here and how many
+    of them another date has too; its events; its tags (name, full path,
+    cards here); its notes. Names, tags, ids, counts and the authors' own
+    words: never a card's text."""
+    from due_crew import plans as P
+    col = _labels_col()
+    R = "#Big_Step1_v12"
+    doc = shapes.clean_plan_doc({"deck": "Big Step 1", "tagroot": "Block_1", "units": [
+        {"id": "a", "name": "Viruses", "opens": "2026-10-05", "due": "2026-10-09", "tags": [f"{R}::#Video_Series::05_Micro::Viruses"],
+         "decks": [], "for": "q", "todo": [{"k": "watch", "t": "lecture 14", "url": "https://example.com/l14"}]},
+        {"id": "b", "name": "Herpes again", "opens": "2026-10-06", "tags": [], "decks": [], "cards": [["guid000001", 0], ["guid000002", 0]],
+         "notes": ["guid000010"], "search": ['"tag:DueCrew::Block_1::SLG_12" "tag:Step1::Renal"'],
+         "cut": [{"tag": "Step1::Renal", "in": "t1", "q": '"tag:DueCrew::Block_1::SLG_12" "tag:Step1::Renal"'}]}],
+        "events": [{"id": "q", "day": "2026-10-09", "name": "Micro quiz"}],
+        "tags": [{"id": "t1", "name": "SLG 12", "notes": ["guid000010", "guid000003"]}],
+        "remarks": [{"id": "r1", "tag": f"{R}::#Video_Series", "text": "Watch at 1.5x"},
+                    {"id": "r2", "card": ["guid000005", 1], "text": "The second cloze"}]})
+    lines = P.export_plan_lines(P.DeckIndex(col, 10), doc, "Block 1")
+    check("export: the plan's lines, each a comment", lines and all(x.startswith("# ") for x in lines), lines)
+    check("export: a date as its text writes it, with its cards here and what another date has too",
+          f"# 2026-10-05 | Viruses | tag:{R}::#Video_Series::05_Micro::Viruses | due 2026-10-09 | for Micro quiz | "
+          "watch: lecture 14 https://example.com/l14 | 8 cards here, 2 also on another date" in lines, lines)
+    check("export: picks as the text writes them (cards numbered from 1), a cut by its tag's name",
+          "# 2026-10-06 | Herpes again | tag:Step1::Renal in SLG 12 | notes:guid000010 | cards:guid000001:1 guid000002:1 | "
+          "3 cards here, 2 also on another date" in lines, lines)
+    check("export: events, the plan's tags with their path and cards here, the authors' notes",
+          "# 2026-10-09 | event | Micro quiz" in lines and "# tag | SLG 12 | DueCrew::Block_1::SLG_12 | 2 cards here" in lines
+          and f"# note | tag:{R}::#Video_Series | Watch at 1.5x" in lines and "# note | card:guid000005:2 | The second cloze" in lines,
+          lines)
+    check("export: never a card's text in the plan's lines", "SECRET" not in "\n".join(lines))
+    text, n = P.export_notes(col, {1, 6}, plan_lines=lines)
+    rows = text.split("\n")
+    check("export: the lines come after Anki's header lines, then the cards by #guid and #cards",
+          rows[:7] == ["#separator:tab", "#html:false", "#guid column:1", "#notetype column:2", "#deck column:3", "#tags column:4",
+                       "#cards column:5"] and rows[7:7 + len(lines)] == lines and n == 2 and rows[7 + len(lines)].startswith("guid000001\t"),
+          rows[:12])
+    check("export: without the plan, as before", P.export_notes(col, {1, 6})[0].split("\n")[7].startswith("guid000001\t"))
+    src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
+    check("export: the box, on by default, only with a plan picked; the plan itself, not my days",
+          'QCheckBox("With the plan (its dates, tags, notes and what overlaps)")' in src and "self.with_plan.setChecked(True)" in src
+          and "self.with_plan.setVisible(bool(p))" in src and 'p.get("plan_doc") or p["doc"]' in src)
+
+
+def test_export_reads_an_authored_plan_whole_v381():
+    """3.8.1 (found in the plans review): /plans/mine leaves a date's single
+    cards and note ids out, so Export cards for my AI, for a plan I write but
+    don't follow, asks for that plan whole (one request, on picking it)."""
+    store = world({"dre": "Dre"})
+    pid, _code = store.add_plan("dre", "Block 1", "Step 1", [
+        {"id": "hf", "name": "Heart failure", "opens": "2026-09-01", "tags": ["Step1::Cardio"], "decks": [],
+         "cards": [["guid000001", 0]]}])
+    dre = new_client(store, "dre", "Dre")
+    lean = dre.my_plans()[0]["doc"]["units"][0]
+    whole = dre.plan(pid)["doc"]["units"][0]
+    check("export: the plan list is lean (no single cards), as plans.ts mine; the plan itself is whole",
+          "cards" not in lean or not lean["cards"], lean)
+    check("export: ...and one GET /plans/{id} has them", whole.get("cards") == [["guid000001", 0]]
+          and store.log[-1] == ("GET", f"/plans/{pid}", 200), whole)
+    src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
+    check("export: a plan from the list is fetched whole once, when picked",
+          'dict(p, _lean=True)' in src and 'self.client.plan(pid)' in src and 'p["_lean"] = False' in src)
+
+
+def _away_units():
+    """Five dates a day apart up to today, and one ahead (see _plan_col)."""
+    return [
+        {"id": "hf", "name": "Heart failure", "opens": _day(-4), "tags": ["Step1::Cardio::Heart_failure"]},
+        {"id": "ar", "name": "Arrhythmia", "opens": _day(-3), "tags": ["Step1::Cardio::Arrhythmia"]},
+        {"id": "ex", "name": "Extras", "opens": _day(-2), "decks": ["Step 1::Extras"]},
+        {"id": "cz", "name": "Cloze two", "opens": _day(-1), "cards": [["guid000050", 1]]},
+        {"id": "cg", "name": "Cardiology", "opens": _day(0), "tags": ["Step1::Cardiology"]},
+        {"id": "lt", "name": "Later", "opens": _day(5), "cards": [["guid000050", 0]]},
+    ]
+
+
+def _studied(col, *days):
+    """An answer on each of those Anki days (days ago, 0 today)."""
+    cut = col.sched.day_cutoff
+    for n in days:
+        fakes.add_review(col.db.conn, (cut - (n + 1) * 86400 + 3600) * 1000)
+
+
+def _away_world():
+    """Maya follows the plan (_away_units) on _plan_col's deck."""
+    store, pid, code, maya = _v381_world(_away_units())
+    col = _plan_col()
+    return store, pid, code, maya, col
+
+
+def _away_start(g, F, maya, code, pid, col, own=None):
+    """This computer last ran its morning five days ago, and nothing of the
+    plan has opened since: its dates are waiting."""
+    plan, _ = maya.follow_plan(code, own=own)
+    maya.fetch_board([_day(0)], with_decks=True)
+    p = next(x for x in F.followed() if x["id"] == pid)
+    pc = g.state()
+    pc["plans"] = {pid: F.new_state(col, p, 10)}
+    pc["plans_day"] = _day(-5)
+    F._psave(pc)
+    return p
+
+
+def test_welcome_back_v381():
+    """3.8.1, plans round three, Welcome back: on the plan's dates, when the
+    morning would open dates from 3 or more days on which I studied nothing
+    in Anki (no answer at all that day, read from the revlog in one query),
+    it asks before opening: Open them, Push my dates back N days (the
+    follow's shift, one PATCH on the click), or Not today (nothing opens,
+    asked again tomorrow). Never at my own pace, never for a paused plan."""
+    from due_crew import plans as P, board
+    us = _away_units()
+    check("away: the days with a waiting date and nothing studied, oldest first",
+          P.away_days(us, {}, _day(0), {_day(-4)}) == [_day(-3), _day(-2), _day(-1)]
+          and P.away_days(us, {"ar": "sig"}, _day(0), set()) == [_day(-4), _day(-2), _day(-1)]
+          and P.away_days(us, {}, _day(0), set(), since=_day(-2)) == [_day(-2), _day(-1)])
+
+    store, pid, code, maya, col = _away_world()
+    _studied(col, 4)  # studied on Heart failure's day only
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        _away_start(g, F, maya, code, pid, col)
+        F.maybe_morning(False)
+        st = F._state_cfg()[pid]
+        away = st.get("away") or {}
+        check("welcome back: three days with nothing studied: the morning opens nothing of it and asks",
+              not ({1, 2, 3, 4, 6, 9} & _open(col)) and away.get("days") == [_day(-3), _day(-2), _day(-1)]
+              and sorted(away.get("units") or []) == ["ar", "cg", "cz", "ex", "hf"] and away.get("n") == 6
+              and away.get("day") == _day(0) and g.state()["plans_day"] == _day(0), str(away))
+        check("welcome back: till it's answered, its dates wait (as Not today keeps them), so nothing else opens them",
+              all(st["later"].get(u) == _day(1) for u in ("hf", "ar", "ex", "cz", "cg"))
+              and F.run(col, F.followed(), json.loads(json.dumps(F._state_cfg())), _day(0), dry=True)["n"] == 0)
+        asked = []
+        F.welcome_back([pid], ask=lambda *a: asked.append(a) or "open")
+        st = F._state_cfg()[pid]
+        check("welcome back, Open them: everything waiting opens, in one undo step, and nothing waits",
+              asked == [("Step 1", [_day(-3), _day(-2), _day(-1)], 5, 6)] and {1, 2, 3, 4, 6, 9} <= _open(col)
+              and 5 not in _open(col) and col.undo_status().undo == "Due Crew: open 5 dates"
+              and not st.get("later") and "away" not in st and (F.morning_opened() or {}).get("n") == 6, str(asked))
+        F.welcome_back([pid], ask=lambda *a: asked.append(a) or "open")
+        check("welcome back: asked once", len(asked) == 1)
+
+    # Push my dates back: one PATCH, my dates N days later, what's due on them opens
+    store, pid, code, maya, col = _away_world()
+    _studied(col, 4)
+    with _PlanGlue({"A": maya}, {"A": col}) as g, _SyncBg(g.F):
+        F = g.F
+        _away_start(g, F, maya, code, pid, col)
+        F.maybe_morning(False)
+        before = len(store.log)
+        F.welcome_back([pid], ask=lambda *a: "push")
+        sent = store.log[before:]
+        st = F._state_cfg()[pid]
+        check("welcome back, Push my dates back 3 days: one PATCH of my follow's shift, nothing else",
+              [(m, s) for m, _p, s in sent] == [("PATCH", 200)] and store.follows[(pid, "maya")].get("shift") == 3, sent)
+        check("pushed: what's due on my new days opens (Heart failure and Arrhythmia), the rest waits for its day",
+              {1, 2, 3} <= _open(col) and not ({4, 6, 9} & _open(col)) and "away" not in st
+              and not (st.get("later") or {}), sorted(_open(col)))
+
+    # Not today: nothing opens, it says they wait, and tomorrow morning asks again
+    store, pid, code, maya, col = _away_world()
+    _studied(col, 4)
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        _away_start(g, F, maya, code, pid, col)
+        F.maybe_morning(False)
+        F.welcome_back([pid], ask=lambda *a: "later")
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
+        h = board._plan_card_html(v)
+        check("welcome back, Not today: nothing opens; the card says they wait for tomorrow morning, with Open now",
+              not ({1, 2, 3, 4, 6, 9} & _open(col)) and v["put_off_ask"] and "5 dates</b> wait for tomorrow morning" in h
+              and f"duecrew:planputback:{pid}" in h, h[-900:])
+        g.today["d"] = _day(1)
+        col.sched.day_cutoff += 86400
+        F.maybe_morning(False)
+        st = F._state_cfg()[pid]
+        check("not today: the next morning asks again (the day I was away too), and still opens nothing",
+              (st.get("away") or {}).get("day") == _day(1)
+              and st["away"]["days"] == [_day(-3), _day(-2), _day(-1), _day(0)]
+              and not ({1, 2, 3, 4, 6, 9} & _open(col)), str(st.get("away")))
+
+    # it doesn't ask: studied on those days (the phone's reviews come with the sync), two days only, my own pace, paused
+    for what, setup in (("studied every day", lambda col: _studied(col, 1, 2, 3, 4)),
+                        ("two days with nothing", lambda col: _studied(col, 2, 4))):
+        store, pid, code, maya, col = _away_world()
+        setup(col)
+        with _PlanGlue({"A": maya}, {"A": col}) as g:
+            F = g.F
+            _away_start(g, F, maya, code, pid, col)
+            F.maybe_morning(False)
+            st = F._state_cfg()[pid]
+            check(f"welcome back: {what}, the morning opens as ever, no question",
+                  "away" not in st and {1, 2, 3, 4, 6, 9} <= _open(col), sorted(_open(col)))
+    store, pid, code, maya, col = _away_world()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        _away_start(g, F, maya, code, pid, col, own="ready")
+        F.maybe_morning(False)
+        check("welcome back: never at my own pace", "away" not in F._state_cfg()[pid] and not ({1, 2, 3, 4, 6, 9} & _open(col)))
+    store, pid, code, maya, col = _away_world()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        _away_start(g, F, maya, code, pid, col)
+        maya.set_days(pid, paused=True, since=_day(-5), until=_day(9))
+        F.maybe_morning(False)
+        check("welcome back: never for a paused plan", "away" not in F._state_cfg()[pid] and not ({1, 2, 3} & _open(col)))
+    src = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    morning = src[src.index("def maybe_morning"):src.index("def _morning_waits")]
+    check("welcome back: decided after the morning's other steps and before its open; asked after it",
+          morning.index("build_checks(") < morning.index("_put_away(") < morning.index("_open_now([p for p")
+          < morning.index("welcome_back("))
+
+
+def test_morning_opened_by_date_v381():
+    """3.8.1: the morning's line says what it opened by date ("This morning
+    opened 3 new cards: Heart failure 2 · Arrhythmia 1"), each name opening
+    Browse on that date's new cards; four or more, the first two "and 2
+    more". Under Today, and on Plans when Due is off. Not today as ever."""
+    import due_crew as dc
+    from due_crew import board, due_flow
+    from due_crew.app import _state
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        check("morning by date: what each date opened, a card on two dates counted once",
+              F.opened_dates() == [[pid, "hf", "Heart failure", 2], [pid, "ar", "Arrhythmia", 1]]
+              and F.morning_opened() == {"n": 3, "sync": False}, F.opened_dates())
+        op = F.opened_view()
+        h = board._opened_line(op)
+        check("morning by date: the line names them with their cards, each a way to Browse; Not today stays",
+              "This morning opened 3 new cards: <a class=\"tp\"" in h and f"duecrew:planopened:{pid}:hf" in h
+              and "Heart failure</a> 2 &middot; " in h and "Arrhythmia</a> 1</span>" in h and "duecrew:plannottoday" in h, h)
+        many = dict(op, dates=[[pid, f"u{i}", f"Date <{i}>", 10] for i in range(5)])
+        hm = board._opened_line(many)
+        check("morning by date: three named; four or more, two and how many more; names escaped",
+              "Date &lt;0&gt;</a> 10 &middot; " in hm and "Date &lt;1&gt;</a> 10 and 3 more</span>" in hm
+              and "Date &lt;2&gt;" not in hm and "<0>" not in hm
+              and board._opened_line(dict(op, dates=many["dates"][:3])).count("planopened:") == 3, hm)
+        _state["labels"] = [_day(0)]
+        try:
+            v = due_flow.view({"due_show": True})
+            plans = F.board_view({})
+        finally:
+            _state["labels"], _state["due_reviews"] = [], None
+        check("morning by date: Due's Today has them", (v or {}).get("opened", {}).get("dates") == F.opened_dates(), str(v and v.get("opened")))
+        ph = board.you_html({}, None, {"tab": "plans", "plans": plans, "opened": F.morning_opened()})
+        check("morning by date: with Due off, on Plans too", f"duecrew:planopened:{pid}:ar" in ph, ph[-1500:])
+        got = []
+        saved = F._browse
+        F._browse = lambda cids, q=None, empty="": got.append(sorted(cids))
+        try:
+            dc._on_js(False, f"duecrew:planopened:{pid}:hf", DeckBrowser())
+        finally:
+            F._browse = saved
+        check("morning by date: a name (sent as the board does) opens Browse on that date's new cards", got == [[1, 2]], got)
+
+
+def _menu_recorder(acts):
+    """A QMenu stand-in for plan_menu: every action's text, and its trigger."""
+    class Action:
+        def __init__(self, text):
+            self.text, self.fn = text, None
+            self.triggered = types.SimpleNamespace(connect=lambda f: setattr(self, "fn", f))
+
+        def setCheckable(self, on): pass
+
+        def setChecked(self, on): pass
+
+        def setEnabled(self, on): pass
+
+    class Menu:
+        def __init__(self, *a):
+            pass
+
+        def addAction(self, text):
+            a = Action(text)
+            acts.append(a)
+            return a
+
+        def addMenu(self, text):
+            return Menu()
+
+        def addSeparator(self):
+            pass
+
+        def setEnabled(self, on):
+            pass
+
+        def exec(self, *a):
+            pass
+    return Menu
+
+
+def test_held_back_sheet_v381():
+    """3.8.1: what Hold back keeps. The plan's ··· menu says "Held back: N
+    cards…" and opens a sheet: what it holds, by date, and why; Open them
+    (one undo step, a leech stays shut, Hold back stays on for what an author
+    adds later) or Stop holding back (opens them and turns it off)."""
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (4, 6)")  # later dates' new cards, active
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open", hold=True)
+        acts = []
+        qt = sys.modules["aqt.qt"]
+        saved_qt = (qt.QMenu, qt.QCursor)
+        qt.QMenu, qt.QCursor = _menu_recorder(acts), types.SimpleNamespace(pos=lambda: None)
+        shown = []
+        saved_show = F.show_held
+        F.show_held = lambda p2, ask=None: shown.append(p2)
+        try:
+            F.plan_menu(pid)
+            item = next((a for a in acts if a.text.startswith("Held back")), None)
+            if item:
+                item.fn()
+        finally:
+            qt.QMenu, qt.QCursor = saved_qt
+            F.show_held = saved_show
+        check("held back: the plan's menu says how many, and opens the sheet",
+              item is not None and item.text == "Held back: 2 cards…" and shown == [pid], [a.text for a in acts])
+        col.db.conn.execute("UPDATE notes SET tags = ' leech ' WHERE id = 4")  # Extras' card became a leech since
+        v = F.held_view(pid)
+        check("held back: by date, with its day, and why; a leech stays shut, said apart",
+              v["n"] == 1 and v["lines"] == [f"Cloze two · {P_fmt(_day(7))} · 1"]
+              and v["holding"] and "till their day" in v["why"] and v["leeches"] == 1 and F.held_count(pid) == 1, str(v))
+        st = F._state_cfg()[pid]
+        st["applied"]["cz"] = "opened-here"  # as if Cloze two's date had opened and I suspended its card myself
+        check("held back: a card on a date that opened here isn't the plan's to show or open (the review)",
+              F.held_view(pid)["n"] == 0 and F.held_count(pid) == 0)
+        del st["applied"]["cz"]
+        F.show_held(pid, ask=lambda view: "open")
+        st = F._state_cfg()[pid]
+        check("held back, Open them: one undo step; the leech stays shut; Hold back stays on",
+              6 in _open(col) and 4 not in _open(col) and col.undo_status().undo == "Due Crew: open what Step 1 held back"
+              and st["hold_yes"] is True and F.held_count(pid) == 0, str(st))
+        F.hold_new(F.followed(), F._state_cfg(), _day(0), morning=True)
+        check("held back: what it opened is never held again", 6 in _open(col))
+        units = _plan_units()
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # the author adds card 9 to a later date
+        store.edit_plan(pid, units)
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 9")
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("held back: and what an author adds later is still held", 9 not in _open(col))
+        F.show_held(pid, ask=lambda view: "stop")
+        st = F._state_cfg()[pid]
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 5")
+        units[4] = dict(units[4], cards=[["guid000050", 0]])  # and card 5, after the stop
+        store.edit_plan(pid, units)
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("held back, Stop holding back: opens them and holds nothing more",
+              9 in _open(col) and 5 in _open(col) and 4 not in _open(col) and st["hold_yes"] is False, sorted(_open(col)))
+        left = F.held_view(pid)
+        check("held back: only the leech is left, and no yes: nothing to open, so no menu line",
+              left["n"] == 0 and left["leeches"] == 1 and not left["holding"] and "Hold back is off" in left["why"]
+              and F.held_count(pid) == 0, str(left))
+        said = len(g.toasts)
+        F.show_held(pid, ask=lambda view: "open")
+        check("held back: nothing to open, nothing to show", len(g.toasts) == said + 1 and "Nothing held back" in g.toasts[-1])
+
+
+def P_fmt(iso):
+    from due_crew import plans as P
+    return P.fmt_day(iso)
+
+
+def test_why_didnt_it_open_v381():
+    """3.8.1: under a date in the plan's week, a quiet line when it left cards
+    shut: "1 leech stays shut" (Browse them) · "1 pick isn't in your copy",
+    from what the date counted when it opened (_tally)."""
+    import due_crew as dc
+    from due_crew import board
+    from aqt.deckbrowser import DeckBrowser
+    units = _plan_units()
+    units[1] = dict(units[1], cards=[["guid000003", 0], ["guidnothere", 0]])
+    store, pid, code, maya = _v381_world(units)
+    col = _plan_col()
+    col.db.conn.execute("UPDATE notes SET tags = tags || ' leech' WHERE id = 3")
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
+        row = next(r for d in v["week"] for r in d["units"] if r["uid"] == "ar")
+        check("why: the date's row says what stayed shut", 3 not in _open(col) and row.get("why") == {"lee": 1, "miss": 1}, str(row))
+        h = board._plan_card_html(dict(v, week=[dict(d, units=[dict(r, name="Arr <i>") for r in d["units"]]) for d in v["week"]]))
+        check("why: a quiet line under it, the leech a way to Browse, names escaped",
+              f'duecrew:planleech:{pid}:ar' in h and "1 leech</a> stays shut &middot; 1 pick isn&rsquo;t in your copy" in h
+              and "Arr &lt;i&gt;" in h and "<i>" not in h.replace("<i class", "").replace("<i style", ""), h[-2500:])
+        two = board._why_shut("p", "u", {"lee": 2, "miss": 3})
+        check("why: in the plural", "2 leeches</a> stay shut &middot; 3 picks aren&rsquo;t in your copy" in two
+              and board._why_shut("p", "u", {}) == "", two)
+        check("why: a date that left nothing shut says nothing",
+              [r["uid"] for d in v["week"] for r in d["units"] if r.get("why")] == ["ar"])
+        got = []
+        saved = F._browse
+        F._browse = lambda cids, q=None, empty="": got.append(sorted(cids))
+        try:
+            dc._on_js(False, f"duecrew:planleech:{pid}:ar", DeckBrowser())
+        finally:
+            F._browse = saved
+        check("why: its leeches open in Browse (sent as the board does)", got == [[3]], got)
+
+
+def test_up_next_any_date_v381():
+    """3.8.1, at my own pace: the names after "Then" are links, each opening
+    that date ahead of the rest (first in line, one undo step), and the line
+    after says "Opened Extras (ahead of Heart failure)" with its Undo."""
+    import due_crew as dc
+    from due_crew import plans as P, board
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        p = next(x for x in F.followed() if x["id"] == pid)
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        items = v["own"]["then_items"]
+        check("then: each date after Up next, with its id", [x["uid"] for x in items] == ["ar", "ex", "cz"], str(items))
+        h = board._plan_card_html(dict(v, own=dict(v["own"], then_items=[dict(items[0], name="Arr <b>")] + items[1:])))
+        check("then: each name a link that opens it, escaped", f"duecrew:planpaceopen:{pid}:ex" in h
+              and "Arr &lt;b&gt;</a> 1 &middot; " in h and "<b>Arr" not in h, h[:1500])
+        dc._on_js(False, f"duecrew:planpaceopen:{pid}:ex", DeckBrowser())
+        st = F._state_cfg()[pid]
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, st, F._state["plan_progress"][pid], _day(0))
+        check("then: Extras opens now (sent as the board does), first in line, one undo step; Heart failure is still up next",
+              4 in _open(col) and not ({1, 2} & _open(col)) and col.undo_status().undo == "Due Crew: open Extras"
+              and st["own_opened"] == {"ex": _day(0)} and v["own"]["next"]["uid"] == "hf"
+              and P.up_next(p["doc"], st["applied"])[0]["id"] == "hf", str(st.get("own_opened")))
+        check("then: the line says it went ahead of which, with its Undo",
+              v["own"]["last"] == "Opened Extras (ahead of Heart failure) · 1 card, first in line."
+              and f"duecrew:planpaceundo:{pid}" in board._plan_card_html(v), v["own"]["last"])
+        _undo_here(F, col, lambda: F.own_undo(pid))
+        st = F._state_cfg()[pid]
+        check("then: Undo shuts it again, Up next as it was", 4 not in _open(col) and "ex" not in (st.get("own_opened") or {}))
+        F.open_next(pid)
+        check("then: the next one, in order, says nothing of ahead",
+              (F._pcfg().get("own_last") or {}).get("ahead") is None and {1, 2} <= _open(col))
+
+
+def test_study_this_date_v381():
+    """3.8.1, Study on a date (the plan's week, and a plan date in Due): a Due
+    Crew deck of the date's open cards, new and review, due or not (a cram
+    before a quiz), random order, Anki's own one step; Anki's Study screen
+    on it. A date with nothing open builds nothing."""
+    import due_crew as dc
+    from due_crew import plans as P, board, due_flow, due as DUE
+    from aqt.deckbrowser import DeckBrowser
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 1")
+    col.db.conn.execute("UPDATE cards SET queue = -3 WHERE id = 2")  # buried
+    idx = P.DeckIndex(col, 10)
+    check("study: a date's open cards, new and review, due or not; never a suspended or buried one",
+          P.study_cards(idx, {1, 2, 3, 8, 99}) == [1, 8])
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        built, sel, moved = [], [], []
+
+        def fake_filtered(c, name, cids, order=4):
+            built.append((name, sorted(cids), order))
+            col.decks.names[99] = name
+            return True
+        saved = (F._filtered, getattr(F.mw, "moveToState", None))
+        F._filtered = fake_filtered
+        col.decks.select = sel.append
+        F.mw.moveToState = moved.append
+        try:
+            dc._on_js(False, f"duecrew:planstudydate:{pid}:hf", DeckBrowser())
+            dc._on_js(False, f"duecrew:planstudydate:{pid}:ex", DeckBrowser())  # nothing of it open yet
+        finally:
+            F._filtered = saved[0]
+            if saved[1] is None:
+                F.mw.__dict__.pop("moveToState", None)
+            else:
+                F.mw.moveToState = saved[1]
+        check("study: a Due Crew deck of the date's open cards, random order, and Anki's Study screen on it",
+              built == [("Due Crew::Heart failure", [1, 2], 1)] and sel == [99] and moved == ["overview"], (built, sel, moved))
+        check("study: a date with nothing open builds nothing, and says so", len(built) == 1 and "None of its cards are open yet." in g.toasts[-1])
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        ar = next(r for d in v["week"] for r in d["units"] if r["uid"] == "ar")
+        h = board._plan_card_html(v)
+        check("study: the week offers it on a date with cards open, though none is seen yet",
+              ar.get("study") and int(ar["seen"]) == 0 and f"duecrew:planstudydate:{pid}:ar" in h, str(ar))
+        dates, _e, _r = due_flow.plan_dates(_day(0))
+        mine = {d["uid"]: d for d in dates if d["pid"] == pid}
+        check("study: Due's plan dates say which have cards open", mine["ar"]["study"] and not mine.get("ex", {}).get("study"), str(mine.keys()))
+        rows = DUE.view(_day(0), [dict(mine["ar"], name="Arr <b>")], [], {})
+        r = next(x for x in rows["rows"] if x["kind"] == "plan")
+        dh = board._due_html(dict(rows, rows=[dict(r, study=True)]))
+        check("study: a plan date in Due has its Study too, its name escaped",
+              f"duecrew:planstudydate:{pid}:ar" in dh and "Arr &lt;b&gt;" in dh and "Arr <b>" not in dh, dh[-1500:])
+        check("study: not on a row Due Crew didn't mark", "planstudydate" not in board._due_html(rows))
+    # Anki's new filtered deck comes with a second filter (the current deck's new cards, 20): ours keep only theirs
+    made = []
+    term = lambda: types.SimpleNamespace(search="", limit=0, order=0)  # noqa: E731
+    deck = types.SimpleNamespace(name="", config=types.SimpleNamespace(search_terms=[term(), term()], reschedule=False))
+    fcol = types.SimpleNamespace(decks=types.SimpleNamespace(id_for_name=lambda n: None),
+                                 sched=types.SimpleNamespace(get_or_create_filtered_deck=lambda deck_id=0: deck,
+                                                             add_or_update_filtered_deck=made.append))
+    from due_crew import plan_flow as F
+    saved = (F._pcfg, F._psave)
+    F._pcfg, F._psave = (lambda: {}), (lambda c: None)
+    try:
+        F._filtered(fcol, "Due Crew::Renal", [3, 1], order=1)
+    finally:
+        F._pcfg, F._psave = saved
+    t = deck.config.search_terms
+    check("study: the deck holds just its cards, random, rescheduling (Anki's second filter dropped)",
+          made == [deck] and len(t) == 1 and t[0].search == "cid:3,1" and t[0].limit == 2 and t[0].order == 1
+          and deck.config.reschedule, [(x.search, x.limit) for x in t])
+
+
+def test_shared_and_mine_v381():
+    """3.8.1: the week's day line separates what the plan opens that day
+    ("opens 1 new") from my own load ("you: 3 reviews due"), today and
+    ahead; today's is Due's own count once Due has read it."""
+    from due_crew import board
+    from due_crew.app import _state
+    store, pid, code, maya = _v381_world()
+    col = _plan_col()
+    fakes.add_card(col.db.conn, 20, did=20, ctype=2, queue=2, due=1000)   # today
+    fakes.add_card(col.db.conn, 21, did=20, ctype=2, queue=2, due=995)    # overdue: today's too
+    fakes.add_card(col.db.conn, 22, did=20, ctype=2, queue=3, due=1002)   # in two days
+    fakes.add_card(col.db.conn, 23, did=20, ctype=2, queue=2, due=1001, odid=20)  # in a filtered deck
+    _state["due_reviews"] = None  # Due's count, from another test
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        got = F.reviews_by_day(col, _day(0))
+        check("mine: reviews due by day, my whole Anki, overdue on today", got == {_day(0): 3, _day(2): 1}, got)
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        F.refresh_progress()
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        by = {d["day"]: d for d in v["week"]}
+        h = board._plan_card_html(v)
+        check("mine: today and the days ahead carry my reviews due, past days don't",
+              by[_day(0)].get("mine") == 3 and by.get(_day(2), {}).get("mine", 1) == 1
+              and all("mine" not in d for d in v["week"] if d["day"] < _day(0)), str([(d["day"], d.get("mine")) for d in v["week"]]))
+        check("mine: the day line, the plan's then mine (cards: every card its dates match)", "opens 1 card &middot; you: 3 reviews due" in h, h[-3000:])
+        _state["due_reviews"] = (0, {"due": 7})
+        try:
+            v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        finally:
+            _state["due_reviews"] = None
+        check("mine: today's is Due's own count when Due has it", next(d for d in v["week"] if d["today"]).get("mine") == 7)
+        check("mine: a past day has no line, a day with nothing says nothing",
+              board._day_line({"past": True, "new": 5, "mine": 9}) == "" and board._day_line({"new": 0}) == ""
+              and board._day_line({"new": 0, "mine": 1}) == '<span class="pdl">you: 1 review due</span>')
+
+
+def test_reinforcement_v381():
+    """3.8.1, plans round three §5: a date for an event that opens after the
+    event's day is reinforcement: Anki's week view and Due say "after Heme
+    quiz" in place of "for Heme quiz", it isn't a prep day, and the plan
+    card's "For … · N more days of prep" doesn't count it."""
+    from due_crew import plans as P, board, due as DUE, due_flow
+    doc = {"deck": "Step 1", "events": [{"id": "q", "day": "2026-10-09", "name": "Heme <quiz>"}],
+           "units": [{"id": "a", "name": "Anemia", "opens": "2026-10-07", "for": "q"},
+                     {"id": "b", "name": "Anemia again", "opens": "2026-10-12", "for": "q"},
+                     {"id": "c", "name": "Plain", "opens": "2026-10-08"}]}
+    a, b, c = doc["units"]
+    check("after: a date after its event reinforces it; one before preps for it; none, neither",
+          P.reinforces(doc, b)["id"] == "q" and P.reinforces(doc, a) is None and P.reinforces(doc, c) is None
+          and P.for_words(doc, a) == "for Heme <quiz>" and P.for_words(doc, b) == "after Heme <quiz>" and P.for_words(doc, c) == "")
+    w = P.week_view(doc, {}, "2026-10-07", P.week_start("2026-10-12"))
+    rb = next(r for d in w for r in d["units"] if r["uid"] == "b")
+    check("after: in the week it says so, and isn't prep", rb["ev"] == "after Heme <quiz>" and rb["prep"] is False
+          and not next(d for d in w if d["day"] == "2026-10-12")["prep"], str(rb))
+    w0 = P.week_view(doc, {}, "2026-10-07", P.week_start("2026-10-07"))
+    ra = next(r for d in w0 for r in d["units"] if r["uid"] == "a")
+    rc = next(r for d in w0 for r in d["units"] if r["uid"] == "c")
+    check("after: a prep date says for, a plain one nothing", ra["ev"] == "for Heme <quiz>" and ra["prep"] and "ev" not in rc)
+    card = {"id": "p1", "title": "Plan", "week": w, "rows": [], "lines": []}
+    h = board._week_html(card, "p1")
+    check("after: the day's details say it, escaped", "&middot; after Heme &lt;quiz&gt;</span>" in h and "<quiz>" not in h, h[-1500:])
+    check("after: the card's prep line doesn't count a date after the event",
+          P.prep_for(dict(doc, units=[b]), "2026-10-05") is None
+          and P.prep_for(doc, "2026-10-05")["name"] == "Heme <quiz>")
+    x = {"pid": "p", "uid": "b", "plan": "Plan", "name": "Anemia again", "opens": "2026-10-12", "seen": 0, "total": 4,
+         "prep": "Heme <quiz>"}
+    r = DUE.view("2026-10-12", [x], [], {})["rows"][0]
+    check("after: Due says after for it, for otherwise, escaped",
+          "after Heme &lt;quiz&gt;" in board._due_plan(dict(r, after=True))
+          and "for Heme &lt;quiz&gt;" in board._due_plan(r))
+    store, pid, code, maya = _v381_world(
+        [dict(u, **{"for": "e1"}) if u["id"] in ("hf", "ar") else u for u in _plan_units()],
+        events=[{"id": "e1", "day": _day(-3), "name": "Cardio quiz"}])
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        F.refresh_progress()
+        dates, _e, _r = due_flow.plan_dates(_day(0))
+        mine = {d["uid"]: d for d in dates if d["pid"] == pid}
+        check("after: Due's plan dates mark a date after its event (my days), not one before it",
+              mine["ar"]["after"] and not mine["hf"]["after"] and mine["ar"]["prep"] == "Cardio quiz", str(mine))
+
+
+def test_plan_tags_builder_v381():
+    """3.8.1 on duecrew.com: the builder names a cut as the add-on does,
+    writes and reads it as text, makes one from Overlap's "and", lets a tag
+    line hold single cards, and the whole plan's text names the dates still
+    using a tag it takes off."""
+    builder = open(os.path.join(REPO, "site", "public", "builder.js"), encoding="utf-8").read()
+    plans_src = open(os.path.join(REPO, "due_crew", "plans.py"), encoding="utf-8").read()
+    check("r2 site: a cut is named for its tag's last part and the plan tag, as plans.topic_items names it (the twins)",
+          'return `${Tags.word(c.tag.split("::").pop())}${t ? ` · ${t.name}` : ""}`' in builder
+          and 'f"{_word(segs[-1])} \\u00b7 {c[\'nm\']}"' in plans_src)
+    check("r2 site: the text writes a cut as tag:PATH in NAME and reads it back, its search not again",
+          "`tag:${c.tag} in ${" in builder and "/^(\\S+)\\s+in\\s+(\\S.*)$/i" in builder
+          and ".filter((q) => !cutOf(u, q)).map((q) => `search:${q}`)" in builder)
+    check("r2 site: a cut keeps its Anki search in the date's searches, for an add-on before 3.8.1",
+          "const cutQ = (tagPath, t) => `${Tags.ankiSearch(\"tag\", ptagPath(t))} ${Tags.ankiSearch(\"tag\", tagPath)}`" in builder
+          and builder.count("syncCuts();") >= 3)
+    check("r2 site: Overlap's and with a deck tag is a cut; a tag line takes cards:",
+          'if (ovl.op === "and" && !pt)' in builder and "const cs = picks ? picks.cards : [];" in builder
+          and "(t.cards || []).length ? Picks.cardsText(t.cards)" in builder)
+    check("r2 site: the whole plan's text names the dates a removed tag is still on, and offers both ways",
+          '"Take them off those dates too"' in builder and '"Keep the tags"' in builder and '"Replace anyway"' in builder
+          and "What these dates already opened stays open." in builder)
+    check("r2 site: the tagging prompt gives the root, the tags as they stand and the #cards rule",
+          "In Anki each one becomes the tag DueCrew::${tagRootNow()}::NAME" in builder
+          and "This plan's tags now, as they stand" in builder and "#cards column" in builder
+          and "if (ids + m <= 2000)" in builder)
+    check("r2 site: a plan tag's tag inside a search is matched whole (renaming SLG 1 leaves SLG 12), as plans.ts reroot bounds it",
+          '(?=::|$|[\\\\s")])`, flags);' in builder and "if (!tagRe(oldPath).test(q)) continue;" in builder
+          and "q.replace(tagRe(oldPath, \"gi\"), () => nq)" in builder and "q.includes(oq)" not in builder)
+    check("r2 site: a tag line writes each search as its own part, so Edit the whole plan reads it back the same",
+          "...(t.search || []).map((x) => `search:${x}`)].filter(Boolean);" in builder and '"tag", t.name, ...tagSrcs(t)' in builder)
+    check("r2 site: a cut chip dragged to another day moves as a cut; a cut's search is never trimmed away",
+          "else if (c.cut) {" in builder and "takeCut(c.u, x);" in builder and ".slice(-10)" not in builder
+          and 'note = "A date holds up to 10 searches and cuts."' in builder)
+    check("r2 site: a heavy day's Split takes a whole tag or subdeck only; a redraw keeps the page where it was",
+          "const big = u.even ? null : srcs(u).filter((k) => !uncounted(k) && eff(k) > 0)" in builder  # 3.8.1: srcs are tags and subdecks
+          and "const y = window.scrollY;\n    drawNow();\n    if (y) window.scrollTo(0, y);" in builder)
+
+
+def test_builder_review_bugs_v381():
+    """The plan builder's review (Sam's picks): Fill to a date stops there and
+    says what didn't fit; /plans/new draws before it can fail and says why;
+    a replaced doc brings its pace; Edit the whole plan keeps a renamed or
+    moved date's id and reads a name as a name; a plan tag's x names its
+    dates first; the server's ceilings are said where they're hit, each
+    refusal in its own words; Starts and Move this day move everything."""
+    import re
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    plans_ts = open(os.path.join(REPO, "worker", "src", "plans.ts"), encoding="utf-8").read()
+    # 1: Fill to <date>
+    check("review: Fill to a date never runs past it; an even piece there takes fewer days",
+          "let until = end;" in builder and "if (end && studyDays(d, end) < k) { k = studyDays(d, end); clipped = true; }" in builder
+          and "if (pace.mode === \"end\") pace.daily = endDaily();" not in builder)
+    check("review: whole chapters leave gaps, so the pace rises a little (8 tries) before anything is left off",
+          "cap = Math.min(5000, Math.ceil(cap * 1.1));" in builder and "tries >= 7" in builder)
+    check("review: what didn't fit is said, by name; an end before the dates places nothing (no 1-a-day pace)",
+          "didn't fit${end && !full ? ` by ${pretty(end)}` : \"\"}: ${leftNames(r.left)}." in builder
+          and "`Nothing fits by ${pretty(end)}: " in builder and "if (d1) pace.daily = d1;" in builder)
+    # 2: /plans/new
+    new_plan = app[app.index("async function newPlan()"):app.index("// ---- the builder: builder.js ----")]
+    check("review: a new plan is named for the deck's last part, 60 characters at most",
+          'const name = (deck.split("::").pop().trim() || deck.trim()).slice(0, 60).trim() || "My plan";' in new_plan
+          and 'api("POST", "/plans", { name, deck })' in new_plan and "{ name: deck, deck }" not in new_plan)
+    check("review: /plans/new draws its page before any request, so a failure shows; each reason its own",
+          new_plan.index("page(h(\"h1\"") < new_plan.index('api("GET", "/plans/mine")')
+          and all(k in new_plan for k in ('"too_many_plans"', '"plans_full"', '"bad_plan"', "err.status === 429")))
+    # 3: the doc replaced, the pace follows
+    check("review: History's Undo and a (merged) save reload the pace, what to cover and the start with the doc",
+          "function reload(d) {" in builder and builder.count("reload(plan.doc)") == 2 and "fromDoc(); study.days = pace.days;" in builder
+          and "doc = structuredClone(plan.doc); base = structuredClone(plan.doc);" not in builder)
+    check("review: a save to an end date keeps the pace it was filled at (5,000 at most, as the server takes)",
+          "p.daily = Math.max(1, Math.min(5000, endDaily() || pace.daily));" in builder)
+    # 4: Edit the whole plan
+    check("review: the whole plan's text keeps a moved date (its name, another day) or a renamed one (its day and cards)",
+          "fromText(ta.value, !adding)" in builder and "function fromText(text, whole = false)" in builder
+          and "oldSig(u) === sigOf(e)" in builder and "loose.filter((x) => x.key === e.key).length === 1" in builder
+          and "claimed.has(u.id)" in builder)
+    check("review: the part after the date is a name (Read: Chapter 3, For the midterm, Evenly), keywords only after it",
+          "const namePart = !opens || k === at + 1;" in builder and "!namePart && /^even(ly)?$/i.test(part)" in builder
+          and "!namePart && (m = /^for\\s+(.+)$/i.exec(part))" in builder and "!namePart && (m = /^(watch|read|do):" in builder)
+    check("review: the preview says a date moved or was renamed", "` · moved from ${pretty(was.opens)}`" in builder and "` · was ${was.name}`" in builder)
+    # 5: a plan tag's x
+    check("review: a plan tag's x names the dates it's on, and which go, before Delete it",
+          "function dropSay(t)" in builder and "nothing else, so ${gone.length === 1 ? \"it goes\" : \"they go\"}, to-dos too." in builder
+          and 'tagDrop === t.id ? h("div", { class: "ptdrop small"' in builder)
+    # 6: the server's ceilings, where they're hit
+    want = {k: re.search(rf"const {k} = (\d+);", plans_ts).group(1) for k in ("UNITS_MAX", "EVENTS_MAX", "REVIEWS_MAX", "SOURCES_MAX", "SEARCH_MAX")}
+    check("review: the builder's ceilings are the Worker's", all(f"{k} = {v}" in builder for k, v in want.items()), str(want))
+    check("review: a date made past 200, a search past 10 (search box, Overlap, a moved chip), a review day past 60 are refused, said",
+          "if (doc.units.length >= UNITS_MAX) { note = FULL; return null; }" in builder
+          and "if (!addSearch(u, q)) { why.textContent = note;" in builder and ".slice(0, 10)" not in builder
+          and "if (!addSearch(t, c.search)) { cleanup(); draw(); return; }" in builder
+          and "(doc.reviews || []).length >= REVIEWS_MAX" in builder)
+    check("review: a cleared date name is the date's own again; a cleared event name keeps the one it had",
+          "const nameIt = (u, v) =>" in builder and 'x.name = was.trim() ? was : "Event";' in builder
+          and "for (const u of doc.units) if (!String(u.name || \"\").trim()) { auto.add(u.id); u.name = autoName(u); }" in builder)
+    codes = ("plans_full", "bad_plan", "bad_name", "bad_line", "bad_post", "bad_squad", "not_owner", "not_author", "no_plan", "too_big", "slow_down")
+    check("review: each refusal of a save has its own words; the old catch-all about due dates is gone",
+          all(f"    {c}: " in builder for c in codes) and "A date isn't valid: a due date can't be before it opens" not in builder
+          and "const over = overLimit()" in builder)
+    worker_src = "".join(open(os.path.join(REPO, "worker", "src", f), encoding="utf-8").read() for f in ("plans.ts", "util.ts", "limits.ts", "validate.ts"))
+    check("review: those codes are the Worker's", all(f'"{c}"' in worker_src or f'bad("{c[4:]}")' in worker_src for c in codes)
+          and 'bad = (what: string) => new HttpError(400, "bad_" + what)' in worker_src)
+    # 7: Starts, Move this day, failures said, Split
+    check("review: Starts moves the review days, the events and the end with the dates",
+          "for (const r of doc.reviews || []) r.day = addDays(r.day, delta);" in builder and "for (const x of events()) x.day = addDays(x.day, delta);" in builder
+          and "if (doc.end) doc.end = addDays(doc.end, delta);" in builder)
+    check("review: Move this day onto a date merges its to-dos, its for and its cuts too",
+          "function mergeInto(into, u)" in builder and "if (u.for && !into.for) into.for = u.for;" in builder
+          and "into.cut = [...(into.cut || []), c]" in builder and "into.todo = all.slice(0, Todo.MAX);" in builder
+          and "const r = mergeInto(other, u);" in builder)
+    check("review: a note, a co-author, a follower's pace, History and Updates say when they fail",
+          '"That note didn\'t post. Try again."' in builder and '"Couldn\'t load your crew. Try again."' in builder
+          and "That didn't change. Try again.\"" in builder and "That didn't reset. Try again.\"" in builder and '"Couldn\'t load the history. "' in builder
+          and '"Couldn\'t load the updates. "' in builder and "catch { return; }" not in builder
+          and "/* stays as it was */" not in builder and "history = []; draw();" not in builder)
+    check("review: Split has no choice its button ignores; picking in Anki is a line",
+          'opt("anki"' not in builder and '"Or pick cards in Anki: "' in builder and "} else return;" not in builder)
+
+
+def test_builder_review_wording_v381():
+    """The builder's words (Sam's picks): followers are asked at their next
+    refresh; Fill, not Lay it out; the Text tab's line is true; my squads
+    vs the plan's squad; a neutral example beside the med one; the review
+    day says what it makes; the empty tree names the deck; most of the
+    last; per-date counts from 3 in the squad; the whole format's page."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    classes = open(os.path.join(site, "classes.html"), encoding="utf-8").read()
+    check("words: an opened date's followers are asked at their next refresh",
+          "Followers who opened it are asked at their next refresh" in builder and "tomorrow morning" not in builder)
+    check("words: the empty List says Fill", "Tick what to cover and Fill, or drag" in builder and "Lay it out, or drag" not in builder)
+    check("words: Edit the whole plan says nothing changes before Replace and Save",
+          "Nothing does until you Replace the plan's dates, and Save." in builder and "Saving replaces the plan's dates with this text." not in builder)
+    check("words: Settings offers it to one of my squads, not the plan's squad",
+          '"Offer it to one of my squads"' in builder and '"Only people in that squad of mine"' in builder and '"Offer it to a squad"' not in builder)
+    check("words: each example has a neutral one beside the med one",
+          "(SLG 12, or Unit 3)" in builder and "2026-10-20 | Chapter 4 | deck:Chemistry::Unit 3::Chapter 4" in builder
+          and "2026-10-12 | Chapter 4 | tag:Chemistry::Unit_3::Chapter_4" in builder and '"tag | Unit 3 | tag:Chemistry::Unit_3"' in builder
+          and "Heart failure | tag:Step1::Cardio::Heart_failure" in builder)
+    check("words: Make it a review day says followers get a Due Crew deck of what they've seen, that morning",
+          "That morning, followers get a Due Crew deck of what they've seen from these dates" in builder)
+    check("words: the empty tree names the plan's deck, and Anki's deck needs that name",
+          "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
+    check("words: at my own pace, the next once I've seen most of the last",
+          "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
+    check("words: Progress shows per-date counts only from 3 in the squad, as the class hint",
+          "if (pr.sharing < 3) {" in builder and "Each date's counts show once 3 or more are in it." in builder)
+    check("words: For classes says the plan's squad", "among those in the plan&rsquo;s squad" in classes and "among those who share it" not in classes)
+    check("words: the Format box links the whole format; both prompts name it",
+          'h("a", { class: "small", href: "/plan-text"' in builder and "The whole format ›" in builder
+          and builder.count('"The whole format: https://duecrew.com/plan-text",') == 2)
+
+
+def test_builder_undo_follow_asof_v381():
+    """Sam's picks: Undo in the builder, a step at a time, never across a
+    save or a reload; Follow on a plan's link page, one request; "Tags as
+    of" the day the author's Anki sent them."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(site, "app.css"), encoding="utf-8").read()
+    plans_ts = open(os.path.join(REPO, "worker", "src", "plans.ts"), encoding="utf-8").read()
+    check("undo: each change keeps the state before it (doc, pace, what to cover, the start), 20 at most",
+          "const UNDO_MAX = 20;" in builder and "const snap = () => JSON.stringify({ doc, pace, cover: [...cover], start, meta, auto: [...auto] });" in builder
+          and "if (undos.length > UNDO_MAX) { undos.shift(); undoLost = true; }" in builder)
+    check("undo: typing in one box is one step", "mark(`name:${u.id}`)" in builder and 'mark("title")' in builder and "!(key && key === undoKey)" in builder)
+    check("undo: a save or a reload starts over; back to the saved plan is clean",
+          "settled();" in builder and "  settled();  // Undo starts from the plan as it loaded\n  draw();" in builder
+          and "if (!undos.length && !undoLost) { dirty = false;" in builder)
+    check("undo: the button beside Save, and Ctrl/Cmd+Z when no text box has the focus",
+          "undoBtn, saveBtn) : null);" in builder and '.savebar button.undo' in css
+          and 'e.key.toLowerCase() === "z" && document.contains(saveBtn)' in builder and "&& undos.length && !typing(e.target)) { e.preventDefault(); undo(); }" in builder)
+    fb = app[app.index("function followBox(p, code, followed) {"):app.index("/** /p/CODE: what a shared link shows. */")]
+    check("follow: signed in, a plan's link page follows on one request, then says where its cards go",
+          fb.count("api(") == 1 and 'api("POST", "/plans/follow", { code })' in fb and "picks it up at its next refresh" in fb
+          and '"You follow 20 plans. Stop one first."' in fb and "me ? followBox(p, code, followed) : null" in app)
+    check("follow: its authors and followers get the way to it instead",
+          '"It\'s your plan. "' in fb and '"You follow it. "' in fb and "following: !!peek.following" in app)
+    check("as of: the tree's day, from GET /plans/trees' at, under its heading",
+          "at: r.at, ...JSON.parse(r.doc)" in plans_ts and "const treeAt = raw.at ?" in builder and "`Tags as of ${pretty(treeAt)}`" in builder)
+
+
+def test_plans_round_three_site_v381():
+    """Plans, round three, on duecrew.com (Sam signed off): co-authors say yes
+    first and a plan can be handed over (Settings, and Home's invite lines);
+    where to get the deck; notes for followers on a tag or a card (Note, the
+    ⓘ, Notes on cards, note | lines in the text, both prompts); a date's
+    picked cards read by the deck tags they sit under (`pl`)."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(site, "app.css"), encoding="utf-8").read()
+    text_page = open(os.path.join(site, "plan-text.html"), encoding="utf-8").read()
+    # 1: co-authors who said yes, and handing a plan over
+    co = builder[builder.index("function coauthorsBox() {"):builder.index("/** 3.5, B: list the plan in the library")]
+    check("r3 site: Settings lists co-authors: an invite waits (Take back), one who said yes can be handed it or taken off",
+          '"Invited, waiting for "' in co and '"Take back"' in co and "`Hand it to ${e.name}`" in co and '"Remove"' in co
+          and 'h("label", {}, "Co-authors"), coauthorsBox(),' in builder)
+    check("r3 site: an offer is said with Take back, and stands alone (no second Hand it to)",
+          '"Offered to "' in co and "offered ? null : h(\"button\"" in co and "offer(null, ev.currentTarget)" in co)
+    check("r3 site: each is one request on its click: POST /owner {uid}, DELETE /editors/{uid}, POST /editors {uid}",
+          'api("POST", `/plans/${id}/owner`, { uid })' in co and 'api("DELETE", `/plans/${id}/editors/${e.uid}`)' in co
+          and 'api("POST", `/plans/${id}/editors`, { uid: who.uid })' in co and co.count("api(") == 4)
+    check("r3 site: an invite isn't a co-author yet: not in the plan's line, shown as invited in Share",
+          "x.uid !== me.uid && !x.pending" in builder and "`${x.name}, invited`" in builder and '"Co-authors…"' in builder)
+    inv = app[app.index("function planInvites() {"):app.index("// board.py's footer")]
+    check("r3 site: Home's invite lines, as the add-on's board says them, above the plans",
+          '" asked you to co-write "' in inv and '". Its tags would go on your notes in Anki."' in inv and '" offered you "' in inv
+          and '" to keep."' in inv and "b.planInvites" in inv and app.count("planInvites(),") == 2)
+    check("r3 site: Yes and No are one request each, POST /plans/{id}/invite {yes, kind}",
+          inv.count("api(") == 1 and 'api("POST", `/plans/${x.id}/invite`, { yes, ...(x.kind === "coauthor" || x.kind === "owner" ? { kind: x.kind } : {}) })' in inv
+          and '"Yes"' in inv and '"No"' in inv and "Open it ›" in inv)
+    # 2: where to get the deck
+    deck_link = re.search(r"const deckLink = \(u\) => typeof u === \"string\" && u.length <= 300 && /(.*?)/\.test\(u\);", app)
+    ok_link = lambda u: len(u) <= 300 and bool(re.match(deck_link.group(1).replace("\\/", "/"), u))  # noqa: E731
+    check("r3 site: a deck link is https://, no spaces or quotes, 300 at most, or never a link (plans.ts DECK_URL)",
+          bool(deck_link) and ok_link("https://example.com/deck?v=12") and not any(ok_link(x) for x in (
+              "http://example.com", "javascript:alert(1)", "https://a b", 'https://x"y', "https:///x", "https://" + "a" * 293))
+          and all(f"deckLink({x})" in app + builder for x in ("v", "url", "doc.deckUrl")))
+    check("r3 site: Settings' field; the link page and the poster say Where to get it ›",
+          '"Where to get the deck (a link, optional)"' in builder and app.count('"Where to get it ›"') == 1
+          and builder.count('"Where to get it ›"') == 1 and "deckUrl: peek.doc.deckUrl" in app
+          and "steps(p.deck, true, p.deckUrl)" in app and "steps(p.deck, false, p.deckUrl)" in app)
+    check("r3 site: a save says where to get the deck changed; a merge keeps it",
+          '["deckUrl", "where to get the deck"]' in builder and '"every", "deckUrl"]) {' in builder)
+    # 3: notes for followers on a tag or a card
+    check("r3 site: notes ride the doc: 300 a plan, one line of 280, one a tag or a card",
+          "const MAX = 300, TEXT = 280;" in builder and "function setTagRemark(path, text)" in builder
+          and "const same = (a, b) => (a.card ?" in builder)
+    check("r3 site: Note on a deck tag's or a cut's chip in the day; the ⓘ on the calendar and in the day",
+          "const noteTag = (c) => (c.cut ? c.cut.tag : c.key && !c.picks && kindOf(c.key) === \"tag\" ? pathOf(c.key) : null);" in builder
+          and '}, "Note") : null,' in builder and 'h("i", { class: "ri", "aria-label": `Note: ${rmk.text}` }, "ⓘ ")' in builder
+          and "return [chip, nt ? remarkBox(nt) : null];" in builder and ".flatMap((c) => chipEl(u, c))" in builder)
+    check("r3 site: a row shows its tag's note or the nearest tag above it's, as in Anki",
+          "p.startsWith(`${r.tag.toLowerCase()}::`)" in builder and ".sort((a, b) => b.tag.length - a.tag.length)[0]" in builder)
+    check("r3 site: Notes on cards: which card by ID and number, never its text, the authors take one off",
+          '"Notes on cards"' in builder and "`${r.card[0]} · card ${r.card[1] + 1}`" in builder
+          and "putRemarks(remarks().filter((x) => x !== r)); mark(); draw();" in builder)
+    check("r3 site: a renamed or deleted plan tag's note follows it or goes",
+          "putRemarks(newPath ? remarks().map((r) => (r.tag && r.tag.toLowerCase() === low ? { ...r, tag: newPath } : r))" in builder)
+    check("r3 site: the text writes note lines after the dates and reads them (Add dates adds, the whole plan replaces)",
+          "...remarks().map(Remarks.line)].join(\"\\n\"); };" in builder
+          and "const line = (r) => (r.card ? `note | card:${r.card[0]}:${r.card[1] + 1} | ${r.text}` : `note | tag:${r.tag} | ${r.text}`);" in builder
+          and "if (replace) putRemarks(r.remarks.map(keepId));" in builder and "Takes off ${goneRmk.length} note" in builder)
+    # the reading regexes, run here on lines a guid with | and : can make
+    take_card = re.search(r"let m = /(\^card:.*?\$)/i\.exec\(rest\);", builder).group(1).replace("\\/", "/")
+    take_tag = re.search(r"m = /(\^tag:.*?\$)/i\.exec\(rest\);", builder).group(1)
+    note_line = re.search(r"const nl = /(\^note.*?\$)/i\.exec\(line\);", builder).group(1)
+    m = re.match(note_line, "note | card:Zq|7!m:N2:3 | On the quiz | Friday.", re.I)
+    c = m and re.match(take_card, m.group(1), re.I)
+    check("r3 site: note | card:GUID:N reads a guid holding | and :, N from 1, the rest the note",
+          bool(c) and c.group(1) == "Zq|7!m:N2" and c.group(2) == "3" and c.group(3) == "On the quiz | Friday.", str(c and c.groups()))
+    t = re.match(take_tag, "tag:SLG 12 | Slides first.", re.I)
+    check("r3 site: note | tag: takes a plan tag's name with its space", bool(t) and t.group(1) == "SLG 12" and t.group(2) == "Slides first.")
+    check("r3 site: both AI prompts mention note lines; the format's page documents them",
+          "note | tag:FULL::TAG::PATH | Skip the last two minutes, or note | card:ID:N |" in builder
+          and "note | tag:NAME | your words, or note | card:ID:N | your words." in builder
+          and 'id="remarks"' in text_page and "note | card:Zq7!mN2pLk:2 |" in text_page and "Up to 300 a plan." in text_page)
+    # 4: a date's picked cards by their resource's name
+    check("r3 site: a picked chip reads by its first label (88 picked until the author's Anki says)",
+          "`${plWord(pl[0][0])} · ${pl[0][1].toLocaleString()} picked` : `${picksN(u).toLocaleString()} picked`" in builder
+          and "picks: true, text: picksText(u), raw: picksList(u)" in builder and "cards: true, text:" not in builder)
+    check("r3 site: pl counts only while the date's picks are as they loaded, and goes back as it came",
+          "was && picksSig(was) === picksSig(u) ? u.pl : null" in builder and "pl && was.get(u.id) === picksSig(u) ? { ...u, pl } : u" in builder
+          and "lean(merge(doc, base, theirs.doc), theirs.doc.units || [])" in builder
+          and "if (old?.pl && picksSig(old) === picksSig(u)) u.pl = old.pl;" in builder)
+    check("r3 site: the new parts are styled", all(x in css for x in (".firststeps", ".chips2 .rmk", ".cnote", ".coa", ".pinv", ".pdeck", ".ch2 .xtra")))
+
+
+def test_plans_round_three_builder_v381():
+    """Plans, round three, in the builder (Sam signed off): a date after its
+    event is reinforcement ("after Heme quiz"); a tag's extras split, with
+    them or without; Edit the whole plan keeps a renamed tag (its dates
+    follow) and the save says what changed as revisions; first steps on an
+    empty plan."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    text_page = open(os.path.join(site, "plan-text.html"), encoding="utf-8").read()
+    # 5: reinforcement, the same rule as the add-on's
+    check("r3 builder: a date after its event's day is reinforcement",
+          "const afterEv = (u) => { const ev = u.for && evById(u.for); return !!ev && ev.day < u.opens; };" in builder
+          and "doc.units.filter((u) => u.for === id && !afterEv(u))" in builder)
+    check("r3 builder: the calendar, the day panel and the printout say after",
+          'evById(id).day < d ? "after " : "for "' in builder and 'after ? "After " : "For "' in builder
+          and "${forWord(u)} ${fx.name}, ${pretty(fx.day)}" in builder and 'h("optgroup", { label: "After" }' in builder
+          and "evById(u.for) && !afterEv(u)) ? \"lead\"" in builder)
+    check("r3 builder: the format's page and the prompt say it", "&ldquo;after Heme quiz&rdquo;" in text_page
+          and 'it reads \\"after Micro quiz\\", review after it.' in builder)
+    # 6: extras
+    ex = re.search(r"const EXTRA = /(.*?)/i;", builder).group(1)
+    is_extra = lambda seg: bool(re.match(ex, re.sub(r"[_#]", "", seg), re.I))  # noqa: E731
+    check("r3 builder: a child named Extra, Extras, Bonus or Supplement (any case, _ and # aside) is a tag's extras",
+          all(is_extra(x) for x in ("Extra", "#Extras", "BONUS", "_Supplement_", "extra_")) and not any(is_extra(x) for x in ("Extraction", "Supplements2", "Bonuses")))
+    check("r3 builder: the split, and Without as a search less each extra, named X but not Extra",
+          "`${main.toLocaleString()} + ${ex.toLocaleString()} extra`" in builder and '[[false, "With extras"], [true, "Without"]]' in builder
+          and '[Tags.ankiSearch("tag", path), ...extraKids(`tag:${path}`).map((k) => `-${Tags.ankiSearch("tag", pathOf(k))}`)].join(" ")' in builder
+          and "`${ws[0][1]} but not ${ws.slice(1).map(([, w]) => w).join(\", \")}`" in builder)
+    # 7: revisions
+    check("r3 builder: the whole plan's text keeps a renamed tag (same contents, a new name) and its dates follow",
+          "renamed.push({ id: was[0].id, from: ptagPath(was[0]), was: was[0].name });" in builder
+          and "if (t) retag(x.from, ptagPath(t)); }" in builder and "` · was ${was.name}`" in builder
+          and builder.index("const renamed = [];") < builder.index("for (const c of pendingCuts) {"))
+    check("r3 builder: a save's summary: updated Fri 16 Oct, renamed / added / took off N tags, the notes",
+          "out.push(`updated ${pretty(updated[0].opens)}`)" in builder and "out.push(`renamed ${nTags(ren.length)}`)" in builder
+          and "out.push(`added ${nTags(tAdded)}`)" in builder and "out.push(`took off ${nTags(tGone)}`)" in builder
+          and "out.push(`added ${nNotes2(rAdded)}`)" in builder)
+    check("r3 builder: a date that only followed a renamed tag hasn't changed; dates compare in any key order",
+          "!same(follow(b.get(u.id)), u)" in builder and "Object.keys(v).sort()" in builder)
+    # Sam's pick: first steps on an empty plan
+    fs = builder[builder.index("// 3.8.1 (Sam's pick): first steps"):builder.index("const main = h(\"div\", { class: \"main2\" },")]
+    check("r3 builder: first steps while the plan as saved has no dates, gone once it's saved with them",
+          "author && view !== \"print\" && !(plan.doc.units || []).length" in fs and "firstSteps, paceBox," in builder)
+    check("r3 builder: Tick what to cover · Fill to <end> · Save · Share the code, the step now bold, done ones ticked",
+          all(x in fs for x in ('"Tick what to cover"', "fillLabel", '"Save"', '"Share the code"', 'done ? "✓"', 'i === now ? h("b", {}, t) : t', '"aria-current"')))
+
+
+def test_plan_tags_insights_v381():
+    """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
+    choices (its topics, the map's first pick); the map's "by" gets one
+    named way a plan, each SLG a tile, with the ones no card carries."""
+    from due_crew import team as T, board
+    sys_tags = ["Step1::^Systems::Cardio::Heart", "Step1::^Systems::Renal::Kidney", "Step1::^Systems::Pulm::Lung"]
+    tags_of = {i: [sys_tags[i % 3], f"DueCrew::MS2_Block_1::SLG_{i % 5}"] for i in range(90)}
+    know = {i: (0.95 if i % 2 else 0.6) for i in range(90)}
+    topics, _groups = T.deck_topics(tags_of, set(tags_of))
+    check("r2 insights: a plan's own tags are never a topic of Not sticking yet",
+          not any("SLG" in t[1] for t in topics) and topics, str([t[1] for t in topics]))
+    tiles, ways = T.subjects_by(tags_of, know, set(tags_of))
+    check("r2 insights: nor the map's own pick, nor one of its ways",
+          not any("duecrew" in w["key"].lower() or "MS2" in w["name"] for w in ways) and {t["name"] for t in tiles} == {"Cardio", "Renal", "Pulm"},
+          str((ways, [t["name"] for t in tiles])))
+    held = [("SLG 1", "DueCrew::MS2_Block_1::SLG_1", set(range(0, 40))), ("SLG 2", "DueCrew::MS2_Block_1::SLG_2", set(range(40, 50))),
+            ("SLG 19", "DueCrew::MS2_Block_1::SLG_19", set()), ("SLG 3", "DueCrew::MS2_Block_1::SLG_3", {200})]
+    pt, none = T.plan_tiles(held, know, set(range(90)))
+    check("r2 insights: by a plan's tags: a tile a tag, biggest first, shaded by what I know; Browse by its tag",
+          [t["name"] for t in pt] == ["SLG 1", "SLG 2"] and pt[0]["n"] == 40 and pt[0]["know"] == round(100 * (20 * 0.95 + 20 * 0.6) / 40)
+          and pt[0]["find"] == {"tags": ["DueCrew::MS2_Block_1::SLG_1"]}, str(pt))
+    check("r2 insights: the ones no card here carries are named (one with cards, none in play, isn't)", none == ["SLG 19"], str(none))
+    way = {"key": "~plan:p1", "name": "MS2 Block 1's tags", "on": True, "none": ["SLG 19", "SLG <22>"]}
+    html = board._ins_map(10, pt, "fsrs", (), [{"key": "x", "name": "Systems", "on": False}, way])
+    check("r2 insights: picked, the way reads by the plan's name, and the gap is said, escaped",
+          "MS2 Block 1&#x27;s tags" in html and "No card in this deck carries SLG 19, SLG &lt;22&gt;." in html, html[-400:])
+    html2 = board._ins_map(10, pt, "fsrs", (), [dict(way, on=False), {"key": "x", "name": "Systems", "on": True}])
+    check("r2 insights: another way picked, no gap line", "No card in this deck" not in html2)
+    from due_crew import team_flow as TF
+    from due_crew.backend import shapes
+    col = _tag_col()
+    doc = shapes.clean_plan_doc({"deck": "Step 1", "units": [], "tagroot": "MS2_Block_1", "tags": [
+        {"id": "t1", "name": "SLG 1", "notes": ["guid000001", "guid000002"]}, {"id": "t2", "name": "SLG 2", "tags": ["#Video::Auto"]},
+        {"id": "t3", "name": "SLG 9", "notes": ["elsewhere"]}]})
+    saved = TF._tag_plans
+    try:
+        TF._tag_plans = lambda c, did: [("p1", "MS2 Block 1", doc, None)]
+        got = TF._plan_ways(col, 10, {1, 2, 4, 5, 6}, {1: 0.9, 4: 0.5})
+    finally:
+        TF._tag_plans = saved
+    way, tiles = got["~plan:p1"]
+    check("r2 insights: the plan's way reads what its tags hold in this deck, cards in play only",
+          way["name"] == "MS2 Block 1's tags" and way["none"] == ["SLG 9"]
+          and [(t["name"], t["n"]) for t in tiles] == [("SLG 2", 3), ("SLG 1", 2)], str((way, tiles)))
+
+
+def test_tag_pass_reads_a_deck_once_v381():
+    """3.8.1, the audit (#9): plans that share a deck read it once a tag pass,
+    and a plan whose tags moved notes makes the next plan read it fresh."""
+    from due_crew import plan_flow as F, plans as P
+    reads, moves = [], {}
+    pc = {"plans": {"a": {"deck_id": 10}, "b": {"deck_id": 10}, "c": {"deck_id": 20}}}
+    plan_list = [{"id": k, "name": k, "doc": {"tags": [{"id": "t1", "name": "SLG 1", "notes": ["g1"]}]}} for k in ("a", "b", "c")]
+    names = ("_pcfg", "_psave", "_today", "tooltip", "_deck_ok", "_tags_changed")
+    saved = {n: getattr(F, n) for n in names}
+    real = (P.DeckIndex, P.sync_tags, dc_mw().col)
+    try:
+        F._pcfg, F._psave, F.tooltip = (lambda: pc), (lambda c: None), (lambda *a, **k: None)
+        F._deck_ok, F._tags_changed = (lambda col, did: True), (lambda: None)
+        dc_mw().col = object()
+        P.DeckIndex = lambda col, did: reads.append(did) or ("idx", did)
+        P.sync_tags = lambda col, idx, doc, applied, label, swap=None: (
+            {"t1": "DueCrew::x::SLG_1"}, {"added": moves.get(label, 0), "removed": 0, "new": [], "missing": {}})
+        F._today = lambda: "2026-10-13"
+        F.apply_tags(plan_list, toast=False)
+        check("tag pass: two plans on one deck read it once", reads == [10, 20], str(reads))
+        reads.clear()
+        moves["Due Crew: a's tags"] = 3
+        F._today = lambda: "2026-10-14"
+        F.apply_tags(plan_list, toast=False)
+        check("tag pass: a plan whose tags moved notes makes the next one read fresh", reads == [10, 10, 20], str(reads))
+    finally:
+        for n, v in saved.items():
+            setattr(F, n, v)
+        P.DeckIndex, P.sync_tags, dc_mw().col = real
+
+
+def test_sign_in_says_what_went_wrong_v381():
+    """3.8.1, the audit (#5): asking for a code blames the address only when
+    the server says the address is bad; the mail being down says so."""
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    said = []
+    for status in (502, 503, 429):
+        def boom(*a, _s=status, **k):
+            raise shapes.TransportError("x", status=_s)
+        cl._call = boom
+        try:
+            cl.request_code("dre@example.com")
+        except api.AuthError as e:
+            said.append(str(e))
+    cl._call = lambda *a, **k: (400, {"error": "bad_email"})
+    try:
+        cl.request_code("nope")
+    except api.AuthError as e:
+        said.append(str(e))
+    check("sign-in: mail trouble isn't the address; too many is too many; a bad address is",
+          said == ["mail_failed", "mail_failed", "slow_down", "bad_email"], str(said))
+
+
 def test_plan_tags_glue_v380():
     """3.8.0, plan tags in the add-on: Browse sends the picked notes' guids
     to the plan (owner or co-author) and tags them here; a follower's Anki
@@ -9406,6 +12051,660 @@ def test_heatmap_day_v380():
         check("heat: not a day, or a day ahead: nothing", shown == [[901, 902]])
     finally:
         F._browse, dc.mw.col, _state["labels"] = saved
+
+
+def test_fifteen_model_v381():
+    """3.8.1, the Fifteen: fifteen minutes, then a question for five; each
+    yes adds one (after a five-minute break, or now), up to eight; no
+    answer and it's over. Mine alone: never a room on my week doc."""
+    from due_crew import room_model as rm
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
+    at = lambda m: t0 + datetime.timedelta(minutes=m)
+    f = rm.make_fifteen("me", t0)
+    check("fifteen: one fifteen of 15 with a 5-min break, kind kept by clean_room",
+          f == {"host": "me", "start": "2026-10-13T18:00:00Z", "rounds": 1, "round": 15, "brk": 5, "kind": "fifteen"}
+          and rm.clean_room(dict(f)) == f and rm.is_fifteen(f) and not rm.is_fifteen(rm.make_room("x", t0)))
+    check("fifteen: a friend's doc can't make a room a fifteen with junk",
+          "kind" not in rm.clean_room(dict(f, kind="party")))
+    got = [(m, rm.phase(f, at(m))["state"]) for m in (0, 14.9, 15, 19.9, 20)]
+    check("fifteen: the question for five minutes after the fifteen, then done",
+          got == [(0, "round"), (14.9, "round"), (15, "ask"), (19.9, "ask"), (20, "done")], got)
+    five = rm.fifteen_next(f, at(16))
+    check("take five: one more after a five-minute break from the fifteen's end; the start holds",
+          five["rounds"] == 2 and five["start"] == f["start"] and rm.phase(five, at(16))["state"] == "break"
+          and rm.phase(five, at(20))["state"] == "round" and rm.phase(five, at(35))["state"] == "ask")
+    now = rm.fifteen_next(f, at(16), wait=False)
+    p = rm.phase(now, at(16))
+    check("another now: the next fifteen starts this minute, all fifteen of it",
+          now["rounds"] == 2 and p["state"] == "round" and p["round"] == 2 and p["left"] == 900)
+    early = rm.fifteen_next(five, at(17), wait=False)
+    check("Start now on the break: the same, the round it was waiting for",
+          early["rounds"] == 2 and rm.phase(early, at(17))["state"] == "round" and rm.phase(early, at(17))["left"] == 900)
+    check("nothing to answer in a fifteen, or a room's break",
+          rm.fifteen_next(f, at(5)) is None and rm.fifteen_next(rm.make_room("x", t0, 4, 25, 5), at(27)) is None)
+    eight = dict(f, rounds=8)
+    check("eight is the most: no ninth", rm.fifteen_next(eight, at(8 * 15 + 7 * 5 + 1)) is None
+          and rm.phase(eight, at(8 * 15 + 7 * 5 + 1))["state"] == "ask")
+    check("what's spent: fifteens begun and their minutes",
+          rm.fifteen_spent(f, at(7.5)) == (1, 7) and rm.fifteen_spent(f, at(16)) == (1, 15)
+          and rm.fifteen_spent(now, at(23)) == (2, 22) and rm.fifteen_spent(f, at(0.2)) == (0, 0))
+    check("studying now lasts to the end of the question", rm.live_until(five) == at(40))
+    check("usual start: the middle of the last days' first answers; none from under three days",
+          rm.usual_start([3600 * 18, 3600 * 19, 3600 * 20]) == 3600 * 19 and rm.usual_start([10, 20]) is None
+          and rm.usual_start([100, 300, 200, 400]) == 250)
+    v = rm.board_view(now, [], now=at(16))["mine"]
+    check("on the Decks screen: the fifteen, its ring, minutes left",
+          v["fifteen"] and v["state"] == "round" and v["title"] == "Fifteen 2" and v["label"] == "15")
+    q = rm.board_view(f, [], now=at(16))["mine"]
+    check("…and its question there too", q["state"] == "ask" and q["label"] == "✓" and "another fifteen?" in q["sub"])
+    check("a capped one says so", "two hours" in rm.board_view(eight, [], now=at(8 * 15 + 7 * 5 + 1))["mine"]["sub"])
+
+    # the week doc: a fifteen isn't a room to join; it's studying now
+    from due_crew.backend import shapes as S
+    live = datetime.datetime.now(utc)  # both under way: a row's room is one not over yet, by the clock
+    check("fifteen: never on a row as a room", S._live_room(rm.make_fifteen("me", live)) is None
+          and S._live_room(rm.make_room("x", live)) is not None)
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    cl.session = {"room": rm.make_fifteen("me", datetime.datetime.now(utc)), "live_until": "2099-01-01T00:00:00Z"}
+    doc = cl.week_doc([TODAY.isoformat()], {})
+    check("fifteen: my week doc has studying now and no room", "room" not in doc and doc.get("liveUntil"), doc)
+    cl.session["room"] = rm.make_room("me", datetime.datetime.now(utc), 2, 25, 5)
+    check("…a room with my crew still rides it", "room" in cl.week_doc([TODAY.isoformat()], {}))
+
+
+def test_fifteen_js_phase_matches_v381():
+    """The widgets' clock is room_model.phase restated (a twin): a fifteen's
+    question and its end, on both sides. Needs node; skipped without it."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm
+    node = shutil.which("node")
+    if not node:
+        print("SKIP fifteen phase parity: no node")
+        return
+    src = rm._RUNTIME
+    fn = src[src.index("  function phase(now) {"):src.index("  function hm(ms)")]
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=datetime.timezone.utc)
+    cases, datas = [], []
+    for i, room in enumerate((rm.make_fifteen("me", t0), dict(rm.make_fifteen("me", t0), rounds=3), rm.make_room("x", t0, 2, 25, 5))):
+        d = rm.widget_data(room, [], ("#000", "#fff"), sev=False)
+        datas.append({k: d[k] for k in ("start", "rounds", "round", "brk", "kind", "ask")})
+        for m in range(-3, 140, 1):
+            when = t0 + datetime.timedelta(minutes=m, seconds=7)
+            p = rm.phase(room, when)
+            cases.append([i, int(when.timestamp() * 1000), p["state"], p["round"], round(p["left"])])
+    prog = ("var D;" + fn + f"var datas = {json.dumps(datas)}, cases = {json.dumps(cases)}, bad = 0;"
+            "cases.forEach(function (c) { D = datas[c[0]]; var p = phase(c[1]);"
+            " if (p.state !== c[2] || p.round !== c[3] || Math.round(p.left / 1000) !== c[4]) { bad++; } });"
+            "console.log(bad + '/' + cases.length);")
+    out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+    check("fifteen: the widgets' clock is the model's, question and all", out.stdout.strip() == f"0/{len(cases)}", out.stdout + out.stderr)
+
+
+def test_fifteen_widgets_v381():
+    """▶ Fifteen? in the top bar; the question and its break on the review
+    screen, keyed (a card's own script can't answer it); Sev in them."""
+    from due_crew import room_model as rm
+    t0 = datetime.datetime.now(datetime.timezone.utc)
+    start = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "left", True, nap=True))
+    check("Fifteen? (with its question mark) at the chip's end, napping Sev, starts one",
+          "'Fifteen?'" in start and "position:fixed;left:10px" in start and "send('room15')" in start
+          and "m-nap" in start and "dc-sev-css" in start)
+    plain = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "right", False))
+    check("…and with Sev off, no Sev", "sv m-" not in plain and '"sev": null' in plain)
+    f = rm.make_fifteen("me", t0)
+    ask = rm.widget_js("ask", rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), cards=38, total=61))
+    check("the question: three answers, keyed, Sev with the clock",
+          all(f"'{c}'" in ask for c in ("room15five", "room15now", "room15stop")) and "That’s fifteen." in ask
+          and "m-ring" in ask and '"cards": 38' in ask and "No answer" not in ask)
+    brk = rm.widget_js("break", rm.widget_data(dict(f, rounds=2), [], ("#2e7d32", "#7cc47f"), brk_pose="stretch"))
+    check("a fifteen's break: Start now and Stop here, Sev stretching (Settings), no cheer for nobody",
+          "'room15now'" in brk and "'room15stop'" in brk and '"brk_pose": "stretch"' in brk and "Cheer the room" in brk
+          and "FIF ?" in brk)
+    room = rm.widget_js("break", rm.widget_data(rm.make_room("dre", t0, 2, 25, 5), [], ("#2e7d32", "#7cc47f")))
+    check("a room with my crew keeps its break as it was (no Sev yet)", '"sev": null' in room and '"kind": "room"' in room)
+    check("the answers are the widget's own commands", {"room15five", "room15now", "room15stop"} <= set(rm.CARD_PAGE_CMDS))
+    msg, ok = rm.trusted("duecrew:room15now", True)
+    msg2, ok2 = rm.trusted(f"duecrew:room15now|{rm.CMD_KEY}", True)
+    check("from the review page only with the key", not ok and ok2 and msg2 == "duecrew:room15now")
+
+
+def test_fifteen_flow_v381():
+    """Start, the question, its answers, the end: through _on_js, as the
+    top bar, the board and the review screen send them."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import rooms as R, room_model as rm, app as appmod, due_flow
+    from due_crew.app import _state
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
+    clock = {"now": t0}
+    cl = types.SimpleNamespace(signed_in=True, user_id="me", session={}, _save_session=lambda: None)
+    syncs, swaps, evals, walked = [], [], [], []
+    col = types.SimpleNamespace(db=types.SimpleNamespace(scalar=lambda *a: 7), sched=types.SimpleNamespace(day_cutoff=10 ** 10))
+    saved = (R.client, R._now, R._eval, R._webs, appmod.sync, appmod.swap, due_flow.study_today, R.mw.state, R.mw.col,
+             dict(_state), R.cfg)
+    try:
+        R.client = lambda: cl
+        R._now = lambda: clock["now"]
+        R._eval = lambda web, js: evals.append(js)
+        R._webs = lambda: (None, None, None)
+        R.cfg = lambda: {}
+        appmod.sync = lambda **k: syncs.append(k)
+        appmod.swap = lambda c, **k: swaps.append(1)
+        due_flow.study_today = lambda: walked.append(1)
+        R.mw.state, R.mw.col = "deckBrowser", col
+        _state["entries"] = [{"user_id": "me", "you": True, "room": None, "live_until": ""}]
+        _state["labels"] = ["2026-10-13"]
+        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        room = cl.session.get("room")
+        check("start: a fifteen of mine, my crew sees studying now (one light sync), Study today opens",
+              rm.is_fifteen(room) and room["rounds"] == 1 and cl.session.get("live_until") == "2026-10-13T18:20:00Z"
+              and syncs == [{"light": True, "fetch": False}] and walked == [1]
+              and _state["entries"][0]["room"] is None and _state["entries"][0]["live_until"] == "2026-10-13T18:20:00Z")
+        clock["now"] = t0 + datetime.timedelta(minutes=16)
+        R.rm_real = rm.phase
+        dc._on_js(False, "duecrew:room15five", DeckBrowser())
+        check("take five: one more, studying now to the end of its question",
+              cl.session["room"]["rounds"] == 2 and cl.session["live_until"] == "2026-10-13T18:40:00Z" and len(syncs) == 2)
+        clock["now"] = t0 + datetime.timedelta(minutes=17)
+        walked.clear()
+        dc._on_js(False, "duecrew:room15now", DeckBrowser())
+        check("Start now on its break: the second starts this minute; from Decks, Study today opens",
+              rm.phase(cl.session["room"], clock["now"])["left"] == 900 and walked == [1])
+        clock["now"] = t0 + datetime.timedelta(minutes=22)
+        dc._on_js(False, "duecrew:room15stop", DeckBrowser())
+        done = cl.session.get("fifteen_done")
+        check("stop: the session's line (fifteens begun, minutes, cards), nothing left of it, crew told",
+              "room" not in cl.session and "live_until" not in cl.session and done
+              and (done["n"], done["minutes"], done["cards"], done["walked"]) == (2, 20, 7, False) and len(syncs) == 4,
+              str((done, len(syncs), sorted(cl.session))))
+        view = R.board_view()
+        check("…on the board, with Sev stacking (once)", view.get("fifteen_done", {}).get("n") == 2
+              and "stk" in (view["fifteen_done"].get("sev") or "") and " rest" not in view["fifteen_done"]["sev"].split('"')[1])
+        check("…and drawn again it rests", " rest" in R.board_view()["fifteen_done"]["sev"].split('"')[1])
+        dc._on_js(False, "duecrew:room15x", DeckBrowser())
+        check("× takes the line away", "fifteen_done" not in cl.session)
+        # walked away: no answer, so it ends quietly, with no sync of its own
+        clock["now"] = t0
+        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        n = len(syncs)
+        clock["now"] = t0 + datetime.timedelta(minutes=21)
+        real_phase = rm.phase
+        R.room_model.is_over = lambda r, now=None: rm.phase(r, clock["now"])["state"] == "done"
+        try:
+            gone = R.my_room()
+        finally:
+            R.room_model.is_over = lambda r, now=None: r is None or real_phase(r, now)["state"] == "done"
+        d = cl.session.get("fifteen_done") or {}
+        check("no answer: over, quietly (no request), and its line is there", gone is None and d.get("walked") is True
+              and d.get("n") == 1 and len(syncs) == n and "live_until" not in cl.session, str((d, len(syncs), n, sorted(cl.session))))
+    finally:
+        (R.client, R._now, R._eval, R._webs, appmod.sync, appmod.swap, due_flow.study_today, R.mw.state, R.mw.col,
+         st, R.cfg) = saved
+        _state.clear()
+        _state.update(st)
+        R.room_model.is_over = rm.__dict__["is_over"]
+
+
+def test_sev_by_the_logo_is_a_moment_v381():
+    """Sam: Sev isn't always by the logo. It comes when something just
+    happened, the first time the board draws it, and goes after a few
+    seconds; a redraw meanwhile keeps its place; then the logo's alone."""
+    from due_crew import rooms as R
+    from due_crew.app import _state
+    saved = (R.cfg, dict(_state), R.time.time)
+    clock = {"t": 1000.0}
+    try:
+        R.cfg = lambda: {}
+        R.time.time = lambda: clock["t"]
+        _state["labels"] = ["2026-10-13"]
+        _state.pop("sev_shown", None)
+        _state["sev_cheer"] = 0
+        check("nothing happening: no Sev by the logo", R.board_sev({}, {"done": False}) is None)
+        first = R.board_sev({}, {"done": True})
+        clock["t"] += 2
+        again = R.board_sev({}, {"done": True})
+        clock["t"] += 4
+        later = R.board_sev({}, {"done": True})
+        check("the day done: a hop, kept through a redraw, gone after its few seconds, not back that day",
+              first and "m-hop" in first["svg"] and first["ago"] == 0 and again["ago"] == 2 and later is None)
+        _state["sev_cheer"] = clock["t"] - 1
+        cheer = R.board_sev({}, {"done": True})
+        check("a cheer is its own moment, the same day", cheer and "m-cheer" in cheer["svg"])
+        R.cfg = lambda: {"sev": False}
+        _state.pop("sev_shown", None)
+        check("Sev off: never", R.board_sev({}, {"done": True}) is None)
+    finally:
+        R.cfg, st, R.time.time = saved
+        _state.clear()
+        _state.update(st)
+
+
+def test_top_bar_is_our_page_v381():
+    """Sam: clicking ▶ Fifteen? did nothing. Anki tags the top bar's
+    messages with a TopToolbar (Toolbar.draw's wrapper), and only Toolbar
+    counted as ours: the top bar got a card page's rules, and room15 (not
+    one of the widgets' own) was dropped. The chip's phase tick too."""
+    import due_crew as dc
+    from due_crew import rooms as R, room_model as rm
+    saved_mod, saved_on = sys.modules.get("aqt.toolbar"), R.on_message
+    tb = types.ModuleType("aqt.toolbar")
+    tb.TopToolbar = type("TopToolbar", (), {"__init__": lambda self, toolbar=None: None})
+    tb.Toolbar = type("Toolbar", (), {})
+    sys.modules["aqt.toolbar"] = tb
+    got = []
+    R.on_message = lambda cmd, parts: (got.append(cmd), True)[1]
+    try:
+        check("the top bar (as Anki tags it) is one of our pages", dc._our_page(tb.TopToolbar()))
+        dc._on_js(False, f"duecrew:room15|{rm.CMD_KEY}", tb.TopToolbar())  # as the chip sends it, keyed
+        dc._on_js(False, "duecrew:roomtick", tb.TopToolbar())
+        dc._on_js(False, "duecrew:room15", type("Previewer", (), {})())  # a card's page: still not
+    finally:
+        R.on_message = saved_on
+        if saved_mod is None:
+            sys.modules.pop("aqt.toolbar", None)
+        else:
+            sys.modules["aqt.toolbar"] = saved_mod
+    check("▶ Fifteen? and the chip's tick reach the glue from the top bar; a card's page can't start one",
+          got == ["room15", "roomtick"], got)
+
+
+def test_crew_room_sevs_wear_their_accents_v381():
+    """3.8.1 (Sam's pick): in a crew room each member is their Sev, in their
+    own accent, and they started at different moments, so the blinks never
+    line up: the room's card and the Decks screen's lobby. Sev off, or a
+    fifteen: the initials, as before. The accent rides GET /board, a mutual
+    friend's only, and only one of the add-on's own reaches a page."""
+    from due_crew import room_model as rm, rooms as R, sev
+    from due_crew.app import _state
+    utc = datetime.timezone.utc
+    store = world({"sam": "Sammy", "dre": "Dre <K>", "ana": "Ana", "nia": "Nia", "kai": "Kai"},
+                  {"sam": ["dre", "ana", "nia"], "dre": ["sam"], "ana": ["sam"], "kai": ["sam"]})
+    for uid, accent in (("sam", "amber"), ("dre", "blue"), ("ana", "teal"), ("nia", "rose"), ("kai", "purple")):
+        new_client(store, uid).put_settings("2026-10-13T10:00:00Z", {"accent": accent})
+    raw = {f["uid"]: f for f in store._board("sam", False)["friends"]}
+    check("server: a mutual friend's accent comes with their week; someone I added who hasn't added me back: name and emoji only",
+          raw["dre"].get("accent") == "blue" and raw["nia"] == {"uid": "nia", "name": "Nia", "emoji": "", "mutual": False}
+          and "kai" not in raw)
+    check("…and the other way: someone who added me, and I haven't added back, never gets mine",
+          {f["uid"]: f for f in store._board("kai", False)["friends"]}["sam"] == {"uid": "sam", "name": "Sammy", "emoji": "", "mutual": False})
+    real_board = store._board
+
+    def junk_board(me, *a, **k):  # a server that sends junk for ana's (the Worker never would)
+        out = real_board(me, *a, **k)
+        for f in out["friends"]:
+            if f["uid"] == "ana":
+                f["accent"] = "red;}</style><b>x"
+        return out
+    store._board = junk_board
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    sam = new_client(store, "sam", "Sammy")
+    n = len(store.log)
+    entries = sam.fetch_board(labels)["entries"]
+    acc = {e["user_id"]: e["accent"] for e in entries}
+    check("client: the accent rides the refresh (still one request); junk is no accent; mine is this computer's, not the server's",
+          len(store.log) - n == 1 and acc == {"sam": "", "dre": "blue", "ana": ""}, acc)
+    check("client: only one of the add-on's accents is kept",
+          [shapes.clean_accent(x) for x in ("rose", "Rose", " rose", "</style>", "red;x", ["rose"], {"a": 1}, None, 7, "__proto__")]
+          == ["rose"] + [""] * 9)
+
+    room = rm.make_room("dre", datetime.datetime.now(utc) - datetime.timedelta(minutes=5))
+    ents = [dict(e, room=room) for e in entries]
+    mine = board.accent_pair("amber")
+    on = rm.widget_data(room, ents, mine)
+    seats = {s["n"]: s for s in on["seats"]}
+    check("card, Sev on: each member is their Sev in their accent (mine is mine; junk wears the default), host first",
+          [s["n"] for s in on["seats"]] == ["Dre <K>", "Ana", "You"] and seats["Dre <K>"]["a"] == list(board.accent_pair("blue"))
+          and seats["Ana"]["a"] == list(board.accent_pair("green")) and seats["You"]["a"] == list(mine)
+          and on["sev"] == {"idle": sev.svg("idle")} and "sv-blink" in on["sevcss"], on["seats"])
+    check("…each started at its own moment: the blinks never line up (a delay in the blink, each different)",
+          [s["d"] for s in on["seats"]] == [0, -1.7, -3.4] and "sv-blink 4.6s var(--sv-d, 0s)" in sev.CSS
+          and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
+    js = rm.widget_js("card", on)
+    check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
+          "seats(40) : faces(c, 24)" in js and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
+          and "v.setAttribute('aria-label', s.n)" in js and round(40 * sev.SLOT[0]) == 24)
+    off = rm.widget_data(room, ents, mine, sev=False)
+    fif = rm.widget_data(rm.make_fifteen("sam", datetime.datetime.now(utc)), ents, mine)
+    check("card, Sev off: the initials as before; a fifteen has no members (and its own Sevs)",
+          off["seats"] == [] and off["sev"] is None and off["initials"] == ["D", "A", "S"]
+          and fif["seats"] == [] and fif["initials"] == [] and "focus" in fif["sev"])
+
+    now = datetime.datetime.now(utc)
+    lobby = board.room_html(rm.board_view(room, ents, now=now, sev=True, accent_pair=mine))
+    blue, amber = board.accent_pair("blue"), mine
+    check("lobby, Sev on: each member is their Sev, in their accent by day and by night, blinking at its own moment",
+          lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby and lobby.count("m-idle") == 3
+          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
+          and "--sv-d:-1.70s" in lobby)
+    check("…the name only as its label, escaped",
+          'title="Dre &lt;K&gt;"' in lobby and 'aria-label="Dre &lt;K&gt;"' in lobby and "Dre <K>" not in lobby
+          and 'aria-label="You"' in lobby)
+    plain = board.room_html(rm.board_view(room, ents, now=now))
+    check("lobby, Sev off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
+    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon"})
+    check("lobby: a seat's colours are colours, or the default's; nothing else reaches its style",
+          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-d:0.00s' in bad
+          and "</style>" not in bad and "<b>" not in bad)
+    cfg_sheet = lambda theme: board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {"theme": theme}, 0)
+    dark, light, auto = cfg_sheet("dark"), cfg_sheet("light"), cfg_sheet("auto")
+    check("the board picks a seat's colour as it does its own: Settings › Theme, or Anki's night mode",
+          "#due-crew .dc-room .seat { --sv-a: var(--sa-d); }" in dark and "#due-crew .dc-room .seat { --sv-a: var(--sa-l); }" in light
+          and "--sa-d" not in light and "body.nightMode #due-crew .dc-room .seat" in auto
+          and "@media (prefers-color-scheme: dark) { #due-crew .dc-room .seat { --sv-a: var(--sa-d); } }" in auto)
+
+    # the glue: Settings › Sev decides, my accent is mine
+    saved = (R.cfg, R.my_room, R._done, R._fifteen_done, dict(_state))
+    try:
+        R.my_room, R._done, R._fifteen_done = (lambda: room), (lambda: None), (lambda: None)
+        _state.update(entries=ents, room_dismissed=set(), labels=labels)
+        R.cfg = lambda: {"accent": "amber"}
+        glue_on, data_on = R.board_view()["mine"], R._data(room)
+        R.cfg = lambda: {"accent": "amber", "sev": False}
+        glue_off, data_off = R.board_view()["mine"], R._data(room)
+    finally:
+        R.cfg, R.my_room, R._done, R._fifteen_done, st = saved
+        _state.clear()
+        _state.update(st)
+    check("glue: Sev on, the lobby's and the card's seats, me in my accent; Sev off, none",
+          [s["a"] for s in glue_on["seats"]] == [list(blue), list(board.accent_pair("green")), list(amber)]
+          and data_on["seats"] == glue_on["seats"] and glue_off["seats"] == [] and data_off["seats"] == []
+          and data_off["initials"] == ["D", "A", "S"])
+
+
+def test_fifteen_board_v381():
+    """The board: the lobby's question, the session's line, the nudge, Sev
+    beside the logo, and the Settings that turn it all off."""
+    from due_crew import room_model as rm, sev, settings_model as SM
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=datetime.timezone.utc)
+    f = rm.make_fifteen("me", t0)
+    ask = dict(rm.fifteen_view(f, t0 + datetime.timedelta(minutes=16)), cards=38, sev=sev.svg("ring"))
+    h = board.room_html({"mine": ask})
+    check("lobby, the question: cards, three answers, Sev with its clock",
+          "38 cards." in h and all(f"duecrew:{c}" in h for c in ("room15five", "room15now", "room15stop")) and "m-ring" in h)
+    cap = board.room_html({"mine": rm.fifteen_view(dict(f, rounds=8), t0 + datetime.timedelta(minutes=8 * 15 + 7 * 5 + 1))})
+    check("…capped: Stop here only", "room15five" not in cap and "room15now" not in cap and "room15stop" in cap)
+    rnd = board.room_html({"mine": rm.fifteen_view(f, t0 + datetime.timedelta(minutes=3))})
+    check("…in a fifteen: Study and Stop here", "duecrew:duestudy" in rnd and "room15stop" in rnd and "12 min left" in rnd)
+    line = board.room_html({"fifteen_done": {"n": 3, "minutes": 45, "cards": 1212, "walked": True, "sev": sev.svg("stack", stack=3)}})
+    check("the session's line: fifteens, minutes, cards, the same however it ended",
+          "3 fifteens &middot; 45 m &middot; 1,212 cards.</span>" in line and "counts" not in line and "room15x" in line)
+    one = board.room_html({"fifteen_done": {"n": 1, "minutes": 11, "cards": 56, "sev": sev.svg("stack", stack=1)}})
+    check("Sam: its box fits what Sev stacks (room for one square, or three), its words left, no fixed gap above",
+          [sev.stack_reach(n, 44) for n in (1, 2, 3, 8)] == [(7, 3), (13, 3), (19, 3), (19, 3)]
+          and 'style="padding:7px 0 3px"' in one and 'style="padding:19px 0 3px"' in line
+          and "dc-sess" in one and "padding-top: 26px" not in board.SEV_CSS and ".dc-sess { text-align: left; }" in board.SEV_CSS)
+    check("…and the sparks that twinkle as it lands are gone once it rests, or when nothing moves",
+          ".sv.m-stack .spark, .sv.m-cheer .spark { opacity: 0; }" in sev.CSS.split("@media")[0]
+          and ".sv.rest .spark" in sev.CSS)
+    v = {"today": "2026-10-13", "name": "Due", "done_n": 0, "total_n": 2, "behind_n": 0, "folded": False, "tab": "today",
+         "rows": [], "suggestions": [], "notes": [], "later": [], "later_n": 0, "nudge": True, "nudge_sev": sev.svg("peek")}
+    try:
+        nud = board._due_html(v)
+    except Exception as ex:  # the view's other keys: from a real one
+        nud = str(ex)
+    check("the nudge: Not started yet today. Fifteen? Start, and Not today",
+          "Not started yet today." in nud and "duecrew:room15" in nud and "duecrew:duex:fifteen" in nud and "m-peek" in nud, nud[:300])
+    head = board._head("today", sev={"svg": sev.svg("hop"), "ago": 1.5})
+    check("Sev beside the logo, never on it, for a moment (it goes; a redraw keeps its place)",
+          'class="dc-sev once"' in head and head.index("dc-mark") < head.index("dc-sev") and "--ago:1.50s" in head
+          and board._head("today") .count("dc-sev") == 0)
+    check("by the logo only when something happens: a cheer, back from away, exam eve, the day done; else nothing",
+          [sev.moment(cheered=True, back=True), sev.moment(back=True, exam_eve=True), sev.moment(exam_eve=True, day_done=True),
+           sev.moment(day_done=True), sev.moment()] == ["cheer", "hello", "exam", "hop", None])
+    check("Sev: every pose draws; the cheer blushes and nothing else does; a stack of one",
+          all(sev.svg(k).startswith('<svg class="sv m-') for k in sev.POSES) and "sv-cheek" in sev.svg("cheer")
+          and "sv-cheek" not in sev.svg("idle") and sev.svg("stack", stack=1).count('class="stk') == 1)
+    check("Sev: still unless the computer allows motion; what happens once rests when drawn again",
+          sev.CSS.index("@media (prefers-reduced-motion: no-preference)") < sev.CSS.index("@keyframes")
+          and "animation" not in sev.CSS[:sev.CSS.index("@media")] and ' rest"' in sev.svg("hop", rest=True)
+          and " rest" not in sev.svg("nap", rest=True))
+    st = board.settings_html({"tab": "board"}, {})
+    check("Settings: Fifteen? in the top bar, Sev, and the break's Breathe or Stretch",
+          "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
+    ix = board.settings_index({"tab": "board"}, {})
+    hit = lambda word: {r["f"] for r in ix if word in r["k"].split()}
+    check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Sev, stretch finds the break",
+          "set:fifteen:" in hit("timer") and "set:fifteen:" in hit("pomodoro") and "set:sev:" in hit("mascot")
+          and "set:sev_break:" in hit("stretch"), (hit("timer"), hit("mascot"), hit("stretch")))
+    check("…and what a click there saves", SM.change(["set", "sev", "0"], {}) == {"sev": False}
+          and SM.change(["set", "sev_break", "stretch"], {}) == {"sev_break": "stretch"}
+          and SM.change(["set", "sev_break", "dance"], {}) is None and SM.change(["set", "fifteen", "0"], {}) == {"fifteen": False})
+    off = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {"sev": False}, 0)
+    on = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {}, 0,
+                      sev={"svg": sev.svg("hop"), "ago": 0})
+    check("Sev off: no motion sheet on the board; on, the sheet and Sev by the logo",
+          "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev once"' in on)
+
+
+def test_week_card_sev_v381():
+    """3.8.1, the week card (Sam's pick, "Sev hops across the week"): a
+    dotted arc from each day studied to the next, a long one over days
+    off, none over days to come, and Sev standing on the last day studied
+    in the card's accent; no Sev with nothing studied or Sev off, and on
+    today's card only on today. sev.still is the one drawing: cards.js
+    keeps a copy, and lays the card out the same (that part needs node)."""
+    import shutil
+    import subprocess
+    from due_crew import rooms as R, sev, shares as SH, sharecard as S
+    from due_crew.app import _state
+    measure = lambda s, px, w: len(s) * px * 0.55  # noqa: E731
+    mon = datetime.date(2026, 10, 12)
+    log = lambda days: {(mon + datetime.timedelta(days=i)).isoformat(): (30 + 7 * i, (10 + 3 * i) * 60000)  # noqa: E731
+                        for i, x in enumerate(days) if x}
+    on = {k: True for k in ("time", "reviews", "streak", "crew")}
+    of = lambda ops, kind: [o for o in ops if o[0] == kind]  # noqa: E731
+    P, s = 78, (1080 - 2 * 78 - 6 * 20) / 7
+    mid = lambda i, x0=P, side=s, gap=20: x0 + i * (side + gap) + side / 2  # noqa: E731
+
+    wk = S.week(log([1, 1, 0, 1, 1, 0, 1]), "2026-10-18", False, {"2026-10-18": 9}, 4, 2, sev=True)  # the mock's: two days off
+    W, H, ops = S.draw("week", "story", wk, on, "light", measure)
+    hp = S.hops(wk, P, 560 + S.ROOM, s, 20, 8)
+    over = lambda a, b: [y - hp["r"] for x, y in hp["dots"] if mid(a) < x < mid(b)]  # noqa: E731
+    check("hops: an arc from each day studied to the next, a long one over each day off",
+          hp["arcs"] == [(0, 1), (1, 3), (3, 4), (4, 6)] and min(over(1, 3)) < min(over(0, 1)) and min(over(4, 6)) < min(over(3, 4))
+          and all(min(over(a, b)) < 560 + S.ROOM for a, b in hp["arcs"]), hp["arcs"])
+    sv = of(ops, "sev")
+    check("Sev on the last day studied, standing on today's ring, in the card's accent; the trail drawn in it too",
+          len(sv) == 1 and sv[0][1] == "hop" and abs(sv[0][2] + sv[0][4] / 2 - mid(6)) < 1e-9
+          and abs(sv[0][3] + sv[0][4] * S.SEV_FEET - (560 + S.ROOM - 8 * 1.375)) < 1e-9 and sv[0][5] == "#2e7d32"
+          and [o[1:3] for o in of(ops, "dot")] == hp["dots"] and {o[4] for o in of(ops, "dot")} == {"#2e7d32"}
+          and of(S.draw("week", "story", wk, on, "dark", measure)[2], "sev")[0][5] == S.LOOKS["dark"]["g"], sv)
+    texts = {o[1]: o[3] for o in of(ops, "text")}
+    body_top = sv[0][3] + sv[0][4] * 27 / 80  # sev.py: the body's top
+    check("room for it: the squares and the numbers under them move down; every word and number kept, nothing crowded",
+          texts["S"] == 560 + S.ROOM + s + 54 and texts["day streak"] == 962 + S.ROOM and texts["duecrew.com"] == H - P
+          and body_top - 462 >= 50 and min(y - hp["r"] for _x, y in hp["dots"]) - 462 >= 50
+          and texts["day streak"] + 100 < H - P and [o[1] for o in of(ops, "text")]
+          == [o[1] for o in of(S.draw("week", "story", dict(wk, sev=False), on, "light", measure)[2], "text")], (body_top, texts))
+    six = S.week(log([1, 0, 0, 0, 0, 0, 1]), "2026-10-18", sev=True)
+    tall = S.hops(six, P, 560 + S.ROOM, s, 20, 8)
+    check("…the longest hop (Monday to Sunday) clears the words above it too",
+          tall["arcs"] == [(0, 6)] and min(y - tall["r"] for _x, y in tall["dots"]) - 462 >= 50)
+    wed = S.week(dict(log([1, 0, 1, 1, 1, 0, 0])), "2026-10-14", sev=True)
+    hw = S.hops(wed, P, 560 + S.ROOM, s, 20, 8)
+    check("nothing over the days to come: Sev on today, the last day so far",
+          hw["arcs"] == [(0, 2)] and max(x for x, _y in hw["dots"]) < mid(2) and abs(hw["sev"][0] + hw["sev"][2] / 2 - mid(2)) < 1e-9)
+    hg = S.hops(S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", sev=True), P, 660, s, 20, 8)
+    check("today not studied yet: Sev on the last day that was, standing on its square (no ring there)",
+          hg["arcs"] == [(0, 1)] and abs(hg["sev"][0] + hg["sev"][2] / 2 - mid(1)) < 1e-9
+          and abs(hg["sev"][1] + hg["sev"][2] * S.SEV_FEET - 660) < 1e-9, hg["sev"])
+    plain = S.draw("week", "story", S.week(log([1, 1, 0, 1, 1, 0, 1]), "2026-10-18"), on, "light", measure)
+    none = S.week({}, "2026-10-14", sev=True)
+    check("no Sev with nothing studied this week, or with Sev off: today's card as it was (squares at 560)",
+          not S.landings(none) and not of(S.draw("week", "story", none, on, "light", measure)[2], "sev")
+          and S.draw("week", "story", none, on, "light", measure) == S.draw("week", "story", dict(none, sev=False), on, "light", measure)
+          and not of(plain[2], "sev") and not of(plain[2], "dot")
+          and {o[1]: o[3] for o in of(plain[2], "text")}["S"] == 560 + s + 54)
+    one = S.week(log([1, 1, 1, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
+    one_ops = S.draw("today", "story", one, on, "light", measure)[2]
+    not_yet = S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
+    check("today's card: Sev on today's square when today was studied, no arcs; not yet today, no Sev",
+          S.landings(one) == [2] and len(of(one_ops, "sev")) == 1 and not of(one_ops, "dot")
+          and abs(of(one_ops, "sev")[0][2] + of(one_ops, "sev")[0][4] / 2 - mid(2)) < 1e-9
+          and not S.landings(not_yet) and not of(S.draw("today", "story", not_yet, on, "light", measure)[2], "sev"))
+    lk = S.draw("week", "link", wk, on, "light", measure)[2]
+    ls = (1200 - 64 - 720 - 6 * 12) / 7
+    lsev = of(lk, "sev")[0]
+    check("a link: Sev and its trail in the room above the squares, under the logo's row, the squares where they were",
+          {o[1]: o[3] for o in of(lk, "text")}["M"] == 230 + ls + 38 and lsev[3] + lsev[4] * 27 / 80 > 64 + 34 + 20
+          and min(o[2] - o[3] for o in of(lk, "dot")) > 64 + 34 + 20
+          and min(o[1] for o in of(lk, "dot")) > 720 and abs(lsev[2] + lsev[4] / 2 - mid(6, 720, ls, 12)) < 1e-9)
+
+    art = sev.still("hop", "#123456")
+    check("sev.still: one drawing, standing still for a picture: its own svg, the colour given, no CSS, no classes, no effects",
+          art.startswith('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">')
+          and "fill:#123456" in art and "var(" not in art and "class=" not in art
+          and art.count("<rect") == sev.svg("hop").count("<rect") - 7 and "<ellipse" not in art  # no confetti, no shadow
+          and "#1f2a1f" in art and sev.still("idle").count("#2e7d32") > 3)
+    js = open(os.path.join(REPO, "site", "public", "cards.js"), encoding="utf-8").read()
+    const = re.search(r"\n  const SEV = '([^']*)';\n", js)
+    check("cards.js draws sev.py's Sev: its copy is sev.still('hop', '%A%') to the byte",
+          const is not None and const.group(1) == sev.still("hop", "%A%"))
+    app_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    check("the site has no Sev switch: its week card always asks for Sev", "crew: withMe, sev: true }" in app_js)
+
+    # in Anki the card follows Settings › Sev
+    store = world({"sam": "Sam"})
+    cl = new_client(store, "sam")
+    d0 = datetime.date.today()
+    col = make_user_col([d0], today=d0)
+    made = []
+
+    class Dlg:
+        def __init__(self, parent, choose, **_kw):
+            self.choose = choose
+            made.append(self)
+
+        def show(self):
+            pass
+    saved = (SH.client, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state.get("entries"), _state.get("labels"), R.cfg)
+    real_dlg = sys.modules.get("due_crew.ui.share_card_dialog")
+    sys.modules["due_crew.ui.share_card_dialog"] = types.SimpleNamespace(ShareCardDialog=Dlg)
+    files = tempfile.mkdtemp()
+    try:
+        SH.client, SH.cfg, SH._profile_files = (lambda: cl), (lambda: {}), (lambda: files)
+        sys.modules["aqt"].mw.col = col
+        q = StatsQueries(col)
+        _state["labels"] = [q.day_label(i) for i in range(7)]
+        _state["entries"] = [{"you": True, "days": {}}]
+        _state.pop("pic_log", None)
+        got = []
+        for c in ({}, {"sev": False}):
+            R.cfg = lambda c=c: c
+            for kind in ("pictureweek", "picturetoday"):
+                SH.picture(kind)
+                got.append(made[-1].choose(None)["data"]["sev"])
+        check("in Anki: the week and today cards have Sev as Settings › Sev says (on unless switched off)",
+              got == [True, True, False, False], got)
+    finally:
+        (SH.client, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state["entries"], _state["labels"], R.cfg) = saved
+        if real_dlg is None:
+            sys.modules.pop("due_crew.ui.share_card_dialog", None)
+        else:
+            sys.modules["due_crew.ui.share_card_dialog"] = real_dlg
+        _state.pop("share_card", None)
+        _state.pop("pic_log", None)
+
+    node = shutil.which("node")
+    if not node:
+        print("SKIP week card Sev twin: no node")
+        return
+    expose = "return { open, short, SIZES, MONTHS };"
+    check("cards.js: the card's twin is reachable for the check", expose in js)
+    cases = [(S.week(log(p), t, one_, {t: 9}, 4, 2, sv_), one_) for p, t, one_, sv_ in (
+        ([1, 1, 0, 1, 1, 0, 1], "2026-10-18", False, True), ([1, 0, 0, 0, 0, 0, 1], "2026-10-18", False, True),
+        ([1, 0, 1, 1, 1, 0, 0], "2026-10-14", False, True), ([1, 1, 0, 0, 0, 0, 0], "2026-10-14", False, True),
+        ([0] * 7, "2026-10-14", False, True), ([1, 1, 1, 0, 0, 0, 0], "2026-10-14", True, True),
+        ([1, 1, 0, 0, 0, 0, 0], "2026-10-14", True, True), ([1, 1, 0, 1, 1, 0, 1], "2026-10-18", False, False))]
+    draws = [[kind, size, look, d] for d, one_ in cases for kind in (["today"] if one_ else ["week"])
+             for size in ("story", "link") for look in ("light", "dark")]
+    grid = [[S.week(log([(m >> i) & 1 for i in range(7)]), t, one_, sev=True), x0, top, side, g, ring]
+            for m in range(128) for t in ("2026-10-12", "2026-10-15", "2026-10-18") for one_ in (False, True)
+            for x0, top, side, g, ring in ((P, 660, s, 20, 8), (720, 230, ls, 12, 4))]
+    prog = (
+        "globalThis.Image = class { set src(v) { this.s = v; Promise.resolve().then(() => this.onload()); } };\n"
+        + js.replace(expose, "return { open, short, SIZES, MONTHS, DRAW, LOOKS, hops };") + "\n"
+        "const fake = () => { const log = []; let font = '';\n"
+        "  return { log, get font() { return font; }, set font(f) { font = f; },\n"
+        "    measureText(s) { return { width: [...s].length * Number(/([0-9.]+)px/.exec(font)[1]) * 0.55 }; },\n"
+        "    fillText(s, x, y) { log.push(['text', s, x, y]); }, fillRect(x, y, w, h) { log.push(['rule', x, y, w, h]); },\n"
+        "    arc(x, y, r) { log.push(['dot', x, y, r, this.fillStyle]); },\n"
+        "    drawImage(img, x, y, w, h) { log.push([img.s.startsWith('data:') ? 'sev' : 'logo', x, y, w, h, decodeURIComponent(img.s)]); },\n"
+        "    beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, stroke() {}, setLineDash() {} }; };\n"
+        "const { draws, grid, on } = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+        "(async () => { const out = [];\n"
+        "  for (const [kind, size, look, d] of draws) { const c = fake(); const [W, H] = Cards.SIZES[size];\n"
+        "    await Cards.DRAW[kind](c, W, H, size, d, on, Cards.LOOKS[look], look); out.push(c.log); }\n"
+        "  console.log(JSON.stringify({ draws: out, grid: grid.map((g) => Cards.hops(...g)) })); })();")
+    run = subprocess.run([node, "-e", prog], input=json.dumps({"draws": draws, "grid": grid, "on": on}),  # too big for an argument
+                         capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    check("cards.js runs the week card in node", got is not None, run.stdout[-500:] + run.stderr[-2000:])
+    if got is None:
+        return
+    close = lambda a, b: len(a) == len(b) and all(abs(x - y) < 1e-6 for x, y in zip(a, b))  # noqa: E731
+    bad = []
+    for g, h in zip(grid, got["grid"]):
+        mine = S.hops(*g)
+        if ([list(a) for a in mine["arcs"]] != h["arcs"] or abs(mine["r"] - h["r"]) > 1e-9 or len(mine["dots"]) != len(h["dots"])
+                or not all(close(a, b) for a, b in zip(mine["dots"], h["dots"]))
+                or (mine["sev"] is None) != (h["sev"] is None) or (mine["sev"] and not close(mine["sev"], h["sev"]))):
+            bad.append((g[0]["days"], g[1:], mine, h))
+    check("cards.js hops() is sharecard.hops: the same arcs, dots and Sev on every week (all 128, three todays, both cards, both sizes)",
+          not bad and len(got["grid"]) == len(grid) == 128 * 3 * 2 * 2, bad[:1])
+    bad = []
+    for (kind, size, look, d), log_ in zip(draws, got["draws"]):
+        ops = S.draw(kind, size, d, on, look, measure)[2]
+        want = {"text": [(o[1], o[2], o[3]) for o in of(ops, "text")],
+                "rule": [o[1:5] for o in of(ops, "rect") if o[4] == 3],
+                "dot": [(o[1], o[2], o[3], o[4]) for o in of(ops, "dot")],
+                "sev": [(o[2], o[3], o[4], o[4], "data:image/svg+xml;charset=utf-8," + sev.still(o[1], o[5])) for o in of(ops, "sev")]}
+        have = {k: [tuple(x[1:]) for x in log_ if x[0] == k] for k in want}
+        ok = (len(want["text"]) == len(have["text"]) and all(a[0] == b[0] and close(a[1:], b[1:]) for a, b in zip(want["text"], have["text"]))
+              and all(close(a, b) for a, b in zip(want["rule"], have["rule"])) and len(want["rule"]) == len(have["rule"])
+              and len(want["dot"]) == len(have["dot"]) and all(close(a[:3], b[:3]) and a[3] == b[3] for a, b in zip(want["dot"], have["dot"]))
+              and len(want["sev"]) == len(have["sev"]) and all(close(a[:4], b[:4]) and a[4] == b[4] for a, b in zip(want["sev"], have["sev"])))
+        if not ok:
+            bad.append((kind, size, look, [c["studied"] for c in d["days"]], want, have))
+    check("cards.js lays the week and today cards out as sharecard does: words, rule, trail, and Sev (sev.still, in the accent)",
+          not bad and len(got["draws"]) == len(draws) == 32, bad[:1])
+
+
+def test_welcome_back_sev_v381():
+    """Sam liked Welcome back with Sev: Sev waves from the window's corner
+    (still: a Qt window can't play the board's motion), unless Settings ›
+    Sev is off. tools/dialogs.py draws it and checks the pixel; here, the
+    switch reaches the window, and the drawing is sev.py's still one."""
+    from due_crew import plan_flow, rooms as R, sev, room_model as rm
+    got = []
+    fake = types.ModuleType("due_crew.ui.away_dialog")
+    fake.ask_away = lambda parent, name, days, n_dates, n_cards, sev=False: (got.append(sev), "later")[1]
+    saved = (sys.modules.get("due_crew.ui.away_dialog"), R.cfg)
+    sys.modules["due_crew.ui.away_dialog"] = fake
+    try:
+        R.cfg = lambda: {}
+        plan_flow._ask_away("Big Step 1", ["2026-10-05"], 1, 20)
+        R.cfg = lambda: {"sev": False}
+        plan_flow._ask_away("Big Step 1", ["2026-10-05"], 1, 20)
+    finally:
+        R.cfg = saved[1]
+        if saved[0] is None:
+            sys.modules.pop("due_crew.ui.away_dialog", None)
+        else:
+            sys.modules["due_crew.ui.away_dialog"] = saved[0]
+    check("Welcome back: Sev on, the window waves; Settings › Sev off, it's as before", got == [True, False], got)
+    art = sev.still("hello", "#6b3fb5")
+    check("…its Sev is the still drawing, waving, in the accent", art.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+          and "#6b3fb5" in art and "var(" not in art and "class=" not in art)
+    ask = next(ln for ln in rm._RUNTIME.splitlines() if "squares(c, 110)" in ln and "qb." in ln)
+    check("the fifteen's question with Sev off shows the logo's squares (the else was inside a comment)",
+          "//" not in ask.split("squares(c, 110)")[0], ask.strip())
 
 
 def main():

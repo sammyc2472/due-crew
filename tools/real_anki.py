@@ -62,10 +62,17 @@ def check(path):
     fakes.install_fake_aqt()
     from due_crew import plans as P
     from due_crew import plan_flow as F
+    F_real = {k: getattr(F, k) for k in ("_state_cfg", "refresh_progress", "_pcfg", "_psave", "followed", "client", "_today", "tooltip")}
 
     col = Collection(path)
     did = col.decks.id_for_name("Step Deck")
-    ok = lambda name, cond, extra="": print(("PASS " if cond else "FAIL ") + name, extra)
+    failed = []
+
+    def ok(name, cond, extra=""):
+        # 3.8.1 (the audit, #8): a FAIL fails the run, so an exit code can gate a release
+        print(("PASS " if cond else "FAIL ") + name, extra)
+        if not cond:
+            failed.append(name)
     tm = lambda: time.perf_counter()
 
     t = tm(); idx = P.DeckIndex(col, did); t_idx = tm() - t
@@ -156,7 +163,10 @@ def check(path):
     ok("…remembered as built here, with the parent", pstore.get("built") == [fdid, parent], pstore)
 
     # 3.8.0: the morning's tidy: a filtered deck of ours goes once it's empty; one with cards stays
-    F._filtered(col, F._deck_name("Checkpoint · Empty one"), pick[:3])
+    # three open cards in no filtered deck yet (pick's are in Study's now; until 3.8.1 Anki's second
+    # filter, the current deck's new cards, filled this one whatever it was asked for)
+    spare = [c for c in col.find_cards('deck:"Step Deck" -is:suspended -deck:filtered') if c not in set(pick)][:3]
+    F._filtered(col, F._deck_name("Checkpoint · Empty one"), spare)
     edid = col.decks.id_for_name("Due Crew::Checkpoint · Empty one")
     mine = col.decks.id("Mine, not Due Crew's")
     t = tm(); n_none = F.tidy_decks(col); t_tidy = tm() - t
@@ -168,7 +178,7 @@ def check(path):
        n_one == 1 and not col.decks.get(edid, default=False) and col.decks.get(fdid, default=False)
        and col.decks.get(mine, default=False) and sorted(pstore.get("built")) == sorted([fdid, parent]),
        (n_one, pstore, col.undo_status().undo))
-    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in pick[:3])} deck:\"Step Deck\"")) == 3)
+    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in spare)} deck:\"Step Deck\"")) == 3)
     col.sched.empty_filtered_deck(fdid)
     n_two = F.tidy_decks(col)
     ok("tidy: the last one under Due Crew goes with the parent, one undo step",
@@ -222,12 +232,35 @@ def check(path):
     head = text.splitlines()[:6]
     ok("export: the whole deck in Anki's own format, guid first", n_out == 35000 and head[2] == "#guid column:1",
        f"{len(text)/1024/1024:.1f} MB, {t_exp*1000:.0f} ms")
-    row = text.splitlines()[6].split("\t")
-    ok("export: notetype and deck names from Anki", row[1] == "Basic" and row[2] == "Step Deck", str(row[:3]))
+    row = next(x for x in text.splitlines() if not x.startswith("#")).split("\t")
+    ok("export: notetype and deck names from Anki; 3.8.1, each note's card numbers",
+       row[1] == "Basic" and row[2] == "Step Deck" and row[4] == "1" and "#cards column:5" in head + text.splitlines()[6:7], str(row[:5]))
     est = P.export_size(col, nids_all)
     ok("export: the size estimate errs high, not wildly", len(text) <= est <= 3 * len(text), f"{est/1024/1024:.1f} MB est")
     t = tm(); dates = P.export_scope(idx2, doc, "dates"); t_scope = tm() - t
     ok("export: what the plan's dates open", 0 < len(dates) < 35000, f"{len(dates):,} notes, {t_scope*1000:.0f} ms")
+    # 3.8.1, round three: the plan itself at the file's top, never a card's text
+    t = tm(); plines = P.export_plan_lines(idx2, doc, "Cardio"); t_pl = tm() - t
+    text2, _n2 = P.export_notes(col, list(nids_all)[:50], plan_lines=plines)
+    ok("export with the plan: its dates' lines after Anki's header, no card's text",
+       len(plines) == 32 and text2.splitlines()[7:7 + len(plines)] == plines and not any("card " in x and "front" in x for x in plines),
+       f"{len(plines)} lines, {t_pl*1000:.0f} ms")
+    # 3.8.1, round three: a date's picked cards named by the deck tags they sit under (the
+    # author's #lbl and a follower's topics): a lecture's picks by the lecture, never a question
+    # id; fast for a date's picks and for the whole deck
+    lect_cids = sorted(idx2.tag_cards(lect[0]))
+    t = tm(); lbl = P.pick_labels(idx2, lect_cids); t_lbl = tm() - t
+    lect1 = sorted(idx2.tag_cards(lect[1]))
+    t = tm(); lbl1 = P.pick_labels(idx2, lect1); t_lbl1 = tm() - t
+    ok("labels: a lecture's picked cards are named by the lecture; the next date's quick (each card's tags kept with the notes)",
+       lbl and lbl[0] == [lect[0], len(lect_cids)] and lbl1 and lbl1[0][0] == lect[1] and t_lbl1 < 0.05,
+       f"{lbl[:2]}, first {t_lbl*1000:.0f} ms (reads each card's tags once), the next {t_lbl1*1000:.1f} ms")
+    picks5k = sorted(idx2.cards)[:5000]
+    t = tm(); lbl5 = P.pick_labels(idx2, picks5k); t_lbl5 = tm() - t
+    t = tm(); lblall = P.pick_labels(idx2, idx2.cards); t_all = tm() - t
+    ok("labels: 5,000 picks and the whole deck, up to three, no question id, quick",
+       0 < len(lbl5) <= 3 and 0 < len(lblall) <= 3 and not any(p.split("::")[-1].isdigit() for p, _n in lbl5 + lblall)
+       and t_lbl5 < 0.5 and t_all < 2.5, f"{lbl5[0]}, {t_lbl5*1000:.0f} ms; the deck {t_all*1000:.0f} ms")
     del re
 
     # 3.2's who-knows-it, on two years of answers (400,000): every sync reads it
@@ -434,15 +467,167 @@ def check(path):
        and col.undo_status().undo == label, f"{t_up*1000:.0f} ms")
     col.undo()
     ok("plan tags: Edit › Undo puts the last update back", len(find(p12)) == 3000 and not find(p12b) and find("DueCrew::MS2_Block_1::Cardio_overlap"))
+    # 3.8.1, round two: a plan tag holding one cloze of a note: Anki's tag is on the whole note,
+    # Due Crew reads just that card; a date's cut (a lecture kept to SLG 19) is the lecture's
+    # cards in SLG 19, its Anki search the same but for those siblings (what an older add-on opens)
+    from anki.collection import AddNoteRequest
+    cz = col.models.by_name("Cloze")
+    reqs = []
+    for i in range(3):
+        n = col.new_note(cz)
+        n["Text"] = "{{c1::one}} {{c2::two}} {{c3::three}} %d" % i
+        n.tags = [lect[0]]
+        reqs.append(AddNoteRequest(n, did))
+    col.add_notes(reqs)
+    cz_nids = sorted(col.find_notes('"note:Cloze"'))
+    cz_guids = col.db.list(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, cz_nids))}) ORDER BY id")
+    lect_nids = sorted(set(col.find_notes(P.tag_search(lect[0]) + '"')) - set(cz_nids))
+    half_nids = lect_nids[: len(lect_nids) // 2]
+    half = col.db.list(f"SELECT guid FROM notes WHERE id IN ({','.join(map(str, half_nids))})")
+    r2 = {"deck": "Step Deck", "tagroot": "Block_2", "units": [], "tags": [
+        {"id": "s19", "name": "SLG 19", "notes": half, "cards": [[cz_guids[0], 1], [cz_guids[1], 0]]}]}
+    label2 = "Due Crew: Block 2's tags"
+    P.sync_tags(col, P.DeckIndex(col, did), r2, {}, label2)
+    p19 = "DueCrew::Block_2::SLG_19"
+    idx8 = P.DeckIndex(col, did)
+    t = tm(); exact = idx8.plan_tag_cards(r2, r2["tags"][0]); t_ptc = tm() - t
+    cz_cards = {c: (col.get_card(c).nid, col.get_card(c).ord) for c in col.find_cards('"note:Cloze"')}
+    single = {c for c, k in cz_cards.items() if k in ((cz_nids[0], 1), (cz_nids[1], 0))}
+    siblings = {c for c, (nid, _) in cz_cards.items() if nid in cz_nids[:2]} - single
+    half_cards = set(col.find_cards(f"nid:{','.join(map(str, half_nids))}"))
+    anki19 = set(col.find_cards(P.tag_search(p19) + '"'))
+    ok("r2: one cloze of a note: Anki's tag is on the whole note, Due Crew reads just that card",
+       anki19 == half_cards | single | siblings and exact == half_cards | single and len(siblings) == 4,
+       f"{len(exact):,} cards, {t_ptc*1000:.0f} ms")
+    q = P.tag_search(p19) + '" ' + P.tag_search(lect[0]) + '"'
+    cut_u = {"id": "c1", "name": "Lecture · SLG 19", "opens": "2026-10-03", "tags": [], "decks": [], "cards": [],
+             "search": [q], "cut": [{"tag": lect[0], "in": "s19", "q": q}]}
+    got = idx8.match(cut_u, None, r2)
+    by_search = set(col.find_cards(q))
+    ok("r2: a cut is the lecture's cards in SLG 19, the single cloze and not its siblings",
+       got == half_cards | single and 0 < len(got) < len(idx8.tag_cards(lect[0])), f"{len(got):,} of {len(idx8.tag_cards(lect[0])):,}")
+    ok("r2: an add-on before 3.8.1 reads the cut's search: the same cards, but for the siblings Anki's tag carries",
+       idx8.match(cut_u, None, "Step Deck") == by_search == got | siblings)
+    col.undo()
+    ok("r2: Edit › Undo takes the single-card tag off in one step", not col.find_notes(P.tag_search(p19) + '"'))
     n_drop = P.drop_tags(col, pt, "Due Crew: stop following MS2 Block 1")
     ok("plan tags: unfollowing takes every one of them off; my own tags stay",
        n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
        f"{n_drop:,} notes")
+    # 3.8.1: Put back isn't a yes to Hold back (its cards went in `held`, and every morning since
+    # held each later date's new cards), and the morning's other steps come before what it opens,
+    # so the open is Anki's latest step and Not today undoes just it
+    import types
+    pstore = {"plans": {}}
+    F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+    F._state_cfg, F.refresh_progress = F_real["_state_cfg"], (lambda: {})
+    F.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+    F.tooltip = lambda *a, **k: None
+    day = "2026-10-13"
+    F._today = lambda: day
+    later = lambda n: str(_dtm.date.fromisoformat(day) + _dtm.timedelta(days=n))
+    renal = sorted({p for p, _ in tags if "#Lectures::Renal::" in p and p.count("::") == 4})[:4]
+    rdates = [{"id": f"r{i}", "name": p.rsplit("::", 1)[-1], "opens": later(3 * i - 3), "tags": [p], "decks": [], "cards": []}
+              for i, p in enumerate(renal)]  # three days ago, today, in three days, in six
+    idx9 = P.DeckIndex(col, did)
+    late_new = sorted(c for u in rdates[2:] for c in idx9.match(u, None, "Step Deck") if idx9.cards[c][1] == 0)[:40]
+    col.sched.unsuspend_cards(late_new)  # later dates' new cards, active (an author added them, say)
+    own = {"id": "pO", "name": "Own", "own": "ready", "doc": {"deck": "Step Deck", "units": rdates}}
+    pstore["plans"]["pO"] = F.new_state(col, own, did)
+    F.followed = lambda: [F.mine(own)]
+    try:
+        F.open_next("pO")
+        F._state["plan_progress"] = F.progress(col, [own], F._state_cfg())
+        F.put_back_own("pO")
+        st9 = pstore["plans"]["pO"]
+        n_held = F.hold_new([own], F._state_cfg(), day, morning=True)
+        still = sum(1 for c in late_new if col.get_card(c).queue == 0)
+        ok("put back: its cards kept for Stop, no yes to Hold back; the morning holds no later date's cards after it",
+           st9.get("held") and st9.get("hold_yes") is False and n_held == 0 and still == len(late_new) > 0,
+           f"{len(st9.get('held') or [])} put back, {still} later cards still open, undo {col.undo_status().undo!r}")
+        plan = {"id": "pM", "name": "Morning", "doc": {"deck": "Step Deck", "units": rdates}}
+        pstore.clear()
+        pstore["plans"] = {"pM": F.new_state(col, plan, did)}
+        F.followed = lambda: [F.mine(plan)]
+        F.run(col, [plan], pstore["plans"], later(-1))  # the first date opened three days ago
+        st9 = pstore["plans"]["pM"]
+        st9["hold_yes"] = True
+        st9["catch"] = {"until": later(2), "extra": 5}
+        pstore["plans_day"] = later(-1)
+        base = F._base_limit(col, did)
+        i10 = P.DeckIndex(col, did)
+        today_cards = i10.openable(i10.match(rdates[1], None, "Step Deck"))
+        t = tm(); F.maybe_morning(False); t_morn = tm() - t
+        opened = pstore.get("plans_opened") or {}
+        held_now = sum(1 for c in late_new if col.get_card(c).queue == -1)
+        lim = F.new_limit(col, did)
+        ok("morning: holds back for a yes, sets the catch-up's limit, then opens; the open is Anki's latest step",
+           held_now == len(late_new) and lim == base + 5 and opened.get("label") and col.undo_status().undo == opened["label"]
+           and F.morning_opened() and all(col.get_card(c).queue != -1 for c in today_cards),
+           f"{held_now} held, limit {lim} (was {base}), {len(today_cards)} opened, latest step {col.undo_status().undo!r}, {t_morn*1000:.0f} ms")
+        F.mw.undo = col.undo
+        F.undo_morning(put_off_too=True)
+        ok("morning: Not today undoes just the open; the held cards and the limit stay; the date opens tomorrow",
+           all(col.get_card(c).queue == -1 for c in today_cards) and held_now == sum(1 for c in late_new if col.get_card(c).queue == -1)
+           and F.new_limit(col, did) == base + 5 and (pstore["plans"]["pM"].get("later") or {}).get("r1") == later(1),
+           f"latest step now {col.undo_status().undo!r}")
+        # 3.8.1, plans round three: Hold back's sheet, Open them: what the plan holds opens in one undo step,
+        # a leech stays shut, the yes stays (what an author adds later is still held); Edit › Undo shuts them again
+        st9 = pstore["plans"]["pM"]
+        lee_c = late_new[0]
+        lnote = col.get_card(lee_c).note()
+        lnote.tags.append("leech")
+        col.update_note(lnote)
+        shut = [c for c in st9.get("held") or [] if col.get_card(c).queue == -1]
+        n_menu = F.held_count("pM")
+        t = tm(); F.open_held("pM"); t_held = tm() - t
+        step = col.undo_status().undo
+        ok("held back, Open them: all it holds but the leech, in one undo step; Hold back stays on",
+           n_menu == len(shut) - 1 > 0 and col.get_card(lee_c).queue == -1
+           and all(col.get_card(c).queue != -1 for c in shut if c != lee_c)
+           and step == "Due Crew: open what Morning held back" and st9.get("hold_yes") is True,
+           f"{n_menu} opened, undo {step!r}, {t_held*1000:.0f} ms")
+        col.undo()
+        ok("held back: Edit › Undo shuts them again", all(col.get_card(c).queue == -1 for c in shut))
+        # 3.8.1, Study this date: a Due Crew deck of the date's open cards, new and review, due or not (a cram
+        # before a quiz), random order, Anki rescheduling them; Anki's own one undo step; its Study screen on it
+        r0 = sorted(P.DeckIndex(col, did).match(rdates[0], None, "Step Deck"))
+        for c in [c for c in r0 if col.get_card(c).queue == 0][:8]:
+            card = col.get_card(c)
+            card.type, card.queue, card.ivl, card.due = 2, 2, 20, col.sched.today + 15  # reviews, not due for weeks
+            col.update_card(card)
+        i11 = P.DeckIndex(col, did)
+        want = P.study_cards(i11, i11.match(rdates[0], None, "Step Deck"))
+        moved = []
+        F.mw.moveToState = moved.append
+        t = tm(); F.study_date("pM", "r0"); t_study = tm() - t
+        sname = F._deck_name(rdates[0]["name"])
+        sdid = col.decks.id_for_name(sname)
+        sdeck = col.decks.get(sdid) if sdid else {}
+        got = set(col.find_cards(f'"deck:{sname}"')) if sdid else set()
+        reviews = sum(1 for c in got if col.get_card(c).type == 2)
+        ok("study this date: Anki's filtered deck of the date's open cards, new and reviews not due, random, rescheduling",
+           sdid and sdeck.get("dyn") and got == set(want) and 0 < reviews < len(got) == len(want)
+           and sdeck["terms"][0][2] == 1 and sdeck.get("resched") and moved == ["overview"] and col.decks.selected() == sdid
+           and not any(col.get_card(c).queue == -1 for c in got),
+           f"{len(got)} cards ({reviews} reviews), terms {sdeck.get('terms')}, {t_study*1000:.0f} ms")
+        sstep = col.undo_status().undo
+        col.undo()
+        ok("study this date: one undo step of Anki's own; Edit › Undo takes the deck away, the cards go home",
+           not col.decks.id_for_name(sname) and all(col.get_card(c).odid == 0 and col.get_card(c).did == did for c in want),
+           f"undo {sstep!r}")
+    finally:
+        for k, v in F_real.items():
+            setattr(F, k, v)
+        F.mw.__dict__.pop("undo", None)
     col.close()
+    return failed
 
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
-        check(p)
+        failed = check(p)
+    print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
+    sys.exit(1 if failed else 0)

@@ -23,6 +23,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
+from . import sev as _sev
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -45,6 +46,13 @@ ACCENTS = {
     "rose":   {"light": ("#b03052", "#ffffff", "#fbe9ee"), "dark": ("#f08fa8", "#3a1220", "#3f2a31")},
 }
 DEFAULT_ACCENT = "green"
+
+
+def accent_pair(name):
+    """An accent's colour (light, dark); a name that isn't one of ours gets
+    the default's. 3.8.1: a crewmate's Sev in a room wears theirs from here."""
+    shades = ACCENTS.get(name if isinstance(name, str) else "", ACCENTS[DEFAULT_ACCENT])
+    return shades["light"][0], shades["dark"][0]
 
 
 def palette(theme, accent=DEFAULT_ACCENT):
@@ -88,18 +96,23 @@ def _token_block(palette):
     return "".join(f"--dc-{k}: {v}; " for k, v in palette.items())
 
 
-def _theme_css(cfg):
+def _by_theme(cfg, sel, light, dark):
+    """`light` or `dark` (declarations) on `sel`, as Settings › Theme says;
+    Match Anki follows its night mode (and the computer's)."""
     theme = cfg.get("theme", "auto")
-    accent = cfg.get("accent", DEFAULT_ACCENT)
-    light, dark = palette("light", accent), palette("dark", accent)
     if theme == "light":
-        return f"#due-crew {{ {_token_block(light)} }}"
+        return f"{sel} {{ {light} }}"
     if theme == "dark":
-        return f"#due-crew {{ {_token_block(dark)} }}"
-    night = ", ".join(f"{sel} #due-crew" for sel in NIGHT_SELECTORS)
-    return (f"#due-crew {{ {_token_block(light)} }}\n"
-            f"    @media (prefers-color-scheme: dark) {{ #due-crew {{ {_token_block(dark)} }} }}\n"
-            f"    {night} {{ {_token_block(dark)} }}")
+        return f"{sel} {{ {dark} }}"
+    night = ", ".join(f"{n} {sel}" for n in NIGHT_SELECTORS)
+    return (f"{sel} {{ {light} }}\n"
+            f"    @media (prefers-color-scheme: dark) {{ {sel} {{ {dark} }} }}\n"
+            f"    {night} {{ {dark} }}")
+
+
+def _theme_css(cfg):
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    return _by_theme(cfg, "#due-crew", _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
 
 
 def _fmt_time(ms):
@@ -589,6 +602,9 @@ def _css(cfg):
       text-decoration: none; font-weight: 700; font-size: 10.5px; }}
     #due-crew .dc-wrap .wx {{ color: var(--dc-muted);
       text-decoration: none; font-weight: 700; }}
+    #due-crew .dc-wrap.inv {{ text-align: left; }}
+    #due-crew .dc-wrap .yn {{ margin-left: auto; display: flex; gap: 12px; white-space: nowrap; }}
+    #due-crew .dc-wrap .yn .wc {{ margin-left: 0; font-size: 12px; }}
     #due-crew .dc-delta {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
       margin-left: 6px; }}
     #due-crew th .hi {{ display: none; }}
@@ -793,6 +809,7 @@ def _css(cfg):
     #due-crew .dc-pc .pq, #due-crew .dc-pc .pnl {{ font-size: 11.5px; color: var(--dc-muted); margin: 6px 2px 0; }}
     #due-crew .dc-pc .pnl {{ color: var(--dc-ink); }}
     #due-crew .dc-pc .pq a, #due-crew .dc-pc .pnl a {{ color: var(--dc-accent); font-weight: 700; text-decoration: none; }}
+    #due-crew .dc-pc .pq a.nx3 {{ font-weight: 600; }}  /* 3.8.1: Then's dates, each opens now */
     /* 3.5.0: a plan's week (Anki centres the Decks screen's text; the plan reads left to right) */
     #due-crew .dc-pc, #due-crew .dc-pways {{ text-align: left; }}
     #due-crew .wbar {{ display: block; height: 5px; background: var(--dc-well); border-radius: 3px; overflow: hidden; }}
@@ -849,7 +866,12 @@ def _css(cfg):
     #due-crew .pday .wi {{ display: grid; gap: 2px; margin: 1px 0 5px; padding-left: 9px; border-left: 2px solid var(--dc-line);
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
     #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .pday .wi .rm {{ font-style: italic; overflow-wrap: anywhere; }}
     #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
+    /* 3.8.1: a day's line (the plan's, then mine), and why a date left cards shut */
+    #due-crew .pday .pdl {{ font-size: 11.5px; color: var(--dc-muted); margin-top: -3px; text-align: left; }}
+    #due-crew .pday .pwhy {{ font-size: 11.5px; color: var(--dc-muted); margin: -2px 0 4px; padding-left: 11px; text-align: left; }}
+    #due-crew .pday .pwhy a.tp {{ font-weight: inherit; }}
     /* 3.8.0: a set of cards that opens in Browse (a topic, "16 left"): one look
        everywhere, the board's green, as Today's (Sam: "pick one style and stick with it") */
     #due-crew a.tp {{ color: var(--dc-accent); font-weight: inherit; text-decoration: none; }}
@@ -996,7 +1018,7 @@ def _crew_on(period, show_up=False):
     return "today" if show_up and period == "week" else period
 
 
-def _head(period, show_up=False, hidden=frozenset(), crew="today"):
+def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
     """3.8.0: the board is your people: Crew and Squads. Crew's views are
     picked under the pills (_crew_picker), and the Crew pill goes back to
     the one last picked."""
@@ -1011,7 +1033,11 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today"):
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
-    return (f'<div class="dc-head"><span class="dc-title">{board_mark()}</span>'
+    # 3.8.1: Sev beside the logo, never on it (the logo itself never changes),
+    # and only for a moment: it pops in, plays it, and goes (Sam)
+    beside = (f'<span class="dc-sev once" style="--ago:{float(sev.get("ago") or 0):.2f}s">{_sev.slot(sev["svg"], 36)}</span>'
+              if sev and sev.get("svg") else "")
+    return (f'<div class="dc-head"><span class="dc-title">{board_mark()}{beside}</span>'
             f'<span>{pills}</span></div>')
 
 
@@ -1523,21 +1549,56 @@ def _you_plans(plans, opened=None):
     """3.8.0, You › Plans: a plan offered to one of my squads, then each plan
     I follow; following none, the ways in. opened: this morning's line, here
     only when Due is off (it's under Today otherwise)."""
-    return _opened_line(opened) + _offer_banners((plans or {}).get("offers")) + _plans_html(plans)
+    if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
+        opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
+    return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans))
+
+
+def _invite_lines(invites):
+    """3.8.1: an invite to co-write a plan, or to keep one, a line each above
+    the plans, with Yes and No. Names are the server's: escaped."""
+    e = _html.escape
+    out = ""
+    for x in invites or []:
+        pid, who, name = str(x.get("id", "")), e(str((x.get("by") or {}).get("name") or "?")), e(str(x.get("name") or "Plan"))
+        said = (f"<b>{who}</b> offered you <b>{name}</b> to keep." if x.get("kind") == "owner"
+                else f"<b>{who}</b> asked you to co-write <b>{name}</b>. Its tags would go on your notes in Anki.")
+        out += (f'<div class="dc-wrap inv"><span>&#128221;</span><span>{said}</span><span class="yn">'
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:yes")}">Yes</a>'
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:no")}">No</a></span></div>')
+    return out
+
+
+def _opened_dates(dates):
+    """3.8.1: what the morning opened, by date: "Renal physiology 80 ·
+    Antiarrhythmics 40", each name opening Browse on that date's new cards;
+    four or more: the first two "and 2 more". Names are the author's:
+    escaped here."""
+    dates = [d for d in dates or [] if isinstance(d, (list, tuple)) and len(d) >= 4]
+    if not dates:
+        return ""
+    shown = dates if len(dates) <= 3 else dates[:2]
+    out = " &middot; ".join(
+        f'<a class="tp" href="#" title="Browse its new cards" onclick="{_pycmd(f"planopened:{d[0]}:{d[1]}")}">'
+        f'{_html.escape(str(d[2]))}</a> {int(d[3]):,}' for d in shown)
+    return ": " + out + (f" and {len(dates) - len(shown)} more" if len(dates) > len(shown) else "")
 
 
 def _opened_line(op):
     """3.8.0, from the plan's old Today box: what this morning opened, with
-    Put off to tomorrow (its undo) while that's still Anki's latest step."""
+    Not today (its undo; 3.8.1, the name the update line's has) while that's
+    still Anki's latest step. 3.8.1: by date, each a way to its new cards."""
     n = int((op or {}).get("n") or 0)
     if not n:
         return ""
     # 3.8.0: Sync now while AnkiWeb hasn't had them (a phone gets them from there)
     sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
             if op.get("sync") else "")
-    return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}.</span>'
-            f'<span class="acts">{sync}<a href="#" title="They open again tomorrow morning" onclick="{_pycmd("plannottoday")}">'
-            f'Put off to tomorrow</a></span></div>')
+    by = _opened_dates(op.get("dates"))
+    return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}{by or "."}</span>'
+            f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
+            f'Not today</a></span></div>')
 
 
 def _segs(segments):
@@ -1598,6 +1659,7 @@ def _plan_now(card, pid):
         return (f'<div class="pn"><span>No new cards while it&rsquo;s paused.</span>'
                 f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></span></div>')
     out = _own_html(card.get("own"), pid) if card.get("own") else ""
+    out += _quiz_line(card, pid)
     kind = (card.get("session") or {}).get("kind")
     if kind in ("rest", "catchup", "taper"):
         word = {"rest": "a rest day", "catchup": "in its catch-up week", "taper": "in its taper"}[kind]
@@ -1615,6 +1677,26 @@ def _plan_now(card, pid):
     return out
 
 
+def _quiz_line(card, pid):
+    """3.8.1 (plans, rethought), Study for a quiz: from three days out, the
+    event, its prep days left, the cards its dates opened here, and Study for
+    it (one deck of them, the shakiest first). The event's name is the
+    author's: escaped here."""
+    qz = card.get("quiz")
+    if not qz:
+        return ""
+    e = _html.escape
+    pf = card.get("prep") or {}
+    left = int(pf.get("left") or 0) if pf.get("day") == qz.get("day") and pf.get("name") == qz.get("name") else 0
+    n = int(qz.get("open") or 0)
+    when = "today" if qz.get("today") else f'on {e(str(qz.get("when") or ""))}'
+    return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
+            + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
+            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its dates</span>'
+            f'<span class="acts"><a href="#" title="Its dates&rsquo; open cards in one deck, the shakiest first" '
+            f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
+
+
 def _own_html(ow, pid):
     """3.8.0, at my own pace: Up next with Open and Open and study, what
     follows, the last step's Undo (or Put back), and quiet lines: where the
@@ -1630,8 +1712,18 @@ def _own_html(ow, pid):
                 f'<span class="nx2"><a class="bt" href="#" onclick="{_pycmd("planpaceopen:" + pid)}">Open</a>'
                 f'<a class="bt2" href="#" onclick="{_pycmd("planpacestudy:" + pid)}">Open and study</a></span></div>')
         then, more = ow.get("then") or [], int(ow.get("more") or 0)
+        items = ow.get("then_items") or []
+        if items:
+            # 3.8.1: any date after Then opens now, ahead of the rest (and says so, with its Undo)
+            then = []
+            for x in items:
+                go = _pycmd(f"planpaceopen:{pid}:{x.get('uid') or ''}")
+                then.append(f'<a class="nx3" href="#" title="Open it now, ahead of the rest" onclick="{go}">'
+                            f'{e(str(x.get("name") or "?"))}</a> {int(x.get("n") or 0):,}')
+        else:
+            then = [e(str(x)) for x in then]
         if then:
-            out += f'<div class="pq">Then {" &middot; ".join(e(str(x)) for x in then)}{f" &middot; {more:,} more" if more else ""}</div>'
+            out += f'<div class="pq">Then {" &middot; ".join(then)}{f" &middot; {more:,} more" if more else ""}</div>'
     else:
         out += '<div class="pq">Every date of it is open.</div>'
     if ow.get("last"):
@@ -2040,9 +2132,15 @@ def _ins_map(did, tiles, by, at=(), ways=()):
     else:
         sub = "<span>&nbsp;&middot; by topic, now</span>"
     share = f' <a class="tmsh" href="#" title="A picture of it, or text" onclick="{_pycmd(f"insmapshare:{did}")}">Share &rsaquo;</a>'
+    # 3.8.1: by a plan's own tags, the ones no card in this deck carries (a gap in the plan's coverage)
+    none = next((w.get("none") or [] for w in ways if w.get("on")), [])
+    gap = ""
+    if none and not trail:
+        names = ", ".join(e(str(x)) for x in none[:6]) + (f" and {len(none) - 6} more" if len(none) > 6 else "")
+        gap = f'<div class="tmt">No card in this deck carries {names}.</div>'
     return (f'<div class="isec"><div class="ik">What you know{sub}'
             f'<span class="ikey">{key}{share}</span></div>'
-            f'{path}<div class="tmap">{out}</div></div>')
+            f'{path}<div class="tmap">{out}</div>{gap}</div>')
 
 
 def _week_html(card, pid):
@@ -2123,17 +2221,26 @@ def _week_html(card, pid):
                     acts = f'<a href="#" onclick="{_pycmd(f"planunskip:{pid}:{uid}")}">Undo skip</a>'
                     num = "skipped"
                 else:
-                    acts = (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
+                    # 3.8.1: a date whose cards are all shut again (Edit › Undo), or at my
+                    # own pace not opened yet, opens from here as one on its day does
+                    acts = (f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>' if u.get("shut") else "")
+                    # 3.8.1: Study, a Due Crew deck of its open cards (a cram before a quiz)
+                    acts += (f'<a href="#" title="A Due Crew deck of its open cards, new and review, in random order" '
+                             f'onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>'
+                             if int(u["seen"]) or u.get("study") else "")
                     acts += move + back_
                     num = f'{int(u["seen"]):,} / {int(u["total"]):,}' if int(u["total"]) else ""
                 if u.get("ld") and u["state"] != "skip":
                     num = _load_words(u["ld"], d["past"] or d["today"])
                 tag = ' <span class="mv">&middot; moved</span>' if u.get("moved") else ""
+                if u.get("ev"):  # 3.8.1: "for Heme quiz", or "after Heme quiz" (reinforcement)
+                    tag += f' <span class="mv">&middot; {e(str(u["ev"]))}</span>'
                 rows += f'<div class="r"><span class="u">{e(u["name"])}{tag}</span><span class="n">{num}</span><span class="acts">{acts}</span></div>'
                 # 3.6.5, P7: what's in it, as the site's print list groups it, and Browse
                 # 3.8.0: each topic opens its cards in Browse
                 what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}'
                                + " &middot; ".join(_topic_a(pid, uid, x, i) for x, i in xs) + '</span>'
+                               + _remark_lines(xs, u.get("rm"), "rm")  # 3.8.1: the authors' notes under it
                                for g, xs in (u.get("what") or []))
                 browse = (f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {int(u["total"]):,} card{"s" if int(u["total"]) != 1 else ""}</a>'
                           if int(u["total"]) and u["state"] != "skip" else "")
@@ -2142,6 +2249,7 @@ def _week_html(card, pid):
                                f'{int(u["total"]) - int(u["seen"]):,} left</a>')  # 3.8.0
                 if what or browse:
                     rows += f'<div class="wi">{what}{f"<span class=acts>{browse}</span>" if browse else ""}</div>'
+                rows += _why_shut(pid, uid, u.get("why"))  # 3.8.1
             for n in d["events"]:
                 rows += f'<div class="r"><span class="u"><b>{e(n)}</b></span><span class="n"></span><span></span></div>'
             later = (not d["past"] and not d["today"] and any(u["state"] == "later" for u in d["units"]))
@@ -2149,10 +2257,35 @@ def _week_html(card, pid):
                     if later else "")
             details += (f'<div class="pday" id="{did}"{"" if i == sel else " hidden"}><b>{e(d["dow"])} {int(d["num"])} {_mon(d["day"])}'
                         + (' &middot; today' if d["today"] else "") + '</b>'
-                        f'{rows}{back}</div>')
+                        f'{_day_line(d)}{rows}{back}</div>')
     key = ('<div class="pkey"><span><i class="kn"></i>new to you</span><span><i class="kc"></i>seen or in your Anki by then</span>'
            '</div>') if loaded else ""
     return out + f'<div class="pwk">{cells}</div>{key}{details}'
+
+
+def _why_shut(pid, uid, why):
+    """3.8.1, why didn't it open: under a date in the week, a quiet line when
+    it left cards shut: its leeches (Browse) and picks this copy doesn't have."""
+    lee, miss = int((why or {}).get("lee") or 0), int((why or {}).get("miss") or 0)
+    bits = []
+    if lee:
+        bits.append(f'<a class="tp" href="#" title="Browse them" onclick="{_pycmd(f"planleech:{pid}:{uid}")}">'
+                    f'{lee:,} leech{"es" if lee != 1 else ""}</a> stay{"s" if lee == 1 else ""} shut')
+    if miss:
+        bits.append(f'{miss:,} pick{"s aren" if miss != 1 else " isn"}&rsquo;t in your copy')
+    return f'<div class="pwhy">{" &middot; ".join(bits)}</div>' if bits else ""
+
+
+def _day_line(d):
+    """3.8.1, shared and mine: a day's details say what the plan opens that
+    day apart from my own load ("opens 120 cards · you: 300 reviews due");
+    today and ahead only."""
+    if d.get("past"):
+        return ""
+    new, mine = int(d.get("new") or 0), int(d.get("mine") or 0)
+    bits = ([f"opens {new:,} card{'s' if new != 1 else ''}"] if new else []) + (  # every card its dates match, not only new ones
+        [f"you: {mine:,} review{'s' if mine != 1 else ''} due"] if mine else [])
+    return f'<span class="pdl">{" &middot; ".join(bits)}</span>' if bits else ""
 
 
 def _left_a(pid, uids, text):
@@ -2162,6 +2295,18 @@ def _left_a(pid, uids, text):
         return text
     return (f'<a class="tp" href="#" title="Browse them" onclick="event.stopPropagation();'
             f'{_pycmd(f"planleft:{pid}:{uids}")}">{text}</a>')
+
+
+def _remark_lines(xs, rm, cls):
+    """3.8.1: the authors' notes on a tag ([[i, text]], plans.topic_remarks)
+    under the topic row that names it: xs, that row's [[name, i]]. Each note
+    once; the authors' words, escaped."""
+    at = {int(i) for _x, i in xs or []}
+    texts = []
+    for i, text in rm or []:
+        if int(i) in at and str(text) not in texts:
+            texts.append(str(text))
+    return "".join(f'<span class="{cls}">&#9432; {_html.escape(t)}</span>' for t in texts)
 
 
 def _topic_a(pid, uids, name, i):
@@ -2227,7 +2372,7 @@ def _plan_notes(card, pid):
         a2 = (f'<a href="#" onclick="{_pycmd("planspread:" + pid)}">Spread them (+{int(ask["spread"]):,} a day)</a>')
         if ask.get("push"):
             n = int(ask["push"])
-            a2 += f'<a href="#" onclick="{_pycmd("planpush:" + pid)}">Move my days back {n}</a>'
+            a2 += f'<a href="#" onclick="{_pycmd("planpush:" + pid)}">Push my dates back {n} day{"s" if n != 1 else ""}</a>'
         a2 += f'<a href="#" onclick="{_pycmd("planleave:" + pid)}">Leave them</a>'
         out.append(f'<div class="pn warn"><span>Missed <b>{e(when)}</b>: {int(ask["waiting"]):,} new waiting</span>'
                    f'<span class="acts">{a2}</span></div>')
@@ -2243,7 +2388,7 @@ def _plan_notes(card, pid):
                 if lim is not None and int(s.get("target") or 0) + n > int(lim) else "")
         out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
-                   f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+                   f'<a href="#" title="They open tomorrow morning" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
     if card.get("team_ask"):
         # 3.7.6: shared progress before the team and sharing were one choice: asked once
         out.append('<div class="pn"><span>Join this plan&rsquo;s squad? The others in it see your name and the days you '
@@ -2298,10 +2443,14 @@ def _plan_notes(card, pid):
     if card.get("put_off"):
         names = [str(n) for n in card["put_off"]]
         what = " and ".join(f"<b>{e(n)}</b>" for n in names) if len(names) <= 2 else f"<b>{len(names)} dates</b>"
-        out.append(f'<div class="pn"><span>{what} open{"s" if len(names) == 1 else ""} tomorrow morning</span>'
+        # 3.8.1: put off by Welcome back's Not today, they wait: tomorrow morning asks again
+        when = (f'wait{"s" if len(names) == 1 else ""} for tomorrow morning' if card.get("put_off_ask")
+                else f'open{"s" if len(names) == 1 else ""} tomorrow morning')
+        out.append(f'<div class="pn"><span>{what} {when}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planputback:" + pid)}">Open now</a></span></div>')
-    pf = card.get("prep")
-    if pf:
+    pf, qz = card.get("prep"), card.get("quiz")
+    # 3.8.1: Study for a quiz says this, in what the plan says about now (_plan_now)
+    if pf and not (qz and qz.get("day") == pf.get("day") and qz.get("name") == pf.get("name")):
         left = int(pf.get("left") or 0)
         what = (f'<b>{e(str(pf.get("name") or "?"))}</b> is today' if pf.get("today")
                 else f'For <b>{e(str(pf.get("name") or "?"))}</b> on {e(str(pf.get("when") or ""))}'
@@ -2896,7 +3045,7 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None, you=None, sticking=None):
+           notice=None, asks=None, due=None, you=None, sticking=None, sev=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -2909,7 +3058,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view
     (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
+    sev (3.8.1): Sev beside the logo for a moment, {svg, ago} (rooms.board_sev), or None."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -2964,7 +3114,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
     lobby = ""
     if room and period in ("today", "week"):
-        bans += [b for b in _split_wraps(room_html({"done": room.get("done"), "invites": room.get("invites")}))]
+        bans += [b for b in _split_wraps(room_html({"done": room.get("done"), "invites": room.get("invites"),
+                                                     "fifteen_done": room.get("fifteen_done")}))]
         lobby = room_html({"mine": room.get("mine")})
     if wrap and not show_up:  # the week's totals are numbers
         extra = ""
@@ -3027,9 +3178,12 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
-    return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>'
+    # 3.8.1: Sev's moments; a crew room's Sevs each wear their person's accent, by day or by night as the board
+    seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")
+    sheet = f'<style>{SEV_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
+    return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period)}{body}{foot}</div></div>')
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
 
 
 def you_html(cfg, due=None, you=None):
@@ -3229,6 +3383,13 @@ def _settings_board(cfg):
             + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
+            + '</div><div class="st-h">Fifteen and Sev</div><div class="st-box">'
+            + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
+                      "And the nudge, when you haven't started by your usual time")
+            + _st_row("Sev", _st_switch("sev", g("sev", True), "Sev"), "The square from the logo, beside it and in your fifteens")
+            + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
+                                            cfg.get("sev_break", "breathe"), "On a break"),
+                      "Breathe with Sev, four counts a side, or stretch")
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -3299,6 +3460,9 @@ FIND_WORDS = {
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
     "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
     "setreset": "default", "friends": "crew code invite", "decks": "share deck",
+    # 3.8.1: the Fifteen and Sev
+    "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
+    "set:sev_break:": "breathe stretch rest",
 }
 
 
@@ -3381,6 +3545,22 @@ def room_html(room):
     Every string in it may carry a friend's name: escaped here."""
     e = _html.escape
     out = ""
+    fd = room.get("fifteen_done")
+    if fd:
+        # 3.8.1: a session of fifteens, ended: Sev stacks a square for each
+        n = int(fd.get("n") or 0)
+        mins = int(fd.get("minutes") or 0)
+        cards = fd.get("cards")
+        what = f'{n} fifteen{"" if n == 1 else "s"} &middot; {e(room_model.duration_text(mins))}'
+        if isinstance(cards, int):
+            what += f' &middot; {cards:,} card{"" if cards == 1 else "s"}'
+        if fd.get("sev"):
+            up, down = _sev.stack_reach(n, 44)  # room for the squares drawn and the shadow, no more
+            icon = f'<span class="dc-fig" style="padding:{up}px 0 {down}px">{_sev.slot(fd["sev"], 44)}</span>'
+        else:
+            icon = "<span>&#10003;</span>"
+        out += (f'<div class="dc-wrap dc-sess">{icon}<span><b>Your session:</b> {what}.</span>'
+                f'<a class="wx" href="#" title="Done" style="margin-left:auto" onclick="{_pycmd("room15x")}">&times;</a></div>')
     done = room.get("done")
     if done:
         out += (f'<div class="dc-wrap"><span>&#10003;</span><span><b>Room done:</b> '
@@ -3397,21 +3577,101 @@ def room_html(room):
                 f'</span><a class="wc" href="#" onclick="{_pycmd("roomjoin:" + key)}">Join</a>'
                 f'<a class="wx" href="#" title="Not now" onclick="{_pycmd("roomx:" + key)}">&times;</a></div>')
     mine = room.get("mine")
+    if mine and mine.get("fifteen"):
+        return out + _fifteen_lobby(mine)
     if mine:
         bars = ""
         for i, f in enumerate(mine.get("bars") or []):
             if i:
                 bars += f'<em style="flex:{int(mine.get("brk_min", 5)) or 1}"></em>'
             bars += f'<i style="flex:{int(mine.get("round", 25))}"><u style="width:{float(f) * 100:.1f}%"></u></i>'
-        faces = "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6])
+        seats = [s for s in (mine.get("seats") or []) if isinstance(s, dict)][:6]
+        faces = ("".join(_seat_html(s) for s in seats) if seats  # 3.8.1: Sev on, each member is their Sev
+                 else "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6]))
         out += (f'<div class="dc-room"><span class="rg{" brk" if mine.get("brk") else ""}" style="--p:{float(mine.get("frac", 0)):.3f}">'
                 f'<b>{e(str(mine.get("label", "")))}</b></span>'
                 f'<span class="rt"><b>{e(str(mine.get("title", "")))}</b><small>{e(str(mine.get("sub", "")))}</small>'
                 f'<span class="rb">{bars}</span></span>'
-                f'<span class="rw"><span class="fc" title="{e(str(mine.get("line", "")))}">{faces}</span>'
+                f'<span class="rw"><span class="fc{" sv-seats" if seats else ""}" title="{e(str(mine.get("line", "")))}">{faces}</span>'
                 f'<a class="go" href="#" onclick="{_pycmd("roomstudy")}">Study</a>'
                 f'<a class="lv" href="#" onclick="{_pycmd("roomleave")}">Leave</a></span></div>')
     return out
+
+
+_HEX = _re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def _seat_html(s):
+    """3.8.1: a crew room's member as their Sev (room_model.seats), a 24 px
+    seat like the initials' circles: their accent by day and by night (only
+    a colour reaches the style; anything else, the default's), blinking at
+    its own moment, their name its label (escaped)."""
+    dflt, a = accent_pair(None), s.get("a")
+    pair = a if isinstance(a, (list, tuple)) and len(a) == 2 else dflt
+    light, dark = (x if isinstance(x, str) and _HEX.fullmatch(x) else d for x, d in zip(pair, dflt))
+    try:
+        delay = max(-60.0, min(0.0, float(s.get("d") or 0)))
+    except (TypeError, ValueError):
+        delay = 0.0
+    name = _html.escape(str(s.get("n") or ""), quote=True)
+    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-d:{delay:.2f}s">'
+            f'{_sev.slot(_sev.svg("idle", label=name), 40)}</span>')
+
+
+def _fifteen_lobby(m):
+    """3.8.1: my fifteen on the Decks screen: its ring with Sev beside it,
+    and what can be said there (the question too, as the review screen asks it)."""
+    e = _html.escape
+    st = m.get("state")
+    sub = str(m.get("sub", ""))
+    if st == "ask" and isinstance(m.get("cards"), int):
+        sub = f'{m["cards"]:,} card{"" if m["cards"] == 1 else "s"}. ' + sub
+    go = lambda cmd, text, cls="go": f'<a class="{cls}" href="#" onclick="{_pycmd(cmd)}">{text}</a>'  # noqa: E731
+    if st == "ask":
+        acts = ("" if m.get("cap") else go("room15five", "Take five, then another") + go("room15now", "Another now", "lv"))
+        acts += go("room15stop", "Stop here", "go" if m.get("cap") else "lv")
+    elif st == "break":
+        acts = go("room15now", "Start now") + go("room15stop", "Stop here", "lv")
+    else:
+        acts = go("duestudy", "Study") + go("room15stop", "Stop here", "lv")
+    sv = _sev.slot(m["sev"], 46) if m.get("sev") else ""
+    return (f'<div class="dc-room dc-fif"><span class="rgw">{sv}<span class="rg{" brk" if m.get("brk") else ""}" '
+            f'style="--p:{float(m.get("frac", 0)):.3f}"><b>{e(str(m.get("label", "")))}</b></span></span>'
+            f'<span class="rt"><b>{e(str(m.get("title", "")))}</b><small>{e(sub)}</small></span>'
+            f'<span class="rw">{acts}</span></div>')
+
+
+# 3.8.1: Sev on the board wears the board's colours; its size is its body's
+SEV_CSS = """
+    #due-crew { --sv-a: var(--dc-accent); --sv-line: var(--dc-line); --sv-amb: var(--dc-hours); --sv-mut: var(--dc-muted); }
+    /* its feet on the logo's line, a little shorter than the wordmark is tall */
+    #due-crew .dc-sev { display: inline-block; margin-left: 8px; vertical-align: middle; line-height: normal;
+      position: relative; top: -1px; }
+    /* by the logo it's a moment: out for a few seconds, then gone (still, it just goes) */
+    #due-crew .dc-sev.once { animation: dc-sev-go 0s linear calc(5s - var(--ago, 0s)) forwards; }
+    @keyframes dc-sev-go { to { visibility: hidden; } }
+    @media (prefers-reduced-motion: no-preference) {
+      #due-crew .dc-sev.once { transform-origin: 50% 100%;
+        animation: dc-sev-pop 5s linear calc(0s - var(--ago, 0s)) forwards; }
+      @keyframes dc-sev-pop { 0% { transform: scale(0); } 7% { transform: scale(1.12); } 11%, 90% { transform: scale(1); }
+        100% { transform: scale(0); visibility: hidden; } }
+    }
+    /* a crew room's members as their Sevs: side by side, not overlapping as the circles do */
+    #due-crew .dc-room .fc.sv-seats { gap: 3px; align-items: center; }
+    #due-crew .dc-room .fc .seat { display: inline-flex; }
+    #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
+    #due-crew .dc-fif .rt { text-align: left; }
+    /* the session's line: Sev and its stack, the box's own padding around them (stack_reach) */
+    #due-crew .dc-wrap .dc-fig { display: inline-flex; flex: none; }
+    #due-crew .dc-sess { text-align: left; }
+    #due-crew .dc-fif .rw { flex-wrap: wrap; justify-content: flex-end; }
+    #due-crew .du-nudge { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center;
+      font-size: 12.5px; padding: 6px 2px 8px; text-align: left; }
+    #due-crew .du-nudge .nz { position: relative; width: 34px; height: 28px; overflow: hidden; }
+    #due-crew .du-nudge .nz svg { position: absolute; left: -7px; top: -19px; width: 48px; height: 48px; }
+    #due-crew .du-nudge .du-go { margin: 0; }
+    #due-crew .du-nudge .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; text-decoration: none; }
+"""
 
 
 def _card(cfg, title, body_html):
@@ -4040,6 +4300,7 @@ DUE_CSS = """
     #due-crew .du-sub .du-bx { width: 11px; height: 11px; margin: 0; border-radius: 3px; }
     #due-crew .du-sub .du-bx.on::after { left: 2.5px; top: -0.5px; width: 2.5px; height: 6px; }
     #due-crew .du-sub .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .du-rm { display: block; color: var(--dc-muted); font-size: 11.5px; font-style: italic; text-align: left; }
     #due-crew .du .wbar { margin-top: 3px; }
     #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); padding-top: 4px; }
@@ -4050,6 +4311,7 @@ DUE_CSS = """
     #due-crew .du-line b { color: var(--dc-ink); font-weight: 600; }
     #due-crew .du-line .acts { display: flex; gap: 12px; }
     #due-crew .du-line a, #due-crew .du-sg a { color: var(--dc-accent); font-weight: 700; }
+    #due-crew .du-line a.tp { font-weight: inherit; }
     #due-crew .du-sg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 9px; font-size: 12px;
       padding: 5px 0; border-top: 1px solid var(--dc-line); align-items: baseline; }
     #due-crew .du-sg .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; }
@@ -4305,7 +4567,8 @@ def _due_plan(r):
         for k, (g, xs) in enumerate(groups):
             if k not in used and (g == label or (label == "Other" and not g)):
                 used.add(k)
-                return " &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                return (" &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                        + _remark_lines(xs, r.get("rm"), "du-rm"))  # 3.8.1: the authors' notes under it
         return ""
     subs = ""
     for ln in r["lines"]:
@@ -4324,7 +4587,7 @@ def _due_plan(r):
                      f'<span class="n">by hand</span></span>')
     extra = []
     if r.get("prep"):
-        extra.append(f'for {e(r["prep"])}')
+        extra.append(f'{"after" if r.get("after") else "for"} {e(r["prep"])}')  # 3.8.1: after its event, reinforcement
     if r.get("crew") and int(r["crew"][1]) > 1:
         extra.append(f'crew {int(r["crew"][0]):,} of {int(r["crew"][1]):,} done')
     if r.get("upd"):
@@ -4337,12 +4600,17 @@ def _due_plan(r):
         # as the Plans tab's day writes them: the group in bold, then its topics
         what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
                                               for g, xs in rest) + "</small>"
+        what += "".join(_remark_lines(xs, r.get("rm"), "du-rm") for _g, xs in rest)  # 3.8.1
     elif groups:
         what = ""
     else:
         what = f'<small>{e(r["what"])}</small>' if r.get("what") else ""
     bar = _wbar(r["seen"], r["total"]) if r["total"] and not r["done"] else ""
     go = ""  # 3.8.0: one Study, the box's Study today (its first step is this plan's deck)
+    if r.get("study"):  # 3.8.1: but a plan's date with cards open has its own: a cram of just it
+        cmd = _pycmd(f"planstudydate:{r['pid']}:{r['uid']}")
+        go = (f'<a href="#" class="du-go" title="A Due Crew deck of its open cards, new and review, in random order" '
+              f'onclick="{cmd}">Study</a>')
     n = f'<span class="n">{e(r["n"])}</span>' if r["n"] else ""
     return (f'<div class="du-r{" done" if r["done"] else ""}">{box}<span class="t"><b>{e(r["name"])}</b>'
             f'<small>{meta}</small>{what}{subs}{bar}</span><span class="end">{n}{go}</span></div>')
@@ -4479,6 +4747,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
+        if v.get("nudge"):
+            # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
+            peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
+            body += (f'<div class="du-nudge">{peek}<span><b>Not started yet today.</b> Fifteen?</span>'
+                     f'<span><a href="#" class="du-go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">Start</a>'
+                     f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:fifteen")}">&times;</a></span></div>')
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":

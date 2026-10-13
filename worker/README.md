@@ -55,7 +55,7 @@ cookie) except these, which need no sign-in: `GET /version`,
 
 | | |
 |---|---|
-| `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?, settingsAt}`. `settingsAt` (3.7.1) is when my settings were last saved: an add-on pulls a save it hasn't seen. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`; one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
+| `GET /board[?decks=1][&keep=1]` | `{me: {uid, name, emoji, code, week, updatedAt}, friends: [...], cheers: [...], knocks: [...], decks?, settingsAt}`. `settingsAt` (3.7.1) is when my settings were last saved: an add-on pulls a save it hasn't seen. One request is a whole refresh. A friend who added me back comes with `week` and `updatedAt`, and (3.8.1) `accent` when their settings hold one of ours (their Sev wears it in a study room; otherwise no `accent`); one who hasn't is `{uid, name, emoji, mutual: false}`. Cheers come from mutual friends only, and each is deleted as it's read, except with `keep=1` (3.2, the site's home: it shows them and leaves them for Anki). |
 | `POST /sync` | `{profile?, week?, decks?, heatmap?, squads?: {row, ids}, settings?, plans?, knows?, stuck?, log?}` → `{ok, gone, wrote, cards?}`. Every part is validated before anything is written, and a part the server already holds verbatim isn't written again. `heatmap: null` takes the heatmap down. Squad rows are UPDATEs only; `gone` lists the squads I'm no longer in. 3.2: `knows: {reset?, add, del}` (note guids I have down, in decks I share; at most 2,000 of each, 100,000 kept a person), `stuck: [guid]` (at most 300; answered in `cards: {guid: {knows: [uid], tips: [{from, text, at, helped}]}}`, mutual friends only, and nothing about the question is kept), `log: {days: {date: [minutes, reviews, new, retention]}}` (merged, 15 years kept since 3.7.1, mine only; the reply's `logAll` lets the add-on's history import move on). |
 | `POST /tips/helped {guid, from, helped?}` | 3.2: "This helped" on a mutual friend's tip. It orders tips (the most helpful first); nobody sees a count. |
 | `GET /log` | 3.2: my log, for the site, and since 3.7.1 `cheers: {year: n}` (cheers my crew sent me, a sender once a day, tips not counted). Mine only. `?summary=1`: how many days and the first; `?cheers=1` (3.8.0, the add-on's year and all-time pictures): `{cheers}` alone. |
@@ -70,7 +70,7 @@ cookie) except these, which need no sign-in: `GET /version`,
 | `GET /admin/squads/{id}` | One squad (A4): name, founder, open, made, members by name and emoji (never their numbers), how many removed, and what the admin did there. `PATCH {open?, name?, founder?}` as its founder would (a founder must already be in it); `POST .../code` a new code, in the answer once and the founder's email, the old one opening nothing (`squad_codes`, the id unchanged); `POST .../remove/{uid} {why?}` removes and blocks (never the founder); `DELETE {name}` the squad, its name typed out. The founder is emailed for each. |
 | `GET /decks` | Shared-deck progress: mine and my mutual friends'. |
 | `GET /heatmap/{uid}` | Mine or a mutual friend's; `{counts: null}` when they don't share one. |
-| `GET` / `PUT /settings` | `{v, at, settings}`, mine only, up to 64 KB (Due's own to-dos ride it). |
+| `GET` / `PUT /settings` | `{v, at, settings, rev}`, mine only, up to 64 KB (Due's own to-dos ride it). 3.8.1 (migration 0028): each save that writes moves `rev`. A PUT with `base` (the rev it started from) is written only if nobody saved since, else 409 `conflict` with the current `{v, at, settings, rev}` for the client to merge and save over; the same doc again is no conflict. Without `base` (older add-ons, a sync's `settings`) the save wins as before. Answers `{ok, rev}`. |
 
 **The week doc** is 2.9's `shared/week`:
 - `{v, days: {label: {studied, reviews, studyTimeMs, accuracy, streak, newCards, status}}, paused, examDate, awayFrom, awayTo, liveUntil, tricky, room}`.
@@ -92,16 +92,17 @@ cookie) except these, which need no sign-in: `GET /version`,
 | `GET /invites/{code}` | Signed out (the `/i/CODE` page): `{kind, name, emoji, state}` for an invite (`ok`, `used`, `expired`) or a friend code (`kind: "code"`). 300 an hour an address. |
 | `POST /invites/{code}/redeem` | The first use within 14 days: I'm crew with its maker at once, both edges, knocks between us cleared. After that (used, or old) it works as their friend code: I add them and they're knocked (`{mutual, knocked}`). 400 `own_code`. The same person again writes nothing. Shares the add's 30 an hour; rows are kept a year. |
 | `POST /codes/{code}/add` | Add the code's owner, and knock them unless they already added me. 30 tries an hour. |
-| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card (5,000 a person), for mutual friends stuck on it. |
+| `POST /cheers/{to} {emoji, note?, luck?, guid?}` | Only to someone who added me. 3.8.1: from someone they muted (the `muted` list in their settings) it reads as sent and goes nowhere; one waiting from before the mute is dropped as read, on `GET /board` and the site's `keep=1` alike. One per sender; it overwrites the last. A cheer with a `guid` (a tip) from a mutual friend takes that flag off the recipient's week, for the whole crew (3.0.1). 3.2: a tip with words is also kept on its card (`tips`), one per author per card (5,000 a person), for mutual friends stuck on it. |
 | `GET /knocks`, `DELETE /knocks/{from}` | Mine. Names come from profiles, never the knock. |
-| `POST /knocks/{to} {squad}` | Only between two members of that squad. |
-| `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. Stores nothing: mails `REPORT_TO` the reporter's and the reported uid, the reported name and emoji, the reason, the note, and their cheer to me if one is still unread. Never the reporter's email. Without `REPORT_TO` it logs "report received" and nothing else. 10 an hour. Muting is the client's (a `muted` list in settings); nobody is told. |
+| `POST /knocks/{to} {squad}` | Only between two members of that squad. 3.8.1: 60 an hour a sender (429); one a day a pair, so a knock dismissed isn't back within the day; never from someone the recipient muted (both read as sent). A knock from someone muted isn't listed, and is again after an unmute. Adding by code or a used invite knocks nobody who muted me. |
+| `POST /reports {uid, reason, note?}` | `reason` is `cheers`, `name` or `other`; `note` at most 500. 3.8.1: kept for the admin's Inbox (`reports`, migration 0027: who, whom, the reason, the note, their cheer to me if one is still unread), and mailed to `REPORT_TO` when it's set; a mail that fails doesn't fail the report. Never the reporter's email. Kept 180 days; gone with either account; in the reporter's `GET /account/data` (`reportsYouMade`, without whom). 10 an hour. Muting is the reporter's own setting (the client mutes as it reports, and the server honours it); nobody is told. `GET /admin/reports?state=new\|done\|all` (newest first, 100, both names and emoji as they are now, `open`), `PATCH /admin/reports/{id} {done}`, `DELETE /admin/reports/{id}`; `GET /admin/stats` carries `reportsOpen`. 404 for everyone else. |
 | `POST /feedback {text, ver?}` | 3.6.5, P6: feedback for the admin's page. `text` 1–2,000 characters, `ver` one line of at most 120 (the add-on's and Anki's versions, or the site page it came from). 5 a day a person (429 `too_many`). Kept a year (housekeeping) and deleted with the account. `GET /admin/feedback?state=new\|done\|all` (newest first, 100, with each sender's name and emoji, never an email, and `open`, the count not done), `PATCH /admin/feedback/{id} {done}`, `DELETE /admin/feedback/{id}`, `POST /admin/feedback/{id}/reply {text}` (mailed from Due Crew to the sender with what they wrote quoted; marks it replied and done). 404 for everyone else. |
 
 ### Plans (3.1)
 
-See `docs/plans-design.md` for the endpoints (`/plans/*`, `/auth/link`), the
-doc shape and the rules. `GET /board?decks=1` adds `plans` (the plans I
+`docs/plans.md` is how plans work now (the doc and a date's fields, who
+writes each, the limits, a follow, the morning); `docs/plans-design.md`
+has the 3.1–3.5 reasoning. The paragraphs below are the API, by version. `GET /board?decks=1` adds `plans` (the plans I
 follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
 `plans: {id: {unitId: [opened, seen, total]}}`. 3.2: a plan's doc may have
 `end`, `phases: {catchup, taper}` and a date's `check` (a checkpoint); a
@@ -121,13 +122,18 @@ save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
 
 3.7.3 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
-saw on every refresh) answers `pv` (a short hash of the plans I follow:
-their versions, my follow's own days, their newest post; never my
-progress) and carries `plans`, `planOffers` and `authored` again only when
+saw on every refresh) answers `pv` (a short hash of the plans I follow, and since 3.8.1 the
+plans I write or co-author and my squads' offers: their versions, my
+follow's own days, their newest post; never my progress) and carries `plans`, `planOffers` and `authored` again only when
 it moved, so a save reaches followers at their next refresh with no
 request of its own. Each plan on the board has `posts` (its newest 3:
 `{id, name, text, withSave, at}`), and the board marks the version as
 reached (`plan_follows.seen_version`, written only when it changed).
+3.8.1: an add-on that keeps the docs it has asks the day's first board with
+`same=1`; when its `pv` is the stamp, each followed plan comes as
+`{..., same: true}` without its `doc` (not read from D1 either), and the
+add-on puts back the doc it kept for that version. Without `same=1`
+(older add-ons) every doc comes as before.
 `GET /plans/{id}/posts` (anyone in the plan), `POST /plans/{id}/posts
 {text}` and `DELETE /plans/{id}/posts/{pid}` (authors; the owner removes
 any): one line, 200 characters, 5 a day per plan (`429 too_many_posts`),
@@ -173,8 +179,10 @@ write, lean) and each plan's `early`.
 the lean `authored` docs carry each date's searches. `GET
 /plans/ics?code=` (no sign-in) is the plan as iCalendar; the site serves
 it at `/p/CODE.ics` (1,000 an hour an address). `POST /plans/follow`
-shares peek's 60 an hour. `GET /plans/mine` leaves each doc's single
-cards and note ids out; `GET /plans/{id}/progress` is for co-authors too.
+shares peek's 60 an hour. `GET /plans/mine` leaves each date's single
+cards and note ids out (`cards`, `ids`; its `idr`, `notes` and the plan
+tags' lists stay: Export cards for my AI, Tag for a plan and the log page
+read them); `GET /plans/{id}/progress` is for co-authors too.
 The UI review: `GET /plans/public?code=` (no sign-in, code plans only) is
 what a plan's link shows before signing in: `{name, ownerName, line,
 deck, followers, units: [{name, opens, due?, n}]}`, days and counts, never
@@ -217,6 +225,79 @@ plan version like any save, with a line in the plan's history. The
 board's `authored` (the plans I write or co-author) carries each plan's
 `name`, and its doc `tagroot` and `tags`, so the author's Anki writes them
 too.
+3.8.1: a plan tag may carry `cards: [[guid, ord]]` (5,000 a tag, counted
+with its notes into the plan's 50,000): Anki's tag goes on their notes,
+Due Crew reads just those cards; `POST /plans/{id}/tags {remove}` takes a
+note's single cards off with it. A date may carry `cut: [{tag, in, q}]`
+(up to 10): `tag` a deck tag kept to the cards of the plan tag `in` (its
+id), `q` the same as an Anki search and one of the date's `search`. A
+cut whose plan tag isn't in the doc is dropped, its tag back in the
+date's `tags` and its `q` out of `search` and `sn`; a copy's new root
+rewrites `tag` and `q`. `PUT /plans/{id}/ids` takes a fourth item a
+date, `[[tag, in]]`, its cuts as the author's Anki read them; the note
+ids are kept only while they match.
+3.8.1, the plans review: a plan's totals (`plans.totals`, `totals_at`;
+migration 0025: followers, how many of them have the version, done per
+date) are counted again when read over an hour old, so the board's
+`followers`/`crewDone`, a plan's `followers`, `/plans/mine`, peek, the
+library and `/plans/public` read one row; up to an hour old. An author's
+`reached` and `GET /plans/{id}/progress` are counted live. `PUT
+/plans/{id}` writes `post` even when nothing else changed (the reply's
+`posted`: `{id, text}` or `{error: "too_many_posts"}`), ignores a date's
+`ids` in the body (the stored ones stay while the date's tags, subdecks
+and cuts are unchanged, and go otherwise until `PUT /ids` sends them
+again). `POST /plans/follow`: 409 `too_many_plans` at 20 follows I can
+see (a squad plan of a squad I left doesn't count) or 100 follow rows in
+all. `POST /plans/{id}/cards`: the saves' daily limit (429 `slow_down`)
+and room (409 `plans_full`); `POST /plans/{id}/tags` counts the doc kept
+for Undo in its room. `PUT /plans/{id}/ids` has its own daily limit (500,
+`planids`). `POST /plans/{id}/undo` shares the saves' limit and undoes
+the newest logged save, even after an ids upload; `GET /plans/{id}/log`
+marks it `undo: true`. A tag root past `_50` is `<root>_<plan id>`, then
+the plan id.
+3.8.1, plans round three (migration 0026: `plan_editors.accepted_at`,
+`plans.handover`): `POST /plans/{id}/editors {uid}` (owner only, a mutual
+friend, counting toward 10) is an invite: not a co-author anywhere until
+a yes. A pending invitee may read the plan as `reader`. `POST
+/plans/{id}/invite {yes, kind?}` answers a co-author invite or an offer of
+the plan; `kind` (`coauthor` | `owner`, as the board showed it) keeps a
+stale answer from answering the other question (400 `bad_invite` for any
+other kind, 404 `no_invite` when there's no such question). A yes to an
+offer swaps owner and co-author in one batch and drops the plan's pending
+invites (409 `too_many_plans`/`plans_full`/`too_many_listed` for the new
+owner's ceilings, its Undo copies counted). `POST /plans/{id}/owner
+{uid|null}` offers the plan to a co-author who said yes (400
+`not_coauthor`, 403 `not_author`) or takes it back. Invites and offers
+share 30 a day an owner (429).
+`DELETE /plans/{id}/editors/{uid}` also takes back an invite and ends an
+offer. The view's `editors[]` carry `pending: true` and the view
+`handover`, for the owner and accepted co-authors only. The board's
+`planInvites: [{id, name, kind: coauthor|owner, by: {name, emoji}}]`
+(at most 10) comes on `decks=1`, `keep=1` and a moved stamp; the stamp
+counts them only when there are some, and names each followed plan's
+owner, so a hand-over moves it. A `deckUrl` is printable ASCII: no
+spaces, quotes or angle brackets. A plan's doc may carry `deckUrl`
+(https, 300 characters, in `/plans/public` too) and `remarks: [{id, tag |
+card, text}]` (300 a plan, 280 characters each, rerooted like any tag);
+`POST /plans/{id}/remarks {add: {tag | card, text}} | {remove: id}` is a
+save for the authors (a note on a card or tag that has one changes it,
+keeping its id; 409 `too_many_remarks`). `PUT /plans/{id}/ids` counts
+may carry `"#lbl": [[tagPath, n]]` a date (at most 3), kept as the
+date's `pl` while its picks are unchanged; a malformed one is skipped.
+
+A date's id fields, who writes each, and when it goes:
+
+| Field | What | Written by | Kept while |
+|---|---|---|---|
+| `nids`, `cids` | numbers pasted from one Anki | the builder | the author keeps them |
+| `notes` | note guids, every card of each | the builder | the author keeps them |
+| `cards` | `[[guid, ord]]` single cards | the builder, the author's Anki | the author keeps them |
+| `idr` | `nids`/`cids` as `[[guid, ord]]` | the author's Anki (`PUT /ids` `refs`) | `nids` and `cids` are unchanged |
+| `ids` | the author's note guids behind the date's tags and subdecks | the author's Anki (`PUT /ids` `units`) | its tags, subdecks and cuts are unchanged |
+| `idn` | how many cards the pasted ids found | the author's Anki (`counts` `#ids`) | its ids are unchanged |
+| `sn` | how many cards each search found | the author's Anki (`counts`) | the search is there |
+| `pn` | `[new, repeat, missing]` in the author's copy | the author's Anki (`counts` `#pn`) | `opens`, tags, subdecks, searches, ids and notes are unchanged |
+| `n` | a total, from older builders | the builder | as saved |
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
@@ -244,7 +325,7 @@ without it); a plan's view says `library` and, for its authors, `listed`
 `basedOn: {id, name, owner}`. `POST /plans/{id}/copy {start}`: a plan of
 my own from a listed one (or one I write), its first date on `start`,
 without followers, notes or co-authors. `POST /plans/{id}/report {reason:
-spam|copied|other, note?}` mails REPORT_TO and stores nothing. The admin:
+spam|copied|other, note?}` is kept for the admin's Inbox like a person's (3.8.1) and mailed to REPORT_TO when it's set. The admin:
 `POST /admin/library/{id} {note}` takes one out, `DELETE` puts it back,
 `GET /admin/library` lists those taken out.
 3.5, H/L/X (migration 0009): `GET /board?keep=1&feed=1` (the site's home

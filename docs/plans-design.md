@@ -1,4 +1,8 @@
-# Plans (3.1): design
+# Plans (3.1–3.5): design notes
+
+Kept for the reasoning behind each step. The current description of how
+plans work (the doc, a follow, plans.json, the morning, limits) is
+[`docs/plans.md`](plans.md); later changes are in `docs/history.md`.
 
 Signed-off mock: the "Due Crew Plans" artifact (Dre builds, Maya follows).
 This file is how it's built. What users see is in the mock; ask the maintainer before
@@ -211,12 +215,12 @@ Signed-off mock: "Building a Plan" (P1–P8, H1). P6 is a prompt for the
 person's own AI, not one the server runs; P8 (co-authors, suggestions,
 comments, the change log) comes after, save-based.
 
-- **What to cover**: every tag, named readably ("#AK_Step1_v12::#Pathoma::
-  01_Growth" reads "Step 1 › Pathoma › 1 · Growth", the raw tag beneath),
+- **What to cover**: every tag, named readably ("#Big_Step1_v12::#Path_Book::
+  01_Growth" reads "Step 1 › Path Book › 1 · Growth", the raw tag beneath),
   in three views when the deck has them: by resource (a `#` tag), by
   system (a `^` tag), other tags; and subdecks. Ticking a tag covers
   everything under it; a tag holding more than one view covers only what
-  the view shows (AnKing's top tag holds the same cards twice).
+  the view shows (a big shared deck's top tag can hold the same cards twice).
 - **The pace**: the plan's study days (`pace.days`), and one of: finish by
   the end date (cards a day follow), cards a day (the finish follows), or
   day by day (each day is what's on it, as a class's syllabus).
@@ -343,7 +347,7 @@ a copy when shared; keep note ids for tag and subdeck dates).
   [{day, from, to}]`: on that morning (up to three late) "Review · A – B",
   the dates from A to B, 200 cards. The site's day panel sets them
   (+ Review day); a 3.2 checkpoint loads as a one-date review day.
-- **C5 AnKing updates.** A date's `ids`: the note ids behind its tags and
+- **C5 a shared deck's updates.** A date's `ids`: the note ids behind its tags and
   subdecks in the author's copy. The day's first board carries
   `authored` (my plans, lean); `send_ids` computes each plan's ids from
   the deck of the same name and sends them when they changed
@@ -357,7 +361,7 @@ A deck's tags, note ids and subdecks are kept between refreshes
 (`plans._STATIC`) while a fingerprint holds (card count, newest note
 edit, newest card, deck and card-number sums; a few ms); only each
 card's state is read again, and so are a date's searches (they depend
-on notes and cards, never on reviews). On a 35,000-card AnKing-shaped
+on notes and cards, never on reviews). On a 35,000-card shared-deck-shaped
 deck a refresh's plan work is ~50 ms after the first (~550 ms). `tools/real_anki.py`
 checks it, with Anki's own package, before a release.
 
@@ -386,16 +390,16 @@ Signed-off mock "Plans 3.4" (D1, D2).
   (`cids`: that card), pasted as a list in the day's Add cards box (a
   spreadsheet column, or ids with commas or spaces) or as `nids:1,2` in
   Text. Up to 5,000 of each a date, counted into the plan's 50,000 single
-  cards. They're numbers, so they work wherever the deck is the same (an
-  AnKing copy, a class deck imported from one file); a follower missing
+  cards. They're numbers, so they work wherever the deck is the same (a
+  big shared deck's copy, a class deck imported from one file); a follower missing
   some gets the rest. Each follower's Anki finds them inside the plan's
   deck; the author's Anki counts them at its next refresh (`"#ids"`, kept
   as `idn`), as it does a pasted search. They are not C5's `ids` (guids
   behind a date's tags).
 - Print (a view beside Month, Week, List and Text, for authors and
   followers): the dates from a range as a list, one row per study day by
-  week, a box to tick, the day's topics grouped by resource (B&B, Pathoma,
-  Sketchy), searches by name, ids and picked cards as counts; review days
+  week, a box to tick, the day's topics grouped by resource (a video series, a
+  book, a picture series), searches by name, ids and picked cards as counts; review days
   shaded; notes and days off optional. The page's own print style; no
   server change.
 

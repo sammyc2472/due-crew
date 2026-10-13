@@ -135,6 +135,70 @@ def newer(a, b):
     return str(a or "") > str(b or "")
 
 
+# 3.8.1 (the audit, #2): two saves from one start, merged. A save replaced the
+# whole doc, so two computers (or a computer and the site) saving close together
+# lost one side's change. The server now names each save's rev and turns away a
+# save made over an older one; this merges the two from the doc both started from.
+_LISTS = {"muted": None, "squads": "id", "shared_decks": "id", "due_items": "id"}
+_GONE = object()
+
+
+def _one(b, m, t):
+    """One value three ways: the side that changed it; both did, mine (the save
+    being made now)."""
+    if m is _GONE:
+        return t
+    if t is _GONE:
+        return m
+    return t if m == b else m
+
+
+def _by(v, key):
+    out = {}
+    for x in v if isinstance(v, list) else []:
+        k = x if key is None else (x.get(key) if isinstance(x, dict) else None)
+        if isinstance(k, (str, int)) and not isinstance(k, bool) and k not in out:
+            out[k] = x
+    return out
+
+
+def _merge_keys(b, m, t):
+    """Keyed things three ways: what one side added stays, what one side took
+    off goes, what one side changed takes that change. Theirs' order, then
+    my new ones."""
+    out = []
+    for k in list(t) + [k for k in m if k not in t]:
+        if k in b and (k not in m or k not in t):
+            continue
+        out.append((k, _one(b.get(k, _GONE), m.get(k, _GONE), t.get(k, _GONE))))
+    return out
+
+
+def merge3(base, mine, theirs):
+    """The account's settings from my save and theirs, both made from `base`.
+    A key one side changed takes that side's. A key both changed: the muted,
+    squads, shared decks and to-dos merge item by item, the to-do ticks day
+    by day, and anything else (a switch, a status) takes mine. Pure."""
+    base, mine, theirs = (x if isinstance(x, dict) else {} for x in (base, mine, theirs))
+    out = {}
+    for k in list(theirs) + [k for k in mine if k not in theirs]:
+        b, m, t = base.get(k, _GONE), mine.get(k, _GONE), theirs.get(k, _GONE)
+        if m == b:
+            v = t
+        elif t == b:
+            v = m
+        elif k in _LISTS and isinstance(m, list) and isinstance(t, list):
+            key = _LISTS[k]
+            v = [x for _k, x in _merge_keys(_by(b, key), _by(m, key), _by(t, key))]
+        elif k == "due_ticks" and isinstance(m, dict) and isinstance(t, dict):
+            v = dict(_merge_keys(b if isinstance(b, dict) else {}, m, t))
+        else:
+            v = m
+        if v is not _GONE:
+            out[k] = v
+    return out
+
+
 # ---- glue ----
 
 _pending = []
@@ -230,20 +294,29 @@ def _pulled(result, gen=None):
             # session survive) takes the account's, whatever the session says,
             # and is never "newer" than it
             here = cfg().get(SEEN_KEY)
+            base = _base()
             if at != cl.session.get("settings_seen") or here != at:
                 mine = cl.session.get("settings_local_at")
-                if here and cl.session.get("settings_dirty") and newer(mine, at):
-                    push(cfg())  # this computer's save is the newest
+                if here and cl.session.get("settings_dirty") and base is not None:
+                    # 3.8.1: an edit here not yet up, and a save from elsewhere: both
+                    merge_in(doc, base)
+                    push(cfg())
+                elif here and cl.session.get("settings_dirty") and newer(mine, at):
+                    push(cfg())  # no save kept to merge from (before 3.8.1): the newest wins
                 else:
                     c = apply(cfg(), doc.get("settings"), _resolve)
                     c[SEEN_KEY] = at
                     app.save_cfg(c, from_account=True)
                     cl.session.update(settings_seen=at, settings_dirty=False)
+                    _keep_base(doc)
                     cl._save_session()
                     if app.swap:
                         app.swap(cfg())
             elif cl.session.get("settings_dirty"):
                 push(cfg())  # an edit whose upload failed: nothing newer up there
+            elif base is None:
+                _keep_base(doc)  # this computer holds the account's save: the start for the next
+                cl._save_session()
         elif status == 404:
             push(cfg())  # the account's first settings: this computer's
     finally:
@@ -281,10 +354,47 @@ def saved_elsewhere(at):
     ensure()
 
 
+def _base():
+    """The save this computer last had in common with the server (its rev and
+    doc), the start a merge works from; None before 3.8.1's first pull."""
+    sess = client().session
+    rev, doc = sess.get("settings_rev"), sess.get("settings_base")
+    return doc if isinstance(rev, int) and isinstance(doc, dict) else None
+
+
+def _keep_base(doc, rev=None):
+    """Remember the server's doc as the start for the next save (main thread)."""
+    sess = client().session
+    rev = doc.get("rev") if rev is None else rev
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else None
+    if isinstance(rev, int) and not isinstance(rev, bool) and settings is not None:
+        sess.update(settings_rev=rev, settings_base=settings)
+    else:
+        sess.pop("settings_rev", None)
+        sess.pop("settings_base", None)
+
+
+def merge_in(doc, base):
+    """3.8.1: someone saved since this computer's last save: theirs and mine
+    merged, here now and up next (the caller pushes). A key the config
+    doesn't hold reads as unchanged. Main thread."""
+    cl = client()
+    theirs = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    mine = dict(base)
+    mine.update(pick(cfg(), _deck_name))
+    c = apply(cfg(), merge3(base, mine, theirs), _resolve)
+    app.save_cfg(c, from_account=True)
+    _keep_base(doc)
+    cl._save_session()
+    if app.swap:
+        app.swap(cfg())
+
+
 _pushing = {"busy": False, "again": False}
+MERGES = 3  # turned away this many times in a row: the next pull sorts it out
 
 
-def push(c):
+def push(c, _merged=0):
     """Send this computer's account settings. The newest save wins. One
     save at a time (3.5.0: Settings in the board saves on every click, and
     the server keeps whichever arrives last): a change made while one is
@@ -302,20 +412,36 @@ def push(c):
     _pushing["busy"] = True
     settings = pick(c, _deck_name)
     gen = app.generation
+    base = _base()
+    rev = cl.session.get("settings_rev") if base is not None else None
 
-    def done(ok):
+    def done(res):
         _pushing["busy"] = False
         again, _pushing["again"] = _pushing["again"], False
-        if ok and not again and gen == app.generation:
-            cl.session.update(settings_seen=at, settings_dirty=False)
+        ours = gen == app.generation
+        conflict = getattr(res, "conflict", None)
+        if res and ours:
+            # what the server holds now is this save: the start for the next
+            _keep_base({"settings": settings}, getattr(res, "rev", None))
+            if not again:
+                cl.session.update(settings_seen=at, settings_dirty=False)
             cl._save_session()
-            c2 = cfg()
-            c2[SEEN_KEY] = at
-            app.save_cfg(c2, from_account=True)
+            if not again:
+                c2 = cfg()
+                c2[SEEN_KEY] = at
+                app.save_cfg(c2, from_account=True)
+        elif conflict and ours and base is not None and _merged < MERGES:
+            # 3.8.1: someone saved since this one started: merge, and save that
+            merge_in(conflict, base)
+            push(cfg(), _merged + 1)
+            return
         if again:
             push(cfg())  # whoever is signed in now, as the config is now
 
-    app._bg(lambda: cl.put_settings(at, settings), done)
+    if rev is None:
+        app._bg(lambda: cl.put_settings(at, settings), done)
+    else:
+        app._bg(lambda: cl.put_settings(at, settings, base=rev), done)
 
 
 def on_change(c):

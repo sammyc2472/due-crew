@@ -167,32 +167,58 @@ def logo_label(width=150):
     the top of the sign-in and welcome screens, or None if this Qt can't
     draw SVG (then the screen goes without). Drawn at the screen's pixel
     ratio so it stays sharp; one square's width of clear space around it."""
-    from aqt.qt import (QBuffer, QByteArray, QGuiApplication, QIODevice, QImageReader,
-                        QLabel, QPixmap, QSize)
+    from aqt.qt import QLabel
     from ..logo import ASPECT, svg
-    try:
-        ratio = max(1.0, float(QGuiApplication.primaryScreen().devicePixelRatio()))
-    except Exception:
-        ratio = 1.0
-    height = round(width * ASPECT)
-    buf = QBuffer()
-    data = svg("dark" if _night() else "light", _accent_name()).encode("utf-8")
-    buf.setData(QByteArray(data))
-    buf.open(QIODevice.OpenModeFlag.ReadOnly)
-    reader = QImageReader(buf, QByteArray(b"svg"))
-    reader.setScaledSize(QSize(round(width * ratio), round(height * ratio)))
-    image = reader.read()
-    if image.isNull():
-        image = _svg_by_renderer(data, round(width * ratio), round(height * ratio))
-    if image is None or image.isNull():
+    pixmap = _svg_pixmap(svg("dark" if _night() else "light", _accent_name()), width, round(width * ASPECT))
+    if pixmap is None:
         return None
-    pixmap = QPixmap.fromImage(image)
-    pixmap.setDevicePixelRatio(ratio)
     label = QLabel()
     label.setPixmap(pixmap)
     label.setAccessibleName("Due Crew")
     clear = round(width * 40 / 401)  # one square
     label.setContentsMargins(4, 4, 0, clear)  # the dialog's margin makes up the rest
+    return label
+
+
+def _svg_pixmap(markup, width, height):
+    """An SVG drawn at the screen's pixel ratio, so it stays sharp; None if
+    this Qt can't draw SVG."""
+    from aqt.qt import QBuffer, QByteArray, QGuiApplication, QIODevice, QImageReader, QPixmap, QSize
+    try:
+        ratio = max(1.0, float(QGuiApplication.primaryScreen().devicePixelRatio()))
+    except Exception:
+        ratio = 1.0
+    w, h = round(width * ratio), round(height * ratio)
+    data = markup.encode("utf-8")
+    buf = QBuffer()
+    buf.setData(QByteArray(data))
+    buf.open(QIODevice.OpenModeFlag.ReadOnly)
+    reader = QImageReader(buf, QByteArray(b"svg"))
+    reader.setScaledSize(QSize(w, h))
+    image = reader.read()
+    if image.isNull():
+        image = _svg_by_renderer(data, w, h)
+    if image is None or image.isNull():
+        return None
+    pixmap = QPixmap.fromImage(image)
+    pixmap.setDevicePixelRatio(ratio)
+    return pixmap
+
+
+def sev_label(pose="hello", size=64, name="Sev"):
+    """3.8.1: Sev in a dialog's corner (Welcome back), in the accent and
+    Anki's theme: sev.py's one drawing, still (a Qt window can't play the
+    board's motion; it's the frame Reduce motion shows). None if this Qt
+    can't draw SVG: the dialog goes without."""
+    from aqt.qt import QLabel, Qt
+    from ..sev import still
+    pixmap = _svg_pixmap(still(pose, accent()), size, size)
+    if pixmap is None:
+        return None
+    label = QLabel()
+    label.setTextFormat(Qt.TextFormat.PlainText)  # a picture; never markup
+    label.setPixmap(pixmap)
+    label.setAccessibleName(name)
     return label
 
 

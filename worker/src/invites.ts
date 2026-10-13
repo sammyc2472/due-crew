@@ -8,7 +8,7 @@
 
 import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
-import { CODE_ALPHABET, added, mutual, nameOf } from "./social";
+import { CODE_ALPHABET, added, mutedBy, mutual, nameOf } from "./social";
 import { Env, HttpError, clientIp, json, nowSec, sha256Hex } from "./util";
 
 export const INVITE_LEN = 10;
@@ -107,7 +107,7 @@ export async function redeem(s: Session, env: Env, [raw]: string[]): Promise<Res
       .bind(s.uid, row.uid, now).run();
   }
   const isMutual = await mutual(env, s.uid, row.uid);
-  if (!isMutual) {
+  if (!isMutual && !(await mutedBy(env, row.uid, s.uid))) {
     await env.DB.prepare(
       `INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES (?, ?, NULL, ?)
        ON CONFLICT(to_uid, from_uid) DO UPDATE SET squad = NULL, at = excluded.at`,

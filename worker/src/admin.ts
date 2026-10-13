@@ -108,13 +108,14 @@ export async function stats(s: Session, env: Env): Promise<Response> {
   adminOnly(env, s);
   const c = await counts(env);
   const since = day(nowSec() - 6 * 86400);
-  const [codes, versions, fbOpen, moving] = await env.DB.batch<any>([
+  const [codes, versions, fbOpen, moving, rpOpen] = await env.DB.batch<any>([
     env.DB.prepare("SELECT key, SUM(n) AS n FROM admin_days WHERE day >= ? AND key LIKE 'codes.%' GROUP BY key").bind(since),
     env.DB.prepare("SELECT client_version AS v, COUNT(*) AS n FROM users GROUP BY client_version ORDER BY n DESC LIMIT 12"),
     // what's waiting on the admin (A2's Needs you): new feedback, email changes not yet finished
     env.DB.prepare("SELECT COUNT(*) AS n FROM feedback WHERE done = 0"),
     env.DB.prepare(`SELECT c.uid, u.name, c.at FROM email_changes c JOIN users u ON u.uid = c.uid
                       WHERE c.at > ? ORDER BY c.at DESC LIMIT 10`).bind(nowSec() - 7 * 86400),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE done = 0"),  // 3.8.1
   ]);
   const code = Object.fromEntries((codes.results as { key: string; n: number }[]).map((r) => [r.key.slice(6), r.n]));
   return json({
@@ -122,6 +123,7 @@ export async function stats(s: Session, env: Env): Promise<Response> {
     codes: { sent: code.sent ?? 0, ok: code.ok ?? 0, wrong: code.wrong ?? 0, out: code.out ?? 0, limited: code.limited ?? 0 },
     versions: (versions.results as { v: string | null; n: number }[]).map((r) => [r.v || "no add-on sync", r.n]),
     feedbackOpen: (fbOpen.results[0] as { n: number }).n,
+    reportsOpen: (rpOpen.results[0] as { n: number }).n,
     emailChanges: (moving.results as { uid: string; name: string | null; at: number }[]).map((r) => ({ uid: r.uid, name: r.name || "?", at: r.at })),
     housekeeping: await Quiet.counts(env),  // Q6: folded, quiet past the trim, due to go in 30 days
   });

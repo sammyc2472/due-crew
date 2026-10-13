@@ -6,9 +6,10 @@ that), and no Qt.
 
 import datetime
 import hashlib
+import json
 import re
 
-from ..room_model import clean_room, is_over
+from ..room_model import clean_room, is_fifteen, is_over
 
 TIMEOUT = 10
 LIVE_MINUTES = 60   # 2.10: "studying now" lasts this long unless stopped
@@ -93,6 +94,14 @@ def _first_grapheme(text):
             break
         out += ch
     return out
+
+
+def clean_accent(name):
+    """3.8.1: a crewmate's accent from GET /board, if it's one of the add-on's
+    (board.ACCENTS), else '': their Sev in a study room wears it, and only a
+    name from that table, as that table's colours, ever reaches a page."""
+    from ..board import ACCENTS  # board is pure; asked here, the shapes load without it
+    return name if isinstance(name, str) and name in ACCENTS else ""
 
 
 def emoji_fits(emoji):
@@ -302,7 +311,8 @@ def clean_cards(value):
 
 def _live_room(value):
     room = clean_room(value)
-    return None if is_over(room) else room
+    # 3.8.1: a fifteen is mine alone, never a room on a row (it's "studying now")
+    return None if is_over(room) or is_fifteen(room) else room
 
 
 def live_now(until, now_utc=None):
@@ -497,6 +507,9 @@ def _clean_unit(u):
     search = [q for q in u.get("search") or [] if isinstance(q, str) and q.strip()][:10]
     if search:
         out["search"] = search  # 3.3, C3: Anki searches, run here
+    cut = _cuts(u.get("cut"), search)
+    if cut:
+        out["cut"] = cut  # 3.8.1: a tag kept to one of the plan's own tags' cards
     ids = [g for g in u.get("ids") or [] if isinstance(g, str) and g][:50000]
     if ids:
         out["ids"] = ids  # 3.3, C5: the note ids behind its tags, from the author's Anki
@@ -520,6 +533,19 @@ def _clean_unit(u):
     if todo:
         out["todo"] = todo[:8]
     return out
+
+
+def _cuts(cut, search):
+    """3.8.1: a date's cuts, [{tag, in, q}]: a tag kept to the cards of the plan
+    tag `in`; q is the same as an Anki search, one of the date's searches (an
+    add-on before 3.8.1 opens it), which this one leaves to the cut."""
+    out, seen = [], set()
+    for c in cut if isinstance(cut, list) else []:
+        if (isinstance(c, dict) and isinstance(c.get("tag"), str) and c["tag"] and _UNIT_ID.fullmatch(str(c.get("in") or ""))
+                and c.get("q") in (search or []) and (c["tag"], c["in"]) not in seen):
+            seen.add((c["tag"], c["in"]))
+            out.append({"tag": c["tag"], "in": c["in"], "q": c["q"]})
+    return out[:10]
 
 
 def _todo_text(t):
@@ -568,7 +594,7 @@ def clean_sched(s):
 
 
 def _clean_plan_tag(t):
-    """3.8.0: one of a plan's tags, {id, name, notes?, tags?, decks?, search?, n?}:
+    """3.8.0: one of a plan's tags, {id, name, notes?, cards?, tags?, decks?, search?, n?}:
     names and note guids, never card text. None if it holds nothing."""
     if not isinstance(t, dict) or not _UNIT_ID.fullmatch(str(t.get("id") or "")):
         return None
@@ -583,9 +609,38 @@ def _clean_plan_tag(t):
     notes = [g for g in t.get("notes") or [] if isinstance(g, str) and g][:5000]
     if notes:
         out["notes"] = notes
+    cards = [[c[0], c[1]] for c in t.get("cards") or []  # 3.8.1: single cards, guid + card number
+             if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str) and c[0]
+             and isinstance(c[1], int) and not isinstance(c[1], bool) and 0 <= c[1] <= 1000][:5000]
+    if cards:
+        out["cards"] = cards
     if isinstance(t.get("n"), int) and not isinstance(t.get("n"), bool) and t["n"] >= 0:
         out["n"] = t["n"]
-    return out if any(k in out for k in ("tags", "decks", "search", "notes")) else None
+    return out if any(k in out for k in ("tags", "decks", "search", "notes", "cards")) else None
+
+
+def _plan_tag_refs(doc):
+    """3.8.1: a date that uses the plan's own tags (a cut, or the tag itself)
+    carries `ptv`, what those tags hold, so it reads as changed (and its new
+    cards open, as any update's do) when they change; a cut carries its tag's
+    name for the page. A cut whose tag is gone is left to its search."""
+    from ..plans import tag_part  # here: plans reads this module as it loads
+    by_id = {t["id"]: t for t in doc.get("tags") or []}
+    root = doc.get("tagroot")
+    base = f"duecrew::{root}::".lower() if root else None
+    by_part = {f"{base}{tag_part(t['name']).lower()}": t for t in by_id.values()} if base else {}
+    for u in doc.get("units") or []:
+        cut = [c for c in u.get("cut") or [] if c["in"] in by_id]
+        if u.get("cut"):
+            if cut:
+                u["cut"] = [dict(c, nm=by_id[c["in"]]["name"]) for c in cut]
+            else:
+                del u["cut"]
+        used = {c["in"] for c in cut} | {by_part[t.lower()]["id"] for t in u.get("tags") or [] if t.lower() in by_part}
+        if used:
+            blob = json.dumps([[k, {x: by_id[k].get(x) for x in ("notes", "cards", "tags", "decks", "search")}]
+                               for k in sorted(used)], sort_keys=True)
+            u["ptv"] = hashlib.sha1(blob.encode()).hexdigest()[:10]
 
 
 def _own_tags(doc):
@@ -598,12 +653,44 @@ def _own_tags(doc):
     return {"tagroot": root, **({"tags": tags} if tags else {})}
 
 
+_DECK_URL = re.compile(r"https://[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]{0,291}")  # the Worker's rule (plans.ts DECK_URL)
+
+
+def _clean_remarks(v):
+    """3.8.1: the authors' notes on a tag or a card, [{id, tag | card, text}]:
+    exactly one of tag (a deck tag's path, or a plan tag's DueCrew:: path)
+    or card ([guid, card number from 0]); one line of 1 to 280. Drawn escaped."""
+    out, seen = [], set()
+    for r in v if isinstance(v, list) else []:
+        if not isinstance(r, dict) or not _UNIT_ID.fullmatch(str(r.get("id") or "")) or r["id"] in seen:
+            continue
+        text = clean_note(r.get("text"), 280)
+        tag, card = r.get("tag"), r.get("card")
+        one = {"id": r["id"], "text": text}
+        if isinstance(tag, str) and tag.strip() and len(tag) <= 200 and card is None:
+            one["tag"] = tag
+        elif (tag is None and isinstance(card, list) and len(card) == 2 and isinstance(card[0], str) and 0 < len(card[0]) <= 40
+              and isinstance(card[1], int) and not isinstance(card[1], bool) and 0 <= card[1] <= 1000):
+            one["card"] = [card[0], card[1]]
+        else:
+            continue
+        if text:
+            seen.add(r["id"])
+            out.append(one)
+    return out[:300]
+
+
 def clean_plan_doc(doc):
     """{deck, units}: units sorted by when they open, as plans.py reads them."""
     doc = doc if isinstance(doc, dict) else {}
     units = [u for u in map(_clean_unit, doc.get("units") or []) if u][:200]
     units.sort(key=lambda u: u["opens"])
     out = {"deck": str(doc.get("deck") or ""), "units": units}
+    if isinstance(doc.get("deckUrl"), str) and _DECK_URL.fullmatch(doc["deckUrl"]):
+        out["deckUrl"] = doc["deckUrl"]  # 3.8.1: where to get the deck, opened in the browser
+    remarks = _clean_remarks(doc.get("remarks"))
+    if remarks:
+        out["remarks"] = remarks  # 3.8.1: the authors' notes on a tag or a card
     if _ISO.fullmatch(str(doc.get("end") or "")):
         out["end"] = doc["end"]
     ids = {u["id"] for u in units}
@@ -620,6 +707,7 @@ def clean_plan_doc(doc):
     if every:
         out["every"] = every[:6]  # 3.8.0: lines every week, on their weekdays
     out.update(_own_tags(doc))  # 3.8.0: the plan's own tags
+    _plan_tag_refs(out)
     days = (doc.get("pace") or {}).get("days") if isinstance(doc.get("pace"), dict) else None
     if isinstance(days, list) and len(days) == 7 and all(x in (0, 1) for x in days) and any(days):
         out["pace"] = {"days": [int(x) for x in days]}  # 3.3: what an even split spreads over
@@ -654,7 +742,12 @@ def clean_authored(a):
                  for k in ("nids", "cids") if u.get(k)},  # E1
               **({"notes": [g for g in u["notes"] if isinstance(g, str) and g][:5000]}
                  if isinstance(u.get("notes"), list) else {}),  # 3.6.5
-              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {})}  # P1
+              **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {}),  # P1
+              **({"cut": _cuts(u.get("cut"), u.get("search"))} if u.get("cut") else {}),  # 3.8.1
+              # 3.8.1: single cards, when the board carries them: what send_ids' #lbl names
+              **({"cards": [[c[0], c[1]] for c in u["cards"] if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str)
+                            and isinstance(c[1], int) and not isinstance(c[1], bool)][:50000]}
+                 if isinstance(u.get("cards"), list) and u["cards"] else {})}
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "name": clean_note(a.get("name"), 60) or "Plan",
             "doc": {"deck": str(d.get("deck") or ""), "units": units, **_own_tags(d)}}  # 3.8.0: and its own tags
@@ -709,6 +802,19 @@ def clean_days(v):
                       if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 365}
             if isinstance(v.get("moved"), dict) else {},
             "own": v["own"] if v.get("own") in ("ready", "next") else ""}  # 3.8.0: at my own pace
+
+
+def clean_plan_invites(v):
+    """3.8.1: my pending invites, from the day's first board: [{id, name, kind
+    ("coauthor": to co-write it; "owner": to keep it), by: {name, emoji}}], 10 at most."""
+    out = []
+    for x in v if isinstance(v, list) else []:
+        if (isinstance(x, dict) and _PLAN_ID.fullmatch(str(x.get("id") or "")) and x.get("kind") in ("coauthor", "owner")
+                and x["id"] not in {o["id"] for o in out}):
+            by = x.get("by") if isinstance(x.get("by"), dict) else {}
+            out.append({"id": x["id"], "name": clean_note(x.get("name"), 60) or "Plan", "kind": x["kind"],
+                        "by": {"name": clean_note(by.get("name"), 60) or "?", "emoji": clean_emoji(by.get("emoji"))}})
+    return out[:10]
 
 
 def clean_offer(o):

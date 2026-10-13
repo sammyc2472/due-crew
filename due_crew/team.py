@@ -145,8 +145,9 @@ def deck_topics(tags_of, reviewed, min_n=None):
     leaves = {}
     for cid in reviewed:
         # 3.8.0: a question bank's id ("…::Step::104523") is never a topic
+        # 3.8.1: never a plan's own tags (DueCrew::…): the plan's way on the map shows those
         tags = [str(t) for t in (tags_of.get(cid) or ()) if t and str(t).lower() not in ANKI_TAGS
-                and not _bank_id(str(t))]
+                and not _bank_id(str(t)) and not _ours(str(t))]
         low = [t.lower() for t in tags]
         leaves[cid] = [t for t, lt in zip(tags, low) if not any(o.startswith(lt + P._SEP) for o in low)]
     under = {}
@@ -341,6 +342,33 @@ def expand(t, know):
     return t["kids"]
 
 
+def _ours(tag):
+    """3.8.1: one of a plan's own tags (DueCrew::<plan>::SLG_12)."""
+    return tag.lower().startswith(P.TAG_PARENT.lower() + P._SEP)
+
+
+def plan_tiles(held, know, active):
+    """3.8.1, the map by a plan's own tags (its "MS2 Block 1's tags" way):
+    held: [(tag name, its Anki tag, {cid} it holds here)] in the plan's
+    order. (tiles, none): a tile a tag, sized by its cards in play and shaded
+    by what I know of the started ones, biggest first; none, the names of
+    the tags no card here carries (a coverage gap, for the author)."""
+    tiles, none = [], []
+    for name, path, cids in held:
+        if not cids:
+            none.append(name)
+            continue
+        play = [c for c in cids if c in active]
+        if not play:
+            continue
+        started = [know[c] for c in play if c in know]
+        tiles.append({"key": path, "name": str(name)[:NAME_MAX], "n": len(play), "started": len(started),
+                      "know": int(round(100 * sum(started) / len(started))) if started else None,
+                      "find": {"tags": [path]}})
+    tiles.sort(key=lambda t: (-t["n"], t["name"].lower()))
+    return tiles, none
+
+
 def subjects(paths_of, know, active=None, decks=False):
     """The map's tiles, the best way (subjects_by without a pick)."""
     return subjects_by(paths_of, know, active, decks)[0]
@@ -376,7 +404,7 @@ def subjects_by(paths_of, know, active=None, decks=False, by=None):
     seen, names = {}, {}  # a tag read once; a family's name as spelled
 
     def read(t):
-        if not t or t.lower() in ANKI_TAGS or (not decks and _bank_id(t)):
+        if not t or t.lower() in ANKI_TAGS or (not decks and (_bank_id(t) or _ours(t))):
             return None
         segs = [x for x in t.split(P._SEP) if x]
         ri = -1

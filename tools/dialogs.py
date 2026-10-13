@@ -352,7 +352,33 @@ def main(out):
         settle()
         if "notes" not in dlg.size.text() or dlg.scope.count() != 2:
             raise RuntimeError(f"export: {dlg.size.text()!r} {dlg.scope.count()}")
+        # 3.8.1: with a plan picked, the plan itself at the file's top, ticked by default; none for a whole deck
+        lines = dlg.plan_lines()
+        if dlg.with_plan.isHidden() or not dlg.with_plan.isChecked() or not lines or not all(x.startswith("# ") for x in lines):
+            raise RuntimeError(f"export with the plan: {lines!r}")
         shoot(dlg, os.path.join(out, "export-for-ai.png"))
+        dlg.plan.setCurrentIndex(dlg.plan.count() - 1)
+        if not dlg.with_plan.isHidden() or dlg.plan_lines() is not None:
+            raise RuntimeError("export: a whole deck has no plan's lines")
+        dlg.close()
+        # 3.8.1: Follow, when no deck here has the plan's deck's name and the plan says where to get it
+        got_pid, got_code = STORE.add_plan("igk", "Elsewhere", "A deck not here", units[:1])
+        STORE.plans[got_pid]["doc"]["deckUrl"] = "https://example.com/get-the-deck"
+        links = []
+        utils.openLink = links.append
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=got_code, today=today.isoformat(), swap_prompt=lambda sw, n: False)
+        settle()
+        if dlg.get_deck.isHidden() or "Where to get it" not in dlg.get_deck.text() or "A deck not here" not in dlg.get_deck.text():
+            raise RuntimeError(f"follow: the deck's link {dlg.get_deck.text()!r}")
+        dlg.get_deck.linkActivated.emit("x")
+        if links != ["https://example.com/get-the-deck"]:
+            raise RuntimeError(f"follow: opened {links!r}")
+        shoot(dlg, os.path.join(out, "plan-follow-get-deck.png"))
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
+        settle()
+        if not dlg.get_deck.isHidden():
+            raise RuntimeError("follow: a plan with no link, or a deck here, says nothing of it")
+        dlg.close()
         # 3.6.5, P6: Send feedback to Sam
         from due_crew.ui.feedback_dialog import FeedbackDialog
         dlg = FeedbackDialog(None, CLIENT, "3.6.5")
@@ -497,7 +523,7 @@ def main(out):
         dlg.close()
         priv = S.privacy({"share_time": False})
         wdlg = ShareCardDialog(None, lambda _k: {"kind": "week", "title": "Share my week", "sizes": ("story", "link"),
-                                                 "file": "due-crew-week-2026-10-12", "data": wk}, priv=priv)
+                                                 "file": "due-crew-week-2026-10-12", "data": dict(wk, sev=True)}, priv=priv)
         shoot(wdlg, os.path.join(out, "share-card-week-sheet.png"))
         if wdlg.switch["time"].isChecked() or "Privacy" not in wdlg.switch["time"].text():
             raise RuntimeError("share card: Time studied should start off when Privacy keeps it home")
@@ -513,6 +539,26 @@ def main(out):
                         raise RuntimeError(f"share card: no {kind} {size} picture")
                     tag = data.get("year") if kind == "year" else ""
                     img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
+        # 3.8.1: Sev hops across the week (Settings › Sev on): the sample week, one with two days off (the
+        # mock's), today's card; Sev drawn by QtSvg in the card's accent, on the last day studied
+        mon = datetime.date(2026, 10, 12)
+        two_off = {(mon + datetime.timedelta(days=i)).isoformat(): (60 + 23 * i, (14 + 6 * i) * 60000)
+                   for i, x in enumerate((1, 1, 0, 1, 1, 0, 1)) if x}
+        on = {k: True for k in ("time", "reviews", "streak", "crew")}
+        for name, kind, data in (("week", "week", S.week(days, today, False, {today: 14, "2026-10-12": 20}, 23, 4, True)),
+                                 ("week-two-off", "week", S.week(two_off, "2026-10-18", False, {"2026-10-18": 9}, 23, 4, True)),
+                                 ("today", "today", S.week(days, today, True, {today: 14}, 23, 2, True))):
+            for size in ("story", "link"):
+                for look in ("light", "dark"):
+                    img = paint(kind, size, data, on, look)
+                    ops = S.draw(kind, size, data, on, look, lambda s, px, w: 0)[2]
+                    sev = [o for o in ops if o[0] == "sev"]
+                    if len(sev) != 1:
+                        raise RuntimeError(f"share card: Sev isn't on the {name} card")
+                    _o, _pose, x, y, z, color = sev[0]
+                    if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
+                        raise RuntimeError(f"share card: Sev not drawn on the {name} card ({size}, {look})")
+                    img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
 
     def why():
         # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
@@ -537,6 +583,67 @@ def main(out):
         if len(dlg.rows) != 1 or dlg.note.isVisible():
             raise RuntimeError("why: read again after a fix")
         dlg.close()
+
+    def held():
+        # 3.8.1: the plan's ··· menu › Held back: N cards…: what it holds, by date, and why; Open them,
+        # Stop holding back (only with a yes to Hold back), Close. The plan's and dates' names stay text
+        from due_crew.ui.held_dialog import HeldDialog
+        view = {"name": "MS2 <b>Block</b> 1", "n": 1240, "more": 9, "holding": True, "leeches": 2,
+                "lines": ["Renal physiology <i> · Mon 19 Oct · 120", "Antiarrhythmics · Tue 20 Oct · 80",
+                          "Heart failure · Wed 21 Oct · 96", "On no date now · 4"],
+                "why": "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day."}
+        dlg = HeldDialog(None, view)
+        settle()
+        labels = dlg.findChildren(QtWidgets.QLabel)
+        if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
+            raise RuntimeError("held: a plan's or date's name went in as markup")
+        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more dates" not in dlg.list.text():
+            raise RuntimeError(f"held: {[w.text() for w in labels]!r}")
+        if "2 more are leeches and stay shut" not in dlg.note.text() or dlg.stop_btn.isHidden():
+            raise RuntimeError(f"held: {dlg.note.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-held.png"))
+        dlg = HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
+                                    why="You put these back. They open when you open their date again."))
+        dlg.show()
+        if dlg.stop_btn.isVisible() or "leech" in dlg.note.text():
+            raise RuntimeError("held: no yes, no Stop holding back")
+        dlg.open_btn.click()
+        if dlg.choice != "open":
+            raise RuntimeError(f"held: {dlg.choice!r}")
+        shoot(HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
+                                    why="You put these back. They open when you open their date again.")),
+              os.path.join(out, "plan-held-put-back.png"))
+
+    def away():
+        # 3.8.1: Welcome back, before the morning opens dates from days with nothing studied
+        from due_crew.ui.away_dialog import AwayDialog, days_words
+        dlg = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240, sev=True)
+        settle()
+        # 3.8.1: Sev waves from its corner (still), in the accent: its forehead's pixel says QtSvg drew it
+        from due_crew.ui import accent
+        if dlg.sev is None:
+            raise RuntimeError("away: no Sev with Sev on")
+        img = dlg.sev.pixmap().toImage()
+        k = img.width() / 64
+        if img.pixelColor(int(32 * k), int(30 * k)).name() != accent():
+            raise RuntimeError(f"away: Sev isn't in the accent: {img.pixelColor(int(32 * k), int(30 * k)).name()}")
+        labels = dlg.findChildren(QtWidgets.QLabel)
+        if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
+            raise RuntimeError("away: the plan's name went in as markup")
+        if (dlg.push_btn.text() != "Push my dates back 3 days"
+                or "3 days with no study in Anki: Mon 5 Oct, Tue 6 Oct and Wed 7 Oct." not in dlg.body.text()
+                or "4 dates would open now: 240 new cards." not in dlg.body.text()):
+            raise RuntimeError(f"away: {dlg.push_btn.text()!r} {dlg.body.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
+        plain = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
+        if plain.sev is not None:
+            raise RuntimeError("away: Sev with Sev off")
+        shoot(plain, os.path.join(out, "plan-welcome-back-plain.png"))
+        dlg = AwayDialog(None, "Cardio", [f"2026-10-{d:02d}" for d in range(5, 15)], 9, 610)
+        dlg.show()
+        dlg.push_btn.click()
+        if dlg.choice != "push" or "between Mon 5 Oct and Wed 14 Oct" not in days_words([f"2026-10-{d:02d}" for d in range(5, 15)]):
+            raise RuntimeError(f"away: {dlg.choice!r}")
 
     def open_cards():
         # 3.8.0: Browse › Due Crew: open its cards…: counted first, leeches stay, first in line ticked
@@ -597,11 +704,52 @@ def main(out):
             raise RuntimeError("tag: the plan didn't get it")
         dlg.close()
 
+    def remark():
+        # 3.8.1: Browse › note for the plan's followers: only plans I write; the note on this
+        # card there is filled in and edited (it stays one note) or taken off; names stay text
+        from due_crew.ui.remark_dialog import RemarkDialog
+        pid, _code = STORE.add_plan("sam", "MS2 <Block> 2", "Big Step 1", [
+            {"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        CLIENT.plan_remark(pid, add={"card": ["guid000004", 0], "text": "The second half of the lecture"})
+        done = []
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        names = [dlg.plan.itemText(i) for i in range(dlg.plan.count())]
+        if any("Not mine" in n for n in names) or "MS2 <Block> 2" not in dlg.plan.currentText():
+            raise RuntimeError(f"remark: plans {names!r}, picked {dlg.plan.currentText()!r}")
+        if dlg.text.text() != "The second half of the lecture" or dlg.remove_btn.isHidden() or dlg.save_btn.isEnabled():
+            raise RuntimeError(f"remark: the note there {dlg.text.text()!r}")
+        if dlg.where.textFormat() != QtCore.Qt.TextFormat.PlainText or "MS2 <Block> 2" not in dlg.where.text():
+            raise RuntimeError(f"remark: where {dlg.where.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-remark.png"))
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        dlg.text.setText("Watch the second half first")
+        dlg.show()
+        dlg.save_btn.click()
+        settle()
+        rs = STORE.plans[pid]["doc"].get("remarks") or []
+        if [r["text"] for r in rs] != ["Watch the second half first"] or not done:
+            raise RuntimeError(f"remark: edited {rs!r} {dlg.status.text()!r}")
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        dlg.show()
+        dlg.remove_btn.click()
+        settle()
+        if STORE.plans[pid]["doc"].get("remarks"):
+            raise RuntimeError("remark: not taken off")
+        dlg = RemarkDialog(None, CLIENT, "guid000003", 0)
+        settle()
+        if dlg.text.text() or not dlg.remove_btn.isHidden() or dlg.save_btn.isEnabled():
+            raise RuntimeError("remark: a card with none starts empty, Save off")
+        shoot(dlg, os.path.join(out, "plan-remark-new.png"))
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards)):
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
+                         ("remark", remark), ("held back", held), ("welcome back", away)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")

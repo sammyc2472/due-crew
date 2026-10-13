@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A plan as text · Due Crew</title>
+<meta name="description" content="The lines a Due Crew plan reads in Text: dates, events, the plan's own tags and notes for followers. For you, and for an AI drafting a plan with you.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon.png" type="image/png">
+<style>
+  :root {
+    --bg: #fbfbf8; --ink: #2a2c28; --muted: #6b6f68; --line: #e2e2da; --well: #f2f2ec;
+    --accent: #2e7d32; --accent-ink: #ffffff;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1c; --ink: #dfe1dc; --muted: #9a9e97; --line: #3d403b; --well: #2b2d29;
+            --accent: #7cc47f; --accent-ink: #122912; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 56px 20px 40px; }
+  .logo { display: block; width: 180px; max-width: 60%; height: auto; }
+  h1 { font-size: 28px; line-height: 1.25; font-weight: 700; margin: 26px 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 36px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lede { font-size: 18px; color: var(--muted); margin: 0 0 20px; }
+  .muted { color: var(--muted); }
+  ul { padding-left: 20px; margin: 0 0 14px; }
+  li { margin: 4px 0; }
+  code { font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--well); padding: 1px 5px; border-radius: 5px;
+         overflow-wrap: anywhere; }
+  pre { font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--well); border-radius: 10px;
+        padding: 12px 14px; overflow-x: auto; margin: 0 0 16px; }
+  .parts { width: 100%; border-collapse: collapse; font-size: 15px; margin: 0 0 16px; }
+  .parts td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .parts td:first-child { white-space: nowrap; padding-right: 14px; }
+  .wrap { overflow-x: auto; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 15px; margin: 0 0 8px; }
+  footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 18px; font-size: 15px; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <a href="/"><picture>
+    <source srcset="/logo-dark.svg" media="(prefers-color-scheme: dark)">
+    <img class="logo" src="/logo.svg" alt="Due Crew" width="401" height="137">
+  </picture></a>
+
+  <h1>A plan as text</h1>
+  <p class="lede">What a plan's Text tab reads: one line a date, an event, one of the plan's own tags or a note for followers. For you, and for an AI drafting a plan with you.</p>
+  <nav><a href="#dates">Dates</a><a href="#events">Events</a><a href="#tags">The plan's tags</a><a href="#remarks">Notes for followers</a><a href="#notes">Notes to yourself</a><a href="#rules">Rules</a><a href="#where">Where it goes</a></nav>
+
+  <p>Each line is parts split by <code>|</code> (two or more spaces work too). Blank lines and a leading <code>-</code>, <code>*</code> or <code>•</code> are fine. A line that starts with <code>#</code> is shown with the plan, never imported.</p>
+  <pre>2026-10-05 | Microcytic anemias | tag:Heme::Red_cells::Microcytic
+2026-10-06 | Unit 3: la familia | deck:Spanish 1::Unit 3 | watch: Unit 3 video https://example.com/u3
+2026-10-09 | event | Heme quiz</pre>
+
+  <h2 id="dates">Dates</h2>
+  <p>A date opens its cards on that morning, for everyone following. The first part is when; the second is its name; the rest say what it opens and how.</p>
+  <div class="wrap"><table class="parts">
+    <tr><td><code>2026-10-05</code> or <code>week 3</code></td><td>The day it opens. <code>week 3</code> is the Monday of the plan's third week.</td></tr>
+    <tr><td>a name</td><td>The part right after the date, up to 60 characters, whatever it says ("Read: Chapter 3" is a name). Leave it empty (<code>2026-10-05 | | tag:…</code>) and it's named from what it opens.</td></tr>
+    <tr><td><code>tag:FULL::TAG::PATH</code></td><td>Every card under that tag of the deck. Several, comma-separated: <code>tag:A, tag:B</code>.</td></tr>
+    <tr><td><code>deck:FULL::DECK::PATH</code></td><td>Every card in that subdeck.</td></tr>
+    <tr><td><code>tag:SLG 12</code></td><td>One of the plan's own tags, by its name (no <code>::</code>).</td></tr>
+    <tr><td><code>tag:PATH in SLG 12</code></td><td>Only the cards of that tag that the plan's tag SLG 12 holds: a video or a chapter, kept to an objective. Shows as "Cephalosporins · SLG 12".</td></tr>
+    <tr><td><code>search:…</code></td><td>An Anki search, as its own part: <code>search:tag:A -tag:B</code>. Up to 10 a date (with the <code>in</code> ones), each under 500 characters.</td></tr>
+    <tr><td><code>notes:ID ID</code></td><td>Exact notes, every card of each. IDs are the <code>#guid</code> column of Tools › Due Crew › Export cards for my AI, separated by spaces.</td></tr>
+    <tr><td><code>cards:ID:2 ID:1</code></td><td>Exact cards: card N of each note (1 is the first; for a cloze, its number). The export's <code>#cards</code> column lists each note's.</td></tr>
+    <tr><td><code>nids:</code>, <code>cids:</code></td><td>Anki's own numbers, from one copy of the deck. They work for others only once the author's Anki has turned them into notes (after you save and open Anki).</td></tr>
+    <tr><td><code>12 single cards</code></td><td>Written by the plan's own text: keeps the date's single cards as they are.</td></tr>
+    <tr><td><code>due 2026-10-09</code></td><td>By when it's meant to be done (otherwise: before the next date opens).</td></tr>
+    <tr><td><code>even</code></td><td>Spread its cards evenly from its day to its due date.</td></tr>
+    <tr><td><code>for Heme quiz</code></td><td>The event it preps for, named as on its event line. On a date after that event it reads &ldquo;after Heme quiz&rdquo;: review after it.</td></tr>
+    <tr><td><code>watch:</code>, <code>read:</code>, <code>do:</code></td><td>Things cards can't measure, ticked by hand (up to 8): <code>read: chapter 6</code>. A link may follow the words.</td></tr>
+  </table></div>
+  <pre>2026-10-07 | Lecture 12 cards | notes:Ab3$kL9qZ1 p&amp;x8Hk!eQ2 | cards:Zq7!mN2pLk:2 | for Heme quiz
+2026-10-08 | Cephalosporins | tag:#Videos::Pharm::Cephalosporins in SLG 12, tag:#Videos::Pharm::Penicillins
+week 4 | Chapter 4 | deck:Spanish 1::Chapter 4 | due 2026-10-30 | even</pre>
+
+  <h2 id="events">Events</h2>
+  <p>Named days with no cards: a lecture, a quiz, the exam. A date that preps for one ends with <code>| for</code> and its name.</p>
+  <pre>2026-10-09 | event | Heme quiz</pre>
+
+  <h2 id="tags">The plan's own tags</h2>
+  <p>A plan can put its own tags on everyone's notes, named as your course names things (SLG 12, Unit 3, Lecture 14). Each becomes <code>DueCrew::&lt;the plan&gt;::&lt;name&gt;</code> in Anki; the plan's Text tab and its tagging prompt show the real <code>&lt;the plan&gt;</code> part.</p>
+  <pre>tag | SLG 12 | notes:Ab3$kL9qZ1 p&amp;x8Hk!eQ2 | cards:Zq7!mN2pLk:2
+tag | SLG 14 | tag:#Book::Pharm::Ch07
+tag | Unit 3 | deck:Spanish 1::Unit 3 | search:tag:Vocab -tag:Review</pre>
+  <ul>
+    <li>A name is up to 40 characters; spaces become <code>_</code> in Anki. "SLG 12" and "slg_12" are the same tag.</li>
+    <li>A tag holds exact notes (<code>notes:</code>), single cards (<code>cards:</code>; Anki tags their whole note, Due Crew uses just those cards), and the cards of a deck tag, a subdeck or a search, found in each person's copy.</li>
+    <li>Up to 100 tags a plan, 5,000 notes and 5,000 single cards a tag. A second line with the same name adds to the tag.</li>
+  </ul>
+
+  <h2 id="remarks">Notes for followers</h2>
+  <p>A note on a video, a chapter or one card, in your own words. Each follower's Anki shows it: a card's on the review screen when that card comes up, a tag's with that tag (and the tags under it) in You &rsaquo; Plans and Due.</p>
+  <pre>note | tag:#Videos::Pharm::Cephalosporins | Skip the last two minutes; it's not on our exam.
+note | tag:SLG 12 | Lecture 12's slides cover this better than the book.
+note | card:Zq7!mN2pLk:2 | This one is on the quiz.</pre>
+  <ul>
+    <li><code>tag:</code> takes a deck tag's full path, or one of the plan's own tags by its name. <code>card:ID:N</code> is card N of that note (1 is the first), as <code>cards:</code> writes it.</li>
+    <li>One line, up to 280 characters. One note a tag or a card: a second line for the same one replaces it. Up to 300 a plan.</li>
+    <li>Never card text: a note is yours to write, and Due Crew never sees a card.</li>
+    <li>On a plan's page, a tag's note shows as &#9432; on its dates; Note on a tag in a day writes one. A card's note is written in Anki: Browse, right-click the card &rsaquo; Due Crew: note for the plan's followers&hellip;</li>
+  </ul>
+
+  <h2 id="notes">Notes to yourself</h2>
+  <ul>
+    <li><code># …</code>: shown with the plan as the AI's notes; never imported.</li>
+    <li><code># Pick in Anki for 2026-10-06: the iron-study cards from Lecture 17</code>: shown under "To pick in Anki", for cards nobody gave IDs for.</li>
+  </ul>
+
+  <h2 id="rules">Rules</h2>
+  <ul>
+    <li>Copy tags, subdecks and IDs exactly; never invent one. A tag or subdeck your deck doesn't have is named before anything is saved.</li>
+    <li>A search never uses <code>deck:current</code>, <code>is:due</code>, <code>is:new</code>, <code>is:learn</code>, <code>is:review</code>, <code>is:suspended</code>, <code>is:buried</code>, <code>rated:</code>, <code>prop:</code>, <code>introduced:</code>, <code>added:</code>, <code>edited:</code>, <code>resched:</code>, <code>flag:</code>, <code>nid:</code> or <code>cid:</code>: they find different cards for each person.</li>
+    <li>A date holds up to 10 searches (with the <code>in</code> ones), 50 tags, 50 subdecks and 5,000 IDs of each kind. A plan holds 200 dates, 200 events and 50,000 single cards.</li>
+    <li>Card text never goes in a plan: only tags, names and IDs. Each person's Anki finds the cards in its own copy.</li>
+  </ul>
+
+  <h2 id="where">Where it goes</h2>
+  <ul>
+    <li><b>Add dates</b> adds: a line with the same day and name as a date already there adds to it. Tag lines add to the plan's tags. A note line adds a note, or rewrites the one on that tag or card.</li>
+    <li><b>Edit the whole plan</b> replaces the plan's dates, events, tags and notes with the text. A line with a date's day and name is that date; otherwise the one date with that name on another day is that date moved, and the one date that day with the same tags is that date renamed, so followers keep their progress on it. A tag line with a new name that holds just what one of the plan's tags holds is that tag renamed: the dates using it follow. A tag the text leaves out goes; the preview names the dates still using it, and offers to take it off them too or keep it. What a date already opened stays open.</li>
+    <li>Edit the whole plan doesn't carry the weekly lines, review days, catch-up weeks or the pace: those stay as they are.</li>
+    <li>Read it shows what the text does before anything changes; Save keeps it.</li>
+  </ul>
+  <p class="muted">Drafting with an AI? A plan's Text tab has a prompt to copy (with your deck's tags and the plan so far) and, for your course's objectives, a tagging prompt. Tools › Due Crew › Export cards for my AI gives it your cards, on your computer only.</p>
+
+  <footer>
+    <b>due crew</b> &middot; free for Anki &middot;
+    <a href="/classes">For classes</a> &middot;
+    <a href="/library">Library</a> &middot;
+    <a href="https://ankiweb.net/shared/info/2035408484">AnkiWeb</a> &middot;
+    <a href="/privacy">Privacy</a> &middot;
+    <a href="https://github.com/sammyc2472/due-crew">Source</a>
+  </footer>
+</main>
+</body>
+</html>

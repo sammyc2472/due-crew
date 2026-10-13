@@ -251,6 +251,7 @@ class ConnectTimeout(RequestException):
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 EMOJI_RE = re.compile(r"[^A-Za-z0-9 ]+")
 SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ACCENTS = ("green", "blue", "purple", "teal", "amber", "rose")  # auth.ts ACCENTS
 
 
 def _u16(s):
@@ -295,14 +296,64 @@ def _todo_line(x, every=False):
     return one
 
 
+def _one_line(v, n):
+    """validate.ts oneLine: one printable line, at most n."""
+    t = " ".join(re.split(r"[" + re.escape(_JS_SPACE) + r"]+", v)).strip(_JS_SPACE)
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", t)[:n]
+
+
+def _path(v):
+    """plans.ts path: a tag's or subdeck's path, 1-200, no control characters."""
+    return isinstance(v, str) and 0 < _js_len(v) <= 200 and not re.search(r"[\x00-\x1f]", v)
+
+
+def _card_ref(v):
+    """plans.ts cardRef: [guid, card number]."""
+    return (isinstance(v, (list, tuple)) and len(v) == 2 and isinstance(v[0], str) and 0 < _js_len(v[0]) <= 40
+            and _is_int(v[1], 0, 1000))
+
+
+# 3.8.1 (plans.ts): where to get the deck, the authors' notes (remarks), a date's picks named (pl)
+DECK_URL_RE = re.compile(r"https://[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*")  # plans.ts DECK_URL: printable ASCII, no space, quotes or <>
+UNIT_ID_RE = re.compile(r"[a-z0-9]{1,12}")
+
+
+def _remark(r):
+    """plans.ts remark: {id, tag | card, text}, exactly one of tag or card, one line of 1-280."""
+    if not isinstance(r, dict) or not set(r) <= {"id", "tag", "card", "text"}:
+        raise Bad(400, "plan")
+    if not isinstance(r.get("id"), str) or not UNIT_ID_RE.fullmatch(r["id"]):
+        raise Bad(400, "plan")
+    tag, card = r.get("tag") is not None, r.get("card") is not None
+    if tag == card or (tag and not _path(r["tag"])) or (card and not _card_ref(r["card"])):
+        raise Bad(400, "plan")
+    text = r.get("text")
+    if not isinstance(text, str) or not 0 < _js_len(text) <= 280 or not _one_line(text, 280):
+        raise Bad(400, "plan")
+    return dict({"id": r["id"]}, **({"tag": r["tag"]} if tag else {"card": [r["card"][0], r["card"][1]]}), text=_one_line(text, 280))
+
+
+def _labels(v):
+    """plans.ts labels: [[tag path, n]], at most 3; None when it isn't that."""
+    if not isinstance(v, list) or len(v) > 3 or not all(
+            isinstance(x, list) and len(x) == 2 and _path(x[0]) and _is_int(x[1], 0, 1_000_000) for x in v):
+        return None
+    return [[t, n] for t, n in v]
+
+
+def _picks(u):
+    """A date's picked cards: single cards, notes, pasted ids."""
+    return [u.get("cards") or [], u.get("notes") or [], u.get("nids") or [], u.get("cids") or []]
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class Bad(Exception):
-    def __init__(self, status, code):
+    def __init__(self, status, code, extra=None):
         super().__init__(code)
-        self.status, self.code = status, code
+        self.status, self.code, self.extra = status, code, extra or {}  # extra: as the Worker's HttpError
 
 
 class FakeWorker:
@@ -331,11 +382,12 @@ class FakeWorker:
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
         self.new_codes = {}  # uid -> POST /codes today (20 a day)
-        self.reports = []    # what POST /reports mailed (the Worker stores none)
+        self.reports = []    # what POST /reports kept (3.8.1: the Worker keeps them for the admin too)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
-        self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version}
+        self.plans = {}      # id -> {code, owner, name, line, audience, squad, doc, version,
+        #                      editors: {uid} (said yes), invited: {uid: n} (3.8.1, waiting), handover: uid or None}
         self.plan_posts = {} # 3.7.3: plan id -> [{id, name, text, withSave, at}]
         self.team = {}       # 3.7.3: (plan, uid) -> {joined, days: [label], play}
         self.team_asks = []  # 3.7.3: [{id, plan, uid, parent, text, guid, ord, topic, helped, at, act}]
@@ -404,7 +456,7 @@ class FakeWorker:
             status, body = self._route(method, route, dict(p.split("=", 1) for p in query.split("&") if "=" in p),
                                        auth, json_body)
         except Bad as e:
-            status, body = e.status, {"error": e.code}
+            status, body = e.status, {"error": e.code, **e.extra}
         self.log.append((method, route, status))
         return FakeResponse(status, body)
 
@@ -427,7 +479,8 @@ class FakeWorker:
             return self._auth(method, parts[1:], auth, body or {})
         me = self._me(auth)
         if m == ("GET", "board"):
-            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"), query.get("pv"))
+            return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"), query.get("pv"),
+                                    keep=query.get("keep") == "1", same=query.get("same") == "1")
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -442,8 +495,7 @@ class FakeWorker:
                 raise Bad(404, "no_settings")
             return 200, dict(self.settings[me])
         if m == ("PUT", "settings"):
-            self._put_settings(me, body)
-            return 200, {"ok": True}
+            return self._put_settings(me, body, conditional=True)
         if m == ("GET", "users") and len(parts) == 2:
             u = self.users.get(parts[1])
             if not u or not self._connected(me, parts[1]):  # 3.7.1, D5
@@ -500,6 +552,7 @@ class FakeWorker:
             if doc:
                 doc["settings"] = dict(doc["settings"], due_items=[], due_ticks={})
                 doc["at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                doc["rev"] = doc.get("rev", 0) + 1  # 3.8.1
             return 200, {"ok": True}
         if m == ("GET", "log"):
             return 200, {"days": dict(self.logs.get(me) or {})}
@@ -558,11 +611,30 @@ class FakeWorker:
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
     def _plan_stamp(self, me):
-        """3.7.3, as planStamp: my follows as they stand, their versions and newest posts."""
+        """3.7.3, as planStamp: my follows I can see as they stand, their
+        versions and newest posts; and (3.8.1's review) the plans I write or
+        co-author, and the plans offered to my squads, by version."""
         rows = [[pid, self.plans[pid]["version"], json.dumps({k: v for k, v in f.items() if k != "progress"}, sort_keys=True),
                  max([x["id"] for x in self.plan_posts.get(pid, [])], default=0)]
-                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans]
-        return hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:16]
+                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans and self._sees(self.plans[pid], me)]
+        authored = [[pid, p["version"]] for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
+        offers = [[pid, p["version"], p["squad"]] for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]
+        invites = self._plan_invites(me)  # 3.8.1: with none, the stamp is as before
+        return hashlib.sha1(json.dumps([rows, authored, offers] + ([invites] if invites else [])).encode()).hexdigest()[:16]
+
+    def _plan_invites(self, me):
+        """3.8.1, plans.ts planInvites: plans offered to me (I co-write them),
+        then invites to co-write, newest first; at most 10. Who asked: the
+        plan's owner, by name and emoji only."""
+        def by(p):
+            u = self.users.get(p["owner"]) or {}
+            return {"name": u.get("name") or "?", "emoji": u.get("emoji") or ""}
+        offers = [(pid, q) for pid, q in sorted(self.plans.items())
+                  if q.get("handover") == me and q["owner"] and me in (q.get("editors") or ())]
+        asked = sorted(((q["invited"][me], pid, q) for pid, q in self.plans.items() if me in (q.get("invited") or {}) and q["owner"]),
+                       key=lambda x: (-x[0], x[1]))
+        return ([{"id": pid, "name": q["name"], "kind": "owner", "by": by(q)} for pid, q in offers]
+                + [{"id": pid, "name": q["name"], "kind": "coauthor", "by": by(q)} for _at, pid, q in asked])[:10]
 
     def add_post(self, pid, uid, text):
         """3.7.3, setup helper: an author's post to followers."""
@@ -570,7 +642,7 @@ class FakeWorker:
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
                                                     "text": text, "withSave": False, "at": int(time.time())})
 
-    def _board(self, me, with_decks, wk=None, got=None, pv=None):
+    def _board(self, me, with_decks, wk=None, got=None, pv=None, keep=False, same=False):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
             for key in [k for k, c in self.cheers.items() if k[0] == me and c["n"] <= int(got)]:
@@ -583,8 +655,13 @@ class FakeWorker:
             f = self.users[fid]
             if self.mutual(me, fid):
                 fw, fat = self._week_of(fid)
-                friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
-                                "mutual": True, "week": fw, "updatedAt": fat})
+                row = {"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
+                       "mutual": True, "week": fw, "updatedAt": fat}
+                # 3.8.1: and their accent, from their settings, when it's one of ours (board.ts)
+                accent = ((self.settings.get(fid) or {}).get("settings") or {}).get("accent")
+                if isinstance(accent, str) and accent in ACCENTS:
+                    row["accent"] = accent
+                friends.append(row)
             else:
                 friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
                                 "mutual": False})
@@ -592,7 +669,7 @@ class FakeWorker:
         for (to, frm), c in sorted(self.cheers.items()):
             if to != me:
                 continue
-            if self.mutual(me, frm):
+            if self.mutual(me, frm) and not self._muted_by(me, frm):  # 3.8.1: muted, dropped as read
                 cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
                                "note": c.get("note") or "", "luck": bool(c.get("luck")),
                                "guid": c.get("guid") or "", "at": c["at"]})
@@ -605,6 +682,7 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        stamp = None
         if pv is not None:  # 3.7.3: the plans again, when their stamp moved
             stamp = self._plan_stamp(me)
             if not with_decks and pv != stamp:
@@ -613,9 +691,12 @@ class FakeWorker:
         teams = self._teams_for_board(me)  # 3.7.3
         if teams:
             out["teams"] = teams
+        if keep:  # 3.8.1: the site's home lists my invites
+            out["planInvites"] = self._plan_invites(me)
         if with_decks:
             out["decks"] = self._decks_for(me)
-            out.update(self._plans_for_board(me))  # 3.1
+            # 3.1; 3.8.1: same=1 and an unmoved stamp: each plan without its doc
+            out.update(self._plans_for_board(me, same and stamp is not None and pv == stamp))
             # 3.6: the week's bingo card, to anyone in a squad (3.7.3: or on a plan's team)
             if wk in self.bingo_cards and (any(u == me for (_s, u) in self.members) or any(u == me for (_p, u) in self.team)):
                 out["bingo"] = self.bingo_cards[wk]
@@ -632,10 +713,16 @@ class FakeWorker:
     def _decks_for(self, me):
         return {u: d for u, d in self.decks.items() if u == me or self.mutual(me, u)}
 
+    def _muted_by(self, owner, other):
+        """social.ts mutedBy (3.8.1): `other` is in `owner`'s settings' `muted`."""
+        muted = ((self.settings.get(owner) or {}).get("settings") or {}).get("muted")
+        return isinstance(muted, list) and other in muted
+
     def _knocks_of(self, me):
         return [{"from": frm, "name": self.users[frm]["name"] or "?", "emoji": self.users[frm]["emoji"] or "",
                  "squad": k.get("squad") or ""}
-                for (to, frm), k in sorted(self.knocks.items()) if to == me and frm in self.users]
+                for (to, frm), k in sorted(self.knocks.items())
+                if to == me and frm in self.users and not self._muted_by(me, frm)]
 
     WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap"}
     DAY_KEYS = {"studied", "reviews", "studyTimeMs", "streak", "newCards", "accuracy", "status"}
@@ -861,11 +948,26 @@ class FakeWorker:
                 out[g] = {"knows": knows, "tips": tips}
         return out
 
-    def _put_settings(self, me, doc):
-        if not isinstance(doc, dict) or set(doc) != {"v", "at", "settings"} or not isinstance(doc["settings"], dict):
+    def _put_settings(self, me, doc, conditional=False):
+        """board.ts putSettings. 3.8.1 (the audit, #2): each save that writes moves
+        `rev`; a PUT naming the rev it started from (`base`) is turned away with
+        the current doc (409 conflict) when someone saved since. A sync's
+        settings, and a PUT without base, win as before."""
+        keys = {"v", "at", "settings"} | ({"base"} if conditional else set())
+        if not isinstance(doc, dict) or not {"v", "at", "settings"} <= set(doc) <= keys or not isinstance(doc["settings"], dict):
             raise Bad(400, "bad_settings")
-        self.settings[me] = {"v": doc["v"], "at": doc["at"], "settings": doc["settings"]}
-        self._count("settings")
+        base = doc.get("base")
+        if "base" in doc and (not isinstance(base, int) or isinstance(base, bool) or base < 0):
+            raise Bad(400, "bad_settings")
+        have = self.settings.get(me)
+        same = have and (have["v"], have["at"], have["settings"]) == (doc["v"], doc["at"], doc["settings"])
+        if have and not same and base is not None and have.get("rev", 0) != base:
+            raise Bad(409, "conflict", {**json.loads(json.dumps(have)), "rev": have.get("rev", 0)})
+        if not same:
+            rev = (have or {}).get("rev", 0) + 1
+            self.settings[me] = {"v": doc["v"], "at": doc["at"], "settings": doc["settings"], "rev": rev}
+            self._count("settings")
+        return 200, {"ok": True, "rev": self.settings[me].get("rev", 0)}
 
     # -- people ------------------------------------------------------------
     def _friends(self, method, me, rest, body):
@@ -920,7 +1022,7 @@ class FakeWorker:
                 raise Bad(409, "already")
             self.friends.add((me, owner))
             mutual = self.mutual(me, owner)
-            if not mutual:
+            if not mutual and not self._muted_by(owner, me):
                 self.knocks[(owner, me)] = {"squad": "", "at": _now()}
             o = self.users[owner]
             return 200, {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or "",
@@ -954,7 +1056,7 @@ class FakeWorker:
             # used: as their friend code (add, then their Add back)
             self.friends.add((me, owner))
             mutual = self.mutual(me, owner)
-            if not mutual:
+            if not mutual and not self._muted_by(owner, me):
                 self.knocks[(owner, me)] = {"squad": "", "at": _now()}
             return 200, {**info, "mutual": mutual, "knocked": not mutual}
         raise Bad(405, "method")
@@ -970,6 +1072,8 @@ class FakeWorker:
             raise Bad(400, "bad_guid")
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
+        if self._muted_by(to, me):  # 3.8.1: it goes nowhere, and reads as sent
+            return 200, {"ok": True}
         if not body.get("guid"):  # 3.7.1: a cheer received counts on my year card, a sender once a day
             day = datetime.date.today().isoformat()
             seen = self.__dict__.setdefault("cheer_days", set())
@@ -1021,7 +1125,7 @@ class FakeWorker:
             raise Bad(404, "no_user")
         if sum(1 for r in self.reports if r["reporter"] == me) >= 10:
             raise Bad(429, "slow_down")
-        # the Worker stores nothing and mails this; the fake keeps the mail
+        # the Worker keeps it for the admin (3.8.1) and mails it when REPORT_TO is set
         u = self.users[uid]
         c = self.cheers.get((me, uid))
         self.reports.append({"reporter": me, "uid": uid, "name": u["name"] or "?", "emoji": u["emoji"] or "",
@@ -1042,6 +1146,17 @@ class FakeWorker:
             sid = body["squad"]
             if to == me or (sid, me) not in self.members or (sid, to) not in self.members:
                 raise Bad(403, "no_squad_in_common")
+            # 3.8.1: 60 an hour a sender; never from someone muted; one a day a pair
+            sent = self.__dict__.setdefault("knocks_sent", {})
+            sent[me] = sent.get(me, 0) + 1
+            if sent[me] > 60:
+                raise Bad(429, "slow_down")
+            if self._muted_by(to, me):
+                return 200, {"ok": True}
+            pairs = self.__dict__.setdefault("knock_pairs", set())
+            if (me, to, datetime.date.today().isoformat()) in pairs:
+                return 200, {"ok": True}
+            pairs.add((me, to, datetime.date.today().isoformat()))
             self.knocks[(to, me)] = {"squad": sid, "at": _now()}
             return 200, {"ok": True}
         raise Bad(405, "method")
@@ -1163,8 +1278,9 @@ class FakeWorker:
         raise Bad(405, "method")
 
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
-    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"}
+    UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut", "pl"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
+    FOLLOWS_MAX = 20
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
         """Setup helper: a plan as the builder saved it. (id, code)."""
@@ -1175,7 +1291,7 @@ class FakeWorker:
         return pid, code
 
     def edit_plan(self, pid, units):
-        """The author saves new dates on the site: version + 1."""
+        """The author saves new dates on the site: version + 1 (plans.ts put, keepIdr)."""
         p = self.plans[pid]
         old = {u["id"]: u for u in p["doc"]["units"]}
         doc = self._plan_doc(dict(p["doc"], units=units))
@@ -1183,13 +1299,48 @@ class FakeWorker:
             o = old.get(u["id"]) or {}
             u.pop("idr", None)
             u.pop("pn", None)
+            u.pop("ids", None)
             if o.get("idr") and o.get("nids") == u.get("nids") and o.get("cids") == u.get("cids"):
                 u["idr"] = o["idr"]
             picks = lambda x: [x.get(k) or ([] if k != "opens" else None) for k in ("opens", "tags", "decks", "search", "nids", "cids", "notes")]
             if o.get("pn") and picks(o) == picks(u):
                 u["pn"] = o["pn"]
+            # 3.3, C5: a date's note ids, as stored, while its tags, subdecks and cuts are what they came from
+            came = lambda x: [x.get("tags") or [], x.get("decks") or [], [[c["tag"], c["in"]] for c in x.get("cut") or []]]
+            if o.get("ids") and came(o) == came(u):
+                u["ids"] = o["ids"]
+            u.pop("pl", None)  # 3.8.1: what its picks are, while they're the same picks
+            if o.get("pl") and _picks(o) == _picks(u):
+                u["pl"] = o["pl"]
         p["doc"] = doc
         p["version"] += 1
+
+    # 3.8.1's review: who sees which plan, as plans.ts SEES, authorOnly and forBoard's offers
+    def _sees(self, p, me):
+        """A plan I follow that I can see: any but a squad's, my own, or one of a squad I'm in."""
+        return p["audience"] != "squad" or p["owner"] == me or (p["squad"], me) in self.members
+
+    def _writes(self, p, me):
+        """Its owner or a co-author."""
+        return p["owner"] == me or me in (p.get("editors") or ())
+
+    def _offered(self, pid, p, me):
+        """Offered to a squad I'm in, not mine, not followed yet."""
+        return bool(p["squad"]) and (p["squad"], me) in self.members and p["owner"] != me and (pid, me) not in self.follows
+
+    def _totals(self, pid):
+        """A plan's totals, as plans.ts totals: how many follow, and per date how
+        many on its team have it done. The Worker keeps them on the plan's row
+        and counts again at most hourly; the fake counts them live every time
+        (what a client sees is the same, only fresher)."""
+        rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
+        done = {}
+        for g in rows:
+            if g["share"] and g["progress"]:
+                for unit, (_o, seen, total) in json.loads(g["progress"]).items():
+                    if total > 0 and seen >= total:
+                        done[unit] = done.get(unit, 0) + 1
+        return len(rows), done
 
     @staticmethod
     def _tag_part(name):
@@ -1207,6 +1358,13 @@ class FakeWorker:
         s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
         return re.sub(r"[_-]+$", "", s[:60]) or "plan"
 
+    @staticmethod
+    def _root_tries(want, pid):
+        """plans.ts rootTries: the one asked for, _2 to _50, then one ending in
+        the plan's own id, and the id alone; each fits 60."""
+        cut = lambda sfx: (re.sub(r"[_-]+$", "", want[:60 - len(sfx)]) or "plan") + sfx
+        return [cut("")] + [cut(f"_{i}") for i in range(2, 51)] + [cut(f"_{pid}"), pid]
+
     def _plan_tags(self, v, doc, picks):
         """3.8.0, plans.ts planTag and planDoc's tags: {id, name, notes?, tags?,
         decks?, search?, n?}, unique by their Anki name, under `tagroot`."""
@@ -1216,7 +1374,7 @@ class FakeWorker:
                 raise Bad(400, "plan")
             out = []
             for t in tags:
-                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "tags", "decks", "search", "n"}
+                if (not isinstance(t, dict) or not set(t) <= {"id", "name", "notes", "cards", "tags", "decks", "search", "n"}
                         or not self.UNIT_ID.fullmatch(str(t.get("id"))) or not isinstance(t.get("name"), str)
                         or not t["name"].strip() or len(t["name"]) > 40):
                     raise Bad(400, "plan")
@@ -1232,7 +1390,13 @@ class FakeWorker:
                     raise Bad(400, "plan")
                 if notes:
                     nt["notes"] = list(dict.fromkeys(notes))
-                if not any(k in nt for k in ("tags", "decks", "search", "notes")):
+                cards = t.get("cards") or []  # 3.8.1: single cards, guid + card number
+                if not isinstance(cards, list) or len(cards) > 5000 or not all(
+                        isinstance(c, (list, tuple)) and len(c) == 2 and isinstance(c[0], str) and c[0] and _is_int(c[1], 0, 1000) for c in cards):
+                    raise Bad(400, "plan")
+                if cards:
+                    nt["cards"] = [list(c) for c in dict.fromkeys((c[0], c[1]) for c in cards)]
+                if not any(k in nt for k in ("tags", "decks", "search", "notes", "cards")):
                     raise Bad(400, "plan")
                 if t.get("n") is not None:
                     if not _is_int(t["n"], 0, 1_000_000):
@@ -1246,7 +1410,7 @@ class FakeWorker:
                 if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
                     raise Bad(400, "plan")
                 doc["tagroot"], doc["tags"] = root, out
-                picks += sum(len(t.get("notes") or []) for t in out)
+                picks += sum(len(t.get("notes") or []) + len(t.get("cards") or []) for t in out)
         if "tags" not in doc and v.get("tagroot") is not None:
             root = v["tagroot"]
             if not isinstance(root, str) or not 0 < len(root) <= 60 or self._tag_part(root) != root:
@@ -1257,7 +1421,7 @@ class FakeWorker:
 
     def _plan_doc(self, v):
         if not isinstance(v, dict) or not set(v) <= {"deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every",
-                                                      "tags", "tagroot"}:
+                                                      "tags", "tagroot", "deckUrl", "remarks"}:
             raise Bad(400, "plan")
         units = v.get("units")
         if not isinstance(v.get("deck"), str) or not v["deck"] or not isinstance(units, list) or len(units) > 200:
@@ -1292,6 +1456,19 @@ class FakeWorker:
                 nu["search"] = list(dict.fromkeys(u["search"]))
             if u.get("sn"):
                 nu["sn"] = dict(u["sn"])
+            if u.get("cut") is not None:  # 3.8.1: a tag kept to a plan tag's cards; its search for older add-ons
+                cut, seen = [], set()
+                if not isinstance(u["cut"], list) or len(u["cut"]) > 10:
+                    raise Bad(400, "plan")
+                for c in u["cut"]:
+                    if (not isinstance(c, dict) or not set(c) <= {"tag", "in", "q"} or not isinstance(c.get("tag"), str) or not c["tag"]
+                            or not self.UNIT_ID.fullmatch(str(c.get("in"))) or c.get("q") not in (nu.get("search") or [])):
+                        raise Bad(400, "plan")
+                    if (c["tag"], c["in"]) not in seen:
+                        seen.add((c["tag"], c["in"]))
+                        cut.append({"tag": c["tag"], "in": c["in"], "q": c["q"]})
+                if cut:
+                    nu["cut"] = cut
             if u.get("ids"):
                 nu["ids"] = list(dict.fromkeys(u["ids"]))
             for k in ("nids", "cids"):  # E1
@@ -1322,6 +1499,12 @@ class FakeWorker:
                 if not isinstance(pn, list) or len(pn) != 3 or not all(_is_int(x, 0, 1_000_000) for x in pn):
                     raise Bad(400, "plan")
                 nu["pn"] = list(pn)
+            if u.get("pl") is not None:  # 3.8.1: what its picks are, while it has picks
+                pl = _labels(u["pl"])
+                if pl is None:
+                    raise Bad(400, "plan")
+                if pl and any(_picks(nu)):
+                    nu["pl"] = pl
             if u.get("for"):
                 nu["for"] = u["for"]  # F1
             if u.get("even"):
@@ -1343,6 +1526,18 @@ class FakeWorker:
         doc = {"deck": v["deck"], "units": out}
         self._plan_tags(v, doc, sum(len(u["cards"]) + len(u.get("notes") or []) + len(u.get("nids") or []) + len(u.get("cids") or [])
                                     for u in out))
+        ids = {t["id"] for t in doc.get("tags") or []}
+        for u in out:  # 3.8.1: a cut whose plan tag went is its whole tag again, its search with it
+            if not u.get("cut"):
+                continue
+            for c in [c for c in u["cut"] if c["in"] not in ids]:
+                u["tags"] = list(dict.fromkeys(u["tags"] + [c["tag"]]))
+                u["search"] = [q for q in u.get("search") or [] if q != c["q"]]
+                (u.get("sn") or {}).pop(c["q"], None)
+            u["cut"] = [c for c in u["cut"] if c["in"] in ids]
+            for k in ("cut", "search", "sn"):
+                if k in u and not u[k]:
+                    del u[k]
         if v.get("exam"):
             doc["exam"] = v["exam"]
         evs = v.get("events") or []  # F1
@@ -1357,6 +1552,18 @@ class FakeWorker:
                 del u["for"]
         if v.get("end"):
             doc["end"] = v["end"]
+        if v.get("deckUrl") not in (None, ""):  # 3.8.1: where to get the deck
+            if not isinstance(v["deckUrl"], str) or _js_len(v["deckUrl"]) > 300 or not DECK_URL_RE.fullmatch(v["deckUrl"]):
+                raise Bad(400, "plan")
+            doc["deckUrl"] = v["deckUrl"]
+        if v.get("remarks") is not None:  # 3.8.1: the authors' notes on a tag or a card
+            if not isinstance(v["remarks"], list) or len(v["remarks"]) > 300:
+                raise Bad(400, "plan")
+            rs = [_remark(r) for r in v["remarks"]]
+            if len({r["id"] for r in rs}) != len(rs):
+                raise Bad(400, "plan")
+            if rs:
+                doc["remarks"] = rs
         every = v.get("every")  # 3.8.0: lines every week, on their weekdays (plans.ts todoLine)
         if every is not None:
             if not isinstance(every, list) or len(every) > 6:
@@ -1390,6 +1597,8 @@ class FakeWorker:
         """The author, a follower, or whoever may follow it."""
         if p["owner"] == me or (pid, me) in self.follows:
             return True
+        if me in (p.get("editors") or ()) or me in (p.get("invited") or {}):  # 3.8.1: an invitee may look first
+            return True
         member = bool(p["squad"]) and (p["squad"], me) in self.members
         if p["audience"] == "squad":
             return member
@@ -1398,15 +1607,27 @@ class FakeWorker:
     def _plan_view(self, pid, me):
         p = self.plans[pid]
         f = self.follows.get((pid, me))
-        out = {"id": pid, "name": p["name"], "line": p["line"], "owner": p["owner"],
+        role = ("owner" if p["owner"] == me else "editor" if me in (p.get("editors") or ())
+                else "follower" if f else "reader")  # plans.ts shape
+        out = {"id": pid, "role": role, "name": p["name"], "line": p["line"], "owner": p["owner"],
                "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?", "audience": p["audience"],
                "squad": p["squad"], "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
-               "followers": sum(1 for (pl, _u) in self.follows if pl == pid)}
+               "followers": self._totals(pid)[0]}
         if p["owner"] == me:
             out["code"] = p["code"]
         if f:
             out["following"] = {"share": f["share"], "paused": f["paused"], "sched": f.get("sched"),
                                 **({"own": f["own"]} if f.get("own") else {})}  # 3.8.0: at my own pace
+        # 3.8.1: its co-authors; its authors also see the invites (pending) and whom it's offered to
+        def ed(u):
+            x = self.users.get(u) or {}
+            return {"uid": u, "name": x.get("name") or "?", "emoji": x.get("emoji") or ""}
+        authors = role in ("owner", "editor")
+        out["editors"] = [ed(u) for u in sorted(p.get("editors") or ()) if u in self.users] + (
+            [dict(ed(u), pending=True) for u, _at in sorted((p.get("invited") or {}).items(), key=lambda x: x[1]) if u in self.users]
+            if authors else [])
+        if authors and p.get("handover"):
+            out["handover"] = p["handover"]
         return out
 
     @staticmethod
@@ -1445,8 +1666,13 @@ class FakeWorker:
                 self._count("plan_trees")
             return 200, {"ok": True}
         if rest == ["mine"] and method == "GET":
-            ids = [pid for pid, p in self.plans.items() if p["owner"] == me or (pid, me) in self.follows]
-            return 200, {"plans": [self._plan_view(pid, me) for pid in ids]}
+            # plans.ts mine: mine, co-authored, and followed while I can see them (FOLLOWED)
+            ids = [pid for pid, p in self.plans.items()
+                   if self._writes(p, me) or ((pid, me) in self.follows and self._sees(p, me))]
+            out = [self._plan_view(pid, me) for pid in ids]
+            for v in out:  # plans.ts mine: json_remove(unit, '$.ids', '$.cards'), a lean list
+                v["doc"]["units"] = [{k: x for k, x in u.items() if k not in ("ids", "cards")} for u in v["doc"].get("units") or []]
+            return 200, {"plans": out}
         if rest == ["peek"] and method == "GET":
             code = self._norm(query.get("code"))
             pid = self._by_code(code) if len(code) == 8 else None
@@ -1461,6 +1687,12 @@ class FakeWorker:
             if not pid or not self._may_read(self.plans[pid], pid, me, code):
                 raise Bad(404, "no_plan")
             old = self.follows.get((pid, me))
+            if not old:
+                # plans.ts follow: 20 that I can see (a squad's plan I left is kept, hidden), 100 kept in all
+                mine = [q for (q, u) in self.follows if u == me and q in self.plans]
+                if (sum(1 for q in mine if self._sees(self.plans[q], me)) >= self.FOLLOWS_MAX
+                        or len(mine) >= self.FOLLOWS_MAX * 5):
+                    raise Bad(409, "too_many_plans")
             sched = self._sched(body["sched"]) if "sched" in body else (old or {}).get("sched")
             if body.get("own") not in (None, "ready", "next"):  # 3.8.0: at my own pace
                 raise Bad(400, "follow")
@@ -1480,6 +1712,102 @@ class FakeWorker:
         if pid not in self.plans:
             raise Bad(404, "no_plan")
         p = self.plans[pid]
+        if rest[1:] == ["editors"] and method == "POST":  # plans.ts addEditor: 3.8.1, an invite until a yes
+            if p["owner"] != me:
+                raise Bad(403, "not_author")
+            uid = body.get("uid")
+            if not isinstance(uid, str) or not uid or uid == me:
+                raise Bad(400, "bad_editor")
+            if not self.mutual(me, uid):
+                raise Bad(403, "not_crew")
+            eds, asked = set(p.get("editors") or ()), p.setdefault("invited", {})
+            if len(eds) + len(asked) >= 10:
+                raise Bad(409, "too_many_editors")
+            if uid not in eds and uid not in asked:
+                self._invite_n = getattr(self, "_invite_n", 0) + 1
+                asked[uid] = self._invite_n
+                self._count("plan_editors")
+            return 200, self._plan_view(pid, me)
+        if len(rest) == 3 and rest[1] == "editors" and method == "DELETE":  # the owner removes or takes back; anyone leaves
+            uid = rest[2]
+            if p["owner"] != me and uid != me:
+                raise Bad(403, "not_owner")
+            p["editors"] = set(p.get("editors") or ()) - {uid}
+            (p.get("invited") or {}).pop(uid, None)
+            if p.get("handover") == uid:
+                p["handover"] = None
+            return 200, {"ok": True}
+        if rest[1:] == ["owner"] and method == "POST":  # 3.8.1: plans.ts offerPlan
+            if p["owner"] != me:
+                raise Bad(403, "not_author")
+            to = body.get("uid")
+            if set(body) != {"uid"} or (to is not None and not (isinstance(to, str) and to)):
+                raise Bad(400, "bad_owner")
+            if to is not None and to not in (p.get("editors") or ()):
+                raise Bad(400, "not_coauthor")
+            if to != p.get("handover"):
+                p["handover"] = to
+                self._count("plans")
+            return 200, self._plan_view(pid, me)
+        if rest[1:] == ["invite"] and method == "POST":  # 3.8.1: plans.ts answerInvite
+            kind = body.get("kind")  # which question it answers, as the board showed it
+            if not set(body) <= {"yes", "kind"} or not isinstance(body.get("yes"), bool) or kind not in (None, "coauthor", "owner"):
+                raise Bad(400, "bad_invite")
+            eds, asked = set(p.get("editors") or ()), p.setdefault("invited", {})
+            if kind != "coauthor" and me in eds and p.get("handover") == me and p["owner"]:
+                if body["yes"]:  # mine now; its owner a co-author; code, tag root, followers stay
+                    if sum(1 for q in self.plans.values() if q["owner"] == me) >= 50:
+                        raise Bad(409, "too_many_plans")
+                    if p.get("listed") and sum(1 for q in self.plans.values() if q["owner"] == me and q.get("listed")) >= 20:
+                        raise Bad(409, "too_many_listed")
+                    p["editors"] = (eds - {me}) | {p["owner"]}
+                    p["owner"] = me
+                    p["invited"] = {}  # the old owner's invites go with them
+                p["handover"] = None
+                self._count("plans")
+            elif kind != "owner" and me in asked:
+                del asked[me]
+                if body["yes"]:
+                    p["editors"] = eds | {me}
+                self._count("plan_editors")
+            else:
+                raise Bad(404, "no_invite")
+            return 200, self._plan_view(pid, me)
+        if rest[1:] == ["remarks"] and method == "POST":  # 3.8.1: plans.ts remarks, a note from Anki's Browse
+            if not self._writes(p, me):
+                raise Bad(403, "not_author")
+            if len(body) != 1 or next(iter(body)) not in ("add", "remove"):
+                raise Bad(400, "bad_remark")
+            doc = json.loads(json.dumps(p["doc"]))
+            rs = doc.get("remarks") or []
+            target = lambda r: ("tag", r["tag"].lower()) if "tag" in r else ("card", tuple(r["card"]))
+            if "add" in body:
+                a = body["add"]
+                if not isinstance(a, dict) or "id" in a:
+                    raise Bad(400, "bad_remark")
+                r = _remark(dict(a, id="new"))
+                had = next((x for x in rs if target(x) == target(r)), None)
+                if had:  # one note there: a second changes its text
+                    had["text"] = r["text"]
+                else:
+                    if len(rs) >= 300:
+                        raise Bad(409, "too_many_remarks")
+                    self._remark_n = getattr(self, "_remark_n", 0) + 1
+                    rs.append(dict(r, id=f"m{self._remark_n:07d}"))
+            else:
+                if not isinstance(body["remove"], str) or not UNIT_ID_RE.fullmatch(body["remove"]):
+                    raise Bad(400, "bad_remark")
+                rs = [x for x in rs if x["id"] != body["remove"]]
+            if rs:
+                doc["remarks"] = rs
+            else:
+                doc.pop("remarks", None)
+            clean = self._plan_doc(doc)
+            if clean != p["doc"]:
+                p["doc"] = clean
+                p["version"] += 1
+                self._count("plans")
+            return 200, self._plan_view(pid, me)
         if rest[1:] == ["follow"] and method == "PATCH":
             if not set(body) <= {"share", "paused", "sched", "early", "shift", "until", "since", "skipped", "moved", "own"} or (
                     body.get("own") not in (None, "ready", "next")) or (
@@ -1520,7 +1848,7 @@ class FakeWorker:
                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                          "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {})}
         if rest[1:] == ["ids"] and method == "PUT":
-            if p["owner"] != me:
+            if not self._writes(p, me):  # plans.ts authorOnly: the owner or a co-author
                 raise Bad(403, "not_author")
             doc = json.loads(json.dumps(p["doc"]))
             for uid, v in (body.get("counts") or {}).items():
@@ -1534,6 +1862,12 @@ class FakeWorker:
                     pn = v.get("#pn")  # 3.6.5, P1
                     if isinstance(pn, list) and len(pn) == 3 and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 1_000_000 for x in pn):
                         u["pn"] = list(pn)
+                    pl = _labels(v["#lbl"]) if "#lbl" in v else None  # 3.8.1: what its picks are; anything else skipped
+                    if pl is not None and any(_picks(u)):
+                        if pl:
+                            u["pl"] = pl
+                        else:
+                            u.pop("pl", None)
             for uid, (nids, cids, refs) in (body.get("refs") or {}).items():  # 3.6.5
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
                 if u and (u.get("nids") or []) == nids and (u.get("cids") or []) == cids:
@@ -1541,9 +1875,13 @@ class FakeWorker:
                         u["idr"] = [list(r) for r in refs]
                     else:
                         u.pop("idr", None)
-            for uid, (tags, decks, ids) in (body.get("units") or {}).items():
+            for uid, v in (body.get("units") or {}).items():
+                if not isinstance(v, list) or len(v) not in (3, 4):
+                    raise Bad(400, "ids")
+                tags, decks, ids = v[:3]
                 u = next((x for x in doc["units"] if x["id"] == uid), None)
-                if u and u["tags"] == tags and u["decks"] == decks:
+                cut = [[c["tag"], c["in"]] for c in (u or {}).get("cut") or []]
+                if u and u["tags"] == tags and u["decks"] == decks and (len(v) == 3 or v[3] == cut):  # 3.8.1: and its cuts
                     if ids:
                         u["ids"] = list(ids)
                     else:
@@ -1580,17 +1918,22 @@ class FakeWorker:
                 t["notes"] = notes
             else:
                 t.pop("notes", None)
+            if t.get("cards"):  # 3.8.1: a note taken off takes its single cards
+                t["cards"] = [c for c in t["cards"] if c[0] not in set(remove)]
+                if not t["cards"]:
+                    del t["cards"]
             if body.get("n") is not None:
                 t["n"] = body["n"]
-            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "tags", "decks", "search"))]
+            doc["tags"] = [x for x in tags if any(x.get(k) for k in ("notes", "cards", "tags", "decks", "search"))]
             if not doc["tags"]:
                 doc.pop("tags")
             if not doc.get("tagroot"):
-                # plans.ts rooted: a plan's root is its own (case aside), else _2, _3…
-                want = self._tag_root(p["name"])
+                # plans.ts rooted: a plan's root is its own (case aside), else the first of rootTries free
                 taken = {str(q["doc"].get("tagroot") or "").lower() for k, q in self.plans.items() if k != pid}
-                doc["tagroot"] = next(r for r in (want if i == 1 else f"{want[:60 - len(str(i)) - 1].rstrip('_-')}_{i}"
-                                                  for i in range(1, 52)) if r.lower() not in taken)
+                root = next((r for r in self._root_tries(self._tag_root(p["name"]), pid) if r.lower() not in taken), None)
+                if root is None:
+                    raise Bad(503, "try_again")
+                doc["tagroot"] = root
             clean = self._plan_doc(doc)
             if clean != p["doc"]:
                 p["doc"] = clean
@@ -1598,7 +1941,7 @@ class FakeWorker:
                 self._count("plans")
             return 200, self._plan_view(pid, me)
         if rest[1:] == ["cards"] and method == "POST":
-            if p["owner"] != me:
+            if not self._writes(p, me):  # plans.ts authorOnly: the owner or a co-author
                 raise Bad(403, "not_author")
             search = body.get("search")
             cards = [] if search else body.get("cards")
@@ -1622,6 +1965,10 @@ class FakeWorker:
                 u["search"] = list(dict.fromkeys((u.get("search") or []) + [search]))
                 u["sn"] = dict(u.get("sn") or {}, **{search: body["n"]})
             clean = self._plan_doc(doc)
+            old = {x["id"]: x for x in p["doc"]["units"]}
+            for x in clean["units"]:  # 3.8.1: picks changed, pl goes (plans.ts stalePl)
+                if x.get("pl") and (x["id"] not in old or _picks(old[x["id"]]) != _picks(x)):
+                    del x["pl"]
             if clean != p["doc"]:
                 p["doc"] = clean
                 p["version"] += 1
@@ -1784,41 +2131,35 @@ class FakeWorker:
                 return 200, {"ok": True}
         raise Bad(404, "nope")
 
-    def _plans_for_board(self, me):
-        """The plans I follow (with crew counts), and squad offers."""
+    def _plans_for_board(self, me, same=False):
+        """The plans I follow that I can see (a squad's plan only while I'm in
+        the squad), with crew counts (live here: see _totals), and squad offers.
+        same (3.8.1): the add-on has each doc as it stands, so none comes."""
         plans = []
         for (pid, uid), f in sorted(self.follows.items()):
-            if uid != me or pid not in self.plans:
+            if uid != me or pid not in self.plans or not self._sees(self.plans[pid], me):
                 continue
             p = self.plans[pid]
-            rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
-            done = {}
-            for g in rows:
-                if g["share"] and g["progress"]:
-                    for unit, (_o, seen, total) in json.loads(g["progress"]).items():
-                        if total > 0 and seen >= total:
-                            done[unit] = done.get(unit, 0) + 1
+            followers, done = self._totals(pid)
             plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
-                          "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
+                          "version": p["version"], **({"same": True} if same else {"doc": json.loads(json.dumps(p["doc"]))}),
                           "share": f["share"], **({"teamAsk": True} if f.get("teamAsk") else {}),
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
-                          "followers": len(rows), "crewDone": done,
+                          "followers": followers, "crewDone": done,
                           "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
-                  for pid, p in sorted(self.plans.items())
-                  if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
-                  and (pid, me) not in self.follows]
+                  for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]
         authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
-                 **{k: u[k] for k in ("nids", "cids", "notes", "opens") if u.get(k)})
+                 **{k: u[k] for k in ("nids", "cids", "notes", "opens", "cut", "cards") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
-            or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags") if p["doc"].get(k)})}  # 3.8.0: its own tags
-            for pid, p in sorted(self.plans.items()) if p["owner"] == me or me in (p.get("editors") or ())]
-        return {"plans": plans, "planOffers": offers, "authored": authored}
+            or u.get("notes") or u.get("cards")]}, **{k: p["doc"][k] for k in ("tagroot", "tags", "remarks") if p["doc"].get(k)})}  # 3.8.0: its own tags; 3.8.1: its notes
+            for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
+        return {"plans": plans, "planOffers": offers, "authored": authored, "planInvites": self._plan_invites(me)}
 
     def _delete_account(self, me):
         email = self.users[me]["email"]
@@ -1831,6 +2172,12 @@ class FakeWorker:
                     del self.squads[sid]
         self.members = {k: v for k, v in self.members.items() if k[1] != me}
         mine = {pid for pid, p in self.plans.items() if p["owner"] == me}
+        for p in self.plans.values():  # 3.8.1
+            if p.get("editors"):
+                p["editors"] = set(p["editors"]) - {me}
+            (p.get("invited") or {}).pop(me, None)
+            if p.get("handover") == me:
+                p["handover"] = None
         self.follows = {k: v for k, v in self.follows.items() if k[1] != me and k[0] not in mine}
         self.plans = {pid: p for pid, p in self.plans.items() if pid not in mine}
         self.knows = {k for k in self.knows if k[0] != me}

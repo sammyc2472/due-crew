@@ -126,7 +126,7 @@ for pid, code, who, name, line, deck, unit_list in [
     out.append("INSERT INTO plans (id, code, owner, name, line, audience, squad, doc, version, created_at, updated_at, listed, listed_at, lib) VALUES "
                f"({q(pid)}, {q(code)}, {q(who)}, {q(name)}, {q(line)}, 'code', NULL, {q(json.dumps(ud))}, 1, {now}, {now}, 1, {now - (7200 if who == 'nia' else 60)}, {q(lib(ud))});")
 # 3.3: Maya co-authors Dre's plan; notes on a day; Maya's plan has a note from Dre
-out.append(f"INSERT INTO plan_editors (plan, uid, at) VALUES ('stepplanpreview1', 'maya', {now});")
+out.append(f"INSERT INTO plan_editors (plan, uid, at, accepted_at) VALUES ('stepplanpreview1', 'maya', {now}, {now});")  # 3.8.1: she said yes
 out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('stepplanpreview1', 'nia', {q(d(2))}, 'Lab day, keep it light?', {now});")
 out.append(f"INSERT INTO plan_notes (plan, uid, day, text, at) VALUES ('mayaplanpreview1', 'maya', {q(wk(0))}, 'Big one today, go early', {now});")
 out.append(f"INSERT INTO plan_log (plan, version, uid, at, summary, prev) VALUES ('stepplanpreview1', 3, 'maya', {now - 600}, 'moved Renal pharm to Mon', NULL);")

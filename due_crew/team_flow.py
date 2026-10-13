@@ -828,12 +828,49 @@ def _know(col, deck, cutoff):
             for c, e in col.db.all(f"SELECT cid, ease FROM revlog WHERE id IN ({ids})")}, "right"
 
 
+def _tag_plans(col, did):
+    """3.8.1: [(plan id, name, doc, swap)] for the plans on this deck with
+    their own tags: the ones I follow on it, then the ones I write on a deck
+    of its name (my Anki carries their tags too)."""
+    pf = _plans_flow()
+    state = pf._state_cfg()
+    out, seen = [], set()
+    for p in pf.followed():
+        st = state.get(p["id"])
+        if st and int(st.get("deck_id") or 0) == int(did):
+            doc = pf.mine(p)["doc"]
+            if P.plan_tags(doc):
+                out.append((p["id"], str(p.get("name") or "Plan"), doc, pf._swap(st)))
+                seen.add(p["id"])
+    name = str(col.decks.name(did) or "").lower()
+    for a in client().session.get("plans_authored") or []:
+        if a.get("id") not in seen and str((a.get("doc") or {}).get("deck") or "").lower() == name and P.plan_tags(a["doc"]):
+            out.append((a["id"], str(a.get("name") or "Plan"), a["doc"], None))
+    return out
+
+
+def _plan_ways(col, did, active, know):
+    """3.8.1: the map's ways by each plan's own tags, {key: (way, tiles)}."""
+    out = {}
+    plans = _tag_plans(col, did)
+    if not plans:
+        return out
+    idx = P.DeckIndex(col, did)
+    for pid, name, doc, swap in plans:
+        held = [(t["name"], P.tag_path(doc, t), idx.plan_tag_cards(doc, t, swap)) for t in P.plan_tags(doc)]
+        tiles, none = T.plan_tiles(held, know, active)
+        key = f"~plan:{pid}"
+        out[key] = ({"key": key, "name": f"{name}'s tags"[:T.NAME_MAX], "score": 0.0, "on": False, "none": none}, tiles)
+    return out
+
+
 def _map(col, did, deck, cutoff):
     """(tiles, by, know, ways) for the topic map: the deck's cards in play
     (unsuspended, started or not) split by its own tags or its subdecks,
     the way that tells them apart best (T.subjects_by), plan or not, or
-    the way I picked (cfg ins_map_by, this computer's, per deck). Shaded by
-    what I know now of the started ones."""
+    the way I picked (cfg ins_map_by, this computer's, per deck), or
+    (3.8.1) by a plan's own tags when I pick that. Shaded by what I know
+    now of the started ones."""
     know, by = _know(col, deck, cutoff)
     rows = col.db.all(f"SELECT c.id, n.tags, CASE WHEN c.odid THEN c.odid ELSE c.did END FROM cards c "
                       f"JOIN notes n ON n.id = c.nid WHERE c.id IN ({deck}) AND c.queue != -1")
@@ -859,7 +896,15 @@ def _map(col, did, deck, cutoff):
         ways = [dict(w, on=not by_decks and w["on"]) for w in ways]
         ways.append({"key": DECKS_WAY, "name": "Subdecks", "score": dways[0]["score"], "on": by_decks})
         ways.sort(key=lambda w: -w["score"])
-    return (dtiles if by_decks else tiles), by, know, ways
+    shown = dtiles if by_decks else tiles
+    plan_ways = _plan_ways(col, did, active, know) if active else {}
+    if plan_ways:  # 3.8.1: a plan's own tags, only when picked, after the deck's own ways
+        chosen = plan_ways.get(pick) if pick else None
+        if chosen and len(chosen[1]) >= 2:
+            ways = [dict(w, on=False) for w in ways]
+            shown = chosen[1]
+        ways += [dict(w, on=bool(chosen) and w["key"] == pick and len(t) >= 2) for w, t in plan_ways.values()]
+    return shown, by, know, ways
 
 
 DECKS_WAY = "~decks"  # the map by the deck's subdecks, among its ways

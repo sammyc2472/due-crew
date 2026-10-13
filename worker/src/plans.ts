@@ -42,7 +42,10 @@ const POST_MAX = 200;        // 3.7.3: a post to followers, one line
 const POSTS_PER_DAY = 5;     // a plan's posts in a day, all its authors together
 const POSTS_KEEP = 50;       // a plan keeps its newest
 const POSTS_ON_BOARD = 3;    // the newest per plan ride an add-on's board
-export const FOLLOWS_MAX = 20;
+export const FOLLOWS_MAX = 20;  // the plans I follow that I can see (FOLLOWED): what every board carries
+// and the follows kept in all, a squad's plan I left (hidden, kept for when I'm back) among them
+const FOLLOWS_KEPT = FOLLOWS_MAX * 5;
+const TOTALS_EVERY = 3600;  // a plan's totals are worked out again when read older than this
 const TREES_MAX = 20;
 export const PLANS_MAX = 50;
 // 3.7.2: what one account's plans keep in all (docs, library cards and the
@@ -59,11 +62,21 @@ const UNIT_ID = /^[a-z0-9]{1,12}$/;
 const TAGS_MAX = 100;
 const TAG_NAME_MAX = 40;
 const TAG_ROOT_MAX = 60;
+// 3.8.1: where to get the deck (a link), and the authors' notes on a tag or
+// a card (`remarks`), riding the doc: words and a link, never card text
+const DECK_URL_MAX = 300;
+// printable ASCII only (no space, quotes or <>): no control or direction-flipping character a link could hide behind
+const DECK_URL = /^https:\/\/[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*$/;
+const REMARKS_MAX = 300;
+const REMARK_TEXT_MAX = 280;
+const LABELS_MAX = 3;  // 3.8.1: the deck tags a date's picked cards sit under (`pl`)
+const INVITES_ON_BOARD = 10;  // 3.8.1: my pending co-author invites and hand-overs a board carries
 
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
-  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null };
+  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null;
+  totals?: string | null; totals_at?: number | null; handover?: string | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -113,7 +126,7 @@ function todoLine(x: unknown, every = false): Obj {
 
 function unit(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut", "pl"].includes(k)) throw V.bad("plan");
   // "every" is taken: a plan's weekly lines are ticked as pid:every:… (3.8.0)
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id) || v.id === "every") throw V.bad("plan");
   if (!V.isDate(v.opens)) throw V.bad("plan");
@@ -157,6 +170,20 @@ function unit(v: unknown): Obj {
     if (!V.isObj(v.sn) || Object.keys(v.sn).length > SEARCH_MAX
         || !Object.entries(v.sn).every(([q, n]) => (out.search as string[] | undefined)?.includes(q) && V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
     if (Object.keys(v.sn).length) out.sn = v.sn;
+  }
+  if (v.cut !== undefined && v.cut !== null) {
+    // 3.8.1: a tag kept to the cards of one of the plan's own tags ("Cephalosporins
+    // in SLG 12"): {tag, in: that plan tag's id, q: the same as an Anki search,
+    // which stays in `search` so an add-on before 3.8.1 opens the same cards}
+    if (!Array.isArray(v.cut) || v.cut.length > SEARCH_MAX) throw V.bad("plan");
+    const qs = (out.search as string[] | undefined) || [];
+    const seen = new Set<string>();
+    const cut = v.cut.map((c) => {
+      if (!V.isObj(c) || Object.keys(c).some((k) => !["tag", "in", "q"].includes(k))) throw V.bad("plan");
+      if (!V.isStr(c.in, 12) || !UNIT_ID.test(c.in as string) || !V.isStr(c.q, SEARCH_LEN, 1) || !qs.includes(c.q as string)) throw V.bad("plan");
+      return { tag: path(c.tag), in: c.in as string, q: c.q as string };
+    }).filter((c) => !seen.has(`${c.tag}\u0000${c.in}`) && seen.add(`${c.tag}\u0000${c.in}`));
+    if (cut.length) out.cut = cut;
   }
   if (v.ids !== undefined && v.ids !== null) {
     // 3.3, C5: the note ids behind its tags and subdecks in the author's Anki
@@ -210,6 +237,39 @@ function unit(v: unknown): Obj {
     if (!Array.isArray(v.pn) || v.pn.length !== 3 || !v.pn.every((n) => V.isInt(n, 0, 1_000_000))) throw V.bad("plan");
     out.pn = v.pn;
   }
+  // 3.8.1: what its picked cards are: the deck tags they sit under in the
+  // author's copy, with how many (PUT /plans/{id}/ids "#lbl"), while it has picks
+  if (v.pl !== undefined && v.pl !== null) {
+    const pl = labels(v.pl);
+    if (!pl) throw V.bad("plan");
+    if (pl.length && hasPicks(out)) out.pl = pl;
+  }
+  return out;
+}
+
+/** 3.8.1: `pl`, [[tag path, n]], at most LABELS_MAX; null when it isn't that. */
+function labels(v: unknown): [string, number][] | null {
+  if (!Array.isArray(v) || v.length > LABELS_MAX) return null;
+  const ok = v.every((x) => Array.isArray(x) && x.length === 2 && V.isStr(x[0], PATH_MAX, 1) && !/[\u0000-\u001f]/.test(x[0])
+    && V.isInt(x[1], 0, 1_000_000));
+  return ok ? (v as [string, number][]).map(([t, n]) => [t, n]) : null;
+}
+
+/** A date's picked cards: single cards, notes, pasted ids. */
+const hasPicks = (u: Obj) => !!(((u.cards as unknown[] | undefined) || []).length || u.notes || u.nids || u.cids);
+const picksOf = (u: Obj) => [u.cards ?? [], u.notes ?? [], u.nids ?? [], u.cids ?? []];
+
+/** 3.8.1: a remark, {id, tag | card, text}: an author's note on a deck tag
+ *  (or a plan tag's DueCrew:: path) or on one card, for followers. One line. */
+function remark(v: unknown): Obj {
+  if (!V.isObj(v) || Object.keys(v).some((k) => !["id", "tag", "card", "text"].includes(k))) throw V.bad("plan");
+  if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
+  const tag = v.tag !== undefined && v.tag !== null, card = v.card !== undefined && v.card !== null;
+  if (tag === card) throw V.bad("plan");  // exactly one
+  const out: Obj = { id: v.id, ...(tag ? { tag: path(v.tag) } : { card: cardRef(v.card) }) };
+  if (!V.isStr(v.text, REMARK_TEXT_MAX, 1)) throw V.bad("plan");
+  out.text = V.oneLine(v.text, REMARK_TEXT_MAX);
+  if (!out.text) throw V.bad("plan");
   return out;
 }
 
@@ -245,30 +305,43 @@ export function reroot(doc: Obj, from: string, to: string): Obj {
     if (Array.isArray(o.tags)) o.tags = (o.tags as unknown[]).map((t) => typeof t === "string" ? tag(t) : t);
     if (Array.isArray(o.search)) o.search = (o.search as unknown[]).map((x) => typeof x === "string" ? q(x) : x);
     if (o.sn && typeof o.sn === "object") o.sn = Object.fromEntries(Object.entries(o.sn as Obj).map(([k, v]) => [q(k), v]));
+    if (Array.isArray(o.cut)) o.cut = (o.cut as Obj[]).map((c) => ({ ...c, tag: tag(String(c.tag)), q: q(String(c.q)) }));
   };
   const out = JSON.parse(JSON.stringify(doc)) as Obj;
   for (const u of (out.units as Obj[] | undefined) || []) fix(u);
   for (const t of (out.tags as Obj[] | undefined) || []) fix(t);
   const pace = out.pace as Obj | undefined;
   if (pace && Array.isArray(pace.cover)) pace.cover = (pace.cover as unknown[]).map((c) => typeof c === "string" && c.startsWith("tag:") ? `tag:${tag(c.slice(4))}` : c);
+  // 3.8.1: an author's note on a plan tag follows it
+  for (const r of (out.remarks as Obj[] | undefined) || []) if (typeof r.tag === "string") r.tag = tag(r.tag);
   out.tagroot = to;
   return out;
 }
 
+/** The tag roots a plan may take, in order: the one asked for, then _2 to
+ *  _50, then (a name fifty plans share) one ending in the plan's own id,
+ *  which no other plan has, and the id alone. All fit TAG_ROOT_MAX. */
+export function rootTries(want: string, id: string): string[] {
+  const cut = (sfx: string) => `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
+  return [cut(""), ...Array.from({ length: 49 }, (_, i) => cut(`_${i + 2}`)), cut(`_${id}`), id];
+}
+
 /** The plan's tag root, its own: the one it holds (a save never moves it),
- *  or, with its first tag, the one asked for, or _2, _3… when another plan
- *  has it (case aside). The doc comes back with its dates following. */
+ *  or, with its first tag, the first of rootTries no other plan has (case
+ *  aside). The doc comes back with its dates following. */
 export async function rooted(env: Env, id: string, held: string | null | undefined, doc: Obj): Promise<{ doc: Obj; root: string | null }> {
   const want = doc.tagroot as string | undefined;
   if (!want) return { doc, root: held ?? null };
   if (held) return { doc: want === held ? doc : reroot(doc, want, held), root: held };
-  for (let i = 1; i <= 50; i++) {
-    const sfx = i === 1 ? "" : `_${i}`;
-    const r = `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
-    const taken = await env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id).first("x");
-    if (!taken) return { doc: r === want ? doc : reroot(doc, want, r), root: r };
-  }
-  throw new HttpError(503, "try_again");
+  const tries = rootTries(want, id);
+  const taken = (r: string) => env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id);
+  const take = (r: string) => ({ doc: r === want ? doc : reroot(doc, want, r), root: r });
+  // the one asked for is free nearly always: one read; else the rest in one batch, each by the index
+  if (!(await taken(tries[0]).first("x"))) return take(tries[0]);
+  const rows = await env.DB.batch(tries.slice(1).map(taken));
+  const free = rows.findIndex((x) => !x.results.length);
+  if (free < 0) throw new HttpError(503, "try_again");
+  return take(tries[free + 1]);
 }
 
 /** Two saves took the same root at once: the second saves again (409), and gets _2. */
@@ -277,12 +350,12 @@ export function rootTaken(e: unknown): never {
   throw e;
 }
 
-/** A plan tag: {id, name, notes?, tags?, decks?, search?, n?}: what it
+/** A plan tag: {id, name, notes?, cards?, tags?, decks?, search?, n?}: what it
  *  holds is exact notes, or a tag's, a subdeck's or a search's cards in
  *  each follower's copy; `n` how many cards the author's Anki found. */
 function planTag(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["id", "name", "notes", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["id", "name", "notes", "cards", "tags", "decks", "search", "n"].includes(k)) throw V.bad("plan");
   if (!V.isStr(v.id, 12) || !UNIT_ID.test(v.id)) throw V.bad("plan");
   const name = V.displayName(v.name);
   if (name.length > TAG_NAME_MAX) throw V.bad("plan");
@@ -299,7 +372,14 @@ function planTag(v: unknown): Obj {
   const notes = v.notes ?? [];
   if (!Array.isArray(notes) || notes.length > IDLIST_MAX || !notes.every((g) => V.isStr(g, V.GUID_MAX, 1))) throw V.bad("plan");
   if (notes.length) out.notes = [...new Set(notes as string[])];
-  if (!out.tags && !out.decks && !out.search && !out.notes) throw V.bad("plan");  // a tag holds something
+  // 3.8.1: single cards, as a date's are (guid + card number): the tag goes on
+  // their notes in Anki (Anki tags notes), and Due Crew uses just these cards
+  const cards = v.cards ?? [];
+  if (!Array.isArray(cards) || cards.length > IDLIST_MAX) throw V.bad("plan");
+  const seenCard = new Set<string>();
+  const refs = cards.map(cardRef).filter(([g, o]) => !seenCard.has(`${g}:${o}`) && seenCard.add(`${g}:${o}`));
+  if (refs.length) out.cards = refs;
+  if (!out.tags && !out.decks && !out.search && !out.notes && !out.cards) throw V.bad("plan");  // a tag holds something
   if (v.n !== undefined && v.n !== null) {
     if (!V.isInt(v.n, 0, 1_000_000)) throw V.bad("plan");
     out.n = v.n;
@@ -347,8 +427,13 @@ function pace(v: unknown): Obj {
 /** A plan's doc: {deck, exam?, end?, phases?, pace?, units}. Units sorted by when they open. */
 export function planDoc(v: unknown): Obj {
   if (!V.isObj(v)) throw V.bad("plan");
-  for (const k of Object.keys(v)) if (!["deck", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot"].includes(k)) throw V.bad("plan");
+  for (const k of Object.keys(v)) if (!["deck", "deckUrl", "exam", "end", "phases", "pace", "reviews", "units", "events", "every", "tags", "tagroot", "remarks"].includes(k)) throw V.bad("plan");
   const out: Obj = { deck: path(v.deck) };
+  if (v.deckUrl !== undefined && v.deckUrl !== null && v.deckUrl !== "") {
+    // 3.8.1: where to get the deck, for a follower whose Anki has none by its name
+    if (!V.isStr(v.deckUrl, DECK_URL_MAX, 9) || !DECK_URL.test(v.deckUrl)) throw V.bad("plan");
+    out.deckUrl = v.deckUrl;
+  }
   if (v.pace !== undefined && v.pace !== null) out.pace = pace(v.pace);
   if (v.end !== undefined && v.end !== null) {
     if (!V.isDate(v.end)) throw V.bad("plan");
@@ -381,7 +466,7 @@ export function planDoc(v: unknown): Obj {
       if (!V.isStr(v.tagroot, TAG_ROOT_MAX, 1) || tagPart(v.tagroot as string) !== v.tagroot) throw V.bad("plan");
       out.tagroot = v.tagroot;
       out.tags = tags;
-      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0), 0);
+      tagNotes = tags.reduce((n, t) => n + ((t.notes as unknown[] | undefined)?.length ?? 0) + ((t.cards as unknown[] | undefined)?.length ?? 0), 0);
     }
   }
   if (!out.tags && v.tagroot !== undefined && v.tagroot !== null) {
@@ -426,6 +511,29 @@ export function planDoc(v: unknown): Obj {
     if (!Array.isArray(v.every) || v.every.length > EVERY_MAX) throw V.bad("plan");
     const every = v.every.map((x) => todoLine(x, true));
     if (every.length) out.every = every;
+  }
+  if (v.remarks !== undefined && v.remarks !== null) {
+    // 3.8.1: the authors' notes on a tag or a card, each follower's Anki
+    // showing them where that tag or card comes up
+    if (!Array.isArray(v.remarks) || v.remarks.length > REMARKS_MAX) throw V.bad("plan");
+    const rs = v.remarks.map(remark);
+    if (new Set(rs.map((r) => r.id)).size !== rs.length) throw V.bad("plan");
+    if (rs.length) out.remarks = rs;
+  }
+  // 3.8.1: a cut whose plan tag went (in a merge, or its last note taken off
+  // in Anki) is its whole tag again, and its search goes with it
+  const tagIds = new Set(((out.tags as Obj[] | undefined) || []).map((t) => t.id as string));
+  for (const u of units) {
+    if (!u.cut) continue;
+    const keep = (u.cut as Obj[]).filter((c) => tagIds.has(c.in as string));
+    for (const c of (u.cut as Obj[]).filter((x) => !keep.includes(x))) {
+      u.tags = [...new Set([...(u.tags as string[]), c.tag as string])];
+      if (u.search) u.search = (u.search as string[]).filter((q) => q !== c.q);
+      if (u.sn) delete (u.sn as Obj)[c.q as string];
+    }
+    if (keep.length) u.cut = keep; else delete u.cut;
+    if (u.search && !(u.search as string[]).length) delete u.search;
+    if (u.sn && !Object.keys(u.sn as Obj).length) delete u.sn;
   }
   units.sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
   out.units = units;
@@ -537,7 +645,8 @@ function followDays(f: { shift?: number | null; pause_until?: string | null; pau
 
 /** Who may see a plan: its author, its followers, and whoever may follow it. */
 async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<boolean> {
-  if (p.owner === uid || (await isEditor(env, p.id, uid))) return true;
+  // 3.8.1: someone asked to co-write it may look before saying yes
+  if (p.owner === uid || (await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(p.id, uid).first())) return true;
   if (p.audience === "squad") return isMember(env, p.squad, uid);  // leaving the squad ends it, follow or not
   if (p.listed === 1) return true;  // 3.5, B: in the library, for anyone signed in
   if (await following(env, p.id, uid)) return true;
@@ -545,10 +654,14 @@ async function mayRead(env: Env, p: Plan, uid: string, code?: string): Promise<b
 }
 
 /** 3.3: the owner and co-authors edit; the owner alone deletes, picks the
- *  audience and the co-authors. */
+ *  audience and the co-authors. 3.8.1: a co-author is one who said yes
+ *  (accepted_at); until then a plan_editors row is an invite, and nothing more. */
 export async function isEditor(env: Env, plan: string, uid: string): Promise<boolean> {
-  return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ?").bind(plan, uid).first());
+  return !!(await env.DB.prepare("SELECT 1 FROM plan_editors WHERE plan = ? AND uid = ? AND accepted_at IS NOT NULL").bind(plan, uid).first());
 }
+
+/** The plans I co-author (said yes to), as SQL; ?1 is my uid. */
+export const COAUTHORED = "SELECT plan FROM plan_editors WHERE uid = ?1 AND accepted_at IS NOT NULL";
 
 async function authorOnly(env: Env, id: string, s: Session): Promise<Plan> {
   const p = await getPlan(env, id);
@@ -574,16 +687,23 @@ type Follow = { share: number; paused: number; sched: string | null; progress: s
   shift: number; pause_until: string | null; pause_since: string | null; skipped: string | null; hist?: string | null;
   moved?: string | null; own?: string | null;
   team_ask?: number };
-type Editor = { uid: string; name: string; emoji: string };
+type Editor = { uid: string; name: string; emoji: string; pending?: true };
+type EditorRow = { plan: string; uid: string; name: string | null; emoji: string | null; accepted_at: number | null };
+const editorOf = (e: EditorRow): Editor => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "", ...(e.accepted_at === null ? { pending: true as const } : {}) });
 
 /** A plan as its page shows it. What it needs about me comes in `ctx`, so
- *  a list of plans reads it in a few queries, not a few per plan. */
+ *  a list of plans reads it in a few queries, not a few per plan. 3.8.1:
+ *  `editors` holds the invites too (pending); only its authors see those,
+ *  and who the owner offered it to (`handover`). */
 function shape(p: Plan & { owner_name?: string | null }, uid: string, doc: unknown,
                ctx: { f: Follow | null; n: number; editors: Editor[]; mySquads: Set<string> }) {
-  const { f, editors } = ctx;
-  const r = p.owner === uid ? "owner" : editors.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
+  const { f } = ctx;
+  const said = ctx.editors.filter((e) => !e.pending);
+  const r = p.owner === uid ? "owner" : said.some((e) => e.uid === uid) ? "editor" : f ? "follower" : "reader";
+  const authors = r === "owner" || r === "editor";
   return {
-    role: r, editors,
+    role: r, editors: authors ? ctx.editors : said,
+    ...(authors && p.handover ? { handover: p.handover } : {}),
     id: p.id, name: p.name, line: p.line, owner: p.owner, ownerName: p.owner_name || (p.owner ? "?" : "a former member"),
     audience: p.audience, version: p.version, doc, followers: ctx.n,
     // which squad it's offered to: only for the author and that squad's members (an id is not an invite)
@@ -610,28 +730,90 @@ async function inChunks<T>(ids: string[], q: (part: string[]) => Promise<{ resul
 }
 
 const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.prepare(
-  `SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid
+  `SELECT e.plan, e.uid, u.name, u.emoji, e.accepted_at FROM plan_editors e JOIN users u ON u.uid = e.uid
     WHERE e.plan IN (${part.map(() => "?").join(",")}) ORDER BY e.at`,
-).bind(...part).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>());
+).bind(...part).all<EditorRow>());
+
+/** A plan's totals (migration 0025), as its readers show them: `n` follow
+ *  it, `m` of them not its owner, `r` of those have version `v` in their
+ *  Anki (3.7.3), and `done` per date, how many on its team have every card
+ *  of it seen. Counts, never who. */
+export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number> };
+type Counted = { id: string; version: number; owner: string | null; totals?: string | null; totals_at?: number | null };
+
+/** One total per plan, kept on its row: a board, a plan's page, my list of
+ *  plans and the library read that row, not every follower's (a library
+ *  plan's can be thousands). Under an hour old it's used as it is, so what
+ *  it shows is up to an hour behind; older, it's worked out again from every
+ *  follow of the stale plans (90 plans a query) and kept. Mine alone (my
+ *  progress, my follow) is never from here, and stays live where it's shown.
+ *  A save since the count moved the version: none have it yet, as at that save. */
+export async function totals(env: Env, plans: Counted[]): Promise<Map<string, Totals>> {
+  const now = nowSec();
+  const out = new Map<string, Totals>();
+  const stale: Counted[] = [];
+  for (const p of plans) {
+    let t: Totals | null = null;
+    if (p.totals && (p.totals_at ?? 0) > now - TOTALS_EVERY) {
+      try { t = JSON.parse(p.totals) as Totals; } catch { t = null; }
+    }
+    if (t) out.set(p.id, t.v === p.version ? t : { ...t, v: p.version, r: 0 });
+    else if (!out.has(p.id) && !stale.some((x) => x.id === p.id)) stale.push(p);
+  }
+  if (!stale.length) return out;
+  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {} }]));
+  const owners = new Map(stale.map((p) => [p.id, p.owner ?? ""]));
+  const rows = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
+    `SELECT plan, uid, share, progress, seen_version FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")})`,
+  ).bind(...part).all<{ plan: string; uid: string; share: number; progress: string | null; seen_version: number | null }>());
+  for (const r of rows.results) {
+    const t = fresh.get(r.plan)!;
+    t.n++;
+    if (r.uid !== owners.get(r.plan)) {
+      t.m++;
+      if (r.seen_version === t.v) t.r++;
+    }
+    if (r.share === 1 && r.progress) {
+      for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
+        if (total > 0 && seen >= total) t.done[u] = (t.done[u] ?? 0) + 1;
+      }
+    }
+  }
+  // Kept with its time, once an hour at most per plan: the time has to move
+  // even when the counts didn't, or every read would count again. Only the
+  // stale row is written (two readers at once write it once), and a plan no
+  // one follows, with nothing kept, isn't written at all (counting it reads nothing).
+  const keep = stale.filter((p) => fresh.get(p.id)!.n || p.totals);
+  if (keep.length) {
+    await env.DB.batch(keep.map((p) => env.DB.prepare(
+      "UPDATE plans SET totals = ?1, totals_at = ?2 WHERE id = ?3 AND (totals_at IS NULL OR totals_at <= ?4)",
+    ).bind(JSON.stringify(fresh.get(p.id)), now, p.id, now - TOTALS_EVERY)));
+  }
+  for (const [id, t] of fresh) out.set(id, t);
+  return out;
+}
 
 export async function view(env: Env, p: Plan, uid: string) {
-  const [f, n, eds, owner, member] = await env.DB.batch<any>([
+  const [[f, eds, owner, member], tot] = await Promise.all([env.DB.batch<any>([
     env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
-    // 3.7.3: and how many of them have this version in their Anki
-    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(uid != ?3), 0) AS m,
-                    COALESCE(SUM(seen_version = ?2 AND uid != ?3), 0) AS r FROM plan_follows WHERE plan = ?1`)
-      .bind(p.id, p.version, p.owner ?? ""),
-    env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
+    env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji, e.accepted_at FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
     env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
     env.DB.prepare("SELECT squad FROM members WHERE squad = ? AND uid = ?").bind(p.squad ?? "", uid),
-  ]);
+  ]), totals(env, [p])]);
+  const t = tot.get(p.id)!;
   const out = shape({ ...p, owner_name: owner.results[0]?.name }, uid, JSON.parse(p.doc), {
-    f: (f.results[0] as Follow) ?? null, n: n.results[0]?.n ?? 0,
-    editors: eds.results.map((e: any) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" })),
+    f: (f.results[0] as Follow) ?? null, n: t.n,
+    editors: eds.results.map((e: any) => editorOf(e)),
     mySquads: new Set(member.results.map((m: any) => m.squad)),
   });
-  // the authors see "reached 18 of 23": followers whose Anki has this version (a count)
-  return out.role === "owner" || out.role === "editor" ? { ...out, reached: [n.results[0]?.r ?? 0, n.results[0]?.m ?? 0] } : out;
+  // 3.7.3: the authors see "reached 18 of 23": followers whose Anki has this version (a count).
+  // Counted live for them (only authors open this, now and then): the plan's totals are up to
+  // an hour old, and after a save "reached" is what an author comes back to watch climb.
+  if (out.role !== "owner" && out.role !== "editor") return out;
+  const c = await env.DB.prepare(
+    "SELECT COUNT(*) AS m, COALESCE(SUM(CASE WHEN seen_version = ?1 THEN 1 ELSE 0 END), 0) AS r FROM plan_follows WHERE plan = ?2 AND uid != ?3",
+  ).bind(p.version, p.id, p.owner ?? "").first<{ m: number; r: number }>();
+  return { ...out, reached: [c?.r ?? t.r, c?.m ?? t.m] };
 }
 
 // ---- the deck's tree, from the add-on ----
@@ -751,19 +933,55 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 /** 3.6.5: `idr` and `pn` come only from the author's Anki (PUT
  *  /plans/{id}/ids): a save keeps a date's as stored while what they were
  *  worked out from is unchanged, and drops them when it changes (the next
- *  morning works them out again). */
+ *  morning works them out again). So do a date's `ids` (3.3, C5: the note
+ *  ids behind its tags, subdecks and cuts in the author's Anki): kept as
+ *  stored while those are, never as a save sends them, so a follower whose
+ *  copy lacks a tag the date has now doesn't fall back to the notes of the
+ *  one it had. The builder only ever sends them back as it got them. */
 export function keepIdr(doc: Obj, was: string | null): Obj {
   const old = new Map(((was ? JSON.parse(was).units : []) as Obj[]).map((u) => [u.id, u]));
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   const picks = (u: Obj) => [u.opens, u.tags, u.decks, u.search, u.nids, u.cids, u.notes];
+  const from = (u: Obj) => [u.tags, u.decks, ((u.cut as Obj[] | undefined) || []).map((c) => [c.tag, c.in])];
   for (const u of doc.units as Obj[]) {
     const o = old.get(u.id);
     delete u.idr;
     delete u.pn;
+    delete u.ids;
+    delete u.pl;
     if (o?.idr && same(o.nids, u.nids) && same(o.cids, u.cids)) u.idr = o.idr;
     if (o?.pn && same(picks(o), picks(u))) u.pn = o.pn;
+    if (o?.ids && same(from(o), from(u))) u.ids = o.ids;
+    // 3.8.1: what its picked cards are, while they're the same cards
+    if (o?.pl && same(picksOf(o), picksOf(u))) u.pl = o.pl;
   }
   return doc;
+}
+
+/** 3.8.1: a date whose picks changed (cards added in Anki) loses its `pl`;
+ *  the author's Anki names them again. */
+function stalePl(doc: Obj, was: string) {
+  const old = new Map(((JSON.parse(was).units || []) as Obj[]).map((u) => [u.id, u]));
+  for (const u of doc.units as Obj[]) {
+    const o = old.get(u.id);
+    if (u.pl && (!o || JSON.stringify(picksOf(o)) !== JSON.stringify(picksOf(u)))) delete u.pl;
+  }
+  return doc;
+}
+
+/** 3.7.2: room for a save Undo can take back: the new doc and library card
+ *  less the old card and the copy Undo held before (it goes); the doc it
+ *  replaces stays, as Undo's copy. */
+async function roomForSave(env: Env, p: Plan, doc: string, lib: string | null) {
+  const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(p.id).first<number>("n");
+  await roomFor(env, p.owner, doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
+}
+
+/** 3.7.3: a line to followers that came with a save. The save stands either
+ *  way; a post past the day's ceiling is said, not lost silently. */
+async function postWithSave(env: Env, p: Plan, uid: string, raw: unknown, version: number | null) {
+  try { return await writePost(env, p, uid, raw, version); }
+  catch (e) { if (e instanceof HttpError && e.status === 429) return { error: "too_many_posts" }; throw e; }
 }
 
 export async function put(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
@@ -783,12 +1001,14 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     line: body.line !== undefined ? planLine(body.line) : p.line,
     audience: p.audience,
     squad: p.squad,
-    doc: body.doc !== undefined ? JSON.stringify(keepIdr(planDoc(body.doc), p.doc)) : p.doc,
+    doc: p.doc,
     tagroot: p.tagroot ?? null,
   };
-  if (body.doc !== undefined) {  // 3.8.0: its tags' root is its own
-    const r = await rooted(env, id, p.tagroot, JSON.parse(next.doc));
-    next.doc = JSON.stringify(r.doc);
+  if (body.doc !== undefined) {
+    // 3.8.0: its tags' root is its own; then what only the author's Anki
+    // sends is kept as stored, compared with the dates under that root
+    const r = await rooted(env, id, p.tagroot, planDoc(body.doc));
+    next.doc = JSON.stringify(keepIdr(r.doc, p.doc));
     next.tagroot = r.root;
   }
   if (body.audience !== undefined) {
@@ -802,29 +1022,22 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   if (next.audience === "squad" && !next.squad) throw V.bad("squad");
   if (next.name === p.name && next.line === p.line && next.audience === p.audience
       && next.squad === p.squad && next.doc === p.doc) {
-    return json(await view(env, p, s.uid));  // nothing changed: nothing written
+    // nothing changed: nothing written but its post, which goes all the same
+    // (a post on its own: there's no new version for it to come with)
+    const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, null) : undefined;
+    return json({ ...(await view(env, p, s.uid)), ...(posted ? { posted } : {}) });
   }
   // 3.5, B: a plan for one squad leaves the library; a listed plan's card follows its doc
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
-  if (next.doc !== p.doc) {
-    // 3.7.2: the new doc, the old one kept for Undo, the library card; less the
-    // copy Undo held before (it goes) and the old card
-    const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
-    await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
-  }
+  if (next.doc !== p.doc) await roomForSave(env, p, next.doc, lib);  // 3.7.2
   const r = await env.DB.prepare(
     `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
   ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
-  // the save stands either way; a post past the day's ceiling is said, not lost silently
-  let posted: { id: number; text: string } | { error: string } | undefined;
-  if (body.post !== undefined) {
-    try { posted = await writePost(env, p, s.uid, body.post, (body.version as number) + 1); }
-    catch (e) { if (e instanceof HttpError && e.status === 429) posted = { error: "too_many_posts" }; else throw e; }
-  }
+  const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, (body.version as number) + 1) : undefined;
   return json({ ...(await view(env, await getPlan(env, id), s.uid)), ...(posted ? { posted } : {}) });
 }
 
@@ -867,6 +1080,10 @@ export async function logSave(env: Env, plan: string, version: number, uid: stri
  *  ones they were read from. Never a history entry; a new version. */
 export async function putIds(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  // an author's Anki sends these by itself, at most once a day a plan (per
+  // computer): a bucket of its own, far over that, so it never eats the
+  // saves' (planput) nor they it
+  await limitOrThrow(env, `planids:${s.uid}`, 500, 86400);
   const body = await readJson(req, PLAN_BODY_MAX);
   if (!V.isObj(body.units) || Object.keys(body).some((k) => !["units", "counts", "refs"].includes(k))) throw V.bad("ids");
   if (body.counts !== undefined && !V.isObj(body.counts)) throw V.bad("ids");
@@ -874,9 +1091,11 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   const doc = JSON.parse(p.doc) as Obj & { units: Obj[] };
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   for (const [uid, v] of Object.entries(body.units)) {
-    if (!Array.isArray(v) || v.length !== 3 || !Array.isArray(v[2])) throw V.bad("ids");
+    if (!Array.isArray(v) || (v.length !== 3 && v.length !== 4) || !Array.isArray(v[2])) throw V.bad("ids");
     const u = doc.units.find((x) => x.id === uid);
     if (!u || !same(u.tags, v[0]) || !same(u.decks, v[1])) continue;  // changed since: the next refresh sends it again
+    // 3.8.1: and its cuts, [[tag, in]], from an add-on that knows them
+    if (v.length === 4 && !same(((u.cut as Obj[] | undefined) || []).map((c) => [c.tag, c.in]), v[3])) continue;
     if (v[2].length) u.ids = v[2]; else delete u.ids;
   }
   // 3.6.5: the cards a date's pasted ids are here, as guid + card number,
@@ -898,6 +1117,14 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
       if (q === "#ids") { if ((u.nids || u.cids || u.notes) && V.isInt(n, 0, 1_000_000)) u.idn = n; continue; }
       // 3.6.5, P1: new to this date, already on an earlier one, picked notes not in the deck
       if (q === "#pn") { if (Array.isArray(n) && n.length === 3 && n.every((x) => V.isInt(x, 0, 1_000_000))) u.pn = n; continue; }
+      // 3.8.1: the deck tags its picked cards sit under here, with how many;
+      // kept as the date's `pl` while its picks are the same (keepIdr). Only
+      // that shape is kept, and only on a date with picks; anything else is skipped
+      if (q === "#lbl") {
+        const pl = labels(n);
+        if (pl && hasPicks(u)) { if (pl.length) u.pl = pl; else delete u.pl; }
+        continue;
+      }
       if (!qs.includes(q) || !V.isInt(n, 0, 1_000_000)) continue;  // a search taken off since: skipped
       sn[q] = n;
     }
@@ -905,30 +1132,41 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
-  await roomFor(env, p.owner, clean.length - p.doc.length);  // 3.7.2
+  const lib = keepLib(p, clean);
+  await roomFor(env, p.owner, clean.length - p.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0));  // 3.7.2: no Undo copy
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+    .bind(clean, lib, nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   return json({ version: p.version + 1 });
 }
 
-/** GET /plans/{id}/log: the history, newest first, for the authors. */
+/** GET /plans/{id}/log: the history, newest first, for the authors. Undo is
+ *  on the newest row, while it holds the doc its save replaced. Not "the row
+ *  of the plan's version": an upload from the author's Anki (PUT /ids) moves
+ *  the version and writes no row (it's no one's save, nothing to undo), and
+ *  it runs by itself each day, so Undo would go every time Anki opened.
+ *  Every other change to a doc writes its row. */
 export async function log(s: Session, env: Env, [id]: string[]): Promise<Response> {
-  const p = await authorOnly(env, id, s);
+  await authorOnly(env, id, s);
   const rows = await env.DB.prepare(
     `SELECT l.version, l.uid, l.at, l.summary, l.prev IS NOT NULL AS undoable, u.name FROM plan_log l
        LEFT JOIN users u ON u.uid = l.uid WHERE l.plan = ? ORDER BY l.version DESC LIMIT ?`,
   ).bind(id, LOG_KEEP).all<{ version: number; uid: string; at: number; summary: string; undoable: number; name: string | null }>();
-  return json({ log: rows.results.map((r) => ({ version: r.version, uid: r.uid, name: r.name || "?", at: r.at, summary: r.summary,
-    undo: r.version === p.version && r.undoable === 1 })) });
+  return json({ log: rows.results.map((r, i) => ({ version: r.version, uid: r.uid, name: r.name || "?", at: r.at, summary: r.summary,
+    undo: i === 0 && r.undoable === 1 })) });
 }
 
-/** POST /plans/{id}/undo {version}: puts back what the latest save replaced. */
+/** POST /plans/{id}/undo {version}: puts back what the latest save replaced
+ *  (the newest row, as the log offers it), whatever ids the author's Anki
+ *  sent since: they were worked out from the doc Undo replaces, and that
+ *  Anki sends them again when the doc it reads changes. `version` is the
+ *  plan's as I read it: another author's save since is refused (409). */
 export async function undo(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);  // a save, as far as the ceiling goes
   const body = await readJson(req);
   if (body.version !== p.version) throw new HttpError(409, "stale", { version: p.version });
-  const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? AND version = ?").bind(id, p.version)
+  const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? ORDER BY version DESC LIMIT 1").bind(id)
     .first<{ summary: string; prev: string | null }>();
   if (!row || !row.prev) throw new HttpError(404, "nothing_to_undo");
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
@@ -940,9 +1178,14 @@ export async function undo(req: Request, s: Session, env: Env, [id]: string[]): 
 
 // ---- co-authors ----
 
-/** POST /plans/{id}/editors {uid}: the owner adds a co-author from their crew. */
+/** POST /plans/{id}/editors {uid}: the owner asks someone from their crew
+ *  (a mutual friend) to co-write it. 3.8.1: an invite (accepted_at NULL)
+ *  until they say yes (POST /plans/{id}/invite); invites count toward the
+ *  plan's EDITORS_MAX. Asking a co-author again changes nothing. */
 export async function addEditor(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await ownerOnly(env, id, s);
+  // 3.8.1: an invite moves its invitee's stamp (their next refresh brings every plan again): a ceiling
+  await limitOrThrow(env, `planinvite:${s.uid}`, 30, 86400);
   const body = await readJson(req);
   if (!V.isStr(body.uid, 128, 1) || body.uid === s.uid) throw V.bad("editor");
   const mutual = await env.DB.prepare(
@@ -955,12 +1198,161 @@ export async function addEditor(req: Request, s: Session, env: Env, [id]: string
   return json(await view(env, p, s.uid));
 }
 
-/** DELETE /plans/{id}/editors/{uid}: the owner removes a co-author, or one leaves. */
+/** DELETE /plans/{id}/editors/{uid}: the owner removes a co-author or takes
+ *  back an invite, or anyone leaves (or says no). 3.8.1: the plan offered to
+ *  them isn't any more. */
 export async function removeEditor(s: Session, env: Env, [id, uid]: string[]): Promise<Response> {
   const p = await getPlan(env, id);
   if (p.owner !== s.uid && uid !== s.uid) throw new HttpError(403, "not_owner");
-  await env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, uid),
+    env.DB.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, uid),
+  ]);
   return json({ ok: true });
+}
+
+/** POST /plans/{id}/owner {uid}: 3.8.1, the owner offers the plan to one of
+ *  its co-authors (one who said yes); {uid: null} takes the offer back. It's
+ *  theirs when they say yes (POST /plans/{id}/invite). */
+export async function offerPlan(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await ownerOnly(env, id, s);
+  await limitOrThrow(env, `planinvite:${s.uid}`, 30, 86400);  // as an invite: it moves its co-author's stamp
+  const body = await readJson(req);
+  if (Object.keys(body).some((k) => k !== "uid") || !("uid" in body)) throw V.bad("owner");
+  const to = body.uid;
+  if (to !== null && !V.isStr(to, 128, 1)) throw V.bad("owner");
+  if (to !== null && !(await isEditor(env, id, to as string))) throw new HttpError(400, "not_coauthor");
+  if ((to ?? null) !== (p.handover ?? null)) {
+    // still a co-author who said yes as it's written (one who left meanwhile is offered nothing)
+    await env.DB.prepare(`UPDATE plans SET handover = ?1 WHERE id = ?2 AND owner = ?3
+        AND (?1 IS NULL OR EXISTS (SELECT 1 FROM plan_editors WHERE plan = ?2 AND uid = ?1 AND accepted_at IS NOT NULL))`)
+      .bind(to, id, s.uid).run();
+  }
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+export const LISTED_MAX = 20;  // plans one person keeps in the library (library.ts)
+
+/** POST /plans/{id}/invite {yes, kind?}: 3.8.1, the invitee's answer (kind, as the board
+ *  showed it: "coauthor" or "owner", so a stale answer never answers the other). To an invite
+ *  to co-write it: yes makes me a co-author, no takes the invite away. To the
+ *  plan offered to me (I co-write it): yes makes it mine, and its owner a
+ *  co-author (its code, tag root and followers stay); no leaves it theirs.
+ *  404 no_invite when there's neither. */
+export async function answerInvite(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const body = await readJson(req);
+  if (typeof body.yes !== "boolean" || Object.keys(body).some((k) => k !== "yes" && k !== "kind")) throw V.bad("invite");
+  // which question this answers (as the board showed it): a stale "co-write?" Yes never takes the plan
+  const kind = body.kind;
+  if (kind !== undefined && kind !== "coauthor" && kind !== "owner") throw V.bad("invite");
+  const p = await getPlan(env, id);
+  const row = await env.DB.prepare("SELECT accepted_at FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, s.uid)
+    .first<{ accepted_at: number | null }>();
+  const db = env.DB;
+  const now = nowSec();
+  if (kind !== "coauthor" && row && row.accepted_at !== null && p.handover === s.uid && p.owner) {
+    if (body.yes) {
+      // what an owner keeps has a ceiling (create, copy): a plan handed over counts too, its Undo copy and
+      // its place in the library with it
+      const mine = await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ?").bind(s.uid).first<number>("n");
+      if ((mine ?? 0) >= PLANS_MAX) throw new HttpError(409, "too_many_plans");
+      const prev = await db.prepare("SELECT COALESCE(SUM(LENGTH(prev)), 0) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
+      await roomFor(env, s.uid, p.doc.length + (p.lib?.length ?? 0) + (prev ?? 0));
+      if (p.listed === 1) {
+        const listed = await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ? AND listed = 1").bind(s.uid).first<number>("n");
+        if ((listed ?? 0) >= LISTED_MAX) throw new HttpError(409, "too_many_listed");
+      }
+      // one transaction; each step only while the swap is the one asked for
+      const [swap] = await db.batch([
+        db.prepare("UPDATE plans SET owner = ?1, handover = NULL WHERE id = ?2 AND owner = ?3 AND handover = ?1").bind(s.uid, id, p.owner),
+        db.prepare("DELETE FROM plan_editors WHERE plan = ?1 AND uid = ?2 AND EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?2)").bind(id, s.uid),
+        db.prepare(
+          `INSERT INTO plan_editors (plan, uid, at, accepted_at) SELECT ?1, ?2, ?3, ?3 WHERE EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?4)
+           ON CONFLICT(plan, uid) DO UPDATE SET accepted_at = COALESCE(plan_editors.accepted_at, excluded.accepted_at)`,
+        ).bind(id, p.owner, now, s.uid),
+        // the invites the old owner sent go with them (only someone the new owner could add today is asked)
+        db.prepare("DELETE FROM plan_editors WHERE plan = ?1 AND accepted_at IS NULL AND EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?2)")
+          .bind(id, s.uid),
+      ]);
+      if (!swap.meta.changes) throw new HttpError(404, "no_invite");
+    } else {
+      await db.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, s.uid).run();
+    }
+  } else if (kind !== "owner" && row && row.accepted_at === null) {
+    await (body.yes
+      ? db.prepare("UPDATE plan_editors SET accepted_at = ? WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(now, id, s.uid)
+      : db.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(id, s.uid)).run();
+  } else {
+    throw new HttpError(404, "no_invite");
+  }
+  return json(await view(env, await getPlan(env, id), s.uid));
+}
+
+/** 3.8.1: my invites waiting for an answer, as the day's first board (and
+ *  the site's home) carry them: to co-write a plan, or a plan offered to me.
+ *  Who asked by name and emoji only. Offers first, then the newest invites. */
+const INVITES_SQL = `SELECT p.id, p.name, 'owner' AS kind, u.name AS by_name, u.emoji AS by_emoji, 0 AS k, 0 AS at
+     FROM plans p LEFT JOIN users u ON u.uid = p.owner
+    WHERE p.handover = ?1 AND p.owner != ''
+      AND EXISTS (SELECT 1 FROM plan_editors e WHERE e.plan = p.id AND e.uid = ?1 AND e.accepted_at IS NOT NULL)
+   UNION ALL
+   SELECT p.id, p.name, 'coauthor', u.name, u.emoji, 1, e.at
+     FROM plan_editors e JOIN plans p ON p.id = e.plan LEFT JOIN users u ON u.uid = p.owner
+    WHERE e.uid = ?1 AND e.accepted_at IS NULL AND p.owner != ''
+   ORDER BY k, at DESC, id LIMIT ${INVITES_ON_BOARD}`;
+type InviteRow = { id: string; name: string; kind: "owner" | "coauthor"; by_name: string | null; by_emoji: string | null };
+const inviteOf = (r: InviteRow) => ({ id: r.id, name: r.name, kind: r.kind, by: { name: r.by_name || "?", emoji: r.by_emoji || "" } });
+
+export async function planInvites(env: Env, uid: string) {
+  return (await env.DB.prepare(INVITES_SQL).bind(uid).all<InviteRow>()).results.map(inviteOf);
+}
+
+/** POST /plans/{id}/remarks {add: {tag | card, text}} or {remove: id}: 3.8.1,
+ *  an author's note for followers on a card (or a tag), from Anki's Browse.
+ *  A save, as tagNotes is: a new version, a line in History, room for Undo's
+ *  copy, the saves' daily ceiling. A note on a card or tag that has one
+ *  already changes its text (one note there, edited). Never card text. */
+export async function remarks(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
+  const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);
+  const body = await readJson(req);
+  const keys = Object.keys(body);
+  if (keys.length !== 1 || !["add", "remove"].includes(keys[0])) throw V.bad("remark");
+  const doc = JSON.parse(p.doc) as Obj;
+  let list = ((doc.remarks as Obj[] | undefined) || []).map((r) => ({ ...r }));
+  const target = (r: Obj) => (r.tag !== undefined ? `tag:${String(r.tag).toLowerCase()}` : `card:${JSON.stringify(r.card)}`);
+  const where = (r: Obj) => (r.tag !== undefined ? String(r.tag).split("::").pop()!.replace(/_/g, " ") : "a card");
+  let summary: string;
+  if (body.add !== undefined) {
+    if (!V.isObj(body.add) || "id" in body.add) throw V.bad("remark");
+    const r = remark({ ...body.add, id: "new" });
+    const had = list.find((x) => target(x) === target(r));
+    if (had) {
+      if (had.text === r.text) return json(await view(env, p, s.uid));
+      had.text = r.text;
+      summary = `changed a note on ${where(had)} in Anki`;
+    } else {
+      if (list.length >= REMARKS_MAX) throw new HttpError(409, "too_many_remarks");
+      list.push({ ...r, id: newUnitId() });
+      summary = `added a note on ${where(r)} in Anki`;
+    }
+  } else {
+    if (!V.isStr(body.remove, 12) || !UNIT_ID.test(body.remove)) throw V.bad("remark");
+    const r = list.find((x) => x.id === body.remove);
+    if (!r) return json(await view(env, p, s.uid));  // gone already
+    list = list.filter((x) => x !== r);
+    summary = `took off a note on ${where(r)} in Anki`;
+  }
+  if (list.length) doc.remarks = list; else delete doc.remarks;
+  const clean = JSON.stringify(planDoc(doc));
+  if (clean === p.doc) return json(await view(env, p, s.uid));
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2: and the doc it replaces, kept for Undo
+  const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
+    .bind(clean, lib, nowSec(), id, p.version).run();
+  if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
+  await logSave(env, id, p.version + 1, s.uid, V.oneLine(summary, SUMMARY_MAX), p.doc);
+  return json(await view(env, await getPlan(env, id), s.uid));
 }
 
 // ---- notes on a day ----
@@ -988,7 +1380,7 @@ export async function notes(s: Session, env: Env, [id]: string[]): Promise<Respo
 
 /** The owner and co-authors. */
 export async function authorUids(env: Env, p: Plan): Promise<Set<string>> {
-  const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ?").bind(p.id).all<{ uid: string }>();
+  const eds = await env.DB.prepare("SELECT uid FROM plan_editors WHERE plan = ? AND accepted_at IS NOT NULL").bind(p.id).all<{ uid: string }>();
   return new Set([p.owner, ...eds.results.map((e) => e.uid)]);
 }
 
@@ -1075,6 +1467,7 @@ export async function removePost(s: Session, env: Env, [id, pid]: string[]): Pro
  *  picked in Anki's browser, added to a date that exists or a new one. */
 export async function addCards(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);  // a save, as the plan's PUT is
   const body = await readJson(req, PLAN_BODY_MAX);
   // 3.3, C3: or an Anki search, with how many it found here
   const search = body.search !== undefined ? body.search : null;
@@ -1097,10 +1490,12 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
     u.search = [...new Set([...((u.search as string[]) || []), search as string])];
     u.sn = { ...((u.sn as Obj) || {}), [search as string]: body.n };
   }
-  const clean = JSON.stringify(planDoc(doc));  // dedupes, re-sorts, enforces the caps
+  const clean = JSON.stringify(stalePl(planDoc(doc), p.doc));  // dedupes, re-sorts, enforces the caps
   if (clean === p.doc) return json(await view(env, p, s.uid));
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2, as a save's
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+    .bind(clean, lib, nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, p.version + 1, s.uid, search !== null ? "added a search in Anki"
     : `added ${cards.length} single card${cards.length === 1 ? "" : "s"} in Anki`, p.doc);
@@ -1139,16 +1534,21 @@ export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[
   const notes = [...new Set([...had, ...add])].filter((g) => !remove.has(g));
   if (notes.length > IDLIST_MAX) throw new HttpError(400, "too_many");
   if (notes.length) t.notes = notes; else delete t.notes;
+  if (t.cards) {  // 3.8.1: a note taken off takes its single cards with it
+    const left = (t.cards as [string, number][]).filter(([g]) => !remove.has(g));
+    if (left.length) t.cards = left; else delete t.cards;
+  }
   if (body.n !== undefined) t.n = body.n;
-  doc.tags = tags.filter((x) => x.notes || x.tags || x.decks || x.search);
+  doc.tags = tags.filter((x) => x.notes || x.cards || x.tags || x.decks || x.search);
   if (!doc.tags.length) delete doc.tags;
   if (!doc.tagroot) doc.tagroot = p.tagroot || tagRoot(p.name);
   const r0 = await rooted(env, id, p.tagroot, planDoc(doc));
   const clean = JSON.stringify(r0.doc);
   if (clean === p.doc) return json(await view(env, p, s.uid));
-  await roomFor(env, p.owner, clean.length - p.doc.length);
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2: and the doc it replaces, kept for Undo
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), r0.root, nowSec(), id, p.version).run().catch(rootTaken);
+    .bind(clean, lib, r0.root, nowSec(), id, p.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   const added = notes.filter((g) => !had.has(g)).length, taken = [...had].filter((g) => remove.has(g)).length;
   await logSave(env, id, p.version + 1, s.uid, added
@@ -1248,17 +1648,19 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
   await limitOrThrow(env, `pub:ip:${clientIp(req)}`, 300, 3600);  // guessing codes stays slow
   const p = await env.DB.prepare(
-    `SELECT p.id, p.owner, p.name, p.line, p.audience, p.version, p.doc, u.name AS owner_name,
-            (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
+    `SELECT p.id, p.owner, p.name, p.line, p.audience, p.version, p.doc, p.totals, p.totals_at, u.name AS owner_name
        FROM plans p LEFT JOIN users u ON u.uid = p.owner WHERE p.code = ?`,
-  ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string; owner_name: string | null; followers: number }>();
+  ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string;
+                       totals: string | null; totals_at: number | null; owner_name: string | null }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
-  const doc = JSON.parse(p.doc) as { deck: string; units: Obj[]; events?: { day: string; name: string }[] };
+  const doc = JSON.parse(p.doc) as { deck: string; deckUrl?: string; units: Obj[]; events?: { day: string; name: string }[] };
   const n = unitCount;
+  const followers = (await totals(env, [p])).get(p.id)!.n;  // its totals, up to an hour old
   return json({
-    name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
+    name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers,
     // 3.5, A: the version keys the link's preview picture; events are in the calendar feed already
     v: p.version, events: (doc.events || []).map((e) => ({ day: e.day, name: e.name })),
+    ...(doc.deckUrl ? { deckUrl: doc.deckUrl } : {}),  // 3.8.1: where to get the deck
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
   });
 }
@@ -1281,9 +1683,14 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   if (!p || !(await mayRead(env, p, s.uid, code))) throw new HttpError(404, "no_plan");
   const was = await following(env, p.id, s.uid);
   if (!was) {
-    // a bound on what every board carries (and on one query's parameters)
-    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE uid = ?").bind(s.uid).first<number>("n");
-    if ((n ?? 0) >= FOLLOWS_MAX) throw new HttpError(409, "too_many_plans");
+    // a bound on what every board carries (and on one query's parameters):
+    // the plans I follow that I can see, as the board and my list show them.
+    // A squad's plan I left is kept, hidden (back in the squad, it's back),
+    // and counts only toward a looser ceiling on what I keep in all
+    const c = await env.DB.prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(${SEES("p")}), 0) AS shown FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1`,
+    ).bind(s.uid).first<{ n: number; shown: number }>();
+    if ((c?.shown ?? 0) >= FOLLOWS_MAX || (c?.n ?? 0) >= FOLLOWS_KEPT) throw new HttpError(409, "too_many_plans");
   }
   const sj = sched === undefined ? null : sched === null ? null : JSON.stringify(sched);
   await env.DB.prepare(
@@ -1353,40 +1760,45 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
   return json({ ok: true });
 }
 
-/** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
- *  single cards and note ids (a list never needs them; they're most of a
- *  big plan), and everything else in five queries, however many plans. */
-/** The plans I follow that I may still read: a squad plan only while I'm
- *  in its squad (mayRead). ?1 is my uid. */
-export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.uid = ?1
-  AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = ?1))`;
+/** A plan I follow that I can see (`t` its plans row; ?1 my uid): any but a
+ *  squad's, or one of a squad I'm in (mayRead: leaving ends it), or my own. */
+const SEES = (t: string) => `(${t}.audience != 'squad' OR ${t}.owner = ?1
+  OR EXISTS (SELECT 1 FROM members m WHERE m.squad = ${t}.squad AND m.uid = ?1))`;
 
+/** The plans I follow that I may still read, as the board shows them. ?1 is my uid. */
+export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.uid = ?1 AND ${SEES("fp")}`;
+
+/** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
+ *  dates' single cards and note ids (`cards`, `ids`: a list never needs
+ *  them; they're most of a big plan), and everything else in a few queries,
+ *  however many plans. What a date's pasted ids are (`idr`), its notes and
+ *  the plan tags' notes and cards stay: the add-on reads them from here for
+ *  a plan it doesn't follow (Export cards for my AI's "what the dates open",
+ *  the Browse tag dialog's notes on a tag), and the site counts a date's notes. */
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
-            p.listed, p.listed_note, p.based_on,
+            p.listed, p.listed_note, p.based_on, p.totals, p.totals_at, p.handover,
             json_remove(p.doc, '$.units') AS rest,
             (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
       WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${FOLLOWED}
-                     UNION SELECT plan FROM plan_editors WHERE uid = ?1)
+                     UNION ${COAUTHORED})
       ORDER BY p.updated_at DESC`,  // each part by index, not a scan of every plan
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
   const ids = rows.results.map((p) => p.id);
   if (!ids.length) return json({ plans: [] });
-  const [fs, ns, eds, sq] = await Promise.all([
+  const [fs, tot, eds, sq] = await Promise.all([
     env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
-    inChunks(ids, (part) => env.DB.prepare(
-      `SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")}) GROUP BY plan`)
-      .bind(...part).all<{ plan: string; n: number }>()),
+    totals(env, rows.results),  // how many follow each: its totals, up to an hour old
     editorsOf(env, ids),
     env.DB.prepare("SELECT squad FROM members WHERE uid = ?").bind(s.uid).all<{ squad: string }>(),
   ]);
   const follows = new Map(fs.results.map((f) => [f.plan, f]));
-  const counts = new Map(ns.results.map((r) => [r.plan, r.n]));
+  const counts = new Map([...tot].map(([id, t]) => [id, t.n]));
   const editors = new Map<string, Editor[]>();
-  for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), { uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }]);
+  for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), editorOf(e)]);
   const mySquads = new Set(sq.results.map((m) => m.squad));
   return json({ plans: rows.results.map((p) => {
     const units = (JSON.parse(p.units) as Obj[]).sort((a, b) => String(a.opens).localeCompare(String(b.opens)));
@@ -1464,16 +1876,31 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
 
 // ---- the board ----
 
-/** 3.7.3: what a refresh compares: the plans I follow as they stand (their
- *  version, my follow's own days, their newest post). Not my progress, which
- *  moves at every sync. A short hash; one read. */
+/** 3.7.3: what a refresh compares: everything forBoard sends as it stands,
+ *  but counts. The plans I follow that I can see (their version, my follow's
+ *  own days, their newest post), and since 3.8.1's review the plans I write
+ *  or co-author (their version: an author's save reaches my Anki's tags) and
+ *  the plans offered to my squads; so leaving a squad, or a plan offered to
+ *  it, moves it too. Not my progress, which moves at every sync, nor the
+ *  totals (the day's first refresh brings those). A short hash; one batch of reads. */
 export async function planStamp(env: Env, uid: string): Promise<string> {
-  const rows = await env.DB.prepare(
-    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
-            (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
-       FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ? ORDER BY p.id`,
-  ).bind(uid).raw();
-  const bytes = new TextEncoder().encode(JSON.stringify(rows));
+  const rows = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT p.id, p.version, p.owner, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
+              (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
+         FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1 AND ${SEES("p")} ORDER BY p.id`).bind(uid),
+    env.DB.prepare(
+      `SELECT p.id, p.version FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})
+        ORDER BY p.id`).bind(uid),
+    env.DB.prepare(
+      `SELECT p.id, p.version, p.squad, p.owner FROM plans p JOIN members m ON m.squad = p.squad AND m.uid = ?1
+        WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1) ORDER BY p.id`).bind(uid),
+    // 3.8.1: my invites, as the board lists them (planInvites): one arriving or going moves it
+    env.DB.prepare(INVITES_SQL).bind(uid),
+  ]);
+  // with none, the stamp is what it was before 3.8.1 (no refresh reloads its plans for them)
+  const parts = rows[3].results.length ? rows : rows.slice(0, 3);
+  const bytes = new TextEncoder().encode(JSON.stringify(parts.map((r) => r.results.map((x) => Object.values(x as Obj)))));
   const h = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes));
   return Array.from(h.slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1482,52 +1909,40 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
  *  stamp moved): the plans I follow, and plans offered to my squads that I
  *  don't follow yet; with each plan its newest posts, and the version is
  *  noted as reached (seen_version, written only when it changed). */
-export async function forBoard(env: Env, uid: string) {
+export async function forBoard(env: Env, uid: string, same = false) {
+  // 3.8.1: same: the add-on has every doc as it stands (its stamp matched), so
+  // each plan comes without its doc, which isn't read here either
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.team_ask, f.paused, f.sched, f.early,
+    `SELECT p.id, p.name, p.owner, p.version, ${same ? "NULL AS doc" : "p.doc"}, p.totals, p.totals_at, f.share, f.team_ask, f.paused, f.sched, f.early,
             f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
-      WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
-            OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
+      WHERE f.uid = ?1 AND ${SEES("p")}`,
   ).bind(uid).all<any>();
   const offers = await env.DB.prepare(
     `SELECT p.id, p.name, p.code, p.squad, u.name AS owner_name FROM plans p
        JOIN members m ON m.squad = p.squad AND m.uid = ?1 LEFT JOIN users u ON u.uid = p.owner
       WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1)`,
   ).bind(uid).all<any>();
-  // per plan: how many follow, and per unit how many sharing followers have it done. Counts only.
-  const crew = new Map<string, { followers: number; done: Record<string, number> }>();
-  if (mineRows.results.length) {
-    const ids = mineRows.results.map((r) => r.id);
-    const rows = await env.DB.prepare(
-      `SELECT plan, share, progress FROM plan_follows WHERE plan IN (${ids.map(() => "?").join(",")})`,
-    ).bind(...ids).all<{ plan: string; share: number; progress: string | null }>();
-    for (const r of rows.results) {
-      const c = crew.get(r.plan) ?? { followers: 0, done: {} };
-      c.followers++;
-      if (r.share === 1 && r.progress) {
-        for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
-          if (total > 0 && seen >= total) c.done[u] = (c.done[u] ?? 0) + 1;
-        }
-      }
-      crew.set(r.plan, c);
-    }
-  }
+  // per plan: how many follow, and per unit how many sharing followers have it
+  // done. Counts only: each plan's totals, from its row, up to an hour old.
+  const crew = await totals(env, mineRows.results);
   // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their
   // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
     `SELECT p.id, p.version, p.name, json_extract(p.doc, '$.deck') AS deck,
-            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags,
+            json_extract(p.doc, '$.tagroot') AS tagroot, json_extract(p.doc, '$.tags') AS tags, json_extract(p.doc, '$.remarks') AS remarks,
             (SELECT json_group_array(json_object('id', json_extract(x.value, '$.id'), 'tags', json_extract(x.value, '$.tags'),
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
-                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens')))
+                      'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens'),
+                      'cut', json_extract(x.value, '$.cut'), 'cards', json_extract(x.value, '$.cards')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
-                    + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
-       FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)`,
-  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; units: string }>();
+                    + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0)
+                    + coalesce(json_array_length(x.value, '$.cards'), 0) > 0) AS units
+       FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})`,
+  ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; remarks: string | null; units: string }>();
   // 3.7.3: the newest posts per plan, and this version reached me
   const posts = new Map<string, Obj[]>();
   if (mineRows.results.length) {
@@ -1548,15 +1963,18 @@ export async function forBoard(env: Env, uid: string) {
     ).bind(r.version, r.id, uid)));
   }
   // 3.8.0: with the plan's own tags, so my Anki carries them too (counts, and older followers' note ids)
-  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
-    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}) });
+  // 3.8.1: and its notes on cards and tags, so my Anki's Browse can show and change them
+  const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null; remarks: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
+    .map((u) => (u.search || u.nids || u.cids || u.notes || (u.cards as unknown[] | null)?.length ? Object.fromEntries(Object.entries(u).filter(([k, x]) => x !== null && !(k === "cards" && !(x as unknown[]).length))) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
+    ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}),
+    ...(r.remarks ? { remarks: JSON.parse(r.remarks) } : {}) });
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, name: r.name, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
-      version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
+      version: r.version, ...(same ? { same: true } : { doc: JSON.parse(r.doc) }), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
-      followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
+      followers: crew.get(r.id)?.n ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
+    planInvites: await planInvites(env, uid),  // 3.8.1
   };
 }

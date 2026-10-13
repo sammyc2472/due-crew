@@ -280,8 +280,10 @@ export function cheer(v: unknown) {
 
 export function settingsDoc(v: unknown) {
   if (!isObj(v) || !isInt(v.v, 0, 1000) || !isStr(v.at, 40, 1) || !isObj(v.settings)) throw bad("settings");
-  for (const k of Object.keys(v)) if (!["v", "at", "settings"].includes(k)) throw bad("settings");
+  for (const k of Object.keys(v)) if (!["v", "at", "settings", "base"].includes(k)) throw bad("settings");
+  // 3.8.1 (the audit, #2): the rev this save started from; without it, the save wins as before
+  if (v.base !== undefined && !isInt(v.base, 0, 2 ** 31)) throw bad("settings");
   const json = JSON.stringify(v.settings);
   if (json.length > 64 * 1024) throw bad("settings"); // Due: my own to-dos ride it
-  return { v: v.v, at: v.at, json };
+  return { v: v.v, at: v.at, json, base: v.base as number | undefined };
 }

@@ -24,12 +24,12 @@ import threading
 import requests
 
 from .. import bingo as _bingo
-from ..room_model import clean_room, is_over
+from ..room_model import clean_room, is_fifteen, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
-    _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
+    _exam_value, _live_room, _week_days, away_range, clean_accent, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
-    clean_team_view, clean_teams,
+    clean_team_view, clean_teams, clean_plan_invites,
 )
 
 FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
@@ -56,6 +56,50 @@ def _said(path):
     """A path fit for an error message: no query, and never a code (friend
     codes and invites are in some paths; codes are never logged)."""
     return re.sub(r"/(codes|invites)/[^/]+", r"/\1/…", path.split("?")[0])
+
+
+def _addon_version():
+    """This add-on's version (its manifest), for the plan docs it keeps."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "manifest.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "?")
+    except (OSError, ValueError):
+        return "?"
+
+
+_KEPT_BY = _addon_version()
+
+
+def _with_kept_docs(plans, kept):
+    """3.8.1: the board's plans, each one sent without its doc (`same`, my
+    stamp hadn't moved) given the doc I kept for that version. None when I
+    kept no such doc: then nothing of them is used."""
+    have = {(p.get("id"), p.get("version")): p.get("doc") for p in kept if isinstance(p, dict)}
+    out = []
+    for p in plans:
+        if isinstance(p, dict) and p.get("same") is True and "doc" not in p:
+            key = (p.get("id"), p.get("version"))
+            if key not in have:
+                return None
+            p = dict(p, doc=have[key])
+        out.append(p)
+    return out
+
+
+class Saved:
+    """put_settings's answer: true when it saved. `rev`, the server's rev now
+    (None from a Worker before 3.8.1); `conflict`, the doc someone saved
+    since this save started ({v, at, settings, rev}), or None."""
+
+    def __init__(self, status, data):
+        self.status = status
+        data = data if isinstance(data, dict) else {}
+        rev = data.get("rev")
+        self.rev = rev if isinstance(rev, int) and not isinstance(rev, bool) else None
+        self.conflict = data if status == 409 and isinstance(data.get("settings"), dict) else None
+
+    def __bool__(self):
+        return self.status == 200
 
 
 class ApiClient:
@@ -195,6 +239,8 @@ class ApiClient:
         except TransportError as e:
             if e.status == 429:
                 raise AuthError("slow_down")
+            if e.status in (502, 503):  # 3.8.1 (the audit): the mail, not the address
+                raise AuthError("mail_failed")
             raise
         if status != 200:
             raise AuthError(str(data.get("error") or "bad_email"))
@@ -273,7 +319,10 @@ class ApiClient:
         got = int(self.session.get("cheers_got") or 0)
         # 3.7.3: the plans' stamp as I last saw it; they come again only when it moved
         pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}" if with_decks
+        # 3.8.1: same=1, I keep the docs I have: a morning whose stamp didn't move brings none.
+        # Only docs this version cleaned: an older add-on's cleaner left out what it didn't know
+        same = "&same=1" if self.session.get("plans_by") == _KEPT_BY else ""
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}{same}" if with_decks
                                   else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
@@ -294,6 +343,8 @@ class ApiClient:
                 "user_id": uid,
                 "name": str(p.get("name") or (self.display_name if you else "") or "?"),
                 "emoji": clean_emoji(p.get("emoji")),
+                # 3.8.1: a crewmate's accent (mutual friends only); mine is this computer's
+                "accent": "" if you else clean_accent(p.get("accent")),
                 "you": you,
                 "paused": bool(week.get("paused")),
                 "last_updated": max(stamps),
@@ -329,21 +380,36 @@ class ApiClient:
         # 3.8.0: only a list counts: a refresh without one isn't "following nothing"
         # (the morning would forget every plan and unsuspend what Hold back kept)
         plans_came = isinstance(data.get("plans"), list)
+        lost = False
+        if plans_came:
+            raw = _with_kept_docs(data["plans"], self.session.get("plans") or [])
+            if raw is None:
+                # a doc I don't have: keep the plans as they are, and the next refresh brings them all
+                plans_came, lost = False, True
+                self.session["plans_pv"] = ""
+                self._save_session()
+            else:
+                data["plans"] = raw
+                if self.session.get("plans_by") != _KEPT_BY:
+                    self.session["plans_by"] = _KEPT_BY  # 3.8.1: the docs I keep, cleaned by this version
+                    self._save_session()
         if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
             authored = [a for a in map(clean_authored, data.get("authored") or []) if a]
+            invites = clean_plan_invites(data.get("planInvites"))  # 3.8.1: to co-write a plan, or to keep one
             if (plans != self.session.get("plans") or offers != self.session.get("plan_offers")
-                    or authored != self.session.get("plans_authored")):
+                    or authored != self.session.get("plans_authored") or invites != (self.session.get("plan_invites") or [])):
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
+                self.session["plan_invites"] = invites
                 self._save_session()
         # 3.7.3: the teams I'm on, as counts (none: on no team)
         teams = clean_teams(data.get("teams"))
         if teams != (self.session.get("teams") or {}):
             self.session["teams"] = teams
             self._save_session()
-        if isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
+        if not lost and isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
             self.session["plans_pv"] = data["pv"][:40]
             self._save_session()
         squads = None
@@ -360,6 +426,7 @@ class ApiClient:
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
                 "plan_offers": list(self.session.get("plan_offers") or []),
+                "plan_invites": list(self.session.get("plan_invites") or []),  # 3.8.1
                 "plans_fresh": bool(plans_came),
                 # 3.7.3: plans that came later in the day (an update): ask, don't open
                 "plans_update": bool(plans_came and not with_decks),
@@ -469,8 +536,8 @@ class ApiClient:
         if tricky:
             doc["tricky"] = tricky
         room = clean_room(self.session.get("room"))
-        if room and not is_over(room):
-            doc["room"] = room
+        if room and not is_over(room) and not is_fifteen(room):
+            doc["room"] = room  # 3.8.1: a fifteen isn't a room to join: it's studying now, above
         recap = clean_recap(self.session.get("recap"), labels[0] if labels else None)
         if recap:
             doc["recap"] = recap
@@ -650,13 +717,23 @@ class ApiClient:
         return {str(k): int(v) for k, v in got.items() if str(k).isdigit() and isinstance(v, int) and v >= 0}
 
     def get_settings(self):
-        """(doc, status): {v, at, settings}; 404 when there's none yet."""
+        """(doc, status): {v, at, settings, rev}; 404 when there's none yet."""
         status, data = self._call("GET", "/settings")
         return (data if status == 200 else None), status
 
-    def put_settings(self, at, settings):
-        status, _ = self._call("PUT", "/settings", {"v": 1, "at": at, "settings": settings})
-        return status == 200
+    def put_settings(self, at, settings, base=None):
+        """A Saved: true when it saved. 3.8.1 (the audit, #2): `base`, the rev
+        this save started from; someone saved since, it's turned away with
+        their doc (`conflict`) to merge with. A Worker before 3.8.1 refuses
+        `base` (400): the save goes again without it, as before."""
+        body = {"v": 1, "at": at, "settings": settings}
+        if base is not None:
+            body["base"] = int(base)
+        status, data = self._call("PUT", "/settings", body)
+        if status == 400 and base is not None:
+            del body["base"]
+            status, data = self._call("PUT", "/settings", body)
+        return Saved(status, data)
 
     # ---- friends and codes ----
 
@@ -990,6 +1067,33 @@ class ApiClient:
         self._save_session()
         return True
 
+    def answer_plan_invite(self, plan_id, yes):
+        """3.8.1: my answer to an invite on the board: to co-write a plan, or to
+        keep one handed to me. On the server's word the invite goes from the
+        session; a yes writes the plan with me from now (the next board says so
+        too). (plan, status): 404 when the invite was taken back meanwhile."""
+        # the question it answers, as the board showed it: a stale "co-write?" Yes never takes the plan
+        kind = next((x.get("kind") for x in self.session.get("plan_invites") or [] if x.get("id") == plan_id), None)
+        body = {"yes": bool(yes), **({"kind": kind} if kind in ("coauthor", "owner") else {})}
+        status, data = self._call("POST", f"/plans/{plan_id}/invite", body, retry=False)
+        if status in (200, 404):
+            self.session["plan_invites"] = [x for x in self.session.get("plan_invites") or [] if x.get("id") != plan_id]
+            got = clean_plan(data) if status == 200 else None
+            a = clean_authored(data) if got and yes and isinstance(data.get("doc"), dict) else None
+            if a and not any(x.get("id") == a["id"] for x in self.session.get("plans_authored") or []):
+                self.session["plans_authored"] = list(self.session.get("plans_authored") or []) + [a]  # Browse's items, now
+            self._save_session()
+            return got, status
+        return None, status
+
+    def plan_remark(self, plan_id, add=None, remove=None):
+        """3.8.1: an author's note for the plan's followers, on a card ({card:
+        [guid, ord], text}) or a tag ({tag, text}), or one taken off by its id.
+        It rides the plan's doc, so followers get it with the plan. (plan, status)."""
+        body = {"remove": str(remove)} if remove else {"add": dict(add or {})}
+        status, data = self._call("POST", f"/plans/{plan_id}/remarks", body, retry=False)
+        return (clean_plan(data) if status == 200 else None), status
+
     def put_ids(self, plan_id, units, counts=None, refs=None):
         """3.3, C5: the note ids behind a plan's tags, from my copy, and
         (3.4, D1) how many cards its searches find here. One request, only
@@ -1044,6 +1148,14 @@ class ApiClient:
     def team_helped(self, plan_id, ask_id, on):
         status, _ = self._call("POST", f"/plans/{plan_id}/asks/{int(ask_id)}/helped", {"on": bool(on)})
         return status == 200
+
+    def plan(self, plan_id):
+        """3.8.1: one plan as its page has it, every field of its doc (/plans/mine
+        leaves a date's single cards and note ids out). Raises TransportError."""
+        status, data = self._call("GET", f"/plans/{plan_id}")
+        if status != 200:
+            raise TransportError(f"plan: {status}", status)
+        return clean_plan(data)
 
     def my_plans(self):
         """[plan]: the plans I wrote and the ones I follow. Raises TransportError."""

@@ -19,6 +19,7 @@ ERRORS = {
     "expired": "That code has expired. Send a new one.",
     "locked": "Too many tries. Wait an hour, then send a new code.",
     "slow_down": "Too many codes. Wait a bit, then try again.",
+    "mail_failed": "The email didn't go out. Your address is fine: try again in a minute.",
     "NETWORK": "Can't reach the server. Check your connection.",
 }
 

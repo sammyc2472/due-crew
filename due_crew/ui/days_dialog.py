@@ -75,7 +75,7 @@ class BackDialog(QDialog):
         root = QVBoxLayout(self)
         root.addWidget(QLabel(f"<b>Welcome back. {n_units} date{'s' if n_units != 1 else ''} "
                               f"opened while you were away.</b>"))
-        self.push = QRadioButton(f"Pick up where I left off: my dates move {days} day{'s' if days != 1 else ''} later")
+        self.push = QRadioButton(f"Push my dates back {days} day{'s' if days != 1 else ''}")
         self.push.setChecked(True)
         self.open = QRadioButton(f"Open the {n_units} date{'s' if n_units != 1 else ''} now")
         group = QButtonGroup(self)

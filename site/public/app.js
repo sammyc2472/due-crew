@@ -88,6 +88,9 @@ const nextMonday = () => { let d = today(); while (parseIso(d).getUTCDay() !== 1
 const spaced = (code) => `${code.slice(0, 4)} ${code.slice(4)}`;
 const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
 const uid8 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+/** 3.8.1: a plan's "where to get the deck" (doc.deckUrl), as plans.ts takes it (DECK_URL):
+ *  https://, no spaces, quotes or angle brackets, 300 characters at most. Anything else is never a link here. */
+const deckLink = (u) => typeof u === "string" && u.length <= 300 && /^https:\/\/[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*$/.test(u);
 
 async function copy(text, btn) {
   try {
@@ -217,6 +220,17 @@ function needSignIn() {
 
 // ---- sign in ----
 
+/** 3.8.1 (the audit, #5): what went wrong asking for a code, in words that say
+ *  what to do. Only a bad address blames the address; mail or the network
+ *  being down says so, and that the address is fine. */
+function codeTrouble(err) {
+  const e = err?.body?.error;
+  if (err?.status === 429) return (err.body?.retryAfter || 0) > 3600 ? "Too many codes today. Try again tomorrow." : "Too many codes for now. Try again in an hour.";
+  if (e === "bad_email") return "That doesn't look like an email address.";
+  if (e === "mail_unavailable" || e === "mail_failed") return "The email didn't go out. Your address is fine: try again in a minute.";
+  return "Couldn't reach Due Crew just now. Check your connection and try again.";
+}
+
 function signIn() {
   // only a page of this site: "//elsewhere" would leave it
   const asked = new URLSearchParams(location.search).get("next") || "";
@@ -231,20 +245,24 @@ function signIn() {
     title.textContent = "Sign in to open the plan";
     api("GET", `/plans/public?code=${plan[1]}`).then((p) => { title.textContent = `Sign in to open ${p.name}`; }).catch(() => {});
   }
+  const send = h("button", { type: "submit" }, "Send code");
   const form = h("form", { class: "stack", novalidate: true },
     title,
     h("p", { class: "muted" }, "We'll email you a code."),
     h("label", { for: "email" }, "Email"), email,
-    h("div", {}, h("button", { type: "submit" }, "Send code")), status);
+    h("div", {}, send), status);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (send.disabled) return;  // one code a click, however fast the clicks
+    send.disabled = true;
     status.className = "status"; status.textContent = "Sending…";
     try {
       await api("POST", "/auth/code", { email: email.value });
       codeStep(email.value, next);
     } catch (err) {
+      send.disabled = false;  // the address stays as typed
       status.className = "status bad";
-      status.textContent = err.status === 429 ? "Too many codes for now. Try again in an hour." : "That doesn't look like an email address.";
+      status.textContent = codeTrouble(err);
     }
   });
   m.append(form);
@@ -285,7 +303,8 @@ function codeStep(address, next) {
     } catch (err) {
       status.className = "status bad";
       status.textContent = { wrong_code: "That code isn't right.", expired: "That code has expired. Send a new one.",
-        locked: "Too many tries. Try again in an hour." }[err.body?.error] || (err.status === 429 ? "Too many tries. Try again in an hour." : "That didn't work. Try again.");
+        locked: "Too many tries. Try again in an hour." }[err.body?.error] || (err.status === 429 ? "Too many tries. Try again in an hour."
+        : err.status ? "That didn't work. Try again." : "Couldn't reach Due Crew just now. Check your connection and try again.");
     }
   });
   m.append(form);
@@ -455,29 +474,71 @@ async function newPlan() {
   }
   const deck = new URLSearchParams(location.search).get("deck") || "";
   if (!deck) { page(h("h1", {}, "A new plan"), h("p", { class: "muted" }, "Start from Anki: Tools › Due Crew › Make a plan from a deck.")); return; }
-  const { plans } = await api("GET", "/plans/mine");
-  const same = plans.filter((p) => (p.role === "owner" || p.role === "editor") && p.doc.deck === deck);
+  // named for the deck's own last part ("Step 1::Cardio" makes "Cardio"), as long as a name can be
+  const name = (deck.split("::").pop().trim() || deck.trim()).slice(0, 60).trim() || "My plan";
   const status = h("p", { class: "status", role: "status" });
-  const make = async () => {
+  const again = h("button", { class: "ghost", hidden: true, onclick: () => make() }, "Try again");
+  // the page is drawn before anything can fail, so a failure has somewhere to say why
+  page(h("h1", { style: "overflow-wrap:anywhere" }, name), deck !== name ? h("p", { class: "muted small", style: "overflow-wrap:anywhere" }, deck) : null, status, again);
+  status.textContent = "Loading…";
+  let plans;
+  try { ({ plans } = await api("GET", "/plans/mine")); }
+  catch (err) { if (err.status === 401) throw err; status.className = "status bad"; status.textContent = "Couldn't load your plans. Reload the page."; return; }
+  const same = plans.filter((p) => (p.role === "owner" || p.role === "editor") && p.doc.deck === deck);
+  async function make() {
+    again.hidden = true; status.className = "status"; status.textContent = "Making the plan…";
     try {
-      const p = await api("POST", "/plans", { name: deck, deck });
+      const p = await api("POST", "/plans", { name, deck });
       history.replaceState(null, "", `/plans/${p.id}`);
       route();
-    } catch { status.className = "status bad"; status.textContent = "That didn't work. Try again."; }
-  };
+    } catch (err) {
+      const code = err.body?.error;
+      status.className = "status bad";
+      status.replaceChildren(...(code === "too_many_plans" ? ["You have 50 plans, as many as an account keeps. Delete one in ", link("/plans", "Your plans"), " first."]
+        : [code === "plans_full" ? "Your plans hold as much as one account can. Delete one first."
+          : code === "bad_plan" ? "That deck's name is too long for a plan: 200 characters at most, with its parent decks. Rename it in Anki, then try again."
+          : err.status === 429 ? "That's a lot of new plans. Try again in an hour."
+          : !err.status ? "No connection. Try again." : "That didn't work. Try again."]));
+      again.hidden = code === "too_many_plans" || code === "plans_full" || code === "bad_plan";
+    }
+  }
   // 3.3: straight to the calendar; only a deck that has plans already asks which
   if (!same.length) return make();
+  status.textContent = "";
   page(
     h("h1", {}, deck),
     h("div", { class: "plans" }, same.map((p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
       h("b", {}, p.name), h("small", {}, planDays(p.doc))))),
-    h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: make }, "New plan")), status,
+    h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: () => make() }, "New plan")), status, again,
   );
 }
 
 // ---- the builder: builder.js ----
 
 // ---- a plan's own page (author: progress; follower: the dates) ----
+
+/** The add-on keeps my squads in my settings (with the code, for Copy invite):
+ *  a squad joined here joins them there too. Only over a read that worked, or
+ *  a real "no settings yet": a read that failed never writes (the audit, #1),
+ *  and the add-on still finds the squad on its next day's board (heal_squads). */
+async function squadToSettings(sq) {
+  let doc = null;
+  try { doc = await api("GET", "/settings"); } catch (err) { if (err.status !== 404) return; }
+  // 3.8.1 (#2): over the rev it read; a save from elsewhere meanwhile comes back
+  // with the doc as it is now, and the squad goes onto that instead (once)
+  for (let tries = 0; tries < 2; tries++) {
+    const set = { ...(doc?.settings || {}) };
+    const list = Array.isArray(set.squads) ? set.squads.filter((q) => q && q.id !== sq.id) : [];
+    set.squads = [...list, { id: sq.id, code: sq.code, name: sq.name, founder: sq.founder }];
+    try {
+      await api("PUT", "/settings", { v: doc?.v || 1, at: new Date().toISOString(), settings: set, base: doc?.rev ?? 0 });
+      return;
+    } catch (err) {
+      if (err.status !== 409 || !err.body?.settings) return;
+      doc = err.body;
+    }
+  }
+}
 
 /** 3.4 review, H1: any code someone sent: a friend's (6), a plan's or a
  *  squad's (8). It says what it is before anything happens. */
@@ -521,7 +582,8 @@ function codeBox() {
         } }, `Add ${f.name}`));
       }
       let plan = null;
-      try { plan = await api("GET", `/plans/peek?code=${c}`); } catch (err) { if (err.status === 429) throw err; }
+      // only "no such plan" moves on to squads; anything else is trouble, not a miss
+      try { plan = await api("GET", `/plans/peek?code=${c}`); } catch (err) { if (err.status !== 404) throw err; }
       if (plan) {
         if (plan.following) return say("", h("b", {}, plan.name), h("span", { class: "muted" }, "you follow it"), link(`/plans/${plan.id}`, "Open"));
         return say("", h("b", {}, plan.name), h("span", { class: "muted" }, `${plan.ownerName}'s plan · ${planDays(plan.doc)}`), h("button", { onclick: async () => {
@@ -533,18 +595,14 @@ function codeBox() {
       return say("", h("b", {}, sq.name), h("span", { class: "muted" }, sq.open ? "a squad" : "a squad · locked"), sq.open ? h("button", { onclick: async () => {
         try {
           await api("POST", `/squads/${sq.id}/join`, { code: c });
-          // the add-on keeps my squads in my settings: this one joins them there too
-          let doc = null;
-          try { doc = await api("GET", "/settings"); } catch { doc = null; }
-          const set = { ...(doc?.settings || {}) };
-          const list = Array.isArray(set.squads) ? set.squads.filter((q) => q && q.id !== sq.id) : [];
-          set.squads = [...list, { id: sq.id, code: sq.code, name: sq.name, founder: sq.founder }];
-          await api("PUT", "/settings", { v: doc?.v || 1, at: new Date().toISOString(), settings: set }).catch(() => {});
+          await squadToSettings(sq);
           done(`You're in ${sq.name}. It shows in Anki's Squads next time Anki opens.`);
         } catch { say("bad", h("span", {}, "That didn't work. The squad may have just closed.")); }
       } }, "Join") : null);
     } catch (err) {
-      say("bad", h("span", {}, err.status === 429 ? "That's a lot of codes. Try again in an hour." : "That code doesn't match a friend, a plan or a squad."));
+      say("bad", h("span", {}, err.status === 429 ? "That's a lot of codes. Try again in an hour."
+        : err.status === 404 || err.status === 400 ? "That code doesn't match a friend, a plan or a squad."
+        : "Couldn't look that up just now. Try again in a minute."));
     }
   }
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
@@ -593,21 +651,50 @@ function planIntro(p) {
       u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
 }
 
+/** /p/CODE, signed in: follow it here, one request on the click, as the
+ *  code box does; then where its cards go. Its authors and followers get
+ *  the way to it instead. */
+function followBox(p, code, followed) {
+  const open = p.id ? link(`/plans/${p.id}`, "Open the plan ›") : null;
+  if (p.author) return h("section", { class: "panel followbox" }, h("p", {}, h("b", {}, "It's your plan. "), open));
+  if (p.following) return h("section", { class: "panel followbox" }, h("p", {}, h("b", {}, "You follow it. "), open));
+  const out = h("p", { class: "status", role: "status" });
+  const btn = h("button", { onclick: async () => {
+    btn.disabled = true; out.className = "status"; out.textContent = "";
+    try {
+      await api("POST", "/plans/follow", { code });
+      box.replaceChildren(h("p", {}, h("b", {}, "Following. "), "Due Crew in your Anki picks it up at its next refresh and opens each date's cards on their day. The first time, it asks about holding later ones back. ", open));
+      followed?.();
+    } catch (err) {
+      btn.disabled = false; out.className = "status bad";
+      out.textContent = err.body?.error === "too_many_plans" ? "You follow 20 plans. Stop one first."
+        : err.status === 429 ? "That's a lot of codes. Try again in an hour."
+        : err.status === 404 ? "This plan isn't open to you any more." : "That didn't work. Try again.";
+    }
+  } }, "Follow");
+  const box = h("section", { class: "panel followbox" },
+    h("div", { class: "row" }, btn, h("span", { class: "muted small" }, "Its cards open in your Anki on their days.")), out);
+  return box;
+}
+
 /** /p/CODE: what a shared link shows. */
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
-  const steps = (deck) => h("ol", { class: "steps" },
-    h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, "."),
+  // 3.8.1: with the plan's link to the deck, where its authors gave one
+  const steps = (deck, follow = true, url = null) => h("ol", { class: "steps" },
+    h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, ".",
+      deckLink(url) ? [" ", h("a", { href: url, target: "_blank", rel: "noopener" }, "Where to get it ›")] : null),
     h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
-    h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email."));
+    follow ? h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email.") : null);
   let p = null;
   try {
     if (me) {
       const peek = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
       const n = (x) => (x.n || 0) + (x.cards || []).length + Object.values(x.sn || {}).reduce((a, v) => a + v, 0);
-      p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience,
-            units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })) };
+      p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience, deckUrl: peek.doc.deckUrl,
+            units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })),
+            id: peek.id, following: !!peek.following, author: peek.role === "owner" || peek.role === "editor" };
     } else p = await api("GET", `/plans/public?code=${encodeURIComponent(code)}`);
   } catch { p = null; }
   if (!p) {
@@ -617,11 +704,16 @@ async function codePage(code) {
     return;
   }
   const cal = p.audience === "squad" ? null : calMenu(code);
+  const card = h("section", { class: "panel stepcard" }, h("h4", {}, me ? "Or in Anki" : "Follow it in Anki"), steps(p.deck, true, p.deckUrl),
+    me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
+  // followed here: the card is only how to get Due Crew into Anki, signed in as me
+  const followed = () => card.replaceChildren(h("h4", {}, "No Due Crew in your Anki yet?"), steps(p.deck, false, p.deckUrl),
+    h("p", { class: "muted small" }, "Then sign in with the same email, and the plan is there."));
   page(...planIntro(p),
+    me ? followBox(p, code, followed) : null,
     cal ? h("div", { class: "phone-only" }, cal) : null,
     emailMe(`/p/${code}`),
-    h("section", { class: "panel stepcard" }, h("h4", {}, "Follow it in Anki"), steps(p.deck),
-      me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck.")),
+    card,
     cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
     me ? null : h("p", { class: "muted small" }, "Due Crew opens a plan's cards in your Anki on their days, and puts friends' studying next to yours. Free. ", h("a", { href: "/" }, "What's Due Crew?")));
   reading();
@@ -1265,10 +1357,39 @@ async function home() {
   // plan I follow, on track or behind; the day-by-day lives on its page and
   // in Anki. Following none, the ways in
   function plansPanel() {
-    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"),
+    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"), planInvites(),
       h("small", { class: "muted" }, "A plan opens a deck’s cards on their days. Find one in the library, paste its code below, or make one in Anki."),
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
-    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true)));
+    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), planInvites(), followed.map((p) => onTrack(p, true)));
+  }
+  /** 3.8.1: a plan I'm asked to co-write, or offered to keep (the board's planInvites), above
+   *  the plans, as the add-on's board says it: Yes or No, one request each. */
+  function planInvites() {
+    const inv = (b.planInvites || []).filter((x) => x && x.id && !x.done);
+    if (!inv.length) return null;
+    return h("div", { class: "pinvs" }, inv.map((x) => {
+      const by = x.by || {};
+      const st = h("span", { class: "status small", role: "status" });
+      const answer = async (yes, btn) => {
+        btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = true; });
+        try { await api("POST", `/plans/${x.id}/invite`, { yes, ...(x.kind === "coauthor" || x.kind === "owner" ? { kind: x.kind } : {}) }); }
+        catch (err) {
+          btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = false; });
+          st.className = "status bad small"; st.textContent = err.body?.error === "no_invite" ? "That invite isn't there any more." : "That didn't work. Try again.";
+          return;
+        }
+        x.done = yes ? "yes" : "no";
+        line.replaceChildren(yes ? h("span", { class: "small" }, x.kind === "owner" ? `${x.name} is yours. ` : `You co-write ${x.name}. `, link(`/plans/${x.id}/edit`, "Open it ›"))
+          : h("span", { class: "small muted" }, x.kind === "owner" ? `You said no to keeping ${x.name}.` : `You said no to co-writing ${x.name}.`));
+      };
+      const who = [by.emoji ? `${by.emoji} ` : "", h("b", {}, by.name || "Someone")];
+      const line = h("div", { class: "pinv" },
+        h("span", { class: "small" }, ...(x.kind === "owner" ? [...who, " offered you ", h("b", {}, x.name), " to keep."]
+          : [...who, " asked you to co-write ", h("b", {}, x.name), ". Its tags would go on your notes in Anki."])),
+        h("span", { class: "row" }, h("button", { class: "ghost", onclick: (e) => answer(true, e.currentTarget) }, "Yes"),
+          h("button", { class: "quiet", onclick: (e) => answer(false, e.currentTarget) }, "No")), st);
+      return line;
+    }));
   }
   // board.py's footer: Crew (people) and Share (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
@@ -1337,7 +1458,7 @@ async function home() {
     Cards.open({ kind: oneDay ? "today" : "week", title: oneDay ? "Share today" : "Share my week", file: oneDay ? `due-crew-${t}` : `due-crew-week-${mon}`, sizes: ["story", "link"],
       data: { one: !!oneDay, range: oneDay ? `${DAYS[dd.getUTCDay()]} ${Cards.short(t)}` : `${Cards.short(mon)} – ${Cards.short(addDays(mon, 6))}`, days,
         studied: oneDay ? (days.find((x) => x.today)?.studied ? 1 : 0) : days.filter((x) => x.studied).length, elapsed: sofar.length,
-        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe },
+        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe, sev: true },  // 3.8.1: Sev hops across it
       switches: [
         { k: "time", label: "Time studied", off: a.time == null ? hidden : "" },
         { k: "reviews", label: "Reviews and new cards", off: a.reviews == null ? hidden : "" },
@@ -1351,22 +1472,25 @@ async function home() {
     h("div", { class: "row" }, h("span", { class: "small" }, "Your code ", h("b", { class: "mono" }, b.me.code ? spaced(b.me.code) : "—")),
       b.me.code ? h("button", { class: "linkish", onclick: (e) => copyInvite(b.me.code, e.target) }, "Copy invite") : null),
     codeBox());
+  // 3.8.1 (the audit, #7): each part says what it is, so a phone can put people first
+  // (app.css: the board, what friends said, the way to invite, then mine, my year last)
+  const m = (key, el) => { if (el) el.dataset.m = key; return el; };
   page(todayStrip(followed, my[t]), h("div", { class: "wb" },
     h("div", { class: "stack" },
-      h("section", { class: "brd dc-panel" },
+      m("board", h("section", { class: "brd dc-panel" },
         h("div", { class: "top2" }, pills),
         panel,
         h("div", { class: "foot" }, footLeft,
-          h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻")))),
-      yearPanel(logR.days || {}, logR.cheers || {}, "Your year")),
+          h("span", {}, updated, " ", h("button", { class: "linkish ico", title: "Refresh", "aria-label": "Refresh", onclick: () => route() }, "↻"))))),
+      m("year", yearPanel(logR.days || {}, logR.cheers || {}, "Your year"))),
     h("aside", { class: "rail" },
-      yearNudge(logR.days || {}, t, logR.cheers || {}),
-      h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
-        h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`))),
-      duePanel(followed, sett?.settings || {}, t),
-      sinceYouWereHere(b, crew, t),
-      plansPanel(),
-      friends)));
+      m("nudge", yearNudge(logR.days || {}, t, logR.cheers || {})),
+      m("week", h("section", { class: "panel" }, h("h4", {}, "This week", h("button", { class: "linkish", onclick: () => weekCard() }, "Share ›")),
+        h("div", { class: "row" }, squares(my, mon), h("span", { class: "muted small" }, `${studied} day${studied === 1 ? "" : "s"} · ${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`)))),
+      m("due", duePanel(followed, sett?.settings || {}, t)),
+      m("feed", sinceYouWereHere(b, crew, t)),
+      m("plans", plansPanel()),
+      m("friends", friends))));
   // K7: Anki's "as a picture…" lands here with ?card=, the sheet open; the address goes back to /home
   const want = new URLSearchParams(location.search).get("card");
   if (want === "today" || want === "week" || want === "year" || want === "alltime") {
@@ -2441,6 +2565,7 @@ function needsYou(s, show) {
   const row = (tag, text, label, go, warn) => h("div", { class: "nrow2" }, h("span", { class: `pill${warn ? " w" : ""}` }, tag), h("span", {}, text),
     h("button", { class: "linkish", onclick: go }, label));
   const rows = [];
+  if (s.reportsOpen) rows.push(row("Report", `${s.reportsOpen} new`, "Open", () => show("inbox"), true));  // 3.8.1
   if (s.feedbackOpen) rows.push(row("Feedback", `${s.feedbackOpen} new`, "Open", () => show("inbox")));
   for (const c of s.emailChanges || []) rows.push(row("Email", [h("b", {}, c.name), " is moving to a new address (waiting for their first sign-in there)"], "Open", () => show("people", c.uid)));
   // Q6: quiet accounts, as the daily job sees them (each deletion is in the audit log)
@@ -2703,7 +2828,7 @@ async function adminPage() {
     people: ["People", h("div", { class: "apage" }, people.el)],
     squads: ["Squads", h("div", { class: "apage" }, squads.el)],
     plans: ["Plans & library", h("div", { class: "apage" }, library)],
-    inbox: ["Inbox", h("div", { class: "apage" }, feedbackPanel(nav))],
+    inbox: ["Inbox", h("div", { class: "apage" }, reportsPanel(nav), feedbackPanel(nav))],
     notices: ["Notices", h("div", { class: "apage" }, notices)],
     bingo: ["Bingo", h("div", { class: "apage" }, bingoPanel())],
     system: ["System", h("div", { class: "apage" }, h("div", { class: "agrid3" }, codes))],
@@ -2715,7 +2840,7 @@ async function adminPage() {
     for (const [k, [, el]] of Object.entries(pages)) el.hidden = k !== key;
     side.replaceChildren(...Object.entries(pages).map(([k, [label]]) =>
       h("button", { class: k === key ? "on" : "", "aria-current": k === key ? "page" : null, onclick: () => show(k) },
-        label, k === "inbox" && s.feedbackOpen ? h("i", { class: "ct" }, String(s.feedbackOpen)) : null)));
+        label, k === "inbox" && (s.feedbackOpen || s.reportsOpen) ? h("i", { class: "ct" }, String((s.feedbackOpen || 0) + (s.reportsOpen || 0))) : null)));
     history.replaceState(null, "", key === "today" ? "/admin" : `/admin?p=${key}`);
     window.scrollTo(0, 0);
   }
@@ -2752,6 +2877,39 @@ function feedbackPage() {
   const form = h("div", { class: "stack" }, box, h("div", { class: "row" }, send, h("span", { class: "muted small" }, from ? `Sent with the page you were on (${from}).` : "")), status);
   page(phead("Send feedback", "What's working, what isn't, what you'd add. Every one is read, with your name, and we can write back to your email. Nobody else sees it."), form);
   reading();
+}
+
+/** 3.8.1 (the audit): reports, kept for the admin (they used to go only by
+ *  mail). Newest first: who reported whom or which plan, why, the note, what
+ *  came with it; each person's account a click away. Kept 180 days. */
+function reportsPanel(nav) {
+  let state = "new";
+  const list = h("div", { class: "fb" });
+  const seg = h("span", { class: "seg" });
+  const ago = (t) => new Date(t * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  const WHY = { cheers: "Unwanted cheers or knocks", name: "Their name or emoji", other: "Something else",
+                spam: "Not a study plan", copied: "Copied without credit" };
+  const who = (p) => [p.emoji ? `${p.emoji} ` : "", h("b", {}, p.name)];
+  async function draw() {
+    let r;
+    try { r = await api("GET", `/admin/reports?state=${state}`); } catch { list.replaceChildren(h("p", { class: "status bad" }, "Couldn't load reports.")); return; }
+    seg.replaceChildren(...[["new", `New · ${r.open}`], ["done", "Done"], ["all", "All"]].map(([k, t]) =>
+      h("button", { class: state === k ? "on" : "", "aria-pressed": String(state === k), onclick: () => { state = k; draw(); } }, t)));
+    if (!r.reports.length) { list.replaceChildren(h("p", { class: "muted small" }, state === "new" ? "Nothing new." : "None.")); return; }
+    list.replaceChildren(...r.reports.map((x) => h("div", { class: `item${x.done ? "" : " new"}` },
+      h("span", {}, who(x.by), " reported ", x.kind === "plan" ? [h("b", {}, x.target.name), " (a plan)"] : who(x.target), ": ", WHY[x.reason] || x.reason),
+      x.note ? h("span", { style: "white-space:pre-wrap" }, `“${x.note}”`) : null,
+      x.detail ? h("small", { class: "muted" }, x.kind === "plan" ? x.detail : `Their last cheer: ${x.detail}`) : null,
+      h("div", { class: "meta" }, h("span", {}, ago(x.at))),
+      h("div", { class: "acts" },
+        h("button", { class: "linkish", onclick: async () => { await api("PATCH", `/admin/reports/${x.id}`, { done: !x.done }).catch(() => null); draw(); } }, x.done ? "Mark new" : "Mark done"),
+        x.kind === "person" ? h("button", { class: "linkish", onclick: () => nav.person(x.target.uid) }, `${x.target.name}'s account`) : null,
+        x.kind === "plan" && x.target.code ? link(`/p/${x.target.code}`, "The plan") : null,
+        h("button", { class: "linkish", onclick: () => nav.person(x.by.uid) }, "Reporter"),
+        h("button", { class: "linkish", onclick: async () => { await api("DELETE", `/admin/reports/${x.id}`).catch(() => null); draw(); } }, "Delete")))));
+  }
+  draw();
+  return h("section", { class: "panel" }, h("h4", {}, "Reports", seg), list);
 }
 
 /** 3.6.5, P6: the admin's Feedback: newest first, Reply by mail from Due

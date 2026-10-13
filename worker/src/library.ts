@@ -7,13 +7,13 @@
 
 import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
-import { sendMail } from "./mail";
 import { isAdmin } from "./notices";
 import * as P from "./plans";
+import * as R from "./reports";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
-export const LISTED_MAX = 20;  // plans one person keeps in the library
+export const LISTED_MAX = P.LISTED_MAX;  // plans one person keeps in the library (a hand-over checks it too)
 const PAGE = 24;
 const PAGES_MAX = 20;
 const Q_MAX = 60;
@@ -44,19 +44,22 @@ export async function list(req: Request, s: Session, env: Env): Promise<Response
   }
   const order = q ? "(p.name LIKE ? ESCAPE '\\') DESC, p.listed_at DESC" : "p.listed_at DESC";
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.code, p.owner, p.name, p.line, p.lib, p.listed_at, p.based_on, u.name AS owner_name,
-            (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
+    `SELECT p.id, p.code, p.owner, p.name, p.line, p.lib, p.listed_at, p.based_on, p.version, p.totals, p.totals_at, u.name AS owner_name
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
       WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`,
   ).bind(...binds, ...(q ? [like] : []), PAGE + 1, page * PAGE)
-    .all<{ id: string; code: string; owner: string; name: string; line: string; lib: string; listed_at: number; based_on: string | null; owner_name: string | null; followers: number }>();
+    .all<{ id: string; code: string; owner: string; name: string; line: string; lib: string; listed_at: number; based_on: string | null;
+           version: number; totals: string | null; totals_at: number | null; owner_name: string | null }>();
   const decks = await env.DB.prepare(
     `SELECT json_extract(lib, '$.deck') AS deck, COUNT(*) AS n FROM plans WHERE listed = 1 AND audience = 'code'
       GROUP BY deck ORDER BY deck COLLATE NOCASE LIMIT 40`,
   ).all<{ deck: string; n: number }>();
+  // how many follow each: its totals (migration 0025), not every follower's row, up to an hour old
+  const shown = rows.results.slice(0, PAGE);
+  const tot = await P.totals(env, shown);
   return json({
-    plans: rows.results.slice(0, PAGE).map((r) => ({
-      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || (r.owner ? "?" : "a former member"), followers: r.followers ?? 0,
+    plans: shown.map((r) => ({
+      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || (r.owner ? "?" : "a former member"), followers: tot.get(r.id)?.n ?? 0,
       listedAt: r.listed_at, mine: r.owner === s.uid, ...(JSON.parse(r.lib || "{}") as Obj), ...(r.based_on ? { basedOn: JSON.parse(r.based_on) } : {}),
     })),
     more: rows.results.length > PAGE,
@@ -150,9 +153,9 @@ export const PLAN_REPORT_REASONS: Record<string, string> = {
   other: "Something else",
 };
 
-/** POST /plans/{id}/report {reason, note?}: a listed plan, reported. Stores
- *  nothing; it goes by mail to REPORT_TO with the plan's id, name and
- *  author's uid. Never the reporter's email. */
+/** POST /plans/{id}/report {reason, note?}: a listed plan, reported. Kept for
+ *  the admin's Inbox (3.8.1) and mailed to REPORT_TO when it's set, with the
+ *  plan's id, name and author's uid. Never the reporter's email. */
 export async function report(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await P.getPlan(env, id);
   if (p.listed !== 1) throw new HttpError(404, "no_plan");
@@ -163,11 +166,9 @@ export async function report(req: Request, s: Session, env: Env, [id]: string[])
   if (p.owner === s.uid) throw new HttpError(400, "self");
   await limitOrThrow(env, `report:${s.uid}`, 10, 3600);
   const note = typeof body.note === "string" ? V.oneLine(body.note, REPORT_NOTE_MAX) : "";
-  if (!env.REPORT_TO) {
-    console.log("due crew: plan report received");
-    return json({ ok: true });
-  }
-  await sendMail(env, env.REPORT_TO, "Due Crew report: a plan in the library", [
+  await R.keep(env, { by: s.uid, kind: "plan", target: p.id, reason: body.reason, note,
+                      detail: `${p.name} · duecrew.com/p/${p.code} · author ${p.owner}` },
+               "Due Crew report: a plan in the library", [
     `Reason: ${PLAN_REPORT_REASONS[body.reason]}`,
     `Note: ${note || "(none)"}`,
     "",

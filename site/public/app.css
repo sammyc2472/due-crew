@@ -85,7 +85,22 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 /* 3.2: home, the log, phases */
 /* 3.3: the board, as the add-on draws it, and a narrow column beside it */
 .wb { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: start; }
-@media (max-width: 860px) { .wb { grid-template-columns: 1fr; } }
+@media (max-width: 860px) {
+  .wb { grid-template-columns: 1fr; gap: 12px; }
+  /* 3.8.1 (the audit, #7): on a phone, people first: the board, what friends said and the
+     way to invite them, then my own panels, my year last. The two columns' boxes step aside
+     (their parts are the grid's), and the board is as tall as its rows. */
+  .wb > .stack, .wb > .rail { display: contents; }
+  .wb [data-m] { min-width: 0; }
+  .wb [data-m="board"] { order: 1; min-height: 0; }
+  .wb [data-m="feed"] { order: 2; }
+  .wb [data-m="friends"] { order: 3; }
+  .wb [data-m="due"] { order: 4; }
+  .wb [data-m="week"] { order: 5; }
+  .wb [data-m="plans"] { order: 6; }
+  .wb [data-m="nudge"] { order: 7; }
+  .wb [data-m="year"] { order: 8; }
+}
 .rail { display: grid; gap: 12px; align-content: start; grid-template-columns: minmax(0, 1fr); }  /* a long word never widens the page */
 .brd { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 10px; background: var(--card); display: grid; gap: 8px;
   min-height: 300px; grid-template-rows: auto 1fr auto; }  /* 3.8.0: a short tab doesn't pull the page up; the footer stays at the bottom */
@@ -260,6 +275,9 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .d.heavy .dn2 b { color: var(--warn); }
 .ch { display: flex; justify-content: space-between; gap: 4px; align-items: baseline; width: 100%; text-align: left; font: 11.5px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 600; border: 0; border-radius: 5px; padding: 2px 5px; cursor: grab; color: var(--ink); }
 .ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 3.8.1: a date's own name above its chips */
+.dname { font-size: 11.5px; font-weight: 700; color: var(--ink); padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal2.week .dname { white-space: normal; }
 .ch small { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cal2.week .ch span { white-space: normal; }
 .ch.ev { border-left: 3px solid var(--accent); }
@@ -278,9 +296,20 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .ch2 { display: inline-flex; gap: 8px; align-items: center; border-radius: 8px; padding: 4px 6px 4px 9px; font-size: 13px; }
 .ch2 .raw { max-width: 260px; }
 .ch2 small { color: var(--muted); }
+/* 3.8.1: tags a date's name points at */
+.sug { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.sug:empty { display: none; }
+.sug1 { border: 0; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink); padding: 3px 9px; }
+.sug1:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.dayp .sug .sug1 { display: inline-flex; width: auto; max-width: 100%; gap: 8px; text-align: left; }
+.dayp .sug .sug1 > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch2 .cps { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }  /* 3.8.0: Copy search */
 .ch2 .cps:hover { color: var(--accent); }
 .ch2 .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
+/* 3.8.1: All of it / Only SLG 12, on a deck tag's chip */
+.ch2 .inpick { font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 4px; max-width: 140px; }
+.ch2 .inpick:hover, .ch2 .inpick:focus-visible { color: var(--accent); border-color: var(--accent); }
 .linkish { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 600; font-size: 12.5px; }
 label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; }
 .splitp { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
@@ -319,6 +348,9 @@ label.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; ma
 .aibox p { margin: 0; }
 .aipre { white-space: pre-wrap; max-height: 320px; overflow: auto; background: var(--well); padding: 10px; border-radius: 8px; margin: 8px 0 0; }
 .pv { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 10px 12px; display: grid; gap: 6px; }
+.pv .warnbox { background: var(--warn-tint); border-radius: 8px; padding: 8px 10px; text-align: left; }  /* 3.8.1: tags still on dates */
+.pv .warnbox b { color: var(--warn); }
+.pv .warnbox ul { margin: 6px 0; padding-left: 20px; }
 .pvrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 700px) { .pvrow { grid-template-columns: 1fr; gap: 2px; } }
 /* 3.3: plans together */
@@ -931,6 +963,10 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .dayp .ch2 > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .dayp .ch2 .raw { display: block; max-width: 100%; }
 .dayp .ch2 > small, .dayp .ch2 > button { flex: none; white-space: nowrap; overflow-wrap: normal; }
+/* 3.8.1: a chip with All of it / Only SLG 12 keeps its name whole on the first line, the controls under it */
+.dayp .ch2:has(.inpick) { flex-wrap: wrap; row-gap: 2px; }
+.dayp .ch2:has(.inpick) > span:first-child { flex-basis: 100%; }
+.dayp .ch2 > .inpick { flex: 0 1 auto; min-width: 0; margin-left: auto; }
 .ltops, .ltodo { display: grid; gap: 2px; grid-column: 1 / -1; font-size: 12.5px; }
 .lrow > small.muted:last-child { grid-column: 1 / -1; }
 .lu small { font-size: 12px; } .lu.late small { color: var(--warn); }
@@ -962,3 +998,73 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .pacebox { margin: 4px 0 10px; display: grid; gap: 4px; justify-items: start; }
 .pacebox label { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; max-width: 100%; }
 .pacebox select { font: inherit; font-size: 13px; padding: 2px 6px; max-width: 100%; }
+
+/* the builder: a plan tag's ×, the dates it's on before it goes */
+.ptag .ptdrop { display: grid; gap: 4px; margin: 4px 2px 2px; padding: 6px 8px; border-radius: 8px; background: var(--warn-tint); text-align: left; overflow-wrap: anywhere; }
+.ptag .ptdrop .row { display: flex; gap: 14px; }
+/* when the author's Anki last sent the deck's tags */
+.tree2 .asof { display: block; margin-top: -2px; }
+/* Undo, beside Save while there's something to undo; on a phone the bar keeps to the screen */
+.savebar button.undo { padding: 7px 14px; }
+@media (max-width: 560px) {
+  .savebar { max-width: calc(100vw - 32px); box-sizing: border-box; padding-left: 12px; gap: 6px; }
+  .savebar .status { min-width: 0; line-height: 1.2; }
+  .savebar .tell { width: auto; flex: 0 1 140px; min-width: 64px; }
+  .savebar button.undo { padding: 7px 11px; }
+}
+/* a plan tag's row: its size shrinks before its buttons do (the × stays in reach) */
+.ptags .ptlist { grid-template-columns: minmax(0, 1fr); }
+.ptag { min-width: 0; }
+.ptag .pt1 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ptag .pt1 button { flex: none; }
+/* /p/CODE signed in: Follow, then where its cards go */
+.followbox { margin: 14px 0; max-width: 640px; }
+.followbox p { margin: 0; }
+.followbox .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+/* 3.8.1 (plans, round three) */
+/* first steps on an empty plan: 1 Tick · 2 Fill · 3 Save · 4 Share, the one to do now bold */
+.firststeps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-size: 13.5px; color: var(--muted); }
+.firststeps li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.firststeps .n { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%; border: 1px solid var(--line); font-size: 11.5px; font-weight: 700; }
+.firststeps li.now { color: var(--ink); }
+.firststeps li.now .n { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.firststeps li.done .n { border-color: var(--accent); color: var(--accent); }
+/* a note for followers on a tag: ⓘ on its chip; its words under the chip in the day panel */
+.ri { font-style: normal; font-weight: 400; }
+.cal2 .ch .ri { color: var(--muted); }
+.chips2 .rmk { flex-basis: 100%; display: flex; gap: 6px; align-items: baseline; min-width: 0; margin: -1px 0 3px 9px; color: var(--muted); overflow-wrap: anywhere; text-align: left; }
+.chips2 .rmk .ri { color: var(--accent); }
+.chips2 .rmk.edit { align-items: center; margin-left: 0; }
+.chips2 .rmk.edit input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 4px 8px; }
+/* a tag's extras: 64 + 22 extra, With extras / Without */
+.ch2 .xtra { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ch2 .xtra .seg button { font-size: 11.5px; padding: 1px 8px; }
+.dayp .ch2:has(.xtra) { flex-wrap: wrap; row-gap: 2px; }
+.dayp .ch2:has(.xtra) > span:first-child { flex-basis: 100%; }
+.dayp .ch2 > .xtra { flex: 0 1 auto; min-width: 0; }
+.dayp .ch2:has(.inpick) > .x, .dayp .ch2:has(.xtra) > .x { margin-left: auto; }  /* wrapped: the × at the row's end */
+/* a date's picked cards, open in the day panel: every label, whole */
+.dayp .ch2.single > span:first-child, .dayp .ch2.single .raw { white-space: normal; overflow-wrap: anywhere; }
+/* notes on single cards, by ID and number */
+.cnotes summary { cursor: pointer; }
+.cnotes[open] summary { margin-bottom: 6px; }
+.cnote { display: grid; grid-template-columns: minmax(0, 14em) minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--line); text-align: left; }
+.cnote .mono { overflow-wrap: anywhere; color: var(--muted); }
+.cnote .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
+@media (max-width: 560px) { .cnote { grid-template-columns: minmax(0, 1fr) auto; } .cnote .mono { grid-column: 1 / -1; } }
+/* Settings' co-authors: invited, waiting; Hand it to; offered, Take back */
+.coas { display: grid; gap: 6px; }
+.coa { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 6px 10px; border-radius: 8px; background: var(--well); font-size: 14px; color: var(--ink); }
+.coa .sp { flex: 1; }
+.coa.offer { background: var(--you); }
+.who2.wait { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+/* Home: asked to co-write a plan, or offered one */
+.pinvs { display: grid; gap: 8px; }
+.pinv { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--you); overflow-wrap: anywhere; }
+.pinv .row { gap: 8px; }
+.pinv button { padding: 4px 14px; font-size: 13px; }
+.pinv .status:empty, .coas .status:empty { display: none; }
+/* the poster: where to get the deck, its address on paper */
+.printout.poster .pdeck { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+.printout.poster .pdeck a { color: #2e7d32; }
+.printout.poster .purl { color: #6b6b64; }

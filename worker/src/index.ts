@@ -3,6 +3,7 @@
 
 import * as Ad from "./admin";
 import * as Fb from "./feedback";
+import * as Rp from "./reports";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
@@ -107,6 +108,10 @@ authed("GET", r("/admin/feedback"), Fb.list);
 authed("PATCH", r("/admin/feedback/([0-9A-Z]{26})"), Fb.mark);
 authed("DELETE", r("/admin/feedback/([0-9A-Z]{26})"), (_q, s, env, p) => Fb.remove(s, env, p));
 authed("POST", r("/admin/feedback/([0-9A-Z]{26})/reply"), Fb.reply);
+// 3.8.1 (the audit): reports, kept for the admin (they went only by mail)
+authed("GET", r("/admin/reports"), Rp.list);
+authed("PATCH", r("/admin/reports/([0-9A-Z]{26})"), Rp.mark);
+authed("DELETE", r("/admin/reports/([0-9A-Z]{26})"), (_q, s, env, p) => Rp.remove(s, env, p));
 authed("PUT", r("/admin/bingo/([a-z0-9]{1,12})"), Bingo.adminPut);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
@@ -142,6 +147,9 @@ authed("PUT", r(`/plans/${ID}/ids`), P.putIds);
 authed("POST", r(`/plans/${ID}/undo`), P.undo);
 authed("POST", r(`/plans/${ID}/editors`), P.addEditor);
 authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEditor(s, env, p));
+authed("POST", r(`/plans/${ID}/invite`), P.answerInvite);  // 3.8.1: yes or no to co-writing it, or to keeping it
+authed("POST", r(`/plans/${ID}/owner`), P.offerPlan);      // 3.8.1: the owner offers it to a co-author
+authed("POST", r(`/plans/${ID}/remarks`), P.remarks);       // 3.8.1: a note on a card or tag, from Anki's Browse
 authed("GET", r(`/plans/${ID}/notes`), (_q, s, env, p) => P.notes(s, env, p));
 authed("POST", r(`/plans/${ID}/notes`), P.addNote);
 authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.removeNote(s, env, p));
@@ -177,6 +185,7 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
     // 3.6.5, P6: feedback is kept a year
     env.DB.prepare("DELETE FROM feedback WHERE at <= ?").bind(now - 365 * 86400),
+    env.DB.prepare("DELETE FROM reports WHERE at <= ?").bind(now - Rp.REPORTS_KEPT_DAYS * 86400),  // 3.8.1
     // the admin's audit log is kept a year; an email change lapses after a week
     env.DB.prepare("DELETE FROM admin_actions WHERE at <= ?").bind(now - 365 * 86400),
     env.DB.prepare("DELETE FROM email_changes WHERE at <= ?").bind(now - 7 * 86400),
