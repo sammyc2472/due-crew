@@ -352,7 +352,33 @@ def main(out):
         settle()
         if "notes" not in dlg.size.text() or dlg.scope.count() != 2:
             raise RuntimeError(f"export: {dlg.size.text()!r} {dlg.scope.count()}")
+        # 3.8.1: with a plan picked, the plan itself at the file's top, ticked by default; none for a whole deck
+        lines = dlg.plan_lines()
+        if dlg.with_plan.isHidden() or not dlg.with_plan.isChecked() or not lines or not all(x.startswith("# ") for x in lines):
+            raise RuntimeError(f"export with the plan: {lines!r}")
         shoot(dlg, os.path.join(out, "export-for-ai.png"))
+        dlg.plan.setCurrentIndex(dlg.plan.count() - 1)
+        if not dlg.with_plan.isHidden() or dlg.plan_lines() is not None:
+            raise RuntimeError("export: a whole deck has no plan's lines")
+        dlg.close()
+        # 3.8.1: Follow, when no deck here has the plan's deck's name and the plan says where to get it
+        got_pid, got_code = STORE.add_plan("igk", "Elsewhere", "A deck not here", units[:1])
+        STORE.plans[got_pid]["doc"]["deckUrl"] = "https://example.com/get-the-deck"
+        links = []
+        utils.openLink = links.append
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=got_code, today=today.isoformat(), swap_prompt=lambda sw, n: False)
+        settle()
+        if dlg.get_deck.isHidden() or "Where to get it" not in dlg.get_deck.text() or "A deck not here" not in dlg.get_deck.text():
+            raise RuntimeError(f"follow: the deck's link {dlg.get_deck.text()!r}")
+        dlg.get_deck.linkActivated.emit("x")
+        if links != ["https://example.com/get-the-deck"]:
+            raise RuntimeError(f"follow: opened {links!r}")
+        shoot(dlg, os.path.join(out, "plan-follow-get-deck.png"))
+        dlg = FollowDialog(None, CLIENT, aqt.mw.col, code=code, today=today.isoformat(), swap_prompt=lambda sw, n: True)
+        settle()
+        if not dlg.get_deck.isHidden():
+            raise RuntimeError("follow: a plan with no link, or a deck here, says nothing of it")
+        dlg.close()
         # 3.6.5, P6: Send feedback to Sam
         from due_crew.ui.feedback_dialog import FeedbackDialog
         dlg = FeedbackDialog(None, CLIENT, "3.6.5")
@@ -597,11 +623,52 @@ def main(out):
             raise RuntimeError("tag: the plan didn't get it")
         dlg.close()
 
+    def remark():
+        # 3.8.1: Browse › note for the plan's followers: only plans I write; the note on this
+        # card there is filled in and edited (it stays one note) or taken off; names stay text
+        from due_crew.ui.remark_dialog import RemarkDialog
+        pid, _code = STORE.add_plan("sam", "MS2 <Block> 2", "Big Step 1", [
+            {"id": "u1", "name": "Cardio", "opens": TODAY, "tags": ["Step1::Cardio"]}])
+        CLIENT.plan_remark(pid, add={"card": ["guid000004", 0], "text": "The second half of the lecture"})
+        done = []
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        names = [dlg.plan.itemText(i) for i in range(dlg.plan.count())]
+        if any("Not mine" in n for n in names) or "MS2 <Block> 2" not in dlg.plan.currentText():
+            raise RuntimeError(f"remark: plans {names!r}, picked {dlg.plan.currentText()!r}")
+        if dlg.text.text() != "The second half of the lecture" or dlg.remove_btn.isHidden() or dlg.save_btn.isEnabled():
+            raise RuntimeError(f"remark: the note there {dlg.text.text()!r}")
+        if dlg.where.textFormat() != QtCore.Qt.TextFormat.PlainText or "MS2 <Block> 2" not in dlg.where.text():
+            raise RuntimeError(f"remark: where {dlg.where.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-remark.png"))
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        dlg.text.setText("Watch the second half first")
+        dlg.show()
+        dlg.save_btn.click()
+        settle()
+        rs = STORE.plans[pid]["doc"].get("remarks") or []
+        if [r["text"] for r in rs] != ["Watch the second half first"] or not done:
+            raise RuntimeError(f"remark: edited {rs!r} {dlg.status.text()!r}")
+        dlg = RemarkDialog(None, CLIENT, "guid000004", 0, on_done=done.append)
+        settle()
+        dlg.show()
+        dlg.remove_btn.click()
+        settle()
+        if STORE.plans[pid]["doc"].get("remarks"):
+            raise RuntimeError("remark: not taken off")
+        dlg = RemarkDialog(None, CLIENT, "guid000003", 0)
+        settle()
+        if dlg.text.text() or not dlg.remove_btn.isHidden() or dlg.save_btn.isEnabled():
+            raise RuntimeError("remark: a card with none starts empty, Save off")
+        shoot(dlg, os.path.join(out, "plan-remark-new.png"))
+
     for label, build in (("tools menu", tools_menu), ("friends", friends), ("decks", decks),
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards)):
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
+                         ("remark", remark)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")
