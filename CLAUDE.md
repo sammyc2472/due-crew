@@ -80,12 +80,13 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   server; an install pulls before it uploads (`account.ensure()`), and the
   newest save wins. Theme, sort, tab, hidden tabs and the room chip's side
   stay per computer.
-- Plans: the plan says what and by when; my follow (shift, skips, moves,
+- Plans (`docs/plans.md` is how they work now: the doc, a follow,
+  plans.json, the morning, the limits): the plan says what and by when; my follow (shift, skips, moves,
   pause, catch-up, and since 3.8.0 `own`, my own pace) says when for me
   (`plan_flow.mine` → `plans.my_doc`), and never changes the plan. The
   morning opens what's due once per Anki day, after the AnkiWeb sync, in
   one undo step; at my own pace it opens only what an author adds to dates
-  I opened (and, "next", the next once I've seen the last). A plan never suspends on
+  I opened (and, "next", the next once I've seen most of the last). A plan never suspends on
   its own (Hold back is the one suspend, and only when asked), a date that
   opened never closes again, and a leech never opens. Plan state is per
   profile (`user_files/<profile>/plans.json`), never the shared config:
@@ -93,8 +94,10 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json`. A plan's squad (its team on the server) shares only
-  that I showed up, my questions and answers, and bingo stamps; never a
-  number, never weak spots.
+  that I showed up, my questions and answers, and bingo stamps; never my
+  numbers by name, never weak spots. While I'm in it, my per-date progress
+  joins the counts its authors see (Progress, never named, per date only
+  from three people up).
 - Days are the person's Anki day (their rollover), on both sides (`ankiDay`
   in the Worker).
 - Background jobs capture `app.generation` (bumped at profile open/close,

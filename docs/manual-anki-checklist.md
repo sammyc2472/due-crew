@@ -201,7 +201,7 @@ Deploy the Worker first (the tag does), dev first as for 3.0.
 - [ ] A second computer signed in to the same account: B is muted there too after its next settings pull (restart Anki).
 - [ ] B, muted, tips A's flag: the flag goes down for the crew, then comes back up at A's next sync (a muted tip doesn't count).
 - [ ] Report… on B: "Report B", three choices, a note, "Sends their name, emoji and last cheer to Due Crew. Reporting also mutes them.", Cancel / Report. Cancel does nothing. Report: tooltip says reported and muted; B is muted. With REPORT_TO set, the mail arrives with both uids, B's name and emoji, the reason, the note, and B's cheer to you if it was still unread; your address isn't in it. Without REPORT_TO, `wrangler tail` shows "report received" and no ids.
-- [ ] Settings → Board → Room chip: Left. Open a room: the chip sits at the left end of the top bar (Decks screen and while reviewing); with AMBOSS installed, the two chips don't overlap. Right puts it back. Reset Board puts it back on the right. A second computer keeps its own choice.
+- [ ] Settings → Board → Room chip: Left. Open a room: the chip sits at the left end of the top bar (Decks screen and while reviewing); with another add-on's chip in the top bar, the two don't overlap. Right puts it back. Reset Board puts it back on the right. A second computer keeps its own choice.
 
 ## 3.1: plans
 
@@ -279,7 +279,7 @@ deck both share (Settings › Shared decks).
 ### 3.3: following, the Plans tab, together (3.8.0: the tab is You › Plans, above the board)
 
 - [ ] Follow a plan: nothing asks for a schedule; the board switches to a new Plans tab with the card (today's tiles, one status line, one bar a date). Decks has no plan card. Stop following everything: the tab goes.
-- [ ] Make a plan from an AnKing deck: the builder's tree reaches tags five levels down (#Bootcamp › Cardiology › 2 · Anatomy › 4 · Penetrating…).
+- [ ] Make a plan from a big shared deck: the builder's tree reaches tags five levels down (#Videos › Cardiology › 2 · Anatomy › 4 · Penetrating…).
 - [ ] Site, as the owner: + Co-author lists your crew; pick one. They see the plan under Yours (with you), can edit and save, can't see Settings. Remove them with ×.
 - [ ] A follower opens the plan on the site: the calendar, read-only, with 💬 on days with notes; click a day, add a note; the author sees it and can take it down.
 - [ ] History: each save with who and what; Undo on the latest puts it back.
@@ -298,7 +298,7 @@ deck both share (Settings › Shared decks).
 - [ ] C2: Plan ▾ › Open early › 2 days: the next two days' cards open now; the card says "(2 days early)".
 - [ ] C3: in the browser, search `tag:*Cardio* -tag:*Pharm*`, Due Crew: add to a plan › This search: the date shows the search with its count on the site; a follower's morning opens those cards. Paste a search on a day on the site: the same.
 - [ ] C4: Study on a date's row opens "Due Crew · <date>". A review day on the site: that morning, "Review · A – B" (200 most-missed).
-- [ ] C5: rename a tag in a follower's copy (like a new AnKing): the date still opens its cards, and the card says the tags differ, with OK.
+- [ ] C5: rename a tag in a follower's copy (like a new version of a shared deck): the date still opens its cards, and the card says the tags differ, with OK.
 
 ### 3.4: search counts, calendar
 
