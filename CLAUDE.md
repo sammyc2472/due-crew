@@ -122,6 +122,11 @@ same commit, each with its test:
 - `plans.topic_items`' cut row ↔ `cutName` in builder.js ("Cephalosporins ·
   SLG 12", 3.8.1); a cut's `q` ↔ `cutQ` in builder.js ↔ `reroot` in plans.ts
 - `board._plan_squad_html` ↔ `PlanSquad.view` in builder.js (a plan's squad)
+- `plans.reinforces` ↔ `afterEv` in builder.js (a date after its event is
+  reinforcement, "after Heme quiz", 3.8.1)
+- `plans.topic_remarks` ↔ `remarkOn` in builder.js (a topic shows its tag's
+  note or the nearest parent's); `plans._date_line` (the export) ↔ a date's
+  line in builder.js `toText`; the picked row's "X · N picked" ↔ `picksText`
 - `room_model.phase` ↔ the room widget's JS
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
@@ -150,6 +155,10 @@ same commit, each with its test:
 | Plan tags: DueCrew::<plan>::SLG_12 on followers' notes (Browse right-click, the builder, Tag by objective; 3.8.0) | `plans.sync_tags`, `plan_flow.apply_tags`, `ui/tag_dialog.py` | `plans.ts` tagNotes; This plan's tags in builder.js |
 | Cuts (a video kept to an SLG) and a tag's single cards; taking a tag off (3.8.1) | `plans.match`/`plan_tag_cards`/`topic_items`, `plan_flow._unit_cids` | `planDoc`/`putIds` in `plans.ts`; `setCut`/`syncCuts` and the Text preview in builder.js |
 | Your own pace (Up next, Open, Put back); Browse › open its cards / open these (3.8.0) | `plans.up_next`, `plan_flow.open_next`, `plan_flow.open_cards_now`, `ui/open_dialog.py` | follow `own` (`plans.ts`); `paceBox` in builder.js |
+| Co-authors who said yes, handing a plan over (3.8.1) | `board._invite_lines`, `plan_flow.answer_invite` | `plans.ts` addEditor/answerInvite/offerPlan; `coauthorsBox` in builder.js, Home's invites |
+| Notes for followers on a tag or a card (`remarks`, 3.8.1) | `plans.topic_remarks`, `cards.remark_view`, `ui/remark_dialog.py` | `plans.ts` remarks; `Remarks`, `remarkOn` in builder.js |
+| A follower's day (3.8.1): Welcome back, what Hold back keeps, Study a date or a quiz | `plan_flow.welcome_back`/`show_held`/`study_date`/`study_quiz`, `plans.quiz`, `ui/away_dialog.py`, `ui/held_dialog.py` | never sent (Push my dates back is the follow's shift) |
+| The builder's day's work and suggestions (3.8.1) | | `Work`, `Suggest` in builder.js |
 | Previews of a plan or invite link | | `site/src/og.ts` |
 
 ## Releasing

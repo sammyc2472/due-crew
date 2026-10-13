@@ -77,6 +77,9 @@ day's cards each morning. Behind? **Catch up** or **Push my dates back**.
   first? The plan's ··· menu › Open early.
 - **Hold back.** A deck with every card showing? Follow holds the later
   dates back until their day.
+- **Study a date, or a quiz.** Each date has **Study**: its cards in one
+  deck, a cram before class. Three days before a quiz, **Study for it**
+  puts every date that preps for it in one deck, the shakiest first.
 - **Your own pace.** Follow a plan with its cards opening **When I'm
   ready**: **Up next** opens the next date, first in Anki's line of new
   cards, or opens it by itself once you've seen most of the last one.
@@ -90,8 +93,9 @@ day's cards each morning. Behind? **Catch up** or **Push my dates back**.
   away in Browse. Its authors make them in Anki or on duecrew.com.
 - **A plan's squad.** See who showed up today, ask and answer questions,
   and play bingo with everyone on the plan.
-- Plans can have co-authors and notes, go in your calendar app, and be
-  shared in the library.
+- Plans can have co-authors (each says yes first), notes for followers
+  on a video or a card, go in your calendar app, and be shared in the
+  library.
 
 ## In Anki's browser
 

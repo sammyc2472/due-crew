@@ -11,7 +11,7 @@ their reasoning. The plan text format (what Text and an AI write) is
 
 | Part | Where it lives | Who writes it |
 |---|---|---|
-| The plan: name, line, audience, its doc | D1 `plans` (`worker/src/plans.ts`) | its owner and co-authors, on duecrew.com (and the author's Anki, below) |
+| The plan: name, line, audience, its doc | D1 `plans` (`worker/src/plans.ts`) | its owner and co-authors (each said yes to an invite, 3.8.1; an owner can hand the plan to one), on duecrew.com (and the author's Anki, below) |
 | A follow: my shift, skips, moves, pause, early, own pace, my progress | D1 `plan_follows` | me (Anki or the site) |
 | My state for each plan on this computer | `user_files/<profile>/plans.json` | my Anki (`plan_flow.py`) |
 | The deck's tag tree, for the builder | D1 `plan_trees` | the author's Anki (`PUT /plans/trees`) |
@@ -29,7 +29,11 @@ Top level: `deck` (the deck's name, matched by name in each follower's
 Anki), `units` (the dates), and optionally `exam`, `end`, `phases`
 (`catchup`, `taper`), `pace` (the builder's choices and what to cover),
 `reviews` (review days), `events` (named days with no cards), `every`
-(weekly to-do lines), `tags` and `tagroot` (the plan's own tags).
+(weekly to-do lines), `tags` and `tagroot` (the plan's own tags), and
+since 3.8.1 `deckUrl` (where to get the deck, https) and `remarks`
+(`[{id, tag | card, text}]`: the authors' notes for followers on a deck tag
+or one card, shown under that topic and on the review screen; at most
+300, 280 characters each).
 
 A date (`unit`):
 
@@ -46,6 +50,7 @@ A date (`unit`):
 | `ids` | the author's note guids behind the date's tags and subdecks, kept while its tags, subdecks and cuts are unchanged; a follower whose copy names a tag differently still gets the date | the author's Anki |
 | `idn`, `pn`, `n` | counts: what pasted ids found; new / repeat / missing in the author's copy; a total | the author's Anki |
 | `todo` | up to 8 lines ticked by hand (watch / read / do) | the builder |
+| `pl` | what the date's picked cards are: `[[deck tag, n]]` (at most 3), so "Herpes Viruses · 88 picked" | the author's Anki (`#lbl` on the ids upload), kept while the picks are unchanged |
 
 Limits (`worker/src/plans.ts`, top): 200 dates, 200 events, 10 searches
 a date (each under 500 characters), 5,000 ids pasted on one date, 50,000
@@ -121,20 +126,39 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
    it opens only what an author added to dates I opened, and ("next")
    the next date once I've seen most of the last.
 6. A pause that ended asks its question; a plan new here asks Follow's
-   Hold back question.
+   Hold back question. 3.8.1, Welcome back: when the open would take in
+   dates from 3 or more days with no study at all (not at my own pace, on
+   a 3.2 schedule or with even dates), those dates wait in `later` and the
+   morning asks: Open them · Push my dates back N days (the follow's
+   shift, one PATCH) · Not today (asks again tomorrow).
 
-The line under the board says what opened, with Not today (Anki's undo,
+The line under the board says what opened, by date since 3.8.1 (each
+name opens Browse on that date's new cards), with Not today (Anki's undo,
 then those dates open tomorrow morning; at my own pace the date stays
 opened and only the author's addition waits) while it's still Anki's
 latest step. An author's update that arrives later in the day is asked,
 not opened (`midday`). A date closed with Edit › Undo offers Open now,
 which opens it whole.
 
+## A follower's plan box (3.8.1)
+
+The week marks a date after its event "after X" (reinforcement: no prep
+day), says under a date what stayed shut (leeches, picks not in this
+copy), and keeps what the plan opens apart from my own reviews due. Every
+date with open cards has Study: a Due Crew filtered deck of them, new and
+review, due or not, random (`study_date`). From three days before an
+event, its line has Study for it: every prep date's open cards in one
+deck, the shakiest first (`plans.quiz`, `study_quiz`). The plan's menu
+says what Hold back keeps, with Open them (one undo step; Hold back stays
+on) and Stop holding back. At my own pace, any date after Then opens at
+once, with Undo. All of it is read here; nothing is sent.
+
 ## What the author's Anki sends
 
 On the day's first refresh, for each plan I write or co-author whose
 deck I have (by its name): the note ids behind each date (`PUT
-/plans/{id}/ids`: `ids`, `idr`, counts), only when they changed; the
+/plans/{id}/ids`: `ids`, `idr`, counts, and since 3.8.1 `#lbl`, the deck
+tags a date's picked cards sit under), only when they changed; the
 deck's tag tree, only when it changed (`send_trees`, `PUT /plans/trees`;
 the builder says "Tags as of" its date); and the plan's own tags go on
 my notes. Make a plan from a deck sends the tree at once. A tag change
@@ -146,6 +170,10 @@ Each add-on cleans a plan on arrival (`backend/shapes.clean_plan_doc`)
 and drops fields it doesn't know, so a newer field must leave the plan
 usable without it:
 
+- 3.8.1 `deckUrl`, `remarks` and a date's `pl`: an older add-on shows
+  none of them; the plan works the same. A co-author invited but not yet
+  answered is no co-author to any add-on. An older add-on never sends
+  `same=1`, so its morning brings every doc as before.
 - 3.8.1 cuts keep their search in `search`: an older add-on opens the
   same cards by the search.
 - 3.8.1 single cards in a plan tag: an older add-on leaves them out, and

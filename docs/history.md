@@ -1379,3 +1379,47 @@ every release that changes how something works.
   text format, linked from the Format box and both prompts), three
   README lines, a date's id fields in the Worker README; no third-party
   deck named in the design notes, the click-test or the preview's data.
+- 3.8.1, plans round three (Sam's eight picks on the "Plans, Round Three"
+  mock, an outside reviewer's six notes, and Study on a date; built by
+  four builders on one contract, then joined). Co-authors say yes first
+  (migration 0026: `plan_editors.accepted_at`, `plans.handover`): an
+  invite is nothing until a yes (no saves, no tags in their Anki, not in
+  the library), shown on the day's first board (`planInvites`, Yes and No
+  above the plans; Home on the site); an owner can hand the plan to a
+  co-author who said yes, who says yes too, and the code, tag root and
+  followers stay. Where to get the deck: an https link on the plan
+  (`deckUrl`), on its page, poster and in Follow when no deck has its name.
+  Notes for followers (`remarks`, in the doc): on a tag (under its topic
+  in Anki, an ⓘ on the site) or one card (on the review screen when it
+  comes up), written on the site, in Text (`note | tag:… | …`) or from
+  Browse; an edited card note keeps its id. Picked cards keep their
+  resource's name (`pl` from the author's Anki, `#lbl` on the ids upload,
+  the board's authored plans now carrying single cards): "Herpes Viruses ·
+  88 picked". A deck tag with an Extra part shows "64 + 22 extra" with
+  With extras / Without. Revisions read as revisions: "updated Fri 16 Oct",
+  "renamed 10 tags" (a renamed tag matched by what it holds keeps its id).
+  A date that opens after its event is reinforcement, "after Heme quiz",
+  and no prep day. Export cards for my AI starts with the plan (dates in
+  the text format, tags, overlaps, notes; never card text). First steps
+  on an empty plan. A follower's day: Welcome back (3 days with no study:
+  Open them, Push my dates back, Not today), what the morning opened by
+  date (each opens Browse), what Hold back keeps (Open them, Stop holding
+  back), why a date left cards shut (leeches, picks not in this copy),
+  any date in Up next opens at once with Undo, Study on every date (a
+  random cram of its open cards, one undo step), and a day's line keeps
+  what the plan opens apart from my own reviews. Anki's new filtered deck
+  came with a second search (20 new cards of the current deck) that went
+  into every Due Crew deck since 3.8.0; it's gone.
+- 3.8.1, plans rethought (the "Plans, Rethought" page: where plans fail,
+  five rules, moves mocked for Sam's call). Built: the builder reads a
+  day's work, each date spread over the study days to its due date
+  (`Work` in builder.js), so a week's date isn't "212 new on Monday"; the
+  heavy note names the date most to blame with Split or Give it till, and
+  every day's bar is its share. A date the author named shows its name
+  above its chips; a tag's last word the deck has twice reads with its
+  parent. A named date's day panel suggests the deck's tags its name
+  points at (`Suggest`; words, never card text). Study for a quiz: from
+  three days out, one deck of its prep dates' open cards, the shakiest
+  first (`plans.quiz`, `planquiz:`). The morning keeps the plan docs it
+  has: `same=1` on the day's first board, and an unmoved stamp sends each
+  plan without its doc (a doc not kept here lets the stamp go).
