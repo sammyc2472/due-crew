@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person } from "./helpers";
+import { anHourOn, api, db, person } from "./helpers";
 
 const SITE = { "x-due-crew": "1" };  // what the site's own script sends
 
@@ -188,6 +188,7 @@ describe("plans: following", () => {
     expect((await nia.call("POST", "/sync", { plans: prog })).body.wrote.plans).toBe(true);  // kept for her own views, counted for nobody
     const p = await dre.call("GET", `/plans/${plan.id}/progress`);
     expect(p.body).toEqual({ followers: 2, sharing: 1, units: { hf: { opened: 1, done: 1 }, arr: { opened: 1, done: 0 } } });
+    await anHourOn();  // the board's counts are the plan's totals, up to an hour old (the authors' are live)
     const b = (await nia.call("GET", "/board?decks=1")).body.plans[0];
     expect(b).toMatchObject({ followers: 2, crewDone: { hf: 1 } });  // a follower sees counts, never names
     expect(await maya.status("GET", `/plans/${plan.id}/progress`)).toBe(403);

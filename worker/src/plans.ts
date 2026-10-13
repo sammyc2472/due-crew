@@ -42,7 +42,10 @@ const POST_MAX = 200;        // 3.7.3: a post to followers, one line
 const POSTS_PER_DAY = 5;     // a plan's posts in a day, all its authors together
 const POSTS_KEEP = 50;       // a plan keeps its newest
 const POSTS_ON_BOARD = 3;    // the newest per plan ride an add-on's board
-export const FOLLOWS_MAX = 20;
+export const FOLLOWS_MAX = 20;  // the plans I follow that I can see (FOLLOWED): what every board carries
+// and the follows kept in all, a squad's plan I left (hidden, kept for when I'm back) among them
+const FOLLOWS_KEPT = FOLLOWS_MAX * 5;
+const TOTALS_EVERY = 3600;  // a plan's totals are worked out again when read older than this
 const TREES_MAX = 20;
 export const PLANS_MAX = 50;
 // 3.7.2: what one account's plans keep in all (docs, library cards and the
@@ -63,7 +66,8 @@ const TAG_ROOT_MAX = 60;
 type Obj = Record<string, unknown>;
 export type Plan = { id: string; code: string; owner: string; name: string; line: string; audience: string;
   squad: string | null; doc: string; version: number; updated_at: number;
-  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null };
+  listed?: number; listed_note?: string | null; lib?: string | null; based_on?: string | null; tagroot?: string | null;
+  totals?: string | null; totals_at?: number | null };
 
 export function draw(n: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
@@ -270,20 +274,30 @@ export function reroot(doc: Obj, from: string, to: string): Obj {
   return out;
 }
 
+/** The tag roots a plan may take, in order: the one asked for, then _2 to
+ *  _50, then (a name fifty plans share) one ending in the plan's own id,
+ *  which no other plan has, and the id alone. All fit TAG_ROOT_MAX. */
+export function rootTries(want: string, id: string): string[] {
+  const cut = (sfx: string) => `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
+  return [cut(""), ...Array.from({ length: 49 }, (_, i) => cut(`_${i + 2}`)), cut(`_${id}`), id];
+}
+
 /** The plan's tag root, its own: the one it holds (a save never moves it),
- *  or, with its first tag, the one asked for, or _2, _3… when another plan
- *  has it (case aside). The doc comes back with its dates following. */
+ *  or, with its first tag, the first of rootTries no other plan has (case
+ *  aside). The doc comes back with its dates following. */
 export async function rooted(env: Env, id: string, held: string | null | undefined, doc: Obj): Promise<{ doc: Obj; root: string | null }> {
   const want = doc.tagroot as string | undefined;
   if (!want) return { doc, root: held ?? null };
   if (held) return { doc: want === held ? doc : reroot(doc, want, held), root: held };
-  for (let i = 1; i <= 50; i++) {
-    const sfx = i === 1 ? "" : `_${i}`;
-    const r = `${want.slice(0, TAG_ROOT_MAX - sfx.length).replace(/[_-]+$/, "") || "plan"}${sfx}`;
-    const taken = await env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id).first("x");
-    if (!taken) return { doc: r === want ? doc : reroot(doc, want, r), root: r };
-  }
-  throw new HttpError(503, "try_again");
+  const tries = rootTries(want, id);
+  const taken = (r: string) => env.DB.prepare("SELECT 1 AS x FROM plans WHERE tagroot = ? COLLATE NOCASE AND id != ?").bind(r, id);
+  const take = (r: string) => ({ doc: r === want ? doc : reroot(doc, want, r), root: r });
+  // the one asked for is free nearly always: one read; else the rest in one batch, each by the index
+  if (!(await taken(tries[0]).first("x"))) return take(tries[0]);
+  const rows = await env.DB.batch(tries.slice(1).map(taken));
+  const free = rows.findIndex((x) => !x.results.length);
+  if (free < 0) throw new HttpError(503, "try_again");
+  return take(tries[free + 1]);
 }
 
 /** Two saves took the same root at once: the second saves again (409), and gets _2. */
@@ -651,24 +665,80 @@ const editorsOf = (env: Env, ids: string[]) => inChunks(ids, (part) => env.DB.pr
     WHERE e.plan IN (${part.map(() => "?").join(",")}) ORDER BY e.at`,
 ).bind(...part).all<{ plan: string; uid: string; name: string | null; emoji: string | null }>());
 
+/** A plan's totals (migration 0025), as its readers show them: `n` follow
+ *  it, `m` of them not its owner, `r` of those have version `v` in their
+ *  Anki (3.7.3), and `done` per date, how many on its team have every card
+ *  of it seen. Counts, never who. */
+export type Totals = { v: number; n: number; m: number; r: number; done: Record<string, number> };
+type Counted = { id: string; version: number; owner: string | null; totals?: string | null; totals_at?: number | null };
+
+/** One total per plan, kept on its row: a board, a plan's page, my list of
+ *  plans and the library read that row, not every follower's (a library
+ *  plan's can be thousands). Under an hour old it's used as it is, so what
+ *  it shows is up to an hour behind; older, it's worked out again from every
+ *  follow of the stale plans (90 plans a query) and kept. Mine alone (my
+ *  progress, my follow) is never from here, and stays live where it's shown.
+ *  A save since the count moved the version: none have it yet, as at that save. */
+export async function totals(env: Env, plans: Counted[]): Promise<Map<string, Totals>> {
+  const now = nowSec();
+  const out = new Map<string, Totals>();
+  const stale: Counted[] = [];
+  for (const p of plans) {
+    let t: Totals | null = null;
+    if (p.totals && (p.totals_at ?? 0) > now - TOTALS_EVERY) {
+      try { t = JSON.parse(p.totals) as Totals; } catch { t = null; }
+    }
+    if (t) out.set(p.id, t.v === p.version ? t : { ...t, v: p.version, r: 0 });
+    else if (!out.has(p.id) && !stale.some((x) => x.id === p.id)) stale.push(p);
+  }
+  if (!stale.length) return out;
+  const fresh = new Map<string, Totals>(stale.map((p) => [p.id, { v: p.version, n: 0, m: 0, r: 0, done: {} }]));
+  const owners = new Map(stale.map((p) => [p.id, p.owner ?? ""]));
+  const rows = await inChunks(stale.map((p) => p.id), (part) => env.DB.prepare(
+    `SELECT plan, uid, share, progress, seen_version FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")})`,
+  ).bind(...part).all<{ plan: string; uid: string; share: number; progress: string | null; seen_version: number | null }>());
+  for (const r of rows.results) {
+    const t = fresh.get(r.plan)!;
+    t.n++;
+    if (r.uid !== owners.get(r.plan)) {
+      t.m++;
+      if (r.seen_version === t.v) t.r++;
+    }
+    if (r.share === 1 && r.progress) {
+      for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
+        if (total > 0 && seen >= total) t.done[u] = (t.done[u] ?? 0) + 1;
+      }
+    }
+  }
+  // Kept with its time, once an hour at most per plan: the time has to move
+  // even when the counts didn't, or every read would count again. Only the
+  // stale row is written (two readers at once write it once), and a plan no
+  // one follows, with nothing kept, isn't written at all (counting it reads nothing).
+  const keep = stale.filter((p) => fresh.get(p.id)!.n || p.totals);
+  if (keep.length) {
+    await env.DB.batch(keep.map((p) => env.DB.prepare(
+      "UPDATE plans SET totals = ?1, totals_at = ?2 WHERE id = ?3 AND (totals_at IS NULL OR totals_at <= ?4)",
+    ).bind(JSON.stringify(fresh.get(p.id)), now, p.id, now - TOTALS_EVERY)));
+  }
+  for (const [id, t] of fresh) out.set(id, t);
+  return out;
+}
+
 export async function view(env: Env, p: Plan, uid: string) {
-  const [f, n, eds, owner, member] = await env.DB.batch<any>([
+  const [[f, eds, owner, member], tot] = await Promise.all([env.DB.batch<any>([
     env.DB.prepare(`SELECT ${FOLLOW_COLS} FROM plan_follows WHERE plan = ? AND uid = ?`).bind(p.id, uid),
-    // 3.7.3: and how many of them have this version in their Anki
-    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(uid != ?3), 0) AS m,
-                    COALESCE(SUM(seen_version = ?2 AND uid != ?3), 0) AS r FROM plan_follows WHERE plan = ?1`)
-      .bind(p.id, p.version, p.owner ?? ""),
     env.DB.prepare(`SELECT e.plan, e.uid, u.name, u.emoji FROM plan_editors e JOIN users u ON u.uid = e.uid WHERE e.plan = ? ORDER BY e.at`).bind(p.id),
     env.DB.prepare("SELECT name FROM users WHERE uid = ?").bind(p.owner),
     env.DB.prepare("SELECT squad FROM members WHERE squad = ? AND uid = ?").bind(p.squad ?? "", uid),
-  ]);
+  ]), totals(env, [p])]);
+  const t = tot.get(p.id)!;
   const out = shape({ ...p, owner_name: owner.results[0]?.name }, uid, JSON.parse(p.doc), {
-    f: (f.results[0] as Follow) ?? null, n: n.results[0]?.n ?? 0,
+    f: (f.results[0] as Follow) ?? null, n: t.n,
     editors: eds.results.map((e: any) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" })),
     mySquads: new Set(member.results.map((m: any) => m.squad)),
   });
-  // the authors see "reached 18 of 23": followers whose Anki has this version (a count)
-  return out.role === "owner" || out.role === "editor" ? { ...out, reached: [n.results[0]?.r ?? 0, n.results[0]?.m ?? 0] } : out;
+  // 3.7.3: the authors see "reached 18 of 23": followers whose Anki has this version (a count)
+  return out.role === "owner" || out.role === "editor" ? { ...out, reached: [t.r, t.m] } : out;
 }
 
 // ---- the deck's tree, from the add-on ----
@@ -788,19 +858,41 @@ export async function peek(req: Request, s: Session, env: Env): Promise<Response
 /** 3.6.5: `idr` and `pn` come only from the author's Anki (PUT
  *  /plans/{id}/ids): a save keeps a date's as stored while what they were
  *  worked out from is unchanged, and drops them when it changes (the next
- *  morning works them out again). */
+ *  morning works them out again). So do a date's `ids` (3.3, C5: the note
+ *  ids behind its tags, subdecks and cuts in the author's Anki): kept as
+ *  stored while those are, never as a save sends them, so a follower whose
+ *  copy lacks a tag the date has now doesn't fall back to the notes of the
+ *  one it had. The builder only ever sends them back as it got them. */
 export function keepIdr(doc: Obj, was: string | null): Obj {
   const old = new Map(((was ? JSON.parse(was).units : []) as Obj[]).map((u) => [u.id, u]));
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   const picks = (u: Obj) => [u.opens, u.tags, u.decks, u.search, u.nids, u.cids, u.notes];
+  const from = (u: Obj) => [u.tags, u.decks, ((u.cut as Obj[] | undefined) || []).map((c) => [c.tag, c.in])];
   for (const u of doc.units as Obj[]) {
     const o = old.get(u.id);
     delete u.idr;
     delete u.pn;
+    delete u.ids;
     if (o?.idr && same(o.nids, u.nids) && same(o.cids, u.cids)) u.idr = o.idr;
     if (o?.pn && same(picks(o), picks(u))) u.pn = o.pn;
+    if (o?.ids && same(from(o), from(u))) u.ids = o.ids;
   }
   return doc;
+}
+
+/** 3.7.2: room for a save Undo can take back: the new doc and library card
+ *  less the old card and the copy Undo held before (it goes); the doc it
+ *  replaces stays, as Undo's copy. */
+async function roomForSave(env: Env, p: Plan, doc: string, lib: string | null) {
+  const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(p.id).first<number>("n");
+  await roomFor(env, p.owner, doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
+}
+
+/** 3.7.3: a line to followers that came with a save. The save stands either
+ *  way; a post past the day's ceiling is said, not lost silently. */
+async function postWithSave(env: Env, p: Plan, uid: string, raw: unknown, version: number | null) {
+  try { return await writePost(env, p, uid, raw, version); }
+  catch (e) { if (e instanceof HttpError && e.status === 429) return { error: "too_many_posts" }; throw e; }
 }
 
 export async function put(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
@@ -820,12 +912,14 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
     line: body.line !== undefined ? planLine(body.line) : p.line,
     audience: p.audience,
     squad: p.squad,
-    doc: body.doc !== undefined ? JSON.stringify(keepIdr(planDoc(body.doc), p.doc)) : p.doc,
+    doc: p.doc,
     tagroot: p.tagroot ?? null,
   };
-  if (body.doc !== undefined) {  // 3.8.0: its tags' root is its own
-    const r = await rooted(env, id, p.tagroot, JSON.parse(next.doc));
-    next.doc = JSON.stringify(r.doc);
+  if (body.doc !== undefined) {
+    // 3.8.0: its tags' root is its own; then what only the author's Anki
+    // sends is kept as stored, compared with the dates under that root
+    const r = await rooted(env, id, p.tagroot, planDoc(body.doc));
+    next.doc = JSON.stringify(keepIdr(r.doc, p.doc));
     next.tagroot = r.root;
   }
   if (body.audience !== undefined) {
@@ -839,29 +933,22 @@ export async function put(req: Request, s: Session, env: Env, [id]: string[]): P
   if (next.audience === "squad" && !next.squad) throw V.bad("squad");
   if (next.name === p.name && next.line === p.line && next.audience === p.audience
       && next.squad === p.squad && next.doc === p.doc) {
-    return json(await view(env, p, s.uid));  // nothing changed: nothing written
+    // nothing changed: nothing written but its post, which goes all the same
+    // (a post on its own: there's no new version for it to come with)
+    const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, null) : undefined;
+    return json({ ...(await view(env, p, s.uid)), ...(posted ? { posted } : {}) });
   }
   // 3.5, B: a plan for one squad leaves the library; a listed plan's card follows its doc
   const listed = next.audience === "squad" && p.listed === 1 ? 0 : (p.listed ?? 0);
   const lib = listed === 1 && next.doc !== p.doc ? JSON.stringify(libCard(JSON.parse(next.doc))) : (p.lib ?? null);
-  if (next.doc !== p.doc) {
-    // 3.7.2: the new doc, the old one kept for Undo, the library card; less the
-    // copy Undo held before (it goes) and the old card
-    const held = await env.DB.prepare("SELECT LENGTH(prev) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
-    await roomFor(env, p.owner, next.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0) - (held ?? 0));
-  }
+  if (next.doc !== p.doc) await roomForSave(env, p, next.doc, lib);  // 3.7.2
   const r = await env.DB.prepare(
     `UPDATE plans SET name = ?, line = ?, audience = ?, squad = ?, doc = ?, listed = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND version = ?`,
   ).bind(next.name, next.line, next.audience, next.squad, next.doc, listed, lib, next.tagroot, nowSec(), id, body.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, (body.version as number) + 1, s.uid, summary || "changed the plan", next.doc !== p.doc ? p.doc : null);
-  // the save stands either way; a post past the day's ceiling is said, not lost silently
-  let posted: { id: number; text: string } | { error: string } | undefined;
-  if (body.post !== undefined) {
-    try { posted = await writePost(env, p, s.uid, body.post, (body.version as number) + 1); }
-    catch (e) { if (e instanceof HttpError && e.status === 429) posted = { error: "too_many_posts" }; else throw e; }
-  }
+  const posted = body.post !== undefined ? await postWithSave(env, p, s.uid, body.post, (body.version as number) + 1) : undefined;
   return json({ ...(await view(env, await getPlan(env, id), s.uid)), ...(posted ? { posted } : {}) });
 }
 
@@ -904,6 +991,10 @@ export async function logSave(env: Env, plan: string, version: number, uid: stri
  *  ones they were read from. Never a history entry; a new version. */
 export async function putIds(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  // an author's Anki sends these by itself, at most once a day a plan (per
+  // computer): a bucket of its own, far over that, so it never eats the
+  // saves' (planput) nor they it
+  await limitOrThrow(env, `planids:${s.uid}`, 500, 86400);
   const body = await readJson(req, PLAN_BODY_MAX);
   if (!V.isObj(body.units) || Object.keys(body).some((k) => !["units", "counts", "refs"].includes(k))) throw V.bad("ids");
   if (body.counts !== undefined && !V.isObj(body.counts)) throw V.bad("ids");
@@ -944,30 +1035,41 @@ export async function putIds(req: Request, s: Session, env: Env, [id]: string[])
   }
   const clean = JSON.stringify(planDoc(doc));
   if (clean === p.doc) return json({ version: p.version });
-  await roomFor(env, p.owner, clean.length - p.doc.length);  // 3.7.2
+  const lib = keepLib(p, clean);
+  await roomFor(env, p.owner, clean.length - p.doc.length + (lib?.length ?? 0) - (p.lib?.length ?? 0));  // 3.7.2: no Undo copy
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+    .bind(clean, lib, nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   return json({ version: p.version + 1 });
 }
 
-/** GET /plans/{id}/log: the history, newest first, for the authors. */
+/** GET /plans/{id}/log: the history, newest first, for the authors. Undo is
+ *  on the newest row, while it holds the doc its save replaced. Not "the row
+ *  of the plan's version": an upload from the author's Anki (PUT /ids) moves
+ *  the version and writes no row (it's no one's save, nothing to undo), and
+ *  it runs by itself each day, so Undo would go every time Anki opened.
+ *  Every other change to a doc writes its row. */
 export async function log(s: Session, env: Env, [id]: string[]): Promise<Response> {
-  const p = await authorOnly(env, id, s);
+  await authorOnly(env, id, s);
   const rows = await env.DB.prepare(
     `SELECT l.version, l.uid, l.at, l.summary, l.prev IS NOT NULL AS undoable, u.name FROM plan_log l
        LEFT JOIN users u ON u.uid = l.uid WHERE l.plan = ? ORDER BY l.version DESC LIMIT ?`,
   ).bind(id, LOG_KEEP).all<{ version: number; uid: string; at: number; summary: string; undoable: number; name: string | null }>();
-  return json({ log: rows.results.map((r) => ({ version: r.version, uid: r.uid, name: r.name || "?", at: r.at, summary: r.summary,
-    undo: r.version === p.version && r.undoable === 1 })) });
+  return json({ log: rows.results.map((r, i) => ({ version: r.version, uid: r.uid, name: r.name || "?", at: r.at, summary: r.summary,
+    undo: i === 0 && r.undoable === 1 })) });
 }
 
-/** POST /plans/{id}/undo {version}: puts back what the latest save replaced. */
+/** POST /plans/{id}/undo {version}: puts back what the latest save replaced
+ *  (the newest row, as the log offers it), whatever ids the author's Anki
+ *  sent since: they were worked out from the doc Undo replaces, and that
+ *  Anki sends them again when the doc it reads changes. `version` is the
+ *  plan's as I read it: another author's save since is refused (409). */
 export async function undo(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);  // a save, as far as the ceiling goes
   const body = await readJson(req);
   if (body.version !== p.version) throw new HttpError(409, "stale", { version: p.version });
-  const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? AND version = ?").bind(id, p.version)
+  const row = await env.DB.prepare("SELECT summary, prev FROM plan_log WHERE plan = ? ORDER BY version DESC LIMIT 1").bind(id)
     .first<{ summary: string; prev: string | null }>();
   if (!row || !row.prev) throw new HttpError(404, "nothing_to_undo");
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
@@ -1114,6 +1216,7 @@ export async function removePost(s: Session, env: Env, [id, pid]: string[]): Pro
  *  picked in Anki's browser, added to a date that exists or a new one. */
 export async function addCards(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await authorOnly(env, id, s);
+  await limitOrThrow(env, `planput:${s.uid}`, 500, 86400);  // a save, as the plan's PUT is
   const body = await readJson(req, PLAN_BODY_MAX);
   // 3.3, C3: or an Anki search, with how many it found here
   const search = body.search !== undefined ? body.search : null;
@@ -1138,8 +1241,10 @@ export async function addCards(req: Request, s: Session, env: Env, [id]: string[
   }
   const clean = JSON.stringify(planDoc(doc));  // dedupes, re-sorts, enforces the caps
   if (clean === p.doc) return json(await view(env, p, s.uid));
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2, as a save's
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), nowSec(), id, p.version).run();
+    .bind(clean, lib, nowSec(), id, p.version).run();
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   await logSave(env, id, p.version + 1, s.uid, search !== null ? "added a search in Anki"
     : `added ${cards.length} single card${cards.length === 1 ? "" : "s"} in Anki`, p.doc);
@@ -1189,9 +1294,10 @@ export async function tagNotes(req: Request, s: Session, env: Env, [id]: string[
   const r0 = await rooted(env, id, p.tagroot, planDoc(doc));
   const clean = JSON.stringify(r0.doc);
   if (clean === p.doc) return json(await view(env, p, s.uid));
-  await roomFor(env, p.owner, clean.length - p.doc.length);
+  const lib = keepLib(p, clean);
+  await roomForSave(env, p, clean, lib);  // 3.7.2: and the doc it replaces, kept for Undo
   const r = await env.DB.prepare("UPDATE plans SET doc = ?, lib = ?, tagroot = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
-    .bind(clean, keepLib(p, clean), r0.root, nowSec(), id, p.version).run().catch(rootTaken);
+    .bind(clean, lib, r0.root, nowSec(), id, p.version).run().catch(rootTaken);
   if (!r.meta.changes) throw new HttpError(409, "stale", { version: (await getPlan(env, id)).version });
   const added = notes.filter((g) => !had.has(g)).length, taken = [...had].filter((g) => remove.has(g)).length;
   await logSave(env, id, p.version + 1, s.uid, added
@@ -1291,15 +1397,16 @@ export async function publicPeek(req: Request, env: Env): Promise<Response> {
   if (code.length !== PLAN_CODE_LEN) throw new HttpError(404, "no_plan");
   await limitOrThrow(env, `pub:ip:${clientIp(req)}`, 300, 3600);  // guessing codes stays slow
   const p = await env.DB.prepare(
-    `SELECT p.id, p.owner, p.name, p.line, p.audience, p.version, p.doc, u.name AS owner_name,
-            (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
+    `SELECT p.id, p.owner, p.name, p.line, p.audience, p.version, p.doc, p.totals, p.totals_at, u.name AS owner_name
        FROM plans p LEFT JOIN users u ON u.uid = p.owner WHERE p.code = ?`,
-  ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string; owner_name: string | null; followers: number }>();
+  ).bind(code).first<{ id: string; owner: string; name: string; line: string; audience: string; version: number; doc: string;
+                       totals: string | null; totals_at: number | null; owner_name: string | null }>();
   if (!p || p.audience === "squad") throw new HttpError(404, "no_plan");
   const doc = JSON.parse(p.doc) as { deck: string; units: Obj[]; events?: { day: string; name: string }[] };
   const n = unitCount;
+  const followers = (await totals(env, [p])).get(p.id)!.n;  // its totals, up to an hour old
   return json({
-    name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers: p.followers ?? 0,
+    name: p.name, ownerName: p.owner_name || (p.owner ? "?" : "a former member"), line: p.line || "", deck: doc.deck, followers,
     // 3.5, A: the version keys the link's preview picture; events are in the calendar feed already
     v: p.version, events: (doc.events || []).map((e) => ({ day: e.day, name: e.name })),
     units: doc.units.map((u) => ({ name: u.name, opens: u.opens, ...(u.due ? { due: u.due } : {}), n: n(u) })),
@@ -1324,9 +1431,14 @@ export async function follow(req: Request, s: Session, env: Env): Promise<Respon
   if (!p || !(await mayRead(env, p, s.uid, code))) throw new HttpError(404, "no_plan");
   const was = await following(env, p.id, s.uid);
   if (!was) {
-    // a bound on what every board carries (and on one query's parameters)
-    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM plan_follows WHERE uid = ?").bind(s.uid).first<number>("n");
-    if ((n ?? 0) >= FOLLOWS_MAX) throw new HttpError(409, "too_many_plans");
+    // a bound on what every board carries (and on one query's parameters):
+    // the plans I follow that I can see, as the board and my list show them.
+    // A squad's plan I left is kept, hidden (back in the squad, it's back),
+    // and counts only toward a looser ceiling on what I keep in all
+    const c = await env.DB.prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(${SEES("p")}), 0) AS shown FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1`,
+    ).bind(s.uid).first<{ n: number; shown: number }>();
+    if ((c?.shown ?? 0) >= FOLLOWS_MAX || (c?.n ?? 0) >= FOLLOWS_KEPT) throw new HttpError(409, "too_many_plans");
   }
   const sj = sched === undefined ? null : sched === null ? null : JSON.stringify(sched);
   await env.DB.prepare(
@@ -1396,18 +1508,25 @@ export async function unfollow(s: Session, env: Env, [id]: string[]): Promise<Re
   return json({ ok: true });
 }
 
-/** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
- *  single cards and note ids (a list never needs them; they're most of a
- *  big plan), and everything else in five queries, however many plans. */
-/** The plans I follow that I may still read: a squad plan only while I'm
- *  in its squad (mayRead). ?1 is my uid. */
-export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.uid = ?1
-  AND (fp.audience != 'squad' OR fp.squad IN (SELECT squad FROM members WHERE uid = ?1))`;
+/** A plan I follow that I can see (`t` its plans row; ?1 my uid): any but a
+ *  squad's, or one of a squad I'm in (mayRead: leaving ends it), or my own. */
+const SEES = (t: string) => `(${t}.audience != 'squad' OR ${t}.owner = ?1
+  OR EXISTS (SELECT 1 FROM members m WHERE m.squad = ${t}.squad AND m.uid = ?1))`;
 
+/** The plans I follow that I may still read, as the board shows them. ?1 is my uid. */
+export const FOLLOWED = `SELECT f.plan FROM plan_follows f JOIN plans fp ON fp.id = f.plan WHERE f.uid = ?1 AND ${SEES("fp")}`;
+
+/** GET /plans/mine: plans I wrote and plans I follow. Each doc without its
+ *  dates' single cards and note ids (`cards`, `ids`: a list never needs
+ *  them; they're most of a big plan), and everything else in a few queries,
+ *  however many plans. What a date's pasted ids are (`idr`), its notes and
+ *  the plan tags' notes and cards stay: the add-on reads them from here for
+ *  a plan it doesn't follow (Export cards for my AI's "what the dates open",
+ *  the Browse tag dialog's notes on a tag), and the site counts a date's notes. */
 export async function mine(s: Session, env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT p.id, p.code, p.owner, p.name, p.line, p.audience, p.squad, p.version, p.updated_at, u.name AS owner_name,
-            p.listed, p.listed_note, p.based_on,
+            p.listed, p.listed_note, p.based_on, p.totals, p.totals_at,
             json_remove(p.doc, '$.units') AS rest,
             (SELECT json_group_array(json_remove(x.value, '$.ids', '$.cards')) FROM json_each(p.doc, '$.units') x) AS units
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
@@ -1417,17 +1536,15 @@ export async function mine(s: Session, env: Env): Promise<Response> {
   ).bind(s.uid).all<Plan & { owner_name: string | null; rest: string; units: string }>();
   const ids = rows.results.map((p) => p.id);
   if (!ids.length) return json({ plans: [] });
-  const [fs, ns, eds, sq] = await Promise.all([
+  const [fs, tot, eds, sq] = await Promise.all([
     env.DB.prepare(`SELECT plan, ${FOLLOW_COLS} FROM plan_follows WHERE uid = ?`).bind(s.uid)
       .all<Follow & { plan: string }>(),
-    inChunks(ids, (part) => env.DB.prepare(
-      `SELECT plan, COUNT(*) AS n FROM plan_follows WHERE plan IN (${part.map(() => "?").join(",")}) GROUP BY plan`)
-      .bind(...part).all<{ plan: string; n: number }>()),
+    totals(env, rows.results),  // how many follow each: its totals, up to an hour old
     editorsOf(env, ids),
     env.DB.prepare("SELECT squad FROM members WHERE uid = ?").bind(s.uid).all<{ squad: string }>(),
   ]);
   const follows = new Map(fs.results.map((f) => [f.plan, f]));
-  const counts = new Map(ns.results.map((r) => [r.plan, r.n]));
+  const counts = new Map([...tot].map(([id, t]) => [id, t.n]));
   const editors = new Map<string, Editor[]>();
   for (const e of eds.results) editors.set(e.plan, [...(editors.get(e.plan) ?? []), { uid: e.uid, name: e.name || "?", emoji: e.emoji || "" }]);
   const mySquads = new Set(sq.results.map((m) => m.squad));
@@ -1507,16 +1624,27 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
 
 // ---- the board ----
 
-/** 3.7.3: what a refresh compares: the plans I follow as they stand (their
- *  version, my follow's own days, their newest post). Not my progress, which
- *  moves at every sync. A short hash; one read. */
+/** 3.7.3: what a refresh compares: everything forBoard sends as it stands,
+ *  but counts. The plans I follow that I can see (their version, my follow's
+ *  own days, their newest post), and since 3.8.1's review the plans I write
+ *  or co-author (their version: an author's save reaches my Anki's tags) and
+ *  the plans offered to my squads; so leaving a squad, or a plan offered to
+ *  it, moves it too. Not my progress, which moves at every sync, nor the
+ *  totals (the day's first refresh brings those). A short hash; one batch of reads. */
 export async function planStamp(env: Env, uid: string): Promise<string> {
-  const rows = await env.DB.prepare(
-    `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
-            (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
-       FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ? ORDER BY p.id`,
-  ).bind(uid).raw();
-  const bytes = new TextEncoder().encode(JSON.stringify(rows));
+  const rows = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
+              (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
+         FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1 AND ${SEES("p")} ORDER BY p.id`).bind(uid),
+    env.DB.prepare(
+      `SELECT p.id, p.version FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION SELECT plan FROM plan_editors WHERE uid = ?1)
+        ORDER BY p.id`).bind(uid),
+    env.DB.prepare(
+      `SELECT p.id, p.version, p.squad FROM plans p JOIN members m ON m.squad = p.squad AND m.uid = ?1
+        WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1) ORDER BY p.id`).bind(uid),
+  ]);
+  const bytes = new TextEncoder().encode(JSON.stringify(rows.map((r) => r.results.map((x) => Object.values(x as Obj)))));
   const h = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes));
   return Array.from(h.slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1527,35 +1655,19 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
  *  noted as reached (seen_version, written only when it changed). */
 export async function forBoard(env: Env, uid: string) {
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, f.share, f.team_ask, f.paused, f.sched, f.early,
+    `SELECT p.id, p.name, p.owner, p.version, p.doc, p.totals, p.totals_at, f.share, f.team_ask, f.paused, f.sched, f.early,
             f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
-      WHERE f.uid = ?1 AND (p.audience != 'squad' OR p.owner = ?1
-            OR EXISTS (SELECT 1 FROM members m WHERE m.squad = p.squad AND m.uid = ?1))`,
+      WHERE f.uid = ?1 AND ${SEES("p")}`,
   ).bind(uid).all<any>();
   const offers = await env.DB.prepare(
     `SELECT p.id, p.name, p.code, p.squad, u.name AS owner_name FROM plans p
        JOIN members m ON m.squad = p.squad AND m.uid = ?1 LEFT JOIN users u ON u.uid = p.owner
       WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1)`,
   ).bind(uid).all<any>();
-  // per plan: how many follow, and per unit how many sharing followers have it done. Counts only.
-  const crew = new Map<string, { followers: number; done: Record<string, number> }>();
-  if (mineRows.results.length) {
-    const ids = mineRows.results.map((r) => r.id);
-    const rows = await env.DB.prepare(
-      `SELECT plan, share, progress FROM plan_follows WHERE plan IN (${ids.map(() => "?").join(",")})`,
-    ).bind(...ids).all<{ plan: string; share: number; progress: string | null }>();
-    for (const r of rows.results) {
-      const c = crew.get(r.plan) ?? { followers: 0, done: {} };
-      c.followers++;
-      if (r.share === 1 && r.progress) {
-        for (const [u, [, seen, total]] of Object.entries(JSON.parse(r.progress) as Record<string, number[]>)) {
-          if (total > 0 && seen >= total) c.done[u] = (c.done[u] ?? 0) + 1;
-        }
-      }
-      crew.set(r.plan, c);
-    }
-  }
+  // per plan: how many follow, and per unit how many sharing followers have it
+  // done. Counts only: each plan's totals, from its row, up to an hour old.
+  const crew = await totals(env, mineRows.results);
   // 3.3, C5: the plans I write, so my Anki can keep the note ids behind their
   // tags. Only what that needs, cut in SQL: a plan's ids are most of its doc.
   const authored = await env.DB.prepare(
@@ -1600,7 +1712,7 @@ export async function forBoard(env: Env, uid: string) {
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
       version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
-      followers: crew.get(r.id)?.followers ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
+      followers: crew.get(r.id)?.n ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
   };
 }

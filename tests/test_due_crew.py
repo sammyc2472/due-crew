@@ -8611,6 +8611,104 @@ def test_plan_tags_v380():
     check("tags: only under DueCrew, ever", P.drop_tags(col, "mine::x", "x") == 0 and "mine" in _tags_of(col, 6))
 
 
+def test_plans_review_tag_roots_and_ids_twin():
+    """3.8.1's plans review, the fake's side (worker/test/plansreview.test.ts
+    is the Worker's): a plan whose name fifty plans share still makes its
+    first tag, on a root ending in its own id; a site save keeps a date's
+    note ids only while its tags, subdecks and cuts are what they came from."""
+    w = world({"dre": "Dre", "maya": "Maya"})
+    pid, _code = w.add_plan("dre", "Block", "Step 1", [])
+    for r in ["block"] + [f"Block_{i}" for i in range(2, 51)]:  # case aside, as Anki's tags
+        other, _c = w.add_plan("someone", "Other", "Step 1", [])
+        w.plans[other]["doc"]["tagroot"] = r
+    dre = new_client(w, "dre", "Dre")
+    got, status = dre.tag_plan_notes(pid, "SLG 12", add=["guid000001"])
+    check("roots: past _50, the plan's own id makes it its own, and it fits",
+          status == 200 and got["doc"]["tagroot"] == f"Block_{pid}" and len(got["doc"]["tagroot"]) <= 60, str((status, got and got["doc"])))
+    full, _c = w.add_plan("dre", "Block", "Step 1", [])
+    for r in (f"Block_{full}", full):
+        other, _c = w.add_plan("someone", "Other", "Step 1", [])
+        w.plans[other]["doc"]["tagroot"] = r
+    try:
+        said = dre.tag_plan_notes(full, "SLG 1", add=["guid000001"])[1]
+    except shapes.TransportError as e:
+        said = e.status
+    check("roots: every one taken is try again, not a crash", said == 503, str(said))
+    # a date's note ids (3.3, C5), from the author's Anki, through a site save
+    w2 = world({"dre": "Dre"})
+    qid, _c = w2.add_plan("dre", "Cardio", "Step 1", _plan_units())
+    dre = new_client(w2, "dre", "Dre")
+    units = w2.plans[qid]["doc"]["units"]
+    snap = {u["id"]: [u["tags"], u["decks"], [f"n{i}"]] for i, u in enumerate(units) if u["id"] in ("hf", "ar")}
+    check("ids: the author's Anki sends them", dre.put_ids(qid, snap))
+    ids = lambda: {u["id"]: u.get("ids") for u in w2.plans[qid]["doc"]["units"] if u["id"] in ("hf", "ar")}
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, name="HF") if u["id"] == "hf" else u for u in doc["units"]])
+    check("ids: a save that keeps a date's tags keeps them", ids() == {"hf": ["n0"], "ar": ["n1"]}, str(ids()))
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, tags=u["tags"] + ["Step1::Cardio::Cardiomyopathy"]) if u["id"] == "hf" else u for u in doc["units"]])
+    check("ids: a tag added to a date drops its ids (worked out from the tags it had); the others stay",
+          ids() == {"hf": None, "ar": ["n1"]}, str(ids()))
+    doc = json.loads(json.dumps(w2.plans[qid]["doc"]))
+    w2.edit_plan(qid, [dict(u, ids=["forged"]) for u in doc["units"]])
+    check("ids: a save never sets them", ids() == {"hf": None, "ar": ["n1"]}, str(ids()))
+
+
+def test_plans_review_follows_authors_twin():
+    """3.8.1's plans review, the fake's side: the follow ceiling counts the
+    plans I can see (a squad's plan I left is hidden, kept, not counted); a
+    co-author uploads ids and adds cards as the owner does; my list carries
+    the plans I co-author; the board and its stamp move with leaving a
+    squad, a co-author's plan saved, and a plan offered to my squad."""
+    w = world({"dre": "Dre", "maya": "Maya", "jo": "Jo"})
+    dre, maya, jo = new_client(w, "dre", "Dre"), new_client(w, "maya", "Maya"), new_client(w, "jo", "Jo")
+    sq = dre.create_squad("MS2")
+    check("follows: in the squad", maya.join_squad(sq["id"], sq["code"]) == 200)
+    codes = [w.add_plan("dre", f"Week {i + 1}", "Step 1", [], audience="squad", squad=sq["id"])[1] for i in range(20)]
+    check("follows: twenty of the squad's plans", all(maya.follow_plan(c)[1] == 200 for c in codes))
+    _other, other_code = w.add_plan("jo", "Renal", "Step 1", [])
+    check("follows: twenty I can see is the ceiling", maya.follow_plan(other_code)[1] == 409)
+    labels = [_day(0)]
+    maya.fetch_board(labels, with_decks=True)
+    pv = maya.session.get("plans_pv")
+    check("follows: leaving the squad", maya.leave_squad(sq["id"]))
+    upd = maya.fetch_board(labels)
+    check("follows: its plans leave my board at the next refresh (the stamp moved)",
+          upd["plans_fresh"] and maya.session.get("plans_pv") != pv and maya.session.get("plans") == [], str(maya.session.get("plans")))
+    check("follows: and my list", maya.my_plans() == [])
+    check("follows: hidden ones don't count toward the twenty", maya.follow_plan(other_code)[1] == 200)
+    # a co-author: ids, cards, my list, my board's authored plans
+    pid, _c = w.add_plan("dre", "Cardio", "Step 1", _plan_units())
+    w.plans[pid]["editors"] = {"jo"}
+    hf = next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf")
+    check("co-author: uploads the note ids behind a date", jo.put_ids(pid, {"hf": [hf["tags"], hf["decks"], ["g1"]]})
+          and next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf").get("ids") == ["g1"])
+    check("co-author: adds cards from Anki's browser", jo.add_plan_cards(pid, [["guid000077", 0]], unit="ar")[1] == 200)
+    check("co-author: not a follower, who can't", maya.add_plan_cards(pid, [["guid000077", 0]], unit="ar")[1] == 403
+          and not maya.put_ids(pid, {}))
+    mine = jo.my_plans()
+    check("co-author: my list carries the plans I co-author, as an editor",
+          [(p["id"], p["role"]) for p in mine if p["id"] == pid] == [(pid, "editor")], str([(p["id"], p["role"]) for p in mine]))
+    jo.fetch_board(labels, with_decks=True)
+    v = next(a["version"] for a in jo.session["plans_authored"] if a["id"] == pid)
+    check("stamp: nothing moved, nothing comes", not jo.fetch_board(labels)["plans_fresh"])
+    maya.fetch_board(labels)  # her own follow since her last refresh: seen
+    w.edit_plan(pid, w.plans[pid]["doc"]["units"])
+    jo.fetch_board(labels)
+    check("stamp: a save to a plan I co-author reaches my Anki at the next refresh",
+          next(a["version"] for a in jo.session["plans_authored"] if a["id"] == pid) == v + 1)
+    check("stamp: and moves no one else's", not maya.fetch_board(labels)["plans_fresh"])
+    # a plan offered to a squad I'm in
+    check("offers: back in the squad", maya.join_squad(sq["id"], sq["code"]) == 200)
+    maya.fetch_board(labels)
+    w.add_plan("dre", "Neuro", "Step 1", [], audience="squad", squad=sq["id"])
+    maya.fetch_board(labels)
+    check("offers: a plan offered to my squad comes at the next refresh",
+          "Neuro" in [o["name"] for o in maya.session.get("plan_offers") or []], str(maya.session.get("plan_offers")))
+    check("offers: and the squad's plans I follow are back on my board",
+          len(maya.session.get("plans") or []) == 21, str(len(maya.session.get("plans") or [])))
+
+
 def test_plan_tags_round_two_v381():
     """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named

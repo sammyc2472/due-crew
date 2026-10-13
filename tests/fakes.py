@@ -558,11 +558,15 @@ class FakeWorker:
         return (json.loads(w[0]), w[1]) if w else (None, "")
 
     def _plan_stamp(self, me):
-        """3.7.3, as planStamp: my follows as they stand, their versions and newest posts."""
+        """3.7.3, as planStamp: my follows I can see as they stand, their
+        versions and newest posts; and (3.8.1's review) the plans I write or
+        co-author, and the plans offered to my squads, by version."""
         rows = [[pid, self.plans[pid]["version"], json.dumps({k: v for k, v in f.items() if k != "progress"}, sort_keys=True),
                  max([x["id"] for x in self.plan_posts.get(pid, [])], default=0)]
-                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans]
-        return hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:16]
+                for (pid, uid), f in sorted(self.follows.items()) if uid == me and pid in self.plans and self._sees(self.plans[pid], me)]
+        authored = [[pid, p["version"]] for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
+        offers = [[pid, p["version"], p["squad"]] for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]
+        return hashlib.sha1(json.dumps([rows, authored, offers]).encode()).hexdigest()[:16]
 
     def add_post(self, pid, uid, text):
         """3.7.3, setup helper: an author's post to followers."""
@@ -1165,6 +1169,7 @@ class FakeWorker:
     # -- plans (3.1): worker/src/plans.ts --------------------------------------
     UNIT_KEYS = {"id", "name", "opens", "due", "lead", "check", "tags", "decks", "cards", "n", "even", "search", "sn", "ids", "nids", "cids", "idn", "for", "notes", "idr", "pn", "todo", "cut"}
     UNIT_ID = re.compile(r"[a-z0-9]{1,12}")
+    FOLLOWS_MAX = 20
 
     def add_plan(self, owner, name, deck, units, audience="code", squad=None, code=None):
         """Setup helper: a plan as the builder saved it. (id, code)."""
@@ -1175,7 +1180,7 @@ class FakeWorker:
         return pid, code
 
     def edit_plan(self, pid, units):
-        """The author saves new dates on the site: version + 1."""
+        """The author saves new dates on the site: version + 1 (plans.ts put, keepIdr)."""
         p = self.plans[pid]
         old = {u["id"]: u for u in p["doc"]["units"]}
         doc = self._plan_doc(dict(p["doc"], units=units))
@@ -1183,13 +1188,45 @@ class FakeWorker:
             o = old.get(u["id"]) or {}
             u.pop("idr", None)
             u.pop("pn", None)
+            u.pop("ids", None)
             if o.get("idr") and o.get("nids") == u.get("nids") and o.get("cids") == u.get("cids"):
                 u["idr"] = o["idr"]
             picks = lambda x: [x.get(k) or ([] if k != "opens" else None) for k in ("opens", "tags", "decks", "search", "nids", "cids", "notes")]
             if o.get("pn") and picks(o) == picks(u):
                 u["pn"] = o["pn"]
+            # 3.3, C5: a date's note ids, as stored, while its tags, subdecks and cuts are what they came from
+            came = lambda x: [x.get("tags") or [], x.get("decks") or [], [[c["tag"], c["in"]] for c in x.get("cut") or []]]
+            if o.get("ids") and came(o) == came(u):
+                u["ids"] = o["ids"]
         p["doc"] = doc
         p["version"] += 1
+
+    # 3.8.1's review: who sees which plan, as plans.ts SEES, authorOnly and forBoard's offers
+    def _sees(self, p, me):
+        """A plan I follow that I can see: any but a squad's, my own, or one of a squad I'm in."""
+        return p["audience"] != "squad" or p["owner"] == me or (p["squad"], me) in self.members
+
+    def _writes(self, p, me):
+        """Its owner or a co-author."""
+        return p["owner"] == me or me in (p.get("editors") or ())
+
+    def _offered(self, pid, p, me):
+        """Offered to a squad I'm in, not mine, not followed yet."""
+        return bool(p["squad"]) and (p["squad"], me) in self.members and p["owner"] != me and (pid, me) not in self.follows
+
+    def _totals(self, pid):
+        """A plan's totals, as plans.ts totals: how many follow, and per date how
+        many on its team have it done. The Worker keeps them on the plan's row
+        and counts again at most hourly; the fake counts them live every time
+        (what a client sees is the same, only fresher)."""
+        rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
+        done = {}
+        for g in rows:
+            if g["share"] and g["progress"]:
+                for unit, (_o, seen, total) in json.loads(g["progress"]).items():
+                    if total > 0 and seen >= total:
+                        done[unit] = done.get(unit, 0) + 1
+        return len(rows), done
 
     @staticmethod
     def _tag_part(name):
@@ -1206,6 +1243,13 @@ class FakeWorker:
         s = re.sub(r'["*\\%]', "", s).replace(":", "-")
         s = re.sub(r"^[_-]+|[_-]+$", "", re.sub(r"_+", "_", s))
         return re.sub(r"[_-]+$", "", s[:60]) or "plan"
+
+    @staticmethod
+    def _root_tries(want, pid):
+        """plans.ts rootTries: the one asked for, _2 to _50, then one ending in
+        the plan's own id, and the id alone; each fits 60."""
+        cut = lambda sfx: (re.sub(r"[_-]+$", "", want[:60 - len(sfx)]) or "plan") + sfx
+        return [cut("")] + [cut(f"_{i}") for i in range(2, 51)] + [cut(f"_{pid}"), pid]
 
     def _plan_tags(self, v, doc, picks):
         """3.8.0, plans.ts planTag and planDoc's tags: {id, name, notes?, tags?,
@@ -1429,10 +1473,12 @@ class FakeWorker:
     def _plan_view(self, pid, me):
         p = self.plans[pid]
         f = self.follows.get((pid, me))
-        out = {"id": pid, "name": p["name"], "line": p["line"], "owner": p["owner"],
+        role = ("owner" if p["owner"] == me else "editor" if me in (p.get("editors") or ())
+                else "follower" if f else "reader")  # plans.ts shape
+        out = {"id": pid, "role": role, "name": p["name"], "line": p["line"], "owner": p["owner"],
                "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?", "audience": p["audience"],
                "squad": p["squad"], "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
-               "followers": sum(1 for (pl, _u) in self.follows if pl == pid)}
+               "followers": self._totals(pid)[0]}
         if p["owner"] == me:
             out["code"] = p["code"]
         if f:
@@ -1476,7 +1522,9 @@ class FakeWorker:
                 self._count("plan_trees")
             return 200, {"ok": True}
         if rest == ["mine"] and method == "GET":
-            ids = [pid for pid, p in self.plans.items() if p["owner"] == me or (pid, me) in self.follows]
+            # plans.ts mine: mine, co-authored, and followed while I can see them (FOLLOWED)
+            ids = [pid for pid, p in self.plans.items()
+                   if self._writes(p, me) or ((pid, me) in self.follows and self._sees(p, me))]
             return 200, {"plans": [self._plan_view(pid, me) for pid in ids]}
         if rest == ["peek"] and method == "GET":
             code = self._norm(query.get("code"))
@@ -1492,6 +1540,12 @@ class FakeWorker:
             if not pid or not self._may_read(self.plans[pid], pid, me, code):
                 raise Bad(404, "no_plan")
             old = self.follows.get((pid, me))
+            if not old:
+                # plans.ts follow: 20 that I can see (a squad's plan I left is kept, hidden), 100 kept in all
+                mine = [q for (q, u) in self.follows if u == me and q in self.plans]
+                if (sum(1 for q in mine if self._sees(self.plans[q], me)) >= self.FOLLOWS_MAX
+                        or len(mine) >= self.FOLLOWS_MAX * 5):
+                    raise Bad(409, "too_many_plans")
             sched = self._sched(body["sched"]) if "sched" in body else (old or {}).get("sched")
             if body.get("own") not in (None, "ready", "next"):  # 3.8.0: at my own pace
                 raise Bad(400, "follow")
@@ -1551,7 +1605,7 @@ class FakeWorker:
                          "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                          "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {})}
         if rest[1:] == ["ids"] and method == "PUT":
-            if p["owner"] != me:
+            if not self._writes(p, me):  # plans.ts authorOnly: the owner or a co-author
                 raise Bad(403, "not_author")
             doc = json.loads(json.dumps(p["doc"]))
             for uid, v in (body.get("counts") or {}).items():
@@ -1625,11 +1679,12 @@ class FakeWorker:
             if not doc["tags"]:
                 doc.pop("tags")
             if not doc.get("tagroot"):
-                # plans.ts rooted: a plan's root is its own (case aside), else _2, _3…
-                want = self._tag_root(p["name"])
+                # plans.ts rooted: a plan's root is its own (case aside), else the first of rootTries free
                 taken = {str(q["doc"].get("tagroot") or "").lower() for k, q in self.plans.items() if k != pid}
-                doc["tagroot"] = next(r for r in (want if i == 1 else f"{want[:60 - len(str(i)) - 1].rstrip('_-')}_{i}"
-                                                  for i in range(1, 52)) if r.lower() not in taken)
+                root = next((r for r in self._root_tries(self._tag_root(p["name"]), pid) if r.lower() not in taken), None)
+                if root is None:
+                    raise Bad(503, "try_again")
+                doc["tagroot"] = root
             clean = self._plan_doc(doc)
             if clean != p["doc"]:
                 p["doc"] = clean
@@ -1637,7 +1692,7 @@ class FakeWorker:
                 self._count("plans")
             return 200, self._plan_view(pid, me)
         if rest[1:] == ["cards"] and method == "POST":
-            if p["owner"] != me:
+            if not self._writes(p, me):  # plans.ts authorOnly: the owner or a co-author
                 raise Bad(403, "not_author")
             search = body.get("search")
             cards = [] if search else body.get("cards")
@@ -1824,19 +1879,14 @@ class FakeWorker:
         raise Bad(404, "nope")
 
     def _plans_for_board(self, me):
-        """The plans I follow (with crew counts), and squad offers."""
+        """The plans I follow that I can see (a squad's plan only while I'm in
+        the squad), with crew counts (live here: see _totals), and squad offers."""
         plans = []
         for (pid, uid), f in sorted(self.follows.items()):
-            if uid != me or pid not in self.plans:
+            if uid != me or pid not in self.plans or not self._sees(self.plans[pid], me):
                 continue
             p = self.plans[pid]
-            rows = [g for (pl, _u), g in self.follows.items() if pl == pid]
-            done = {}
-            for g in rows:
-                if g["share"] and g["progress"]:
-                    for unit, (_o, seen, total) in json.loads(g["progress"]).items():
-                        if total > 0 and seen >= total:
-                            done[unit] = done.get(unit, 0) + 1
+            followers, done = self._totals(pid)
             plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
                           "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
@@ -1844,19 +1894,17 @@ class FakeWorker:
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),
                           "moved": f.get("moved", {}), **({"own": f["own"]} if f.get("own") else {}),
-                          "followers": len(rows), "crewDone": done,
+                          "followers": followers, "crewDone": done,
                           "posts": [dict(x) for x in sorted(self.plan_posts.get(pid, []), key=lambda x: -x["id"])[:3]]})
         offers = [{"id": pid, "name": p["name"], "code": p["code"], "squad": p["squad"],
                    "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?"}
-                  for pid, p in sorted(self.plans.items())
-                  if p["squad"] and (p["squad"], me) in self.members and p["owner"] != me
-                  and (pid, me) not in self.follows]
+                  for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]
         authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
                  **{k: u[k] for k in ("nids", "cids", "notes", "opens", "cut") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
             or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags") if p["doc"].get(k)})}  # 3.8.0: its own tags
-            for pid, p in sorted(self.plans.items()) if p["owner"] == me or me in (p.get("editors") or ())]
+            for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
         return {"plans": plans, "planOffers": offers, "authored": authored}
 
     def _delete_account(self, me):

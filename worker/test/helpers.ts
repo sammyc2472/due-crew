@@ -80,6 +80,12 @@ export async function befriend(a: { call: Function; uid?: string }, b: { uid: st
   if (r.status !== 200) throw new Error(`befriend ${r.status}`);
 }
 
+/** An hour on, as far as plans' totals go (migration 0025): each plan's
+ *  kept count reads as stale, and the next reader counts again. */
+export async function anHourOn() {
+  await env.DB.prepare("UPDATE plans SET totals_at = totals_at - 3601 WHERE totals_at IS NOT NULL").run();
+}
+
 export const WEEK = (label: string, reviews = 10) =>
   ({ v: 1, paused: false, days: { [label]: { studied: true, reviews, studyTimeMs: 1000, accuracy: 90.5, streak: 3 } } });
 
