@@ -41,3 +41,17 @@ describe("3.8.1: the morning keeps the docs it has", () => {
     expect(moved.plans[0].same).toBeUndefined();
   });
 });
+
+describe("3.8.1: the author's Anki sees a date's single cards", () => {
+  it("authored carries a date made only of single cards, with them, so its picks can be named (#lbl)", async () => {
+    const dre = await person("dre");
+    const made = await dre.call("POST", "/plans", { name: "Step 1", deck: "Step 1" });
+    const units = [...UNITS, { id: "pk", name: "Picked", opens: "2026-10-07", tags: [], decks: [], cards: [["gA", 0], ["gB", 1]] }];
+    expect((await dre.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "Step 1", units } })).status).toBe(200);
+    const mine = (await dre.call("GET", "/board?decks=1&pv=")).body.authored[0];
+    const pk = mine.doc.units.find((u: { id: string }) => u.id === "pk");
+    expect(pk.cards).toEqual([["gA", 0], ["gB", 1]]);
+    // a date of tags alone stays lean
+    expect(mine.doc.units.find((u: { id: string }) => u.id === "hf")).toEqual({ id: "hf", tags: ["Step1::Cardio::Heart_failure"], decks: [], opens: "2026-10-05" });
+  });
+});

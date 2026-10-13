@@ -2111,9 +2111,9 @@ class FakeWorker:
                   for pid, p in sorted(self.plans.items()) if self._offered(pid, p, me)]
         authored = [{"id": pid, "version": p["version"], "name": p["name"], "doc": dict({"deck": p["doc"]["deck"], "units": [
             dict({"id": u["id"], "tags": u["tags"], "decks": u["decks"]}, **({"search": u["search"]} if u.get("search") else {}),
-                 **{k: u[k] for k in ("nids", "cids", "notes", "opens", "cut") if u.get(k)})
+                 **{k: u[k] for k in ("nids", "cids", "notes", "opens", "cut", "cards") if u.get(k)})
             for u in p["doc"]["units"] if u["tags"] or u["decks"] or u.get("search") or u.get("nids") or u.get("cids")
-            or u.get("notes")]}, **{k: p["doc"][k] for k in ("tagroot", "tags", "remarks") if p["doc"].get(k)})}  # 3.8.0: its own tags; 3.8.1: its notes
+            or u.get("notes") or u.get("cards")]}, **{k: p["doc"][k] for k in ("tagroot", "tags", "remarks") if p["doc"].get(k)})}  # 3.8.0: its own tags; 3.8.1: its notes
             for pid, p in sorted(self.plans.items()) if self._writes(p, me)]
         return {"plans": plans, "planOffers": offers, "authored": authored, "planInvites": self._plan_invites(me)}
 
@@ -2222,92 +2222,3 @@ def day_cutoff_for(today, rollover_hour=4):
     dt = datetime.datetime.combine(today + datetime.timedelta(days=1),
                                    datetime.time(rollover_hour))
     return int(dt.timestamp())
-
-
-# ---------------------------------------------------------------------------
-# round three, A2 stub: the least of the contract's sections 1 and 3 that the
-# add-on's own tests need before the Worker builder's fake lands; the lead
-# reconciles it with that one (and drops it). POST /plans/{id}/editors {uid}
-# (an invite), /owner {uid} (a hand-over), /invite {yes}; the board's
-# planInvites with the plans, and a stamp that moves with them; POST
-# /plans/{id}/remarks {add | remove}; a doc that keeps `remarks` and `deckUrl`.
-
-def _r3_invites(store):
-    return store.__dict__.setdefault("r3_invites", {})  # {(plan id, uid): {kind, by}}
-
-
-_r3_plan_doc = FakeWorker._plan_doc
-_r3_plans = FakeWorker._plans
-_r3_for_board = FakeWorker._plans_for_board
-_r3_stamp = FakeWorker._plan_stamp
-
-
-def _r3_plan_doc_keep(self, v):
-    keep = {k: v[k] for k in ("remarks", "deckUrl") if isinstance(v, dict) and v.get(k)}
-    doc = _r3_plan_doc(self, {k: x for k, x in v.items() if k not in ("remarks", "deckUrl")} if isinstance(v, dict) else v)
-    doc.update(json.loads(json.dumps(keep)))
-    return doc
-
-
-def _r3_plans_route(self, method, me, rest, query, body):
-    pid = rest[0] if rest else ""
-    p, inv = self.plans.get(pid), _r3_invites(self)
-    if p and method == "POST" and rest[1:] in (["editors"], ["owner"]):
-        if p["owner"] != me:
-            raise Bad(403, "not_owner")
-        if rest[1] == "owner" and body.get("uid") not in (p.get("editors") or ()):
-            raise Bad(400, "not_coauthor")
-        inv[(pid, body.get("uid"))] = {"kind": "coauthor" if rest[1] == "editors" else "owner", "by": me}
-        return 200, self._plan_view(pid, me)
-    if p and method == "POST" and rest[1:] == ["invite"]:
-        x = inv.pop((pid, me), None)
-        if not x:
-            raise Bad(404, "no_invite")
-        if body.get("yes") is True and x["kind"] == "coauthor":
-            p["editors"] = list(p.get("editors") or []) + [me]
-        elif body.get("yes") is True:
-            p["editors"] = [u for u in p.get("editors") or [] if u != me] + [p["owner"]]
-            p["owner"] = me
-        return 200, self._plan_view(pid, me)
-    if p and method == "POST" and rest[1:] == ["remarks"]:
-        if not self._writes(p, me):
-            raise Bad(403, "not_author")
-        doc = json.loads(json.dumps(p["doc"]))
-        rs, a = list(doc.get("remarks") or []), body.get("add") or {}
-        if "remove" in body:
-            if not any(r["id"] == body["remove"] for r in rs):
-                raise Bad(404, "no_remark")
-            rs = [r for r in rs if r["id"] != body["remove"]]
-        elif (not isinstance(a.get("text"), str) or not 0 < len(a["text"].strip()) <= 280
-              or ("tag" in a) == ("card" in a) or len(rs) >= 300):
-            raise Bad(400, "bad_remark")
-        else:
-            self._r3_n = getattr(self, "_r3_n", 0) + 1
-            rs.append(dict({"id": f"r{self._r3_n}", "text": " ".join(a["text"].split())},
-                           **({"tag": a["tag"]} if "tag" in a else {"card": list(a["card"])})))
-        doc["remarks"] = rs
-        p["doc"] = self._plan_doc(doc)
-        p["version"] += 1
-        self._count("plans")
-        return 200, self._plan_view(pid, me)
-    return _r3_plans(self, method, me, rest, query, body)
-
-
-def _r3_for_board_invites(self, me):
-    out = _r3_for_board(self, me)
-    out["planInvites"] = [{"id": pid, "name": self.plans[pid]["name"], "kind": x["kind"],
-                           "by": {"name": self.users[x["by"]]["name"] or "?", "emoji": self.users[x["by"]]["emoji"] or ""}}
-                          for (pid, uid), x in sorted(_r3_invites(self).items()) if uid == me and pid in self.plans][:10]
-    return out
-
-
-def _r3_stamp_invites(self, me):
-    mine = sorted(pid for (pid, uid) in _r3_invites(self) if uid == me)
-    return _r3_stamp(self, me) + (hashlib.sha1(json.dumps(mine).encode()).hexdigest()[:6] if mine else "")
-
-
-FakeWorker._plan_doc = _r3_plan_doc_keep
-FakeWorker._plans = _r3_plans_route
-FakeWorker._plans_for_board = _r3_for_board_invites
-FakeWorker._plan_stamp = _r3_stamp_invites
-# end of the round three, A2 stub

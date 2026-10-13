@@ -9801,6 +9801,12 @@ def test_plan_remarks_and_deck_link_v381():
     check("review: the card's note when it comes up, another card nothing, a crewmate's tip first; no request",
           shown[0] and shown[0]["kind"] == "remark" and "Block 1: The second cloze" in shown[0]["text"] and shown[1] is None
           and shown[2]["kind"] == "tip" and len(store.log) == n, shown)
+    got, status = dre.plan_remark(pid, add={"card": ["guid000005", 1], "text": "The second cloze, the bigger one"})
+    rs = got["doc"]["remarks"]
+    dlg = open(os.path.join(REPO, "due_crew", "ui", "remark_dialog.py")).read()
+    check("remarks: a card's note changed in place keeps its id, and Save leaves it there (only old words go)",
+          status == 200 and len(rs) == 1 and rs[0]["id"] == rid and rs[0]["text"] == "The second cloze, the bigger one"
+          and 'if got is not None and old is not None and old.get("text") != words:' in dlg, rs)
     got, status = dre.plan_remark(pid, remove=rid)
     check("remarks: taken off by its id", status == 200 and not got["doc"].get("remarks"), got)
     # Browse: for authors, on one card
@@ -9843,7 +9849,7 @@ def test_plan_invites_v381():
     from due_crew import plan_flow as F
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
-    store = world({"dre": "Dre <b>", "sam": "Sam"})
+    store = world({"dre": "Dre <b>", "sam": "Sam"}, {"dre": ["sam"], "sam": ["dre"]})  # an invite goes to a mutual friend
     pid, _code = store.add_plan("dre", "Block <1>", "Deck", [{"id": "a", "name": "A", "opens": _day(0), "tags": ["x"], "decks": []}])
     dre, sam = new_client(store, "dre", "Dre"), new_client(store, "sam", "Sam")
     st, _d = dre._call("POST", f"/plans/{pid}/editors", {"uid": "sam"})

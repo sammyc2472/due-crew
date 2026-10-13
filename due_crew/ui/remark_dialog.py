@@ -122,8 +122,11 @@ class RemarkDialog(QDialog):
             if remove:
                 return cl.plan_remark(pid, remove=had["id"])
             got, status = cl.plan_remark(pid, add={"card": card, "text": words})
-            if got is not None and had and any(r.get("id") == had["id"] for r in (got.get("doc") or {}).get("remarks") or []):
-                got, status = cl.plan_remark(pid, remove=had["id"])  # the old words go, so it stays one note
+            # the Worker changes a card's note in place (same id, new words); only
+            # if the old one were still there with its old words would it go
+            old = next((r for r in ((got or {}).get("doc") or {}).get("remarks") or [] if had and r.get("id") == had["id"]), None)
+            if got is not None and old is not None and old.get("text") != words:
+                got, status = cl.plan_remark(pid, remove=had["id"])
             return got, status
 
         def done(result, err):

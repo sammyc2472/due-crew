@@ -1913,11 +1913,12 @@ export async function forBoard(env: Env, uid: string, same = false) {
                       'decks', json_extract(x.value, '$.decks'), 'search', json_extract(x.value, '$.search'),
                       'nids', json_extract(x.value, '$.nids'), 'cids', json_extract(x.value, '$.cids'),
                       'notes', json_extract(x.value, '$.notes'), 'opens', json_extract(x.value, '$.opens'),
-                      'cut', json_extract(x.value, '$.cut')))
+                      'cut', json_extract(x.value, '$.cut'), 'cards', json_extract(x.value, '$.cards')))
                FROM json_each(p.doc, '$.units') x
               WHERE json_array_length(x.value, '$.tags') + json_array_length(x.value, '$.decks')
                     + coalesce(json_array_length(x.value, '$.search'), 0) + coalesce(json_array_length(x.value, '$.nids'), 0)
-                    + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0) > 0) AS units
+                    + coalesce(json_array_length(x.value, '$.cids'), 0) + coalesce(json_array_length(x.value, '$.notes'), 0)
+                    + coalesce(json_array_length(x.value, '$.cards'), 0) > 0) AS units
        FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})`,
   ).bind(uid).all<{ id: string; version: number; name: string; deck: string; tagroot: string | null; tags: string | null; remarks: string | null; units: string }>();
   // 3.7.3: the newest posts per plan, and this version reached me
@@ -1942,7 +1943,7 @@ export async function forBoard(env: Env, uid: string, same = false) {
   // 3.8.0: with the plan's own tags, so my Anki carries them too (counts, and older followers' note ids)
   // 3.8.1: and its notes on cards and tags, so my Anki's Browse can show and change them
   const lean = (r: { deck: string; units: string; tagroot: string | null; tags: string | null; remarks: string | null }) => ({ deck: r.deck, units: (JSON.parse(r.units) as Obj[])
-    .map((u) => (u.search || u.nids || u.cids || u.notes ? Object.fromEntries(Object.entries(u).filter(([, x]) => x !== null)) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
+    .map((u) => (u.search || u.nids || u.cids || u.notes || (u.cards as unknown[] | null)?.length ? Object.fromEntries(Object.entries(u).filter(([k, x]) => x !== null && !(k === "cards" && !(x as unknown[]).length))) : { id: u.id, tags: u.tags, decks: u.decks, opens: u.opens })),
     ...(r.tagroot ? { tagroot: r.tagroot } : {}), ...(r.tagroot && r.tags ? { tags: JSON.parse(r.tags) } : {}),
     ...(r.remarks ? { remarks: JSON.parse(r.remarks) } : {}) });
   return {
