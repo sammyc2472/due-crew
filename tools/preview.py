@@ -514,6 +514,17 @@ sections.append("<h3>3.8.1: the session's line; Sev hops by the logo for a momen
           "fifteen_done": {"n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": _sev.svg("stack", stack=3)}}))
 sections.append("<h3>3.8.1: by the logo for a moment: a cheer lands; exam eve; back from away</h3>" + "".join(board.render(
     SOLO, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg(k), "ago": 0}) for k in ("cheer", "exam", "hello")))
+# 3.8.1: a crew room with Sev on: each member is their Sev, in their own accent
+# (mine is the board's), blinking at its own moment
+_ACC = {"dre": "blue", "marisa": "teal", "noah": "rose"}
+SEATED = [dict(e, room=_room, accent=_ACC.get(e["user_id"], "")) if e["user_id"] in _ACC or e["you"] else e
+          for e in DATA["entries"]]
+sections.append("<h3>3.8.1: a crew room, Sev on: each member is their Sev, in their accent</h3>" + board.render(
+    dict(DATA, entries=SEATED), {"period": "today"}, now_ts - 60,
+    room=room_model.board_view(_room, SEATED, sev=True, accent_pair=board.accent_pair(board.DEFAULT_ACCENT))))
+sections.append("<h3>3.8.1: the same room, Sev off: the initials</h3>" + board.render(
+    dict(DATA, entries=SEATED), {"period": "today", "sev": False}, now_ts - 60,
+    room=room_model.board_view(_room, SEATED)))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

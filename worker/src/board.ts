@@ -2,7 +2,7 @@
 // shows, in one request) and POST /sync (everything a sync uploads, in
 // one request). Plus the lazy reads: shared decks, a heatmap, settings.
 
-import type { Session } from "./auth";
+import { accentOf, type Session } from "./auth";
 import { listKnocks, withoutFlags } from "./social";
 import * as B from "./bingo";
 import * as C from "./cards";
@@ -70,7 +70,7 @@ async function feed(env: Env, uid: string) {
 }
 
 /** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
- *  their week when they added me back, name and emoji only when they haven't
+ *  their week and accent when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
  *  shows the cheers waiting and leaves them for Anki to play. got= (3.7.2)
  *  says which cheers the last reply delivered (its `cheersAt`): those go now,
@@ -93,12 +93,15 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
          (SELECT at FROM settings WHERE uid = u.uid) AS sat,
          (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
-    // a week leaves the server only for someone its owner added
+    // a week leaves the server only for someone its owner added; 3.8.1: so
+    // does their accent (from their settings: their Sev wears it in a study room)
     db.prepare(
-      `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at
+      `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
+         json_extract(t.json, '$.accent') AS accent
        FROM friends f JOIN users u ON u.uid = f.friend
        LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
        LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
+       LEFT JOIN settings t ON t.uid = f.friend AND b.owner IS NOT NULL
        WHERE f.owner = ?1 ORDER BY f.at, f.friend`).bind(s.uid),
     db.prepare(
       `SELECT c.from_uid, c.emoji, c.note, c.luck, c.guid, c.at FROM cheers c WHERE c.to_uid = ?`).bind(s.uid),
@@ -107,7 +110,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   if (!me) throw new HttpError(401, "auth");
   const friends = (friendsRes.results as any[]).map((f) => f.mutual
     ? { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: true,
-        week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at) }
+        week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at),
+        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}) }  // none, or not one of ours: none
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
   // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen

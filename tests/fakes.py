@@ -251,6 +251,7 @@ class ConnectTimeout(RequestException):
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 EMOJI_RE = re.compile(r"[^A-Za-z0-9 ]+")
 SQUAD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ACCENTS = ("green", "blue", "purple", "teal", "amber", "rose")  # auth.ts ACCENTS
 
 
 def _u16(s):
@@ -654,8 +655,13 @@ class FakeWorker:
             f = self.users[fid]
             if self.mutual(me, fid):
                 fw, fat = self._week_of(fid)
-                friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
-                                "mutual": True, "week": fw, "updatedAt": fat})
+                row = {"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
+                       "mutual": True, "week": fw, "updatedAt": fat}
+                # 3.8.1: and their accent, from their settings, when it's one of ours (board.ts)
+                accent = ((self.settings.get(fid) or {}).get("settings") or {}).get("accent")
+                if isinstance(accent, str) and accent in ACCENTS:
+                    row["accent"] = accent
+                friends.append(row)
             else:
                 friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
                                 "mutual": False})

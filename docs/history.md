@@ -1529,6 +1529,20 @@ every release that changes how something works.
   top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
   Stretch, all on this computer. Not yet: Sev on crew rows (the site's
   board would need it too), Welcome back, the buddy.
+  In a room with my crew, each member is their Sev (Sam's pick): on the
+  room's card and the Decks screen's lobby, where the initials were, each
+  in its person's accent (by day or by night, as the widget or the board
+  picks mine), and they started at different moments, so the blinks never
+  line up (`sev.started`, each its own place in the blink, `--sv-d`;
+  idle, still under Reduce motion). The accent rides `GET /board`, a
+  mutual friend's only, from their settings in the friends query (no
+  request, reads only, bounded by the crew); `shapes.clean_accent` keeps
+  only one of ours and `board.accent_pair` makes it colours (anything
+  else, the default's), so only those reach a style; a name is only a
+  seat's label, as text. Sev off, or a fifteen (no members): the initials
+  as before; the chip, the margin and the break keep them
+  (`room_model.seats`, `test_crew_room_sevs_wear_their_accents_v381`).
+  The privacy page says the crew sees my accent.
   Sev's spacing (Sam: review it wherever it shows): its body sits low in
   its drawing (the effects need the room above), so a box the drawing's
   size left it low and loose: 3 to 6 px under its neighbours' middle,
