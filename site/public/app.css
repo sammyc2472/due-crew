@@ -973,3 +973,26 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .pacebox { margin: 4px 0 10px; display: grid; gap: 4px; justify-items: start; }
 .pacebox label { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; max-width: 100%; }
 .pacebox select { font: inherit; font-size: 13px; padding: 2px 6px; max-width: 100%; }
+
+/* the builder: a plan tag's ×, the dates it's on before it goes */
+.ptag .ptdrop { display: grid; gap: 4px; margin: 4px 2px 2px; padding: 6px 8px; border-radius: 8px; background: var(--warn-tint); text-align: left; overflow-wrap: anywhere; }
+.ptag .ptdrop .row { display: flex; gap: 14px; }
+/* when the author's Anki last sent the deck's tags */
+.tree2 .asof { display: block; margin-top: -2px; }
+/* Undo, beside Save while there's something to undo; on a phone the bar keeps to the screen */
+.savebar button.undo { padding: 7px 14px; }
+@media (max-width: 560px) {
+  .savebar { max-width: calc(100vw - 32px); box-sizing: border-box; padding-left: 12px; gap: 6px; }
+  .savebar .status { min-width: 0; line-height: 1.2; }
+  .savebar .tell { width: auto; flex: 0 1 140px; min-width: 64px; }
+  .savebar button.undo { padding: 7px 11px; }
+}
+/* a plan tag's row: its size shrinks before its buttons do (the × stays in reach) */
+.ptags .ptlist { grid-template-columns: minmax(0, 1fr); }
+.ptag { min-width: 0; }
+.ptag .pt1 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ptag .pt1 button { flex: none; }
+/* /p/CODE signed in: Follow, then where its cards go */
+.followbox { margin: 14px 0; max-width: 640px; }
+.followbox p { margin: 0; }
+.followbox .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

@@ -455,23 +455,42 @@ async function newPlan() {
   }
   const deck = new URLSearchParams(location.search).get("deck") || "";
   if (!deck) { page(h("h1", {}, "A new plan"), h("p", { class: "muted" }, "Start from Anki: Tools › Due Crew › Make a plan from a deck.")); return; }
-  const { plans } = await api("GET", "/plans/mine");
-  const same = plans.filter((p) => (p.role === "owner" || p.role === "editor") && p.doc.deck === deck);
+  // named for the deck's own last part ("Step 1::Cardio" makes "Cardio"), as long as a name can be
+  const name = (deck.split("::").pop().trim() || deck.trim()).slice(0, 60).trim() || "My plan";
   const status = h("p", { class: "status", role: "status" });
-  const make = async () => {
+  const again = h("button", { class: "ghost", hidden: true, onclick: () => make() }, "Try again");
+  // the page is drawn before anything can fail, so a failure has somewhere to say why
+  page(h("h1", { style: "overflow-wrap:anywhere" }, name), deck !== name ? h("p", { class: "muted small", style: "overflow-wrap:anywhere" }, deck) : null, status, again);
+  status.textContent = "Loading…";
+  let plans;
+  try { ({ plans } = await api("GET", "/plans/mine")); }
+  catch (err) { if (err.status === 401) throw err; status.className = "status bad"; status.textContent = "Couldn't load your plans. Reload the page."; return; }
+  const same = plans.filter((p) => (p.role === "owner" || p.role === "editor") && p.doc.deck === deck);
+  async function make() {
+    again.hidden = true; status.className = "status"; status.textContent = "Making the plan…";
     try {
-      const p = await api("POST", "/plans", { name: deck, deck });
+      const p = await api("POST", "/plans", { name, deck });
       history.replaceState(null, "", `/plans/${p.id}`);
       route();
-    } catch { status.className = "status bad"; status.textContent = "That didn't work. Try again."; }
-  };
+    } catch (err) {
+      const code = err.body?.error;
+      status.className = "status bad";
+      status.replaceChildren(...(code === "too_many_plans" ? ["You have 50 plans, as many as an account keeps. Delete one in ", link("/plans", "Your plans"), " first."]
+        : [code === "plans_full" ? "Your plans hold as much as one account can. Delete one first."
+          : code === "bad_plan" ? "That deck's name is too long for a plan: 200 characters at most, with its parent decks. Rename it in Anki, then try again."
+          : err.status === 429 ? "That's a lot of new plans. Try again in an hour."
+          : !err.status ? "No connection. Try again." : "That didn't work. Try again."]));
+      again.hidden = code === "too_many_plans" || code === "plans_full" || code === "bad_plan";
+    }
+  }
   // 3.3: straight to the calendar; only a deck that has plans already asks which
   if (!same.length) return make();
+  status.textContent = "";
   page(
     h("h1", {}, deck),
     h("div", { class: "plans" }, same.map((p) => h("a", { class: "plan-row", href: `/plans/${p.id}`, "data-go": "" },
       h("b", {}, p.name), h("small", {}, planDays(p.doc))))),
-    h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: make }, "New plan")), status,
+    h("div", { style: "margin-top:12px" }, h("button", { class: "ghost", onclick: () => make() }, "New plan")), status, again,
   );
 }
 
@@ -593,21 +612,48 @@ function planIntro(p) {
       u.length > shown.length ? h("div", {}, h("small", {}), h("span", { class: "muted" }, `and ${u.length - shown.length} more, to ${pretty(last.due || last.opens)}`), h("small", {})) : null) : null];
 }
 
+/** /p/CODE, signed in: follow it here, one request on the click, as the
+ *  code box does; then where its cards go. Its authors and followers get
+ *  the way to it instead. */
+function followBox(p, code, followed) {
+  const open = p.id ? link(`/plans/${p.id}`, "Open the plan ›") : null;
+  if (p.author) return h("section", { class: "panel followbox" }, h("p", {}, h("b", {}, "It's your plan. "), open));
+  if (p.following) return h("section", { class: "panel followbox" }, h("p", {}, h("b", {}, "You follow it. "), open));
+  const out = h("p", { class: "status", role: "status" });
+  const btn = h("button", { onclick: async () => {
+    btn.disabled = true; out.className = "status"; out.textContent = "";
+    try {
+      await api("POST", "/plans/follow", { code });
+      box.replaceChildren(h("p", {}, h("b", {}, "Following. "), "Due Crew in your Anki picks it up at its next refresh and opens each date's cards on their day. The first time, it asks about holding later ones back. ", open));
+      followed?.();
+    } catch (err) {
+      btn.disabled = false; out.className = "status bad";
+      out.textContent = err.body?.error === "too_many_plans" ? "You follow 20 plans. Stop one first."
+        : err.status === 429 ? "That's a lot of codes. Try again in an hour."
+        : err.status === 404 ? "This plan isn't open to you any more." : "That didn't work. Try again.";
+    }
+  } }, "Follow");
+  const box = h("section", { class: "panel followbox" },
+    h("div", { class: "row" }, btn, h("span", { class: "muted small" }, "Its cards open in your Anki on their days.")), out);
+  return box;
+}
+
 /** /p/CODE: what a shared link shows. */
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
-  const steps = (deck) => h("ol", { class: "steps" },
+  const steps = (deck, follow = true) => h("ol", { class: "steps" },
     h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, "."),
     h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
-    h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email."));
+    follow ? h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email.") : null);
   let p = null;
   try {
     if (me) {
       const peek = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
       const n = (x) => (x.n || 0) + (x.cards || []).length + Object.values(x.sn || {}).reduce((a, v) => a + v, 0);
       p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience,
-            units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })) };
+            units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })),
+            id: peek.id, following: !!peek.following, author: peek.role === "owner" || peek.role === "editor" };
     } else p = await api("GET", `/plans/public?code=${encodeURIComponent(code)}`);
   } catch { p = null; }
   if (!p) {
@@ -617,11 +663,16 @@ async function codePage(code) {
     return;
   }
   const cal = p.audience === "squad" ? null : calMenu(code);
+  const card = h("section", { class: "panel stepcard" }, h("h4", {}, me ? "Or in Anki" : "Follow it in Anki"), steps(p.deck),
+    me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
+  // followed here: the card is only how to get Due Crew into Anki, signed in as me
+  const followed = () => card.replaceChildren(h("h4", {}, "No Due Crew in your Anki yet?"), steps(p.deck, false),
+    h("p", { class: "muted small" }, "Then sign in with the same email, and the plan is there."));
   page(...planIntro(p),
+    me ? followBox(p, code, followed) : null,
     cal ? h("div", { class: "phone-only" }, cal) : null,
     emailMe(`/p/${code}`),
-    h("section", { class: "panel stepcard" }, h("h4", {}, "Follow it in Anki"), steps(p.deck),
-      me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck.")),
+    card,
     cal ? h("div", { class: "wide-only" }, calMenu(code)) : null,
     me ? null : h("p", { class: "muted small" }, "Due Crew opens a plan's cards in your Anki on their days, and puts friends' studying next to yours. Free. ", h("a", { href: "/" }, "What's Due Crew?")));
   reading();
