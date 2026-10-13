@@ -12326,6 +12326,14 @@ def test_fifteen_board_v381():
     line = board.room_html({"fifteen_done": {"n": 3, "minutes": 45, "cards": 1212, "walked": True, "sev": sev.svg("stack", stack=3)}})
     check("the session's line: fifteens, minutes, cards, the same however it ended",
           "3 fifteens &middot; 45 m &middot; 1,212 cards.</span>" in line and "counts" not in line and "room15x" in line)
+    one = board.room_html({"fifteen_done": {"n": 1, "minutes": 11, "cards": 56, "sev": sev.svg("stack", stack=1)}})
+    check("Sam: its box fits what Sev stacks (room for one square, or three), its words left, no fixed gap above",
+          [sev.stack_reach(n, 44) for n in (1, 2, 3, 8)] == [(7, 3), (13, 3), (19, 3), (19, 3)]
+          and 'style="padding:7px 0 3px"' in one and 'style="padding:19px 0 3px"' in line
+          and "dc-sess" in one and "padding-top: 26px" not in board.SEV_CSS and ".dc-sess { text-align: left; }" in board.SEV_CSS)
+    check("…and the sparks that twinkle as it lands are gone once it rests, or when nothing moves",
+          ".sv.m-stack .spark, .sv.m-cheer .spark { opacity: 0; }" in sev.CSS.split("@media")[0]
+          and ".sv.rest .spark" in sev.CSS)
     v = {"today": "2026-10-13", "name": "Due", "done_n": 0, "total_n": 2, "behind_n": 0, "folded": False, "tab": "today",
          "rows": [], "suggestions": [], "notes": [], "later": [], "later_n": 0, "nudge": True, "nudge_sev": sev.svg("peek")}
     try:

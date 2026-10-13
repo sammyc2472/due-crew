@@ -3540,8 +3540,12 @@ def room_html(room):
         what = f'{n} fifteen{"" if n == 1 else "s"} &middot; {e(room_model.duration_text(mins))}'
         if isinstance(cards, int):
             what += f' &middot; {cards:,} card{"" if cards == 1 else "s"}'
-        icon = _sev.slot(fd["sev"], 44) if fd.get("sev") else "<span>&#10003;</span>"
-        out += (f'<div class="dc-wrap{" dc-stack" if fd.get("sev") else ""}">{icon}<span><b>Your session:</b> {what}.</span>'
+        if fd.get("sev"):
+            up, down = _sev.stack_reach(n, 44)  # room for the squares drawn and the shadow, no more
+            icon = f'<span class="dc-fig" style="padding:{up}px 0 {down}px">{_sev.slot(fd["sev"], 44)}</span>'
+        else:
+            icon = "<span>&#10003;</span>"
+        out += (f'<div class="dc-wrap dc-sess">{icon}<span><b>Your session:</b> {what}.</span>'
                 f'<a class="wx" href="#" title="Done" style="margin-left:auto" onclick="{_pycmd("room15x")}">&times;</a></div>')
     done = room.get("done")
     if done:
@@ -3618,8 +3622,9 @@ SEV_CSS = """
     }
     #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
     #due-crew .dc-fif .rt { text-align: left; }
-    /* the session's line: room above Sev's head for the squares it stacks */
-    #due-crew .dc-wrap.dc-stack { padding-top: 26px; }
+    /* the session's line: Sev and its stack, the box's own padding around them (stack_reach) */
+    #due-crew .dc-wrap .dc-fig { display: inline-flex; flex: none; }
+    #due-crew .dc-sess { text-align: left; }
     #due-crew .dc-fif .rw { flex-wrap: wrap; justify-content: flex-end; }
     #due-crew .du-nudge { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center;
       font-size: 12.5px; padding: 6px 2px 8px; text-align: left; }

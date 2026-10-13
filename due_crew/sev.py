@@ -238,6 +238,16 @@ def slot(markup, size):
             + "</span>")
 
 
+def stack_reach(n, size):
+    """How far the squares Sev stacks (n of them, three at most) and its
+    shadow reach out of its slot(), in px: (above, below). The session's
+    line pads its Sev by these, so the box fits what's drawn (one square
+    or three) and its words centre on Sev and its stack together."""
+    k, y, w = size / 80, round(size * SLOT[2]), round(size * SLOT[0])
+    top = _TOP[1] - 13 - 11 * (max(1, min(3, int(n or 1))) - 1)  # the highest square's top (_fx)
+    return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
+
+
 # 3.8.1 (Sam): by the logo Sev is a moment, not a fixture. It comes when
 # something just happened, plays it, and goes; the rest of the time the
 # logo is alone. LOGO_SECONDS: how long it stays.
@@ -275,6 +285,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .sv-armL, .sv .sv-armR { transform-origin: 50% 8%; }
 .sv .sv-case { transform-origin: 50% 0%; }
 .sv .sv-cheek { opacity: .6; }
+.sv.m-stack .spark, .sv.m-cheer .spark { opacity: 0; } /* they twinkle once and go: at rest, and still, they're gone */
 .sv .sv-z.z2 { transform: translate(6px, -8px); }
 .sv .sv-z.z3 { transform: translate(12px, -16px); }
 .sv .cf { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); }
@@ -393,7 +404,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-in { 0% { transform: scale(0); } 70% { transform: scale(1.14); } 100% { transform: scale(1); } }
   /* drawn again after it played: it rests, and blinks */
   .sv.rest .sv-body, .sv.rest .sv-armR, .sv.rest .sv-armL, .sv.rest .sv-shadow, .sv.rest .sv-clock,
-  .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek { animation: none; transform: none; }
+  .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark { animation: none; transform: none; }
   .sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { animation: none; opacity: 0; }
   .sv.rest.m-peek .sv-body { transform: translateY(22%); }
 }

@@ -1549,4 +1549,11 @@ every release that changes how something works.
   fixed clock holds on any real date. Find a setting knows the new rows
   by other words too (timer, pomodoro, mascot, stretch: `FIND_WORDS`),
   and `tools/motion_preview.py` plays Sev's moments by the logo and the
-  session's line.
+  session's line. The session's line (Sam: funky spacing) kept 26 px
+  over Sev for a full stack and its sparks, so one square left a gap on
+  top and the words sat low. Its Sev is padded by what's drawn now
+  (`sev.stack_reach`: one square or three, and the shadow), so the box
+  has its own even padding (8.6 px over the stack and under the shadow)
+  and the words and × centre on Sev and its stack together; its words
+  are left-aligned when they wrap. The sparks as the stack lands are
+  gone once it rests, and in the still frame, as the motion ends.
