@@ -83,6 +83,19 @@ back never sets it), `later` (dates put off to a later morning),
 missed-days answer), and the plan tags this computer wrote. Per profile,
 `trees_sent` (what this computer last sent of each authored deck's tags).
 
+## A day's work, in the builder
+
+The builder reads each date as a span: its cards spread over the study
+days from the day it opens to its due date (or to the day before the
+next date opens), as the plan's days and phases weigh them (`Work` in
+`builder.js`, on `Sched`). A day's bar and the heavy warning are that
+daily share, summed over the dates; what opens on a day is the number in
+its corner. The warning names the date most to blame, with Split (its
+biggest tag) or Give it till (the due date the pace needs). The Text
+preview's "Over your pace" reads the same work. A follower's Anki opens
+a date whole on its day; the spread is what keeping up takes, not when
+cards open.
+
 ## The morning
 
 Once per Anki day, on the Decks screen, after AnkiWeb's sync
@@ -151,7 +164,10 @@ all; raising it is a decision, not a habit.
 A refresh is one request and a sync is one. Plans ride them: the day's
 first refresh (`decks=1`) brings my plans, plans I write, squad offers
 and the stamp (`pv`) that moves when one changes; the sync sends my
-progress. Everything else is one request on a click (follow, save, a
+progress. Since 3.8.1 that first refresh asks with `same=1`: when the
+stamp hasn't moved, each plan comes without its doc and the add-on keeps
+the one it has (`api._with_kept_docs`); a doc it doesn't have lets the
+stamp go, so the next refresh brings them all. Everything else is one request on a click (follow, save, a
 post, a choice), or the author's uploads above, only when something
 changed. `test_request_budget` pins this.
 

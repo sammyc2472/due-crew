@@ -129,6 +129,11 @@ it moved, so a save reaches followers at their next refresh with no
 request of its own. Each plan on the board has `posts` (its newest 3:
 `{id, name, text, withSave, at}`), and the board marks the version as
 reached (`plan_follows.seen_version`, written only when it changed).
+3.8.1: an add-on that keeps the docs it has asks the day's first board with
+`same=1`; when its `pv` is the stamp, each followed plan comes as
+`{..., same: true}` without its `doc` (not read from D1 either), and the
+add-on puts back the doc it kept for that version. Without `same=1`
+(older add-ons) every doc comes as before.
 `GET /plans/{id}/posts` (anyone in the plan), `POST /plans/{id}/posts
 {text}` and `DELETE /plans/{id}/posts/{pid}` (authors; the owner removes
 any): one line, 200 characters, 5 a day per plan (`429 too_many_posts`),
@@ -250,6 +255,28 @@ for Undo in its room. `PUT /plans/{id}/ids` has its own daily limit (500,
 the newest logged save, even after an ids upload; `GET /plans/{id}/log`
 marks it `undo: true`. A tag root past `_50` is `<root>_<plan id>`, then
 the plan id.
+3.8.1, plans round three (migration 0026: `plan_editors.accepted_at`,
+`plans.handover`): `POST /plans/{id}/editors {uid}` (owner only, a mutual
+friend, counting toward 10) is an invite: not a co-author anywhere until
+a yes. A pending invitee may read the plan as `reader`. `POST
+/plans/{id}/invite {yes}` answers a co-author invite or an offer of the
+plan (404 `no_invite`; a yes to an offer swaps owner and co-author in one
+batch, 409 `too_many_plans`/`plans_full` for the new owner's ceilings).
+`POST /plans/{id}/owner {uid|null}` offers the plan to an accepted
+co-author (400 `not_coauthor`, 403 `not_author`) or takes it back.
+`DELETE /plans/{id}/editors/{uid}` also takes back an invite and ends an
+offer. The view's `editors[]` carry `pending: true` and the view
+`handover`, for the owner and accepted co-authors only. The board's
+`planInvites: [{id, name, kind: coauthor|owner, by: {name, emoji}}]`
+(at most 10) comes on `decks=1`, `keep=1` and a moved stamp; the stamp
+counts them only when there are some. A plan's doc may carry `deckUrl`
+(https, 300 characters, in `/plans/public` too) and `remarks: [{id, tag |
+card, text}]` (300 a plan, 280 characters each, rerooted like any tag);
+`POST /plans/{id}/remarks {add: {tag | card, text}} | {remove: id}` is a
+save for the authors (a note on a card or tag that has one changes it,
+keeping its id; 409 `too_many_remarks`). `PUT /plans/{id}/ids` counts
+may carry `"#lbl": [[tagPath, n]]` a date (at most 3), kept as the
+date's `pl` while its picks are unchanged; a malformed one is skipped.
 
 A date's id fields, who writes each, and when it goes:
 
