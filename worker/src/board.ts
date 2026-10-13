@@ -69,7 +69,7 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP]: me, the people I added (with
+/** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
  *  their week when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
  *  shows the cheers waiting and leaves them for Anki to play. got= (3.7.2)
@@ -138,7 +138,10 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const pv = params.get("pv");
   if (!keep && (withDecks || pv !== null)) {
     const stamp = await P.planStamp(env, s.uid);
-    if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid));
+    // 3.8.1: an add-on that keeps the docs it has (same=1) gets none on the day's
+    // first refresh when nothing moved: the counts and posts come, each doc doesn't
+    const same = params.get("same") === "1" && pv === stamp;
+    if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid, same));
     out.pv = stamp;
   }
   // 3.8.1: the site's home lists my invites to co-write a plan, and plans offered to me

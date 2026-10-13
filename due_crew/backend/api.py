@@ -58,6 +58,22 @@ def _said(path):
     return re.sub(r"/(codes|invites)/[^/]+", r"/\1/…", path.split("?")[0])
 
 
+def _with_kept_docs(plans, kept):
+    """3.8.1: the board's plans, each one sent without its doc (`same`, my
+    stamp hadn't moved) given the doc I kept for that version. None when I
+    kept no such doc: then nothing of them is used."""
+    have = {(p.get("id"), p.get("version")): p.get("doc") for p in kept if isinstance(p, dict)}
+    out = []
+    for p in plans:
+        if isinstance(p, dict) and p.get("same") is True and "doc" not in p:
+            key = (p.get("id"), p.get("version"))
+            if key not in have:
+                return None
+            p = dict(p, doc=have[key])
+        out.append(p)
+    return out
+
+
 class ApiClient:
     def __init__(self, session_file, base=None):
         self.session_file = session_file
@@ -273,7 +289,8 @@ class ApiClient:
         got = int(self.session.get("cheers_got") or 0)
         # 3.7.3: the plans' stamp as I last saw it; they come again only when it moved
         pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}" if with_decks
+        # 3.8.1: same=1, I keep the docs I have: a morning whose stamp didn't move brings none
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}&same=1" if with_decks
                                   else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
@@ -329,6 +346,16 @@ class ApiClient:
         # 3.8.0: only a list counts: a refresh without one isn't "following nothing"
         # (the morning would forget every plan and unsuspend what Hold back kept)
         plans_came = isinstance(data.get("plans"), list)
+        lost = False
+        if plans_came:
+            raw = _with_kept_docs(data["plans"], self.session.get("plans") or [])
+            if raw is None:
+                # a doc I don't have: keep the plans as they are, and the next refresh brings them all
+                plans_came, lost = False, True
+                self.session["plans_pv"] = ""
+                self._save_session()
+            else:
+                data["plans"] = raw
         if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
@@ -343,7 +370,7 @@ class ApiClient:
         if teams != (self.session.get("teams") or {}):
             self.session["teams"] = teams
             self._save_session()
-        if isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
+        if not lost and isinstance(data.get("pv"), str) and data["pv"] != self.session.get("plans_pv"):
             self.session["plans_pv"] = data["pv"][:40]
             self._save_session()
         squads = None

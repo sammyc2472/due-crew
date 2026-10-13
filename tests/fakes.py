@@ -479,7 +479,7 @@ class FakeWorker:
         me = self._me(auth)
         if m == ("GET", "board"):
             return 200, self._board(me, query.get("decks") == "1", query.get("wk"), query.get("got"), query.get("pv"),
-                                    keep=query.get("keep") == "1")
+                                    keep=query.get("keep") == "1", same=query.get("same") == "1")
         if m == ("POST", "sync"):
             return self._sync(me, body or {})
         if m == ("GET", "decks"):
@@ -641,7 +641,7 @@ class FakeWorker:
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
                                                     "text": text, "withSave": False, "at": int(time.time())})
 
-    def _board(self, me, with_decks, wk=None, got=None, pv=None, keep=False):
+    def _board(self, me, with_decks, wk=None, got=None, pv=None, keep=False, same=False):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
             for key in [k for k, c in self.cheers.items() if k[0] == me and c["n"] <= int(got)]:
@@ -676,6 +676,7 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        stamp = None
         if pv is not None:  # 3.7.3: the plans again, when their stamp moved
             stamp = self._plan_stamp(me)
             if not with_decks and pv != stamp:
@@ -688,7 +689,8 @@ class FakeWorker:
             out["planInvites"] = self._plan_invites(me)
         if with_decks:
             out["decks"] = self._decks_for(me)
-            out.update(self._plans_for_board(me))  # 3.1
+            # 3.1; 3.8.1: same=1 and an unmoved stamp: each plan without its doc
+            out.update(self._plans_for_board(me, same and stamp is not None and pv == stamp))
             # 3.6: the week's bingo card, to anyone in a squad (3.7.3: or on a plan's team)
             if wk in self.bingo_cards and (any(u == me for (_s, u) in self.members) or any(u == me for (_p, u) in self.team)):
                 out["bingo"] = self.bingo_cards[wk]
@@ -2085,9 +2087,10 @@ class FakeWorker:
                 return 200, {"ok": True}
         raise Bad(404, "nope")
 
-    def _plans_for_board(self, me):
+    def _plans_for_board(self, me, same=False):
         """The plans I follow that I can see (a squad's plan only while I'm in
-        the squad), with crew counts (live here: see _totals), and squad offers."""
+        the squad), with crew counts (live here: see _totals), and squad offers.
+        same (3.8.1): the add-on has each doc as it stands, so none comes."""
         plans = []
         for (pid, uid), f in sorted(self.follows.items()):
             if uid != me or pid not in self.plans or not self._sees(self.plans[pid], me):
@@ -2096,7 +2099,7 @@ class FakeWorker:
             followers, done = self._totals(pid)
             plans.append({"id": pid, "name": p["name"], "owner": p["owner"],
                           "ownerName": (self.users.get(p["owner"]) or {}).get("name") or "?",
-                          "version": p["version"], "doc": json.loads(json.dumps(p["doc"])),
+                          "version": p["version"], **({"same": True} if same else {"doc": json.loads(json.dumps(p["doc"]))}),
                           "share": f["share"], **({"teamAsk": True} if f.get("teamAsk") else {}),
                           "paused": f["paused"], "sched": f.get("sched"), "early": f.get("early", 0),
                           "shift": f.get("shift", 0), "until": f.get("until"), "since": f.get("since"), "skipped": f.get("skipped", []),

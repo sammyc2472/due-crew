@@ -8851,6 +8851,44 @@ def test_remarks_deck_link_and_picks_named_v381():
     check("picks: other picks on the site: gone", "pl" not in cz())
 
 
+def test_morning_keeps_unchanged_plan_docs_v381():
+    """3.8.1 (plans, rethought): the day's first refresh asks with same=1; when
+    the plans' stamp hasn't moved, each followed plan comes without its doc and
+    the add-on keeps the one it has. A doc it doesn't have leaves its plans as
+    they are, and the next refresh brings them all again."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    maya = new_client(store, "maya", "Maya")
+    labels = [_day(-i) for i in range(7)]
+    maya.follow_plan(code)
+    saw = []
+    real = store._plans_for_board
+    store._plans_for_board = lambda me, same=False: (saw.append(same), real(me, same))[1]
+    first = maya.fetch_board(labels, with_decks=True)
+    kept = json.loads(json.dumps(maya.session.get("plans")))
+    check("lean plans: the first morning brings each doc", first["plans_fresh"] and saw[-1] is False
+          and kept and kept[0]["doc"]["units"])
+    again = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: nothing moved: no doc comes, the plans stay whole", again["plans_fresh"] and saw[-1] is True
+          and maya.session.get("plans") == kept, str(saw))
+    store.add_post(pid, "dre", "Read chapter 6 first.")
+    moved = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: the stamp moved: the docs come again, with the post", moved["plans_fresh"] and saw[-1] is False
+          and maya.session["plans"][0]["posts"][0]["text"] == "Read chapter 6 first.")
+    maya.session["plans"] = []  # a session that lost its plans but kept its stamp
+    lost = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: a doc I don't have: nothing of them is used, the stamp is let go",
+          not lost["plans_fresh"] and maya.session["plans"] == [] and maya.session.get("plans_pv") == "")
+    back = maya.fetch_board(labels)
+    check("lean plans: the next refresh brings them all", back["plans_fresh"] and maya.session["plans"]
+          and maya.session["plans"][0]["doc"]["units"] and maya.session.get("plans_pv"))
+    old = store.handle("GET", f"{api.API_BASE}/board?decks=1&wk=&got=0&pv={maya.session['plans_pv']}",
+                       {"Authorization": f"Bearer {store.session_for('maya')}"})
+    body = old.json()
+    check("lean plans: an older add-on (no same=1) still gets every doc", old.status_code == 200 and body.get("plans")
+          and all("doc" in p and not p.get("same") for p in body["plans"]), str(body)[:200])
+
+
 def test_plan_tags_round_two_v381():
     """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named

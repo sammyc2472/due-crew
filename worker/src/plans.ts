@@ -1887,9 +1887,11 @@ export async function planStamp(env: Env, uid: string): Promise<string> {
  *  stamp moved): the plans I follow, and plans offered to my squads that I
  *  don't follow yet; with each plan its newest posts, and the version is
  *  noted as reached (seen_version, written only when it changed). */
-export async function forBoard(env: Env, uid: string) {
+export async function forBoard(env: Env, uid: string, same = false) {
+  // 3.8.1: same: the add-on has every doc as it stands (its stamp matched), so
+  // each plan comes without its doc, which isn't read here either
   const mineRows = await env.DB.prepare(
-    `SELECT p.id, p.name, p.owner, p.version, p.doc, p.totals, p.totals_at, f.share, f.team_ask, f.paused, f.sched, f.early,
+    `SELECT p.id, p.name, p.owner, p.version, ${same ? "NULL AS doc" : "p.doc"}, p.totals, p.totals_at, f.share, f.team_ask, f.paused, f.sched, f.early,
             f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own, u.name AS owner_name
        FROM plan_follows f JOIN plans p ON p.id = f.plan LEFT JOIN users u ON u.uid = p.owner
       WHERE f.uid = ?1 AND ${SEES("p")}`,
@@ -1946,7 +1948,7 @@ export async function forBoard(env: Env, uid: string) {
   return {
     authored: authored.results.map((r) => ({ id: r.id, version: r.version, name: r.name, doc: lean(r) })),
     plans: mineRows.results.map((r) => ({ id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name || (r.owner ? "?" : "a former member"),
-      version: r.version, doc: JSON.parse(r.doc), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
+      version: r.version, ...(same ? { same: true } : { doc: JSON.parse(r.doc) }), share: r.share === 1, ...(r.team_ask === 1 ? { teamAsk: true } : {}), paused: r.paused === 1,
       sched: r.sched ? JSON.parse(r.sched) : null, early: r.early ?? 0, ...followDays(r),
       followers: crew.get(r.id)?.n ?? 0, crewDone: crew.get(r.id)?.done ?? {}, posts: posts.get(r.id) ?? [] })),
     planOffers: offers.results.map((r) => ({ id: r.id, name: r.name, code: r.code, squad: r.squad, ownerName: r.owner_name || (r.owner ? "?" : "a former member") })),
