@@ -589,6 +589,9 @@ def _css(cfg):
       text-decoration: none; font-weight: 700; font-size: 10.5px; }}
     #due-crew .dc-wrap .wx {{ color: var(--dc-muted);
       text-decoration: none; font-weight: 700; }}
+    #due-crew .dc-wrap.inv {{ text-align: left; }}
+    #due-crew .dc-wrap .yn {{ margin-left: auto; display: flex; gap: 12px; white-space: nowrap; }}
+    #due-crew .dc-wrap .yn .wc {{ margin-left: 0; font-size: 12px; }}
     #due-crew .dc-delta {{ font-size: 10px; font-weight: 700; color: var(--dc-accent);
       margin-left: 6px; }}
     #due-crew th .hi {{ display: none; }}
@@ -849,6 +852,7 @@ def _css(cfg):
     #due-crew .pday .wi {{ display: grid; gap: 2px; margin: 1px 0 5px; padding-left: 9px; border-left: 2px solid var(--dc-line);
                            font-size: 11.5px; color: var(--dc-muted); text-align: left; }}
     #due-crew .pday .wi b {{ color: var(--dc-ink); font-weight: 600; }}
+    #due-crew .pday .wi .rm {{ font-style: italic; overflow-wrap: anywhere; }}
     #due-crew .pday .wi .acts {{ display: flex; gap: 12px; }}
     /* 3.8.0: a set of cards that opens in Browse (a topic, "16 left"): one look
        everywhere, the board's green, as Today's (Sam: "pick one style and stick with it") */
@@ -1523,7 +1527,23 @@ def _you_plans(plans, opened=None):
     """3.8.0, You › Plans: a plan offered to one of my squads, then each plan
     I follow; following none, the ways in. opened: this morning's line, here
     only when Due is off (it's under Today otherwise)."""
-    return _opened_line(opened) + _offer_banners((plans or {}).get("offers")) + _plans_html(plans)
+    return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans))
+
+
+def _invite_lines(invites):
+    """3.8.1: an invite to co-write a plan, or to keep one, a line each above
+    the plans, with Yes and No. Names are the server's: escaped."""
+    e = _html.escape
+    out = ""
+    for x in invites or []:
+        pid, who, name = str(x.get("id", "")), e(str((x.get("by") or {}).get("name") or "?")), e(str(x.get("name") or "Plan"))
+        said = (f"<b>{who}</b> offered you <b>{name}</b> to keep." if x.get("kind") == "owner"
+                else f"<b>{who}</b> asked you to co-write <b>{name}</b>. Its tags would go on your notes in Anki.")
+        out += (f'<div class="dc-wrap inv"><span>&#128221;</span><span>{said}</span><span class="yn">'
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:yes")}">Yes</a>'
+                f'<a class="wc" href="#" onclick="{_pycmd(f"planinvite:{pid}:no")}">No</a></span></div>')
+    return out
 
 
 def _opened_line(op):
@@ -2144,6 +2164,7 @@ def _week_html(card, pid):
                 # 3.8.0: each topic opens its cards in Browse
                 what = "".join(f'<span class="g">{f"<b>{e(str(g))}</b> &middot; " if g else ""}'
                                + " &middot; ".join(_topic_a(pid, uid, x, i) for x, i in xs) + '</span>'
+                               + _remark_lines(xs, u.get("rm"), "rm")  # 3.8.1: the authors' notes under it
                                for g, xs in (u.get("what") or []))
                 browse = (f'<a href="#" onclick="{_pycmd(f"planbrowse:{pid}:{uid}")}">Browse {int(u["total"]):,} card{"s" if int(u["total"]) != 1 else ""}</a>'
                           if int(u["total"]) and u["state"] != "skip" else "")
@@ -2172,6 +2193,18 @@ def _left_a(pid, uids, text):
         return text
     return (f'<a class="tp" href="#" title="Browse them" onclick="event.stopPropagation();'
             f'{_pycmd(f"planleft:{pid}:{uids}")}">{text}</a>')
+
+
+def _remark_lines(xs, rm, cls):
+    """3.8.1: the authors' notes on a tag ([[i, text]], plans.topic_remarks)
+    under the topic row that names it: xs, that row's [[name, i]]. Each note
+    once; the authors' words, escaped."""
+    at = {int(i) for _x, i in xs or []}
+    texts = []
+    for i, text in rm or []:
+        if int(i) in at and str(text) not in texts:
+            texts.append(str(text))
+    return "".join(f'<span class="{cls}">&#9432; {_html.escape(t)}</span>' for t in texts)
 
 
 def _topic_a(pid, uids, name, i):
@@ -4050,6 +4083,7 @@ DUE_CSS = """
     #due-crew .du-sub .du-bx { width: 11px; height: 11px; margin: 0; border-radius: 3px; }
     #due-crew .du-sub .du-bx.on::after { left: 2.5px; top: -0.5px; width: 2.5px; height: 6px; }
     #due-crew .du-sub .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #due-crew .du-rm { display: block; color: var(--dc-muted); font-size: 11.5px; font-style: italic; text-align: left; }
     #due-crew .du .wbar { margin-top: 3px; }
     #due-crew .du-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
       color: var(--dc-muted); padding-top: 4px; }
@@ -4315,7 +4349,8 @@ def _due_plan(r):
         for k, (g, xs) in enumerate(groups):
             if k not in used and (g == label or (label == "Other" and not g)):
                 used.add(k)
-                return " &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                return (" &middot; " + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
+                        + _remark_lines(xs, r.get("rm"), "du-rm"))  # 3.8.1: the authors' notes under it
         return ""
     subs = ""
     for ln in r["lines"]:
@@ -4347,6 +4382,7 @@ def _due_plan(r):
         # as the Plans tab's day writes them: the group in bold, then its topics
         what = "<small>" + " &middot; ".join((f"<b>{e(str(g))}</b> &middot; " if g else "") + ", ".join(_topic_a(r["pid"], r["uid"], x, i) for x, i in xs)
                                               for g, xs in rest) + "</small>"
+        what += "".join(_remark_lines(xs, r.get("rm"), "du-rm") for _g, xs in rest)  # 3.8.1
     elif groups:
         what = ""
     else:

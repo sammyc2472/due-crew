@@ -631,6 +631,49 @@ def progress(col, plan_list, state, idxs=None):
     return out
 
 
+_PICKS = {}  # 3.8.1: (deck id, a date's picks): (the deck's tag index they were named from, their labels)
+
+
+def pick_names(col, plan_list, state, idxs=None):
+    """3.8.1: {plan id: {unit id: [[tag path, n], ...]}}: each date's picked
+    cards here, by the deck tags they sit under (P.pick_labels), then ["", n]
+    for the ones under none; named again only when the deck's notes or the
+    picks change. Main thread, with the refresh's deck reads."""
+    out = {}
+    for p in plan_list:
+        st = state.get(p["id"])
+        if not st or not _deck_ok(col, st.get("deck_id")):
+            continue
+        idx = None
+        for u in P.units(p["doc"]):
+            src = P.picks(u)
+            if not src:
+                continue
+            idx = idx or _index(col, st, idxs)
+            key = (int(st["deck_id"]), json.dumps([src, st.get("swap")], sort_keys=True))
+            hit = _PICKS.get(key)
+            if hit and hit[0] is idx.by_tag:
+                got = hit[1]
+            else:
+                cids = idx.match(src, _swap(st), p["doc"])
+                got = P.pick_labels(idx, cids)
+                rest = len(cids) - sum(n for _p, n in got)
+                got += [["", rest]] if got and rest > 0 else []
+                for k in [k for k, v in _PICKS.items() if k[0] == key[0] and v[0] is not idx.by_tag]:
+                    del _PICKS[k]  # read from the deck's notes as they were
+                _PICKS[key] = (idx.by_tag, got)
+            if got:
+                out.setdefault(p["id"], {})[u["id"]] = got
+    return out
+
+
+def named(pid, doc):
+    """3.8.1: the doc with each date's picked cards named as this copy has
+    them (`_pl`, for P.topic_items), from the last refresh; a copy, so the
+    session's plan stays as it came."""
+    return P.with_picks(doc, (_state.get("plan_picks") or {}).get(pid))
+
+
 def loads(col, plan_list, state, idxs=None):
     """3.7.81: {plan id: {unit id: [seen, open, locked]}} on my own days
     (plans.load), from the deck read the progress already made."""
@@ -818,7 +861,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     skipped_units = [dict(u, opens=P._later(u["opens"], shift + int(moved.get(u["id"]) or 0)))
                      if shift or moved.get(u["id"]) else u
                      for u in P.units(_plan_doc(plan)) if u["id"] in skipped]
-    week = P.week_view(doc, prog, today, P.week_start(today, week_offset), skipped=skipped_units,
+    week = P.week_view(named(plan["id"], doc), prog, today, P.week_start(today, week_offset), skipped=skipped_units,
                        ld=(_state.get("plan_load") or {}).get(plan["id"]), shut=_shut_dates(plan, st, prog))
     change = None
     if st and st.get("snapshot") is not None and st.get("seen_version") != plan.get("version"):
@@ -1405,8 +1448,14 @@ def send_ids():
             idx = P.DeckIndex(mw.col, did)
             units = P.ids_snapshot(idx, a["doc"])
             counts = P.search_counts(idx, a["doc"])  # 3.4, D1: a pasted search's count
+            for u in a["doc"]["units"]:  # 3.8.1: the deck tags a date's picked cards sit under here (#lbl, its `pl`)
+                lbl = P.pick_labels(idx, idx.match(P.picks(u), None, a["doc"])) if P.picks(u) else []
+                if lbl:
+                    counts.setdefault(u["id"], {})["#lbl"] = lbl
             refs = P.id_refs(idx, mw.col, a["doc"])  # 3.6.5: pasted ids as cards anyone's copy can find
-            h = hashlib.sha1(json.dumps([units, counts, refs], sort_keys=True).encode()).hexdigest()[:16]
+            # 3.8.1: with the picks the labels were read from: a site edit drops a date's `pl`, so new picks send them again
+            picked = {u["id"]: P.picks(u) for u in a["doc"]["units"] if P.picks(u)}
+            h = hashlib.sha1(json.dumps([units, counts, refs] + ([picked] if picked else []), sort_keys=True).encode()).hexdigest()[:16]
             if sent.get(a["id"]) != h:
                 jobs.append((a["id"], units, counts, refs, h))
     except Exception:
@@ -1690,6 +1739,10 @@ def refresh_progress():
     except Exception:
         traceback.print_exc()
     try:
+        _state["plan_picks"] = pick_names(mw.col, followed(), _state_cfg(), idxs)  # 3.8.1
+    except Exception:
+        traceback.print_exc()
+    try:
         _state["plan_session"] = sessions(mw.col, followed(), _state_cfg(), _today(), idxs)
         _note_recap(_state["plan_session"])
     except Exception:
@@ -1875,7 +1928,7 @@ def board_view(c):
     state = _state_cfg(pc)
     today = _state["labels"][0] if _state["labels"] else ""
     if not today:
-        return {"cards": [], "offers": []}
+        return {"cards": [], "offers": [], "invites": list(client().session.get("plan_invites") or [])}
     prog = _state.get("plan_progress") or {}
     here = lambda st: st if st and mw.col and _deck_ok(mw.col, st.get("deck_id")) else None
     sess = _state.get("plan_session") or {}
@@ -1896,7 +1949,8 @@ def board_view(c):
     names = {sq["id"]: sq.get("name") or "" for sq in _my_squads(c)}
     offers = offers_view(client().session.get("plan_offers"), names, {p["id"] for p in plan_list},
                          set(pc.get("plan_offers_dismissed") or []))
-    return {"cards": cards, "offers": offers}
+    # 3.8.1: an invite to co-write a plan, or to keep one, from the day's first board
+    return {"cards": cards, "offers": offers, "invites": list(client().session.get("plan_invites") or [])}
 
 
 # ---- board commands ----
@@ -2019,9 +2073,38 @@ def on_message(cmd, parts):
         pc["plan_offers_dismissed"] = (list(pc.get("plan_offers_dismissed") or []) + [arg])[-50:]
         _psave(pc)
         app.swap(cfg())
+    elif cmd == "planinvite" and arg and len(parts) > 3 and parts[3] in ("yes", "no"):
+        answer_invite(arg, parts[3] == "yes")  # 3.8.1: co-write it, or keep it
     else:
         return False
     return True
+
+
+def answer_invite(pid, yes):
+    """3.8.1: Yes or No to an invite on the board (to co-write a plan, or to
+    keep one its owner hands me): one request, on the click. A yes makes me
+    one of its authors: Browse's items at once, its tags on my notes when the
+    plan next arrives (the refresh's stamp moved with the answer)."""
+    cl = client()
+    inv = next((x for x in cl.session.get("plan_invites") or [] if x.get("id") == pid), None)
+    if inv is None or not cl.signed_in:
+        return
+    gen = app.generation
+
+    def done(res):
+        if gen != app.generation:
+            return  # another profile or account since
+        _got, status = res if res else (None, 0)
+        name = html.escape(inv.get("name") or "the plan")
+        if status == 404:
+            tooltip(f"That invite to {name} was taken back.")
+        elif status != 200:
+            tooltip("Couldn't reach Due Crew. Check your connection." if not status else "That didn't go through. Try again later.")
+        elif yes:
+            tooltip(f"{name} is yours now." if inv.get("kind") == "owner" else f"You co-write {name} now.")
+        app.swap(cfg())
+
+    _bg(lambda: cl.answer_plan_invite(pid, yes), done)
 
 
 def undo_morning(put_off_too=False):
@@ -2195,13 +2278,13 @@ def browse_topic(pid, uids, i):
     if p is None or not st or not mw.col or not _deck_ok(mw.col, st.get("deck_id")):
         return
     pm = mine(p)
-    by_id = {u["id"]: u for u in P.units(pm["doc"])}
+    by_id = {u["id"]: u for u in P.units(named(pid, pm["doc"]))}  # 3.8.1: the picks named as the board drew them
     items = P.topic_items([by_id[x] for x in uids if x in by_id])
     if not 0 <= i < len(items):
         return
     src = items[i][2]
     try:
-        cids = P.DeckIndex(mw.col, st["deck_id"]).match(src, _swap(st), pm["doc"])
+        cids = P.topic_cards(P.DeckIndex(mw.col, st["deck_id"]), src, _swap(st), pm["doc"])
     except Exception:
         traceback.print_exc()
         return
@@ -3224,6 +3307,9 @@ def browser_menu(browser, menu):
         action.triggered.connect(lambda: add_to_plan(browser))
         tag = menu.addAction("Due Crew: tag for a plan…")  # 3.8.0: plan tags
         tag.triggered.connect(lambda: tag_for_plan(browser))
+        if _one_card(browser):  # 3.8.1: a note on one card, for the plan's followers
+            note = menu.addAction("Due Crew: note for the plan's followers…")
+            note.triggered.connect(lambda: note_for_card(browser))
         copy = menu.addAction("Due Crew: copy as plan selector")
         copy.triggered.connect(lambda: copy_selector(browser))
         out = menu.addAction("Due Crew: export for my AI…")
@@ -3559,6 +3645,35 @@ def tag_for_plan(browser):
                 period=5000)
 
     TagDialog(browser, client(), [guid_of[n] for n in nids if n in guid_of], on_done=done, outside=outside).exec()
+
+
+def _one_card(browser):
+    """3.8.1: the browser has exactly one card picked (a note of one card, in Notes)."""
+    try:
+        return len(browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()) == 1
+    except Exception:
+        return False
+
+
+def note_for_card(browser):
+    """3.8.1, Browse › Due Crew: note for the plan's followers…: one line on
+    one card, for everyone following a plan I write or co-author; it shows
+    when that card comes up for them. The plan gets the card's guid and
+    number and my words, never the card's text; one note a card a plan,
+    edited or taken off here."""
+    if not mw.col or not _signed_in():
+        return
+    try:
+        cids = browser.selected_cards() if hasattr(browser, "selected_cards") else browser.selectedCards()
+    except Exception:
+        traceback.print_exc()
+        return
+    refs = P.card_refs(mw.col, cids) if len(cids or []) == 1 else []
+    if not refs:
+        tooltip("Select one card first.")
+        return
+    from .ui.remark_dialog import RemarkDialog
+    RemarkDialog(browser, client(), refs[0][0], refs[0][1], on_done=lambda text: tooltip(html.escape(text), period=5000)).exec()
 
 
 def add_to_plan(browser):
