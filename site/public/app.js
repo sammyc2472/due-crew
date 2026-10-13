@@ -1458,7 +1458,7 @@ async function home() {
     Cards.open({ kind: oneDay ? "today" : "week", title: oneDay ? "Share today" : "Share my week", file: oneDay ? `due-crew-${t}` : `due-crew-week-${mon}`, sizes: ["story", "link"],
       data: { one: !!oneDay, range: oneDay ? `${DAYS[dd.getUTCDay()]} ${Cards.short(t)}` : `${Cards.short(mon)} – ${Cards.short(addDays(mon, 6))}`, days,
         studied: oneDay ? (days.find((x) => x.today)?.studied ? 1 : 0) : days.filter((x) => x.studied).length, elapsed: sofar.length,
-        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe },
+        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe, sev: true },  // 3.8.1: Sev hops across it
       switches: [
         { k: "time", label: "Time studied", off: a.time == null ? hidden : "" },
         { k: "reviews", label: "Reviews and new cards", off: a.reviews == null ? hidden : "" },

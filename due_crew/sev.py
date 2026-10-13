@@ -4,9 +4,11 @@ a cheer lands). Pure: no aqt.
 
 One drawing for every pose, and one motion sheet (CSS). The board draws Sev
 from here, and the room's widgets get its markup from here as data, so it's
-never drawn twice and there's no JS twin. Every pose draws the same named
-parts (sv-body, sv-eyes, sv-pupils, sv-armL/R, sv-card, sv-clock, ...), so
-a moment (`m-*`) moves whatever pose it's given.
+never drawn twice and there's no JS twin; the week picture card draws
+`still`, and the site's cards.js keeps a copy of it the suite checks.
+Every pose draws the same named parts (sv-body, sv-eyes, sv-pupils,
+sv-armL/R, sv-card, sv-clock, ...), so a moment (`m-*`) moves whatever
+pose it's given.
 
 By the logo it's a moment: it comes when something happens and goes
 (`moment`). Still is the frame: each moment's resting markup is the frame that says it
@@ -19,6 +21,7 @@ accent), --sv-line, --sv-amb, --sv-mut, with a fallback each.
 """
 
 import math
+import re
 
 INK = "var(--sv-ink,#1f2a1f)"
 AMB = "var(--sv-amb,#b26a00)"
@@ -202,6 +205,15 @@ def _fx(kinds, stack=3):
     return back, front
 
 
+def _figure(p, blush):
+    """Sev itself: feet, body, face, arms and what it holds. Every drawing's."""
+    back_arms, front_arms = _arms(p["arms"])
+    body = (_r(28.5, 63, 9, 9.5, 3, ACC, ' class="sv-footL"') + _r(42.5, 63, 9, 9.5, 3, ACC, ' class="sv-footR"')
+            + _r(20, 27, 40, 39, 12.5, ACC) + _r(25, 31, 11, 5, 2.5, "#fff", ' opacity=".22"')
+            + _eyes(p["eyes"]) + _mouth(p["mouth"]) + (_cheeks() if blush else ""))
+    return f'<g class="sv-body">{back_arms}{body}{front_arms}{_held(p.get("prop"))}</g>'
+
+
 def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None):
     """Sev in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
@@ -209,17 +221,27 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     stack: squares on its head, one a fifteen (three at most)."""
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
-    back_arms, front_arms = _arms(p["arms"])
     blush = p.get("cheeks") if cheeks is None else cheeks
-    body = (_r(28.5, 63, 9, 9.5, 3, ACC, ' class="sv-footL"') + _r(42.5, 63, 9, 9.5, 3, ACC, ' class="sv-footR"')
-            + _r(20, 27, 40, 39, 12.5, ACC) + _r(25, 31, 11, 5, 2.5, "#fff", ' opacity=".22"')
-            + _eyes(p["eyes"]) + _mouth(p["mouth"]) + (_cheeks() if blush else ""))
     fx_back, fx_front = _fx(p.get("fx") or (), max(1, min(3, int(stack or 3))))
     dims = f' width="{int(size)}" height="{int(size)}"' if size else ""
     cls = f"sv m-{m}" + (" rest" if rest and m in ONCE else "")
     return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Sev")}">'
             f'<ellipse class="sv-shadow" cx="40" cy="74.5" rx="16" ry="2.6" style="fill:{LINE}"/>{fx_back}'
-            f'<g class="sv-body">{back_arms}{body}{front_arms}{_held(p.get("prop"))}</g>{fx_front}</svg>')
+            f'{_figure(p, blush)}{fx_front}</svg>')
+
+
+def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None):
+    """Sev in `pose` for a picture: an SVG of its own (it has the xmlns,
+    width and height), each colour given or the drawing's own fallback, no
+    classes, no motion. Just Sev: no shadow (it stands on what's under
+    it) and none of the moment's effects (they're motion). The week card
+    draws it (sharecard), in Qt here and on the site's canvas, whose
+    cards.js keeps a copy the suite checks against this."""
+    p = POSES.get(pose) or POSES["idle"]
+    given = {"a": accent, "line": line, "ink": ink, "amb": amb, "mut": mut, "blush": blush}
+    art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks")))
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">'
+            + re.sub(r' class="[^"]*"', "", art) + "</svg>")
 
 
 # Sev's body sits low in its drawing (its effects need the room above), so

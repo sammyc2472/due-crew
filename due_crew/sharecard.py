@@ -11,6 +11,7 @@ what my crew sees on the board; a picture I make by hand starts with the
 numbers they keep home switched off, and I can turn them on."""
 
 import datetime
+import math
 
 from .mapcard import mix
 
@@ -69,10 +70,11 @@ def heat_level(days):
 
 # ---- the numbers. days: {label: (reviews, time_ms)}, the days I answered a card ----
 
-def week(days, today, one=False, fresh=None, streak=0, crew=0):
+def week(days, today, one=False, fresh=None, streak=0, crew=0, sev=False):
     """My week (Monday to today), or today alone (one): seven squares,
     and the numbers over the days so far. fresh: {label: new cards};
-    streak: my streak; crew: how many of my crew studied too."""
+    streak: my streak; crew: how many of my crew studied too; sev: Sev
+    hops across it (Settings › Sev here; the site always)."""
     t = _day(today)
     mon = t - datetime.timedelta(days=t.weekday())
     lv = heat_level(days)
@@ -92,7 +94,7 @@ def week(days, today, one=False, fresh=None, streak=0, crew=0):
             "elapsed": len(sofar), "time": sum((days.get(lb) or (0, 0))[1] for lb in span),
             "reviews": sum((days.get(lb) or (0, 0))[0] for lb in span),
             "newCards": sum(int((fresh or {}).get(lb) or 0) for lb in span),
-            "streak": int(streak or 0), "crew": int(crew or 0)}
+            "streak": int(streak or 0), "crew": int(crew or 0), "sev": bool(sev)}
 
 
 def year(days, y, today, cheers=None):
@@ -201,7 +203,9 @@ def switches(kind, d, priv=None, cheers_say=""):
 class _Ops:
     """What a card draws, in order: ("logo", x, y, h); ("text", s, x, y,
     px, color, weight, align, track), y the baseline; ("rect", x, y, w,
-    h, r, color); ("ring", x, y, w, h, r, color, width, dashed)."""
+    h, r, color); ("ring", x, y, w, h, r, color, width, dashed); ("dot",
+    x, y, r, color), a filled circle; ("sev", pose, x, y, size, color),
+    sev.still(pose, color) in that square."""
 
     def __init__(self, measure, pal):
         self.ops, self.measure, self.pal = [], measure, pal
@@ -220,6 +224,12 @@ class _Ops:
 
     def logo(self, x, y, h):
         self.ops.append(("logo", x, y, h))
+
+    def dot(self, x, y, r, color):
+        self.ops.append(("dot", x, y, r, color))
+
+    def sev(self, pose, x, y, size, color):
+        self.ops.append(("sev", pose, x, y, size, color))
 
     def fit(self, s, width, px, least, weight=400):
         """(s, px): the biggest size from px down to least that fits, else
@@ -257,6 +267,78 @@ def _day_cell(o, x, y, s, c, r, ring):
         o.ring(x - ring, y - ring, s + 2 * ring, s + 2 * ring, r + ring, pal["ink"], ring * 0.75)
 
 
+# 3.8.1, the week card's Sev (Sam's pick, "Sev hops across the week"): it
+# lands on the days I studied and hops over the rest. A picture is still,
+# so the hops are its trail, a dotted arc from each day it landed on to
+# the next, and Sev stands on the last. Sizes are over a square's side.
+SEV_SIZE = 1.8  # Sev's drawing: its body about a square
+SEV_FEET = 72.5 / 80  # where its feet end in its drawing (sev.py)
+HOP = 0.45  # a hop's height, times the root of the days it spans: a day off, a longer one
+DOT, STEP = 0.035, 0.16  # the trail: a dot's radius, and the way between two dots
+ROOM = 100  # on a story, the squares and what's under them move down this much for Sev
+
+
+def landings(d):
+    """The days Sev lands on (indexes into d["days"]): the days studied so
+    far, or today alone on today's card; none with Sev off."""
+    if not d.get("sev"):
+        return []
+    return [i for i, c in enumerate(d["days"]) if c["studied"] and not c["future"] and (c["today"] or not d["one"])]
+
+
+def hops(d, x0, top, s, gap, ring):
+    """Sev on the row of squares (from x0, top; side s, gap apart; today's
+    ringed `ring` out): {"arcs": [(day, next day)], "dots": [(x, y)],
+    "r": a dot's radius, "sev": (x, y, size) or None}. Each arc runs from
+    the top of a square it landed on to the next one's, and Sev stands on
+    the last. cards.js hops() is its twin."""
+    land = landings(d)
+    out = {"arcs": [], "dots": [], "r": s * DOT, "sev": None}
+    if not land:
+        return out
+
+    def foot(i):  # where it lands: the square's top, or the top of today's ring
+        return x0 + i * (s + gap) + s / 2, top - (ring * 1.375 if d["days"][i]["today"] else 0)
+    for a, b in zip(land, land[1:]):
+        out["arcs"].append((a, b))
+        out["dots"] += _trail(foot(a), foot(b), s * HOP * math.sqrt(b - a), s * STEP)
+    x, y = foot(land[-1])
+    z = s * SEV_SIZE
+    out["sev"] = (x - z / 2, y - z * SEV_FEET, z)
+    return out
+
+
+def _trail(a, b, h, step):
+    """Dots along a hop from a to b, its top h above them, about step
+    apart along the curve; none at either end (a square is there)."""
+    N = 48
+    pts = []
+    for k in range(N + 1):
+        t = k / N
+        pts.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - 4 * h * t * (1 - t)))
+    run = [0.0]
+    for k in range(N):
+        dx, dy = pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]
+        run.append(run[k] + math.sqrt(dx * dx + dy * dy))
+    n = max(2, int(run[N] / step + 0.5))
+    dots, k = [], 0
+    for i in range(1, n):
+        want = run[N] * i / n
+        while run[k + 1] < want:
+            k += 1
+        f = (want - run[k]) / (run[k + 1] - run[k])
+        dots.append((pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f))
+    return dots
+
+
+def _hop(o, hp):
+    if not hp["sev"]:
+        return
+    for x, y in hp["dots"]:
+        o.dot(x, y, hp["r"], o.pal["g"])
+    o.sev("hop", *hp["sev"], o.pal["g"])
+
+
 def _week(o, W, H, size, d, on):
     pal = o.pal
     time = hm(d["time"]) if on.get("time") and d.get("time") else None
@@ -284,6 +366,7 @@ def _week(o, W, H, size, d, on):
         for i, c in enumerate(d["days"]):
             _day_cell(o, x0 + i * (s + gap), 230, s, c, 12, 4)
             o.text(c["label"], x0 + i * (s + gap) + s / 2, 230 + s + 38, 22, pal["mut"], 700, "center")
+        _hop(o, hops(d, x0, 230, s, gap, 4))  # the room above the squares is free
         o.text(" · ".join(b for b in (crew, "duecrew.com") if b), P, H - P, 26, pal["mut"])
         return
     P = 78
@@ -296,17 +379,19 @@ def _week(o, W, H, size, d, on):
     o.text(sub, P, 462, 38, pal["mut"])
     gap = 20
     s = (w - 6 * gap) / 7
+    dy = ROOM if landings(d) else 0
     for i, c in enumerate(d["days"]):
-        _day_cell(o, P + i * (s + gap), 560, s, c, 26, 8)
-        o.text(c["label"], P + i * (s + gap) + s / 2, 560 + s + 54, 30, pal["mut"], 700, "center")
-    o.rect(P, 812, w, 3, 0, pal["line"])
+        _day_cell(o, P + i * (s + gap), 560 + dy, s, c, 26, 8)
+        o.text(c["label"], P + i * (s + gap) + s / 2, 560 + dy + s + 54, 30, pal["mut"], 700, "center")
+    _hop(o, hops(d, P, 560 + dy, s, gap, 8))
+    o.rect(P, 812 + dy, w, 3, 0, pal["line"])
     stats = [(n(rev), "reviews") if rev is not None and time else None,
              (n(d["newCards"]), "new cards") if on.get("reviews") and d.get("newCards") is not None else None,
              (f"🔥 {streak}", "day streak") if streak else None]
     for i, (v, lb) in enumerate(x for x in stats if x):
         x = P + i * w / 3
-        o.text(v, x, 912, 64, pal["ink"], 700)
-        o.text(lb, x, 962, 32, pal["mut"])
+        o.text(v, x, 912 + dy, 64, pal["ink"], 700)
+        o.text(lb, x, 962 + dy, 32, pal["mut"])
     if crew:
         o.text(crew, P, H - P, 34, pal["mut"])
     o.text("duecrew.com", W - P, H - P, 34, pal["mut"], align="right")

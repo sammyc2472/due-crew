@@ -73,6 +73,53 @@ const Cards = (() => {
   const hm = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
   const n = (v) => Number(v).toLocaleString("en-US");
 
+  // ---- 3.8.1: Sev hops across my week (sharecard.py's landings and hops: change one, change both) ----
+  // sev.still("hop", "%A%") from due_crew/sev.py, the one drawing; the suite checks this copy is it
+  const SEV = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><g><g transform="translate(21.5 47) rotate(155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><g transform="translate(58.5 47) rotate(-155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><rect x="28.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="42.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="20" y="27" width="40" height="39" rx="12.5" style="fill:%A%"/><rect x="25" y="31" width="11" height="5" rx="2.5" style="fill:#fff" opacity=".22"/><g><path d="M28.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/><path d="M42.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/></g><path d="M35 50.5 q5 7 10 0 z" style="fill:#1f2a1f"/></g></svg>';
+  const SEV_SIZE = 1.8, SEV_FEET = 72.5 / 80, HOP = 0.45, DOT = 0.035, STEP = 0.16, ROOM = 100;
+  const sevs = {};
+  const sevImg = (col) => (sevs[col] ||= new Promise((ok) => {
+    const img = new Image();
+    img.onload = () => ok(img); img.onerror = () => ok(null);
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SEV.split("%A%").join(col))}`;
+  }));
+  // the days Sev lands on: the days studied so far, or today alone on today's card
+  const landings = (d) => (d.sev ? d.days.map((c, i) => (c.studied && !c.future && (c.today || !d.one) ? i : -1)).filter((i) => i >= 0) : []);
+  // a dotted arc from each day it landed on to the next (a day off under a long one), Sev standing on the last
+  function hops(d, x0, top, s, gap, ring) {
+    const land = landings(d), out = { arcs: [], dots: [], r: s * DOT, sev: null };
+    if (!land.length) return out;
+    const foot = (i) => [x0 + i * (s + gap) + s / 2, top - (d.days[i].today ? ring * 1.375 : 0)];
+    for (let j = 0; j + 1 < land.length; j++) {
+      const a = land[j], b = land[j + 1];
+      out.arcs.push([a, b]);
+      out.dots.push(...trail(foot(a), foot(b), s * HOP * Math.sqrt(b - a), s * STEP));
+    }
+    const [x, y] = foot(land[land.length - 1]), z = s * SEV_SIZE;
+    out.sev = [x - z / 2, y - z * SEV_FEET, z];
+    return out;
+  }
+  function trail(a, b, h, step) {
+    const N = 48, pts = [], run = [0], dots = [];
+    for (let k = 0; k <= N; k++) { const t = k / N; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - 4 * h * t * (1 - t)]); }
+    for (let k = 0; k < N; k++) { const dx = pts[k + 1][0] - pts[k][0], dy = pts[k + 1][1] - pts[k][1]; run.push(run[k] + Math.sqrt(dx * dx + dy * dy)); }
+    const m = Math.max(2, Math.floor(run[N] / step + 0.5));
+    for (let i = 1, k = 0; i < m; i++) {
+      const want = run[N] * i / m;
+      while (run[k + 1] < want) k++;
+      const f = (want - run[k]) / (run[k + 1] - run[k]);
+      dots.push([pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f]);
+    }
+    return dots;
+  }
+  async function hop(c, hp, pal) {
+    if (!hp.sev) return;
+    c.fillStyle = pal.g;
+    hp.dots.forEach(([x, y]) => { c.beginPath(); c.arc(x, y, hp.r, 0, Math.PI * 2); c.fill(); });
+    const img = await sevImg(pal.g);
+    if (img) c.drawImage(img, hp.sev[0], hp.sev[1], hp.sev[2], hp.sev[2]);
+  }
+
   // ---- K1: my week ----
   async function week(c, W, H, size, d, on, pal, look) {
     const time = on.time && d.time ? hm(d.time) : null;
@@ -92,6 +139,7 @@ const Cards = (() => {
       const x0 = 720, w = W - P - x0, gap = 12, s = (w - 6 * gap) / 7;
       d.days.forEach((x, i) => dayCell(c, x0 + i * (s + gap), 230, s, x, pal, 12, 4));
       d.days.forEach((x, i) => text(c, x.label, x0 + i * (s + gap) + s / 2, 230 + s + 38, 22, pal.mut, { weight: 700, align: "center" }));
+      await hop(c, hops(d, x0, 230, s, gap, 4), pal);  // the room above the squares is free
       text(c, [crew, "duecrew.com"].filter(Boolean).join(" · "), P, H - P, 26, pal.mut);
       return;
     }
@@ -100,12 +148,13 @@ const Cards = (() => {
     eyebrow(c, brow, P, 236, 30, pal);
     text(c, big, P, 396, 150, pal.ink, { weight: 700 });
     text(c, d.one ? (d.studied || time || rev ? "studied today" : "nothing yet today") : `studied, ${days}`, P, 462, 38, pal.mut);
-    const w = W - 2 * P, gap = 20, s = (w - 6 * gap) / 7;
+    const w = W - 2 * P, gap = 20, s = (w - 6 * gap) / 7, dy = landings(d).length ? ROOM : 0;
     d.days.forEach((x, i) => {
-      dayCell(c, P + i * (s + gap), 560, s, x, pal, 26, 8);
-      text(c, x.label, P + i * (s + gap) + s / 2, 560 + s + 54, 30, pal.mut, { weight: 700, align: "center" });
+      dayCell(c, P + i * (s + gap), 560 + dy, s, x, pal, 26, 8);
+      text(c, x.label, P + i * (s + gap) + s / 2, 560 + dy + s + 54, 30, pal.mut, { weight: 700, align: "center" });
     });
-    c.fillStyle = pal.line; c.fillRect(P, 812, w, 3);
+    await hop(c, hops(d, P, 560 + dy, s, gap, 8), pal);
+    c.fillStyle = pal.line; c.fillRect(P, 812 + dy, w, 3);
     const stats = [
       rev != null && time ? [n(rev), "reviews"] : null,
       on.reviews && d.newCards != null ? [n(d.newCards), "new cards"] : null,
@@ -113,8 +162,8 @@ const Cards = (() => {
     ].filter(Boolean);
     stats.forEach(([v, l], i) => {
       const x = P + (i * w) / 3;
-      text(c, v, x, 912, 64, pal.ink, { weight: 700 });
-      text(c, l, x, 962, 32, pal.mut);
+      text(c, v, x, 912 + dy, 64, pal.ink, { weight: 700 });
+      text(c, l, x, 962 + dy, 32, pal.mut);
     });
     if (crew) text(c, crew, P, H - P, 34, pal.mut);
     text(c, "duecrew.com", W - P, H - P, 34, pal.mut, { align: "right" });
@@ -257,8 +306,11 @@ const Cards = (() => {
       on: Object.fromEntries(switches.map((s) => [s.k, s.on !== false && !s.off])) };
     const cv = document.createElement("canvas");
     cv.className = "sc-canvas";
-    let seq = 0;
-    async function paint() {
+    let seq = 0, painting = Promise.resolve();
+    // 3.8.1: what leaves the sheet waits for the picture on screen, Sev and the logo drawn in it
+    const paint = () => (painting = draw());
+    const drawn = async () => { for (let p; p !== painting;) { p = painting; await p.catch(() => {}); } };
+    async function draw() {
       const mine = ++seq;
       const [W, H] = SIZES[st.size];
       const off = document.createElement("canvas"); off.width = W; off.height = H;
@@ -295,7 +347,7 @@ const Cards = (() => {
         sizeRow.replaceWith(fresh); sizeRow = fresh;
         paint();
       } }, l))) : null;
-    const blob = () => new Promise((ok) => cv.toBlob(ok, "image/png"));
+    const blob = () => drawn().then(() => new Promise((ok) => cv.toBlob(ok, "image/png")));
     const name = () => `${file}-${st.size}.png`;
     const download = async () => {
       const b = await blob(); if (!b) return;

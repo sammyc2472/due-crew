@@ -2,18 +2,19 @@
 my day, my week, my year or all time, drawn with QPainter from
 sharecard.draw, in the site's picture-card look. A preview, a switch for
 each number, Story or Link, Light or Dark, then Copy picture or Save….
+Sev on my week (3.8.1) is sev.py's drawing, by QtSvg.
 Main thread: no collection, no network (the glue counts cheers)."""
 
 import os
 
 from aqt.qt import (
-    QApplication, QButtonGroup, QCheckBox, QColor, QComboBox, QDialog, QFileDialog, QFontMetricsF, QHBoxLayout, QImage,
-    QLabel, QPainter, QPainterPath, QPen, QPixmap, QPushButton, QRadioButton, QRectF, QVBoxLayout, Qt,
+    QApplication, QButtonGroup, QByteArray, QCheckBox, QColor, QComboBox, QDialog, QFileDialog, QFontMetricsF, QHBoxLayout,
+    QImage, QLabel, QPainter, QPainterPath, QPen, QPixmap, QPointF, QPushButton, QRadioButton, QRectF, QVBoxLayout, Qt,
 )
 
 from . import _night, attach_alive
 from .map_card_dialog import _font, _logo, _text
-from .. import sharecard as S
+from .. import sharecard as S, sev
 
 BOX_W, BOX_H = 380, 475  # the preview: a story fills it, a link sits in its middle
 
@@ -57,8 +58,28 @@ def paint(kind, size, data, on, look="light"):
             mark = _logo(look, h)
             if mark is not None:
                 p.drawImage(int(x), int(y), mark)
+        elif op[0] == "dot":
+            _o, x, y, r, color = op
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(color))
+            p.drawEllipse(QPointF(x, y), r, r)
+        elif op[0] == "sev":
+            _o, pose, x, y, z, color = op
+            _sev(p, pose, color, QRectF(x, y, z, z))
     p.end()
     return img
+
+
+def _sev(p, pose, color, rect):
+    """Sev, still, in the card's accent: sev.py's one drawing, by QtSvg
+    (where this Qt can't read SVG the card goes without)."""
+    try:
+        from PyQt6.QtSvg import QSvgRenderer
+    except Exception:
+        return
+    r = QSvgRenderer(QByteArray(sev.still(pose, color).encode("utf-8")))
+    if r.isValid():
+        r.render(p, rect)
 
 
 class ShareCardDialog(QDialog):

@@ -12374,6 +12374,203 @@ def test_fifteen_board_v381():
           "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev once"' in on)
 
 
+def test_week_card_sev_v381():
+    """3.8.1, the week card (Sam's pick, "Sev hops across the week"): a
+    dotted arc from each day studied to the next, a long one over days
+    off, none over days to come, and Sev standing on the last day studied
+    in the card's accent; no Sev with nothing studied or Sev off, and on
+    today's card only on today. sev.still is the one drawing: cards.js
+    keeps a copy, and lays the card out the same (that part needs node)."""
+    import shutil
+    import subprocess
+    from due_crew import rooms as R, sev, shares as SH, sharecard as S
+    from due_crew.app import _state
+    measure = lambda s, px, w: len(s) * px * 0.55  # noqa: E731
+    mon = datetime.date(2026, 10, 12)
+    log = lambda days: {(mon + datetime.timedelta(days=i)).isoformat(): (30 + 7 * i, (10 + 3 * i) * 60000)  # noqa: E731
+                        for i, x in enumerate(days) if x}
+    on = {k: True for k in ("time", "reviews", "streak", "crew")}
+    of = lambda ops, kind: [o for o in ops if o[0] == kind]  # noqa: E731
+    P, s = 78, (1080 - 2 * 78 - 6 * 20) / 7
+    mid = lambda i, x0=P, side=s, gap=20: x0 + i * (side + gap) + side / 2  # noqa: E731
+
+    wk = S.week(log([1, 1, 0, 1, 1, 0, 1]), "2026-10-18", False, {"2026-10-18": 9}, 4, 2, sev=True)  # the mock's: two days off
+    W, H, ops = S.draw("week", "story", wk, on, "light", measure)
+    hp = S.hops(wk, P, 560 + S.ROOM, s, 20, 8)
+    over = lambda a, b: [y - hp["r"] for x, y in hp["dots"] if mid(a) < x < mid(b)]  # noqa: E731
+    check("hops: an arc from each day studied to the next, a long one over each day off",
+          hp["arcs"] == [(0, 1), (1, 3), (3, 4), (4, 6)] and min(over(1, 3)) < min(over(0, 1)) and min(over(4, 6)) < min(over(3, 4))
+          and all(min(over(a, b)) < 560 + S.ROOM for a, b in hp["arcs"]), hp["arcs"])
+    sv = of(ops, "sev")
+    check("Sev on the last day studied, standing on today's ring, in the card's accent; the trail drawn in it too",
+          len(sv) == 1 and sv[0][1] == "hop" and abs(sv[0][2] + sv[0][4] / 2 - mid(6)) < 1e-9
+          and abs(sv[0][3] + sv[0][4] * S.SEV_FEET - (560 + S.ROOM - 8 * 1.375)) < 1e-9 and sv[0][5] == "#2e7d32"
+          and [o[1:3] for o in of(ops, "dot")] == hp["dots"] and {o[4] for o in of(ops, "dot")} == {"#2e7d32"}
+          and of(S.draw("week", "story", wk, on, "dark", measure)[2], "sev")[0][5] == S.LOOKS["dark"]["g"], sv)
+    texts = {o[1]: o[3] for o in of(ops, "text")}
+    body_top = sv[0][3] + sv[0][4] * 27 / 80  # sev.py: the body's top
+    check("room for it: the squares and the numbers under them move down; every word and number kept, nothing crowded",
+          texts["S"] == 560 + S.ROOM + s + 54 and texts["day streak"] == 962 + S.ROOM and texts["duecrew.com"] == H - P
+          and body_top - 462 >= 50 and min(y - hp["r"] for _x, y in hp["dots"]) - 462 >= 50
+          and texts["day streak"] + 100 < H - P and [o[1] for o in of(ops, "text")]
+          == [o[1] for o in of(S.draw("week", "story", dict(wk, sev=False), on, "light", measure)[2], "text")], (body_top, texts))
+    six = S.week(log([1, 0, 0, 0, 0, 0, 1]), "2026-10-18", sev=True)
+    tall = S.hops(six, P, 560 + S.ROOM, s, 20, 8)
+    check("…the longest hop (Monday to Sunday) clears the words above it too",
+          tall["arcs"] == [(0, 6)] and min(y - tall["r"] for _x, y in tall["dots"]) - 462 >= 50)
+    wed = S.week(dict(log([1, 0, 1, 1, 1, 0, 0])), "2026-10-14", sev=True)
+    hw = S.hops(wed, P, 560 + S.ROOM, s, 20, 8)
+    check("nothing over the days to come: Sev on today, the last day so far",
+          hw["arcs"] == [(0, 2)] and max(x for x, _y in hw["dots"]) < mid(2) and abs(hw["sev"][0] + hw["sev"][2] / 2 - mid(2)) < 1e-9)
+    hg = S.hops(S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", sev=True), P, 660, s, 20, 8)
+    check("today not studied yet: Sev on the last day that was, standing on its square (no ring there)",
+          hg["arcs"] == [(0, 1)] and abs(hg["sev"][0] + hg["sev"][2] / 2 - mid(1)) < 1e-9
+          and abs(hg["sev"][1] + hg["sev"][2] * S.SEV_FEET - 660) < 1e-9, hg["sev"])
+    plain = S.draw("week", "story", S.week(log([1, 1, 0, 1, 1, 0, 1]), "2026-10-18"), on, "light", measure)
+    none = S.week({}, "2026-10-14", sev=True)
+    check("no Sev with nothing studied this week, or with Sev off: today's card as it was (squares at 560)",
+          not S.landings(none) and not of(S.draw("week", "story", none, on, "light", measure)[2], "sev")
+          and S.draw("week", "story", none, on, "light", measure) == S.draw("week", "story", dict(none, sev=False), on, "light", measure)
+          and not of(plain[2], "sev") and not of(plain[2], "dot")
+          and {o[1]: o[3] for o in of(plain[2], "text")}["S"] == 560 + s + 54)
+    one = S.week(log([1, 1, 1, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
+    one_ops = S.draw("today", "story", one, on, "light", measure)[2]
+    not_yet = S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
+    check("today's card: Sev on today's square when today was studied, no arcs; not yet today, no Sev",
+          S.landings(one) == [2] and len(of(one_ops, "sev")) == 1 and not of(one_ops, "dot")
+          and abs(of(one_ops, "sev")[0][2] + of(one_ops, "sev")[0][4] / 2 - mid(2)) < 1e-9
+          and not S.landings(not_yet) and not of(S.draw("today", "story", not_yet, on, "light", measure)[2], "sev"))
+    lk = S.draw("week", "link", wk, on, "light", measure)[2]
+    ls = (1200 - 64 - 720 - 6 * 12) / 7
+    lsev = of(lk, "sev")[0]
+    check("a link: Sev and its trail in the room above the squares, under the logo's row, the squares where they were",
+          {o[1]: o[3] for o in of(lk, "text")}["M"] == 230 + ls + 38 and lsev[3] + lsev[4] * 27 / 80 > 64 + 34 + 20
+          and min(o[2] - o[3] for o in of(lk, "dot")) > 64 + 34 + 20
+          and min(o[1] for o in of(lk, "dot")) > 720 and abs(lsev[2] + lsev[4] / 2 - mid(6, 720, ls, 12)) < 1e-9)
+
+    art = sev.still("hop", "#123456")
+    check("sev.still: one drawing, standing still for a picture: its own svg, the colour given, no CSS, no classes, no effects",
+          art.startswith('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">')
+          and "fill:#123456" in art and "var(" not in art and "class=" not in art
+          and art.count("<rect") == sev.svg("hop").count("<rect") - 7 and "<ellipse" not in art  # no confetti, no shadow
+          and "#1f2a1f" in art and sev.still("idle").count("#2e7d32") > 3)
+    js = open(os.path.join(REPO, "site", "public", "cards.js"), encoding="utf-8").read()
+    const = re.search(r"\n  const SEV = '([^']*)';\n", js)
+    check("cards.js draws sev.py's Sev: its copy is sev.still('hop', '%A%') to the byte",
+          const is not None and const.group(1) == sev.still("hop", "%A%"))
+    app_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
+    check("the site has no Sev switch: its week card always asks for Sev", "crew: withMe, sev: true }" in app_js)
+
+    # in Anki the card follows Settings › Sev
+    store = world({"sam": "Sam"})
+    cl = new_client(store, "sam")
+    d0 = datetime.date.today()
+    col = make_user_col([d0], today=d0)
+    made = []
+
+    class Dlg:
+        def __init__(self, parent, choose, **_kw):
+            self.choose = choose
+            made.append(self)
+
+        def show(self):
+            pass
+    saved = (SH.client, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state.get("entries"), _state.get("labels"), R.cfg)
+    real_dlg = sys.modules.get("due_crew.ui.share_card_dialog")
+    sys.modules["due_crew.ui.share_card_dialog"] = types.SimpleNamespace(ShareCardDialog=Dlg)
+    files = tempfile.mkdtemp()
+    try:
+        SH.client, SH.cfg, SH._profile_files = (lambda: cl), (lambda: {}), (lambda: files)
+        sys.modules["aqt"].mw.col = col
+        q = StatsQueries(col)
+        _state["labels"] = [q.day_label(i) for i in range(7)]
+        _state["entries"] = [{"you": True, "days": {}}]
+        _state.pop("pic_log", None)
+        got = []
+        for c in ({}, {"sev": False}):
+            R.cfg = lambda c=c: c
+            for kind in ("pictureweek", "picturetoday"):
+                SH.picture(kind)
+                got.append(made[-1].choose(None)["data"]["sev"])
+        check("in Anki: the week and today cards have Sev as Settings › Sev says (on unless switched off)",
+              got == [True, True, False, False], got)
+    finally:
+        (SH.client, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state["entries"], _state["labels"], R.cfg) = saved
+        if real_dlg is None:
+            sys.modules.pop("due_crew.ui.share_card_dialog", None)
+        else:
+            sys.modules["due_crew.ui.share_card_dialog"] = real_dlg
+        _state.pop("share_card", None)
+        _state.pop("pic_log", None)
+
+    node = shutil.which("node")
+    if not node:
+        print("SKIP week card Sev twin: no node")
+        return
+    expose = "return { open, short, SIZES, MONTHS };"
+    check("cards.js: the card's twin is reachable for the check", expose in js)
+    cases = [(S.week(log(p), t, one_, {t: 9}, 4, 2, sv_), one_) for p, t, one_, sv_ in (
+        ([1, 1, 0, 1, 1, 0, 1], "2026-10-18", False, True), ([1, 0, 0, 0, 0, 0, 1], "2026-10-18", False, True),
+        ([1, 0, 1, 1, 1, 0, 0], "2026-10-14", False, True), ([1, 1, 0, 0, 0, 0, 0], "2026-10-14", False, True),
+        ([0] * 7, "2026-10-14", False, True), ([1, 1, 1, 0, 0, 0, 0], "2026-10-14", True, True),
+        ([1, 1, 0, 0, 0, 0, 0], "2026-10-14", True, True), ([1, 1, 0, 1, 1, 0, 1], "2026-10-18", False, False))]
+    draws = [[kind, size, look, d] for d, one_ in cases for kind in (["today"] if one_ else ["week"])
+             for size in ("story", "link") for look in ("light", "dark")]
+    grid = [[S.week(log([(m >> i) & 1 for i in range(7)]), t, one_, sev=True), x0, top, side, g, ring]
+            for m in range(128) for t in ("2026-10-12", "2026-10-15", "2026-10-18") for one_ in (False, True)
+            for x0, top, side, g, ring in ((P, 660, s, 20, 8), (720, 230, ls, 12, 4))]
+    prog = (
+        "globalThis.Image = class { set src(v) { this.s = v; Promise.resolve().then(() => this.onload()); } };\n"
+        + js.replace(expose, "return { open, short, SIZES, MONTHS, DRAW, LOOKS, hops };") + "\n"
+        "const fake = () => { const log = []; let font = '';\n"
+        "  return { log, get font() { return font; }, set font(f) { font = f; },\n"
+        "    measureText(s) { return { width: [...s].length * Number(/([0-9.]+)px/.exec(font)[1]) * 0.55 }; },\n"
+        "    fillText(s, x, y) { log.push(['text', s, x, y]); }, fillRect(x, y, w, h) { log.push(['rule', x, y, w, h]); },\n"
+        "    arc(x, y, r) { log.push(['dot', x, y, r, this.fillStyle]); },\n"
+        "    drawImage(img, x, y, w, h) { log.push([img.s.startsWith('data:') ? 'sev' : 'logo', x, y, w, h, decodeURIComponent(img.s)]); },\n"
+        "    beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, stroke() {}, setLineDash() {} }; };\n"
+        "const { draws, grid, on } = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+        "(async () => { const out = [];\n"
+        "  for (const [kind, size, look, d] of draws) { const c = fake(); const [W, H] = Cards.SIZES[size];\n"
+        "    await Cards.DRAW[kind](c, W, H, size, d, on, Cards.LOOKS[look], look); out.push(c.log); }\n"
+        "  console.log(JSON.stringify({ draws: out, grid: grid.map((g) => Cards.hops(...g)) })); })();")
+    run = subprocess.run([node, "-e", prog], input=json.dumps({"draws": draws, "grid": grid, "on": on}),  # too big for an argument
+                         capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    check("cards.js runs the week card in node", got is not None, run.stdout[-500:] + run.stderr[-2000:])
+    if got is None:
+        return
+    close = lambda a, b: len(a) == len(b) and all(abs(x - y) < 1e-6 for x, y in zip(a, b))  # noqa: E731
+    bad = []
+    for g, h in zip(grid, got["grid"]):
+        mine = S.hops(*g)
+        if ([list(a) for a in mine["arcs"]] != h["arcs"] or abs(mine["r"] - h["r"]) > 1e-9 or len(mine["dots"]) != len(h["dots"])
+                or not all(close(a, b) for a, b in zip(mine["dots"], h["dots"]))
+                or (mine["sev"] is None) != (h["sev"] is None) or (mine["sev"] and not close(mine["sev"], h["sev"]))):
+            bad.append((g[0]["days"], g[1:], mine, h))
+    check("cards.js hops() is sharecard.hops: the same arcs, dots and Sev on every week (all 128, three todays, both cards, both sizes)",
+          not bad and len(got["grid"]) == len(grid) == 128 * 3 * 2 * 2, bad[:1])
+    bad = []
+    for (kind, size, look, d), log_ in zip(draws, got["draws"]):
+        ops = S.draw(kind, size, d, on, look, measure)[2]
+        want = {"text": [(o[1], o[2], o[3]) for o in of(ops, "text")],
+                "rule": [o[1:5] for o in of(ops, "rect") if o[4] == 3],
+                "dot": [(o[1], o[2], o[3], o[4]) for o in of(ops, "dot")],
+                "sev": [(o[2], o[3], o[4], o[4], "data:image/svg+xml;charset=utf-8," + sev.still(o[1], o[5])) for o in of(ops, "sev")]}
+        have = {k: [tuple(x[1:]) for x in log_ if x[0] == k] for k in want}
+        ok = (len(want["text"]) == len(have["text"]) and all(a[0] == b[0] and close(a[1:], b[1:]) for a, b in zip(want["text"], have["text"]))
+              and all(close(a, b) for a, b in zip(want["rule"], have["rule"])) and len(want["rule"]) == len(have["rule"])
+              and len(want["dot"]) == len(have["dot"]) and all(close(a[:3], b[:3]) and a[3] == b[3] for a, b in zip(want["dot"], have["dot"]))
+              and len(want["sev"]) == len(have["sev"]) and all(close(a[:4], b[:4]) and a[4] == b[4] for a, b in zip(want["sev"], have["sev"])))
+        if not ok:
+            bad.append((kind, size, look, [c["studied"] for c in d["days"]], want, have))
+    check("cards.js lays the week and today cards out as sharecard does: words, rule, trail, and Sev (sev.still, in the accent)",
+          not bad and len(got["draws"]) == len(draws) == 32, bad[:1])
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

@@ -1528,7 +1528,7 @@ every release that changes how something works.
   its head for each fifteen at the end. Settings › Fifteen and Sev: the
   top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
   Stretch, all on this computer. Not yet: Sev on crew rows (the site's
-  board would need it too), the week card, Welcome back, the buddy.
+  board would need it too), Welcome back, the buddy.
   Sev's spacing (Sam: review it wherever it shows): its body sits low in
   its drawing (the effects need the room above), so a box the drawing's
   size left it low and loose: 3 to 6 px under its neighbours' middle,
@@ -1557,3 +1557,20 @@ every release that changes how something works.
   and the words and × centre on Sev and its stack together; its words
   are left-aligned when they wrap. The sparks as the stack lands are
   gone once it rests, and in the still frame, as the motion ends.
+  The week card (Sam's pick, "Sev hops across the week"): Sev lands on
+  the days I studied and hops over the rest. A picture is still, so the
+  hops are its trail, a dotted arc from each day studied to the next
+  (short between neighbours, long over days off, none over days to
+  come), and Sev stands on the last day studied so far, in the card's
+  accent. Today's card has Sev on today's square once it's studied, no
+  arcs. Nothing studied, no Sev: the card is as it was; with Sev the
+  story's squares and the numbers under them move down
+  (`sharecard.ROOM`), every word kept, and a link has room above its
+  squares already. `sev.still` is the one drawing, an SVG of its own with
+  the colours given: Qt draws it with QtSvg, and cards.js keeps a copy
+  (checked to the byte) it draws on the canvas from a data URL; Share,
+  Copy picture and Download wait until it's drawn. Where things go is the
+  twins' (`sharecard.landings`, `hops` ↔ `landings`, `hops` in cards.js,
+  each dot by the same arithmetic); `test_week_card_sev_v381` runs both.
+  In Anki the card follows Settings › Sev; the site has no switch and
+  always draws it.

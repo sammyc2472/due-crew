@@ -523,7 +523,7 @@ def main(out):
         dlg.close()
         priv = S.privacy({"share_time": False})
         wdlg = ShareCardDialog(None, lambda _k: {"kind": "week", "title": "Share my week", "sizes": ("story", "link"),
-                                                 "file": "due-crew-week-2026-10-12", "data": wk}, priv=priv)
+                                                 "file": "due-crew-week-2026-10-12", "data": dict(wk, sev=True)}, priv=priv)
         shoot(wdlg, os.path.join(out, "share-card-week-sheet.png"))
         if wdlg.switch["time"].isChecked() or "Privacy" not in wdlg.switch["time"].text():
             raise RuntimeError("share card: Time studied should start off when Privacy keeps it home")
@@ -539,6 +539,26 @@ def main(out):
                         raise RuntimeError(f"share card: no {kind} {size} picture")
                     tag = data.get("year") if kind == "year" else ""
                     img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
+        # 3.8.1: Sev hops across the week (Settings › Sev on): the sample week, one with two days off (the
+        # mock's), today's card; Sev drawn by QtSvg in the card's accent, on the last day studied
+        mon = datetime.date(2026, 10, 12)
+        two_off = {(mon + datetime.timedelta(days=i)).isoformat(): (60 + 23 * i, (14 + 6 * i) * 60000)
+                   for i, x in enumerate((1, 1, 0, 1, 1, 0, 1)) if x}
+        on = {k: True for k in ("time", "reviews", "streak", "crew")}
+        for name, kind, data in (("week", "week", S.week(days, today, False, {today: 14, "2026-10-12": 20}, 23, 4, True)),
+                                 ("week-two-off", "week", S.week(two_off, "2026-10-18", False, {"2026-10-18": 9}, 23, 4, True)),
+                                 ("today", "today", S.week(days, today, True, {today: 14}, 23, 2, True))):
+            for size in ("story", "link"):
+                for look in ("light", "dark"):
+                    img = paint(kind, size, data, on, look)
+                    ops = S.draw(kind, size, data, on, look, lambda s, px, w: 0)[2]
+                    sev = [o for o in ops if o[0] == "sev"]
+                    if len(sev) != 1:
+                        raise RuntimeError(f"share card: Sev isn't on the {name} card")
+                    _o, _pose, x, y, z, color = sev[0]
+                    if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
+                        raise RuntimeError(f"share card: Sev not drawn on the {name} card ({size}, {look})")
+                    img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
 
     def why():
         # 3.8.0, pick 9: Browse › why isn't it showing?, a few reasons and their fixes
