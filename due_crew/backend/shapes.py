@@ -96,6 +96,14 @@ def _first_grapheme(text):
     return out
 
 
+def clean_accent(name):
+    """3.8.1: a crewmate's accent from GET /board, if it's one of the add-on's
+    (board.ACCENTS), else '': their Sev in a study room wears it, and only a
+    name from that table, as that table's colours, ever reaches a page."""
+    from ..board import ACCENTS  # board is pure; asked here, the shapes load without it
+    return name if isinstance(name, str) and name in ACCENTS else ""
+
+
 def emoji_fits(emoji):
     """The server caps an emoji at 16 UTF-16 units (what the Worker's .length
     counts). Too long is refused whole: never truncated into a broken glyph,

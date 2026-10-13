@@ -32,9 +32,7 @@ from .app import _state, cfg, client, save_cfg
 
 
 def _accent_pair():
-    name = cfg().get("accent") or board.DEFAULT_ACCENT
-    shades = board.ACCENTS.get(name, board.ACCENTS[board.DEFAULT_ACCENT])
-    return shades["light"][0], shades["dark"][0]
+    return board.accent_pair(cfg().get("accent"))
 
 
 def my_room():
@@ -74,9 +72,11 @@ def _done():
 
 def board_view():
     """For board.render(room=...). 3.8.1: a fifteen's question shows its
-    cards; the session's line, when one ended today."""
+    cards; the session's line, when one ended today; with Sev on, a crew
+    room's members as their Sevs, each in their accent."""
     room = my_room()
-    out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done(), now=_now())
+    out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done(), now=_now(),
+                                sev=sev_on(), accent_pair=_accent_pair())
     mine = out.get("mine")
     if mine and mine.get("fifteen"):
         if mine["state"] == "ask":

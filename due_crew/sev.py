@@ -248,6 +248,17 @@ def stack_reach(n, size):
     return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
 
 
+# 3.8.1: in a study room each member is their Sev (room_model.seats). They
+# started at different moments, so the blinks never line up: each gets its
+# own place in the blink (--sv-d, a negative delay), a step apart.
+BLINK = 4.6  # s: the blink's cycle (sv-blink, below)
+
+
+def started(i):
+    """The i-th Sev of several: its blink's delay in s (0, then back a step each, round the cycle)."""
+    return -round(i * 1.7 % BLINK, 2) or 0
+
+
 # 3.8.1 (Sam): by the logo Sev is a moment, not a fixture. It comes when
 # something just happened, plays it, and goes; the rest of the time the
 # logo is alone. LOGO_SECONDS: how long it stays.
@@ -295,7 +306,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow { display: none; }
 .sv.m-hop .sv-body { transform: translateY(-12px); }
 @media (prefers-reduced-motion: no-preference) {
-  .sv .sv-eyes { animation: sv-blink 4.6s infinite; }
+  .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
   /* napping: nothing studied yet today */
   .sv.m-nap .sv-body { animation: sv-breathe 3.2s ease-in-out infinite; }

@@ -48,6 +48,13 @@ ACCENTS = {
 DEFAULT_ACCENT = "green"
 
 
+def accent_pair(name):
+    """An accent's colour (light, dark); a name that isn't one of ours gets
+    the default's. 3.8.1: a crewmate's Sev in a room wears theirs from here."""
+    shades = ACCENTS.get(name if isinstance(name, str) else "", ACCENTS[DEFAULT_ACCENT])
+    return shades["light"][0], shades["dark"][0]
+
+
 def palette(theme, accent=DEFAULT_ACCENT):
     """Neutral tokens for the theme plus the chosen accent's trio."""
     base = dict(LIGHT if theme == "light" else DARK)
@@ -89,18 +96,23 @@ def _token_block(palette):
     return "".join(f"--dc-{k}: {v}; " for k, v in palette.items())
 
 
-def _theme_css(cfg):
+def _by_theme(cfg, sel, light, dark):
+    """`light` or `dark` (declarations) on `sel`, as Settings › Theme says;
+    Match Anki follows its night mode (and the computer's)."""
     theme = cfg.get("theme", "auto")
-    accent = cfg.get("accent", DEFAULT_ACCENT)
-    light, dark = palette("light", accent), palette("dark", accent)
     if theme == "light":
-        return f"#due-crew {{ {_token_block(light)} }}"
+        return f"{sel} {{ {light} }}"
     if theme == "dark":
-        return f"#due-crew {{ {_token_block(dark)} }}"
-    night = ", ".join(f"{sel} #due-crew" for sel in NIGHT_SELECTORS)
-    return (f"#due-crew {{ {_token_block(light)} }}\n"
-            f"    @media (prefers-color-scheme: dark) {{ #due-crew {{ {_token_block(dark)} }} }}\n"
-            f"    {night} {{ {_token_block(dark)} }}")
+        return f"{sel} {{ {dark} }}"
+    night = ", ".join(f"{n} {sel}" for n in NIGHT_SELECTORS)
+    return (f"{sel} {{ {light} }}\n"
+            f"    @media (prefers-color-scheme: dark) {{ {sel} {{ {dark} }} }}\n"
+            f"    {night} {{ {dark} }}")
+
+
+def _theme_css(cfg):
+    accent = cfg.get("accent", DEFAULT_ACCENT)
+    return _by_theme(cfg, "#due-crew", _token_block(palette("light", accent)), _token_block(palette("dark", accent)))
 
 
 def _fmt_time(ms):
@@ -3166,7 +3178,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
-    sheet = f'<style>{SEV_CSS}{_sev.CSS}</style>' if cfg.get("sev", True) else ""  # 3.8.1: Sev's moments
+    # 3.8.1: Sev's moments; a crew room's Sevs each wear their person's accent, by day or by night as the board
+    seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")
+    sheet = f'<style>{SEV_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you)}<div class="dc-sheet">'
             f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
@@ -3571,15 +3585,37 @@ def room_html(room):
             if i:
                 bars += f'<em style="flex:{int(mine.get("brk_min", 5)) or 1}"></em>'
             bars += f'<i style="flex:{int(mine.get("round", 25))}"><u style="width:{float(f) * 100:.1f}%"></u></i>'
-        faces = "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6])
+        seats = [s for s in (mine.get("seats") or []) if isinstance(s, dict)][:6]
+        faces = ("".join(_seat_html(s) for s in seats) if seats  # 3.8.1: Sev on, each member is their Sev
+                 else "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6]))
         out += (f'<div class="dc-room"><span class="rg{" brk" if mine.get("brk") else ""}" style="--p:{float(mine.get("frac", 0)):.3f}">'
                 f'<b>{e(str(mine.get("label", "")))}</b></span>'
                 f'<span class="rt"><b>{e(str(mine.get("title", "")))}</b><small>{e(str(mine.get("sub", "")))}</small>'
                 f'<span class="rb">{bars}</span></span>'
-                f'<span class="rw"><span class="fc" title="{e(str(mine.get("line", "")))}">{faces}</span>'
+                f'<span class="rw"><span class="fc{" sv-seats" if seats else ""}" title="{e(str(mine.get("line", "")))}">{faces}</span>'
                 f'<a class="go" href="#" onclick="{_pycmd("roomstudy")}">Study</a>'
                 f'<a class="lv" href="#" onclick="{_pycmd("roomleave")}">Leave</a></span></div>')
     return out
+
+
+_HEX = _re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def _seat_html(s):
+    """3.8.1: a crew room's member as their Sev (room_model.seats), a 24 px
+    seat like the initials' circles: their accent by day and by night (only
+    a colour reaches the style; anything else, the default's), blinking at
+    its own moment, their name its label (escaped)."""
+    dflt, a = accent_pair(None), s.get("a")
+    pair = a if isinstance(a, (list, tuple)) and len(a) == 2 else dflt
+    light, dark = (x if isinstance(x, str) and _HEX.fullmatch(x) else d for x, d in zip(pair, dflt))
+    try:
+        delay = max(-60.0, min(0.0, float(s.get("d") or 0)))
+    except (TypeError, ValueError):
+        delay = 0.0
+    name = _html.escape(str(s.get("n") or ""), quote=True)
+    return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-d:{delay:.2f}s">'
+            f'{_sev.slot(_sev.svg("idle", label=name), 40)}</span>')
 
 
 def _fifteen_lobby(m):
@@ -3620,6 +3656,9 @@ SEV_CSS = """
       @keyframes dc-sev-pop { 0% { transform: scale(0); } 7% { transform: scale(1.12); } 11%, 90% { transform: scale(1); }
         100% { transform: scale(0); visibility: hidden; } }
     }
+    /* a crew room's members as their Sevs: side by side, not overlapping as the circles do */
+    #due-crew .dc-room .fc.sv-seats { gap: 3px; align-items: center; }
+    #due-crew .dc-room .fc .seat { display: inline-flex; }
     #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
     #due-crew .dc-fif .rt { text-align: left; }
     /* the session's line: Sev and its stack, the box's own padding around them (stack_reach) */

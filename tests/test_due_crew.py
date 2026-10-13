@@ -12102,7 +12102,9 @@ def test_fifteen_model_v381():
 
     # the week doc: a fifteen isn't a room to join; it's studying now
     from due_crew.backend import shapes as S
-    check("fifteen: never on a row as a room", S._live_room(f) is None and S._live_room(rm.make_room("x", at(0))) is not None)
+    live = datetime.datetime.now(utc)  # both under way: a row's room is one not over yet, by the clock
+    check("fifteen: never on a row as a room", S._live_room(rm.make_fifteen("me", live)) is None
+          and S._live_room(rm.make_room("x", live)) is not None)
     cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
     cl.session = {"room": rm.make_fifteen("me", datetime.datetime.now(utc)), "live_until": "2099-01-01T00:00:00Z"}
     doc = cl.week_doc([TODAY.isoformat()], {})
@@ -12307,6 +12309,109 @@ def test_top_bar_is_our_page_v381():
             sys.modules["aqt.toolbar"] = saved_mod
     check("▶ Fifteen? and the chip's tick reach the glue from the top bar; a card's page can't start one",
           got == ["room15", "roomtick"], got)
+
+
+def test_crew_room_sevs_wear_their_accents_v381():
+    """3.8.1 (Sam's pick): in a crew room each member is their Sev, in their
+    own accent, and they started at different moments, so the blinks never
+    line up: the room's card and the Decks screen's lobby. Sev off, or a
+    fifteen: the initials, as before. The accent rides GET /board, a mutual
+    friend's only, and only one of the add-on's own reaches a page."""
+    from due_crew import room_model as rm, rooms as R, sev
+    from due_crew.app import _state
+    utc = datetime.timezone.utc
+    store = world({"sam": "Sammy", "dre": "Dre <K>", "ana": "Ana", "nia": "Nia", "kai": "Kai"},
+                  {"sam": ["dre", "ana", "nia"], "dre": ["sam"], "ana": ["sam"], "kai": ["sam"]})
+    for uid, accent in (("sam", "amber"), ("dre", "blue"), ("ana", "teal"), ("nia", "rose"), ("kai", "purple")):
+        new_client(store, uid).put_settings("2026-10-13T10:00:00Z", {"accent": accent})
+    raw = {f["uid"]: f for f in store._board("sam", False)["friends"]}
+    check("server: a mutual friend's accent comes with their week; someone I added who hasn't added me back: name and emoji only",
+          raw["dre"].get("accent") == "blue" and raw["nia"] == {"uid": "nia", "name": "Nia", "emoji": "", "mutual": False}
+          and "kai" not in raw)
+    check("…and the other way: someone who added me, and I haven't added back, never gets mine",
+          {f["uid"]: f for f in store._board("kai", False)["friends"]}["sam"] == {"uid": "sam", "name": "Sammy", "emoji": "", "mutual": False})
+    real_board = store._board
+
+    def junk_board(me, *a, **k):  # a server that sends junk for ana's (the Worker never would)
+        out = real_board(me, *a, **k)
+        for f in out["friends"]:
+            if f["uid"] == "ana":
+                f["accent"] = "red;}</style><b>x"
+        return out
+    store._board = junk_board
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    sam = new_client(store, "sam", "Sammy")
+    n = len(store.log)
+    entries = sam.fetch_board(labels)["entries"]
+    acc = {e["user_id"]: e["accent"] for e in entries}
+    check("client: the accent rides the refresh (still one request); junk is no accent; mine is this computer's, not the server's",
+          len(store.log) - n == 1 and acc == {"sam": "", "dre": "blue", "ana": ""}, acc)
+    check("client: only one of the add-on's accents is kept",
+          [shapes.clean_accent(x) for x in ("rose", "Rose", " rose", "</style>", "red;x", ["rose"], {"a": 1}, None, 7, "__proto__")]
+          == ["rose"] + [""] * 9)
+
+    room = rm.make_room("dre", datetime.datetime.now(utc) - datetime.timedelta(minutes=5))
+    ents = [dict(e, room=room) for e in entries]
+    mine = board.accent_pair("amber")
+    on = rm.widget_data(room, ents, mine)
+    seats = {s["n"]: s for s in on["seats"]}
+    check("card, Sev on: each member is their Sev in their accent (mine is mine; junk wears the default), host first",
+          [s["n"] for s in on["seats"]] == ["Dre <K>", "Ana", "You"] and seats["Dre <K>"]["a"] == list(board.accent_pair("blue"))
+          and seats["Ana"]["a"] == list(board.accent_pair("green")) and seats["You"]["a"] == list(mine)
+          and on["sev"] == {"idle": sev.svg("idle")} and "sv-blink" in on["sevcss"], on["seats"])
+    check("…each started at its own moment: the blinks never line up (a delay in the blink, each different)",
+          [s["d"] for s in on["seats"]] == [0, -1.7, -3.4] and "sv-blink 4.6s var(--sv-d, 0s)" in sev.CSS
+          and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
+    js = rm.widget_js("card", on)
+    check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
+          "seats(40) : faces(c, 24)" in js and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
+          and "v.setAttribute('aria-label', s.n)" in js and round(40 * sev.SLOT[0]) == 24)
+    off = rm.widget_data(room, ents, mine, sev=False)
+    fif = rm.widget_data(rm.make_fifteen("sam", datetime.datetime.now(utc)), ents, mine)
+    check("card, Sev off: the initials as before; a fifteen has no members (and its own Sevs)",
+          off["seats"] == [] and off["sev"] is None and off["initials"] == ["D", "A", "S"]
+          and fif["seats"] == [] and fif["initials"] == [] and "focus" in fif["sev"])
+
+    now = datetime.datetime.now(utc)
+    lobby = board.room_html(rm.board_view(room, ents, now=now, sev=True, accent_pair=mine))
+    blue, amber = board.accent_pair("blue"), mine
+    check("lobby, Sev on: each member is their Sev, in their accent by day and by night, blinking at its own moment",
+          lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby and lobby.count("m-idle") == 3
+          and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
+          and "--sv-d:-1.70s" in lobby)
+    check("…the name only as its label, escaped",
+          'title="Dre &lt;K&gt;"' in lobby and 'aria-label="Dre &lt;K&gt;"' in lobby and "Dre <K>" not in lobby
+          and 'aria-label="You"' in lobby)
+    plain = board.room_html(rm.board_view(room, ents, now=now))
+    check("lobby, Sev off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
+    bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon"})
+    check("lobby: a seat's colours are colours, or the default's; nothing else reaches its style",
+          f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-d:0.00s' in bad
+          and "</style>" not in bad and "<b>" not in bad)
+    cfg_sheet = lambda theme: board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []}, {"theme": theme}, 0)
+    dark, light, auto = cfg_sheet("dark"), cfg_sheet("light"), cfg_sheet("auto")
+    check("the board picks a seat's colour as it does its own: Settings › Theme, or Anki's night mode",
+          "#due-crew .dc-room .seat { --sv-a: var(--sa-d); }" in dark and "#due-crew .dc-room .seat { --sv-a: var(--sa-l); }" in light
+          and "--sa-d" not in light and "body.nightMode #due-crew .dc-room .seat" in auto
+          and "@media (prefers-color-scheme: dark) { #due-crew .dc-room .seat { --sv-a: var(--sa-d); } }" in auto)
+
+    # the glue: Settings › Sev decides, my accent is mine
+    saved = (R.cfg, R.my_room, R._done, R._fifteen_done, dict(_state))
+    try:
+        R.my_room, R._done, R._fifteen_done = (lambda: room), (lambda: None), (lambda: None)
+        _state.update(entries=ents, room_dismissed=set(), labels=labels)
+        R.cfg = lambda: {"accent": "amber"}
+        glue_on, data_on = R.board_view()["mine"], R._data(room)
+        R.cfg = lambda: {"accent": "amber", "sev": False}
+        glue_off, data_off = R.board_view()["mine"], R._data(room)
+    finally:
+        R.cfg, R.my_room, R._done, R._fifteen_done, st = saved
+        _state.clear()
+        _state.update(st)
+    check("glue: Sev on, the lobby's and the card's seats, me in my accent; Sev off, none",
+          [s["a"] for s in glue_on["seats"]] == [list(blue), list(board.accent_pair("green")), list(amber)]
+          and data_on["seats"] == glue_on["seats"] and glue_off["seats"] == [] and data_off["seats"] == []
+          and data_off["initials"] == ["D", "A", "S"])
 
 
 def test_fifteen_board_v381():

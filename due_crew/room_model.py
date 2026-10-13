@@ -269,22 +269,41 @@ def _sevs(keys, on):
     return ({k: _sev.svg(k) for k in keys}, _sev.CSS) if on else (None, "")
 
 
+def _pair_of(name):
+    from .board import accent_pair  # board imports this module
+    return accent_pair(name)
+
+
+def seats(ms, entries, my_pair):
+    """3.8.1: a crew room's members (members()) as their Sevs, in order:
+    [{n: the name, its label (text, never markup), a: [light, dark], d: s}].
+    A crewmate wears their accent (the add-on's colours for it; one it
+    doesn't know, the default's), I wear mine, and each started at its own
+    moment (d, sev.started), so the blinks never line up."""
+    accent = {e.get("user_id"): e.get("accent") for e in entries or []}
+    return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of(accent.get(uid))),
+             "d": _sev.started(i)} for i, (uid, name, you) in enumerate(ms)]
+
+
 def widget_data(room, entries, accent_pair, compact=False, side="right", sev=True, brk_pose="breathe",
                 cards=None, total=None):
     """What every widget needs, all plain values. side: the chip's end of
     the top bar, "right" or "left". 3.8.1, a fifteen: sev (the switch in
     Settings), brk_pose ("breathe" or "stretch"), and for its question the
-    cards answered in the fifteen and in the session."""
+    cards answered in the fifteen and in the session. A crew room with Sev
+    on: its card shows each member as their Sev (seats)."""
     ms = members(entries, room)
     start = _parse(room["start"])
     fifteen = is_fifteen(room)
-    sevs, css = _sevs(FIFTEEN_SEV, sev and fifteen)
+    seat = seats(ms, entries, accent_pair) if sev and not fifteen else []
+    sevs, css = _sevs(FIFTEEN_SEV, sev and fifteen) if fifteen else _sevs(("idle",), bool(seat))
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
             "title": "Fifteen" if fifteen else title(entries, room),
             "names": [] if fifteen else [n.split(" ")[0] if not you else "you" for _u, n, you in ms],
             # faces show each person's own initial, mine included
             "initials": [] if fifteen else [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
+            "seats": seat,
             "line": "" if fifteen else names_line(ms),
             "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side),
             "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
@@ -538,6 +557,21 @@ _RUNTIME = r"""
     w.set(key);
     return w;
   }
+  // 3.8.1: a crew room's members as their Sevs (room_model.seats): each in its
+  // person's accent (by day or night, as mine), each blinking at its own moment;
+  // a name is only ever a label, set as text
+  function seats(size) {
+    var f = el('span', 'display:inline-flex;align-items:center;gap:3px;'), n = night();
+    D.seats.forEach(function (s) {
+      var w = sev('idle', size), v = w.firstChild;
+      w.style.setProperty('--sv-a', n ? s.a[1] : s.a[0]);
+      w.style.setProperty('--sv-d', s.d + 's');
+      w.title = s.n;
+      if (v && v.setAttribute) { v.setAttribute('aria-label', s.n); }
+      f.appendChild(w);
+    });
+    return f;
+  }
   function ftitle(p) { var n = p.state === 'break' ? p.round + 1 : p.round; return p.state === 'break' ? 'Break' : 'Fifteen' + (n > 1 ? ' ' + n : ''); }
   function fsub(p) {
     return p.state === 'break' ? 'fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'ask' ? 'done · your call' : mins(p.left) + ' min left';
@@ -776,7 +810,8 @@ _RUNTIME = r"""
       if (i < D.rounds && D.brk) { bar.appendChild(el('i', 'flex:' + D.brk + ';height:4px;border-radius:2px;background:' + c.warm + ';opacity:.45;display:block;')); }
     }
     var who = el('div', 'display:flex;align-items:center;gap:8px;color:' + c.mut + ';font-size:12px;');
-    who.appendChild(faces(c, 24)); who.appendChild(el('span', '', D.line));
+    // Sev off: each person's initial, as before (sev.SLOT: a 40 px Sev is a 24 px seat, the faces' size)
+    who.appendChild(D.sev && D.seats && D.seats.length ? seats(40) : faces(c, 24)); who.appendChild(el('span', '', D.line));
     var ft = el('div', 'display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:' + c.a + ';border-top:1px solid ' + c.line + ';padding-top:8px;');
     var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'),
         leave = el('span', 'cursor:pointer;', FIF ? 'Stop here' : 'Leave room');
@@ -937,10 +972,11 @@ def fifteen_view(room, now=None):
             "frac": round(frac, 3), "brk": p["state"] == "break", "cap": cap, "n": p["round"]}
 
 
-def board_view(my_room, entries, dismissed=(), done=None, now=None):
+def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, accent_pair=None):
     """What the Decks screen shows about rooms, as plain values (the board
     escapes every string): my room's lobby, invites to my crew's rooms, and
-    the line for a room I finished."""
+    the line for a room I finished. 3.8.1: with Sev on (sev; accent_pair:
+    mine), the lobby's members are their Sevs (seats)."""
     now = _now(now)
     out = {"mine": None, "invites": [], "done": done}
     if my_room and not is_over(my_room, now) and is_fifteen(my_room):
@@ -971,7 +1007,8 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None):
         out["mine"] = {"title": title(entries, my_room), "sub": sub, "label": label, "frac": round(frac, 3),
                        "brk": p["state"] == "break", "bars": [round(b, 3) for b in bars],
                        "round": my_room["round"], "brk_min": my_room["brk"],
-                       "initials": [n[:1].upper() for _u, n, _y in ms], "line": names_line(ms)}
+                       "initials": [n[:1].upper() for _u, n, _y in ms], "line": names_line(ms),
+                       "seats": seats(ms, entries, accent_pair or _pair_of(None)) if sev else []}
     for room, ms in invites(entries, my_room, dismissed, now):
         p = phase(room, now)
         when = (f"starts at {_clock(_parse(room['start']))}" if p["state"] == "before"
