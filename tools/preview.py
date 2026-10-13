@@ -239,6 +239,47 @@ sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + bo
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None,
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
+# 3.8.1, plans round three: a follower's day. The morning's line by date; Study on a plan's date (the week,
+# and Due); why a date left cards shut; a date after its event; the plan's day line apart from my own load;
+# Then's dates as links, and what Open did; Welcome back's Not today
+_PDOC3 = dict(_PDOC, units=_PDOC["units"] + [
+    {"id": "f", "name": "Path Book 2 · Review", "opens": "2026-10-10", "n": 30, "for": "q"}])  # after the quiz
+_W3 = PL.week_view(_PDOC3, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT))
+for _d in _W3:  # what plan_flow._week_more adds from this computer
+    if _d["day"] >= _PT:
+        _d["mine"] = {"2026-10-07": 311, "2026-10-08": 240, "2026-10-09": 198, "2026-10-10": 260}.get(_d["day"], 0)
+    for _r in _d["units"]:
+        if _r["state"] in ("open", "done"):
+            _r["study"] = True
+        if _r["uid"] == "a":
+            _r["why"] = {"lee": 2, "miss": 3}
+_C3 = dict(PLAN_CARD, week=_W3, tabs={"summary": None}, ins=None, waiting=0)
+_DV3 = dict(_DV, rows=[dict(r, study=True) if r.get("kind") == "plan" and r["uid"] in ("u1", "u2") else r for r in _DV["rows"]],
+            opened={"n": 120, "dates": [["p1", "u1", "Renal physiology", 80], ["p1", "u2", "Antiarrhythmics", 40]]})
+_DV3["rows"] = [dict(r, after=True, prep="KSA F3-1") if r.get("uid") == "u2" else r for r in _DV3["rows"]]
+sections.append("<h3>3.8.1: Today: the morning's line by date, Study on a plan's date, a date after its quiz</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV3, you=_YOU("today")).replace('id="du-', 'id="du3-'))
+sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=dict(_DV3, opened={"n": 344, "dates": [
+        ["p1", f"u{i}", n, k] for i, (n, k) in enumerate((("Renal physiology", 80), ("Antiarrhythmics", 40),
+                                                          ("Heart failure", 96), ("Valves", 128)))]}),
+    you=_YOU("today")).replace('id="du-', 'id="du4-'))
+sections.append("<h3>3.8.1: You › Plans: a past date left cards shut (its details open); Study on each open date</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
+        dict(_C3, focus="2026-10-05")], "offers": []})))
+sections.append("<h3>3.8.1: today's details: what the plan opens, then my own load; a date after its quiz</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
+        dict(_C3, focus="2026-10-07"), dict(_C3, id="p2", focus="2026-10-10", title="MS2 Block 1 · after the quiz")],
+        "offers": []})))
+sections.append("<h3>3.8.1: Welcome back's Not today: the dates wait; at my own pace, Then's dates are links</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
+        dict(_C3, put_off=["F3-1 SLGs 1-3", "F3-2 SLG 5", "F3-2 SLG 7", "F3-3 SLG 1"], put_off_ask=True),
+        dict(PLAN_CARD, id="p3", sub="at your pace · 6 following", tabs={"summary": None}, ins=None, lines=[], waiting=0,
+             own=dict(_OWN, then_items=[{"uid": "u3", "name": "SLG 14 · Arrhythmias", "n": 96},
+                                         {"uid": "u4", "name": "SLG 15 · Valves", "n": 122},
+                                         {"uid": "u5", "name": "SLG 16", "n": 140}],
+                      last="Opened SLG 15 · Valves (ahead of SLG 13 · Heart failure) · 122 cards, first in line."))],
+        "offers": []})))
 _EV = {"squares": [{"done": i in (0, 2, 5)} for i in range(8)], "middle": {"done": False, "have": 7, "goal": 9}, "lines": 0}
 _TEAM = {"on": True, "count": 12, "shown": 5, "streak": 4, "more": 4, "bingo": {"card": {"wk": "2026-W41"}, "ev": _EV},
          "faces": [{"uid": "u1", "name": "Maya", "emoji": "\U0001F419", "shown": True},

@@ -538,6 +538,55 @@ def main(out):
             raise RuntimeError("why: read again after a fix")
         dlg.close()
 
+    def held():
+        # 3.8.1: the plan's ··· menu › Held back: N cards…: what it holds, by date, and why; Open them,
+        # Stop holding back (only with a yes to Hold back), Close. The plan's and dates' names stay text
+        from due_crew.ui.held_dialog import HeldDialog
+        view = {"name": "MS2 <b>Block</b> 1", "n": 1240, "more": 9, "holding": True, "leeches": 2,
+                "lines": ["Renal physiology <i> · Mon 19 Oct · 120", "Antiarrhythmics · Tue 20 Oct · 80",
+                          "Heart failure · Wed 21 Oct · 96", "On no date now · 4"],
+                "why": "You said yes to Hold back: the new cards of dates still to come wait, suspended, till their day."}
+        dlg = HeldDialog(None, view)
+        settle()
+        labels = dlg.findChildren(QtWidgets.QLabel)
+        if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
+            raise RuntimeError("held: a plan's or date's name went in as markup")
+        if not any("MS2 <b>Block</b> 1 holds back 1,240 cards" == w.text() for w in labels) or "and 9 more dates" not in dlg.list.text():
+            raise RuntimeError(f"held: {[w.text() for w in labels]!r}")
+        if "2 more are leeches and stay shut" not in dlg.note.text() or dlg.stop_btn.isHidden():
+            raise RuntimeError(f"held: {dlg.note.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-held.png"))
+        dlg = HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
+                                    why="You put these back. They open when you open their date again."))
+        dlg.show()
+        if dlg.stop_btn.isVisible() or "leech" in dlg.note.text():
+            raise RuntimeError("held: no yes, no Stop holding back")
+        dlg.open_btn.click()
+        if dlg.choice != "open":
+            raise RuntimeError(f"held: {dlg.choice!r}")
+        shoot(HeldDialog(None, dict(view, holding=False, leeches=0, more=0, lines=view["lines"][:1],
+                                    why="You put these back. They open when you open their date again.")),
+              os.path.join(out, "plan-held-put-back.png"))
+
+    def away():
+        # 3.8.1: Welcome back, before the morning opens dates from days with nothing studied
+        from due_crew.ui.away_dialog import AwayDialog, days_words
+        dlg = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
+        settle()
+        labels = dlg.findChildren(QtWidgets.QLabel)
+        if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
+            raise RuntimeError("away: the plan's name went in as markup")
+        if (dlg.push_btn.text() != "Push my dates back 3 days"
+                or "3 days with no study in Anki: Mon 5 Oct, Tue 6 Oct and Wed 7 Oct." not in dlg.body.text()
+                or "4 dates would open now: 240 new cards." not in dlg.body.text()):
+            raise RuntimeError(f"away: {dlg.push_btn.text()!r} {dlg.body.text()!r}")
+        shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
+        dlg = AwayDialog(None, "Cardio", [f"2026-10-{d:02d}" for d in range(5, 15)], 9, 610)
+        dlg.show()
+        dlg.push_btn.click()
+        if dlg.choice != "push" or "between Mon 5 Oct and Wed 14 Oct" not in days_words([f"2026-10-{d:02d}" for d in range(5, 15)]):
+            raise RuntimeError(f"away: {dlg.choice!r}")
+
     def open_cards():
         # 3.8.0: Browse › Due Crew: open its cards…: counted first, leeches stay, first in line ticked
         from due_crew.ui.open_dialog import OpenDialog
@@ -601,7 +650,8 @@ def main(out):
                          ("squads", squads), ("cheer", cheer), ("auth", auth),
                          ("welcome", welcome), ("logo", logo), ("room", room), ("emoji", emoji),
                          ("report", report), ("plans", plans), ("schedule", schedule), ("map card", map_card),
-                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards)):
+                         ("share card", share_card), ("why", why), ("plan tags", plan_tags), ("open cards", open_cards),
+                         ("held back", held), ("welcome back", away)):
         attempt(label, build)
     if failures:
         print("FAILED:", *failures, sep="\n  ")
