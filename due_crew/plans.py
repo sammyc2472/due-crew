@@ -802,6 +802,9 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
+            rm = topic_remarks(doc, [u])
+            if rm:
+                rows[-1]["rm"] = rm  # 3.8.1: the authors' notes under the topics they name
             if not skip and state != "later" and u["id"] in shut:
                 rows[-1]["shut"] = True  # 3.8.1
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
@@ -1074,12 +1077,15 @@ def topic_items(us):
             if q in cut_q:
                 continue
             put("Search", str(q)[:40] + ("…" if len(str(q)) > 40 else ""), {"search": [q]})
+        named = _pick_items(u)  # 3.8.1: "Herpes Viruses · 88 picked", when this copy has named them
+        for g, x, src in named:
+            put(g, x, src)
         notes = len(u.get("notes") or []) + len(u.get("nids") or [])
-        if notes:
+        if notes and not named:
             put("Picked by ID", f"{notes:,} note{'s' if notes != 1 else ''}",
                 {k: list(u[k]) for k in ("notes", "nids", "idr") if u.get(k)})
         singles = len(u.get("cids") or []) + len(u.get("cards") or [])
-        if singles:
+        if singles and not named:
             put("Picked", f"{singles:,} single card{'s' if singles != 1 else ''}",
                 {k: list(u[k]) for k in ("cards", "cids") if u.get(k)})
     return items
@@ -1134,6 +1140,166 @@ def parts(idx, unit, swap=None, plan=""):
 def topics_line(us):
     """P7: one line for the Today box, today's dates' topics together."""
     return " · ".join((f"{g}: " if g else "") + ", ".join(x for x, _i in xs) for g, xs in topic_view(us))
+
+
+# ---- 3.8.1: what a date's picked cards are, and the authors' notes on its topics ----
+
+PICK_KEYS = ("cards", "notes", "nids", "cids", "idr")
+_NOT_A_RESOURCE = ("leech", "marked")
+
+
+def picks(unit):
+    """3.8.1: a date's picked cards as sources DeckIndex.match reads (single
+    cards, notes, pasted ids and their refs); {} for a date with none."""
+    return {k: list(unit[k]) for k in PICK_KEYS if unit.get(k)}
+
+
+def _resource_at(segs):
+    """The place of a tag's first #/^ part after its root (a video series, a
+    book), as topic_items groups; -1 for none."""
+    return next((i for i, x in enumerate(segs) if i > 0 and x[:1] in "#^"), -1)
+
+
+_TAGS_OF = ("#tags of each card",)  # a key no search is: kept with the index's searches
+
+
+def _tags_of(idx):
+    """{cid: [lowercased tag]}: each card's own tags, read once and kept with
+    the deck's searches, which go when its notes change."""
+    kept = idx._searches.get(_TAGS_OF)
+    if kept is None:
+        kept = {}
+        for low, lst in idx.by_tag.items():
+            for c in lst:
+                kept.setdefault(c, []).append(low)
+        idx._searches[_TAGS_OF] = kept
+    return kept
+
+
+def pick_labels(idx, cids, most=3):
+    """3.8.1: the deck tags a set of cards sits under, [[path, n]] (at most
+    `most`): the tag covering the most of them, the deepest of those, a tag
+    under a #/^ resource part read from that part down (so a series' root
+    never names them); then the same for what's left. n counts the cards it
+    names that no label before it did. Paths as this copy writes them.
+    Question-id tags (a last part of digits), Anki's leech and marked, and
+    the plans' own DueCrew tags never name anything. Pure over the index:
+    only the tags these cards carry (each card's, kept with the deck's notes)."""
+    left = {int(c) for c in cids}
+    if not left:
+        return []
+    tags_of, hits = _tags_of(idx), {}
+    for c in left:
+        for low in tags_of.get(c, ()):
+            hits.setdefault(low, set()).add(c)
+    cover, spelled, res = {}, {}, {}
+    for low, hit in hits.items():
+        if low in _NOT_A_RESOURCE or low == "duecrew" or low.startswith("duecrew::"):
+            continue
+        parts, lparts = idx.tag_names[low].split(_SEP), low.split(_SEP)
+        if parts[-1].isdigit() or len(parts) != len(lparts):
+            continue  # a question's id: not a resource
+        ri = _resource_at(parts)
+        for n in range(max(ri, 0) + 1, len(parts) + 1):
+            key = _SEP.join(lparts[:n])
+            if len(key) > 200:
+                break  # longer than the server keeps: a shallower one names it
+            got = cover.get(key)
+            if got is None:
+                cover[key] = set(hit)
+                spelled[key] = _SEP.join(parts[:n])
+                res[key] = ri > 0
+            else:
+                got |= hit
+    out = []
+    while cover and len(out) < most:
+        key = min(cover, key=lambda k: (-len(cover[k]), not res[k], -k.count(_SEP), k))
+        took = cover.pop(key)
+        out.append([spelled[key], len(took)])
+        for k in list(cover):
+            cover[k] -= took
+            if not cover[k]:
+                del cover[k]
+    return out
+
+
+def with_picks(doc, labels):
+    """3.8.1: a copy of the doc whose dates carry their picks' labels here
+    (`_pl`; labels: {unit id: [[path, n], ...]}, plan_flow.pick_names), for
+    topic_items; the doc itself when there are none."""
+    if not labels or not doc:
+        return doc
+    return dict(doc, units=[dict(u, _pl=labels[u["id"]]) if isinstance(u, dict) and u.get("id") in labels else u
+                            for u in doc.get("units") or []])
+
+
+def _pick_items(u):
+    """3.8.1: a date's picked cards as topics, by the deck tags they sit under
+    in this copy (`_pl`, set by plan_flow from pick_labels): "Herpes Viruses ·
+    88 picked", grouped as a tag of that series is, then "12 more picked" for
+    the ones under none of them. [] without `_pl`: the counts, as before."""
+    src = picks(u)
+    labels = [x for x in u.get("_pl") or [] if isinstance(x, (list, tuple)) and len(x) == 2]
+    if not src or not labels:
+        return []
+    out, named = [], [str(p) for p, _n in labels if p]
+    for p, n in labels:
+        if p:
+            segs = str(p).split(_SEP)
+            ri = _resource_at(segs)
+            out.append((_word(segs[ri]) if 0 <= ri < len(segs) - 1 else "",
+                        f"{_word(segs[-1])} · {int(n):,} picked", dict(src, _in=[str(p)])))
+        elif int(n) > 0:
+            out.append(("", f"{int(n):,} more picked", dict(src, _out=named)))
+    return out
+
+
+def topic_cards(idx, src, swap=None, plan=""):
+    """3.8.1: the cards one topic (topic_items' sources) stands for here: a
+    picked resource's are the date's picks under its tag (`_in`, this copy's
+    path), the rest the picks under none of them (`_out`)."""
+    cids = idx.match(src, swap, plan)
+    if src.get("_in"):
+        cids &= set().union(*(idx.tag_cards(p) for p in src["_in"]))
+    if src.get("_out"):
+        cids -= set().union(*(idx.tag_cards(p) for p in src["_out"]))
+    return cids
+
+
+def topic_remarks(doc, us):
+    """3.8.1: [[i, text]]: the authors' notes on a tag (the doc's `remarks`),
+    each with the place in topic_items(us) of a topic that names that tag or
+    one under it (a deck tag, a cut's tag or its plan tag, a plan tag). Names
+    and the authors' words; the board escapes them."""
+    rs = [(str(r.get("tag")).lower(), str(r.get("text") or "")) for r in (doc or {}).get("remarks") or []
+          if isinstance(r, dict) and r.get("tag") and r.get("text")]
+    if not rs:
+        return []
+    own = plan_tag_map(doc)
+    out = []
+    for i, (_g, _x, src) in enumerate(topic_items(us)):
+        paths = [str(t).lower() for t in list(src.get("tags") or []) + list(src.get("_in") or [])]
+        for c in src.get("cut") or []:
+            paths.append(str(c.get("tag")).lower())
+            pt = own.get(("id", c.get("in")))
+            if pt:
+                paths.append(tag_path(doc, pt).lower())
+        for tag, text in rs:
+            if any(p == tag or p.startswith(tag + _SEP) for p in paths) and [i, text] not in out:
+                out.append([i, text])
+    return out
+
+
+def card_remarks(plans, guid, ord_):
+    """3.8.1: [(plan name, text)]: what the authors of the plans I follow
+    wrote on this one card (guid + card number), for the review screen."""
+    out = []
+    for p in plans or []:
+        for r in ((p or {}).get("doc") or {}).get("remarks") or []:
+            card = r.get("card") if isinstance(r, dict) else None
+            if card and str(card[0]) == str(guid) and int(card[1]) == int(ord_) and r.get("text"):
+                out.append((str(p.get("name") or "Plan"), str(r["text"])))
+    return out
 
 
 def search_counts(idx, lean_doc):
@@ -1234,27 +1400,46 @@ def ahead_behind(doc, prog, today):
     return out
 
 
+SNAP_TAGS = "#tags"  # 3.8.1: the snapshot's key for the plan's tags (a date's id is [a-z0-9])
+
+
 def snapshot(doc):
     """What a change note compares: {unit id: [name, opens, what it picks]}
     (3.7.3: the third, a short hash of its sources, so "updated" can be said;
-    a snapshot from before has two)."""
+    a snapshot from before has two). 3.8.1: and the plan's tags {id: name}
+    under SNAP_TAGS (a snapshot from before has none)."""
     # what the author picked, not what their Anki worked out (C5 ids, refs):
     # those arrive on their own and would say "updated" for nothing
     picked = lambda u: {k: v for k, v in u.items() if k not in ("ids", "idr")}
-    return {u["id"]: [str(u.get("name") or ""), str(u.get("opens") or ""), unit_sig(picked(u))[:8]] for u in units(doc)}
+    out = {u["id"]: [str(u.get("name") or ""), str(u.get("opens") or ""), unit_sig(picked(u))[:8]] for u in units(doc)}
+    out[SNAP_TAGS] = {str(t["id"]): str(t.get("name") or "") for t in plan_tags(doc)}
+    return out
 
 
 def change_note(owner, old, doc):
     """"Dre moved Renal pharm to Mon 2 Nov and added Pulm · Asthma." as
     segments, or None. At most two of each kind by name, then a count."""
     new = snapshot(doc)
+    tags_now, tags_then = new.pop(SNAP_TAGS), (old or {}).get(SNAP_TAGS)
+    old = {k: v for k, v in (old or {}).items() if k != SNAP_TAGS}
     moved = [(new[u][0], new[u][1]) for u in new if u in old and old[u][1] != new[u][1]]
     added = [new[u][0] for u in new if u not in old]
     gone = [old[u][0] for u in old if u not in new]
     # 3.7.3: a date whose cards changed (a tag, a search, cards added or taken off)
     changed = [new[u][0] for u in new if u in old and len(old[u]) > 2 and old[u][2] != new[u][2]
                and old[u][1] == new[u][1]]
-    if not (moved or added or gone or changed):
+    # 3.8.1: a date whose only change is its name, by its day: "updated Fri 16 Oct"
+    changed += [fmt_day(new[u][1]) for u in new if u in old and old[u][0] != new[u][0] and old[u][1] == new[u][1]
+                and (len(old[u]) < 3 or old[u][2] == new[u][2])]
+    # 3.8.1: the plan's tags, when the last snapshot had them: "renamed 10 tags"
+    tag_words = []
+    if isinstance(tags_then, dict):
+        for verb, n in (("renamed", sum(1 for k in tags_now if k in tags_then and tags_then[k] != tags_now[k])),
+                        ("added", sum(1 for k in tags_now if k not in tags_then)),
+                        ("took off", sum(1 for k in tags_then if k not in tags_now))):
+            if n:
+                tag_words.append([(f"{verb} {n:,} tag{'s' if n != 1 else ''}", False)])
+    if not (moved or added or gone or changed or tag_words):
         return None
     clauses = []
 
@@ -1278,6 +1463,7 @@ def change_note(owner, old, doc):
         clauses.append(names(gone, "took out"))
     if changed:
         clauses.append(names(changed, "updated"))
+    clauses += tag_words
     segs = [(f"{owner or '?'} ", False)]
     for i, c in enumerate(clauses):
         if i:
@@ -1682,12 +1868,73 @@ def export_scope(idx, doc, scope, swap=None):
     return {n for n, cs in idx.by_nid.items() if any(c in cids for c in cs)}
 
 
-def export_notes(col, nids, plain=True):
+CARDS_TEXT = 500  # builder.js CARDS_TEXT: past this, a date's single cards are a count in its text
+
+
+def _date_line(u, doc):
+    """A date as the plan's text writes it (builder.js toText's line, the twin):
+    date | name | tag:…, tag:… in SLG 12, deck:… | search:… | notes:… | cards:G:N | due … | for …"""
+    tags = {t.get("id"): t for t in plan_tags(doc)}
+    evs = {e.get("id"): e for e in (doc or {}).get("events") or [] if isinstance(e, dict)}
+    first = ", ".join([f"tag:{t}" for t in u.get("tags") or []]
+                      + [f"tag:{c.get('tag')} in {(tags.get(c.get('in')) or {}).get('name') or '?'}" for c in u.get("cut") or []]
+                      + [f"deck:{d}" for d in u.get("decks") or []])
+    cut_q = {c.get("q") for c in u.get("cut") or []}
+    cards = u.get("cards") or []
+    parts = [str(u.get("opens") or ""), str(u.get("name") or ""), first,
+             *[f"search:{q}" for q in u.get("search") or [] if q not in cut_q],
+             f"nids:{','.join(str(n) for n in u['nids'])}" if u.get("nids") else "",
+             f"cids:{','.join(str(n) for n in u['cids'])}" if u.get("cids") else "",
+             f"notes:{' '.join(u['notes'])}" if u.get("notes") else "",
+             f"due {u['due']}" if u.get("due") else "", "even" if u.get("even") else "",
+             f"{len(cards)} single cards" if len(cards) > CARDS_TEXT
+             else "cards:" + " ".join(f"{g}:{int(o) + 1}" for g, o in cards) if cards else "",
+             f"for {evs[u['for']].get('name')}" if u.get("for") in evs else "",
+             *[f"{x.get('k')}: {x.get('t')}" + (f" {x['url']}" if x.get("url") else "") for x in u.get("todo") or []]]
+    return " | ".join(p for p in parts[:2]) + "".join(f" | {p}" for p in parts[2:] if p)
+
+
+def export_plan_lines(idx, doc, name="", swap=None):
+    """3.8.1, Export cards for my AI, with the plan: comment lines for the top
+    of the file. Each date in the plan's text format with how many cards it
+    has in this copy and how many of those another date has too; its events;
+    the plan's tags (name, full path, cards here); the authors' notes (tag
+    and card ones). Names, tags, ids, counts and the authors' own words:
+    never a card's text (those are the rows, by #guid and #cards)."""
+    us = units(doc)
+    ms = {u["id"]: idx.match(u, swap, doc or {}) for u in us}
+    seen = {}
+    for cs in ms.values():
+        for c in cs:
+            seen[c] = seen.get(c, 0) + 1
+    out = [f'# The plan "{name or "Plan"}", as its Text tab writes it (duecrew.com/plan-text): each date with its cards '
+           "in this copy and how many of those another date has too; its tags; its notes. Its cards are the rows below, "
+           "by their #guid and #cards columns."]
+    lines = []
+    for u in us:
+        n, also = len(ms[u["id"]]), sum(1 for c in ms[u["id"]] if seen[c] > 1)
+        lines.append(f"{_date_line(u, doc)} | {n:,} card{'s' if n != 1 else ''} here, {also:,} also on another date")
+    lines += [f"{e['day']} | event | {e.get('name') or '?'}" for e in (doc or {}).get("events") or []
+              if isinstance(e, dict) and e.get("day")]
+    out += [f"# {x}" for x in sorted(lines)]
+    for t in plan_tags(doc):
+        n = len(idx.plan_tag_cards(doc, t, swap))
+        out.append(f"# tag | {t.get('name')} | {tag_path(doc, t)} | {n:,} card{'s' if n != 1 else ''} here")
+    for r in (doc or {}).get("remarks") or []:
+        if r.get("tag"):
+            out.append(f"# note | tag:{r['tag']} | {r.get('text')}")
+        elif r.get("card"):
+            out.append(f"# note | card:{r['card'][0]}:{int(r['card'][1]) + 1} | {r.get('text')}")
+    return [re.sub(r"[\r\n\t]+", " ", x) for x in out]
+
+
+def export_notes(col, nids, plain=True, plan_lines=None):
     """(text, notes): the notes in Anki's own plain-text export format, with
     the unique identifier (a note's guid, the same in every copy of a deck)
     first, so an AI can answer with notes: lines; 3.8.1, and each note's
-    card numbers (cards:ID:N, a cloze's N its cloze number). Written to a
-    file on this computer only; nothing here is sent anywhere."""
+    card numbers (cards:ID:N, a cloze's N its cloze number), and (with the
+    plan) its plan_lines after Anki's header lines. Written to a file on
+    this computer only; nothing here is sent anywhere."""
     nl = sorted({int(n) for n in nids})
     rows = []
     names = {}
@@ -1701,6 +1948,7 @@ def export_notes(col, nids, plain=True):
             nums.setdefault(int(nid), set()).add(int(ord_) + 1)
     out = ["#separator:tab", f"#html:{'false' if plain else 'true'}", "#guid column:1",
            "#notetype column:2", "#deck column:3", "#tags column:4", "#cards column:5"]
+    out += [str(x) for x in plan_lines or []]  # 3.8.1: the plan, as comment lines
     for nid, guid, mid, flds, tags, did in rows:
         if mid not in names:
             try:

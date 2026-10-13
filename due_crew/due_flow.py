@@ -79,6 +79,7 @@ def plan_dates(today):
         if p.get("paused") or not st or not mw.col or not pf._deck_ok(mw.col, st.get("deck_id")):
             continue
         doc, title = p["doc"], P.plan_title(p)
+        named = {x["id"]: x for x in P.units(P.with_picks(doc, (_state.get("plan_picks") or {}).get(p["id"])))}  # 3.8.1
         evs = {e.get("id"): e for e in doc.get("events") or [] if isinstance(e, dict)}
         applied = st.get("applied") or {}
         crew, followers = p.get("crewDone") or {}, int(p.get("followers") or 0)
@@ -115,7 +116,8 @@ def plan_dates(today):
                           "parts": (parts.get(p["id"]) or {}).get(u["id"]) or [],
                           "sibs": (sibs.get(p["id"]) or {}).get(u["id"]),
                           "todo": [x for x in u.get("todo") or [] if isinstance(x, dict)],
-                          "what": P.topics_line([u]), "topics": P.topic_view([u]),  # 3.8.0: each a link
+                          "what": P.topics_line([u]), "topics": P.topic_view([named.get(u["id"], u)]),  # 3.8.0: each a link
+                          "rm": P.topic_remarks(doc, [named.get(u["id"], u)]),  # 3.8.1: the authors' notes under its topics
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's

@@ -168,7 +168,8 @@ _DATES = [
      "opens": _T, "seen": 31, "total": 109, "parts": [["Video Series", 6, 85], ["Path Book", 24, 24]],
      "todo": [{"k": "watch", "t": "lecture 14, renal clearance", "url": "https://example.com/l14"}],
      "what": "Video Series: Pharmacokinetics · Path Book: Drug elimination", "crew": [3, 8], "prep": "KSA F3-2",
-     "topics": [["Video Series", [["Pharmacokinetics", 0]]], ["Path Book", [["Drug elimination", 1]]]]},  # 3.8.0: links
+     "topics": [["Video Series", [["Pharmacokinetics", 0]]], ["Path Book", [["Drug elimination", 1]]]],  # 3.8.0: links
+     "rm": [[1, "Pages 40-44 only; the rest is next week"]]},  # 3.8.1: an author's note on a tag, under its topic
     {"pid": "p1", "uid": "u2", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 5 · Clinical trial phases", "opens": _T, "seen": 24, "total": 24},
     {"pid": "p1", "uid": "u3", "plan": "Big Step 1 · F3", "name": "F3-2 SLGs 6a–6b · Drug interactions", "opens": _d(1), "seen": 0, "total": 129},
     {"pid": "p1", "uid": "u4", "plan": "Big Step 1 · F3", "name": "F3-2 SLG 7 · Autonomic drugs", "opens": _d(2), "seen": 0, "total": 96,
@@ -239,6 +240,17 @@ sections.append("<h3>3.8.0: a plan I follow, not in its squad, behind</h3>" + bo
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [dict(
         PLAN_CARD, tabs={"summary": None}, ins=None,
         lines=[("behind", [("Path Book 1 · Cell injury", True), (" was due Mon. 54 cards not seen yet.", False)])])], "offers": []})))
+# 3.8.1, plans round three: an invite to co-write and a hand-over above the plans; today's date
+# with an author's note under the topic it names, and its picked cards named by their resource here
+_R3DOC = dict(_PDOC, remarks=[{"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Figures 2-4 are on the quiz <b>"}],
+              units=[dict(u, notes=[f"g{i}" for i in range(91)], _pl=[["#Deck::#Video_Series::Microbiology::Herpes_Viruses", 88], ["", 3]])
+                     if u["id"] == "c" else u for u in _PDOC["units"]])
+_R3 = {"cards": [dict(PLAN_CARD, tabs={"summary": None}, ins=None,
+                      week=PL.week_view(_R3DOC, {"a": [283, 283, 283], "b": [96, 80, 96], "c": [42, 18, 42]}, _PT, PL.week_start(_PT)))],
+       "offers": [], "invites": [{"id": "p9", "name": "MS2 Block 2", "kind": "coauthor", "by": {"name": "Kim", "emoji": ""}},
+                                 {"id": "p8", "name": "Renal <b> block", "kind": "owner", "by": {"name": "Dre", "emoji": ""}}]}
+sections.append("<h3>3.8.1: invites above the plans; a tag's note under its topic; picks named by their resource</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=_R3, due=_DV, you=_YOU("plans", plans=_R3)))
 _EV = {"squares": [{"done": i in (0, 2, 5)} for i in range(8)], "middle": {"done": False, "have": 7, "goal": 9}, "lines": 0}
 _TEAM = {"on": True, "count": 12, "shown": 5, "streak": 4, "more": 4, "bingo": {"card": {"wk": "2026-W41"}, "ev": _EV},
          "faces": [{"uid": "u1", "name": "Maya", "emoji": "\U0001F419", "shown": True},

@@ -29,7 +29,7 @@ from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
     clean_tricky, day_doc, friend_code_from, invite_code_from, live_now, normalize_code,
-    clean_team_view, clean_teams,
+    clean_team_view, clean_teams, clean_plan_invites,
 )
 
 FEEDBACK_MAX = 2000  # 3.6.5, P6: the Worker's own limit
@@ -360,10 +360,12 @@ class ApiClient:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]
             authored = [a for a in map(clean_authored, data.get("authored") or []) if a]
+            invites = clean_plan_invites(data.get("planInvites"))  # 3.8.1: to co-write a plan, or to keep one
             if (plans != self.session.get("plans") or offers != self.session.get("plan_offers")
-                    or authored != self.session.get("plans_authored")):
+                    or authored != self.session.get("plans_authored") or invites != (self.session.get("plan_invites") or [])):
                 self.session["plans"], self.session["plan_offers"] = plans, offers
                 self.session["plans_authored"] = authored  # 3.3, C5
+                self.session["plan_invites"] = invites
                 self._save_session()
         # 3.7.3: the teams I'm on, as counts (none: on no team)
         teams = clean_teams(data.get("teams"))
@@ -387,6 +389,7 @@ class ApiClient:
         return {"entries": entries,
                 "plans": list(self.session.get("plans") or []),
                 "plan_offers": list(self.session.get("plan_offers") or []),
+                "plan_invites": list(self.session.get("plan_invites") or []),  # 3.8.1
                 "plans_fresh": bool(plans_came),
                 # 3.7.3: plans that came later in the day (an update): ask, don't open
                 "plans_update": bool(plans_came and not with_decks),
@@ -1016,6 +1019,30 @@ class ApiClient:
                 p["early"] = int(data.get("early") or 0)
         self._save_session()
         return True
+
+    def answer_plan_invite(self, plan_id, yes):
+        """3.8.1: my answer to an invite on the board: to co-write a plan, or to
+        keep one handed to me. On the server's word the invite goes from the
+        session; a yes writes the plan with me from now (the next board says so
+        too). (plan, status): 404 when the invite was taken back meanwhile."""
+        status, data = self._call("POST", f"/plans/{plan_id}/invite", {"yes": bool(yes)}, retry=False)
+        if status in (200, 404):
+            self.session["plan_invites"] = [x for x in self.session.get("plan_invites") or [] if x.get("id") != plan_id]
+            got = clean_plan(data) if status == 200 else None
+            a = clean_authored(data) if got and yes and isinstance(data.get("doc"), dict) else None
+            if a and not any(x.get("id") == a["id"] for x in self.session.get("plans_authored") or []):
+                self.session["plans_authored"] = list(self.session.get("plans_authored") or []) + [a]  # Browse's items, now
+            self._save_session()
+            return got, status
+        return None, status
+
+    def plan_remark(self, plan_id, add=None, remove=None):
+        """3.8.1: an author's note for the plan's followers, on a card ({card:
+        [guid, ord], text}) or a tag ({tag, text}), or one taken off by its id.
+        It rides the plan's doc, so followers get it with the plan. (plan, status)."""
+        body = {"remove": str(remove)} if remove else {"add": dict(add or {})}
+        status, data = self._call("POST", f"/plans/{plan_id}/remarks", body, retry=False)
+        return (clean_plan(data) if status == 200 else None), status
 
     def put_ids(self, plan_id, units, counts=None, refs=None):
         """3.3, C5: the note ids behind a plan's tags, from my copy, and

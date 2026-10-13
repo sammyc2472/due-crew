@@ -644,12 +644,44 @@ def _own_tags(doc):
     return {"tagroot": root, **({"tags": tags} if tags else {})}
 
 
+_DECK_URL = re.compile(r"https://[^\s\"'<>]{1,292}")
+
+
+def _clean_remarks(v):
+    """3.8.1: the authors' notes on a tag or a card, [{id, tag | card, text}]:
+    exactly one of tag (a deck tag's path, or a plan tag's DueCrew:: path)
+    or card ([guid, card number from 0]); one line of 1 to 280. Drawn escaped."""
+    out, seen = [], set()
+    for r in v if isinstance(v, list) else []:
+        if not isinstance(r, dict) or not _UNIT_ID.fullmatch(str(r.get("id") or "")) or r["id"] in seen:
+            continue
+        text = clean_note(r.get("text"), 280)
+        tag, card = r.get("tag"), r.get("card")
+        one = {"id": r["id"], "text": text}
+        if isinstance(tag, str) and tag.strip() and len(tag) <= 200 and card is None:
+            one["tag"] = tag
+        elif (tag is None and isinstance(card, list) and len(card) == 2 and isinstance(card[0], str) and 0 < len(card[0]) <= 40
+              and isinstance(card[1], int) and not isinstance(card[1], bool) and 0 <= card[1] <= 1000):
+            one["card"] = [card[0], card[1]]
+        else:
+            continue
+        if text:
+            seen.add(r["id"])
+            out.append(one)
+    return out[:300]
+
+
 def clean_plan_doc(doc):
     """{deck, units}: units sorted by when they open, as plans.py reads them."""
     doc = doc if isinstance(doc, dict) else {}
     units = [u for u in map(_clean_unit, doc.get("units") or []) if u][:200]
     units.sort(key=lambda u: u["opens"])
     out = {"deck": str(doc.get("deck") or ""), "units": units}
+    if isinstance(doc.get("deckUrl"), str) and _DECK_URL.fullmatch(doc["deckUrl"]):
+        out["deckUrl"] = doc["deckUrl"]  # 3.8.1: where to get the deck, opened in the browser
+    remarks = _clean_remarks(doc.get("remarks"))
+    if remarks:
+        out["remarks"] = remarks  # 3.8.1: the authors' notes on a tag or a card
     if _ISO.fullmatch(str(doc.get("end") or "")):
         out["end"] = doc["end"]
     ids = {u["id"] for u in units}
@@ -702,7 +734,11 @@ def clean_authored(a):
               **({"notes": [g for g in u["notes"] if isinstance(g, str) and g][:5000]}
                  if isinstance(u.get("notes"), list) else {}),  # 3.6.5
               **({"opens": u["opens"]} if isinstance(u.get("opens"), str) and len(u["opens"]) == 10 else {}),  # P1
-              **({"cut": _cuts(u.get("cut"), u.get("search"))} if u.get("cut") else {})}  # 3.8.1
+              **({"cut": _cuts(u.get("cut"), u.get("search"))} if u.get("cut") else {}),  # 3.8.1
+              # 3.8.1: single cards, when the board carries them: what send_ids' #lbl names
+              **({"cards": [[c[0], c[1]] for c in u["cards"] if isinstance(c, list) and len(c) == 2 and isinstance(c[0], str)
+                            and isinstance(c[1], int) and not isinstance(c[1], bool)][:50000]}
+                 if isinstance(u.get("cards"), list) and u["cards"] else {})}
              for u in d.get("units") or [] if isinstance(u, dict) and u.get("id")]
     return {"id": a["id"], "version": int(a.get("version") or 0), "name": clean_note(a.get("name"), 60) or "Plan",
             "doc": {"deck": str(d.get("deck") or ""), "units": units, **_own_tags(d)}}  # 3.8.0: and its own tags
@@ -757,6 +793,19 @@ def clean_days(v):
                       if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 365}
             if isinstance(v.get("moved"), dict) else {},
             "own": v["own"] if v.get("own") in ("ready", "next") else ""}  # 3.8.0: at my own pace
+
+
+def clean_plan_invites(v):
+    """3.8.1: my pending invites, from the day's first board: [{id, name, kind
+    ("coauthor": to co-write it; "owner": to keep it), by: {name, emoji}}], 10 at most."""
+    out = []
+    for x in v if isinstance(v, list) else []:
+        if (isinstance(x, dict) and _PLAN_ID.fullmatch(str(x.get("id") or "")) and x.get("kind") in ("coauthor", "owner")
+                and x["id"] not in {o["id"] for o in out}):
+            by = x.get("by") if isinstance(x.get("by"), dict) else {}
+            out.append({"id": x["id"], "name": clean_note(x.get("name"), 60) or "Plan", "kind": x["kind"],
+                        "by": {"name": clean_note(by.get("name"), 60) or "?", "emoji": clean_emoji(by.get("emoji"))}})
+    return out[:10]
 
 
 def clean_offer(o):

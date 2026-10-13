@@ -9599,6 +9599,375 @@ def test_builder_tags_keep_up_v381():
           and any(t[0] == "Step1::Cardio" for t in tags), [t[0] for t in tags][:6])
 
 
+def _labels_col():
+    """3.8.1, round three: a deck in a big shared deck's shapes. 1-5 Herpes
+    (1 with a child tag), each with a question id and a Systems tag; 6-8
+    Influenza; 9 a leech with a plan's own tag only; 10 a tag with no
+    resource part. SECRET in every field: never in what a plan sends."""
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    R = "#Big_Step1_v12"
+    for cid in range(1, 6):
+        fakes.add_card(conn, cid, did=10, queue=-1, tags=f"{R}::#Video_Series::05_Micro::Viruses::Herpes_Viruses"
+                       f"{'::HSV1' if cid == 1 else ''} {R}::#QBank::Step::{1000 + cid} {R}::^Systems::Micro")
+    for cid in range(6, 9):
+        fakes.add_card(conn, cid, did=10, queue=-1, tags=f"{R}::#Video_Series::05_Micro::Viruses::Influenza {R}::#QBank::Step::{2000 + cid}")
+    fakes.add_card(conn, 9, did=10, queue=-1, tags="leech DueCrew::Block::SLG_1")
+    fakes.add_card(conn, 10, did=10, queue=-1, tags="Step1::Renal")
+    conn.execute("UPDATE notes SET flds = 'SECRET front' || char(31) || 'SECRET back'")
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    col.decks = fakes.FakeDecks({10: "Big Step 1"})
+    return col
+
+
+def test_pick_labels_v381():
+    """3.8.1, plans round three (4): a date's picked cards keep their
+    resource's name. plans.pick_labels reads the deck tags they sit under
+    (the deepest covering the most, read from a #/^ resource part down; then
+    the next for what's left; up to 3); the author's Anki sends them with the
+    date's counts (#lbl, again only when they or the picks change); a
+    follower's Anki names the picks with its own in You › Plans and Due, and
+    a name's click opens just those cards."""
+    from due_crew import plans as P, plan_flow as F
+    from due_crew.app import _state
+    R = "#Big_Step1_v12"
+    herpes, viruses = f"{R}::#Video_Series::05_Micro::Viruses::Herpes_Viruses", f"{R}::#Video_Series::05_Micro::Viruses"
+    col = _labels_col()
+    idx = P.DeckIndex(col, 10)
+    check("labels: the deepest tag covering them all names them; a series' root, a question's id and Systems don't",
+          P.pick_labels(idx, [1, 2, 3, 4, 5]) == [[herpes, 5]], P.pick_labels(idx, [1, 2, 3, 4, 5]))
+    got = P.pick_labels(idx, range(1, 11))
+    check("labels: what covers the most first, then the next for what's left; a leech's and a plan's own tags name nothing",
+          got == [[viruses, 8], ["Step1::Renal", 1]], got)
+    check("labels: up to `most`, and none for no cards",
+          P.pick_labels(idx, [1, 6, 10], most=1) == [[viruses, 2]] and P.pick_labels(idx, []) == [], P.pick_labels(idx, [1, 6, 10], most=1))
+    # topics: without labels as before; with them, by the resource, then the rest
+    u = {"id": "u1", "name": "Viruses", "opens": _day(0), "tags": [], "decks": [],
+         "cards": [["guid000001", 0], ["guid000006", 0], ["guid000009", 0]], "notes": ["guid000010"]}
+    doc = {"deck": "Big Step 1", "units": [u]}
+    check("topics: picks with no labels read as before",
+          ["Picked by ID", ["1 note"]] in P.topics(u) and ["Picked", ["3 single cards"]] in P.topics(u), P.topics(u))
+    names = F.pick_names(col, [{"id": "p1", "doc": doc}], {"p1": {"deck_id": 10}})
+    check("labels here: each date's picks by this copy's tags, the rest counted",
+          names == {"p1": {"u1": [[viruses, 2], ["Step1::Renal", 1], ["", 1]]}}, names)
+    nu = P.units(P.with_picks(doc, names["p1"]))[0]
+    check("labels here: a copy of the doc carries them; the plan stays as it came",
+          nu.get("_pl") and "_pl" not in u and P.with_picks(doc, None) is doc)
+    check("topics: \"Viruses · 2 picked\" in its series, then the rest under it",
+          P.topics(nu) == [["Video Series", ["Viruses · 2 picked"]], ["", ["Renal · 1 picked", "1 more picked"]]], P.topics(nu))
+    items = P.topic_items([nu])
+    check("topics: each name opens just its picks here; the rest, the picks under none",
+          [P.topic_cards(idx, s, None, doc) for _g, _x, s in items] == [{1, 6}, {10}, {9}], items)
+    wk = P.week_view(P.with_picks(doc, names["p1"]), {}, _day(0), P.week_start(_day(0)))
+    row = next(r for d in wk for r in d["units"])
+    html = board._week_html({"week": wk, "week_offset": 0}, "p1")
+    check("week: the date's picks read by their resource, each a link to its cards",
+          "Viruses · 2 picked</a>" in html and "duecrew:plantopic:p1:u1:0" in html and "Picked" not in html, row["what"])
+    shown, saved = [], (F.followed, F._state_cfg, F._browse, F.mw.col)
+    try:
+        F.followed = lambda: [{"id": "p1", "doc": doc}]
+        F._state_cfg = lambda c=None: {"p1": {"deck_id": 10}}
+        F._browse = lambda cids, q=None, empty="": shown.append(sorted(cids))
+        F.mw.col = col
+        _state["plan_picks"] = names
+        F.browse_topic("p1", ["u1"], 0)
+        F.browse_topic("p1", ["u1"], 2)
+    finally:
+        (F.followed, F._state_cfg, F._browse, F.mw.col) = saved
+        _state.pop("plan_picks", None)
+    check("browse: the board's click on a named pick opens those cards, as the board drew them", shown == [[1, 6], [9]], shown)
+    # the author's Anki: the labels ride the day's ids request, once a change
+    store = world({"dre": "Dre"})
+    pid, _code = store.add_plan("dre", "Micro", "Big Step 1", [
+        {"id": "u1", "name": "Viruses", "opens": _day(0), "tags": [], "decks": [], "notes": ["guid000001", "guid000006"]},
+        {"id": "u2", "name": "Renal", "opens": _day(1), "tags": ["Step1::Renal"], "decks": []}])
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    puts = lambda: [b for m, p, b in store.bodies if m == "PUT" and p == f"/plans/{pid}/ids"]
+    with _PlanGlue({"A": dre}, {"A": col}) as g, _SyncBg(g.F):
+        g.F.send_ids()
+        first = puts()
+        g.F.send_ids()
+        same = puts()
+        col.db.conn.execute("UPDATE notes SET tags = ' Step1::Renal ' WHERE id = 6")
+        g.F.send_ids()
+        moved = puts()
+    check("#lbl: the deck tags a date's picks sit under go with its counts; a date of tags alone has none",
+          len(first) == 1 and first[0]["counts"]["u1"]["#lbl"] == [[viruses, 2]] and "#lbl" not in first[0]["counts"].get("u2", {}),
+          first)
+    check("#lbl: nothing changed, nothing sent; a tag that moved sends them again",
+          len(same) == 1 and len(moved) == 2 and moved[-1]["counts"]["u1"]["#lbl"] == [[herpes + "::HSV1", 1], ["Step1::Renal", 1]],
+          moved[-1:])
+    check("#lbl: never a card's text", "SECRET" not in json.dumps(first + moved))
+
+
+def test_plan_remarks_and_deck_link_v381():
+    """3.8.1, plans round three (2, 3): the plan doc keeps where to get its
+    deck (an https link) and its authors' notes (`remarks`, on a tag or one
+    card). A tag's note shows under the topic row that names that tag (or one
+    under it) in You › Plans and Due; a card's on the review screen when that
+    card comes up for someone following the plan, with no request of its own.
+    Authors write them from Browse, one note a card (one request on a click)."""
+    from due_crew import plans as P, plan_flow as F, cards as C, due as DUE
+    clean = shapes.clean_plan_doc
+    url = lambda v: clean({"deck": "D", "units": [], "deckUrl": v}).get("deckUrl")
+    check("deckUrl: an https link of up to 300, no spaces, is kept; anything else isn't",
+          url("https://example.com/deck?x=1") == "https://example.com/deck?x=1" and url("https://" + "a" * 292)
+          and not url("https://" + "a" * 293) and not url("http://example.com") and not url("javascript:alert(1)")
+          and not url("https://example.com/a b") and not url('https://x.com/"><b>') and not url(5))
+    rs = clean({"deck": "D", "units": [], "remarks": [
+        {"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Watch <this>\nfirst"},
+        {"id": "r2", "card": ["guid000005", 1], "text": "The second cloze is the one"},
+        {"id": "r3", "tag": "x", "card": ["g", 0], "text": "both"}, {"id": "r4", "text": "neither"},
+        {"id": "R5", "tag": "x", "text": "a bad id"}, {"id": "r6", "tag": "x", "text": "  "},
+        {"id": "r7", "card": ["g", -1], "text": "no such card"}, {"id": "r1", "tag": "y", "text": "the same id"},
+        {"id": "r8", "tag": "y" * 201, "text": "too long a tag"}, {"id": "r9", "tag": "z", "text": "w" * 300}]}).get("remarks")
+    check("remarks: one of a tag or a card, one line, 280 at most; ids unique; the rest dropped",
+          [r["id"] for r in rs] == ["r1", "r2", "r9"] and rs[0]["text"] == "Watch <this> first" and rs[1]["card"] == ["guid000005", 1]
+          and len(rs[2]["text"]) == 280, rs)
+    check("remarks: at most 300 a plan", len(clean({"deck": "D", "units": [], "remarks": [
+        {"id": f"r{i}", "tag": "t", "text": "x"} for i in range(400)]})["remarks"]) == 300)
+    # under the topics that name the tag (or one under it), in the week and in Due
+    doc = clean({"deck": "Deck", "tagroot": "Block_1", "units": [
+        {"id": "a", "name": "Inflammation", "opens": _day(0), "tags": ["#Deck::#Path_Book::02_Inflammation::Acute", "Step1::Renal"],
+         "search": ['"tag:DueCrew::Block_1::SLG_12" "tag:#Deck::#Videos::Pharm::Cephalosporins"'],
+         "cut": [{"tag": "#Deck::#Videos::Pharm::Cephalosporins", "in": "t1",
+                  "q": '"tag:DueCrew::Block_1::SLG_12" "tag:#Deck::#Videos::Pharm::Cephalosporins"'}]}],
+        "tags": [{"id": "t1", "name": "SLG 12", "notes": ["g1"]}],
+        "remarks": [{"id": "r1", "tag": "#Deck::#Path_Book::02_Inflammation", "text": "Watch <this> first"},
+                    {"id": "r2", "tag": "#deck::#path_book::02_inflammation::acute::deeper", "text": "under a topic, not over it"},
+                    {"id": "r3", "tag": "DueCrew::Block_1::SLG_12", "text": "SLG 12 is on the quiz"},
+                    {"id": "r4", "card": ["guid000005", 1], "text": "a card's, not a topic's"}]})
+    u = P.units(doc)[0]
+    names = [x for _g, x, _s in P.topic_items([u])]
+    rm = P.topic_remarks(doc, [u])
+    check("remarks: a tag's note goes with the topic that names it or a tag under it, a plan tag's with its cut; never a card's",
+          rm == [[names.index("Acute"), "Watch <this> first"], [names.index("Cephalosporins · SLG 12"), "SLG 12 is on the quiz"]],
+          (names, rm))
+    wk = P.week_view(doc, {}, _day(0), P.week_start(_day(0)))
+    row = next(r for d in wk for r in d["units"])
+    html = board._week_html({"week": wk, "week_offset": 0}, "p1")
+    check("week: under its topic's row, escaped, once",
+          row.get("rm") == rm and html.count("Watch &lt;this&gt; first") == 1 and "<this>" not in html
+          and '<span class="rm">&#9432; Watch &lt;this&gt; first</span>' in html, html[-900:])
+    check("week: a date with no notes has no rm (as before)", "rm" not in next(
+        r for d in P.week_view(dict(doc, remarks=[]), {}, _day(0), P.week_start(_day(0))) for r in d["units"]))
+    due_row = DUE._date_row({"pid": "p1", "uid": "a", "plan": "Block 1", "name": "Inflammation", "opens": _day(0), "seen": 0,
+                             "total": 4, "topics": P.topic_view([u]), "rm": rm}, {}, _day(0))
+    dh = board._due_plan(due_row)
+    check("Due: the same notes under the same topics, escaped", due_row["rm"] == rm and dh.count('class="du-rm"') == 2
+          and "Watch &lt;this&gt; first" in dh and "<this>" not in dh, dh)
+    # the review screen: a card's note, for the plans I follow, that card only, no request
+    plans = [{"id": "p1", "name": "Block <1>", "doc": doc}]
+    view = C.remark_view(plans, "guid000005", 1)
+    check("review: a card's note shows with the plan's name, for that card alone",
+          view and view["kind"] == "remark" and view["text"] == "\U0001F4CC Block <1>: a card's, not a topic's" and "cmd" not in view
+          and C.remark_view(plans, "guid000005", 0) is None and C.remark_view([], "guid000005", 1) is None, view)
+    js = C.chip_js(dict(view, accent="#2e7d32")) + C.float_js(dict(view, accent=["#2e7d32", "#7cc47f"]))
+    check("review: drawn as text, never markup; with no click of its own",
+          "t.textContent = D.text" in js and "e.textContent = text" in js and "if (D.cmd)" in js
+          and json.dumps(view["text"]) in js, js[:200])
+    shown, saved = [], (C._bottom, C._review_web, C._show, C.client)
+    store = world({"dre": "Dre", "sam": "Sam"})
+    pid, code = store.add_plan("dre", "Block 1", "Deck", [{"id": "a", "name": "Inflammation", "opens": _day(0), "tags": ["x"], "decks": []}])
+    dre, sam = new_client(store, "dre", "Dre"), new_client(store, "sam", "Sam")
+    sam.follow_plan(code)
+    n = len(store.log)
+    got, status = dre.plan_remark(pid, add={"card": ["guid000005", 1], "text": "The second cloze"})
+    rid = (got or {}).get("doc", {}).get("remarks", [{}])[0].get("id")
+    check("remarks: an author's note on a card is one request on a click, and comes back with the plan",
+          status == 200 and len(store.log) == n + 1 and got["doc"]["remarks"][0]["card"] == ["guid000005", 1] and rid, got)
+    sam.fetch_board([_day(0)], with_decks=True)
+    check("remarks: they ride the plan to its followers (no request of their own)",
+          sam.session["plans"][0]["doc"]["remarks"][0]["text"] == "The second cloze")
+    _status, data = sam._call("POST", f"/plans/{pid}/remarks", {"add": {"tag": "x", "text": "mine"}})
+    check("remarks: a follower can't write one", _status == 403, data)
+    card = types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000005"), ord=1)
+    try:
+        C._bottom, C._review_web = (lambda: object()), (lambda: None)
+        C._show = lambda v: shown.append(v)
+        C.client = lambda: sam
+        n = len(store.log)
+        C.on_answer(card)
+        C.on_answer(types.SimpleNamespace(note=lambda: types.SimpleNamespace(guid="guid000005"), ord=0))
+        sam.session["cards"] = {"guid000005": {"tips": [{"from": "dre", "text": "think of it as two"}]}}
+        _state_entries = C._state["entries"]
+        C._state["entries"] = [{"user_id": "dre", "name": "Dre", "you": False}]
+        C.on_answer(card)
+        C._state["entries"] = _state_entries
+        sam.session.pop("cards", None)
+    finally:
+        (C._bottom, C._review_web, C._show, C.client) = saved
+    check("review: the card's note when it comes up, another card nothing, a crewmate's tip first; no request",
+          shown[0] and shown[0]["kind"] == "remark" and "Block 1: The second cloze" in shown[0]["text"] and shown[1] is None
+          and shown[2]["kind"] == "tip" and len(store.log) == n, shown)
+    got, status = dre.plan_remark(pid, remove=rid)
+    check("remarks: taken off by its id", status == 200 and not got["doc"].get("remarks"), got)
+    # Browse: for authors, on one card
+    acts, said = [], []
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved = (F.client, F.tooltip, F.mw.col)
+    try:
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [{"id": "p1", "doc": {}}], "plans": []})
+        F.browser_menu(types.SimpleNamespace(selected_cards=lambda: [5]), Menu())
+        one = list(acts)
+        del acts[:]
+        F.browser_menu(types.SimpleNamespace(selected_cards=lambda: [5, 6]), Menu())
+        two = list(acts)
+        F.tooltip = lambda msg, **k: said.append(msg)
+        F.mw.col = _plan_col()
+        F.note_for_card(types.SimpleNamespace(selected_cards=lambda: [5, 6]))
+    finally:
+        (F.client, F.tooltip, F.mw.col) = saved
+    check("browse: an author's note for one card; not for two",
+          "Due Crew: note for the plan's followers…" in one and "Due Crew: note for the plan's followers…" not in two
+          and said == ["Select one card first."], (one, two, said))
+    src = open(os.path.join(REPO, "due_crew", "ui", "follow_dialog.py"), encoding="utf-8").read()
+    check("follow: no deck named like the plan's, and a link: \"Where to get it ›\", opened in the browser from the plan's own link",
+          "Your Anki has no deck called <b>{esc(deck)}</b>. " in src and "Where to get it &rsaquo;" in src
+          and "openLink(url)" in src and "setOpenExternalLinks(False)" in src)
+
+
+def test_plan_invites_v381():
+    """3.8.1, plans round three (1): an invite to co-write a plan, or to keep
+    one its owner hands over, rides the day's first board (planInvites; no
+    request of its own) and shows as a line above the plans with Yes and No
+    (duecrew:planinvite:<pid>:yes|no), one request on the click."""
+    from due_crew import plan_flow as F
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store = world({"dre": "Dre <b>", "sam": "Sam"})
+    pid, _code = store.add_plan("dre", "Block <1>", "Deck", [{"id": "a", "name": "A", "opens": _day(0), "tags": ["x"], "decks": []}])
+    dre, sam = new_client(store, "dre", "Dre"), new_client(store, "sam", "Sam")
+    st, _d = dre._call("POST", f"/plans/{pid}/editors", {"uid": "sam"})
+    n = len(store.log)
+    data = sam.fetch_board([_day(0)], with_decks=True)
+    inv = sam.session.get("plan_invites")
+    check("invites: they ride the day's first board, one request",
+          st == 200 and len(store.log) == n + 1 and data["plan_invites"] == inv
+          and inv == [{"id": pid, "name": "Block <1>", "kind": "coauthor", "by": {"name": "Dre <b>", "emoji": ""}}], inv)
+    check("invites: cleaned (an id, a kind, ten at most)", shapes.clean_plan_invites(
+        [{"id": "BAD!", "kind": "coauthor"}, {"id": "p1", "kind": "boss"}] + [{"id": f"p{i}", "kind": "owner"} for i in range(12)])
+        == [{"id": f"p{i}", "name": "Plan", "kind": "owner", "by": {"name": "?", "emoji": ""}} for i in range(10)])
+    html = board._you_plans({"cards": [], "offers": [], "invites": inv})
+    check("invites: a line above the plans, names escaped, Yes and No",
+          "<b>Dre &lt;b&gt;</b> asked you to co-write <b>Block &lt;1&gt;</b>. Its tags would go on your notes in Anki." in html
+          and f"duecrew:planinvite:{pid}:yes" in html and f"duecrew:planinvite:{pid}:no" in html
+          and html.index("planinvite") < html.index("Follow a plan"), html[:600])
+    col = _plan_col()
+    with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
+        check("invites: the board's view has them", F.board_view({})["invites"] == inv)
+        n = len(store.log)
+        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        sent = [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"]
+        check("invites: Yes is one request; I co-write it now (Browse's items, its tags), and the line goes",
+              len(store.log) == n + 1 and sent == [{"yes": True}] and "sam" in store.plans[pid].get("editors", [])
+              and not sam.session["plan_invites"] and any(a["id"] == pid for a in sam.session["plans_authored"])
+              and g.toasts[-1] == "You co-write Block &lt;1&gt; now.", g.toasts)
+        st, _d = dre._call("POST", f"/plans/{pid}/owner", {"uid": "sam"})
+        sam.fetch_board([_day(0)])  # a later refresh: the stamp moved
+        inv2 = sam.session.get("plan_invites")
+        html = board._you_plans({"cards": [], "offers": [], "invites": inv2})
+        check("hand-over: the owner offers the plan; it comes with the next refresh, its own words",
+              st == 200 and inv2 and inv2[0]["kind"] == "owner"
+              and "<b>Dre &lt;b&gt;</b> offered you <b>Block &lt;1&gt;</b> to keep." in html, (inv2, html[:300]))
+        dc._on_js(False, f"duecrew:planinvite:{pid}:no", DeckBrowser())
+        check("hand-over: No keeps it where it was; the line goes",
+              store.plans[pid]["owner"] == "dre" and not sam.session["plan_invites"]
+              and [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"][-1] == {"yes": False})
+        sam.session["plan_invites"] = inv2  # as if the board still showed it: the owner took it back meanwhile
+        dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
+        check("invites: one taken back meanwhile says so, and goes", not sam.session["plan_invites"]
+              and "taken back" in g.toasts[-1] and store.plans[pid]["owner"] == "dre", g.toasts[-1:])
+        n = len(store.log)
+        dc._on_js(False, f"duecrew:planinvite:{pid}:maybe", DeckBrowser())
+        dc._on_js(False, "duecrew:planinvite:nothere:yes", DeckBrowser())
+        check("invites: anything but yes or no, or an invite I don't have, sends nothing", len(store.log) == n)
+
+
+def test_change_note_round_three_v381():
+    """3.8.1, plans round three (7): revisions read as revisions. The
+    snapshot keeps the plan's tags {id: name}; a date whose only change is
+    its name is said by its day ("updated Fri 16 Oct"); the tags by count
+    ("renamed 10 tags", "added 2 tags", "took off 1 tag"). A snapshot from
+    before has no tags: nothing is said about them then."""
+    from due_crew import plans as P
+    tag = lambda i, name=None: {"id": f"t{i}", "name": name or f"SLG {i}", "notes": [f"g{i}"]}
+    doc = {"deck": "D", "tagroot": "MS2", "units": [{"id": "a", "name": "Friday's date", "opens": "2026-10-16", "tags": ["x"]},
+                                                    {"id": "b", "name": "Renal", "opens": "2026-10-17", "tags": ["y"]}],
+           "tags": [tag(i) for i in range(1, 13)]}
+    old = P.snapshot(doc)
+    check("snapshot: the plan's tags, {id: name}, beside the dates", old[P.SNAP_TAGS] == {f"t{i}": f"SLG {i}" for i in range(1, 13)}
+          and json.loads(json.dumps(old)) == old)
+    seg = lambda o, d: "".join(t for t, _b in P.change_note("Dre", o, d) or [])
+    renamed = dict(doc, units=[dict(doc["units"][0], name="SLG 4-6 · Acid-base"), doc["units"][1]])
+    check("change: a date renamed, nothing else, is said by its day", seg(old, renamed) == "Dre updated Fri 16 Oct."
+          and ("Fri 16 Oct", True) in P.change_note("Dre", old, renamed), P.change_note("Dre", old, renamed))
+    both = dict(doc, units=[dict(doc["units"][0], name="SLG 4-6", tags=["x", "z"]), doc["units"][1]])
+    check("change: renamed and its cards changed: by its new name, as before", seg(old, both) == "Dre updated SLG 4-6.")
+    tags = dict(doc, tags=[tag(i, f"SLG {i} renal") for i in range(1, 11)] + [tag(13), tag(14)])
+    check("change: the tags by count", seg(old, tags) == "Dre renamed 10 tags, added 2 tags and took off 2 tags.", seg(old, tags))
+    check("change: a date and a tag", seg(old, dict(renamed, tags=doc["tags"][1:])) == "Dre updated Fri 16 Oct and took off 1 tag.")
+    before = {k: v for k, v in old.items() if k != P.SNAP_TAGS}
+    check("change: a snapshot from before has no tags: nothing said of them; its dates still are",
+          P.change_note("Dre", before, tags) is None and seg(before, renamed) == "Dre updated Fri 16 Oct.")
+    check("change: nothing changed, no note", P.change_note("Dre", old, doc) is None
+          and P.change_note("Dre", {"a": ["Friday's date", "2026-10-16"], "b": ["Renal", "2026-10-17"]}, doc) is None)
+
+
+def test_export_with_the_plan_v381():
+    """3.8.1, plans round three (8): Export cards for my AI, with a plan
+    picked, starts with the plan as comment lines after Anki's header lines:
+    each date as the plan's text writes it, with its cards here and how many
+    of them another date has too; its events; its tags (name, full path,
+    cards here); its notes. Names, tags, ids, counts and the authors' own
+    words: never a card's text."""
+    from due_crew import plans as P
+    col = _labels_col()
+    R = "#Big_Step1_v12"
+    doc = shapes.clean_plan_doc({"deck": "Big Step 1", "tagroot": "Block_1", "units": [
+        {"id": "a", "name": "Viruses", "opens": "2026-10-05", "due": "2026-10-09", "tags": [f"{R}::#Video_Series::05_Micro::Viruses"],
+         "decks": [], "for": "q", "todo": [{"k": "watch", "t": "lecture 14", "url": "https://example.com/l14"}]},
+        {"id": "b", "name": "Herpes again", "opens": "2026-10-06", "tags": [], "decks": [], "cards": [["guid000001", 0], ["guid000002", 0]],
+         "notes": ["guid000010"], "search": ['"tag:DueCrew::Block_1::SLG_12" "tag:Step1::Renal"'],
+         "cut": [{"tag": "Step1::Renal", "in": "t1", "q": '"tag:DueCrew::Block_1::SLG_12" "tag:Step1::Renal"'}]}],
+        "events": [{"id": "q", "day": "2026-10-09", "name": "Micro quiz"}],
+        "tags": [{"id": "t1", "name": "SLG 12", "notes": ["guid000010", "guid000003"]}],
+        "remarks": [{"id": "r1", "tag": f"{R}::#Video_Series", "text": "Watch at 1.5x"},
+                    {"id": "r2", "card": ["guid000005", 1], "text": "The second cloze"}]})
+    lines = P.export_plan_lines(P.DeckIndex(col, 10), doc, "Block 1")
+    check("export: the plan's lines, each a comment", lines and all(x.startswith("# ") for x in lines), lines)
+    check("export: a date as its text writes it, with its cards here and what another date has too",
+          f"# 2026-10-05 | Viruses | tag:{R}::#Video_Series::05_Micro::Viruses | due 2026-10-09 | for Micro quiz | "
+          "watch: lecture 14 https://example.com/l14 | 8 cards here, 2 also on another date" in lines, lines)
+    check("export: picks as the text writes them (cards numbered from 1), a cut by its tag's name",
+          "# 2026-10-06 | Herpes again | tag:Step1::Renal in SLG 12 | notes:guid000010 | cards:guid000001:1 guid000002:1 | "
+          "3 cards here, 2 also on another date" in lines, lines)
+    check("export: events, the plan's tags with their path and cards here, the authors' notes",
+          "# 2026-10-09 | event | Micro quiz" in lines and "# tag | SLG 12 | DueCrew::Block_1::SLG_12 | 2 cards here" in lines
+          and f"# note | tag:{R}::#Video_Series | Watch at 1.5x" in lines and "# note | card:guid000005:2 | The second cloze" in lines,
+          lines)
+    check("export: never a card's text in the plan's lines", "SECRET" not in "\n".join(lines))
+    text, n = P.export_notes(col, {1, 6}, plan_lines=lines)
+    rows = text.split("\n")
+    check("export: the lines come after Anki's header lines, then the cards by #guid and #cards",
+          rows[:7] == ["#separator:tab", "#html:false", "#guid column:1", "#notetype column:2", "#deck column:3", "#tags column:4",
+                       "#cards column:5"] and rows[7:7 + len(lines)] == lines and n == 2 and rows[7 + len(lines)].startswith("guid000001\t"),
+          rows[:12])
+    check("export: without the plan, as before", P.export_notes(col, {1, 6})[0].split("\n")[7].startswith("guid000001\t"))
+    src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
+    check("export: the box, on by default, only with a plan picked; the plan itself, not my days",
+          'QCheckBox("With the plan (its dates, tags, notes and what overlaps)")' in src and "self.with_plan.setChecked(True)" in src
+          and "self.with_plan.setVisible(bool(p))" in src and 'p.get("plan_doc") or p["doc"]' in src)
+
+
 def test_export_reads_an_authored_plan_whole_v381():
     """3.8.1 (found in the plans review): /plans/mine leaves a date's single
     cards and note ids out, so Export cards for my AI, for a plan I write but

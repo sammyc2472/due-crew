@@ -150,6 +150,14 @@ class FollowDialog(QDialog):
         self.best_hint.setStyleSheet("font-size: 11px; color: palette(mid);")
         drow.addWidget(self.best_hint)
         root.addLayout(drow)
+        # 3.8.1: no deck here named like the plan's, and its authors say where to get it
+        self.get_deck = QLabel("")
+        self.get_deck.setWordWrap(True)
+        self.get_deck.setTextFormat(Qt.TextFormat.RichText)
+        self.get_deck.setOpenExternalLinks(False)
+        self.get_deck.linkActivated.connect(lambda _href: self._open_deck_url())
+        self.get_deck.setVisible(False)
+        root.addWidget(self.get_deck)
         self.match = QWidget()
         self.match_grid = QGridLayout(self.match)
         self.match_grid.setContentsMargins(0, 4, 0, 4)
@@ -251,6 +259,7 @@ class FollowDialog(QDialog):
         self.status.setText("")
         for w in self._plan_parts():
             w.setVisible(False)
+        self.get_deck.setVisible(False)
         self.follow_btn.setEnabled(False)
         self.adjustSize()
 
@@ -283,6 +292,7 @@ class FollowDialog(QDialog):
         self.title.setTextFormat(Qt.TextFormat.PlainText)
         for w in self._plan_parts():
             w.setVisible(True)
+        self._deck_link(plan["doc"])
         self.best, swap = P.best_deck(self.col, plan["doc"], self.choices)
         if self.best is not None:
             if swap:
@@ -292,6 +302,23 @@ class FollowDialog(QDialog):
             self.deck.setCurrentIndex(max(0, at))
             self.deck.blockSignals(False)
         self._deck_changed()
+
+    def _deck_link(self, doc):
+        """3.8.1: "Your Anki has no deck called X. Where to get it ›", when no deck
+        here has the plan's deck's name and the plan says where (`deckUrl`)."""
+        deck, url = str(doc.get("deck") or ""), str(doc.get("deckUrl") or "")
+        missing = bool(deck) and not any(n.lower() == deck.lower() for _d, n in self.choices)
+        show = missing and url.startswith("https://")
+        if show:
+            self.get_deck.setText(f"Your Anki has no deck called <b>{esc(deck)}</b>. "
+                                  f'<a href="{html.escape(url, quote=True)}">Where to get it &rsaquo;</a>')
+        self.get_deck.setVisible(show)
+
+    def _open_deck_url(self):
+        url = str(((self.plan or {}).get("doc") or {}).get("deckUrl") or "")
+        if url.startswith("https://"):
+            from aqt.utils import openLink
+            openLink(url)  # in the browser; the link is the plan's, checked when it arrived
 
     def _index(self, did):
         if did not in self.indexes:

@@ -230,6 +230,28 @@ def check(path):
     ok("export: the size estimate errs high, not wildly", len(text) <= est <= 3 * len(text), f"{est/1024/1024:.1f} MB est")
     t = tm(); dates = P.export_scope(idx2, doc, "dates"); t_scope = tm() - t
     ok("export: what the plan's dates open", 0 < len(dates) < 35000, f"{len(dates):,} notes, {t_scope*1000:.0f} ms")
+    # 3.8.1, round three: the plan itself at the file's top, never a card's text
+    t = tm(); plines = P.export_plan_lines(idx2, doc, "Cardio"); t_pl = tm() - t
+    text2, _n2 = P.export_notes(col, list(nids_all)[:50], plan_lines=plines)
+    ok("export with the plan: its dates' lines after Anki's header, no card's text",
+       len(plines) == 32 and text2.splitlines()[7:7 + len(plines)] == plines and not any("card " in x and "front" in x for x in plines),
+       f"{len(plines)} lines, {t_pl*1000:.0f} ms")
+    # 3.8.1, round three: a date's picked cards named by the deck tags they sit under (the
+    # author's #lbl and a follower's topics): a lecture's picks by the lecture, never a question
+    # id; fast for a date's picks and for the whole deck
+    lect_cids = sorted(idx2.tag_cards(lect[0]))
+    t = tm(); lbl = P.pick_labels(idx2, lect_cids); t_lbl = tm() - t
+    lect1 = sorted(idx2.tag_cards(lect[1]))
+    t = tm(); lbl1 = P.pick_labels(idx2, lect1); t_lbl1 = tm() - t
+    ok("labels: a lecture's picked cards are named by the lecture; the next date's quick (each card's tags kept with the notes)",
+       lbl and lbl[0] == [lect[0], len(lect_cids)] and lbl1 and lbl1[0][0] == lect[1] and t_lbl1 < 0.05,
+       f"{lbl[:2]}, first {t_lbl*1000:.0f} ms (reads each card's tags once), the next {t_lbl1*1000:.1f} ms")
+    picks5k = sorted(idx2.cards)[:5000]
+    t = tm(); lbl5 = P.pick_labels(idx2, picks5k); t_lbl5 = tm() - t
+    t = tm(); lblall = P.pick_labels(idx2, idx2.cards); t_all = tm() - t
+    ok("labels: 5,000 picks and the whole deck, up to three, no question id, quick",
+       0 < len(lbl5) <= 3 and 0 < len(lblall) <= 3 and not any(p.split("::")[-1].isdigit() for p, _n in lbl5 + lblall)
+       and t_lbl5 < 0.5 and t_all < 2.5, f"{lbl5[0]}, {t_lbl5*1000:.0f} ms; the deck {t_all*1000:.0f} ms")
     del re
 
     # 3.2's who-knows-it, on two years of answers (400,000): every sync reads it
