@@ -19,7 +19,7 @@ class MakePlanDialog(QDialog):
         super().__init__(parent)
         self.client, self.col, self.site = client, col, site
         self.open_link = open_link   # tests pass their own; Anki's openLink otherwise
-        self.on_sent = on_sent       # 3.8.2: main thread, (deck, tags, decks) once the tree is up
+        self.on_sent = on_sent       # 3.8.1: main thread, (deck, tags, decks) once the tree is up
         self.indexes = {}            # did -> DeckIndex, read once per deck
         self.url = None
         attach_alive(self)

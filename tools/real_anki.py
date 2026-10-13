@@ -483,7 +483,7 @@ def check(path):
     ok("plan tags: unfollowing takes every one of them off; my own tags stay",
        n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
        f"{n_drop:,} notes")
-    # 3.8.2: Put back isn't a yes to Hold back (its cards went in `held`, and every morning since
+    # 3.8.1: Put back isn't a yes to Hold back (its cards went in `held`, and every morning since
     # held each later date's new cards), and the morning's other steps come before what it opens,
     # so the open is Anki's latest step and Not today undoes just it
     import types

@@ -21,7 +21,7 @@ plans.json, per profile:
   built                  filtered decks Due Crew built here (the last 200), for the morning's tidy
   authored_tags          plans I write, not follow: {plan id: {deck_id, tags, tags_sig, tags_day}}
   ids_sent               {plan id: hash of the note ids, counts and refs last sent} (send_ids)
-  trees_sent             3.8.2: {deck name, lowercased: {h, day}}, its tree last sent, the day last read (send_trees)
+  trees_sent             3.8.1: {deck name, lowercased: {h, day}}, its tree last sent, the day last read (send_trees)
   posts_seen             {plan id: the newest post read}
   aside_ok               {plan id: [leeches, missing]} as last OK'd
   fallback_ok            {plan id: true}: its renamed-tags note OK'd
@@ -35,16 +35,16 @@ plans[plan id], one plan on this computer:
   seen_version, snapshot the plan as last seen, for the change note
   later                  {unit id: day}: put off (Not today) to that morning
   held                   cards the plan shut when I asked (Hold back, Put back): Stop opens them
-  hold_yes               3.8.2: I said yes to Hold back; hold_new holds what authors add later
+  hold_yes               3.8.1: I said yes to Hold back; hold_new holds what authors add later
   catch                  G5's catch-up {until, extra}: Anki's today-only limit each morning
-  missed                 3.8.2: the missed-days answer {mode, day} (3.2; was `catch` before)
+  missed                 3.8.1: the missed-days answer {mode, day} (3.2; was `catch` before)
   own_opened             at my own pace {unit id: the day I opened it, "" when opened elsewhere}
   checks                 checkpoints and review days built {key: {day, at, name, cids}}
   leeches, missing       {unit id: n}, {unit id: [missing, of]}: what a date left shut, when it opened
   tags, tags_sig, tags_day  the plan's own tags on my notes {tag id: path}, its sig, the day read
   tag_news               {day, names, more, missing}: tags that came today, said once
 
-3.8.2, read as today's (_upgrade, _hold_yes): an old `catch` {mode, day}
+3.8.1, read as today's (_upgrade, _hold_yes): an old `catch` {mode, day}
 moves to `missed`; `held` without `hold_yes` was a yes on the plan's dates
 and isn't one at my own pace (Put back put its cards there too).
 
@@ -115,7 +115,7 @@ def _pcfg():
 
 
 def _upgrade(data):
-    """3.8.2: an older plans.json, read as today's. A plan's `catch` held two
+    """3.8.1: an older plans.json, read as today's. A plan's `catch` held two
     shapes: G5's catch-up {until, extra} and 3.2's missed-days answer {mode,
     day}; the answer moves to `missed`. (Hold back's yes, `hold_yes`, needs
     the plan, so _hold_yes settles it.) True when something changed."""
@@ -278,7 +278,7 @@ def skip_past(st, plan, today):
 
 def first_here(col, st, plan, today):
     """A plan first seen on this computer (followed on another one, or on
-    the site). On the plan's dates, skip_past. At my own pace (3.8.2) no
+    the site). On the plan's dates, skip_past. At my own pace (3.8.1) no
     date has passed: a date whose cards are all open here (AnkiWeb brought
     what the other computer opened) counts as opened, on a day this
     computer doesn't know (`own_opened` "", so not in my pace); the rest
@@ -292,7 +292,7 @@ def first_here(col, st, plan, today):
 
 def _claim(idx, st, doc, day, touched=None):
     """At my own pace: the Up next dates whose cards are all open here now
-    (leeches aside) count as opened on `day`. touched (3.8.2): only the
+    (leeches aside) count as opened on `day`. touched (3.8.1): only the
     dates with a card among these (what an open just unsuspended), so on a
     deck whose cards were all open already one open doesn't claim every
     date. Returns how many."""
@@ -329,7 +329,7 @@ def _unit_cids(idx, st, u, doc, whole=False):
 
 
 def _opened_cids(idx, st, doc):
-    """3.8.2: every card a date opened here matched when it opened (its
+    """3.8.1: every card a date opened here matched when it opened (its
     `src`), read now: Hold back never shuts one, even after an author moves
     it to a later date."""
     out = set()
@@ -405,7 +405,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
     `state`. Returns {n, names, label, per: {plan id: [names, n]},
     units: {plan id: [unit ids opened]}}. G2: a unit put off to a later
     morning (`later` in the state) waits for it, unless `everything`.
-    3.8.2: at my own pace too; `was` {plan id: {unit id: what it was}} is
+    3.8.1: at my own pace too; `was` {plan id: {unit id: what it was}} is
     each own-pace date as it stood before, so Not today can put it back."""
     all_cids, names, per, opened_units, spread, before = set(), [], {}, {}, {}, {}
     for p in plan_list:
@@ -418,7 +418,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
         sig = _sig(st)
         src = st.setdefault("src", {})
         # 3.8.0, at my own pace: a morning opens only what an author adds to dates I opened,
-        # and ("next") the next date once I've seen most of the last one I opened. 3.8.2:
+        # and ("next") the next date once I've seen most of the last one I opened. 3.8.1:
         # whatever the mode (a resume's "start from the next date" once turned it off and
         # skipped every passed date out of Up next)
         own = P.own_pace(p) and not everything
@@ -436,7 +436,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
             continue
         idx = None
         if own:
-            # 3.8.2: a date put off (Not today) waits for its morning here too
+            # 3.8.1: a date put off (Not today) waits for its morning here too
             later = st.get("later") or {}
             items = [(u, how) for u, how in P.own_due(doc, applied, sig) if str(later.get(u["id"]) or "") <= today]
             was = before.setdefault(p["id"], {})
@@ -492,7 +492,7 @@ def run(col, plan_list, state, today, mode=None, everything=False, dry=False):
 def open_one(col, plan, st, uid, today, first=False, whole=False):
     """G1: one date, now, in one undo step; the morning won't open it again.
     {n, names, label}. first (3.8.0): first in Anki's line of new cards.
-    3.8.2: a date that opened here and has none of its cards open now (Edit
+    3.8.1: a date that opened here and has none of its cards open now (Edit
     › Undo closed it) opens whole, as `whole` does; else only what changed."""
     p = mine(plan)
     u = next((x for x in P.units(p["doc"]) if x["id"] == uid), None)
@@ -515,7 +515,7 @@ def open_one(col, plan, st, uid, today, first=False, whole=False):
 def put_off(st, uids, today, was=None):
     """G2, Not today: after Anki's undo closed this morning's cards again,
     these units open on tomorrow's morning (they're not applied any more).
-    3.8.2, at my own pace (`was`: each date as it stood before the morning,
+    3.8.1, at my own pace (`was`: each date as it stood before the morning,
     run's `was`): a date I opened stays opened as it was, and what an author
     added to it waits for tomorrow's morning (as ask_later); the next date
     that opened by itself is Up next again till then."""
@@ -730,7 +730,7 @@ def session_view(plan, st, idx, first_seen, today, pace=(8.0, 30.0), due=None, a
 
 def _missed(st):
     """3.2's answer to the missed-days question, {mode, day} (`missed` since
-    3.8.2; a state not upgraded yet still has it as `catch`)."""
+    3.8.1; a state not upgraded yet still has it as `catch`)."""
     m = (st or {}).get("missed")
     if isinstance(m, dict):
         return m
@@ -848,7 +848,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
 
 
 def _shut_dates(plan, st, prog):
-    """3.8.2: the dates the week offers Open now on although their day has
+    """3.8.1: the dates the week offers Open now on although their day has
     come: ones that opened here and have none of their cards open now
     (Edit › Undo closed them), and at my own pace, ones I haven't opened."""
     if not st or plan.get("paused"):
@@ -1119,7 +1119,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                 c["plans"] = state
                 _psave(c)
             send_ids()  # 3.3, C5: the plans I write
-            send_trees()  # 3.8.2: and their decks' tags, for the builder, when they changed
+            send_trees()  # 3.8.1: and their decks' tags, for the builder, when they changed
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
         if c.get("plans_day") == today:
@@ -1140,7 +1140,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
         c["plans"] = state
         c["plans_day"] = today
         _psave(c)
-        # 3.8.2: every other step the morning makes comes before what it opens, so
+        # 3.8.1: every other step the morning makes comes before what it opens, so
         # Anki's latest step is the open, and Not today can undo it
         if tidy_decks(mw.col):
             _after_change()
@@ -1211,7 +1211,7 @@ def midday(plan_list, toast=True):
                 new_here.append(p["id"])
     c["plans"] = state
     _psave(c)
-    held = hold_new([p for p in live if p["id"] not in new_here], state, today)  # 3.8.2: before what opens
+    held = hold_new([p for p in live if p["id"] not in new_here], state, today)  # 3.8.1: before what opens
     line = None
     if new_here:
         line = opened_line(_open_now([p for p in live if p["id"] in new_here], toast=toast))
@@ -1235,7 +1235,7 @@ def hold_new(plan_list, state, today, morning=False):
     """3.7.3: a follower who chose Hold back gets it for what an author adds to
     later dates too (that was their yes): those cards are suspended until
     their day, one undo step a plan. Never for anyone else. Returns how many.
-    3.8.2: the yes is `hold_yes` (Put back's cards are its own, `put_back`);
+    3.8.1: the yes is `hold_yes` (Put back's cards sit in `held` too, for Stop, but are never a yes);
     a card a date opened here is never held, nor one held or put back
     before and opened since by hand. morning: it runs before the morning's
     open, so what that opens (a date opening early, at my own pace the next
@@ -1276,9 +1276,9 @@ def hold_new(plan_list, state, today, morning=False):
 
 
 def _hold_yes(p, st):
-    """3.8.2: whether I said yes to Hold back for this plan (at Follow, or
+    """3.8.1: whether I said yes to Hold back for this plan (at Follow, or
     asked on first sight or when I went to my own pace): `hold_yes`. Until
-    3.8.2 any held card meant yes, and Put back kept its cards there too, so
+    3.8.1 any held card meant yes, and Put back kept its cards there too, so
     holding back turned on by itself. A state from then: a plan on its dates
     with held cards had said yes (Put back is only at my own pace); one at
     my own pace counts as no until asked again. Settled once, kept."""
@@ -1428,7 +1428,7 @@ def send_ids():
 
 
 def send_trees():
-    """3.8.2, main thread, at the same moment as send_ids: the tag and
+    """3.8.1, main thread, at the same moment as send_ids: the tag and
     subdeck tree of each deck a plan I write runs on (the deck named like
     the plan's) goes up for the builder, so its tag list keeps up without
     Make a plan from a deck. Each deck is read once an Anki day; its tree
@@ -2046,7 +2046,7 @@ def undo_morning(put_off_too=False):
         if put_off_too:
             for pid, uids in (opened.get("units") or {}).items():
                 if pid in state:
-                    # 3.8.2: at my own pace, each date back as it was (`was`)
+                    # 3.8.1: at my own pace, each date back as it was (`was`)
                     put_off(state[pid], uids, _today(), was=(opened.get("was") or {}).get(pid))
         else:
             for pid, uids in (opened.get("spread") or {}).items():
@@ -2224,7 +2224,7 @@ def _tag_search(col, deck_id, src, swap, cids):
 
 
 def open_date(pid, uid):
-    """G1: one date, now. 3.8.2: at my own pace, one I haven't opened opens
+    """G1: one date, now. 3.8.1: at my own pace, one I haven't opened opens
     as Up next's Open does (whole, first in line, counted as opened today,
     with its Undo); one I opened opens what an author added since."""
     p = next((x for x in followed() if x["id"] == pid), None)
@@ -2287,7 +2287,7 @@ def _was(st, uid):
 def open_next(pid, study=False, uid=None):
     """You › Plans, Open: the next date at my own pace opens now, first in
     Anki's line of new cards, as one undo step. Open and study: then a Due
-    Crew deck of its new cards, and into it. uid (3.8.2): that date
+    Crew deck of its new cards, and into it. uid (3.8.1): that date
     instead (the week's Open now)."""
     got = _own_ctx(pid)
     if not got:
@@ -2338,7 +2338,7 @@ def put_back_own(pid):
     """At my own pace, Put back: the last date I opened shuts again, only its
     cards I haven't seen (never a seen one, nor one another opened date
     has), as one undo step; it's Up next again. Stopping the plan opens them.
-    3.8.2: they join `held` (what Stop opens), but Put back isn't a yes to
+    3.8.1: they join `held` (what Stop opens), but Put back isn't a yes to
     Hold back: that's `hold_yes` now (before, any held card counted as one,
     and every later date's new cards were held each morning from then on)."""
     got = _own_ctx(pid)
@@ -2507,7 +2507,7 @@ def move_menu(pid, uid):
         return
     raw = _raw(pid) or {}
     have = int((raw.get("moved") or {}).get(uid) or 0)
-    ev = P.event_of(p["doc"], u)  # 3.8.2: by the event's id (its name never matched)
+    ev = P.event_of(p["doc"], u)  # 3.8.1: by the event's id (its name never matched)
     from aqt.qt import QCursor, QMenu
     menu = QMenu(mw)
     head = menu.addAction(f"Move {u.get('name') or 'this date'} to")
@@ -2629,7 +2629,7 @@ def back(pid):
         return
     today = _today()
     st = _state_cfg().get(pid)
-    # 3.8.2: at my own pace nothing opened by date while I was away: back without asking
+    # 3.8.1: at my own pace nothing opened by date while I was away: back without asking
     n_units, _n_cards = waiting(mw.col, mine(p), st, today) if st and not P.own_pace(p) else (0, 0)
     since = p.get("since") or today
     days = max(0, (S.d(today) - S.d(since)).days)
@@ -2856,7 +2856,7 @@ def set_catch(pid, mode):
     state = _state_cfg(c)
     if pid not in state:
         return
-    state[pid]["missed"] = {"mode": mode, "day": _today()}  # 3.8.2: its own key (`catch` is G5's catch-up)
+    state[pid]["missed"] = {"mode": mode, "day": _today()}  # 3.8.1: its own key (`catch` is G5's catch-up)
     c["plans"] = state
     _psave(c)
     refresh_progress()
@@ -3023,7 +3023,7 @@ def _resume(pid):
     if p is None or not mw.col:
         return
     if P.own_pace(p):
-        # 3.8.2: at my own pace no date waited for its day: nothing to ask (its "start
+        # 3.8.1: at my own pace no date waited for its day: nothing to ask (its "start
         # from the next date" skipped every passed date out of Up next); what an author
         # added to dates I opened opens, as a morning would
         _open_now([p])
@@ -3125,7 +3125,7 @@ def on_followed(plan, deck_id, swap, late, hold=False):
         state[plan["id"]] = new_state(mw.col, plan, deck_id, swap)
     kind, _, rest = str(late).partition(":")
     if hold and mw.col:
-        state[plan["id"]]["hold_yes"] = True  # 3.8.2: my yes, kept (hold_new holds what authors add later)
+        state[plan["id"]]["hold_yes"] = True  # 3.8.1: my yes, kept (hold_new holds what authors add later)
         idx = P.DeckIndex(mw.col, deck_id)
         # 3.7.6: from the beginning, "later dates" are my shifted ones
         hdoc = P.my_doc(plan["doc"], int(rest)) if kind == "begin" and rest.isdigit() else plan["doc"]
@@ -3210,7 +3210,7 @@ def site_base():
 def browser_menu(browser, menu):
     """gui_hooks.browser_will_show_context_menu: why a card isn't showing
     (3.8.0, signed in or not: it's Anki help); single cards onto a date.
-    3.8.2: the ones for writing a plan only for someone who writes one."""
+    3.8.1: the ones for writing a plan only for someone who writes one."""
     menu.addSeparator()
     from . import why_flow
     why = menu.addAction("Due Crew: why isn't it showing?")
@@ -3352,7 +3352,7 @@ def open_cards_now(cids, name, first=True, study=False):
 def _claim_opened(touched):
     """At my own pace, a date whose cards are all open now because Browse
     opened some of them (`touched`, what that open unsuspended; leeches
-    aside) counts as opened today, so Up next moves on. 3.8.2: only such a
+    aside) counts as opened today, so Up next moves on. 3.8.1: only such a
     date; before, every date already all open counted too, so on a deck
     whose cards were all active one open from Browse opened the whole plan."""
     touched = {int(x) for x in touched or ()}

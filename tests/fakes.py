@@ -1525,7 +1525,10 @@ class FakeWorker:
             # plans.ts mine: mine, co-authored, and followed while I can see them (FOLLOWED)
             ids = [pid for pid, p in self.plans.items()
                    if self._writes(p, me) or ((pid, me) in self.follows and self._sees(p, me))]
-            return 200, {"plans": [self._plan_view(pid, me) for pid in ids]}
+            out = [self._plan_view(pid, me) for pid in ids]
+            for v in out:  # plans.ts mine: json_remove(unit, '$.ids', '$.cards'), a lean list
+                v["doc"]["units"] = [{k: x for k, x in u.items() if k not in ("ids", "cards")} for u in v["doc"].get("units") or []]
+            return 200, {"plans": out}
         if rest == ["peek"] and method == "GET":
             code = self._norm(query.get("code"))
             pid = self._by_code(code) if len(code) == 8 else None

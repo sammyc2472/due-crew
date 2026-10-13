@@ -1045,6 +1045,14 @@ class ApiClient:
         status, _ = self._call("POST", f"/plans/{plan_id}/asks/{int(ask_id)}/helped", {"on": bool(on)})
         return status == 200
 
+    def plan(self, plan_id):
+        """3.8.1: one plan as its page has it, every field of its doc (/plans/mine
+        leaves a date's single cards and note ids out). Raises TransportError."""
+        status, data = self._call("GET", f"/plans/{plan_id}")
+        if status != 200:
+            raise TransportError(f"plan: {status}", status)
+        return clean_plan(data)
+
     def my_plans(self):
         """[plan]: the plans I wrote and the ones I follow. Raises TransportError."""
         status, data = self._call("GET", "/plans/mine")

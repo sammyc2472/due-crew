@@ -1,7 +1,9 @@
 """Export cards for my AI (3.6.5, P3): the notes a plan covers, in Anki's
 own plain-text format with each note's unique identifier, written to a
 file the person picks. The cards go to that file only: nothing is sent.
-One request, on a click: the plans I write (my_plans), for their docs."""
+One request, on a click: the plans I write (my_plans), for their docs;
+and (3.8.1) one more when I pick a plan I write but don't follow, for all
+of its doc (my_plans leaves a date's single cards out)."""
 
 import os
 import re
@@ -84,7 +86,7 @@ class ExportDialog(QDialog):
 
     def _mine(self, got):
         have = {p["id"] for p in self.plans}
-        self.plans += [p for p in got or [] if p.get("doc") and p["id"] not in have]
+        self.plans += [dict(p, _lean=True) for p in got or [] if p.get("doc") and p["id"] not in have]
         self._fill_plans()
         self._plan_changed()
 
@@ -92,8 +94,18 @@ class ExportDialog(QDialog):
         pid = self.plan.currentData()
         return next((p for p in self.plans if p["id"] == pid), None)
 
+    def _full(self, pid, got):
+        if not got or not got.get("doc"):
+            return
+        self.plans = [got if x["id"] == pid else x for x in self.plans]
+        if self.plan.currentData() == pid:
+            self._update()
+
     def _plan_changed(self, *_):
         p = self._current()
+        if p and p.get("_lean") and self.client is not None:
+            p["_lean"] = False  # once: its whole doc, for what its dates open
+            run_bg(self, lambda pid=p["id"]: self.client.plan(pid), lambda got, err, pid=p["id"]: self._full(pid, None if err else got))
         did = None
         if p:
             st = self.state.get(p["id"]) or {}

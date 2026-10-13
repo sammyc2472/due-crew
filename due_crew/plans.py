@@ -526,7 +526,7 @@ def tree_rows(idx):
 
 
 def tree_hash(deck, tags, decks):
-    """3.8.2: what a deck's tree was when this computer last sent it."""
+    """3.8.1: what a deck's tree was when this computer last sent it."""
     blob = json.dumps([str(deck), tags, decks], separators=(",", ":"))
     return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
@@ -771,7 +771,7 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
     done, open, later, or skip (`skipped`: [unit] from the plan itself,
     shown on the day they'd have opened). Rest: not one of the plan's
     study days and nothing opens. Numbers only; the board escapes names.
-    shut (3.8.2): the ids of dates that opened here and have none of their
+    shut (3.8.1): the ids of dates that opened here and have none of their
     cards open now (Edit › Undo), or at my own pace aren't opened yet:
     marked `shut`, so the day offers Open now."""
     prog = prog or {}
@@ -803,7 +803,7 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
             if not skip and state != "later" and u["id"] in shut:
-                rows[-1]["shut"] = True  # 3.8.2
+                rows[-1]["shut"] = True  # 3.8.1
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
                 rows[-1]["ld"] = list(ld[u["id"]])
                 rows[-1]["ask"] = load_ask(ld[u["id"]], d, today)
@@ -963,7 +963,7 @@ def holdable(idx, doc, today, swap=None, applied=None, own=False, kept=None):
     never held. A date already applied here (opened early, C2) counts as
     opened. What Follow offers to suspend, once, when asked. own (3.8.0,
     at my own pace): a date is opened only when I opened it, whatever its day.
-    kept (3.8.2): cards a date opened here (what it matched when it opened,
+    kept (3.8.1): cards a date opened here (what it matched when it opened,
     plan_flow._opened_cids): never held, even when the author has since
     moved one to a later date."""
     applied = applied or {}
@@ -1026,7 +1026,7 @@ def note_ids(idx, unit, plan=""):
 
 def _word(seg):
     """A tag part, readable: "05_Elimination_Kinetics" reads "Elimination
-    Kinetics", "#B&B" reads "B&B" (builder.js Tags.word, the order number off)."""
+    Kinetics", "#Videos" reads "Videos" (builder.js Tags.word, the order number off)."""
     s = re.sub(r"^[#^$!]+", "", str(seg))
     s = re.sub(r"(?i)^AK_", "", s)
     s = re.sub(r"(?i)_v\d+$", "", s)

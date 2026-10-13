@@ -1430,7 +1430,7 @@ def test_request_budget():
           and due_crew._wants_fetch(True, True, 0, False, fetch=True) is True)
     check("push on open: goes unless something already pushed; the open's fetch is not a push",
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
-    # 3.8.2: someone who writes a plan sends its deck's tree for the builder at the moment the
+    # 3.8.1: someone who writes a plan sends its deck's tree for the builder at the moment the
     # day's first refresh sends the plan's note ids: one PUT on a day its tags changed, none otherwise
     store.add_plan("sam", "Step 1", "Step 1", _plan_units())
     sam.fetch_board(labels, tomorrow, with_decks=True)
@@ -7156,7 +7156,7 @@ def test_insights_379():
     check("hero: not shown before the aim and under target, least likely first",
           T.hero({1: (0.95, False), 2: (0.5, False), 3: (0.6, True), 4: (0.7, False)}, 0.9) == [2, 4])
     check("source: the resource and the part above the topic",
-          T.source(["Big::#B&B::Basic_Pharmacology::General::Pharmacokinetics"]) == "B&B › General"
+          T.source(["Big::#Videos::Basic_Pharmacology::General::Pharmacokinetics"]) == "Videos › General"
           and T.source(["Big::#Video_Series::Renal"]) == "Video Series" and T.source(["Renal"]) == "")
     topics = [("renal", "Renal", [], ["t:r"], []), ("thin", "Thin", [], ["t:t"], [])]
     of = {"t:r": set(range(1, 31)), "t:t": set(range(40, 50))}
@@ -8802,9 +8802,9 @@ def test_plan_tags_round_two_v381():
           snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
 
 
-# ---------------------------------------------------------------- 3.8.2: the follower side of plans
+# ---------------------------------------------------------------- 3.8.1: the follower side of plans
 
-def _v382_world(units=None, events=None):
+def _v381_world(units=None, events=None):
     """A plan by Dre (_plan_units unless given) and Maya, who'll follow it."""
     store = world({"dre": "Dre", "maya": "Maya"})
     pid, code = store.add_plan("dre", "Step 1", "Step 1", units or _plan_units())
@@ -8844,8 +8844,8 @@ def _undo_here(F, col, fn):
             F.mw.undo = was
 
 
-def test_put_back_is_not_hold_back_v382():
-    """3.8.2: Put back (at my own pace) kept its cards in `held`, and the
+def test_put_back_is_not_hold_back_v381():
+    """3.8.1: Put back (at my own pace) kept its cards in `held`, and the
     morning read any held card as a yes to Hold back: from then on each date
     not opened yet had its new cards suspended. The yes is its own flag now
     (`hold_yes`: Follow's Hold back, or the question on first sight or on
@@ -8854,7 +8854,7 @@ def test_put_back_is_not_hold_back_v382():
     author moves it to a later date."""
     from due_crew import plans as P
     from due_crew import plan_flow as F
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (4, 6)")  # later dates' new cards, active
     with _PlanGlue({"A": maya}, {"A": col}) as g:
@@ -8888,11 +8888,11 @@ def test_put_back_is_not_hold_back_v382():
               9 not in _open(col) and 9 in F._state_cfg()[pid]["held"])
     a, b, c = {"held": [1]}, {"held": [1]}, {}
     ya, yb, yc = F._hold_yes({"own": ""}, a), F._hold_yes({"own": "ready"}, b), F._hold_yes({"own": ""}, c)
-    check("before 3.8.2: held cards on the plan's dates were a yes; at my own pace a no until asked; settled once",
+    check("before 3.8.1: held cards on the plan's dates were a yes; at my own pace a no until asked; settled once",
           ya is True and a["hold_yes"] is True and yb is False and b["hold_yes"] is False
           and yc is False and "hold_yes" not in c and F._hold_yes({"own": ""}, b) is False, (a, b, c))
 
-    store2, pid2, code2, kai = _v382_world()
+    store2, pid2, code2, kai = _v381_world()
     col2 = _plan_col()
     col2.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
     with _PlanGlue({"B": kai}, {"B": col2}):
@@ -8913,15 +8913,15 @@ def test_put_back_is_not_hold_back_v382():
               3 in bare and 3 in _open(col2) and 3 not in F._state_cfg()[pid2]["held"], (sorted(bare), sorted(_open(col2))))
 
 
-def test_own_pace_first_seen_v382():
-    """3.8.2: a plan at my own pace, first seen on this computer (followed on
+def test_own_pace_first_seen_v381():
+    """3.8.1: a plan at my own pace, first seen on this computer (followed on
     the site, or on another computer). The morning skipped every date before
     today, so each left Up next for good. At my own pace no date has passed:
     one whose cards are all open here counts as opened (of a day this
     computer doesn't know, so not in my pace), the rest stay Up next, and
     the hold-back question counts only those."""
     from due_crew import plans as P
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     # Extras opened on the other computer (AnkiWeb brought it); one of Heart failure's cards is active
     col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (1, 4)")
@@ -8946,13 +8946,13 @@ def test_own_pace_first_seen_v382():
               asked == [1], asked)
 
 
-def test_browse_open_claims_only_what_it_opened_v382():
-    """3.8.2: at my own pace, an open from Browse counted every Up next date
+def test_browse_open_claims_only_what_it_opened_v381():
+    """3.8.1: at my own pace, an open from Browse counted every Up next date
     whose cards were all open as opened today, so on a deck whose cards are
     all active one open emptied Up next. Now only a date the open touched,
     with a card shut before it, counts."""
     from due_crew import plans as P
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     col.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
     with _PlanGlue({"A": maya}, {"A": col}) as g:
@@ -8971,14 +8971,14 @@ def test_browse_open_claims_only_what_it_opened_v382():
               and [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ex", "cz", "rn"], str(st))
 
 
-def test_not_today_at_own_pace_v382():
-    """3.8.2: at my own pace, Not today after a morning took the date I had
+def test_not_today_at_own_pace_v381():
+    """3.8.1: at my own pace, Not today after a morning took the date I had
     opened out of `applied` (Up next again) and lost what the author had
     added (the own-pace morning ignored `later`). Now the date stays opened
     as it was and the addition opens tomorrow morning; a next date that
     opened by itself is Up next again till then."""
     from due_crew import plans as P
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     with _PlanGlue({"A": maya}, {"A": col}):
         from due_crew import plan_flow as F
@@ -9006,7 +9006,7 @@ def test_not_today_at_own_pace_v382():
         check("not today: tomorrow's morning opens it", tomorrow["n"] == 1 and 9 in _open(col)
               and not state[pid].get("later"), str(tomorrow))
 
-    store2, pid2, code2, kai = _v382_world()
+    store2, pid2, code2, kai = _v381_world()
     col2 = _plan_col()
     with _PlanGlue({"B": kai}, {"B": col2}):
         plan, _ = kai.follow_plan(code2, own="next")
@@ -9030,15 +9030,15 @@ def test_not_today_at_own_pace_v382():
               F.run(col2, F.followed(), state, _day(1))["names"] == ["Arrhythmia"] and 3 in _open(col2))
 
 
-def test_open_now_on_a_closed_date_v382():
-    """3.8.2: a date closed again with Edit › Undo stayed shut: Open now was
+def test_open_now_on_a_closed_date_v381():
+    """3.8.1: a date closed again with Edit › Undo stayed shut: Open now was
     only on dates still to come, and opening a date that had opened opened
     only what the author had changed since. Now the week offers Open now on
     a date that opened here and has none of its cards open, and it opens
     whole."""
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     with _PlanGlue({"A": maya}, {"A": col}):
         from due_crew import plan_flow as F
@@ -9059,11 +9059,11 @@ def test_open_now_on_a_closed_date_v382():
               and f"duecrew:plannow:{pid}:ar" not in view(), col.undo_status().undo)
 
 
-def test_morning_open_is_the_last_step_v382():
-    """3.8.2: the morning held back, set the catch-up's limit and built the
+def test_morning_open_is_the_last_step_v381():
+    """3.8.1: the morning held back, set the catch-up's limit and built the
     day's checkpoints after it opened, so the open wasn't Anki's latest
     step and Not today went missing. They come before it now."""
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
     with _PlanGlue({"A": maya}, {"A": col}) as g:
@@ -9094,13 +9094,13 @@ def test_morning_open_is_the_last_step_v382():
           and mid.index("hold_new(") < mid.index("_open_now("))
 
 
-def test_resume_at_own_pace_v382():
-    """3.8.2: ending a pause at my own pace asked about the plan's dates, and
+def test_resume_at_own_pace_v381():
+    """3.8.1: ending a pause at my own pace asked about the plan's dates, and
     "Start from the next date" turned my own pace off inside run and
     skipped every passed date out of Up next. At my own pace it resumes
     without asking."""
     from due_crew import plans as P
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     asked = []
     fakes_ui = {"due_crew.ui.days_dialog": types.SimpleNamespace(ask_back=lambda *a, **k: asked.append("back") or "push",
@@ -9137,13 +9137,13 @@ def test_resume_at_own_pace_v382():
                 sys.modules[k] = v
 
 
-def test_move_menu_names_the_event_v382():
-    """3.8.2: Move…'s days compared an event's name with a date's `for` (the
+def test_move_menu_names_the_event_v381():
+    """3.8.1: Move…'s days compared an event's name with a date's `for` (the
     event's id), so "after Cardio quiz" never showed."""
     from due_crew import plans as P
     units = _plan_units()
     units[1] = dict(units[1], **{"for": "q1"})
-    store, pid, code, maya = _v382_world(units=units, events=[{"id": "q1", "day": _day(2), "name": "Cardio quiz"}])
+    store, pid, code, maya = _v381_world(units=units, events=[{"id": "q1", "day": _day(2), "name": "Cardio quiz"}])
     doc = store.plans[pid]["doc"]
     check("event_of: by the event's id", P.event_of(doc, doc["units"][1])["name"] == "Cardio quiz"
           and P.event_of(doc, doc["units"][0]) is None)
@@ -9173,12 +9173,12 @@ def test_move_menu_names_the_event_v382():
           labels[1] == P.fmt_day(_day(1)) and labels[2] == f"{P.fmt_day(_day(2))} · after Cardio quiz", labels)
 
 
-def test_catch_has_one_shape_v382():
-    """3.8.2: a plan's `catch` was G5's catch-up {until, extra} and 3.2's
+def test_catch_has_one_shape_v381():
+    """3.8.1: a plan's `catch` was G5's catch-up {until, extra} and 3.2's
     missed-days answer {mode, day} both, so answering the question ended a
     running catch-up. The answer is `missed`; an old plans.json moves it."""
     from due_crew import plan_flow as F
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
         path = os.path.join(g.dirs["A"], "plans.json")
         with open(path, "w") as f:
@@ -9201,15 +9201,15 @@ def test_catch_has_one_shape_v382():
           and F._missed({"catch": {"until": "x", "extra": 1}}) == {})
 
 
-def test_week_open_now_at_own_pace_v382():
-    """3.8.2: at my own pace the week's Open now opened a date without
+def test_week_open_now_at_own_pace_v381():
+    """3.8.1: at my own pace the week's Open now opened a date without
     counting it as opened (not in my pace, not first in line, no Undo line),
     unlike Up next's Open. It's the same Open; a date I haven't opened
     whose day has passed offers it too, and one I opened opens what an
     author added since."""
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
-    store, pid, code, maya = _v382_world()
+    store, pid, code, maya = _v381_world()
     col = _plan_col()
     for cid, due in ((1, 50), (2, 51), (3, 52), (4, 53), (5, 54), (6, 55), (9, 56)):
         col.db.conn.execute("UPDATE cards SET due = ? WHERE id = ?", (due, cid))
@@ -9239,8 +9239,8 @@ def test_week_open_now_at_own_pace_v382():
               9 in _open(col) and F._state_cfg()[pid]["own_opened"] == {"ex": _day(0)})
 
 
-def test_plan_words_v382():
-    """3.8.2, one name per idea: Not today (the morning's line and an
+def test_plan_words_v381():
+    """3.8.1, one name per idea: Not today (the morning's line and an
     update's), Push my dates back (the missed-days line, Welcome back), "once
     I've seen most of the last" (90% of its open cards opens the next), Hold
     back's question at my own pace; Browse's items for writing a plan only
@@ -9300,8 +9300,8 @@ def test_plan_words_v382():
                                   "Due Crew: copy as plan selector", "Due Crew: export for my AI…"], (reader, writer))
 
 
-def test_builder_tags_keep_up_v382():
-    """3.8.2, Sam's pick "Keep the builder's tag list current": a deck's tag
+def test_builder_tags_keep_up_v381():
+    """3.8.1, Sam's pick "Keep the builder's tag list current": a deck's tag
     tree reached duecrew.com's builder only through Make a plan from a deck.
     Now, at the day's first refresh, each deck a plan I write runs on is
     read (once an Anki day) and its tree goes up only when it differs from
@@ -9373,6 +9373,26 @@ def test_builder_tags_keep_up_v382():
     tags, _decks = P.tree_rows(P.DeckIndex(col, 10))
     check("tree: a path the server won't take stays here", not any(len(t[0]) > 200 for t in tags)
           and any(t[0] == "Step1::Cardio" for t in tags), [t[0] for t in tags][:6])
+
+
+def test_export_reads_an_authored_plan_whole_v381():
+    """3.8.1 (found in the plans review): /plans/mine leaves a date's single
+    cards and note ids out, so Export cards for my AI, for a plan I write but
+    don't follow, asks for that plan whole (one request, on picking it)."""
+    store = world({"dre": "Dre"})
+    pid, _code = store.add_plan("dre", "Block 1", "Step 1", [
+        {"id": "hf", "name": "Heart failure", "opens": "2026-09-01", "tags": ["Step1::Cardio"], "decks": [],
+         "cards": [["guid000001", 0]]}])
+    dre = new_client(store, "dre", "Dre")
+    lean = dre.my_plans()[0]["doc"]["units"][0]
+    whole = dre.plan(pid)["doc"]["units"][0]
+    check("export: the plan list is lean (no single cards), as plans.ts mine; the plan itself is whole",
+          "cards" not in lean or not lean["cards"], lean)
+    check("export: ...and one GET /plans/{id} has them", whole.get("cards") == [["guid000001", 0]]
+          and store.log[-1] == ("GET", f"/plans/{pid}", 200), whole)
+    src = open(os.path.join(REPO, "due_crew", "ui", "export_dialog.py"), encoding="utf-8").read()
+    check("export: a plan from the list is fetched whole once, when picked",
+          'dict(p, _lean=True)' in src and 'self.client.plan(pid)' in src and 'p["_lean"] = False' in src)
 
 
 def test_plan_tags_builder_v381():

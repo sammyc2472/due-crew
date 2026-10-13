@@ -1528,7 +1528,7 @@ def _you_plans(plans, opened=None):
 
 def _opened_line(op):
     """3.8.0, from the plan's old Today box: what this morning opened, with
-    Not today (its undo; 3.8.2, the name the update line's has) while that's
+    Not today (its undo; 3.8.1, the name the update line's has) while that's
     still Anki's latest step."""
     n = int((op or {}).get("n") or 0)
     if not n:
@@ -2130,7 +2130,7 @@ def _week_html(card, pid):
                     acts = f'<a href="#" onclick="{_pycmd(f"planunskip:{pid}:{uid}")}">Undo skip</a>'
                     num = "skipped"
                 else:
-                    # 3.8.2: a date whose cards are all shut again (Edit › Undo), or at my
+                    # 3.8.1: a date whose cards are all shut again (Edit › Undo), or at my
                     # own pace not opened yet, opens from here as one on its day does
                     acts = (f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>' if u.get("shut") else "")
                     acts += (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
