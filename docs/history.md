@@ -1330,3 +1330,52 @@ every release that changes how something works.
   Split takes only a whole tag or subdeck; and a redraw keeps the page
   where it was (on a phone the day panel is under the calendar).
   No new request; the Worker changed (deploy it before the add-on).
+- 3.8.1, the plans review (the "Plans, Reviewed" page: four readers, every
+  finding checked in the code; Sam's calls). A follower's Anki: Hold back's
+  yes is its own flag (`hold_yes`); Put back's cards still sit in `held`
+  for Stop but are never a yes (one Put back used to hold every later
+  date's new cards each morning; a 3.8.0 state counts as a yes on the
+  plan's dates, a no at my own pace). A card a date opened is never held,
+  even after an author moves it. At my own pace: a plan first seen on a
+  computer counts its all-open dates as opened instead of skipping every
+  date that passed (`first_here`); an open from Browse claims only the
+  dates it opened (`_claim_opened(touched)`); Not today keeps the date
+  and opens the author's addition tomorrow; ending a pause doesn't ask;
+  the week's Open now is Up next's Open. The morning's Hold back, catch-up
+  and review-day steps come before its open, so Not today stays (the
+  catch-up's limit was an undo step of its own). A date shut with Edit ›
+  Undo offers Open now and opens whole. Move… names its event (by id). The
+  3.2 missed-days answer has its own key (`missed`). One name each: Not
+  today; Push my dates back; "once I've seen most of the last". Browse's
+  authoring items show only for someone who writes a plan. The deck's tag
+  tree goes up at the day's first refresh when it changed (`send_trees`,
+  `trees_sent`; one PUT a changed deck, `test_request_budget`), and the
+  builder says "Tags as of". Export cards for my AI asks for a plan I
+  write but don't follow whole (`api.plan`): /plans/mine leaves a date's
+  single cards out.
+  The Worker: a tag root past `_50` takes the plan's id; a site save keeps
+  a date's `ids` only while its tags, subdecks and cuts are the same; a
+  post sent with a save that changes nothing is written; the 20 follows
+  are those I can see (100 rows in all); each plan's totals (migration
+  0025) are read from its row and counted again when over an hour old, so
+  a board, the library and a link read one row, not every follower's (an
+  author's `reached` and Progress stay live); adding cards from Anki and
+  the ids upload have daily limits, and tagging counts the doc kept for
+  Undo; Undo survives the author's daily ids upload; the refresh stamp
+  covers plans I write and squad offers. The fake matches it.
+  duecrew.com: Fill to a date stops there (the pace rises up to about
+  double first, then it names what didn't fit); a new plan is named for
+  the deck's last part and says why it failed; History › Undo and every
+  save reload the pace; Edit the whole plan keeps a moved or renamed
+  date's id (followers keep their progress) and reads the part after the
+  date as its name; a plan tag's × names its dates first; the server's
+  limits are said where they're hit, each refusal in its own words;
+  Starts moves review days, events and the end; Move this day merges
+  everything; failures say so. Undo (20 steps, Ctrl/Cmd+Z), Follow on a
+  plan's link page, "Tags as of". Words: the day panel's refresh line,
+  "one of my squads", neutral examples beside the med ones, a review
+  day's deck, Progress per date from three in the squad.
+  Docs: `docs/plans.md` (how plans work now), duecrew.com/plan-text (the
+  text format, linked from the Format box and both prompts), three
+  README lines, a date's id fields in the Worker README; no third-party
+  deck named in the design notes, the click-test or the preview's data.

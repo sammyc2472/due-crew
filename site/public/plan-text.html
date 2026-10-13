@@ -55,7 +55,7 @@
   <p class="lede">What a plan's Text tab reads: one line a date, an event or one of the plan's own tags. For you, and for an AI drafting a plan with you.</p>
   <nav><a href="#dates">Dates</a><a href="#events">Events</a><a href="#tags">The plan's tags</a><a href="#notes">Notes to yourself</a><a href="#rules">Rules</a><a href="#where">Where it goes</a></nav>
 
-  <p>Each line is parts split by <code>|</code>. Anything on a line that starts with <code>#</code> is shown with the plan, never imported.</p>
+  <p>Each line is parts split by <code>|</code> (two or more spaces work too). Blank lines and a leading <code>-</code>, <code>*</code> or <code>•</code> are fine. A line that starts with <code>#</code> is shown with the plan, never imported.</p>
   <pre>2026-10-05 | Microcytic anemias | tag:Heme::Red_cells::Microcytic
 2026-10-06 | Unit 3: la familia | deck:Spanish 1::Unit 3 | watch: Unit 3 video https://example.com/u3
 2026-10-09 | event | Heme quiz</pre>
@@ -64,7 +64,7 @@
   <p>A date opens its cards on that morning, for everyone following. The first part is when; the second is its name; the rest say what it opens and how.</p>
   <div class="wrap"><table class="parts">
     <tr><td><code>2026-10-05</code> or <code>week 3</code></td><td>The day it opens. <code>week 3</code> is the Monday of the plan's third week.</td></tr>
-    <tr><td>a name</td><td>Up to 60 characters. Leave it empty (<code>2026-10-05 | | tag:…</code>) and it's named from what it opens.</td></tr>
+    <tr><td>a name</td><td>The part right after the date, up to 60 characters, whatever it says ("Read: Chapter 3" is a name). Leave it empty (<code>2026-10-05 | | tag:…</code>) and it's named from what it opens.</td></tr>
     <tr><td><code>tag:FULL::TAG::PATH</code></td><td>Every card under that tag of the deck. Several, comma-separated: <code>tag:A, tag:B</code>.</td></tr>
     <tr><td><code>deck:FULL::DECK::PATH</code></td><td>Every card in that subdeck.</td></tr>
     <tr><td><code>tag:SLG 12</code></td><td>One of the plan's own tags, by its name (no <code>::</code>).</td></tr>
@@ -73,6 +73,7 @@
     <tr><td><code>notes:ID ID</code></td><td>Exact notes, every card of each. IDs are the <code>#guid</code> column of Tools › Due Crew › Export cards for my AI, separated by spaces.</td></tr>
     <tr><td><code>cards:ID:2 ID:1</code></td><td>Exact cards: card N of each note (1 is the first; for a cloze, its number). The export's <code>#cards</code> column lists each note's.</td></tr>
     <tr><td><code>nids:</code>, <code>cids:</code></td><td>Anki's own numbers, from one copy of the deck. They work for others only once the author's Anki has turned them into notes (after you save and open Anki).</td></tr>
+    <tr><td><code>12 single cards</code></td><td>Written by the plan's own text: keeps the date's single cards as they are.</td></tr>
     <tr><td><code>due 2026-10-09</code></td><td>By when it's meant to be done (otherwise: before the next date opens).</td></tr>
     <tr><td><code>even</code></td><td>Spread its cards evenly from its day to its due date.</td></tr>
     <tr><td><code>for Heme quiz</code></td><td>The event it preps for, named as on its event line.</td></tr>
@@ -107,14 +108,14 @@ tag | Unit 3 | deck:Spanish 1::Unit 3 | search:tag:Vocab -tag:Review</pre>
   <ul>
     <li>Copy tags, subdecks and IDs exactly; never invent one. A tag or subdeck your deck doesn't have is named before anything is saved.</li>
     <li>A search never uses <code>deck:current</code>, <code>is:due</code>, <code>is:new</code>, <code>is:learn</code>, <code>is:review</code>, <code>is:suspended</code>, <code>is:buried</code>, <code>rated:</code>, <code>prop:</code>, <code>introduced:</code>, <code>added:</code>, <code>edited:</code>, <code>resched:</code>, <code>flag:</code>, <code>nid:</code> or <code>cid:</code>: they find different cards for each person.</li>
-    <li>Up to 5,000 IDs on a line, 200 dates and 200 events a plan, 50,000 single cards in all.</li>
+    <li>A date holds up to 10 searches (with the <code>in</code> ones), 50 tags, 50 subdecks and 5,000 IDs of each kind. A plan holds 200 dates, 200 events and 50,000 single cards.</li>
     <li>Card text never goes in a plan: only tags, names and IDs. Each person's Anki finds the cards in its own copy.</li>
   </ul>
 
   <h2 id="where">Where it goes</h2>
   <ul>
     <li><b>Add dates</b> adds: a line with the same day and name as a date already there adds to it. Tag lines add to the plan's tags.</li>
-    <li><b>Edit the whole plan</b> replaces the plan's dates, events and tags with the text. A tag it leaves out goes; the preview names the dates still using it, and offers to take it off them too or keep it. A date whose name or day you change keeps its place when it's the only match. What a date already opened stays open.</li>
+    <li><b>Edit the whole plan</b> replaces the plan's dates, events and tags with the text. A line with a date's day and name is that date; otherwise the one date with that name on another day is that date moved, and the one date that day with the same tags is that date renamed, so followers keep their progress on it. A tag the text leaves out goes; the preview names the dates still using it, and offers to take it off them too or keep it. What a date already opened stays open.</li>
     <li>Edit the whole plan doesn't carry the weekly lines, review days, catch-up weeks or the pace: those stay as they are.</li>
     <li>Read it shows what the text does before anything changes; Save keeps it.</li>
   </ul>

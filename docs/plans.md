@@ -76,8 +76,12 @@ lists every key. The ones that matter most: `deck_id` and `swap` (which
 deck runs the plan here, and tag renames), `applied` (each date's
 signature when it opened here, or `skip:` + signature), `src` (what each
 opened date matched, so an update opens just what it adds), `held`
-(cards Hold back shut), `later` (dates put off to a later morning),
-`own_opened`, `catch`, and the plan tags this computer wrote.
+(every card the plan shut here when asked: Hold back's and Put back's,
+which Stop following opens), `hold_yes` (I said yes to Hold back; Put
+back never sets it), `later` (dates put off to a later morning),
+`own_opened`, `catch` (a catch-up's extra), `missed` (a 3.2 schedule's
+missed-days answer), and the plan tags this computer wrote. Per profile,
+`trees_sent` (what this computer last sent of each authored deck's tags).
 
 ## The morning
 
@@ -86,15 +90,17 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
 
 1. A plan new on this computer (followed on the site or another
    computer) gets its state; on the plan's dates, dates that passed are
-   marked as done there (they came with the sync); at my own pace,
-   nothing is skipped.
+   marked as done there (they came with the sync); at my own pace, a date
+   whose cards are all open here counts as opened, and the rest stay Up
+   next.
 2. Tidy: Due Crew's empty filtered decks go.
 3. Plan tags go on (or come off) notes, mine and, for plans I write,
    the author's own (`apply_tags`, `apply_authored_tags`).
-4. Hold back (only for someone who said yes) shuts what an author added
-   to later dates; a catch-up sets today's limit; review days build their
-   deck. These run before the open, so the open is Anki's latest step and
-   Not today can undo it.
+4. Hold back (only for someone who said yes, `hold_yes`) shuts what an
+   author added to later dates, never a card a date opened here; a
+   catch-up sets today's limit; review days build their deck. These run
+   before the open, so the open is Anki's latest step and Not today can
+   undo it.
 5. Open: for each plan, what's due by my dates (`run`), in one undo
    step: a date opens its cards, never a leech, never shuts one again.
    A date whose plan changed since it opened opens just what the change
@@ -105,18 +111,21 @@ Once per Anki day, on the Decks screen, after AnkiWeb's sync
    Hold back question.
 
 The line under the board says what opened, with Not today (Anki's undo,
-then those dates open tomorrow morning) while it's still Anki's latest
-step. An author's update that arrives later in the day is asked, not
-opened (`midday`).
+then those dates open tomorrow morning; at my own pace the date stays
+opened and only the author's addition waits) while it's still Anki's
+latest step. An author's update that arrives later in the day is asked,
+not opened (`midday`). A date closed with Edit › Undo offers Open now,
+which opens it whole.
 
 ## What the author's Anki sends
 
 On the day's first refresh, for each plan I write or co-author whose
 deck I have (by its name): the note ids behind each date (`PUT
 /plans/{id}/ids`: `ids`, `idr`, counts), only when they changed; the
-deck's tag tree, only when it changed (`PUT /plans/trees`; the builder
-shows its date); and the plan's own tags go on my notes. Make a plan
-from a deck sends the tree at once.
+deck's tag tree, only when it changed (`send_trees`, `PUT /plans/trees`;
+the builder says "Tags as of" its date); and the plan's own tags go on
+my notes. Make a plan from a deck sends the tree at once. A tag change
+made later in the day reaches the builder the next day.
 
 ## Older add-ons and newer fields
 
@@ -128,6 +137,9 @@ usable without it:
   same cards by the search.
 - 3.8.1 single cards in a plan tag: an older add-on leaves them out, and
   doesn't see a tag made only of single cards.
+- 3.8.1 `hold_yes`: a 3.8.0 state with held cards counts as a yes on the
+  plan's dates and a no at my own pace (Put back put cards there too),
+  settled once.
 - 3.8.0 plan tags: before 3.8.0 a date using one finds nothing until the
   author's ids (`ids`) are there; then it falls back to them.
 
