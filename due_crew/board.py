@@ -3446,6 +3446,9 @@ FIND_WORDS = {
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
     "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
     "setreset": "default", "friends": "crew code invite", "decks": "share deck",
+    # 3.8.1: the Fifteen and Sev
+    "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
+    "set:sev_break:": "breathe stretch rest",
 }
 
 

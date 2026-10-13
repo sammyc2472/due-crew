@@ -1546,4 +1546,7 @@ every release that changes how something works.
   both from one (`test_top_bar_is_our_page_v381`); nothing had sent from
   the top bar as Anki tags it, which is how the suite missed it. Also: rooms.py
   asks one clock (`rooms._now`) whether a room is over, so the suite's
-  fixed clock holds on any real date.
+  fixed clock holds on any real date. Find a setting knows the new rows
+  by other words too (timer, pomodoro, mascot, stretch: `FIND_WORDS`),
+  and `tools/motion_preview.py` plays Sev's moments by the logo and the
+  session's line.

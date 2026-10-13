@@ -12351,6 +12351,11 @@ def test_fifteen_board_v381():
     st = board.settings_html({"tab": "board"}, {})
     check("Settings: Fifteen? in the top bar, Sev, and the break's Breathe or Stretch",
           "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
+    ix = board.settings_index({"tab": "board"}, {})
+    hit = lambda word: {r["f"] for r in ix if word in r["k"].split()}
+    check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Sev, stretch finds the break",
+          "set:fifteen:" in hit("timer") and "set:fifteen:" in hit("pomodoro") and "set:sev:" in hit("mascot")
+          and "set:sev_break:" in hit("stretch"), (hit("timer"), hit("mascot"), hit("stretch")))
     check("…and what a click there saves", SM.change(["set", "sev", "0"], {}) == {"sev": False}
           and SM.change(["set", "sev_break", "stretch"], {}) == {"sev_break": "stretch"}
           and SM.change(["set", "sev_break", "dance"], {}) is None and SM.change(["set", "fifteen", "0"], {}) == {"fifteen": False})
