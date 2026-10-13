@@ -2261,12 +2261,12 @@ def _why_shut(pid, uid, why):
 
 def _day_line(d):
     """3.8.1, shared and mine: a day's details say what the plan opens that
-    day apart from my own load ("opens 120 new · you: 300 reviews due");
+    day apart from my own load ("opens 120 cards · you: 300 reviews due");
     today and ahead only."""
     if d.get("past"):
         return ""
     new, mine = int(d.get("new") or 0), int(d.get("mine") or 0)
-    bits = ([f"opens {new:,} new"] if new else []) + (
+    bits = ([f"opens {new:,} card{'s' if new != 1 else ''}"] if new else []) + (  # every card its dates match, not only new ones
         [f"you: {mine:,} review{'s' if mine != 1 else ''} due"] if mine else [])
     return f'<span class="pdl">{" &middot; ".join(bits)}</span>' if bits else ""
 

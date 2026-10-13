@@ -9972,7 +9972,7 @@ def test_plan_invites_v381():
         dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
         sent = [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"]
         check("invites: Yes is one request; I co-write it now (Browse's items, its tags), and the line goes",
-              len(store.log) == n + 1 and sent == [{"yes": True}] and "sam" in store.plans[pid].get("editors", [])
+              len(store.log) == n + 1 and sent == [{"yes": True, "kind": "coauthor"}] and "sam" in store.plans[pid].get("editors", [])
               and not sam.session["plan_invites"] and any(a["id"] == pid for a in sam.session["plans_authored"])
               and g.toasts[-1] == "You co-write Block &lt;1&gt; now.", g.toasts)
         st, _d = dre._call("POST", f"/plans/{pid}/owner", {"uid": "sam"})
@@ -9985,7 +9985,7 @@ def test_plan_invites_v381():
         dc._on_js(False, f"duecrew:planinvite:{pid}:no", DeckBrowser())
         check("hand-over: No keeps it where it was; the line goes",
               store.plans[pid]["owner"] == "dre" and not sam.session["plan_invites"]
-              and [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"][-1] == {"yes": False})
+              and [b for m, p, b in store.bodies if p == f"/plans/{pid}/invite"][-1] == {"yes": False, "kind": "owner"})
         sam.session["plan_invites"] = inv2  # as if the board still showed it: the owner took it back meanwhile
         dc._on_js(False, f"duecrew:planinvite:{pid}:yes", DeckBrowser())
         check("invites: one taken back meanwhile says so, and goes", not sam.session["plan_invites"]
@@ -10361,6 +10361,11 @@ def test_held_back_sheet_v381():
         check("held back: by date, with its day, and why; a leech stays shut, said apart",
               v["n"] == 1 and v["lines"] == [f"Cloze two · {P_fmt(_day(7))} · 1"]
               and v["holding"] and "till their day" in v["why"] and v["leeches"] == 1 and F.held_count(pid) == 1, str(v))
+        st = F._state_cfg()[pid]
+        st["applied"]["cz"] = "opened-here"  # as if Cloze two's date had opened and I suspended its card myself
+        check("held back: a card on a date that opened here isn't the plan's to show or open (the review)",
+              F.held_view(pid)["n"] == 0 and F.held_count(pid) == 0)
+        del st["applied"]["cz"]
         F.show_held(pid, ask=lambda view: "open")
         st = F._state_cfg()[pid]
         check("held back, Open them: one undo step; the leech stays shut; Hold back stays on",
@@ -10584,7 +10589,7 @@ def test_shared_and_mine_v381():
         check("mine: today and the days ahead carry my reviews due, past days don't",
               by[_day(0)].get("mine") == 3 and by.get(_day(2), {}).get("mine", 1) == 1
               and all("mine" not in d for d in v["week"] if d["day"] < _day(0)), str([(d["day"], d.get("mine")) for d in v["week"]]))
-        check("mine: the day line, the plan's then mine", "opens 1 new &middot; you: 3 reviews due" in h, h[-3000:])
+        check("mine: the day line, the plan's then mine (cards: every card its dates match)", "opens 1 card &middot; you: 3 reviews due" in h, h[-3000:])
         _state["due_reviews"] = (0, {"due": 7})
         try:
             v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
@@ -10857,8 +10862,8 @@ def test_plans_round_three_site_v381():
     check("r3 site: Home's invite lines, as the add-on's board says them, above the plans",
           '" asked you to co-write "' in inv and '". Its tags would go on your notes in Anki."' in inv and '" offered you "' in inv
           and '" to keep."' in inv and "b.planInvites" in inv and app.count("planInvites(),") == 2)
-    check("r3 site: Yes and No are one request each, POST /plans/{id}/invite {yes}",
-          inv.count("api(") == 1 and 'api("POST", `/plans/${x.id}/invite`, { yes })' in inv
+    check("r3 site: Yes and No are one request each, POST /plans/{id}/invite {yes, kind}",
+          inv.count("api(") == 1 and 'api("POST", `/plans/${x.id}/invite`, { yes, ...(x.kind === "coauthor" || x.kind === "owner" ? { kind: x.kind } : {}) })' in inv
           and '"Yes"' in inv and '"No"' in inv and "Open it ›" in inv)
     # 2: where to get the deck
     deck_link = re.search(r"const deckLink = \(u\) => typeof u === \"string\" && u.length <= 300 && /(.*?)/\.test\(u\);", app)

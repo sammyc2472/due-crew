@@ -13,7 +13,7 @@ import * as P from "./plans";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
-export const LISTED_MAX = 20;  // plans one person keeps in the library
+export const LISTED_MAX = P.LISTED_MAX;  // plans one person keeps in the library (a hand-over checks it too)
 const PAGE = 24;
 const PAGES_MAX = 20;
 const Q_MAX = 60;

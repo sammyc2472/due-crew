@@ -1042,7 +1042,10 @@ class ApiClient:
         keep one handed to me. On the server's word the invite goes from the
         session; a yes writes the plan with me from now (the next board says so
         too). (plan, status): 404 when the invite was taken back meanwhile."""
-        status, data = self._call("POST", f"/plans/{plan_id}/invite", {"yes": bool(yes)}, retry=False)
+        # the question it answers, as the board showed it: a stale "co-write?" Yes never takes the plan
+        kind = next((x.get("kind") for x in self.session.get("plan_invites") or [] if x.get("id") == plan_id), None)
+        body = {"yes": bool(yes), **({"kind": kind} if kind in ("coauthor", "owner") else {})}
+        status, data = self._call("POST", f"/plans/{plan_id}/invite", body, retry=False)
         if status in (200, 404):
             self.session["plan_invites"] = [x for x in self.session.get("plan_invites") or [] if x.get("id") != plan_id]
             got = clean_plan(data) if status == 200 else None

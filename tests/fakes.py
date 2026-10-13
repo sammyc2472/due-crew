@@ -313,7 +313,7 @@ def _card_ref(v):
 
 
 # 3.8.1 (plans.ts): where to get the deck, the authors' notes (remarks), a date's picks named (pl)
-DECK_URL_RE = re.compile(r"https://[^\s\"'<>/\x00-\x1f\x7f][^\s\"'<>\x00-\x1f\x7f]*")
+DECK_URL_RE = re.compile(r"https://[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*")  # plans.ts DECK_URL: printable ASCII, no space, quotes or <>
 UNIT_ID_RE = re.compile(r"[a-z0-9]{1,12}")
 
 
@@ -1710,18 +1710,22 @@ class FakeWorker:
                 self._count("plans")
             return 200, self._plan_view(pid, me)
         if rest[1:] == ["invite"] and method == "POST":  # 3.8.1: plans.ts answerInvite
-            if set(body) != {"yes"} or not isinstance(body.get("yes"), bool):
+            kind = body.get("kind")  # which question it answers, as the board showed it
+            if not set(body) <= {"yes", "kind"} or not isinstance(body.get("yes"), bool) or kind not in (None, "coauthor", "owner"):
                 raise Bad(400, "bad_invite")
             eds, asked = set(p.get("editors") or ()), p.setdefault("invited", {})
-            if me in eds and p.get("handover") == me and p["owner"]:
+            if kind != "coauthor" and me in eds and p.get("handover") == me and p["owner"]:
                 if body["yes"]:  # mine now; its owner a co-author; code, tag root, followers stay
                     if sum(1 for q in self.plans.values() if q["owner"] == me) >= 50:
                         raise Bad(409, "too_many_plans")
+                    if p.get("listed") and sum(1 for q in self.plans.values() if q["owner"] == me and q.get("listed")) >= 20:
+                        raise Bad(409, "too_many_listed")
                     p["editors"] = (eds - {me}) | {p["owner"]}
                     p["owner"] = me
+                    p["invited"] = {}  # the old owner's invites go with them
                 p["handover"] = None
                 self._count("plans")
-            elif me in asked:
+            elif kind != "owner" and me in asked:
                 del asked[me]
                 if body["yes"]:
                     p["editors"] = eds | {me}

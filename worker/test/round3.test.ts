@@ -166,7 +166,8 @@ describe("3.8.1: handing a plan over", () => {
     const yes = await maya.call("POST", `/plans/${p.id}/invite`, { yes: true });
     expect(yes.status).toBe(200);
     expect(yes.body).toMatchObject({ role: "owner", owner: "maya", ownerName: "Maya", code: p.code, followers: 1 });
-    expect(yes.body.editors.map((e: any) => [e.uid, !!e.pending]).sort()).toEqual([["dre", false], ["kai", true]]);
+    // the invite the old owner sent goes with them (Kai is Dre's crew, not Maya's)
+    expect(yes.body.editors.map((e: any) => [e.uid, !!e.pending]).sort()).toEqual([["dre", false]]);
     expect(yes.body.handover).toBeUndefined();
     expect(yes.body.doc.tagroot).toBe(before.doc.tagroot);
     expect((await board(maya)).planInvites).toEqual([]);
@@ -176,8 +177,7 @@ describe("3.8.1: handing a plan over", () => {
     expect(await dre.status("PUT", `/plans/${p.id}`, { version: dreView.version, name: "Block 1" })).toBe(200);
     expect(await dre.status("DELETE", `/plans/${p.id}`)).toBe(403);
     expect(await dre.status("POST", `/plans/${p.id}/owner`, { uid: "dre" })).toBe(403);
-    // the invite the old owner sent stands, now from its new owner
-    expect((await board(kai)).planInvites[0].by.name).toBe("Maya");
+    expect((await board(kai)).planInvites).toEqual([]);
     // the follower's plan is the same plan, its new owner's name on it
     const followed = (await board(nia)).plans.find((x: any) => x.id === p.id);
     expect(followed).toMatchObject({ ownerName: "Maya", owner: "maya" });

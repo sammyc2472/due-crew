@@ -644,7 +644,7 @@ def _own_tags(doc):
     return {"tagroot": root, **({"tags": tags} if tags else {})}
 
 
-_DECK_URL = re.compile(r"https://[^\s\"'<>]{1,292}")
+_DECK_URL = re.compile(r"https://[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]{0,291}")  # the Worker's rule (plans.ts DECK_URL)
 
 
 def _clean_remarks(v):

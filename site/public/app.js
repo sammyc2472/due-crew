@@ -90,7 +90,7 @@ const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
 const uid8 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 /** 3.8.1: a plan's "where to get the deck" (doc.deckUrl), as plans.ts takes it (DECK_URL):
  *  https://, no spaces, quotes or angle brackets, 300 characters at most. Anything else is never a link here. */
-const deckLink = (u) => typeof u === "string" && u.length <= 300 && /^https:\/\/[^\s"'<>/\u0000-\u001f\u007f][^\s"'<>\u0000-\u001f\u007f]*$/.test(u);
+const deckLink = (u) => typeof u === "string" && u.length <= 300 && /^https:\/\/[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*$/.test(u);
 
 async function copy(text, btn) {
   try {
@@ -1336,7 +1336,7 @@ async function home() {
       const st = h("span", { class: "status small", role: "status" });
       const answer = async (yes, btn) => {
         btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = true; });
-        try { await api("POST", `/plans/${x.id}/invite`, { yes }); }
+        try { await api("POST", `/plans/${x.id}/invite`, { yes, ...(x.kind === "coauthor" || x.kind === "owner" ? { kind: x.kind } : {}) }); }
         catch (err) {
           btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = false; });
           st.className = "status bad small"; st.textContent = err.body?.error === "no_invite" ? "That invite isn't there any more." : "That didn't work. Try again.";

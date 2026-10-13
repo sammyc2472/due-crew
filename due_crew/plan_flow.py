@@ -1649,9 +1649,9 @@ def study_quiz(pid, eid):
     ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
     if not ev:
         return
-    cids = set()
-    for u in P.units(doc):
-        if u.get("for") == eid and not P.reinforces(doc, u):
+    cids, today = set(), _today()
+    for u in P.units(doc):  # the dates its line counts (P.quiz): prep dates open by today, not one after it
+        if u.get("for") == eid and not P.reinforces(doc, u) and str(u.get("opens") or "9999") <= today:
             cids |= idx.match(u, _swap(st), doc)
     cids = P.study_cards(idx, cids)
     if not cids:
@@ -3387,9 +3387,21 @@ HELD_LINES = 8  # dates the Held back sheet names
 def held_count(pid):
     """How many cards this plan holds shut here now that Open them would open
     (Hold back's, Put back's; a leech never opens): the plan's ··· menu says
-    it. One query a 500."""
-    held = _shut_by_plan(_state_cfg().get(pid))
-    return len(P.openable_ids(mw.col, held)) if held and mw.col else 0
+    it, the same number as its sheet."""
+    v = held_view(pid) if mw.col else None
+    return int(v["n"]) if v else 0
+
+
+def _held_now(st, doc, idx):
+    """3.8.1: the cards the plan holds shut here now: in `held`, suspended, and
+    on no date that opened here (a card I suspended myself after its date
+    opened isn't the plan's to show or open)."""
+    shut = {c for c in _shut_by_plan(st) if c in idx.cards and idx.cards[c][0] == -1}
+    opened = {k for k, v in (st.get("applied") or {}).items() if not str(v).startswith("skip:")} | set(st.get("own_opened") or {})
+    for u in P.units(doc):
+        if u["id"] in opened and shut:
+            shut -= idx.match(u, _swap(st), doc)
+    return shut
 
 
 def held_view(pid):
@@ -3401,7 +3413,7 @@ def held_view(pid):
     if not got:
         return None
     p, st, doc, idx = got
-    shut = {c for c in _shut_by_plan(st) if c in idx.cards and idx.cards[c][0] == -1}
+    shut = _held_now(st, doc, idx)
     held = shut - idx.leech
     own, holding = P.own_pace(p), _hold_yes(p, st)
     lines = []
@@ -3444,8 +3456,8 @@ def open_held(pid, stop=False):
     got = _plan_idx(pid)
     if not got:
         return
-    p, st, _doc, idx = got
-    held = [c for c in _shut_by_plan(st) if c in idx.cards and idx.cards[c][0] == -1]
+    p, st, doc, idx = got
+    held = sorted(_held_now(st, doc, idx))
     name = p.get("name") or "plan"
     n = P.open_cards(mw.col, held, f"Due Crew: open what {name} held back") if held else 0
     if stop:

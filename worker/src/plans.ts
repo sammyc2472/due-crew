@@ -65,7 +65,8 @@ const TAG_ROOT_MAX = 60;
 // 3.8.1: where to get the deck (a link), and the authors' notes on a tag or
 // a card (`remarks`), riding the doc: words and a link, never card text
 const DECK_URL_MAX = 300;
-const DECK_URL = /^https:\/\/[^\s"'<>\/\u0000-\u001f\u007f][^\s"'<>\u0000-\u001f\u007f]*$/;
+// printable ASCII only (no space, quotes or <>): no control or direction-flipping character a link could hide behind
+const DECK_URL = /^https:\/\/[\x21\x23-\x26\x28-\x2e\x30-\x3b\x3d\x3f-\x7e][\x21\x23-\x26\x28-\x3b\x3d\x3f-\x7e]*$/;
 const REMARKS_MAX = 300;
 const REMARK_TEXT_MAX = 280;
 const LABELS_MAX = 3;  // 3.8.1: the deck tags a date's picked cards sit under (`pl`)
@@ -1183,6 +1184,8 @@ export async function undo(req: Request, s: Session, env: Env, [id]: string[]): 
  *  plan's EDITORS_MAX. Asking a co-author again changes nothing. */
 export async function addEditor(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await ownerOnly(env, id, s);
+  // 3.8.1: an invite moves its invitee's stamp (their next refresh brings every plan again): a ceiling
+  await limitOrThrow(env, `planinvite:${s.uid}`, 30, 86400);
   const body = await readJson(req);
   if (!V.isStr(body.uid, 128, 1) || body.uid === s.uid) throw V.bad("editor");
   const mutual = await env.DB.prepare(
@@ -1213,36 +1216,52 @@ export async function removeEditor(s: Session, env: Env, [id, uid]: string[]): P
  *  theirs when they say yes (POST /plans/{id}/invite). */
 export async function offerPlan(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await ownerOnly(env, id, s);
+  await limitOrThrow(env, `planinvite:${s.uid}`, 30, 86400);  // as an invite: it moves its co-author's stamp
   const body = await readJson(req);
   if (Object.keys(body).some((k) => k !== "uid") || !("uid" in body)) throw V.bad("owner");
   const to = body.uid;
   if (to !== null && !V.isStr(to, 128, 1)) throw V.bad("owner");
   if (to !== null && !(await isEditor(env, id, to as string))) throw new HttpError(400, "not_coauthor");
   if ((to ?? null) !== (p.handover ?? null)) {
-    await env.DB.prepare("UPDATE plans SET handover = ? WHERE id = ? AND owner = ?").bind(to, id, s.uid).run();
+    // still a co-author who said yes as it's written (one who left meanwhile is offered nothing)
+    await env.DB.prepare(`UPDATE plans SET handover = ?1 WHERE id = ?2 AND owner = ?3
+        AND (?1 IS NULL OR EXISTS (SELECT 1 FROM plan_editors WHERE plan = ?2 AND uid = ?1 AND accepted_at IS NOT NULL))`)
+      .bind(to, id, s.uid).run();
   }
   return json(await view(env, await getPlan(env, id), s.uid));
 }
 
-/** POST /plans/{id}/invite {yes}: 3.8.1, the invitee's answer. To an invite
+export const LISTED_MAX = 20;  // plans one person keeps in the library (library.ts)
+
+/** POST /plans/{id}/invite {yes, kind?}: 3.8.1, the invitee's answer (kind, as the board
+ *  showed it: "coauthor" or "owner", so a stale answer never answers the other). To an invite
  *  to co-write it: yes makes me a co-author, no takes the invite away. To the
  *  plan offered to me (I co-write it): yes makes it mine, and its owner a
  *  co-author (its code, tag root and followers stay); no leaves it theirs.
  *  404 no_invite when there's neither. */
 export async function answerInvite(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const body = await readJson(req);
-  if (typeof body.yes !== "boolean" || Object.keys(body).some((k) => k !== "yes")) throw V.bad("invite");
+  if (typeof body.yes !== "boolean" || Object.keys(body).some((k) => k !== "yes" && k !== "kind")) throw V.bad("invite");
+  // which question this answers (as the board showed it): a stale "co-write?" Yes never takes the plan
+  const kind = body.kind;
+  if (kind !== undefined && kind !== "coauthor" && kind !== "owner") throw V.bad("invite");
   const p = await getPlan(env, id);
   const row = await env.DB.prepare("SELECT accepted_at FROM plan_editors WHERE plan = ? AND uid = ?").bind(id, s.uid)
     .first<{ accepted_at: number | null }>();
   const db = env.DB;
   const now = nowSec();
-  if (row && row.accepted_at !== null && p.handover === s.uid && p.owner) {
+  if (kind !== "coauthor" && row && row.accepted_at !== null && p.handover === s.uid && p.owner) {
     if (body.yes) {
-      // what an owner keeps has a ceiling (create, copy): a plan handed over counts too
+      // what an owner keeps has a ceiling (create, copy): a plan handed over counts too, its Undo copy and
+      // its place in the library with it
       const mine = await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ?").bind(s.uid).first<number>("n");
       if ((mine ?? 0) >= PLANS_MAX) throw new HttpError(409, "too_many_plans");
-      await roomFor(env, s.uid, p.doc.length + (p.lib?.length ?? 0));
+      const prev = await db.prepare("SELECT COALESCE(SUM(LENGTH(prev)), 0) AS n FROM plan_log WHERE plan = ? AND prev IS NOT NULL").bind(id).first<number>("n");
+      await roomFor(env, s.uid, p.doc.length + (p.lib?.length ?? 0) + (prev ?? 0));
+      if (p.listed === 1) {
+        const listed = await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE owner = ? AND listed = 1").bind(s.uid).first<number>("n");
+        if ((listed ?? 0) >= LISTED_MAX) throw new HttpError(409, "too_many_listed");
+      }
       // one transaction; each step only while the swap is the one asked for
       const [swap] = await db.batch([
         db.prepare("UPDATE plans SET owner = ?1, handover = NULL WHERE id = ?2 AND owner = ?3 AND handover = ?1").bind(s.uid, id, p.owner),
@@ -1251,12 +1270,15 @@ export async function answerInvite(req: Request, s: Session, env: Env, [id]: str
           `INSERT INTO plan_editors (plan, uid, at, accepted_at) SELECT ?1, ?2, ?3, ?3 WHERE EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?4)
            ON CONFLICT(plan, uid) DO UPDATE SET accepted_at = COALESCE(plan_editors.accepted_at, excluded.accepted_at)`,
         ).bind(id, p.owner, now, s.uid),
+        // the invites the old owner sent go with them (only someone the new owner could add today is asked)
+        db.prepare("DELETE FROM plan_editors WHERE plan = ?1 AND accepted_at IS NULL AND EXISTS (SELECT 1 FROM plans WHERE id = ?1 AND owner = ?2)")
+          .bind(id, s.uid),
       ]);
       if (!swap.meta.changes) throw new HttpError(404, "no_invite");
     } else {
       await db.prepare("UPDATE plans SET handover = NULL WHERE id = ? AND handover = ?").bind(id, s.uid).run();
     }
-  } else if (row && row.accepted_at === null) {
+  } else if (kind !== "owner" && row && row.accepted_at === null) {
     await (body.yes
       ? db.prepare("UPDATE plan_editors SET accepted_at = ? WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(now, id, s.uid)
       : db.prepare("DELETE FROM plan_editors WHERE plan = ? AND uid = ? AND accepted_at IS NULL").bind(id, s.uid)).run();
@@ -1864,14 +1886,14 @@ export async function progress(s: Session, env: Env, [id]: string[]): Promise<Re
 export async function planStamp(env: Env, uid: string): Promise<string> {
   const rows = await env.DB.batch([
     env.DB.prepare(
-      `SELECT p.id, p.version, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
+      `SELECT p.id, p.version, p.owner, f.share, f.team_ask, f.paused, f.sched, f.early, f.shift, f.pause_until, f.pause_since, f.skipped, f.moved, f.own,
               (SELECT MAX(t.id) FROM plan_posts t WHERE t.plan = p.id) AS post
          FROM plan_follows f JOIN plans p ON p.id = f.plan WHERE f.uid = ?1 AND ${SEES("p")} ORDER BY p.id`).bind(uid),
     env.DB.prepare(
       `SELECT p.id, p.version FROM plans p WHERE p.id IN (SELECT id FROM plans WHERE owner = ?1 UNION ${COAUTHORED})
         ORDER BY p.id`).bind(uid),
     env.DB.prepare(
-      `SELECT p.id, p.version, p.squad FROM plans p JOIN members m ON m.squad = p.squad AND m.uid = ?1
+      `SELECT p.id, p.version, p.squad, p.owner FROM plans p JOIN members m ON m.squad = p.squad AND m.uid = ?1
         WHERE p.owner != ?1 AND NOT EXISTS (SELECT 1 FROM plan_follows f WHERE f.plan = p.id AND f.uid = ?1) ORDER BY p.id`).bind(uid),
     // 3.8.1: my invites, as the board lists them (planInvites): one arriving or going moves it
     env.DB.prepare(INVITES_SQL).bind(uid),

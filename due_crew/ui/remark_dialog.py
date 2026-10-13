@@ -136,7 +136,8 @@ class RemarkDialog(QDialog):
                 self.remove_btn.setEnabled(True)
                 self.status.setText({403: "Only the plan's author or co-authors write notes for its followers.",
                                      404: "That note is gone already." if remove else "That plan is gone.",
-                                     400: "That's more than the plan holds: 300 notes a plan."}.get(
+                                     400: "That note didn't take. Try it shorter, on one line.",
+                                     409: "That's more than the plan holds: 300 notes a plan."}.get(
                     status, "Couldn't save it. Check your connection."))
                 return
             if self.on_done:

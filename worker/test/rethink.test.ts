@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { person } from "./helpers";
+import { befriend, person } from "./helpers";
 
 // Plans, rethought (3.8.1): what the morning sends when nothing moved.
 
@@ -53,5 +53,53 @@ describe("3.8.1: the author's Anki sees a date's single cards", () => {
     expect(pk.cards).toEqual([["gA", 0], ["gB", 1]]);
     // a date of tags alone stays lean
     expect(mine.doc.units.find((u: { id: string }) => u.id === "hf")).toEqual({ id: "hf", tags: ["Step1::Cardio::Heart_failure"], decks: [], opens: "2026-10-05" });
+  });
+});
+
+describe("3.8.1 review: answers, offers and links", () => {
+  async function two() {
+    const dre = await person("dre");
+    const maya = await person("maya");
+    await befriend(dre, maya);
+    await befriend(maya, dre);
+    const made = await dre.call("POST", "/plans", { name: "Step 1", deck: "Step 1" });
+    const p = (await dre.call("PUT", `/plans/${made.body.id}`, { version: 1, doc: { deck: "Step 1", units: UNITS } })).body;
+    return { dre, maya, p };
+  }
+
+  it("a stale co-write Yes never takes the plan: the answer says which question it answers", async () => {
+    const { dre, maya, p } = await two();
+    await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
+    expect((await maya.call("POST", `/plans/${p.id}/invite`, { yes: true, kind: "coauthor" })).body.role).toBe("editor");
+    await dre.call("POST", `/plans/${p.id}/owner`, { uid: maya.uid });
+    // her Anki still shows the old "co-write?" card: answering it again doesn't hand her the plan
+    expect((await maya.call("POST", `/plans/${p.id}/invite`, { yes: true, kind: "coauthor" })).status).toBe(404);
+    expect((await dre.call("GET", `/plans/${p.id}`)).body.role).toBe("owner");
+    expect((await maya.call("POST", `/plans/${p.id}/invite`, { yes: true, kind: "boss" })).status).toBe(400);
+    // the offer itself, answered as one
+    expect((await maya.call("POST", `/plans/${p.id}/invite`, { yes: true, kind: "owner" })).body.role).toBe("owner");
+  });
+
+  it("a hand-over moves the followers' stamp (its owner's name on their board)", async () => {
+    const { dre, maya, p } = await two();
+    const nia = await person("nia");
+    await nia.call("POST", "/plans/follow", { code: p.code });
+    const pv = (await nia.call("GET", "/board?decks=1&pv=")).body.pv;
+    await dre.call("POST", `/plans/${p.id}/editors`, { uid: maya.uid });
+    await maya.call("POST", `/plans/${p.id}/invite`, { yes: true });
+    await dre.call("POST", `/plans/${p.id}/owner`, { uid: maya.uid });
+    await maya.call("POST", `/plans/${p.id}/invite`, { yes: true });
+    const after = (await nia.call("GET", `/board?pv=${pv}`)).body;
+    expect(after.pv).not.toBe(pv);
+    expect(after.plans[0]).toMatchObject({ owner: "maya" });
+  });
+
+  it("a deck link is printable ASCII: no control or direction-flipping character", async () => {
+    const { dre, p } = await two();
+    const put = (deckUrl: string) => dre.status("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: UNITS, deckUrl } });
+    expect(await put("https://example.com/deck\u0085x")).toBe(400);
+    expect(await put("https://example.com/\u202egpj.exe")).toBe(400);
+    expect(await put("https://example.com/caf\u00e9")).toBe(400);
+    expect(await put("https://example.com/deck?id=12&v=2#top")).toBe(200);
   });
 });
