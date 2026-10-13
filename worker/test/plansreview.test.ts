@@ -211,7 +211,8 @@ describe("one total per plan, kept on its row", () => {
     // under an hour old: every reader reads it as kept, and nothing is written
     const onBoard = async (who: Who) => (await who.call("GET", "/board?decks=1")).body.plans.find((x: any) => x.id === p.id);
     expect(await onBoard(maya)).toMatchObject({ followers: 1, crewDone: {} });
-    expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 1, reached: [0, 1] });
+    // ...but the authors' "reached" is counted live: both follow, and Maya's board just carried this version
+    expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 1, reached: [1, 2] });
     expect((await dre.call("GET", "/plans/mine")).body.plans[0].followers).toBe(1);
     expect((await nia.call("GET", `/plans/peek?code=${p.code}`)).body.followers).toBe(1);
     expect((await api("GET", `/plans/public?code=${p.code}`)).body.followers).toBe(1);
@@ -225,7 +226,7 @@ describe("one total per plan, kept on its row", () => {
     const k2 = await kept(p.id);
     expect(JSON.parse(k2!.totals!)).toEqual({ v: p.version, n: 2, m: 2, r: 1, done: { hf: 1 } });  // Maya's board carried it; Nia's is this one
     expect(k2!.totals_at).toBeGreaterThan(Math.floor(Date.now() / 1000) - 60);
-    expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 2, reached: [1, 2] });
+    expect((await dre.call("GET", `/plans/${p.id}`)).body).toMatchObject({ followers: 2, reached: [2, 2] });  // live: Nia's board too
     expect(await kept(p.id)).toEqual(k2);
     // a save moves the version: none have it yet, at once, with nothing counted or written
     const saved = await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: { deck: "Step 1", units: UNITS.slice(0, 1) } });

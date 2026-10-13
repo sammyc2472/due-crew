@@ -737,8 +737,14 @@ export async function view(env: Env, p: Plan, uid: string) {
     editors: eds.results.map((e: any) => ({ uid: e.uid, name: e.name || "?", emoji: e.emoji || "" })),
     mySquads: new Set(member.results.map((m: any) => m.squad)),
   });
-  // 3.7.3: the authors see "reached 18 of 23": followers whose Anki has this version (a count)
-  return out.role === "owner" || out.role === "editor" ? { ...out, reached: [t.r, t.m] } : out;
+  // 3.7.3: the authors see "reached 18 of 23": followers whose Anki has this version (a count).
+  // Counted live for them (only authors open this, now and then): the plan's totals are up to
+  // an hour old, and after a save "reached" is what an author comes back to watch climb.
+  if (out.role !== "owner" && out.role !== "editor") return out;
+  const c = await env.DB.prepare(
+    "SELECT COUNT(*) AS m, COALESCE(SUM(CASE WHEN seen_version = ?1 THEN 1 ELSE 0 END), 0) AS r FROM plan_follows WHERE plan = ?2 AND uid != ?3",
+  ).bind(p.version, p.id, p.owner ?? "").first<{ m: number; r: number }>();
+  return { ...out, reached: [c?.r ?? t.r, c?.m ?? t.m] };
 }
 
 // ---- the deck's tree, from the add-on ----

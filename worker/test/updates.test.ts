@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anHourOn, befriend, db, person } from "./helpers";
+import { befriend, db, person } from "./helpers";
 
 // 3.7.3 plan updates: the plans ride a refresh when their stamp moved; authors
 // post to followers (with a save or on their own); the authors see how many
@@ -107,19 +107,14 @@ describe("plan updates (3.7.3)", () => {
     const kai = await person("kai");
     await kai.call("POST", "/plans/follow", { code: p.code });
     await dre.call("POST", "/plans/follow", { code: p.code });  // the author following their own plan isn't counted
-    // the counts are the plan's totals, up to an hour old (migration 0025): an hour on, they're counted again
-    await anHourOn();
     expect((await dre.call("GET", `/plans/${p.id}`)).body.reached).toEqual([0, 2]);
     await sam.call("GET", "/board?pv=");
-    await anHourOn();
     expect((await dre.call("GET", `/plans/${p.id}`)).body.reached).toEqual([1, 2]);
     expect((await sam.call("GET", `/plans/${p.id}`)).body.reached).toBeUndefined();
     await dre.call("PUT", `/plans/${p.id}`, { version: p.version, doc: doc(2) });
-    // a save moves the version: none have it, at once, without counting again
     expect((await dre.call("GET", `/plans/${p.id}`)).body.reached).toEqual([0, 2]);
     // the site's home doesn't count: it isn't Anki
     await kai.call("GET", "/board?keep=1");
-    await anHourOn();
     expect((await dre.call("GET", `/plans/${p.id}`)).body.reached).toEqual([0, 2]);
   });
 
