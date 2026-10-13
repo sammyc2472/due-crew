@@ -17,11 +17,17 @@ import json
 import re
 import secrets
 
+from . import sev as _sev
+
 ROUND_CHOICES = (15, 25, 30, 45, 50)
 BREAK_CHOICES = (5, 10, 15)
 MAX_ROUNDS = 8
 HOST_MAX = 128
 GUTTER_WIDTH = 150  # the margin card (C), px
+# 3.8.1, the Fifteen: fifteen minutes, then a question; each yes adds one
+# after a five-minute break (or now), up to the room's eight. The question
+# waits ASK minutes after the fifteen ends; no answer, and the session ends.
+FIFTEEN, FIFTEEN_BREAK, ASK = 15, 5, 5
 
 
 def _parse(ts):
@@ -45,6 +51,18 @@ def make_room(host, start, rounds=4, round_min=25, brk_min=5):
                        "round": round_min, "brk": brk_min})
 
 
+def make_fifteen(host, start):
+    """3.8.1: a fifteen is a room of mine alone that grows a round at a
+    time. It never rides my week doc as a room (nobody joins it yet: the
+    buddy comes later); my crew sees I'm studying now."""
+    return clean_room({"host": host, "start": iso(start), "rounds": 1, "round": FIFTEEN,
+                       "brk": FIFTEEN_BREAK, "kind": "fifteen"})
+
+
+def is_fifteen(room):
+    return bool(room) and room.get("kind") == "fifteen"
+
+
 def _bounded(value, low, high, default):
     try:
         v = int(value)
@@ -62,10 +80,13 @@ def clean_room(value):
     start = _parse(value.get("start"))
     if not host or start is None:
         return None
-    return {"host": host, "start": iso(start),
-            "rounds": _bounded(value.get("rounds"), 1, MAX_ROUNDS, 4),
-            "round": _bounded(value.get("round"), 5, 90, 25),
-            "brk": _bounded(value.get("brk"), 0, 30, 5)}
+    out = {"host": host, "start": iso(start),
+           "rounds": _bounded(value.get("rounds"), 1, MAX_ROUNDS, 4),
+           "round": _bounded(value.get("round"), 5, 90, 25),
+           "brk": _bounded(value.get("brk"), 0, 30, 5)}
+    if value.get("kind") == "fifteen":
+        out["kind"] = "fifteen"
+    return out
 
 
 def room_key(room):
@@ -106,7 +127,70 @@ def phase(room, now=None):
                 return dict(out, state="break", round=i, left=(t + brk - now).total_seconds(),
                             until=t + brk, total=brk.total_seconds())
             t += brk
+    if is_fifteen(room):
+        # 3.8.1: the last fifteen's question, for ASK minutes (the break's own)
+        ask = datetime.timedelta(minutes=ASK)
+        if now < t + ask:
+            return dict(out, state="ask", round=room["rounds"], left=(t + ask - now).total_seconds(),
+                        until=t + ask, total=ask.total_seconds())
+        t += ask
     return dict(out, state="done", round=room["rounds"], left=0, until=t)
+
+
+def fifteen_next(room, now=None, wait=True):
+    """The answer to the question, or Start now on the break: one more
+    fifteen, after a five-minute break from the end of the last (wait),
+    or now. None past the room's eight, or when there's nothing to answer.
+    Now moves the start back, so the arithmetic of every screen holds
+    (it's mine alone: nobody holds the old one)."""
+    now = _now(now)
+    p = phase(room, now)
+    if p["state"] == "ask":
+        k = room["rounds"]
+    elif p["state"] == "break" and is_fifteen(room):
+        k = p["round"]
+    else:
+        return None
+    if k >= MAX_ROUNDS:
+        return None
+    out = dict(room, rounds=k + 1)
+    if not wait:
+        out["start"] = iso(now - datetime.timedelta(minutes=k * (room["round"] + room["brk"])))
+    return clean_room(out)
+
+
+def fifteen_round_start(room, k):
+    """When the k-th fifteen (1-based) began, by the room's arithmetic."""
+    return _parse(room["start"]) + datetime.timedelta(minutes=(k - 1) * (room["round"] + room["brk"]))
+
+
+def fifteen_spent(room, now=None):
+    """(fifteens begun, minutes studied in them) so far: the ones done, and
+    the one running, as long as it's run."""
+    now = _now(now)
+    p = phase(room, now)
+    if p["state"] == "round":
+        part = int((p["total"] - p["left"]) // 60)
+        return p["round"] - 1 + (1 if part else 0), (p["round"] - 1) * room["round"] + part
+    done = p["round"] if p["state"] in ("break", "ask", "done") else 0
+    return done, done * room["round"]
+
+
+def live_until(room):
+    """How long a fifteen keeps me "studying now" for my crew: to the end
+    of its question."""
+    return room_end(room) + datetime.timedelta(minutes=ASK)
+
+
+def usual_start(offsets, least=3):
+    """3.8.1, the nudge: when I usually start, in seconds from the start of
+    my Anki day: the middle of the days I studied lately (each day's first
+    answer), or None with fewer than `least` of them."""
+    xs = sorted(int(x) for x in offsets if x is not None and 0 <= x < 86400)
+    if len(xs) < least:
+        return None
+    mid = len(xs) // 2
+    return xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) // 2
 
 
 def is_over(room, now=None):
@@ -177,19 +261,42 @@ def done_share(done):
 
 # ---- the widgets ----
 
-def widget_data(room, entries, accent_pair, compact=False, side="right"):
+# 3.8.1: Sev in a fifteen's widgets, drawn by sev.py and handed over as markup
+FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
+
+
+def _sevs(keys, on):
+    return ({k: _sev.svg(k) for k in keys}, _sev.CSS) if on else (None, "")
+
+
+def widget_data(room, entries, accent_pair, compact=False, side="right", sev=True, brk_pose="breathe",
+                cards=None, total=None):
     """What every widget needs, all plain values. side: the chip's end of
-    the top bar, "right" or "left"."""
+    the top bar, "right" or "left". 3.8.1, a fifteen: sev (the switch in
+    Settings), brk_pose ("breathe" or "stretch"), and for its question the
+    cards answered in the fifteen and in the session."""
     ms = members(entries, room)
     start = _parse(room["start"])
+    fifteen = is_fifteen(room)
+    sevs, css = _sevs(FIFTEEN_SEV, sev and fifteen)
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
-            "title": title(entries, room),
-            "names": [n.split(" ")[0] if not you else "you" for _u, n, you in ms],
+            "title": "Fifteen" if fifteen else title(entries, room),
+            "names": [] if fifteen else [n.split(" ")[0] if not you else "you" for _u, n, you in ms],
             # faces show each person's own initial, mine included
-            "initials": [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
-            "line": names_line(ms),
-            "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side)}
+            "initials": [] if fifteen else [(n.strip()[:1] or "?").upper() for _u, n, _you in ms],
+            "line": "" if fifteen else names_line(ms),
+            "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side),
+            "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
+            "sev": sevs, "sevcss": css, "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
+            "cards": cards, "total": total}
+
+
+def start_data(accent_pair, side="right", sev=True, nap=False, compact=False):
+    """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room."""
+    sevs, css = _sevs(("idle", "nap"), sev)
+    return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
+            "nap": bool(nap), "sev": sevs, "sevcss": css}
 
 
 SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;height:auto" aria-hidden="true">'
@@ -335,7 +442,7 @@ CMD_KEY = secrets.token_hex(8)
 _RUNTIME = r"""
 (function () {
   var D = __DATA__, KIND = __KIND__, SQ = __SQUARES__;
-  var ids = ['chip', 'bottom', 'gutter', 'break', 'card'];
+  var ids = ['chip', 'bottom', 'gutter', 'break', 'card', 'ask', 'start'];
   function drop(k) {
     var el = document.getElementById('dc-room-' + k);
     if (el) { el.remove(); if (k === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); } }
@@ -364,6 +471,11 @@ _RUNTIME = r"""
         if (now < t + D.brk) { return {state: 'break', round: i, left: t + D.brk - now, until: t + D.brk, total: D.brk}; }
         t += D.brk;
       }
+    }
+    if (D.kind === 'fifteen') {
+      // 3.8.1: the last fifteen's question, for its five minutes (room_model.phase)
+      if (now < t + D.ask) { return {state: 'ask', round: D.rounds, left: t + D.ask - now, until: t + D.ask, total: D.ask}; }
+      t += D.ask;
     }
     return {state: 'done', round: D.rounds, left: 0, until: t, total: 1};
   }
@@ -402,6 +514,36 @@ _RUNTIME = r"""
     return f;
   }
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + __KEY__); } catch (e) {} }
+  // 3.8.1: Sev, drawn by sev.py: our own markup, never a name, so it goes in as markup
+  var FIF = D.kind === 'fifteen';
+  if (D.sev && D.sevcss && !document.getElementById('dc-sev-css')) {
+    var css = document.createElement('style'); css.id = 'dc-sev-css'; css.textContent = D.sevcss;
+    (document.head || document.body).appendChild(css);
+  }
+  function sev(key, size, pad) {
+    var w = el('span', 'display:inline-flex;align-items:center;justify-content:center;flex:none;width:' + size + 'px;height:' + size +
+      'px;margin:' + (pad || 0) + 'px;--sv-a:' + c.a + ';--sv-line:' + c.line + ';--sv-amb:' + c.warm + ';--sv-mut:' + c.mut + ';');
+    w.set = function (k) {
+      if (w.k === k || !D.sev || !D.sev[k]) { return; }
+      w.k = k; w.innerHTML = D.sev[k];
+      var v = w.firstChild; if (v && v.style) { v.style.width = v.style.height = '100%'; }
+    };
+    w.set(key);
+    return w;
+  }
+  function ftitle(p) { var n = p.state === 'break' ? p.round + 1 : p.round; return p.state === 'break' ? 'Break' : 'Fifteen' + (n > 1 ? ' ' + n : ''); }
+  function fsub(p) {
+    return p.state === 'break' ? 'fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'ask' ? 'done · your call' : mins(p.left) + ' min left';
+  }
+  // the little Sev's moment: heads down in a fifteen (after a jump or a shake-out
+  // as it starts), resting or stretching on a break, the clock at the question
+  function fkey(p, fresh) {
+    if (p.state === 'ask') { return 'ring'; }
+    if (p.state === 'break') { return D.brk_pose === 'stretch' ? 'stretch' : 'rest'; }
+    if (fresh) { return p.round > 1 ? 'again' : 'ready'; }
+    return 'focus';
+  }
+  function fresh(p) { return p.state === 'round' && p.total - p.left < 4000; }
   function sub(p) {
     if (p.state === 'before') { return 'starts ' + hm(D.start); }
     if (p.state === 'break') { return 'Break · round ' + (p.round + 1) + ' at ' + hm(p.until); }
@@ -413,30 +555,35 @@ _RUNTIME = r"""
     root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:7px;' +
       'padding:0 10px 0 5px;border:1px solid ' + c.a + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
       ';font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
-    root.title = 'Your study room';
-    var sq = squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
+    root.title = FIF ? 'Your fifteen' : 'Your study room';
+    var sq = FIF && D.sev ? sev('focus', 30, -3) : squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
         t1 = el('b', 'font-size:11.5px;', D.title), t2 = el('small', 'font-size:10.5px;color:' + c.mut + ';'), fc = faces(c, 18);
     tx.appendChild(t1); tx.appendChild(t2);
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
-    if (D.compact) { sq.style.display = tx.style.display = fc.style.display = 'none'; root.style.padding = '0 3px'; }
+    if (D.compact) { tx.style.display = fc.style.display = 'none'; if (!sq.set) { sq.style.display = 'none'; } root.style.padding = '0 3px'; }
     root.onclick = function () { send('roomcard'); };
     update = function (p) {
-      rg.set(p.state === 'before' ? 0 : 1 - p.left / p.total, p.state === 'before' ? '·' : String(mins(p.left)), p.state === 'break');
-      t2.textContent = sub(p);
+      rg.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
+             p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
+      if (FIF) { t1.textContent = ftitle(p); t2.textContent = fsub(p); if (sq.set) { sq.set(fkey(p, fresh(p))); } }
+      else { t2.textContent = sub(p); }
     };
   } else if (KIND === 'bottom') {
     var edit = document.querySelector('button[onclick*="edit"]');
     var cell = edit ? edit.parentNode : document.body;
     root = el('span', 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding-left:10px;border-left:1px solid ' + c.line +
       ';font:12px -apple-system,Segoe UI,sans-serif;color:' + c.mut + ';vertical-align:middle;cursor:pointer;white-space:nowrap;');
-    var rg2 = ring(20, c), tx2 = el('span');
+    var sv2 = FIF && D.sev ? sev('focus', 28, -4) : null, rg2 = ring(20, c), tx2 = el('span');
+    if (sv2) { root.appendChild(sv2); }
     root.appendChild(rg2); root.appendChild(tx2);
     root.onclick = function () { send('roomcard'); };
     cell.appendChild(root);
     update = function (p) {
-      rg2.set(p.state === 'before' ? 0 : 1 - p.left / p.total, p.state === 'before' ? '·' : String(mins(p.left)), p.state === 'break');
-      tx2.textContent = (p.state === 'break' ? 'break ' + mins(p.left) + ' min' : p.state === 'before' ? 'starts ' + hm(D.start) : mins(p.left) + ' min') +
-        (D.line ? ' · ' + D.line : '');
+      rg2.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
+              p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
+      if (sv2) { sv2.set(fkey(p, fresh(p))); }
+      tx2.textContent = (p.state === 'break' ? 'break ' + mins(p.left) + ' min' : p.state === 'before' ? 'starts ' + hm(D.start) :
+        p.state === 'ask' ? 'your call' : mins(p.left) + ' min') + (D.line ? ' · ' + D.line : '');
     };
   } else if (KIND === 'gutter') {
     root = el('div', 'position:fixed;left:16px;top:16px;width:' + __GUTTER__ + 'px;box-sizing:border-box;display:grid;justify-items:center;gap:5px;' +
@@ -444,10 +591,17 @@ _RUNTIME = r"""
       ';font:12px -apple-system,Segoe UI,sans-serif;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.08);z-index:50;cursor:pointer;');
     var rg3 = ring(40, c), g1 = el('b', 'font-size:12.5px;'), g2 = el('small', 'color:' + c.mut + ';font-size:11px;'),
         g3 = el('small', 'color:' + c.mut + ';font-size:11px;line-height:1.3;', D.line);
-    root.appendChild(squares(c, 56)); root.appendChild(rg3); root.appendChild(g1); root.appendChild(g2); root.appendChild(faces(c, 26)); root.appendChild(g3);
+    var sv3 = FIF && D.sev ? sev('focus', 64) : null;
+    root.appendChild(sv3 || squares(c, 56)); root.appendChild(rg3); root.appendChild(g1); root.appendChild(g2); root.appendChild(faces(c, 26)); root.appendChild(g3);
     root.onclick = function () { send('roomcard'); };
     update = function (p) {
-      rg3.set(p.state === 'before' ? 0 : 1 - p.left / p.total, p.state === 'before' ? '·' : String(mins(p.left)), p.state === 'break');
+      rg3.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
+              p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
+      if (FIF) {
+        if (sv3) { sv3.set(fkey(p, fresh(p))); }
+        g1.textContent = ftitle(p); g2.textContent = fsub(p);
+        return;
+      }
       g1.textContent = p.state === 'break' ? 'Break' : p.state === 'before' ? D.title : 'Round ' + p.round + ' of ' + D.rounds;
       g2.textContent = p.state === 'break' ? 'round ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'before' ? 'starts ' + hm(D.start) :
         (p.round < D.rounds && D.brk ? 'break at ' + hm(p.until) : 'ends ' + hm(p.until));
@@ -477,16 +631,28 @@ _RUNTIME = r"""
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var box = el('div', 'display:grid;justify-items:center;gap:14px;max-width:520px;padding:20px;');
     var logo = el('span', 'display:flex;align-items:center;gap:8px;');
-    logo.appendChild(squares(c, 110));
-    var rg4 = ring(150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
+    // 3.8.1: a fifteen's break is Sev's: breathe along (a square, four counts a side), or stretch
+    logo.appendChild(FIF && D.sev ? sev(D.brk_pose === 'stretch' ? 'stretch' : 'breathe', 180) : squares(c, 110));
+    var rg4 = ring(FIF ? 96 : 150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
     var btns = el('div', 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;');
-    var cheer = el('button', 'background:' + c.a + ';color:' + c.bg + ';border:0;border-radius:8px;padding:8px 16px;font:600 14px -apple-system,Segoe UI,sans-serif;cursor:pointer;', 'Cheer the room 🎉');
-    var skip = el('button', 'background:transparent;color:' + c.ink + ';border:1px solid ' + c.line + ';border-radius:8px;padding:8px 16px;font:14px -apple-system,Segoe UI,sans-serif;cursor:pointer;', 'Skip the break');
-    cheer.onclick = function () { send('roomcheer'); cheer.textContent = 'Cheered ✓'; cheer.disabled = true; };
-    skip.onclick = function () { send('roomskip'); };
-    btns.appendChild(cheer); btns.appendChild(skip);
+    function btn(text, go, cmd) {
+      var b = el('button', (go ? 'background:' + c.a + ';color:' + c.bg + ';border:0;font:600 14px ' : 'background:transparent;color:' + c.ink +
+        ';border:1px solid ' + c.line + ';font:14px ') + '-apple-system,Segoe UI,sans-serif;border-radius:8px;padding:8px 16px;cursor:pointer;', text);
+      b.onclick = function () { send(cmd); };
+      btns.appendChild(b);
+      return b;
+    }
+    if (FIF) {
+      btn('Start now', true, 'room15now'); btn('Stop here', false, 'room15stop');
+    } else {
+      var cheer = btn('Cheer the room 🎉', true, 'roomcheer');
+      cheer.onclick = function () { send('roomcheer'); cheer.textContent = 'Cheered ✓'; cheer.disabled = true; };
+      btn('Skip the break', false, 'roomskip');
+    }
     box.appendChild(logo); box.appendChild(rg4); box.appendChild(h); box.appendChild(p1); box.appendChild(faces(c, 32)); box.appendChild(btns);
-    box.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', 'The break waited for you to finish your card.'));
+    box.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', FIF ? (D.brk_pose === 'stretch' ?
+      'Stand up, stretch, some water. Look at something far away.' : 'Breathe with Sev: in for four, hold, out for four, hold.') :
+      'The break waited for you to finish your card.'));
     root.appendChild(box);
     var ended = false;
     update = function (p) {
@@ -495,11 +661,62 @@ _RUNTIME = r"""
         return;
       }
       rg4.set(1 - p.left / p.total, mmss(p.left), true);  // fills as the break passes, as every ring does
+      if (FIF) {
+        h.textContent = 'Break';
+        p1.textContent = 'Fifteen ' + (p.round + 1) + ' starts at ' + hm(p.until) + '.';
+        return;
+      }
       h.textContent = 'Round ' + p.round + ' done. Break.';
       var others = D.names.filter(function (n) { return n !== 'you'; });
       p1.textContent = (others.length ? others.join(' and ') + (others.length > 1 ? ' are' : ' is') + ' on the same break. ' : '') +
         'Round ' + (p.round + 1) + ' starts at ' + hm(p.until) + '.';
     };
+  } else if (KIND === 'ask') {
+    // 3.8.1, the question at the end of a fifteen, once the card in front of me is answered
+    try { if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); } } catch (e) {}
+    root = el('div', 'position:fixed;inset:0;background:' + c.bg + ';color:' + c.ink + ';display:grid;place-items:center;z-index:9999;' +
+      'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
+    var qb = el('div', 'display:grid;justify-items:center;gap:12px;max-width:520px;padding:20px;');
+    if (D.sev) { qb.appendChild(sev('ring', 180)); } else { qb.appendChild(squares(c, 110)); }
+    var n = D.rounds, cap = n >= D.max;
+    qb.appendChild(el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;', 'That’s fifteen.'));
+    if (D.cards != null) {
+      qb.appendChild(el('div', 'color:' + c.mut + ';', D.cards + (D.cards === 1 ? ' card' : ' cards') + (n > 1 ? ' in fifteen ' + n : '') +
+        (n > 1 && D.total != null ? ' · ' + D.total + ' this session' : '')));
+    }
+    qb.appendChild(el('div', 'max-width:40ch;', cap ? 'That’s eight fifteens: two hours. Enough for one sitting.' :
+      'A five-minute break, then another fifteen?'));
+    var qs = el('div', 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;');
+    function qbtn(text, go, cmd) {
+      var b = el('button', (go ? 'background:' + c.a + ';color:' + c.bg + ';border:0;font:600 14px ' : 'background:transparent;color:' + c.ink +
+        ';border:1px solid ' + c.line + ';font:14px ') + '-apple-system,Segoe UI,sans-serif;border-radius:8px;padding:8px 16px;cursor:pointer;', text);
+      b.onclick = function () { send(cmd); };
+      qs.appendChild(b);
+    }
+    if (!cap) { qbtn('Take five, then another fifteen', true, 'room15five'); qbtn('Another fifteen now', false, 'room15now'); }
+    qbtn('Stop here', cap, 'room15stop');
+    qb.appendChild(qs);
+    qb.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', 'No answer in five minutes and the session ends here. It still counts.'));
+    root.appendChild(qb);
+    var gone = false;
+    update = function (p) {
+      if (p.state !== 'ask' && !gone) { gone = true; send('roombreakend'); }
+    };
+  } else if (KIND === 'start') {
+    // 3.8.1: ▶ Fifteen? in the top bar, at the chip's end, whenever I'm in no room
+    root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:5px;' +
+      'padding:0 10px 0 4px;border:1px solid ' + c.line + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
+      ';font:600 12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
+    root.title = 'Fifteen minutes, now. At the end, one question: a break and another?';
+    if (D.sev) { root.appendChild(sev(D.nap ? 'nap' : 'idle', 30, -3)); }
+    root.appendChild(el('span', 'color:' + c.a + ';font-size:10px;', '▶'));
+    var word = el('span', '', 'Fifteen?');
+    root.appendChild(word);
+    if (D.compact) { word.style.display = 'none'; }
+    root.onclick = function () { send('room15'); };
+    root.id = 'dc-room-start';
+    document.body.appendChild(root);
+    return;
   } else if (KIND === 'card') {
     // 3.8.1: it opens at the chip's end of the screen (the left one too), and moves by its top row
     root = el('div', 'position:fixed;__SIDE__:12px;top:10px;width:330px;box-sizing:border-box;border:1px solid ' + c.line +
@@ -508,7 +725,8 @@ _RUNTIME = r"""
     var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
         x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
     hd.title = 'Drag to move';
-    hd.appendChild(squares(c, 70)); hd.appendChild(x);
+    var sv5 = FIF && D.sev ? sev('focus', 44, -6) : null;
+    hd.appendChild(sv5 || squares(c, 70)); hd.appendChild(x);
     var AT = 'dcRoomCardAt';
     function put(px, py) {
       var w = root.offsetWidth, h = root.offsetHeight;
@@ -551,14 +769,30 @@ _RUNTIME = r"""
     var who = el('div', 'display:flex;align-items:center;gap:8px;color:' + c.mut + ';font-size:12px;');
     who.appendChild(faces(c, 24)); who.appendChild(el('span', '', D.line));
     var ft = el('div', 'display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:' + c.a + ';border-top:1px solid ' + c.line + ';padding-top:8px;');
-    var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'), leave = el('span', 'cursor:pointer;', 'Leave room');
+    var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'),
+        leave = el('span', 'cursor:pointer;', FIF ? 'Stop here' : 'Leave room');
     ft.appendChild(tuck); ft.appendChild(leave);
-    root.appendChild(hd); root.appendChild(row); root.appendChild(bar); root.appendChild(who); root.appendChild(ft);
+    // 3.8.1: a fifteen's card answers its question, and starts the next one early
+    var acts = el('div', 'display:flex;gap:8px;flex-wrap:wrap;'), five = null, now5 = null;
+    if (FIF) {
+      var abtn = function (text, go, cmd) {
+        var b = el('button', (go ? 'background:' + c.a + ';color:' + c.bg + ';border:0;font:600 12.5px ' : 'background:transparent;color:' + c.ink +
+          ';border:1px solid ' + c.line + ';font:12.5px ') + '-apple-system,Segoe UI,sans-serif;border-radius:7px;padding:5px 11px;cursor:pointer;', text);
+        b.onclick = function () { shut(); send(cmd); };
+        acts.appendChild(b);
+        return b;
+      };
+      five = abtn('Take five, then another', true, 'room15five');
+      now5 = abtn('Another fifteen now', false, 'room15now');
+    }
+    root.appendChild(hd); root.appendChild(row); root.appendChild(bar);
+    if (FIF) { root.appendChild(acts); } else { root.appendChild(who); }
+    root.appendChild(ft);
     // closed, the chip it popped out of comes back (3.8.1: it hides while this is out)
     function shut() { drop('card'); send('roomcardoff'); }
     x.onclick = shut;
     tuck.onclick = function () { shut(); send('roomtuck'); };
-    leave.onclick = function () { shut(); send('roomleave'); };
+    leave.onclick = function () { shut(); send(FIF ? 'room15stop' : 'roomleave'); };
     setTimeout(function () {
       document.addEventListener('mousedown', function out(ev) {
         // a card closed some other way (×, Tuck, Leave, redrawn) takes this with it
@@ -567,11 +801,23 @@ _RUNTIME = r"""
       });
     }, 0);
     update = function (p) {
-      rg5.set(p.state === 'before' ? 0 : 1 - p.left / p.total,
-              p.state === 'before' ? '·' : String(mins(p.left)), p.state === 'break');
+      rg5.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
+              p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
+      if (FIF) {
+        var cap = D.rounds >= D.max;
+        if (sv5) { sv5.set(fkey(p, false)); }
+        k1.textContent = p.state === 'ask' ? 'That’s fifteen.' : ftitle(p);
+        k2.textContent = p.state === 'ask' ? (cap ? 'That’s eight: two hours. Enough for one sitting.' : 'A five-minute break, then another fifteen?') :
+          p.state === 'break' ? 'Fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : mins(p.left) + ' min left, then your call';
+        five.style.display = p.state === 'ask' && !cap ? '' : 'none';
+        now5.style.display = (p.state === 'ask' && !cap) || p.state === 'break' ? '' : 'none';
+        now5.textContent = p.state === 'break' ? 'Start now' : 'Another fifteen now';
+        acts.style.display = five.style.display === 'none' && now5.style.display === 'none' ? 'none' : 'flex';
+      } else {
       k2.textContent = p.state === 'before' ? 'Starts at ' + hm(D.start) + ' · ' + D.rounds + ' rounds' :
         p.state === 'break' ? 'Break · round ' + (p.round + 1) + ' at ' + hm(p.until) :
         'Round ' + p.round + ' of ' + D.rounds + ' · ' + mins(p.left) + ' min left';
+      }
       var now = Date.now(), t = D.start;
       segs.forEach(function (f) {
         f.style.width = Math.max(0, Math.min(1, (now - t) / D.round)) * 100 + '%';
@@ -582,15 +828,18 @@ _RUNTIME = r"""
   if (KIND !== 'bottom') { document.body.appendChild(root); }
   root.id = 'dc-room-' + KIND;
   if (root.place) { root.place(); }
+  var last = null;
   function tick() {
     var p = phase(Date.now());
-    if (p.state === 'done' && KIND !== 'break') { drop(KIND); return; }
+    // 3.8.1: a phase that changes redraws the Decks screen (its lobby asks the question too)
+    if (KIND === 'chip' && p.state !== last) { if (last !== null) { send('roomtick'); } last = p.state; }
+    if (p.state === 'done' && KIND !== 'break' && KIND !== 'ask') { drop(KIND); return; }
     update(p);
     if (KIND === 'gutter' && window.dcRoomFit) { window.dcRoomFit(); }
     if (KIND === 'bottom' && window.dcBarBalance) { window.dcBarBalance(); }
   }
   tick();
-  window['dcRoomTick_' + KIND] = setInterval(tick, KIND === 'break' ? 1000 : 10000);
+  window['dcRoomTick_' + KIND] = setInterval(tick, KIND === 'break' || KIND === 'ask' || FIF ? 1000 : 10000);
 })();
 """
 
@@ -617,6 +866,8 @@ def widget_js(kind, data=None):
 # what the widgets send from the reviewer's page (the margin card, the
 # break, the room's card, the Ask card): nothing else is ever taken from there
 CARD_PAGE_CMDS = ("roomcard", "roomcardoff", "roomtuck", "roomskip", "roombreakend", "roomcheer", "roomleave",
+                  # 3.8.1: a fifteen's question and its break (another after five, now, stop)
+                  "room15five", "room15now", "room15stop",
                   # the Ask card above the bar (cards.py): opening a dialog or a
                   # menu (Tip asks for its line), moving the chip to the bar, and This
                   # helped, which asks first
@@ -653,13 +904,39 @@ def _clock(dt):
     return dt.astimezone().strftime("%H:%M")
 
 
+def fifteen_view(room, now=None):
+    """3.8.1: a fifteen on the Decks screen, as plain values: where it is
+    (round, break, ask), its ring, and what can be answered there."""
+    now = _now(now)
+    p = phase(room, now)
+    mins = max(1, int(-(-p["left"] // 60)))
+    cap = room["rounds"] >= MAX_ROUNDS
+    if p["state"] == "ask":
+        title = "That\u2019s fifteen."
+        sub = ("That\u2019s eight fifteens: two hours. Enough for one sitting." if cap
+               else "A five-minute break, then another fifteen?")
+        label, frac = "\u2713", 1.0
+    elif p["state"] == "break":
+        title = "Break"
+        sub = f"Fifteen {p['round'] + 1} starts at {_clock(p['until'])}"
+        label, frac = str(mins), 1 - p["left"] / p["total"]
+    else:
+        title = "Fifteen" + (f" {p['round']}" if p["round"] > 1 else "")
+        sub = f"{mins} min left, then your call"
+        label, frac = str(mins), 1 - p["left"] / p["total"]
+    return {"fifteen": True, "state": p["state"], "title": title, "sub": sub, "label": label,
+            "frac": round(frac, 3), "brk": p["state"] == "break", "cap": cap, "n": p["round"]}
+
+
 def board_view(my_room, entries, dismissed=(), done=None, now=None):
     """What the Decks screen shows about rooms, as plain values (the board
     escapes every string): my room's lobby, invites to my crew's rooms, and
     the line for a room I finished."""
     now = _now(now)
     out = {"mine": None, "invites": [], "done": done}
-    if my_room and not is_over(my_room, now):
+    if my_room and not is_over(my_room, now) and is_fifteen(my_room):
+        out["mine"] = fifteen_view(my_room, now)
+    elif my_room and not is_over(my_room, now):
         p = phase(my_room, now)
         ms = members(entries, my_room)
         if not any(you for _u, _n, you in ms):

@@ -130,7 +130,7 @@ same commit, each with its test:
 - `plans.topic_remarks` ↔ `remarkOn` in builder.js (a topic shows its tag's
   note or the nearest parent's); `plans._date_line` (the export) ↔ a date's
   line in builder.js `toText`; the picked row's "X · N picked" ↔ `picksText`
-- `room_model.phase` ↔ the room widget's JS
+- `room_model.phase` ↔ the room widget's JS (3.8.1: a fifteen's question too; `test_fifteen_js_phase_matches_v381`)
 - `sharecard.py` ↔ `site/public/cards.js` (the picture cards' layouts and words, 3.8.0)
 - `due_crew/motion.js` = `site/public/motion.js`, byte for byte (the board's motion, 3.8.0; the suite checks)
 - the Worker ↔ `tests/fakes.FakeWorker` (the suite's server)
@@ -146,6 +146,8 @@ same commit, each with its test:
 | Squads, knocks, bingo | `squads.py`, `bingo.py`, `bingo_flow.py` | `squads.ts`, `bingo.ts`, `adminsquads.ts` |
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
+| The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
+| Sev (3.8.1, Block): by the logo, in a fifteen's chip, question and break, the nudge, the session's line | `sev.py` (one drawing; the widgets get its markup), `rooms.board_sev` | never sent |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |

@@ -664,3 +664,19 @@ In Anki (as a follower):
 - [ ] Put back on the plan card: only the unseen cards of the last date shut again; Edit › Undo puts them back. Stop following opens them.
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
+
+### 3.8.1: the Fifteen and Sev
+
+- [ ] Signed in, in no room: ▶ Fifteen? (with Sev) at the chip's end of the top bar, on the Decks screen, Overview and Review; Settings › Room chip Left moves it; Settings › Fifteen and Sev › Fifteen? off takes it away.
+- [ ] Click it: the chip becomes Fifteen · 15 min left (Sev jumps, then heads down) and Study today opens. A crewmate's board shows you studying now, not a room (no Join).
+- [ ] At 15 minutes, mid-card: nothing until you answer; then "That's fifteen." takes the next card's place, with how many cards; Space and the answer keys do nothing under it.
+- [ ] Take five, then another fifteen: the break (Sev breathing along a square, four counts a side; Settings › On a break › Stretch gives a stretch), Start now starts the next at once; otherwise at five it ends and the card comes back.
+- [ ] Another fifteen now: the card comes back and the chip says Fifteen 2 · 15 min left.
+- [ ] On the Decks screen when a fifteen ends: the board asks the same question (Take five, Another now, Stop here); the chip says done · your call, and its card answers too.
+- [ ] Stop here (from the question, the break, the board or the chip's card): back on the Decks screen, "Your session: N fifteens · M m · C cards." with Sev stacking a square for each; × takes it away. Your crew stops seeing you studying at their next refresh.
+- [ ] Walk away at the question: after five minutes it ends by itself; the line says it ended at the question and still counts.
+- [ ] Eight fifteens: the eighth's question offers Stop here only.
+- [ ] Close Anki in a fifteen: next open, no fifteen, and the session's line is there.
+- [ ] Sev by the logo: napping before you've studied, blinking once you have, a hop when Today's done (once; back on the Decks screen it rests), a gift when a cheer lands, a star the night before your exam, a suitcase on away days. System Settings › Reduce motion: Sev stands still in each.
+- [ ] The nudge: with cards due, nothing studied, past your usual start (three days of history needed), the You box's Today says "Not started yet today. Fifteen?" with Sev peeking; Start starts one; × hides it for today; not on an away day.
+- [ ] Settings › Sev off: no Sev anywhere (the chip, the question and the break show the logo's squares).

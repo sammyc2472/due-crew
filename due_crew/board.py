@@ -23,6 +23,7 @@ from datetime import date as _date, datetime, timezone
 
 from .logo import board_mark
 from . import room_model
+from . import sev as _sev
 from .stats.decks import sig_match
 
 LIGHT = {
@@ -1005,7 +1006,7 @@ def _crew_on(period, show_up=False):
     return "today" if show_up and period == "week" else period
 
 
-def _head(period, show_up=False, hidden=frozenset(), crew="today"):
+def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
     """3.8.0: the board is your people: Crew and Squads. Crew's views are
     picked under the pills (_crew_picker), and the Crew pill goes back to
     the one last picked."""
@@ -1020,7 +1021,9 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today"):
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
-    return (f'<div class="dc-head"><span class="dc-title">{board_mark()}</span>'
+    # 3.8.1: Sev beside the logo, never on it (the logo itself never changes)
+    beside = f'<span class="dc-sev">{sev}</span>' if sev else ""
+    return (f'<div class="dc-head"><span class="dc-title">{board_mark()}{beside}</span>'
             f'<span>{pills}</span></div>')
 
 
@@ -3028,7 +3031,7 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None, you=None, sticking=None):
+           notice=None, asks=None, due=None, you=None, sticking=None, sev=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3041,7 +3044,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     see room_html. plans (3.1): {cards, offers} from plan_flow.board_view
     (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
-    asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks."""
+    asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
+    sev (3.8.1): Sev's markup beside the logo (rooms.board_sev), or None."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3096,7 +3100,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("milestonex:" + str(uid))}">&times;</a></div>')
     lobby = ""
     if room and period in ("today", "week"):
-        bans += [b for b in _split_wraps(room_html({"done": room.get("done"), "invites": room.get("invites")}))]
+        bans += [b for b in _split_wraps(room_html({"done": room.get("done"), "invites": room.get("invites"),
+                                                     "fifteen_done": room.get("fifteen_done")}))]
         lobby = room_html({"mine": room.get("mine")})
     if wrap and not show_up:  # the week's totals are numbers
         extra = ""
@@ -3159,9 +3164,10 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
-    return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>'
+    sheet = f'<style>{SEV_CSS}{_sev.CSS}</style>' if cfg.get("sev", True) else ""  # 3.8.1: Sev's moments
+    return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
             f'{you_html(cfg, due, you)}<div class="dc-sheet">'
-            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period)}{body}{foot}</div></div>')
+            f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
 
 
 def you_html(cfg, due=None, you=None):
@@ -3361,6 +3367,13 @@ def _settings_board(cfg):
             + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
+            + '</div><div class="st-h">Fifteen and Sev</div><div class="st-box">'
+            + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
+                      "And the nudge, when you haven't started by your usual time")
+            + _st_row("Sev", _st_switch("sev", g("sev", True), "Sev"), "The square from the logo, beside it and in your fifteens")
+            + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
+                                            cfg.get("sev_break", "breathe"), "On a break"),
+                      "Breathe with Sev, four counts a side, or stretch")
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -3513,6 +3526,19 @@ def room_html(room):
     Every string in it may carry a friend's name: escaped here."""
     e = _html.escape
     out = ""
+    fd = room.get("fifteen_done")
+    if fd:
+        # 3.8.1: a session of fifteens, ended: Sev stacks a square for each
+        n = int(fd.get("n") or 0)
+        mins = int(fd.get("minutes") or 0)
+        cards = fd.get("cards")
+        what = f'{n} fifteen{"" if n == 1 else "s"} &middot; {e(room_model.duration_text(mins))}'
+        if isinstance(cards, int):
+            what += f' &middot; {cards:,} card{"" if cards == 1 else "s"}'
+        icon = f'<span class="dc-sevw st">{fd["sev"]}</span>' if fd.get("sev") else "<span>&#10003;</span>"
+        out += (f'<div class="dc-wrap">{icon}<span><b>Your session:</b> {what}.'
+                f'{" It ended at the question. That still counts." if fd.get("walked") else ""}</span>'
+                f'<a class="wx" href="#" title="Done" style="margin-left:auto" onclick="{_pycmd("room15x")}">&times;</a></div>')
     done = room.get("done")
     if done:
         out += (f'<div class="dc-wrap"><span>&#10003;</span><span><b>Room done:</b> '
@@ -3529,6 +3555,8 @@ def room_html(room):
                 f'</span><a class="wc" href="#" onclick="{_pycmd("roomjoin:" + key)}">Join</a>'
                 f'<a class="wx" href="#" title="Not now" onclick="{_pycmd("roomx:" + key)}">&times;</a></div>')
     mine = room.get("mine")
+    if mine and mine.get("fifteen"):
+        return out + _fifteen_lobby(mine)
     if mine:
         bars = ""
         for i, f in enumerate(mine.get("bars") or []):
@@ -3544,6 +3572,52 @@ def room_html(room):
                 f'<a class="go" href="#" onclick="{_pycmd("roomstudy")}">Study</a>'
                 f'<a class="lv" href="#" onclick="{_pycmd("roomleave")}">Leave</a></span></div>')
     return out
+
+
+def _fifteen_lobby(m):
+    """3.8.1: my fifteen on the Decks screen: its ring with Sev beside it,
+    and what can be said there (the question too, as the review screen asks it)."""
+    e = _html.escape
+    st = m.get("state")
+    sub = str(m.get("sub", ""))
+    if st == "ask" and isinstance(m.get("cards"), int):
+        sub = f'{m["cards"]:,} card{"" if m["cards"] == 1 else "s"}. ' + sub
+    go = lambda cmd, text, cls="go": f'<a class="{cls}" href="#" onclick="{_pycmd(cmd)}">{text}</a>'  # noqa: E731
+    if st == "ask":
+        acts = ("" if m.get("cap") else go("room15five", "Take five, then another") + go("room15now", "Another now", "lv"))
+        acts += go("room15stop", "Stop here", "go" if m.get("cap") else "lv")
+    elif st == "break":
+        acts = go("room15now", "Start now") + go("room15stop", "Stop here", "lv")
+    else:
+        acts = go("duestudy", "Study") + go("room15stop", "Stop here", "lv")
+    sv = f'<span class="dc-sevw">{m["sev"]}</span>' if m.get("sev") else ""
+    return (f'<div class="dc-room dc-fif"><span class="rgw">{sv}<span class="rg{" brk" if m.get("brk") else ""}" '
+            f'style="--p:{float(m.get("frac", 0)):.3f}"><b>{e(str(m.get("label", "")))}</b></span></span>'
+            f'<span class="rt"><b>{e(str(m.get("title", "")))}</b><small>{e(sub)}</small></span>'
+            f'<span class="rw">{acts}</span></div>')
+
+
+# 3.8.1: Sev on the board wears the board's colours; its size is its body's
+SEV_CSS = """
+    #due-crew { --sv-a: var(--dc-accent); --sv-line: var(--dc-line); --sv-amb: var(--dc-hours); --sv-mut: var(--dc-muted); }
+    #due-crew .dc-sev { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center;
+      margin-left: 6px; vertical-align: middle; line-height: normal; }
+    #due-crew .dc-sev svg { width: 44px; height: 44px; margin: -8px; }
+    #due-crew .dc-sevw { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; flex: none; }
+    #due-crew .dc-sevw svg { width: 48px; height: 48px; margin: -9px; }
+    #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
+    #due-crew .dc-fif .rt { text-align: left; }
+    /* the session's line: room above Sev's head for the squares it stacks */
+    #due-crew .dc-sevw.st { height: 50px; align-items: flex-end; }
+    #due-crew .dc-sevw.st svg { margin: 0 -9px -8px; }
+    #due-crew .dc-fif .rw { flex-wrap: wrap; justify-content: flex-end; }
+    #due-crew .du-nudge { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center;
+      font-size: 12.5px; padding: 6px 2px 8px; text-align: left; }
+    #due-crew .du-nudge .nz { position: relative; width: 34px; height: 28px; overflow: hidden; }
+    #due-crew .du-nudge .nz svg { position: absolute; left: -7px; top: -19px; width: 48px; height: 48px; }
+    #due-crew .du-nudge .du-go { margin: 0; }
+    #due-crew .du-nudge .x { color: var(--dc-muted); font-weight: 400; margin-left: 10px; text-decoration: none; }
+"""
 
 
 def _card(cfg, title, body_html):
@@ -4619,6 +4693,12 @@ def _due_html(v, more=(), more_tab=None, more_body="", folded=None):
                  f'<a href="#" onclick="{_pycmd("dueshow:" + v["toast"]["tab"])}">Show</a></div>')
     body = ""
     if tab == "today":
+        if v.get("nudge"):
+            # 3.8.1: once a day, past my usual start, nothing studied yet: Fifteen?
+            peek = f'<span class="nz">{v["nudge_sev"]}</span>' if v.get("nudge_sev") else "<span>&#9654;</span>"
+            body += (f'<div class="du-nudge">{peek}<span><b>Not started yet today.</b> Fifteen?</span>'
+                     f'<span><a href="#" class="du-go" title="Fifteen minutes, then one question" onclick="{_pycmd("room15")}">Start</a>'
+                     f'<a href="#" class="x" title="Not today" onclick="{_pycmd("duex:fifteen")}">&times;</a></span></div>')
         body += _due_behind(v)
         for r in v["rows"]:
             if r["kind"] == "reviews":

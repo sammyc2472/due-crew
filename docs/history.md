@@ -1482,3 +1482,46 @@ every release that changes how something works.
   (`rooms._little_shown`; the card says `roomcardoff` as it closes, and a
   redraw that finds the page took the card along brings the chip back),
   and it moves by its top row, kept on screen and remembered per side.
+- 3.8.1, the Fifteen and Sev (the "Fifteen, Sev, Buddies" and "Sev Design"
+  pages; Sam's picks). ▶ Fifteen? sits at the chip's end of Anki's top
+  bar whenever I'm in no room, and the You box asks "Not started yet
+  today. Fifteen?" once a day, only when nothing's studied, something's
+  due and it's past my usual start (the middle of my first answers over
+  the last two weeks, from three days of them; never on away days; ×
+  says Not today). Start makes a fifteen (`room_model.make_fifteen`: a
+  room of kind fifteen, 15 + 5, one round) and Study today opens. When
+  the fifteen ends, once the card in front of me is answered, one
+  question takes the next card's place, the break's way: Take five, then
+  another fifteen (a round more after five minutes from the fifteen's
+  end: the question waits those five, `ASK`); Another fifteen now (the
+  start moves back so the next starts this minute: it's mine alone, so
+  nobody holds the old one); Stop here. Each yes adds one, up to the
+  room's eight. No answer in five minutes and it ends quietly; it still
+  counts. The Decks screen's lobby asks it too (the chip's clock tells
+  the board when a phase changes, `roomtick`), and so does the chip's
+  card. A fifteen never rides my week doc as a room (nobody joins one
+  yet: the buddy comes later): my crew sees I'm studying now, to the end
+  of its question (`room_model.live_until`), so a start, each yes and a
+  stop are one write each, and its breaks cost no refresh. The end is a
+  line on the board, a day long: fifteens begun, minutes in them, cards
+  answered since the start. room_model.phase and the widgets' JS gained
+  the question (`ask`) together; `test_fifteen_js_phase_matches_v381`
+  runs both.
+  Sev is Block (no belt, big round eyes, stubby arms, cheeks only when a
+  cheer lands), drawn once by `sev.py`: the board draws it, and the
+  widgets get its markup as data, so there's no JS twin. Every pose
+  draws the same named parts and one sheet moves them; a moment that
+  happens once (a hop, a cheer, the clock) plays once and rests when
+  drawn again; a state (a nap, heads down, a break) loops gently. The
+  still frame is the markup, and motion lives under the computer's own
+  Reduce motion (Anki's is on unless switched off, so it isn't asked:
+  Sam's call). Beside the logo, never on it: away, in a session, a cheer
+  that just landed, exam eve, the day done (the week's squares fly,
+  Thursday's grey), studying, else a nap. In a fifteen: a jump to start,
+  heads down (a blink every seven seconds, eyes along its card, the card
+  turns now and then), the clock at the question, breathing along with
+  the break (a square, four counts a side) or stretching, a square on
+  its head for each fifteen at the end. Settings › Fifteen and Sev: the
+  top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
+  Stretch, all on this computer. Not yet: Sev on crew rows (the site's
+  board would need it too), the week card, Welcome back, the buddy.

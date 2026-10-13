@@ -24,7 +24,7 @@ import threading
 import requests
 
 from .. import bingo as _bingo
-from ..room_model import clean_room, is_over
+from ..room_model import clean_room, is_fifteen, is_over
 from .shapes import (
     AuthError, REPORT_NOTE_MAX, TransportError, TIMEOUT, WEEK_WINDOW, _clean_day, _clean_decks, _clean_member,
     _exam_value, _live_room, _week_days, away_range, clean_days, clean_emoji, clean_squad_name, clean_note, clean_offer, clean_authored, clean_plan, clean_sched, clean_recap, clean_cards, clean_notice,
@@ -534,8 +534,8 @@ class ApiClient:
         if tricky:
             doc["tricky"] = tricky
         room = clean_room(self.session.get("room"))
-        if room and not is_over(room):
-            doc["room"] = room
+        if room and not is_over(room) and not is_fifteen(room):
+            doc["room"] = room  # 3.8.1: a fifteen isn't a room to join: it's studying now, above
         recap = clean_recap(self.session.get("recap"), labels[0] if labels else None)
         if recap:
             doc["recap"] = recap

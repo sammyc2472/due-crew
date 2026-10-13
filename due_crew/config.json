@@ -25,5 +25,8 @@
   "emoji": "",
   "room_chip_side": "right",
   "muted": [],
-  "hidden_tabs": []
+  "hidden_tabs": [],
+  "fifteen": true,
+  "sev": true,
+  "sev_break": "breathe"
 }

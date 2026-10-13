@@ -1826,7 +1826,7 @@ def test_study_rooms_v212():
     data = rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0"))
     js = rm.widget_js("chip", data)
     check("widgets: names ride as JSON data and go in as text",
-          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "")
+          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "").replace("w.innerHTML = D.sev[k]", "")
           and "textContent" in js)
     check("widgets: faces are each person's own initial, mine too (not Y for 'you')",
           data["initials"] == ["D", "A", "S"] and data["names"][-1] == "you")
@@ -3115,7 +3115,7 @@ def test_room_card_pops_out_on_the_chips_side_v381():
         R._where = lambda: "chip"
         R._card_web = lambda: main
         sides = []
-        R.room_model.widget_data = lambda room, entries, acc, compact=False, side="right": (sides.append(side), {"side": side})[1]
+        R.room_model.widget_data = lambda room, entries, acc, compact=False, side="right", **kw: (sides.append(side), {"side": side})[1]
         R.show_card()
         hid = [js for w, js in evals if w == "top" and "dc-room-chip" in js]
         check("card: popped out on the chip's side; the chip hides", sides == ["left"] and hid and "'hidden'" in hid[-1]
@@ -12051,6 +12051,249 @@ def test_heatmap_day_v380():
         check("heat: not a day, or a day ahead: nothing", shown == [[901, 902]])
     finally:
         F._browse, dc.mw.col, _state["labels"] = saved
+
+
+def test_fifteen_model_v381():
+    """3.8.1, the Fifteen: fifteen minutes, then a question for five; each
+    yes adds one (after a five-minute break, or now), up to eight; no
+    answer and it's over. Mine alone: never a room on my week doc."""
+    from due_crew import room_model as rm
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
+    at = lambda m: t0 + datetime.timedelta(minutes=m)
+    f = rm.make_fifteen("me", t0)
+    check("fifteen: one fifteen of 15 with a 5-min break, kind kept by clean_room",
+          f == {"host": "me", "start": "2026-10-13T18:00:00Z", "rounds": 1, "round": 15, "brk": 5, "kind": "fifteen"}
+          and rm.clean_room(dict(f)) == f and rm.is_fifteen(f) and not rm.is_fifteen(rm.make_room("x", t0)))
+    check("fifteen: a friend's doc can't make a room a fifteen with junk",
+          "kind" not in rm.clean_room(dict(f, kind="party")))
+    got = [(m, rm.phase(f, at(m))["state"]) for m in (0, 14.9, 15, 19.9, 20)]
+    check("fifteen: the question for five minutes after the fifteen, then done",
+          got == [(0, "round"), (14.9, "round"), (15, "ask"), (19.9, "ask"), (20, "done")], got)
+    five = rm.fifteen_next(f, at(16))
+    check("take five: one more after a five-minute break from the fifteen's end; the start holds",
+          five["rounds"] == 2 and five["start"] == f["start"] and rm.phase(five, at(16))["state"] == "break"
+          and rm.phase(five, at(20))["state"] == "round" and rm.phase(five, at(35))["state"] == "ask")
+    now = rm.fifteen_next(f, at(16), wait=False)
+    p = rm.phase(now, at(16))
+    check("another now: the next fifteen starts this minute, all fifteen of it",
+          now["rounds"] == 2 and p["state"] == "round" and p["round"] == 2 and p["left"] == 900)
+    early = rm.fifteen_next(five, at(17), wait=False)
+    check("Start now on the break: the same, the round it was waiting for",
+          early["rounds"] == 2 and rm.phase(early, at(17))["state"] == "round" and rm.phase(early, at(17))["left"] == 900)
+    check("nothing to answer in a fifteen, or a room's break",
+          rm.fifteen_next(f, at(5)) is None and rm.fifteen_next(rm.make_room("x", t0, 4, 25, 5), at(27)) is None)
+    eight = dict(f, rounds=8)
+    check("eight is the most: no ninth", rm.fifteen_next(eight, at(8 * 15 + 7 * 5 + 1)) is None
+          and rm.phase(eight, at(8 * 15 + 7 * 5 + 1))["state"] == "ask")
+    check("what's spent: fifteens begun and their minutes",
+          rm.fifteen_spent(f, at(7.5)) == (1, 7) and rm.fifteen_spent(f, at(16)) == (1, 15)
+          and rm.fifteen_spent(now, at(23)) == (2, 22) and rm.fifteen_spent(f, at(0.2)) == (0, 0))
+    check("studying now lasts to the end of the question", rm.live_until(five) == at(40))
+    check("usual start: the middle of the last days' first answers; none from under three days",
+          rm.usual_start([3600 * 18, 3600 * 19, 3600 * 20]) == 3600 * 19 and rm.usual_start([10, 20]) is None
+          and rm.usual_start([100, 300, 200, 400]) == 250)
+    v = rm.board_view(now, [], now=at(16))["mine"]
+    check("on the Decks screen: the fifteen, its ring, minutes left",
+          v["fifteen"] and v["state"] == "round" and v["title"] == "Fifteen 2" and v["label"] == "15")
+    q = rm.board_view(f, [], now=at(16))["mine"]
+    check("…and its question there too", q["state"] == "ask" and q["label"] == "✓" and "another fifteen?" in q["sub"])
+    check("a capped one says so", "two hours" in rm.board_view(eight, [], now=at(8 * 15 + 7 * 5 + 1))["mine"]["sub"])
+
+    # the week doc: a fifteen isn't a room to join; it's studying now
+    from due_crew.backend import shapes as S
+    check("fifteen: never on a row as a room", S._live_room(f) is None and S._live_room(rm.make_room("x", at(0))) is not None)
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    cl.session = {"room": rm.make_fifteen("me", datetime.datetime.now(utc)), "live_until": "2099-01-01T00:00:00Z"}
+    doc = cl.week_doc([TODAY.isoformat()], {})
+    check("fifteen: my week doc has studying now and no room", "room" not in doc and doc.get("liveUntil"), doc)
+    cl.session["room"] = rm.make_room("me", datetime.datetime.now(utc), 2, 25, 5)
+    check("…a room with my crew still rides it", "room" in cl.week_doc([TODAY.isoformat()], {}))
+
+
+def test_fifteen_js_phase_matches_v381():
+    """The widgets' clock is room_model.phase restated (a twin): a fifteen's
+    question and its end, on both sides. Needs node; skipped without it."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm
+    node = shutil.which("node")
+    if not node:
+        print("SKIP fifteen phase parity: no node")
+        return
+    src = rm._RUNTIME
+    fn = src[src.index("  function phase(now) {"):src.index("  function hm(ms)")]
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=datetime.timezone.utc)
+    cases, datas = [], []
+    for i, room in enumerate((rm.make_fifteen("me", t0), dict(rm.make_fifteen("me", t0), rounds=3), rm.make_room("x", t0, 2, 25, 5))):
+        d = rm.widget_data(room, [], ("#000", "#fff"), sev=False)
+        datas.append({k: d[k] for k in ("start", "rounds", "round", "brk", "kind", "ask")})
+        for m in range(-3, 140, 1):
+            when = t0 + datetime.timedelta(minutes=m, seconds=7)
+            p = rm.phase(room, when)
+            cases.append([i, int(when.timestamp() * 1000), p["state"], p["round"], round(p["left"])])
+    prog = ("var D;" + fn + f"var datas = {json.dumps(datas)}, cases = {json.dumps(cases)}, bad = 0;"
+            "cases.forEach(function (c) { D = datas[c[0]]; var p = phase(c[1]);"
+            " if (p.state !== c[2] || p.round !== c[3] || Math.round(p.left / 1000) !== c[4]) { bad++; } });"
+            "console.log(bad + '/' + cases.length);")
+    out = subprocess.run([node], input=prog, capture_output=True, text=True, timeout=60)
+    check("fifteen: the widgets' clock is the model's, question and all", out.stdout.strip() == f"0/{len(cases)}", out.stdout + out.stderr)
+
+
+def test_fifteen_widgets_v381():
+    """▶ Fifteen? in the top bar; the question and its break on the review
+    screen, keyed (a card's own script can't answer it); Sev in them."""
+    from due_crew import room_model as rm
+    t0 = datetime.datetime.now(datetime.timezone.utc)
+    start = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "left", True, nap=True))
+    check("Fifteen? (with its question mark) at the chip's end, napping Sev, starts one",
+          "'Fifteen?'" in start and "position:fixed;left:10px" in start and "send('room15')" in start
+          and "m-nap" in start and "dc-sev-css" in start)
+    plain = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "right", False))
+    check("…and with Sev off, no Sev", "sv m-" not in plain and '"sev": null' in plain)
+    f = rm.make_fifteen("me", t0)
+    ask = rm.widget_js("ask", rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), cards=38, total=61))
+    check("the question: three answers, keyed, Sev with the clock",
+          all(f"'{c}'" in ask for c in ("room15five", "room15now", "room15stop")) and "That’s fifteen." in ask
+          and "m-ring" in ask and '"cards": 38' in ask and "No answer in five minutes" in ask)
+    brk = rm.widget_js("break", rm.widget_data(dict(f, rounds=2), [], ("#2e7d32", "#7cc47f"), brk_pose="stretch"))
+    check("a fifteen's break: Start now and Stop here, Sev stretching (Settings), no cheer for nobody",
+          "'room15now'" in brk and "'room15stop'" in brk and '"brk_pose": "stretch"' in brk and "Cheer the room" in brk
+          and "FIF ?" in brk)
+    room = rm.widget_js("break", rm.widget_data(rm.make_room("dre", t0, 2, 25, 5), [], ("#2e7d32", "#7cc47f")))
+    check("a room with my crew keeps its break as it was (no Sev yet)", '"sev": null' in room and '"kind": "room"' in room)
+    check("the answers are the widget's own commands", {"room15five", "room15now", "room15stop"} <= set(rm.CARD_PAGE_CMDS))
+    msg, ok = rm.trusted("duecrew:room15now", True)
+    msg2, ok2 = rm.trusted(f"duecrew:room15now|{rm.CMD_KEY}", True)
+    check("from the review page only with the key", not ok and ok2 and msg2 == "duecrew:room15now")
+
+
+def test_fifteen_flow_v381():
+    """Start, the question, its answers, the end: through _on_js, as the
+    top bar, the board and the review screen send them."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    from due_crew import rooms as R, room_model as rm, app as appmod, due_flow
+    from due_crew.app import _state
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
+    clock = {"now": t0}
+    cl = types.SimpleNamespace(signed_in=True, user_id="me", session={}, _save_session=lambda: None)
+    syncs, swaps, evals, walked = [], [], [], []
+    col = types.SimpleNamespace(db=types.SimpleNamespace(scalar=lambda *a: 7), sched=types.SimpleNamespace(day_cutoff=10 ** 10))
+    saved = (R.client, R._now, R._eval, R._webs, appmod.sync, appmod.swap, due_flow.study_today, R.mw.state, R.mw.col,
+             dict(_state), R.cfg)
+    try:
+        R.client = lambda: cl
+        R._now = lambda: clock["now"]
+        R._eval = lambda web, js: evals.append(js)
+        R._webs = lambda: (None, None, None)
+        R.cfg = lambda: {}
+        appmod.sync = lambda **k: syncs.append(k)
+        appmod.swap = lambda c, **k: swaps.append(1)
+        due_flow.study_today = lambda: walked.append(1)
+        R.mw.state, R.mw.col = "deckBrowser", col
+        _state["entries"] = [{"user_id": "me", "you": True, "room": None, "live_until": ""}]
+        _state["labels"] = ["2026-10-13"]
+        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        room = cl.session.get("room")
+        check("start: a fifteen of mine, my crew sees studying now (one light sync), Study today opens",
+              rm.is_fifteen(room) and room["rounds"] == 1 and cl.session.get("live_until") == "2026-10-13T18:20:00Z"
+              and syncs == [{"light": True, "fetch": False}] and walked == [1]
+              and _state["entries"][0]["room"] is None and _state["entries"][0]["live_until"] == "2026-10-13T18:20:00Z")
+        clock["now"] = t0 + datetime.timedelta(minutes=16)
+        R.rm_real = rm.phase
+        dc._on_js(False, "duecrew:room15five", DeckBrowser())
+        check("take five: one more, studying now to the end of its question",
+              cl.session["room"]["rounds"] == 2 and cl.session["live_until"] == "2026-10-13T18:40:00Z" and len(syncs) == 2)
+        clock["now"] = t0 + datetime.timedelta(minutes=17)
+        walked.clear()
+        dc._on_js(False, "duecrew:room15now", DeckBrowser())
+        check("Start now on its break: the second starts this minute; from Decks, Study today opens",
+              rm.phase(cl.session["room"], clock["now"])["left"] == 900 and walked == [1])
+        clock["now"] = t0 + datetime.timedelta(minutes=22)
+        dc._on_js(False, "duecrew:room15stop", DeckBrowser())
+        done = cl.session.get("fifteen_done")
+        check("stop: the session's line (fifteens begun, minutes, cards), nothing left of it, crew told",
+              "room" not in cl.session and "live_until" not in cl.session and done
+              and (done["n"], done["minutes"], done["cards"], done["walked"]) == (2, 20, 7, False) and len(syncs) == 4,
+              str((done, len(syncs), sorted(cl.session))))
+        view = R.board_view()
+        check("…on the board, with Sev stacking (once)", view.get("fifteen_done", {}).get("n") == 2
+              and "stk" in (view["fifteen_done"].get("sev") or "") and " rest" not in view["fifteen_done"]["sev"].split('"')[1])
+        check("…and drawn again it rests", " rest" in R.board_view()["fifteen_done"]["sev"].split('"')[1])
+        dc._on_js(False, "duecrew:room15x", DeckBrowser())
+        check("× takes the line away", "fifteen_done" not in cl.session)
+        # walked away: no answer, so it ends quietly, with no sync of its own
+        clock["now"] = t0
+        dc._on_js(False, "duecrew:room15", DeckBrowser())
+        n = len(syncs)
+        clock["now"] = t0 + datetime.timedelta(minutes=21)
+        real_phase = rm.phase
+        R.room_model.is_over = lambda r, now=None: rm.phase(r, clock["now"])["state"] == "done"
+        try:
+            gone = R.my_room()
+        finally:
+            R.room_model.is_over = lambda r, now=None: r is None or real_phase(r, now)["state"] == "done"
+        d = cl.session.get("fifteen_done") or {}
+        check("no answer: over, quietly (no request), and it still counts", gone is None and d.get("walked") is True
+              and d.get("n") == 1 and len(syncs) == n and "live_until" not in cl.session, str((d, len(syncs), n, sorted(cl.session))))
+    finally:
+        (R.client, R._now, R._eval, R._webs, appmod.sync, appmod.swap, due_flow.study_today, R.mw.state, R.mw.col,
+         st, R.cfg) = saved
+        _state.clear()
+        _state.update(st)
+        R.room_model.is_over = rm.__dict__["is_over"]
+
+
+def test_fifteen_board_v381():
+    """The board: the lobby's question, the session's line, the nudge, Sev
+    beside the logo, and the Settings that turn it all off."""
+    from due_crew import room_model as rm, sev, settings_model as SM
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=datetime.timezone.utc)
+    f = rm.make_fifteen("me", t0)
+    ask = dict(rm.fifteen_view(f, t0 + datetime.timedelta(minutes=16)), cards=38, sev=sev.svg("ring"))
+    h = board.room_html({"mine": ask})
+    check("lobby, the question: cards, three answers, Sev with its clock",
+          "38 cards." in h and all(f"duecrew:{c}" in h for c in ("room15five", "room15now", "room15stop")) and "m-ring" in h)
+    cap = board.room_html({"mine": rm.fifteen_view(dict(f, rounds=8), t0 + datetime.timedelta(minutes=8 * 15 + 7 * 5 + 1))})
+    check("…capped: Stop here only", "room15five" not in cap and "room15now" not in cap and "room15stop" in cap)
+    rnd = board.room_html({"mine": rm.fifteen_view(f, t0 + datetime.timedelta(minutes=3))})
+    check("…in a fifteen: Study and Stop here", "duecrew:duestudy" in rnd and "room15stop" in rnd and "12 min left" in rnd)
+    line = board.room_html({"fifteen_done": {"n": 3, "minutes": 45, "cards": 1212, "walked": True, "sev": sev.svg("stack", stack=3)}})
+    check("the session's line: fifteens, minutes, cards, and that a quiet end still counts",
+          "3 fifteens &middot; 45 m &middot; 1,212 cards." in line and "still counts" in line and "room15x" in line)
+    v = {"today": "2026-10-13", "name": "Due", "done_n": 0, "total_n": 2, "behind_n": 0, "folded": False, "tab": "today",
+         "rows": [], "suggestions": [], "notes": [], "later": [], "later_n": 0, "nudge": True, "nudge_sev": sev.svg("peek")}
+    try:
+        nud = board._due_html(v)
+    except Exception as ex:  # the view's other keys: from a real one
+        nud = str(ex)
+    check("the nudge: Not started yet today. Fifteen? Start, and Not today",
+          "Not started yet today." in nud and "duecrew:room15" in nud and "duecrew:duex:fifteen" in nud and "m-peek" in nud, nud[:300])
+    head = board._head("today", sev=sev.svg("nap"))
+    check("Sev beside the logo, never on it", 'class="dc-sev"' in head and head.index("dc-mark") < head.index("dc-sev"))
+    check("moods: away, a session, a cheer, exam eve, day done, studying, a nap",
+          [sev.mood(away=True, in_session=True), sev.mood(in_session=True, cheered=True), sev.mood(cheered=True, exam_eve=True),
+           sev.mood(exam_eve=True, day_done=True), sev.mood(day_done=True, studied=True), sev.mood(studied=True), sev.mood()]
+          == ["away", "focus", "cheer", "exam", "hop", "idle", "nap"])
+    check("Sev: every pose draws; the cheer blushes and nothing else does; a stack of one",
+          all(sev.svg(k).startswith('<svg class="sv m-') for k in sev.POSES) and "sv-cheek" in sev.svg("cheer")
+          and "sv-cheek" not in sev.svg("idle") and sev.svg("stack", stack=1).count('class="stk') == 1)
+    check("Sev: still unless the computer allows motion; what happens once rests when drawn again",
+          sev.CSS.index("@media (prefers-reduced-motion: no-preference)") < sev.CSS.index("@keyframes")
+          and "animation" not in sev.CSS[:sev.CSS.index("@media")] and ' rest"' in sev.svg("hop", rest=True)
+          and " rest" not in sev.svg("nap", rest=True))
+    st = board.settings_html({"tab": "board"}, {})
+    check("Settings: Fifteen? in the top bar, Sev, and the break's Breathe or Stretch",
+          "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
+    check("…and what a click there saves", SM.change(["set", "sev", "0"], {}) == {"sev": False}
+          and SM.change(["set", "sev_break", "stretch"], {}) == {"sev_break": "stretch"}
+          and SM.change(["set", "sev_break", "dance"], {}) is None and SM.change(["set", "fifteen", "0"], {}) == {"fifteen": False})
+    off = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {"sev": False}, 0)
+    on = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {}, 0, sev=sev.svg("nap"))
+    check("Sev off: no motion sheet on the board; on, the sheet and Sev by the logo",
+          "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev"' in on)
 
 
 def main():

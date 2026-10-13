@@ -9,15 +9,25 @@ the break, which takes the place of the next card after a round ends.
 
 Rooms add no reads: the room rides my week doc, which friends already read
 (one write to open, join or leave). The clocks tick in the page.
+
+3.8.1, the Fifteen: ▶ Fifteen? in the top bar (or the nudge) starts fifteen
+minutes, a room of mine alone, and Study today opens. When the fifteen ends,
+once the card in front of me is answered, one question: take five, then
+another fifteen; another now; or stop. Each yes adds one, up to eight. No
+answer in five minutes and the session ends quietly. It isn't a room on my
+week doc: my crew sees I'm studying now, nothing more (one write to start,
+one per yes, one to stop). Sev, if on, keeps me company through it.
 """
 
 import datetime
 import html
+import time
+import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
 
-from . import app, board, room_model
+from . import app, board, room_model, sev
 from .app import _state, cfg, client, save_cfg
 
 
@@ -36,6 +46,9 @@ def my_room():
         return None
     if not room_model.is_over(room):
         return room
+    if room_model.is_fifteen(room):
+        _end_fifteen(room, walked=True)  # no answer to its question: the session ends quietly
+        return None
     ms = room_model.members(_state["entries"], room)
     others = [m for m in ms if not m[2]]
     cl.session.pop("room", None)
@@ -60,9 +73,24 @@ def _done():
 
 
 def board_view():
-    """For board.render(room=...)."""
-    return room_model.board_view(my_room(), _state["entries"],
-                                 _state["room_dismissed"], _done())
+    """For board.render(room=...). 3.8.1: a fifteen's question shows its
+    cards; the session's line, when one ended today."""
+    room = my_room()
+    out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done())
+    mine = out.get("mine")
+    if mine and mine.get("fifteen"):
+        if mine["state"] == "ask":
+            mine["cards"] = _cards_since(room_model.fifteen_round_start(room, room["rounds"]))
+        pose = {"ask": "ring", "break": "stretch" if _brk_pose() == "stretch" else "rest"}.get(mine["state"], "focus")
+        mine["sev"] = _sev_markup(pose, rest=pose == "ring" and _state.get("sev_rang") == room["start"])
+        if pose == "ring":
+            _state["sev_rang"] = room["start"]  # the clock rings once a fifteen
+    fd = _fifteen_done()
+    if fd:
+        out["fifteen_done"] = dict(fd, sev=_sev_markup("stack", stack=fd["n"], rest=bool(fd.get("seen"))))
+        if not fd.get("seen"):
+            fd["seen"] = True  # its stack plays once
+    return out
 
 
 def _set_room(room, msg):
@@ -74,7 +102,8 @@ def _set_room(room, msg):
     cl._save_session()
     for e in _state["entries"] or []:
         if e["you"]:
-            e["room"] = room
+            e["room"] = None if room_model.is_fifteen(room) else room  # 3.8.1: a fifteen is studying now
+            e["live_until"] = str(cl.session.get("live_until") or "")
     app.swap(cfg())
     app.sync(light=True, fetch=False)
     refresh_widgets()
@@ -190,20 +219,33 @@ def _webs():
             getattr(getattr(rv, "bottom", None), "web", None) if mw.state == "review" else None)
 
 
+def _data(room, side=None, **kw):
+    c = cfg()
+    return room_model.widget_data(room, _state["entries"], _accent_pair(),
+                                  compact=bool(c.get("room_compact")),
+                                  side=c.get("room_chip_side") if side is None else side,
+                                  sev=sev_on(), brk_pose=_brk_pose(), **kw)
+
+
 def refresh_widgets():
     """Put the room where it belongs for the screen Anki is on, or take it
-    down. Cheap: a few evals, no collection access, no network."""
+    down. Cheap: a few evals, no collection access, no network. 3.8.1: in
+    no room, ▶ Fifteen? sits at the chip's end of the top bar."""
     top, main, bottom = _webs()
-    room = my_room() if client().signed_in else None
+    signed = client().signed_in
+    room = my_room() if signed else None
     if room is None:
         for web in (top, main, bottom):
             _eval(web, room_model.widget_js("off"))
+        if signed and cfg().get("fifteen", True):
+            c = cfg()
+            _eval(top, room_model.widget_js("start", room_model.start_data(
+                _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
+                compact=bool(c.get("room_compact")))))
         return
-    c = cfg()
-    data = room_model.widget_data(room, _state["entries"], _accent_pair(),
-                                  compact=bool(c.get("room_compact")),
-                                  side=c.get("room_chip_side"))
+    data = _data(room)
     where = _where()
+    _eval(top, room_model.widget_js("start", None))
     _eval(top, room_model.widget_js("chip", data if where == "chip" else None))
     _eval(bottom, room_model.widget_js("bottom", data if where == "bottom" else None))
     _eval(main, room_model.widget_js("gutter", data if where == "gutter" else None))
@@ -241,9 +283,7 @@ def show_card():
     c = cfg()
     where = _where()
     # 3.8.1: it opens at the chip's end (the left one too); the bars' and the margin's are the right's
-    data = room_model.widget_data(room, _state["entries"], _accent_pair(),
-                                  compact=bool(c.get("room_compact")),
-                                  side=c.get("room_chip_side") if where == "chip" else "right")
+    data = _data(room, side=c.get("room_chip_side") if where == "chip" else "right")
     _eval(_card_web(), room_model.widget_js("card", data))
     _state["room_card"] = where
     _little_shown(where, False)
@@ -280,7 +320,8 @@ def _break_due(room):
 
 
 def _show_break(room):
-    data = room_model.widget_data(room, _state["entries"], _accent_pair())
+    data = _data(room)
+    _eval(mw.reviewer.web, room_model.widget_js("ask", None))
     _eval(mw.reviewer.web, room_model.widget_js("break", data))
     _eval(mw.reviewer.bottom.web,
           "var m=document.getElementById('middle');if(m){m.style.visibility='hidden';}")
@@ -302,8 +343,9 @@ def _show_break(room):
         pass
     # one refresh per break: who's in the room now, for the chip. At most
     # one light fetch a round (a doc per friend), and only while reviewing.
+    # 3.8.1: none for a fifteen: nobody else is in it
     mark = (room_model.room_key(room), room_model.phase(room)["round"])
-    if _state["room_refreshed"] != mark:
+    if _state["room_refreshed"] != mark and not room_model.is_fifteen(room):
         _state["room_refreshed"] = mark
         app.sync(light=True, fetch=True)
 
@@ -315,6 +357,7 @@ def _remove_break():
     if mw.state != "review":
         return  # leaving review reset the screen and its shortcuts already
     _eval(mw.reviewer.web, room_model.widget_js("break", None))
+    _eval(mw.reviewer.web, room_model.widget_js("ask", None))
     _eval(mw.reviewer.bottom.web,
           "var m=document.getElementById('middle');if(m){m.style.visibility='';}")
     try:
@@ -367,8 +410,16 @@ def swallow(message):
 
 def on_close():
     """profile_will_close: closing Anki leaves the room. Anki's closing sync
-    (or this push) takes it off my week doc; uploads still go while closing."""
+    (or this push) takes it off my week doc; uploads still go while closing.
+    3.8.1: a fifteen ends, and its line waits for the next open."""
     cl = client()
+    room = room_model.clean_room(cl.session.get("room"))
+    if cl.signed_in and room_model.is_fifteen(room):
+        try:
+            _end_fifteen(room, walked=False, closing=True)
+        except Exception:
+            traceback.print_exc()
+        return
     if cl.signed_in and cl.session.get("room"):
         cl.session.pop("room", None)
         cl._save_session()
@@ -386,7 +437,13 @@ def skip_break():
 
 
 def break_ended():
+    """The break's clock ran out, or the question's: no answer, so the
+    session ends here (my_room sees it's over)."""
     _remove_break()
+    if my_room() is None:
+        refresh_widgets()
+        if mw.state == "deckBrowser":
+            app.swap(cfg())
 
 
 # ---- hooks ----
@@ -400,6 +457,8 @@ def on_question(card):
     room = my_room()
     if room and _break_due(room):
         _show_break(room)
+    elif room_model.is_fifteen(room) and room_model.phase(room)["state"] == "ask":
+        _show_ask(room)
 
 
 def on_answer(card):
@@ -450,6 +509,16 @@ def on_message(cmd, parts):
         skip_break()
     elif cmd == "roombreakend":
         break_ended()
+    elif cmd == "room15":
+        start_fifteen()  # 3.8.1: ▶ Fifteen? and the nudge's Start
+    elif cmd in ("room15five", "room15now", "room15stop"):
+        fifteen_answer(cmd[6:])
+    elif cmd == "room15x":
+        dismiss_fifteen_done()
+    elif cmd == "roomtick":
+        # a phase changed (the chip saw it): the Decks screen's lobby follows
+        if mw.state == "deckBrowser":
+            app.swap(cfg())
     else:
         return False
     return True
@@ -464,3 +533,254 @@ def start_at(when_local_time, now=None):
     if start <= now:
         start += datetime.timedelta(days=1)
     return start.astimezone(datetime.timezone.utc)
+
+
+# ---- 3.8.1: the Fifteen ----
+
+def sev_on():
+    """Sev's switch in Settings, on this computer (on unless switched off)."""
+    return bool(cfg().get("sev", True))
+
+
+def _brk_pose():
+    return "stretch" if cfg().get("sev_break") == "stretch" else "breathe"
+
+
+def _sev_markup(pose, rest=False, stack=None):
+    return sev.svg(pose, rest=rest, stack=stack) if sev_on() else None
+
+
+def _cards_since(when):
+    """Cards answered since `when` (UTC). Main thread."""
+    try:
+        ms = int(when.timestamp() * 1000)
+        return int(mw.col.db.scalar("SELECT count() FROM revlog WHERE id >= ? AND ease > 0", ms) or 0)
+    except Exception:
+        return None
+
+
+def _studied_today():
+    """Any answer yet this Anki day (asked at every card for the top bar's
+    Sev: once it's yes, the day remembers)."""
+    try:
+        cutoff = int(mw.col.sched.day_cutoff)
+        if _state.get("fifteen_studied") == cutoff:
+            return True
+        yes = bool(mw.col.db.scalar("SELECT 1 FROM revlog WHERE id >= ? AND ease > 0 LIMIT 1", (cutoff - 86400) * 1000))
+        if yes:
+            _state["fifteen_studied"] = cutoff
+        return yes
+    except Exception:
+        return True
+
+
+def _now():
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _fifteen_live(room):
+    """Studying now, for my crew, to the end of this fifteen's question (or
+    longer, if I'd already said so)."""
+    cl = client()
+    until = room_model.iso(room_model.live_until(room))
+    mine = str(cl.session.get("live_until") or "")
+    if not board.live_now(mine) or mine == cl.session.get("fifteen_live") or mine < until:
+        cl.session["live_until"] = until
+    cl.session["fifteen_live"] = until
+
+
+def start_fifteen():
+    """▶ Fifteen? or the nudge's Start: fifteen minutes from now, and Study
+    today opens (unless I'm reviewing already)."""
+    cl = client()
+    if not cl.signed_in:
+        tooltip("Sign in to Due Crew first.")
+        return
+    if my_room():
+        show_card()  # already in one: here it is
+        return
+    room = room_model.make_fifteen(cl.user_id, _now())
+    cl.session["fifteen_began"] = room["start"]
+    cl.session.pop("fifteen_done", None)
+    _fifteen_live(room)
+    _set_room(room, None)
+    if mw.state != "review":
+        from . import due_flow
+        due_flow.study_today()
+
+
+def _show_ask(room):
+    """The question, in place of the next card (the break's way)."""
+    began = room_model._parse(client().session.get("fifteen_began") or room["start"])
+    data = _data(room, cards=_cards_since(room_model.fifteen_round_start(room, room["rounds"])),
+                 total=_cards_since(began) if began else None)
+    _eval(mw.reviewer.web, room_model.widget_js("ask", data))
+    _eval(mw.reviewer.bottom.web,
+          "var m=document.getElementById('middle');if(m){m.style.visibility='hidden';}")
+    try:
+        mw.clearStateShortcuts()
+    except Exception:
+        pass
+    try:
+        from aqt.sound import av_player
+        av_player.stop_and_clear_queue()
+    except Exception:
+        pass
+    _state["room_break"] = True
+    try:
+        mw.progress.single_shot(50, _stop_auto_advance)
+    except Exception:
+        pass
+
+
+def fifteen_answer(how):
+    """The question's answer (or the break's Start now): five, now, stop."""
+    room = my_room()
+    if not room_model.is_fifteen(room):
+        _remove_break()
+        return
+    if how == "stop":
+        _end_fifteen(room, walked=False)
+        return
+    nxt = room_model.fifteen_next(room, _now(), wait=(how == "five"))
+    if nxt is None:
+        return  # nothing to answer now, or the eighth is done (only Stop shows then)
+    _fifteen_live(nxt)
+    _set_room(nxt, None)
+    if mw.state == "review":
+        if how == "five":
+            _show_break(nxt)  # the five minutes, in place of the next card
+        else:
+            _remove_break()  # the next fifteen is under way: the card's back
+    elif how == "now":
+        from . import due_flow
+        due_flow.study_today()
+
+
+def _end_fifteen(room, walked=False, closing=False):
+    """The session's over: its line for the board (fifteens, minutes, cards),
+    Sev stacks a square for each, and my crew stops seeing me studying."""
+    cl = client()
+    n, minutes = room_model.fifteen_spent(room, _now())
+    began = room_model._parse(cl.session.get("fifteen_began") or room["start"])
+    cards = _cards_since(began) if began else None
+    cl.session.pop("room", None)
+    cl.session.pop("fifteen_began", None)
+    if cl.session.get("live_until") == cl.session.pop("fifteen_live", None):
+        cl.session.pop("live_until", None)
+    if n:
+        cl.session["fifteen_done"] = {"n": n, "minutes": minutes, "cards": cards, "walked": bool(walked),
+                                      "day": _state["labels"][0] if _state["labels"] else ""}
+    cl._save_session()
+    for e in _state["entries"] or []:
+        if e["you"]:
+            e["room"] = None
+            e["live_until"] = str(cl.session.get("live_until") or "")
+    if closing:
+        app.sync(light=True, fetch=False)
+        return
+    _remove_break()
+    if walked:
+        # found over while drawing: the redraw comes after this one
+        from aqt.qt import QTimer
+        QTimer.singleShot(0, lambda: (refresh_widgets(), mw.state == "deckBrowser" and app.swap(cfg())))
+        return
+    app.sync(light=True, fetch=False)  # my crew stops seeing "studying now"
+    refresh_widgets()
+    if mw.state == "review":
+        mw.moveToState("deckBrowser")  # the session's line is there, with Sev
+    else:
+        app.swap(cfg())
+
+
+def _fifteen_done():
+    d = client().session.get("fifteen_done")
+    if not isinstance(d, dict) or not d.get("n"):
+        return None
+    if _state["labels"] and d.get("day") and d["day"] != _state["labels"][0]:
+        return None  # a day old: gone
+    return d
+
+
+def dismiss_fifteen_done():
+    client().session.pop("fifteen_done", None)
+    client()._save_session()
+    app.swap(cfg())
+
+
+# ---- 3.8.1: the nudge, and Sev by the logo ----
+
+def _usual_start():
+    """When I usually start, in seconds into my Anki day: the middle of my
+    first answers on the days I studied in the last two weeks. Once a day."""
+    try:
+        cutoff = int(mw.col.sched.day_cutoff)
+    except Exception:
+        return None
+    hit = _state.get("fifteen_usual")
+    if hit and hit[0] == cutoff:
+        return hit[1]
+    usual = None
+    try:
+        first = cutoff - 15 * 86400
+        rows = mw.col.db.all("SELECT min(id) FROM revlog WHERE id >= ? AND id < ? AND ease > 0 "
+                             "GROUP BY (id / 1000 - ?) / 86400", first * 1000, (cutoff - 86400) * 1000, first)
+        usual = room_model.usual_start([(int(r[0]) // 1000 - first) % 86400 for r in rows if r and r[0]])
+    except Exception:
+        traceback.print_exc()
+    _state["fifteen_usual"] = (cutoff, usual)
+    return usual
+
+
+def nudge(c, v, dismissed=()):
+    """Whether the You box asks "Fifteen?": once a day, only when nothing's
+    studied yet, something's due, it's past my usual start, I'm not away,
+    in no room, and I didn't say Not today."""
+    try:
+        if not c.get("fifteen", True) or not client().signed_in or not mw.col or "fifteen" in dismissed:
+            return False
+        if not v or v.get("done") or int(v.get("total_n") or 0) <= int(v.get("done_n") or 0) or _studied_today() or my_room():
+            return False
+        from .backend.shapes import away_range
+        rng = away_range(c)
+        today = datetime.date.today()
+        if rng and rng[0] <= today <= rng[1]:
+            return False
+        usual = _usual_start()
+        return usual is not None and time.time() - (mw.col.sched.day_cutoff - 86400) >= usual
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
+def nudge_sev():
+    """Sev peeking in at the nudge: it rises once a day, then stays put."""
+    day = str(_state["labels"][0] if _state.get("labels") else "")
+    rest = _state.get("sev_peeked") == day
+    _state["sev_peeked"] = day
+    return _sev_markup("peek", rest=rest)
+
+
+def board_sev(c, v):
+    """Sev beside the logo: how my day is going, never how much. One moment
+    that happens once (a hop, a cheer) plays once a day; drawn again, it rests."""
+    if not sev_on():
+        return None
+    try:
+        from .backend.shapes import away_range
+        today = datetime.date.today()
+        rng = away_range(c)
+        exam = str(c.get("exam_date") or "") == (today + datetime.timedelta(days=1)).isoformat()
+        cheered = time.time() - float(_state.get("sev_cheer") or 0) < 15 * 60
+        mood = sev.mood(away=bool(rng and rng[0] <= today <= rng[1]), in_session=my_room() is not None,
+                        cheered=cheered, exam_eve=exam, day_done=bool(v and v.get("done")),
+                        studied=_studied_today() if mw.col else False)
+    except Exception:
+        traceback.print_exc()
+        return None
+    played = _state.setdefault("sev_played", set())
+    mark = (str(_state["labels"][0] if _state.get("labels") else ""), mood)
+    rest = mark in played
+    played.add(mark)
+    return sev.svg(mood, rest=rest)
+

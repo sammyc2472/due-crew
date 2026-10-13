@@ -13,17 +13,20 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "highlight_me", "share_reviews", "share_time", "share_retention",
             "share_streak", "share_heatmap",
             "due_show", "due_suggest", "due_leeches",  # Due
-            "shortcuts")  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
+            "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
+            "fifteen", "sev")  # 3.8.1: ▶ Fifteen? and the nudge; Sev
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
-           "room_chip_side": ("left", "right")}
+           "room_chip_side": ("left", "right"),
+           "sev_break": ("breathe", "stretch")}  # 3.8.1: a fifteen's break
 HIDEABLE = ("decks", "squads", "plans", "insights")  # 3.8.0: board.HIDEABLE_TABS: Crew's Decks, Squads; Plans, Insights
 PRIVACY = ("numbers", "showup", "paused")
 LABEL_MAX = 24
 # what Reset board puts back: the Board tab, never anything on Privacy
 BOARD_DEFAULTS = {"show_leaderboard": True, "show_stale": True, "sync_notifications": True,
                   "theme": "auto", "accent": "green", "compact": False, "highlight_me": True,
-                  "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True}
+                  "crew_label": "Crew", "room_chip_side": "right", "hidden_tabs": [], "shortcuts": True,
+                  "fifteen": True, "sev": True, "sev_break": "breathe"}
 
 
 def _day(text):

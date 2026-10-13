@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from ..room_model import clean_room, is_over
+from ..room_model import clean_room, is_fifteen, is_over
 
 TIMEOUT = 10
 LIVE_MINUTES = 60   # 2.10: "studying now" lasts this long unless stopped
@@ -303,7 +303,8 @@ def clean_cards(value):
 
 def _live_room(value):
     room = clean_room(value)
-    return None if is_over(room) else room
+    # 3.8.1: a fifteen is mine alone, never a room on a row (it's "studying now")
+    return None if is_over(room) or is_fifteen(room) else room
 
 
 def live_now(until, now_utc=None):

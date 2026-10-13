@@ -311,6 +311,10 @@ def view(c):
             if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
                 r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
         v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
+        # 3.8.1: "Fifteen?", when the day hasn't started by my usual time
+        from . import rooms
+        v["nudge"] = rooms.nudge(c, v, _day_state()[1].get("dismissed") or ())
+        v["nudge_sev"] = rooms.nudge_sev() if v["nudge"] else None
     except Exception:
         traceback.print_exc()
         return None
