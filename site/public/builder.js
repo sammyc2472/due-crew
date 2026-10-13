@@ -134,6 +134,88 @@ const Picks = (() => {
   return { take, notesText, cardsText };
 })();
 
+/** 3.8.1 (plans, rethought): a date's work, not its delivery. The cards a
+ *  date opens, over the study days until it's due (or until the next date
+ *  opens), as the plan's own days weigh them (Sched): what keeping up takes
+ *  each day. [[day, n]]; all on the next study day when its window has none. */
+const Work = (() => {
+  function spread(doc, u, total, days) {
+    if (!(total > 0) || !u?.opens) return [];
+    const sch = { days };
+    const [a, b] = Sched.win(doc, u, 0);
+    const ws = []; let whole = 0;
+    for (let x = a; x <= b; x = addDays(x, 1)) { const w = Number(Sched.weight(doc, sch, x, 0)) || 0; ws.push([x, w]); whole += w; }
+    if (!whole) {
+      for (let i = 1; i <= 60; i++) { const x = addDays(b, i); if (Number(Sched.weight(doc, sch, x, 0))) return [[x, total]]; }
+      return [[a, total]];
+    }
+    const out = []; let upto = 0, prev = 0;
+    for (const [x, w] of ws) { upto += w; const q = Math.min(total, Math.ceil((total * upto) / whole)); if (q > prev) out.push([x, q - prev]); prev = q; }
+    return out;
+  }
+  /** every day's work, {n, by: [[unit, n]]}, for each date of the plan */
+  function map(doc, totalOf, days) {
+    const out = new Map();
+    for (const u of doc.units || []) {
+      for (const [d, k] of spread(doc, u, totalOf(u), days)) {
+        if (!out.has(d)) out.set(d, { n: 0, by: [] });
+        const e = out.get(d); e.n += k; e.by.push([u, k]);
+      }
+    }
+    return out;
+  }
+  /** runs of days over the pace (a quarter over it): [{a, b, top}] */
+  function over(work, cap) {
+    const runs = [];
+    if (!cap) return runs;
+    for (const d of [...work.keys()].sort()) {
+      const v = work.get(d).n;
+      if (v <= cap * 1.25) continue;
+      const r = runs[runs.length - 1];
+      if (r && addDays(r.b, 1) === d) { r.b = d; r.top = Math.max(r.top, v); } else runs.push({ a: d, b: d, top: v });
+    }
+    return runs;
+  }
+  return { spread, map, over };
+})();
+
+/** 3.8.1 (plans, rethought): the deck's tags a date's name points at. "Renal
+ *  physiology" finds #Videos::Renal::Physiology: every word of the name in
+ *  the tag's path, one of them in its last part. Words, not card text: the
+ *  tag tree is all the builder has. [[path, n]] best first, at most `max`. */
+const Suggest = (() => {
+  const STOP = new Set(["and", "the", "for", "with", "part", "lecture", "lec", "week", "day", "read", "watch", "chapter", "unit",
+    "video", "videos", "intro", "introduction", "review", "notes", "extra", "extras", "session", "class"]);
+  const words = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
+  // "arrhythmia" and "arrhythmias", "cardiac" and "cardio": the same word here
+  const same = (a, b) => {
+    const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+    if (s === l || (s.length >= 4 && l.startsWith(s))) return true;
+    let k = 0; while (k < s.length && s[k] === l[k]) k++;
+    return k >= 5 && k >= 0.8 * s.length;
+  };
+  function tags(name, rows, skip = () => false, max = 3) {
+    const want = [...new Set(words(name))];
+    if (!want.length) return [];
+    const out = [];
+    for (const [path, n] of rows) {
+      if (!n || skip(path)) continue;
+      const segs = String(path).split("::");
+      const leaf = words(segs[segs.length - 1]);
+      const all = words(segs.join(" "));
+      const hit = want.filter((w) => all.some((x) => same(w, x))).length;
+      if (!hit || !want.some((w) => leaf.some((x) => same(w, x)))) continue;
+      out.push([path, n, hit / want.length, segs.length]);
+    }
+    out.sort((x, y) => y[2] - x[2] || y[3] - x[3] || x[1] - y[1]);
+    // every word of the name, or all but one of three or more when nothing has them all: half a name is noise
+    const need = out[0]?.[2] >= 1 || want.length <= 2 ? 1 : (want.length - 1) / want.length;
+    return out.filter((x) => x[2] >= need - 1e-9).slice(0, max).map(([p, n]) => [p, n]);
+  }
+  return { words, tags };
+})();
+
 /** 3.8.0: a plan's squad (its team until then), as the board's Squads tab
  *  draws it (board.py _plan_squad_html: change one, change both): who
  *  showed up today (answered one of the plan's cards), its bingo, then Ask
@@ -419,6 +501,15 @@ async function builder(id) {
   const label = (key, placed) => {
     const w = Tags.word(pathOf(key).split("::").pop());
     return placedBelow(key, placed).length ? `${w} · the rest` : w;
+  };
+  // 3.8.1 (plans, rethought): on the calendar, a last word the deck has in two
+  // places takes its parent's ("Renal › Physiology", not "Physiology")
+  const leafSeen = new Map();
+  for (const k of count.keys()) { const w = `${kindOf(k)}:${pathOf(k).split("::").pop().toLowerCase()}`; leafSeen.set(w, (leafSeen.get(w) || 0) + 1); }
+  const chipLabel = (key, placed) => {
+    const segs = pathOf(key).split("::");
+    const twice = segs.length > 1 && (leafSeen.get(`${kindOf(key)}:${segs[segs.length - 1].toLowerCase()}`) || 0) > 1;
+    return twice ? `${Tags.word(segs[segs.length - 2])} › ${label(key, placed)}` : label(key, placed);
   };
   const searchN = (u) => (u.search || []).reduce((a, q) => a + (u.sn?.[q] || 0), 0);
   // (defined before autoName: the first names are worked out as the page opens)
@@ -983,9 +1074,9 @@ async function builder(id) {
       const e = at(u.opens);
       if (!count.size) {
         // a follower's view: the author's count for the date, its names
-        for (const k of srcs(u)) e.chips.push({ u, key: k, text: label(k, placed), n: null, raw: pathOf(k) });
+        for (const k of srcs(u)) e.chips.push({ u, key: k, text: chipLabel(k, placed), short: label(k, placed), n: null, raw: pathOf(k) });
         e.load += u.n || 0;
-      } else for (const k of srcs(u)) { const c = uncounted(k) ? null : eff(k, placed); e.chips.push({ u, key: k, text: label(k, placed), n: c, raw: pathOf(k) }); e.load += c || 0; }
+      } else for (const k of srcs(u)) { const c = uncounted(k) ? null : eff(k, placed); e.chips.push({ u, key: k, text: chipLabel(k, placed), short: label(k, placed), n: c, raw: pathOf(k) }); e.load += c || 0; }
       for (const c of u.cut || []) {  // 3.8.1: counted by its search in an author's Anki, of its whole tag's
         const v = u.sn?.[c.q] ?? null, k = `tag:${c.tag}`;
         e.chips.push({ u, cut: c, key: k, text: cutName(c), raw: c.tag, n: v, of: count.size && count.has(k) ? n(k) : null });
@@ -1006,6 +1097,8 @@ async function builder(id) {
     }
     return out;
   }
+  // 3.8.1 (plans, rethought): each day's work, every date spread over its window (Work)
+  const workMap = (d0 = doc, placed = placedKeys()) => Work.map(d0, (u) => unitTotal(u, placed), pace.days);
   const hue = (key) => {
     if (!key) return "c9";
     const segs = pathOf(key).split("::");
@@ -1253,13 +1346,17 @@ async function builder(id) {
     const days = dayMap(a, b);
     const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
     const t = today();
-    const maxLoad = Math.max(1, ...[...days.values()].map((e) => e.load));
+    // 3.8.1: a day is heavy for the work it asks (its share of each date), not for what opens on it
+    const work = workMap();
+    const wOn = (d) => work.get(d)?.n || 0;
+    const maxWork = Math.max(1, ...[...work.entries()].filter(([d]) => d >= a && d <= b).map(([, x]) => x.n));
     const cells = [];
     for (let d = a; d <= b; d = addDays(d, 1)) {
       const e = days.get(d) || { chips: [], load: 0 };
       const ph = Sched.phase(doc, d, 0);
       const off = !pace.days[(parseIso(d).getUTCDay() + 6) % 7];
-      const heavy = cap && e.load > cap * 1.25;
+      const w = wOn(d);
+      const heavy = cap && w > cap * 1.25;
       const cls = ["d", off ? "off" : "", ph !== "build" ? ph : "", d === t ? "today" : "", d === picked ? "picked" : "", heavy ? "heavy" : "",
         doc.units.some((u) => u.opens === d && u.for && evById(u.for) && !afterEv(u)) ? "lead" : ""].filter(Boolean).join(" ");
       const dd = parseIso(d);
@@ -1276,19 +1373,33 @@ async function builder(id) {
       });
       const fors = [...new Set(doc.units.filter((u) => u.opens === d && u.for && evById(u.for)).map((u) => u.for))];
       const you = myLine(d);
-      const chips = e.chips.map((c) => {
+      // 3.8.1 (plans, rethought): a date the author named shows its name above its chips,
+      // unless its one chip already says it
+      const said = new Set(), headed = new Set();
+      const dname = (c) => {
+        const u = c.u;
+        if (!u || c.even || c.review || said.has(u) || auto.has(u.id) || !String(u.name || "").trim()) return null;
+        said.add(u);
+        const nm = u.name.trim().toLowerCase();
+        if (e.chips.some((x) => x.u === u && [x.text, x.short].some((t) => String(t || "").toLowerCase() === nm))) return null;
+        headed.add(u);
+        return h("span", { class: "dname", title: u.name }, u.name);
+      };
+      const chip = (c) => {
         // 3.8.1: a note for followers on its tag (or a tag above it): a small ⓘ, the note in its title
         const rmk = c.cut ? remarkOn(c.cut.tag) : c.key && kindOf(c.key) === "tag" ? remarkOn(pathOf(c.key)) : null;
         const el = h("button", { class: `ch ${c.review ? "rv" : c.picks ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}${c.even ? " ev" : ""}`, draggable: author && !c.review ? "true" : null,
           "data-k": c.u ? `${c.u.id}:${c.key || c.search || (c.picks ? "picks" : "")}` : null,
           title: `${c.raw || c.text}${c.n != null && !c.picks ? ` · ${c.n.toLocaleString()} cards` : ""}${rmk ? `\nⓘ ${rmk.text}` : ""}`,
           onclick: (ev) => { ev.stopPropagation(); picked = d; splitting = null; moving = null; sideTab = "day"; draw(); } },
-          h("span", {}, rmk ? h("i", { class: "ri", "aria-label": `Note: ${rmk.text}` }, "ⓘ ") : null, c.text), c.n != null && !c.picks ? h("small", {}, c.n.toLocaleString()) : null);
+          h("span", {}, rmk ? h("i", { class: "ri", "aria-label": `Note: ${rmk.text}` }, "ⓘ ") : null, headed.has(c.u) && c.short ? c.short : c.text), c.n != null && !c.picks ? h("small", {}, c.n.toLocaleString()) : null);
         if (author) el.addEventListener("dragstart", (ev) => { dragging = { chip: c }; ev.dataTransfer.setData("text/plain", c.text); ev.stopPropagation(); });
         return el;
-      });
-      const bar = e.load ? h("div", { class: `load${heavy ? " hi" : ""}` }, h("i", { style: `width:${Math.min(100, Math.round((100 * e.load) / (cap || maxLoad)))}%` })) : null;
-      const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "review-only days"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}`,
+      };
+      const chips = e.chips.flatMap((c) => [dname(c), chip(c)]).filter(Boolean);
+      const bar = w ? h("div", { class: `load${heavy ? " hi" : ""}`, title: `About ${w.toLocaleString()} new to learn this day` },
+        h("i", { style: `width:${Math.min(100, Math.round((100 * w) / (cap || maxWork)))}%` })) : null;
+      const cell = h("div", { class: cls, role: "gridcell", tabindex: "0", "aria-label": `${pretty(d)}${off ? ", a day off" : ""}${ph !== "build" ? `, ${ph === "catchup" ? "catch-up week" : "review-only days"}` : ""}: ${e.load ? `${e.load.toLocaleString()} cards` : "nothing new"}${w ? `, about ${w.toLocaleString()} to learn` : ""}`,
         onclick: () => { picked = picked === d ? null : d; splitting = null; moving = null; sideTab = picked ? "day" : "cover"; draw(); },
         onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); picked = picked === d ? null : d; moving = null; sideTab = picked ? "day" : "cover"; draw(); } } },
         h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...evs, ...chips,
@@ -1333,14 +1444,40 @@ async function builder(id) {
     const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
     if (!cap) return null;
     const [a, b] = range();
-    const days = dayMap(a, b);
-    for (const [d, e] of [...days.entries()].sort()) {
-      if (e.load <= cap * 1.25) continue;
-      const big = e.chips.filter((c) => !c.even && !c.cards && !c.search && !c.ids && !c.cut && c.key).sort((x, y) => y.n - x.n)[0];
-      return h("div", { class: "hnote" }, h("span", {}, h("b", {}, pretty(d)), ` is heavy: ${e.load.toLocaleString()} new (pace ${cap.toLocaleString()}).`),
-        big ? h("button", { class: "ghost", onclick: () => { picked = d; splitting = { u: big.u, key: big.key }; sideTab = "day"; draw(); } }, `Split ${big.text}`) : null);
-    }
-    return null;
+    // 3.8.1 (plans, rethought): the work a day asks, each date spread to its due date;
+    // a week's date due a week later is its daily share, never "212 new on Monday"
+    const work = workMap();
+    const run = Work.over(work, cap).find((r) => r.b >= a && r.a <= b);
+    if (!run) return null;
+    const [u] = work.get(run.a).by.slice().sort((x, y) => y[1] - x[1])[0];
+    const total = unitTotal(u), last = Sched.win(doc, u, 0)[1];
+    // what fixes it: split its biggest tag, or give it the study days the pace needs
+    const big = u.even ? null : srcs(u).filter((k) => !uncounted(k) && eff(k) > 0).sort((x, y) => eff(y) - eff(x))[0];
+    const need = Math.ceil(total / cap);
+    let till = u.opens, k = isStudy(u.opens) ? 1 : 0;
+    while (k < need && till < addDays(u.opens, 366)) { till = addDays(till, 1); if (isStudy(till)) k++; }
+    const when = run.a === run.b ? pretty(run.a) : `${pretty(run.a)} – ${pretty(run.b)}`;
+    return h("div", { class: "hnote" },
+      h("span", {}, h("b", {}, when), ` ${run.a === run.b ? "asks" : "ask"} ${run.top.toLocaleString()} new a day (pace ${cap.toLocaleString()}): `,
+        h("b", {}, u.name || autoName(u)), `, ${total.toLocaleString()} by ${pretty(last)}.`),
+      h("span", { class: "row" },
+        big ? h("button", { class: "ghost", onclick: () => { picked = u.opens; splitting = { u, key: big }; sideTab = "day"; draw(); } }, `Split ${chipLabel(big)}`) : null,
+        till > last ? h("button", { class: "ghost", onclick: () => { u.due = till; mark(); draw(); } }, `Give it till ${pretty(till)}`) : null));
+  }
+
+  /** 3.8.1 (plans, rethought): a named date's suggestions: the deck's tags its
+   *  name points at that no date has yet, each added in one click. */
+  function sugRows(u) {
+    if (!author || !count.size || auto.has(u.id) || !String(u.name || "").trim()) return [];
+    const placed = placedKeys();
+    const skip = (p) => { const k = `tag:${p}`; return isPlaced(k, placed) || [...placed].some((q) => under(q, k)); };
+    const found = Suggest.tags(u.name, tree.tags, skip);
+    if (!found.length) return [];
+    return [h("span", { class: "muted small" }, "In your deck:"), ...found.map(([p, k]) => h("button", { class: `ch2 sug1 ${hue(`tag:${p}`)}`, title: `Add ${Tags.name(p)}`,
+      onclick: () => {
+        if ((u.tags || []).length >= SOURCES_MAX) { note = srcFull("tags"); draw(); return; }
+        u.tags = [...(u.tags || []), p]; mark(); draw();
+      } }, h("span", {}, `+ ${chipLabel(`tag:${p}`)}`), h("small", {}, k.toLocaleString())))];
   }
 
   // ---- 3.8.1: a deck tag's extras (Extra, Bonus): with them, or without ----
@@ -1429,7 +1566,7 @@ async function builder(id) {
     const chipEl = (u, c) => {
       const nt = noteTag(c);
       const chip = h("span", { class: `ch2 ${c.picks ? "single" : c.search && c.n === 0 ? "warn" : c.search ? "c2" : hue(c.key)}`, title: c.raw || "" },
-        h("span", {}, c.text, c.raw && (c.search || c.cut || c.picks || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), c.cut ? cutCount(c) : count(c),
+        h("span", {}, c.short || c.text, c.raw && (c.search || c.cut || c.picks || Tags.name(c.raw) !== c.raw) ? h("span", { class: "raw" }, c.raw) : null), c.cut ? cutCount(c) : count(c),
         extrasPick(u, c),
         c.cut ? copySearch(c.cut.q) : c.search ? copySearch(c.search) : c.key && !c.picks ? copySearch(Tags.ankiSearch(kindOf(c.key), pathOf(c.key))) : null,
         canCut(c) ? onlyPick(u, c) : null,
@@ -1458,9 +1595,13 @@ async function builder(id) {
     for (const u of own) {
       const chips = e.chips.filter((c) => c.u === u).flatMap((c) => chipEl(u, c));
       if (!author) { rows.push(h("div", { class: "du" }, h("b", {}, u.name), h("div", { class: "chips2" }, chips), opensLine(u))); continue; }
+      // 3.8.1 (plans, rethought): the deck's tags its name points at, as it's typed
+      const sugBox = h("div", { class: "sug" });
+      const fillSug = () => sugBox.replaceChildren(...sugRows(u));
       const name = h("input", { class: "uname", value: u.name, maxlength: 60, placeholder: autoName(u), "aria-label": "Name this day",
-        oninput: (ev) => { nameIt(u, ev.target.value); }, onchange: (ev) => { if (!ev.target.value.trim()) { nameIt(u, ""); draw(); } } });
-      rows.push(h("div", { class: "du" }, h("label", { class: "dl" }, h("span", { class: "lbl" }, "Name"), name), h("div", { class: "chips2" }, chips), opensLine(u)));
+        oninput: (ev) => { nameIt(u, ev.target.value); fillSug(); }, onchange: (ev) => { if (!ev.target.value.trim()) { nameIt(u, ""); draw(); } } });
+      fillSug();
+      rows.push(h("div", { class: "du" }, h("label", { class: "dl" }, h("span", { class: "lbl" }, "Name"), name), sugBox, h("div", { class: "chips2" }, chips), opensLine(u)));
     }
     for (const u of spans) {
       const total = unitTotal(u);
@@ -2383,9 +2524,8 @@ async function builder(id) {
       // 3.6.5: a day over the pace, as it would be after this
       const cap = pace.mode === "end" ? endDaily() || pace.daily : pace.mode === "daily" ? pace.daily : 0;
       const after = adding ? [...doc.units.filter((x) => !r.units.some((u) => u.id === x.id)), ...r.units] : r.units;
-      const byDay = new Map();
-      for (const u of after) if (!u.even) byDay.set(u.opens, (byDay.get(u.opens) || 0) + unitTotal(u, placed));
-      const heavy = cap ? [...byDay].filter(([, n]) => n > cap * 1.25).sort() : [];
+      // 3.8.1: the work each day would ask, each date spread to its due date (Work)
+      const heavy = Work.over(workMap({ ...doc, units: after }, placed), cap);
       const goneText = gone.slice(0, 6).map((u) => `${pretty(u.opens)}, ${u.name}`).join(" · ") + (gone.length > 6 ? ` and ${gone.length - 6} more` : "");
       preview.append(h("div", { class: "pv" }, tagRows, rows, rmkRows,
         gone.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${gone.length} date${gone.length === 1 ? "" : "s"}: `), goneText) : null,
@@ -2400,7 +2540,7 @@ async function builder(id) {
           h("div", { class: "muted" }, "What these dates already opened stays open."))
           : goneTags.length ? h("p", { class: "warn small" }, h("b", {}, `Takes off ${goneTags.length} tag${goneTags.length === 1 ? "" : "s"}: `), goneTags.map((t) => t.name).join(", "),
             taken?.length ? h("ul", { style: "margin:4px 0 0;padding-left:20px;text-align:left" }, taken.slice(0, 8).map((x) => h("li", {}, x)), taken.length > 8 ? h("li", {}, `and ${taken.length - 8} more`) : null) : null) : null,
-        heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map(([d, n]) => `${pretty(d)}, ${n.toLocaleString()} new`).join(" · "),
+        heavy.length ? h("p", { class: "warn small" }, h("b", {}, "Over your pace: "), heavy.slice(0, 6).map((x) => `${x.a === x.b ? pretty(x.a) : `${pretty(x.a)} – ${pretty(x.b)}`}, ${x.top.toLocaleString()} new a day`).join(" · "),
           ` (pace ${cap.toLocaleString()} a day)`) : null,
         r.warns.length ? h("p", { class: "warn small" }, r.warns.slice(0, 4).join(" ")) : null,
         r.notes.length ? h("div", { class: "hnote" }, h("span", {}, h("b", {}, "To pick in Anki: "), r.notes.join(" · "))) : null,

@@ -8889,6 +8889,72 @@ def test_morning_keeps_unchanged_plan_docs_v381():
           and all("doc" in p and not p.get("same") for p in body["plans"]), str(body)[:200])
 
 
+def test_builder_work_and_suggestions_v381():
+    """3.8.1 (plans, rethought): the builder warns about the work a day asks
+    (each date spread to its due date over the plan's days), not about what
+    opens on it; and a date's name points at the deck's tags. Needs node."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        print("SKIP builder work: no node")
+        return
+    app = open(os.path.join(REPO, "site", "public", "app.js")).read()
+    b = open(os.path.join(REPO, "site", "public", "builder.js")).read()
+    head = app[app.index("const MONTHS"):app.index("const today =")]
+    sched_js = app[app.index("const Sched = (() => {"):app.index("// ---- 3.2: home")]
+    work_js = b[b.index("const Work = (() => {"):b.index("/** 3.8.0: a plan's squad")]
+    doc = {"deck": "x", "units": [
+        {"id": "rp", "name": "Renal physiology", "opens": "2026-10-12"},           # to the day before the next
+        {"id": "rx", "name": "Renal pharm", "opens": "2026-10-19", "due": "2026-10-20"},
+        {"id": "pu", "name": "Pulm", "opens": "2026-10-26", "due": "2026-10-30", "even": True}]}
+    tree = [["#Videos::Renal", 900], ["#Videos::Renal::Physiology", 212], ["#Videos::Renal::Pharm", 190],
+            ["#Videos::Cardio::Physiology", 300], ["#Videos::Cardio::Arrhythmias", 61], ["#Book::Pharm::Ch07_Diuretics", 64],
+            ["Step1::Pulm", 288], ["#Videos::Heme::Herpes_Viruses", 88]]
+    prog = head + "\n" + sched_js + "\n" + work_js + (
+        f"const doc = {json.dumps(doc)}; const tree = {json.dumps(tree)};\n"
+        "const all = [1, 1, 1, 1, 1, 1, 1], wk = [1, 1, 1, 1, 1, 0, 0];\n"
+        "const tot = { rp: 212, rx: 190, pu: 288 };\n"
+        "const w = Work.map(doc, (u) => tot[u.id], all);\n"
+        "const w5 = Work.map(doc, (u) => tot[u.id], wk);\n"
+        "const sum = (m) => [...m.values()].reduce((a, x) => a + x.n, 0);\n"
+        "console.log(JSON.stringify({"
+        " rp: Work.spread(doc, doc.units[0], 212, all), mon: w.get('2026-10-12').n, sum: sum(w), sum5: sum(w5),"
+        " sat: w5.get('2026-10-17') || null, rx: Work.spread(doc, doc.units[1], 190, all),"
+        " over: Work.over(w, 20), none: Work.over(w, 0),"
+        " s1: Suggest.tags('Renal physiology', tree), s2: Suggest.tags('Cardiac physiology', tree),"
+        " s3: Suggest.tags('Lecture 14: Herpes viruses', tree), s4: Suggest.tags('Read: Chapter 3', tree),"
+        " s5: Suggest.tags('Arrhythmia', tree, (p) => p.includes('Cardio')), s6: Suggest.tags('Diuretics', tree),"
+        " s7: Suggest.tags('Cardio arrhythmia', tree), s8: Suggest.tags('Renal and cardio physiology', tree) }));")
+    out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
+    try:
+        r = json.loads(out.stdout)
+    except ValueError:
+        check("builder work: runs", False, out.stdout + out.stderr)
+        return
+    check("work: a week's date is its daily share, every day of its week, all of it",
+          len(r["rp"]) == 7 and sum(n for _d, n in r["rp"]) == 212 and r["mon"] == 31 and max(n for _d, n in r["rp"]) == 31, str(r["rp"]))
+    check("work: a due date makes the window; every card counted once", [d for d, _n in r["rx"]] == ["2026-10-19", "2026-10-20"]
+          and r["sum"] == 212 + 190 + 288 and r["sum5"] == 212 + 190 + 288, str(r["rx"]))
+    check("work: a day off asks nothing", r["sat"] is None)
+    check("work: days over the pace come as runs, with their most", r["over"][0]["a"] == "2026-10-12"
+          and r["over"][0]["b"] >= "2026-10-18" and r["over"][0]["top"] >= 31 and r["none"] == [], str(r["over"]))
+    check("suggest: every word of the name, one in the tag's last part",
+          r["s1"] == [["#Videos::Renal::Physiology", 212]] and r["s2"] == [["#Videos::Cardio::Physiology", 300]], str(r["s1"]) + str(r["s2"]))
+    check("suggest: lecture words and numbers aside; nothing for a chapter", r["s3"] == [["#Videos::Heme::Herpes_Viruses", 88]]
+          and r["s4"] == [], str(r["s3"]))
+    check("suggest: what's placed is left out; a word inside a part", r["s5"] == [] and r["s6"] == [["#Book::Pharm::Ch07_Diuretics", 64]])
+    check("suggest: half a name is noise; all but one of three words will do",
+          r["s7"] == [["#Videos::Cardio::Arrhythmias", 61]] and r["s8"] and all(p.endswith("Physiology") for p, _n in r["s8"]), str(r["s7"]) + str(r["s8"]))
+    check("builder: the heavy note and the Text preview read the day's work",
+          "const run = Work.over(work, cap)" in b and "Work.over(workMap({ ...doc, units: after }, placed), cap)" in b
+          and "e.load > cap * 1.25" not in b)
+    check("builder: a named date shows its name on the calendar; a doubled last word its parent",
+          'h("span", { class: "dname", title: u.name }, u.name)' in b and "const chipLabel = (key, placed)" in b)
+    check("builder: a named date's suggestions add a tag in one click", "Suggest.tags(u.name, tree.tags, skip)" in b
+          and "u.tags = [...(u.tags || []), p]; mark(); draw();" in b)
+
+
 def test_plan_tags_round_two_v381():
     """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named
@@ -9588,7 +9654,7 @@ def test_plan_tags_builder_v381():
           "else if (c.cut) {" in builder and "takeCut(c.u, x);" in builder and ".slice(-10)" not in builder
           and 'note = "A date holds up to 10 searches and cuts."' in builder)
     check("r2 site: a heavy day's Split takes a whole tag or subdeck only; a redraw keeps the page where it was",
-          "!c.even && !c.cards && !c.search && !c.ids && !c.cut && c.key" in builder
+          "const big = u.even ? null : srcs(u).filter((k) => !uncounted(k) && eff(k) > 0)" in builder  # 3.8.1: srcs are tags and subdecks
           and "const y = window.scrollY;\n    drawNow();\n    if (y) window.scrollTo(0, y);" in builder)
 
 

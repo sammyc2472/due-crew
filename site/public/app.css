@@ -260,6 +260,9 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .d.heavy .dn2 b { color: var(--warn); }
 .ch { display: flex; justify-content: space-between; gap: 4px; align-items: baseline; width: 100%; text-align: left; font: 11.5px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 600; border: 0; border-radius: 5px; padding: 2px 5px; cursor: grab; color: var(--ink); }
 .ch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 3.8.1: a date's own name above its chips */
+.dname { font-size: 11.5px; font-weight: 700; color: var(--ink); padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal2.week .dname { white-space: normal; }
 .ch small { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cal2.week .ch span { white-space: normal; }
 .ch.ev { border-left: 3px solid var(--accent); }
@@ -278,6 +281,13 @@ main.wide { max-width: 1180px; }  /* S1: the same frame as every page */
 .ch2 { display: inline-flex; gap: 8px; align-items: center; border-radius: 8px; padding: 4px 6px 4px 9px; font-size: 13px; }
 .ch2 .raw { max-width: 260px; }
 .ch2 small { color: var(--muted); }
+/* 3.8.1: tags a date's name points at */
+.sug { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.sug:empty { display: none; }
+.sug1 { border: 0; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink); padding: 3px 9px; }
+.sug1:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.dayp .sug .sug1 { display: inline-flex; width: auto; max-width: 100%; gap: 8px; text-align: left; }
+.dayp .sug .sug1 > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch2 .cps { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }  /* 3.8.0: Copy search */
 .ch2 .cps:hover { color: var(--accent); }
 .ch2 .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
