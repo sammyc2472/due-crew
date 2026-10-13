@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api, db, person, befriend } from "./helpers";
+import { anHourOn, api, db, person, befriend } from "./helpers";
 
 // 3.5, B: the plan library, and A's public peek additions
 
@@ -136,6 +136,7 @@ describe("the library (3.5, B)", () => {
     expect(await names("?q=step")).toEqual(["Step 1 in 12 weeks", "Cardio block"]);  // a name match first, then the deck's
     expect(await names("?q=100%25")).toEqual([]);  // % is a letter here, not a wildcard
     expect((await maya.call("GET", "/library")).body.decks).toEqual([["Big Step 1", 2], ["Micro Videos", 1]]);
+    await anHourOn();  // how many follow is the plan's totals, up to an hour old
     expect((await maya.call("GET", "/library")).body.plans[2].followers).toBe(3);
   });
 

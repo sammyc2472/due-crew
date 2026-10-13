@@ -44,19 +44,22 @@ export async function list(req: Request, s: Session, env: Env): Promise<Response
   }
   const order = q ? "(p.name LIKE ? ESCAPE '\\') DESC, p.listed_at DESC" : "p.listed_at DESC";
   const rows = await env.DB.prepare(
-    `SELECT p.id, p.code, p.owner, p.name, p.line, p.lib, p.listed_at, p.based_on, u.name AS owner_name,
-            (SELECT COUNT(*) FROM plan_follows f WHERE f.plan = p.id) AS followers
+    `SELECT p.id, p.code, p.owner, p.name, p.line, p.lib, p.listed_at, p.based_on, p.version, p.totals, p.totals_at, u.name AS owner_name
        FROM plans p LEFT JOIN users u ON u.uid = p.owner
       WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`,
   ).bind(...binds, ...(q ? [like] : []), PAGE + 1, page * PAGE)
-    .all<{ id: string; code: string; owner: string; name: string; line: string; lib: string; listed_at: number; based_on: string | null; owner_name: string | null; followers: number }>();
+    .all<{ id: string; code: string; owner: string; name: string; line: string; lib: string; listed_at: number; based_on: string | null;
+           version: number; totals: string | null; totals_at: number | null; owner_name: string | null }>();
   const decks = await env.DB.prepare(
     `SELECT json_extract(lib, '$.deck') AS deck, COUNT(*) AS n FROM plans WHERE listed = 1 AND audience = 'code'
       GROUP BY deck ORDER BY deck COLLATE NOCASE LIMIT 40`,
   ).all<{ deck: string; n: number }>();
+  // how many follow each: its totals (migration 0025), not every follower's row, up to an hour old
+  const shown = rows.results.slice(0, PAGE);
+  const tot = await P.totals(env, shown);
   return json({
-    plans: rows.results.slice(0, PAGE).map((r) => ({
-      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || (r.owner ? "?" : "a former member"), followers: r.followers ?? 0,
+    plans: shown.map((r) => ({
+      id: r.id, code: r.code, name: r.name, line: r.line, ownerName: r.owner_name || (r.owner ? "?" : "a former member"), followers: tot.get(r.id)?.n ?? 0,
       listedAt: r.listed_at, mine: r.owner === s.uid, ...(JSON.parse(r.lib || "{}") as Obj), ...(r.based_on ? { basedOn: JSON.parse(r.based_on) } : {}),
     })),
     more: rows.results.length > PAGE,
