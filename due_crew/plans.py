@@ -750,14 +750,18 @@ def load_ask(ld, day, today):
     return l_ if day > today else o_ + l_
 
 
-def week_view(doc, prog, today, start, skipped=(), ld=None):
+def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
     """3.5.0, the Plans tab's week: seven days from `start` (a Monday) of
     my own plan (my_doc), each {day, dow, num, today, past, rest, prep,
     events, units, new, seen}. A unit is {uid, name, total, seen, state}:
     done, open, later, or skip (`skipped`: [unit] from the plan itself,
     shown on the day they'd have opened). Rest: not one of the plan's
-    study days and nothing opens. Numbers only; the board escapes names."""
+    study days and nothing opens. Numbers only; the board escapes names.
+    shut (3.8.2): the ids of dates that opened here and have none of their
+    cards open now (Edit › Undo), or at my own pace aren't opened yet:
+    marked `shut`, so the day offers Open now."""
     prog = prog or {}
+    shut = set(shut or ())
     pdays = ((doc or {}).get("pace") or {}).get("days")
     pdays = [1 if x else 0 for x in pdays] if isinstance(pdays, list) and len(pdays) == 7 and any(pdays) else [1] * 7
     first = datetime.date.fromisoformat(str(start))
@@ -784,6 +788,8 @@ def week_view(doc, prog, today, start, skipped=(), ld=None):
                          "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
+            if not skip and state != "later" and u["id"] in shut:
+                rows[-1]["shut"] = True  # 3.8.2
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
                 rows[-1]["ld"] = list(ld[u["id"]])
                 rows[-1]["ask"] = load_ask(ld[u["id"]], d, today)
@@ -825,6 +831,14 @@ def prep_for(doc, today):
     # days, not dates: a day can hold several dates
     left = len({str(u.get("opens")) for u in us if u.get("for") == ev["id"] and today < str(u.get("opens") or "") <= ev["day"]})
     return {"name": ev.get("name") or "?", "day": ev["day"], "left": left, "today": ev["day"] == today}
+
+
+def event_of(doc, u):
+    """The event a date preps for (its `for` is the event's id), or None."""
+    want = (u or {}).get("for")
+    if not want:
+        return None
+    return next((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and e.get("id") == want), None)
 
 
 def opened_by_date(doc, today):
@@ -888,6 +902,18 @@ def first_in_line(col, cids):
     return len(ids)
 
 
+def openable_ids(col, cids):
+    """The ids among `cids` that open_cards would open: suspended, not a leech."""
+    ids = []
+    cl = sorted(int(c) for c in cids or ())
+    for i in range(0, len(cl), 500):
+        chunk = ",".join(str(c) for c in cl[i:i + 500])
+        ids += col.db.list(
+            f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.queue = -1 "
+            f"AND c.id IN ({chunk}) AND (' ' || lower(n.tags) || ' ') NOT LIKE '% leech %'")
+    return [int(c) for c in ids]
+
+
 def open_cards(col, cids, label, dry=False, first=False):
     """Unsuspend the suspended ones among `cids`, as one undo step named
     `label`. Only queue -1 is touched, and never a leech (Anki suspended it
@@ -896,13 +922,7 @@ def open_cards(col, cids, label, dry=False, first=False):
     first (3.8.0): and put them first in Anki's line of new cards."""
     if not cids:
         return 0
-    ids = []
-    cl = sorted(int(c) for c in cids)
-    for i in range(0, len(cl), 500):
-        chunk = ",".join(str(c) for c in cl[i:i + 500])
-        ids += col.db.list(
-            f"SELECT c.id FROM cards c JOIN notes n ON n.id = c.nid WHERE c.queue = -1 "
-            f"AND c.id IN ({chunk}) AND (' ' || lower(n.tags) || ' ') NOT LIKE '% leech %'")
+    ids = openable_ids(col, cids)
     if not ids or dry:
         return len(ids)
     pos = None
@@ -922,15 +942,18 @@ def open_cards(col, cids, label, dry=False, first=False):
     return len(ids)
 
 
-def holdable(idx, doc, today, swap=None, applied=None, own=False):
+def holdable(idx, doc, today, swap=None, applied=None, own=False, kept=None):
     """3.3, "Hold back later dates until their day": the cards of dates
     that haven't opened yet which are active now and never studied (new,
     not suspended, not a leech). A card that is also on an opened date is
     never held. A date already applied here (opened early, C2) counts as
     opened. What Follow offers to suspend, once, when asked. own (3.8.0,
-    at my own pace): a date is opened only when I opened it, whatever its day."""
+    at my own pace): a date is opened only when I opened it, whatever its day.
+    kept (3.8.2): cards a date opened here (what it matched when it opened,
+    plan_flow._opened_cids): never held, even when the author has since
+    moved one to a later date."""
     applied = applied or {}
-    opened, later = set(), set()
+    opened, later = set(kept or ()), set()
     for u in units(doc):
         cids = idx.match(u, swap, doc)
         have = applied.get(u["id"])

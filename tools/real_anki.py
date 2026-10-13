@@ -62,6 +62,7 @@ def check(path):
     fakes.install_fake_aqt()
     from due_crew import plans as P
     from due_crew import plan_flow as F
+    F_real = {k: getattr(F, k) for k in ("_state_cfg", "refresh_progress", "_pcfg", "_psave", "followed", "client", "_today", "tooltip")}
 
     col = Collection(path)
     did = col.decks.id_for_name("Step Deck")
@@ -482,6 +483,67 @@ def check(path):
     ok("plan tags: unfollowing takes every one of them off; my own tags stay",
        n_drop > 0 and not col.find_notes('"tag:DueCrew::*"') and len(col.find_notes('"tag:#Big_Step1_v12::#Path_Book::01_Chapter_1::01_Section"')) == own_before,
        f"{n_drop:,} notes")
+    # 3.8.2: Put back isn't a yes to Hold back (its cards went in `held`, and every morning since
+    # held each later date's new cards), and the morning's other steps come before what it opens,
+    # so the open is Anki's latest step and Not today undoes just it
+    import types
+    pstore = {"plans": {}}
+    F._pcfg, F._psave = (lambda: pstore), (lambda d: None)
+    F._state_cfg, F.refresh_progress = F_real["_state_cfg"], (lambda: {})
+    F.client = lambda: types.SimpleNamespace(signed_in=True, session={})
+    F.tooltip = lambda *a, **k: None
+    day = "2026-10-13"
+    F._today = lambda: day
+    later = lambda n: str(_dtm.date.fromisoformat(day) + _dtm.timedelta(days=n))
+    renal = sorted({p for p, _ in tags if "#Lectures::Renal::" in p and p.count("::") == 4})[:4]
+    rdates = [{"id": f"r{i}", "name": p.rsplit("::", 1)[-1], "opens": later(3 * i - 3), "tags": [p], "decks": [], "cards": []}
+              for i, p in enumerate(renal)]  # three days ago, today, in three days, in six
+    idx9 = P.DeckIndex(col, did)
+    late_new = sorted(c for u in rdates[2:] for c in idx9.match(u, None, "Step Deck") if idx9.cards[c][1] == 0)[:40]
+    col.sched.unsuspend_cards(late_new)  # later dates' new cards, active (an author added them, say)
+    own = {"id": "pO", "name": "Own", "own": "ready", "doc": {"deck": "Step Deck", "units": rdates}}
+    pstore["plans"]["pO"] = F.new_state(col, own, did)
+    F.followed = lambda: [F.mine(own)]
+    try:
+        F.open_next("pO")
+        F._state["plan_progress"] = F.progress(col, [own], F._state_cfg())
+        F.put_back_own("pO")
+        st9 = pstore["plans"]["pO"]
+        n_held = F.hold_new([own], F._state_cfg(), day, morning=True)
+        still = sum(1 for c in late_new if col.get_card(c).queue == 0)
+        ok("put back: its cards kept for Stop, no yes to Hold back; the morning holds no later date's cards after it",
+           st9.get("held") and st9.get("hold_yes") is False and n_held == 0 and still == len(late_new) > 0,
+           f"{len(st9.get('held') or [])} put back, {still} later cards still open, undo {col.undo_status().undo!r}")
+        plan = {"id": "pM", "name": "Morning", "doc": {"deck": "Step Deck", "units": rdates}}
+        pstore.clear()
+        pstore["plans"] = {"pM": F.new_state(col, plan, did)}
+        F.followed = lambda: [F.mine(plan)]
+        F.run(col, [plan], pstore["plans"], later(-1))  # the first date opened three days ago
+        st9 = pstore["plans"]["pM"]
+        st9["hold_yes"] = True
+        st9["catch"] = {"until": later(2), "extra": 5}
+        pstore["plans_day"] = later(-1)
+        base = F._base_limit(col, did)
+        i10 = P.DeckIndex(col, did)
+        today_cards = i10.openable(i10.match(rdates[1], None, "Step Deck"))
+        t = tm(); F.maybe_morning(False); t_morn = tm() - t
+        opened = pstore.get("plans_opened") or {}
+        held_now = sum(1 for c in late_new if col.get_card(c).queue == -1)
+        lim = F.new_limit(col, did)
+        ok("morning: holds back for a yes, sets the catch-up's limit, then opens; the open is Anki's latest step",
+           held_now == len(late_new) and lim == base + 5 and opened.get("label") and col.undo_status().undo == opened["label"]
+           and F.morning_opened() and all(col.get_card(c).queue != -1 for c in today_cards),
+           f"{held_now} held, limit {lim} (was {base}), {len(today_cards)} opened, latest step {col.undo_status().undo!r}, {t_morn*1000:.0f} ms")
+        F.mw.undo = col.undo
+        F.undo_morning(put_off_too=True)
+        ok("morning: Not today undoes just the open; the held cards and the limit stay; the date opens tomorrow",
+           all(col.get_card(c).queue == -1 for c in today_cards) and held_now == sum(1 for c in late_new if col.get_card(c).queue == -1)
+           and F.new_limit(col, did) == base + 5 and (pstore["plans"]["pM"].get("later") or {}).get("r1") == later(1),
+           f"latest step now {col.undo_status().undo!r}")
+    finally:
+        for k, v in F_real.items():
+            setattr(F, k, v)
+        F.mw.__dict__.pop("undo", None)
     col.close()
 
 

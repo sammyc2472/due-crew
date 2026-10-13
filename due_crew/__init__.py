@@ -554,7 +554,7 @@ def _you(c, due, plans):
         if shown == "plans":
             team_flow.plan_lines(plans.get("cards"))  # the next exam's cards at risk, a line a plan
             if not due and mw.col:
-                you["opened"] = plan_flow.morning_opened()  # Due off: Put off to tomorrow is here
+                you["opened"] = plan_flow.morning_opened()  # Due off: its Not today is here
         elif shown == "insights":
             you["insights"] = team_flow.you_view(c)
     except Exception:

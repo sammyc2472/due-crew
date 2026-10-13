@@ -8682,6 +8682,504 @@ def test_plan_tags_round_two_v381():
           snap["u1"][3] == [[video, "t12"]] and "guid000001" in snap["u1"][2] and "guid000002" in snap["u1"][2], str(snap.get("u1")))
 
 
+# ---------------------------------------------------------------- 3.8.2: the follower side of plans
+
+def _v382_world(units=None, events=None):
+    """A plan by Dre (_plan_units unless given) and Maya, who'll follow it."""
+    store = world({"dre": "Dre", "maya": "Maya"})
+    pid, code = store.add_plan("dre", "Step 1", "Step 1", units or _plan_units())
+    if events:  # saved with the dates, so a date's `for` names one
+        store.plans[pid]["doc"] = store._plan_doc({"deck": "Step 1", "units": units or _plan_units(), "events": events})
+    return store, pid, code, new_client(store, "maya", "Maya")
+
+
+class _SyncBg:
+    """plan_flow's background jobs run at once, their done after them."""
+
+    def __init__(self, F):
+        self.F = F
+
+    def __enter__(self):
+        self.saved = self.F._bg
+        self.F._bg = lambda job, done=None: done(job()) if done else job()
+        return self
+
+    def __exit__(self, *exc):
+        self.F._bg = self.saved
+        return False
+
+
+def _undo_here(F, col, fn):
+    """fn() with Anki's undo run on the spot (an Anki without CollectionOp)."""
+    sys.modules["aqt.operations"] = None
+    was = getattr(F.mw, "undo", None)
+    F.mw.undo = col.undo
+    try:
+        fn()
+    finally:
+        sys.modules.pop("aqt.operations", None)
+        if was is None:
+            del F.mw.undo
+        else:
+            F.mw.undo = was
+
+
+def test_put_back_is_not_hold_back_v382():
+    """3.8.2: Put back (at my own pace) kept its cards in `held`, and the
+    morning read any held card as a yes to Hold back: from then on each date
+    not opened yet had its new cards suspended. The yes is its own flag now
+    (`hold_yes`: Follow's Hold back, or the question on first sight or on
+    going to my own pace); a state from before reads as a yes on the plan's
+    dates only. And a card a date opened here is never held, even when the
+    author moves it to a later date."""
+    from due_crew import plans as P
+    from due_crew import plan_flow as F
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (4, 6)")  # later dates' new cards, active
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid)  # Heart failure
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        F.put_back_own(pid)
+        st = F._state_cfg()[pid]
+        check("put back: its cards shut and kept for Stop, and that's no yes to Hold back",
+              not ({1, 2} & _open(col)) and {1, 2} <= set(st.get("held") or []) and st.get("hold_yes") is False, str(st))
+        n = F.hold_new(F.followed(), F._state_cfg(), _day(0), morning=True)
+        pc = g.state()
+        pc["plans_day"] = _day(-1)
+        F._psave(pc)
+        F.maybe_morning(False)
+        check("put back: no morning holds a later date's cards after it", n == 0 and {4, 6} <= _open(col)
+              and g.state()["plans_day"] == _day(0), sorted(_open(col)))
+        asked = []
+        F.offer_hold([pid], ask=lambda name, k: asked.append(k) or True)
+        st = F._state_cfg()[pid]
+        check("hold back asked, yes: the later dates' new cards held, and the yes kept",
+              asked == [2] and not ({4, 6} & _open(col)) and st["hold_yes"] is True, (asked, st.get("hold_yes")))
+        units = _plan_units()
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # card 9 onto a later date
+        store.edit_plan(pid, units)
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 9")
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("hold back, yes: what an author adds to a later date is held too",
+              9 not in _open(col) and 9 in F._state_cfg()[pid]["held"])
+    a, b, c = {"held": [1]}, {"held": [1]}, {}
+    ya, yb, yc = F._hold_yes({"own": ""}, a), F._hold_yes({"own": "ready"}, b), F._hold_yes({"own": ""}, c)
+    check("before 3.8.2: held cards on the plan's dates were a yes; at my own pace a no until asked; settled once",
+          ya is True and a["hold_yes"] is True and yb is False and b["hold_yes"] is False
+          and yc is False and "hold_yes" not in c and F._hold_yes({"own": ""}, b) is False, (a, b, c))
+
+    store2, pid2, code2, kai = _v382_world()
+    col2 = _plan_col()
+    col2.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
+    with _PlanGlue({"B": kai}, {"B": col2}):
+        plan, _ = kai.follow_plan(code2)
+        F.on_followed(plan, 10, None, "open", hold=True)
+        st = F._state_cfg()[pid2]
+        check("follow with Hold back: today's dates open, a later date's card held, the yes kept",
+              {1, 2, 3} <= _open(col2) and 4 not in _open(col2) and st["hold_yes"] is True and st["held"] == [4], str(st))
+        units = _plan_units()
+        units[1] = dict(units[1], tags=["Step1::Cardiology"])                          # Arrhythmia's card...
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardio::Arrhythmia"])  # ...moved to a later date
+        store2.edit_plan(pid2, units)
+        kai.fetch_board([_day(0)], with_decks=True)
+        p = F.followed()[0]
+        bare = P.holdable(P.DeckIndex(col2, 10), p["doc"], _day(0), None, st["applied"])
+        F.hold_new(F.followed(), F._state_cfg(), _day(0))
+        check("moved later by the author: a card a date opened here is never held again",
+              3 in bare and 3 in _open(col2) and 3 not in F._state_cfg()[pid2]["held"], (sorted(bare), sorted(_open(col2))))
+
+
+def test_own_pace_first_seen_v382():
+    """3.8.2: a plan at my own pace, first seen on this computer (followed on
+    the site, or on another computer). The morning skipped every date before
+    today, so each left Up next for good. At my own pace no date has passed:
+    one whose cards are all open here counts as opened (of a day this
+    computer doesn't know, so not in my pace), the rest stay Up next, and
+    the hold-back question counts only those."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    # Extras opened on the other computer (AnkiWeb brought it); one of Heart failure's cards is active
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id IN (1, 4)")
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        maya.follow_plan(code, own="ready")  # on the site
+        maya.fetch_board([_day(0)], with_decks=True)
+        F.maybe_morning(False, fresh=True)
+        st = g.state()["plans"][pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("first seen at my own pace: nothing skipped; a date all open here counts as opened, of no day here",
+              sorted(st["applied"]) == ["ex", "rn"] and not any(v.startswith("skip:") for v in st["applied"].values())
+              and st["own_opened"] == {"ex": "", "rn": ""}, str(st))
+        check("first seen at my own pace: the earlier dates are still Up next",
+              [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ar", "cz"])
+        v = F.card_view(p, st, F.progress(col, [p], F._state_cfg())[pid], _day(0))
+        check("first seen: not in my pace; Up next starts at the first date",
+              v["own"]["pace"] is None and v["own"]["next"]["uid"] == "hf", str(v["own"]))
+        asked = []
+        F.offer_hold([pid], ask=lambda name, n: asked.append(n) or False)
+        check("first seen: the hold-back question counts the dates I haven't opened, not one opened elsewhere",
+              asked == [1], asked)
+
+
+def test_browse_open_claims_only_what_it_opened_v382():
+    """3.8.2: at my own pace, an open from Browse counted every Up next date
+    whose cards were all open as opened today, so on a deck whose cards are
+    all active one open emptied Up next. Now only a date the open touched,
+    with a card shut before it, counts."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE queue = -1")  # a deck imported all active
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        n = F.open_cards_now([4], "Extras", first=False)
+        check("browse, a deck all active: nothing opens, and no date counts as opened",
+              n == 0 and not F._state_cfg()[pid].get("applied"), str(F._state_cfg()[pid].get("applied")))
+        col.db.conn.execute("UPDATE cards SET queue = -1 WHERE id IN (2, 3)")
+        n = F.open_cards_now([3], "Arrhythmia", first=False)
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("browse: the date it opened counts as opened today; one still shut, or one it didn't touch, doesn't",
+              n == 1 and list(st["applied"]) == ["ar"] and st["own_opened"] == {"ar": _day(0)}
+              and [u["id"] for u in P.up_next(p["doc"], st["applied"])] == ["hf", "ex", "cz", "rn"], str(st))
+
+
+def test_not_today_at_own_pace_v382():
+    """3.8.2: at my own pace, Not today after a morning took the date I had
+    opened out of `applied` (Up next again) and lost what the author had
+    added (the own-pace morning ignored `later`). Now the date stays opened
+    as it was and the addition opens tomorrow morning; a next date that
+    opened by itself is Up next again till then."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid)  # Heart failure: 1, 2
+        was_sig = F._state_cfg()[pid]["applied"]["hf"]
+        units = _plan_units()
+        units[0] = dict(units[0], tags=units[0]["tags"] + ["Step1::Cardiology"])  # the author adds card 9 to it
+        store.edit_plan(pid, units)
+        maya.fetch_board([_day(0)], with_decks=True)
+        res = F._open_now(F.followed())
+        check("own pace: the morning opens what an author added to a date I opened, with Not today",
+              res["n"] == 1 and 9 in _open(col) and (F.morning_opened() or {}).get("n") == 1, str(res))
+        _undo_here(F, col, lambda: F.undo_morning(put_off_too=True))
+        st = F._state_cfg()[pid]
+        p = next(x for x in F.followed() if x["id"] == pid)
+        check("not today: the date stays opened as it was, the addition waits for tomorrow",
+              9 not in _open(col) and {1, 2} <= _open(col) and st["applied"]["hf"] == was_sig
+              and st["later"] == {"hf": _day(1)} and "hf" not in [u["id"] for u in P.up_next(p["doc"], st["applied"])], str(st))
+        state = F._state_cfg()
+        again = F.run(col, F.followed(), state, _day(0))
+        check("not today: not again today", again["n"] == 0 and 9 not in _open(col), str(again))
+        tomorrow = F.run(col, F.followed(), state, _day(1))
+        check("not today: tomorrow's morning opens it", tomorrow["n"] == 1 and 9 in _open(col)
+              and not state[pid].get("later"), str(tomorrow))
+
+    store2, pid2, code2, kai = _v382_world()
+    col2 = _plan_col()
+    with _PlanGlue({"B": kai}, {"B": col2}):
+        plan, _ = kai.follow_plan(code2, own="next")
+        F.on_followed(plan, 10, None, "open")
+        F.open_next(pid2)
+        col2.db.conn.execute("UPDATE cards SET type = 2, queue = 2 WHERE id IN (1, 2)")  # seen
+        pc = F._pcfg()
+        pc["plans"][pid2]["own_opened"]["hf"] = _day(-1)
+        F._psave(pc)
+        res = F._open_now(F.followed())
+        check("next: seen the last one, the morning opens the next by itself", res["names"] == ["Arrhythmia"] and 3 in _open(col2), str(res))
+        _undo_here(F, col2, lambda: F.undo_morning(put_off_too=True))
+        st = F._state_cfg()[pid2]
+        p = next(x for x in F.followed() if x["id"] == pid2)
+        check("next, not today: Up next again, opening tomorrow morning",
+              3 not in _open(col2) and "ar" not in st["applied"] and "ar" not in (st.get("own_opened") or {})
+              and P.up_next(p["doc"], st["applied"])[0]["id"] == "ar" and st["later"] == {"ar": _day(1)}, str(st))
+        state = F._state_cfg()
+        check("next, not today: not again today", F.run(col2, F.followed(), state, _day(0))["n"] == 0 and 3 not in _open(col2))
+        check("next, not today: tomorrow's morning opens it",
+              F.run(col2, F.followed(), state, _day(1))["names"] == ["Arrhythmia"] and 3 in _open(col2))
+
+
+def test_open_now_on_a_closed_date_v382():
+    """3.8.2: a date closed again with Edit › Undo stayed shut: Open now was
+    only on dates still to come, and opening a date that had opened opened
+    only what the author had changed since. Now the week offers Open now on
+    a date that opened here and has none of its cards open, and it opens
+    whole."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        opened = {1, 2, 3} <= _open(col)
+        col.undo()  # Edit › Undo
+        p = next(x for x in F.followed() if x["id"] == pid)
+        view = lambda: board._plan_card_html(dict(F.card_view(p, F._state_cfg()[pid], F.progress(col, [p], F._state_cfg())[pid],
+                                                              _day(0)), id=pid))
+        html = view()
+        check("closed by Undo: still opened here, and today's date offers Open now",
+              opened and not ({1, 2, 3} & _open(col)) and "ar" in F._state_cfg()[pid]["applied"]
+              and f"duecrew:plannow:{pid}:ar" in html, html[:300])
+        dc._on_js(False, f"duecrew:plannow:{pid}:ar", DeckBrowser())
+        check("Open now (sent as the board does): the date opens whole, in one step; then no Open now",
+              3 in _open(col) and col.undo_status().undo == "Due Crew: open Arrhythmia"
+              and f"duecrew:plannow:{pid}:ar" not in view(), col.undo_status().undo)
+
+
+def test_morning_open_is_the_last_step_v382():
+    """3.8.2: the morning held back, set the catch-up's limit and built the
+    day's checkpoints after it opened, so the open wasn't Anki's latest
+    step and Not today went missing. They come before it now."""
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 4")
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open", hold=True)  # Extras' card held till its day
+        units = _plan_units()
+        units[4] = dict(units[4], tags=["Step1::Renal", "Step1::Cardiology"])  # a later date gains card 9
+        store.edit_plan(pid, units)
+        col.db.conn.execute("UPDATE cards SET queue = 0 WHERE id = 9")
+        g.today["d"] = _day(3)  # Extras' morning
+        maya.fetch_board([_day(3)], with_decks=True)
+        pc = g.state()
+        pc["plans_day"] = _day(2)
+        F._psave(pc)
+        F.maybe_morning(False, fresh=True)
+        steps = [s[0] for s in col.undo_steps]
+        check("morning: it holds back what the author added, then opens; the open is Anki's latest step, so Not today shows",
+              9 not in _open(col) and 4 in _open(col)
+              and steps[-2:] == ["Due Crew: hold back Step 1", "Due Crew: open Extras"]
+              and F.morning_opened() == {"n": 1, "sync": False}, steps)
+    src = open(os.path.join(REPO, "due_crew", "plan_flow.py"), encoding="utf-8").read()
+    morning = src[src.index("def maybe_morning"):src.index("def _morning_waits")]
+    mid = src[src.index("def midday"):src.index("def hold_new")]
+    check("morning: hold back, the catch-up's limit and the checkpoints come before the open; midday holds before it opens",
+          morning.index("hold_new(") < morning.index("apply_catch()") < morning.index("build_checks(")
+          < morning.index('_open_now([p for p in plan_list if not p.get("paused")]')
+          and mid.index("hold_new(") < mid.index("_open_now("))
+
+
+def test_resume_at_own_pace_v382():
+    """3.8.2: ending a pause at my own pace asked about the plan's dates, and
+    "Start from the next date" turned my own pace off inside run and
+    skipped every passed date out of Up next. At my own pace it resumes
+    without asking."""
+    from due_crew import plans as P
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    asked = []
+    fakes_ui = {"due_crew.ui.days_dialog": types.SimpleNamespace(ask_back=lambda *a, **k: asked.append("back") or "push",
+                                                                 ask_pause=lambda *a, **k: None),
+                "due_crew.ui.follow_dialog": types.SimpleNamespace(ask_catch_up=lambda *a, **k: asked.append("catch") or "skip")}
+    saved = {k: sys.modules.get(k) for k in fakes_ui}
+    sys.modules.update(fakes_ui)
+    skipped = lambda st: [k for k, v in (st.get("applied") or {}).items() if str(v).startswith("skip:")]
+    try:
+        with _PlanGlue({"A": maya}, {"A": col}) as g, _SyncBg(g.F):
+            F = g.F
+            plan, _ = maya.follow_plan(code, own="ready")
+            F.on_followed(plan, 10, None, "open")
+            maya.set_days(pid, paused=True, since=_day(-5), until=_day(-1))
+            F.back(pid)
+            st = F._state_cfg()[pid]
+            f = store.follows[(pid, "maya")]
+            p = next(x for x in F.followed() if x["id"] == pid)
+            check("back from a pause at my own pace: nothing asked, my dates not moved, nothing skipped",
+                  asked == [] and not f.get("paused") and not f.get("shift") and not p.get("paused")
+                  and not skipped(st) and len(P.up_next(p["doc"], st.get("applied"))) == 5, (asked, f, st.get("applied")))
+            maya.set_follow(pid, paused=True)
+            F.set_paused(pid, False)
+            st = F._state_cfg()[pid]
+            check("resume at my own pace: nothing asked, nothing skipped", asked == [] and not skipped(st), (asked, st.get("applied")))
+            res = F.run(col, F.followed(), F._state_cfg(), _day(0), mode="skip")
+            check("and a run asked to skip leaves a plan at my own pace as it is",
+                  res["n"] == 0 and not skipped(F._state_cfg()[pid]), str(F._state_cfg()[pid].get("applied")))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
+def test_move_menu_names_the_event_v382():
+    """3.8.2: Move…'s days compared an event's name with a date's `for` (the
+    event's id), so "after Cardio quiz" never showed."""
+    from due_crew import plans as P
+    units = _plan_units()
+    units[1] = dict(units[1], **{"for": "q1"})
+    store, pid, code, maya = _v382_world(units=units, events=[{"id": "q1", "day": _day(2), "name": "Cardio quiz"}])
+    doc = store.plans[pid]["doc"]
+    check("event_of: by the event's id", P.event_of(doc, doc["units"][1])["name"] == "Cardio quiz"
+          and P.event_of(doc, doc["units"][0]) is None)
+    labels = []
+
+    class Menu:
+        def __init__(self, *a):
+            pass
+
+        def addAction(self, text):
+            labels.append(text)
+            return types.SimpleNamespace(setEnabled=lambda on: None, triggered=types.SimpleNamespace(connect=lambda f: None))
+
+        def exec(self, *a):
+            pass
+    qt = sys.modules["aqt.qt"]
+    saved = (qt.QMenu, qt.QCursor)
+    qt.QMenu, qt.QCursor = Menu, types.SimpleNamespace(pos=lambda: None)
+    try:
+        with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+            maya.follow_plan(code)
+            maya.fetch_board([_day(0)], with_decks=True)
+            g.F.move_menu(pid, "ar")
+    finally:
+        qt.QMenu, qt.QCursor = saved
+    check("move: from the event's day on, a day says it's after it",
+          labels[1] == P.fmt_day(_day(1)) and labels[2] == f"{P.fmt_day(_day(2))} · after Cardio quiz", labels)
+
+
+def test_catch_has_one_shape_v382():
+    """3.8.2: a plan's `catch` was G5's catch-up {until, extra} and 3.2's
+    missed-days answer {mode, day} both, so answering the question ended a
+    running catch-up. The answer is `missed`; an old plans.json moves it."""
+    from due_crew import plan_flow as F
+    store, pid, code, maya = _v382_world()
+    with _PlanGlue({"A": maya}, {"A": _plan_col()}) as g:
+        path = os.path.join(g.dirs["A"], "plans.json")
+        with open(path, "w") as f:
+            json.dump({"plans": {"p1": {"deck_id": 10, "catch": {"mode": "spread", "day": _day(-1)}},
+                                 "p2": {"deck_id": 10, "catch": {"until": _day(3), "extra": 4}}}}, f)
+        g.forget()
+        pc = F._pcfg()
+        with open(path) as f:
+            disk = json.load(f)
+        check("upgrade: the missed-days answer moves to `missed`, a catch-up stays `catch`, written back",
+              pc["plans"]["p1"] == {"deck_id": 10, "missed": {"mode": "spread", "day": _day(-1)}}
+              and pc["plans"]["p2"]["catch"] == {"until": _day(3), "extra": 4} and disk["plans"]["p1"].get("missed"), str(pc))
+        F.set_catch("p2", "leave")
+        st = F._state_cfg()["p2"]
+        check("the missed-days answer leaves a running catch-up be",
+              st["catch"] == {"until": _day(3), "extra": 4} and st["missed"] == {"mode": "leave", "day": _day(0)}, str(st))
+    check("session: the answer read from either shape, never from a catch-up",
+          F._missed({"missed": {"mode": "spread"}}) == {"mode": "spread"}
+          and F._missed({"catch": {"mode": "leave", "day": "x"}})["mode"] == "leave"
+          and F._missed({"catch": {"until": "x", "extra": 1}}) == {})
+
+
+def test_week_open_now_at_own_pace_v382():
+    """3.8.2: at my own pace the week's Open now opened a date without
+    counting it as opened (not in my pace, not first in line, no Undo line),
+    unlike Up next's Open. It's the same Open; a date I haven't opened
+    whose day has passed offers it too, and one I opened opens what an
+    author added since."""
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    store, pid, code, maya = _v382_world()
+    col = _plan_col()
+    for cid, due in ((1, 50), (2, 51), (3, 52), (4, 53), (5, 54), (6, 55), (9, 56)):
+        col.db.conn.execute("UPDATE cards SET due = ? WHERE id = ?", (due, cid))
+    with _PlanGlue({"A": maya}, {"A": col}):
+        from due_crew import plan_flow as F
+        plan, _ = maya.follow_plan(code, own="ready")
+        F.on_followed(plan, 10, None, "open")
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        last_week = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0), week_offset=-1)
+        check("own pace: a date I haven't opened whose day has passed offers Open now",
+              f"duecrew:plannow:{pid}:hf" in board._plan_card_html(dict(last_week, id=pid)))
+        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        st = F._state_cfg()[pid]
+        due4 = col.db.scalar("SELECT due FROM cards WHERE id = 4")
+        last = F._pcfg().get("own_last") or {}
+        check("own pace, the week's Open now is Up next's Open: opened today, first in line, its Undo line",
+              4 in _open(col) and st["own_opened"] == {"ex": _day(0)} and due4 == 0 and last.get("uid") == "ex"
+              and last.get("kind") == "open" and col.undo_status().undo == "Due Crew: open Extras", (st.get("own_opened"), last, due4))
+        units = _plan_units()
+        units[2] = dict(units[2], tags=["Step1::Cardiology"])  # the author adds card 9 to Extras
+        store.edit_plan(pid, units)
+        maya.fetch_board([_day(0)], with_decks=True)
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        dc._on_js(False, f"duecrew:plannow:{pid}:ex", DeckBrowser())
+        check("own pace: Open now on a date I opened opens what the author added, and it stays opened as it was",
+              9 in _open(col) and F._state_cfg()[pid]["own_opened"] == {"ex": _day(0)})
+
+
+def test_plan_words_v382():
+    """3.8.2, one name per idea: Not today (the morning's line and an
+    update's), Push my dates back (the missed-days line, Welcome back), "once
+    I've seen most of the last" (90% of its open cards opens the next), Hold
+    back's question at my own pace; Browse's items for writing a plan only
+    for someone who writes one."""
+    from due_crew import plan_flow as F
+    from due_crew import ui as UI
+    line = board._opened_line({"n": 3})
+    check("words: the morning's line says Not today, and when they open",
+          "Not today</a>" in line and 'title="They open tomorrow morning"' in line and "Put off" not in line, line)
+    notes = "".join(board._plan_notes({"update": {"n": 1, "names": ["A"]},
+                                       "session": {"ask": {"days": [_day(-2), _day(-1)], "waiting": 4, "spread": 2, "push": 2}}}, "p1"))
+    check("words: an update's Not today says when; the missed days' push is Push my dates back",
+          notes.count('title="They open tomorrow morning"') == 1 and "Push my dates back 2 days</a>" in notes
+          and "Move my days" not in notes, notes)
+    src = {n: open(os.path.join(REPO, "due_crew", *n.split("/")), encoding="utf-8").read()
+           for n in ("plan_flow.py", "ui/follow_dialog.py", "ui/days_dialog.py")}
+    check("words: the next opens once I've seen most of the last, at Follow and in the plan's menu",
+          "Open the next one by itself once I've seen most of the last" in src["ui/follow_dialog.py"]
+          and "When I'm ready, the next once I've seen most of the last" in src["plan_flow.py"]
+          and "seen the last\"" not in src["ui/follow_dialog.py"] + src["plan_flow.py"])
+    check("words: Welcome back's choice is Push my dates back",
+          'f"Push my dates back {days} day' in src["ui/days_dialog.py"] and "Pick up where" not in src["ui/days_dialog.py"])
+    said = []
+    saved = UI.confirm
+    UI.confirm = lambda parent, title, text, ok: said.append(text) or True
+    try:
+        F._ask_hold("Step 1", 3, own=True)
+        F._ask_hold("Step 1", 1)
+    finally:
+        UI.confirm = saved
+    check("words: Hold back's question at my own pace: until you open them",
+          "3 cards of its later dates until you open them?" in said[0] and "their day" not in said[0]
+          and "1 card of its later dates until their day?" in said[1], said)
+    acts = []
+
+    class Menu:
+        def addSeparator(self):
+            pass
+
+        def addAction(self, label):
+            acts.append(label)
+            return types.SimpleNamespace(triggered=types.SimpleNamespace(connect=lambda f: None))
+    saved_client = F.client
+    try:
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [], "plans": []})
+        F.browser_menu(types.SimpleNamespace(), Menu())
+        reader = list(acts)
+        del acts[:]
+        F.client = lambda: types.SimpleNamespace(signed_in=True, session={"plans_authored": [{"id": "p1", "doc": {}}], "plans": []})
+        F.browser_menu(types.SimpleNamespace(), Menu())
+        writer = list(acts)
+    finally:
+        F.client = saved_client
+    check("browse: someone who writes no plan gets why and open these; an author the writing ones too",
+          reader == ["Due Crew: why isn't it showing?", "Due Crew: open these…"]
+          and writer == reader + ["Due Crew: add to a plan…", "Due Crew: tag for a plan…",
+                                  "Due Crew: copy as plan selector", "Due Crew: export for my AI…"], (reader, writer))
+
+
 def test_plan_tags_builder_v381():
     """3.8.1 on duecrew.com: the builder names a cut as the add-on does,
     writes and reads it as text, makes one from Overlap's "and", lets a tag

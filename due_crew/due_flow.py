@@ -297,7 +297,7 @@ def view(c):
                    suggestions=suggestions(c, today), notes=notes(), every=plan_every(today))
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
-        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: Put off to tomorrow's line
+        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: the morning's line, with Not today
         v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
     except Exception:
         traceback.print_exc()

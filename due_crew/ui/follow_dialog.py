@@ -203,7 +203,7 @@ class FollowDialog(QDialog):
         for b in (self.how_dates, self.how_ready):
             how.addButton(b)
             root.addWidget(b)
-        self.how_next = QCheckBox("Open the next one by itself when I've seen the last")
+        self.how_next = QCheckBox("Open the next one by itself once I've seen most of the last")
         self.how_next.setChecked(True)
         self.how_next.setStyleSheet("margin-left: 22px;")
         self.how_next.setVisible(False)
@@ -390,7 +390,7 @@ class FollowDialog(QDialog):
                               + ("until you open them" if own else "until their day"))
         self.about.setText("Each morning, that day's cards open." if own is None
                            else "Nothing opens by itself. Open the first from You › Plans; after that, the next "
-                                "opens the morning after you've seen the last one's new cards." if own == "next"
+                                "opens the morning after you've seen most of the last one's new cards." if own == "next"
                            else "Nothing opens by itself. Open the next date from You › Plans, or any topic from Browse.")
         self.adjustSize()
 
