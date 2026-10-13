@@ -1528,7 +1528,8 @@ def _you_plans(plans, opened=None):
 
 def _opened_line(op):
     """3.8.0, from the plan's old Today box: what this morning opened, with
-    Put off to tomorrow (its undo) while that's still Anki's latest step."""
+    Not today (its undo; 3.8.2, the name the update line's has) while that's
+    still Anki's latest step."""
     n = int((op or {}).get("n") or 0)
     if not n:
         return ""
@@ -1536,8 +1537,8 @@ def _opened_line(op):
     sync = (f'<a href="#" title="Anki&rsquo;s sync, so your phone has them" onclick="{_pycmd("plansync")}">Sync now</a>'
             if op.get("sync") else "")
     return (f'<div class="du-line"><span>This morning opened {n:,} new card{"s" if n != 1 else ""}.</span>'
-            f'<span class="acts">{sync}<a href="#" title="They open again tomorrow morning" onclick="{_pycmd("plannottoday")}">'
-            f'Put off to tomorrow</a></span></div>')
+            f'<span class="acts">{sync}<a href="#" title="They open tomorrow morning" onclick="{_pycmd("plannottoday")}">'
+            f'Not today</a></span></div>')
 
 
 def _segs(segments):
@@ -2129,7 +2130,10 @@ def _week_html(card, pid):
                     acts = f'<a href="#" onclick="{_pycmd(f"planunskip:{pid}:{uid}")}">Undo skip</a>'
                     num = "skipped"
                 else:
-                    acts = (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
+                    # 3.8.2: a date whose cards are all shut again (Edit › Undo), or at my
+                    # own pace not opened yet, opens from here as one on its day does
+                    acts = (f'<a href="#" onclick="{_pycmd(f"plannow:{pid}:{uid}")}">Open now</a>' if u.get("shut") else "")
+                    acts += (f'<a href="#" onclick="{_pycmd(f"planstudydate:{pid}:{uid}")}">Study</a>' if int(u["seen"]) else "")
                     acts += move + back_
                     num = f'{int(u["seen"]):,} / {int(u["total"]):,}' if int(u["total"]) else ""
                 if u.get("ld") and u["state"] != "skip":
@@ -2233,7 +2237,7 @@ def _plan_notes(card, pid):
         a2 = (f'<a href="#" onclick="{_pycmd("planspread:" + pid)}">Spread them (+{int(ask["spread"]):,} a day)</a>')
         if ask.get("push"):
             n = int(ask["push"])
-            a2 += f'<a href="#" onclick="{_pycmd("planpush:" + pid)}">Move my days back {n}</a>'
+            a2 += f'<a href="#" onclick="{_pycmd("planpush:" + pid)}">Push my dates back {n} day{"s" if n != 1 else ""}</a>'
         a2 += f'<a href="#" onclick="{_pycmd("planleave:" + pid)}">Leave them</a>'
         out.append(f'<div class="pn warn"><span>Missed <b>{e(when)}</b>: {int(ask["waiting"]):,} new waiting</span>'
                    f'<span class="acts">{a2}</span></div>')
@@ -2249,7 +2253,7 @@ def _plan_notes(card, pid):
                 if lim is not None and int(s.get("target") or 0) + n > int(lim) else "")
         out.append(f'<div class="pn"><span>{who} added {n:,} card{"s" if n != 1 else ""} to {what}.{over}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planupdopen:" + pid)}">Open {n:,}</a>'
-                   f'<a href="#" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
+                   f'<a href="#" title="They open tomorrow morning" onclick="{_pycmd("planupdlater:" + pid)}">Not today</a></span></div>')
     if card.get("team_ask"):
         # 3.7.6: shared progress before the team and sharing were one choice: asked once
         out.append('<div class="pn"><span>Join this plan&rsquo;s squad? The others in it see your name and the days you '

@@ -15,10 +15,11 @@ from . import attach_alive, esc, run_bg
 from .. import plans as P
 
 class MakePlanDialog(QDialog):
-    def __init__(self, parent, client, col, site, open_link=None):
+    def __init__(self, parent, client, col, site, open_link=None, on_sent=None):
         super().__init__(parent)
         self.client, self.col, self.site = client, col, site
         self.open_link = open_link   # tests pass their own; Anki's openLink otherwise
+        self.on_sent = on_sent       # 3.8.2: main thread, (deck, tags, decks) once the tree is up
         self.indexes = {}            # did -> DeckIndex, read once per deck
         self.url = None
         attach_alive(self)
@@ -64,10 +65,8 @@ class MakePlanDialog(QDialog):
             return None, [], []
         if did not in self.indexes:
             self.indexes[did] = P.DeckIndex(self.col, did)
-        tags, decks = self.indexes[did].tree()
-        # the server takes paths of up to 200 characters, one line each
-        ok = lambda path: len(path) <= 200 and path.isprintable()
-        return (self.indexes[did].name, [t for t in tags if ok(t[0])], [d for d in decks if ok(d[0])])
+        tags, decks = P.tree_rows(self.indexes[did])  # paths the server takes: one line, 200 characters
+        return self.indexes[did].name, tags, decks
 
     def _update(self, *_):
         name, tags, decks = self._tree()
@@ -101,6 +100,8 @@ class MakePlanDialog(QDialog):
                 self.status.setText("Couldn't reach Due Crew. Check your connection.")
                 return
             self.url = url
+            if self.on_sent:
+                self.on_sent(name, tags, decks)
             opener = self.open_link
             if opener is None:
                 from aqt.utils import openLink as opener
