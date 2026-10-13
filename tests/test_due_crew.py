@@ -9738,6 +9738,140 @@ def test_builder_undo_follow_asof_v381():
           "at: r.at, ...JSON.parse(r.doc)" in plans_ts and "const treeAt = raw.at ?" in builder and "`Tags as of ${pretty(treeAt)}`" in builder)
 
 
+def test_plans_round_three_site_v381():
+    """Plans, round three, on duecrew.com (Sam signed off): co-authors say yes
+    first and a plan can be handed over (Settings, and Home's invite lines);
+    where to get the deck; notes for followers on a tag or a card (Note, the
+    ⓘ, Notes on cards, note | lines in the text, both prompts); a date's
+    picked cards read by the deck tags they sit under (`pl`)."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(site, "app.css"), encoding="utf-8").read()
+    text_page = open(os.path.join(site, "plan-text.html"), encoding="utf-8").read()
+    # 1: co-authors who said yes, and handing a plan over
+    co = builder[builder.index("function coauthorsBox() {"):builder.index("/** 3.5, B: list the plan in the library")]
+    check("r3 site: Settings lists co-authors: an invite waits (Take back), one who said yes can be handed it or taken off",
+          '"Invited, waiting for "' in co and '"Take back"' in co and "`Hand it to ${e.name}`" in co and '"Remove"' in co
+          and 'h("label", {}, "Co-authors"), coauthorsBox(),' in builder)
+    check("r3 site: an offer is said with Take back, and stands alone (no second Hand it to)",
+          '"Offered to "' in co and "offered ? null : h(\"button\"" in co and "offer(null, ev.currentTarget)" in co)
+    check("r3 site: each is one request on its click: POST /owner {uid}, DELETE /editors/{uid}, POST /editors {uid}",
+          'api("POST", `/plans/${id}/owner`, { uid })' in co and 'api("DELETE", `/plans/${id}/editors/${e.uid}`)' in co
+          and 'api("POST", `/plans/${id}/editors`, { uid: who.uid })' in co and co.count("api(") == 4)
+    check("r3 site: an invite isn't a co-author yet: not in the plan's line, shown as invited in Share",
+          "x.uid !== me.uid && !x.pending" in builder and "`${x.name}, invited`" in builder and '"Co-authors…"' in builder)
+    inv = app[app.index("function planInvites() {"):app.index("// board.py's footer")]
+    check("r3 site: Home's invite lines, as the add-on's board says them, above the plans",
+          '" asked you to co-write "' in inv and '". Its tags would go on your notes in Anki."' in inv and '" offered you "' in inv
+          and '" to keep."' in inv and "b.planInvites" in inv and app.count("planInvites(),") == 2)
+    check("r3 site: Yes and No are one request each, POST /plans/{id}/invite {yes}",
+          inv.count("api(") == 1 and 'api("POST", `/plans/${x.id}/invite`, { yes })' in inv
+          and '"Yes"' in inv and '"No"' in inv and "Open it ›" in inv)
+    # 2: where to get the deck
+    deck_link = re.search(r"const deckLink = \(u\) => typeof u === \"string\" && u.length <= 300 && /(.*?)/\.test\(u\);", app)
+    ok_link = lambda u: len(u) <= 300 and bool(re.match(deck_link.group(1).replace("\\/", "/"), u))  # noqa: E731
+    check("r3 site: a deck link is https://, no spaces or quotes, 300 at most, or never a link (plans.ts DECK_URL)",
+          bool(deck_link) and ok_link("https://example.com/deck?v=12") and not any(ok_link(x) for x in (
+              "http://example.com", "javascript:alert(1)", "https://a b", 'https://x"y', "https:///x", "https://" + "a" * 293))
+          and all(f"deckLink({x})" in app + builder for x in ("v", "url", "doc.deckUrl")))
+    check("r3 site: Settings' field; the link page and the poster say Where to get it ›",
+          '"Where to get the deck (a link, optional)"' in builder and app.count('"Where to get it ›"') == 1
+          and builder.count('"Where to get it ›"') == 1 and "deckUrl: peek.doc.deckUrl" in app
+          and "steps(p.deck, true, p.deckUrl)" in app and "steps(p.deck, false, p.deckUrl)" in app)
+    check("r3 site: a save says where to get the deck changed; a merge keeps it",
+          '["deckUrl", "where to get the deck"]' in builder and '"every", "deckUrl"]) {' in builder)
+    # 3: notes for followers on a tag or a card
+    check("r3 site: notes ride the doc: 300 a plan, one line of 280, one a tag or a card",
+          "const MAX = 300, TEXT = 280;" in builder and "function setTagRemark(path, text)" in builder
+          and "const same = (a, b) => (a.card ?" in builder)
+    check("r3 site: Note on a deck tag's or a cut's chip in the day; the ⓘ on the calendar and in the day",
+          "const noteTag = (c) => (c.cut ? c.cut.tag : c.key && !c.picks && kindOf(c.key) === \"tag\" ? pathOf(c.key) : null);" in builder
+          and '}, "Note") : null,' in builder and 'h("i", { class: "ri", "aria-label": `Note: ${rmk.text}` }, "ⓘ ")' in builder
+          and "return [chip, nt ? remarkBox(nt) : null];" in builder and ".flatMap((c) => chipEl(u, c))" in builder)
+    check("r3 site: a row shows its tag's note or the nearest tag above it's, as in Anki",
+          "p.startsWith(`${r.tag.toLowerCase()}::`)" in builder and ".sort((a, b) => b.tag.length - a.tag.length)[0]" in builder)
+    check("r3 site: Notes on cards: which card by ID and number, never its text, the authors take one off",
+          '"Notes on cards"' in builder and "`${r.card[0]} · card ${r.card[1] + 1}`" in builder
+          and "putRemarks(remarks().filter((x) => x !== r)); mark(); draw();" in builder)
+    check("r3 site: a renamed or deleted plan tag's note follows it or goes",
+          "putRemarks(newPath ? remarks().map((r) => (r.tag && r.tag.toLowerCase() === low ? { ...r, tag: newPath } : r))" in builder)
+    check("r3 site: the text writes note lines after the dates and reads them (Add dates adds, the whole plan replaces)",
+          "...remarks().map(Remarks.line)].join(\"\\n\"); };" in builder
+          and "const line = (r) => (r.card ? `note | card:${r.card[0]}:${r.card[1] + 1} | ${r.text}` : `note | tag:${r.tag} | ${r.text}`);" in builder
+          and "if (replace) putRemarks(r.remarks.map(keepId));" in builder and "Takes off ${goneRmk.length} note" in builder)
+    # the reading regexes, run here on lines a guid with | and : can make
+    take_card = re.search(r"let m = /(\^card:.*?\$)/i\.exec\(rest\);", builder).group(1).replace("\\/", "/")
+    take_tag = re.search(r"m = /(\^tag:.*?\$)/i\.exec\(rest\);", builder).group(1)
+    note_line = re.search(r"const nl = /(\^note.*?\$)/i\.exec\(line\);", builder).group(1)
+    m = re.match(note_line, "note | card:Zq|7!m:N2:3 | On the quiz | Friday.", re.I)
+    c = m and re.match(take_card, m.group(1), re.I)
+    check("r3 site: note | card:GUID:N reads a guid holding | and :, N from 1, the rest the note",
+          bool(c) and c.group(1) == "Zq|7!m:N2" and c.group(2) == "3" and c.group(3) == "On the quiz | Friday.", str(c and c.groups()))
+    t = re.match(take_tag, "tag:SLG 12 | Slides first.", re.I)
+    check("r3 site: note | tag: takes a plan tag's name with its space", bool(t) and t.group(1) == "SLG 12" and t.group(2) == "Slides first.")
+    check("r3 site: both AI prompts mention note lines; the format's page documents them",
+          "note | tag:FULL::TAG::PATH | Skip the last two minutes, or note | card:ID:N |" in builder
+          and "note | tag:NAME | your words, or note | card:ID:N | your words." in builder
+          and 'id="remarks"' in text_page and "note | card:Zq7!mN2pLk:2 |" in text_page and "Up to 300 a plan." in text_page)
+    # 4: a date's picked cards by their resource's name
+    check("r3 site: a picked chip reads by its first label (88 picked until the author's Anki says)",
+          "`${plWord(pl[0][0])} · ${pl[0][1].toLocaleString()} picked` : `${picksN(u).toLocaleString()} picked`" in builder
+          and "picks: true, text: picksText(u), raw: picksList(u)" in builder and "cards: true, text:" not in builder)
+    check("r3 site: pl counts only while the date's picks are as they loaded, and goes back as it came",
+          "was && picksSig(was) === picksSig(u) ? u.pl : null" in builder and "pl && was.get(u.id) === picksSig(u) ? { ...u, pl } : u" in builder
+          and "lean(merge(doc, base, theirs.doc), theirs.doc.units || [])" in builder
+          and "if (old?.pl && picksSig(old) === picksSig(u)) u.pl = old.pl;" in builder)
+    check("r3 site: the new parts are styled", all(x in css for x in (".firststeps", ".chips2 .rmk", ".cnote", ".coa", ".pinv", ".pdeck", ".ch2 .xtra")))
+
+
+def test_plans_round_three_builder_v381():
+    """Plans, round three, in the builder (Sam signed off): a date after its
+    event is reinforcement ("after Heme quiz"); a tag's extras split, with
+    them or without; Edit the whole plan keeps a renamed tag (its dates
+    follow) and the save says what changed as revisions; first steps on an
+    empty plan."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    text_page = open(os.path.join(site, "plan-text.html"), encoding="utf-8").read()
+    # 5: reinforcement, the same rule as the add-on's
+    check("r3 builder: a date after its event's day is reinforcement",
+          "const afterEv = (u) => { const ev = u.for && evById(u.for); return !!ev && ev.day < u.opens; };" in builder
+          and "doc.units.filter((u) => u.for === id && !afterEv(u))" in builder)
+    check("r3 builder: the calendar, the day panel and the printout say after",
+          'evById(id).day < d ? "after " : "for "' in builder and 'after ? "After " : "For "' in builder
+          and "${forWord(u)} ${fx.name}, ${pretty(fx.day)}" in builder and 'h("optgroup", { label: "After" }' in builder
+          and "evById(u.for) && !afterEv(u)) ? \"lead\"" in builder)
+    check("r3 builder: the format's page and the prompt say it", "&ldquo;after Heme quiz&rdquo;" in text_page
+          and 'it reads \\"after Micro quiz\\", review after it.' in builder)
+    # 6: extras
+    ex = re.search(r"const EXTRA = /(.*?)/i;", builder).group(1)
+    is_extra = lambda seg: bool(re.match(ex, re.sub(r"[_#]", "", seg), re.I))  # noqa: E731
+    check("r3 builder: a child named Extra, Extras, Bonus or Supplement (any case, _ and # aside) is a tag's extras",
+          all(is_extra(x) for x in ("Extra", "#Extras", "BONUS", "_Supplement_", "extra_")) and not any(is_extra(x) for x in ("Extraction", "Supplements2", "Bonuses")))
+    check("r3 builder: the split, and Without as a search less each extra, named X but not Extra",
+          "`${main.toLocaleString()} + ${ex.toLocaleString()} extra`" in builder and '[[false, "With extras"], [true, "Without"]]' in builder
+          and '[Tags.ankiSearch("tag", path), ...extraKids(`tag:${path}`).map((k) => `-${Tags.ankiSearch("tag", pathOf(k))}`)].join(" ")' in builder
+          and "`${ws[0][1]} but not ${ws.slice(1).map(([, w]) => w).join(\", \")}`" in builder)
+    # 7: revisions
+    check("r3 builder: the whole plan's text keeps a renamed tag (same contents, a new name) and its dates follow",
+          "renamed.push({ id: was[0].id, from: ptagPath(was[0]), was: was[0].name });" in builder
+          and "if (t) retag(x.from, ptagPath(t)); }" in builder and "` · was ${was.name}`" in builder
+          and builder.index("const renamed = [];") < builder.index("for (const c of pendingCuts) {"))
+    check("r3 builder: a save's summary: updated Fri 16 Oct, renamed / added / took off N tags, the notes",
+          "out.push(`updated ${pretty(updated[0].opens)}`)" in builder and "out.push(`renamed ${nTags(ren.length)}`)" in builder
+          and "out.push(`added ${nTags(tAdded)}`)" in builder and "out.push(`took off ${nTags(tGone)}`)" in builder
+          and "out.push(`added ${nNotes2(rAdded)}`)" in builder)
+    check("r3 builder: a date that only followed a renamed tag hasn't changed; dates compare in any key order",
+          "!same(follow(b.get(u.id)), u)" in builder and "Object.keys(v).sort()" in builder)
+    # Sam's pick: first steps on an empty plan
+    fs = builder[builder.index("// 3.8.1 (Sam's pick): first steps"):builder.index("const main = h(\"div\", { class: \"main2\" },")]
+    check("r3 builder: first steps while the plan as saved has no dates, gone once it's saved with them",
+          "author && view !== \"print\" && !(plan.doc.units || []).length" in fs and "firstSteps, paceBox," in builder)
+    check("r3 builder: Tick what to cover · Fill to <end> · Save · Share the code, the step now bold, done ones ticked",
+          all(x in fs for x in ('"Tick what to cover"', "fillLabel", '"Save"', '"Share the code"', 'done ? "✓"', 'i === now ? h("b", {}, t) : t', '"aria-current"')))
+
+
 def test_plan_tags_insights_v381():
     """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
     choices (its topics, the map's first pick); the map's "by" gets one

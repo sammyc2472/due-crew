@@ -88,6 +88,9 @@ const nextMonday = () => { let d = today(); while (parseIso(d).getUTCDay() !== 1
 const spaced = (code) => `${code.slice(0, 4)} ${code.slice(4)}`;
 const leaf = (p) => p.split("::").pop().replace(/_/g, " ");
 const uid8 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+/** 3.8.1: a plan's "where to get the deck" (doc.deckUrl), as plans.ts takes it (DECK_URL):
+ *  https://, no spaces, quotes or angle brackets, 300 characters at most. Anything else is never a link here. */
+const deckLink = (u) => typeof u === "string" && u.length <= 300 && /^https:\/\/[^\s"'<>/\u0000-\u001f\u007f][^\s"'<>\u0000-\u001f\u007f]*$/.test(u);
 
 async function copy(text, btn) {
   try {
@@ -642,8 +645,10 @@ function followBox(p, code, followed) {
 async function codePage(code) {
   // 3.3: someone who has never heard of Due Crew gets here from a teacher's link
   const copyBtn = (text) => h("button", { class: "quiet", onclick: (e) => copy(text, e.target) }, "Copy");
-  const steps = (deck, follow = true) => h("ol", { class: "steps" },
-    h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, "."),
+  // 3.8.1: with the plan's link to the deck, where its authors gave one
+  const steps = (deck, follow = true, url = null) => h("ol", { class: "steps" },
+    h("li", {}, "Open Anki on your computer (", h("a", { href: "https://apps.ankiweb.net" }, "get it free"), ")", deck ? [", with the deck ", h("b", {}, deck), " in it"] : null, ".",
+      deckLink(url) ? [" ", h("a", { href: url, target: "_blank", rel: "noopener" }, "Where to get it ›")] : null),
     h("li", {}, "Add Due Crew: Tools › Add-ons › Get Add-ons, paste ", h("b", { class: "mono" }, "2035408484"), " ", copyBtn("2035408484"), ", then restart Anki."),
     follow ? h("li", {}, "Tools › Due Crew › Follow a plan, and paste ", h("b", { class: "mono" }, code), " ", copyBtn(code), ". The first time, it signs you in with your email.") : null);
   let p = null;
@@ -651,7 +656,7 @@ async function codePage(code) {
     if (me) {
       const peek = await api("GET", `/plans/peek?code=${encodeURIComponent(code)}`);
       const n = (x) => (x.n || 0) + (x.cards || []).length + Object.values(x.sn || {}).reduce((a, v) => a + v, 0);
-      p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience,
+      p = { name: peek.name, ownerName: peek.ownerName, line: peek.line, followers: peek.followers, deck: peek.doc.deck, audience: peek.audience, deckUrl: peek.doc.deckUrl,
             units: peek.doc.units.map((x) => ({ name: x.name, opens: x.opens, due: x.due, n: n(x) })),
             id: peek.id, following: !!peek.following, author: peek.role === "owner" || peek.role === "editor" };
     } else p = await api("GET", `/plans/public?code=${encodeURIComponent(code)}`);
@@ -663,10 +668,10 @@ async function codePage(code) {
     return;
   }
   const cal = p.audience === "squad" ? null : calMenu(code);
-  const card = h("section", { class: "panel stepcard" }, h("h4", {}, me ? "Or in Anki" : "Follow it in Anki"), steps(p.deck),
+  const card = h("section", { class: "panel stepcard" }, h("h4", {}, me ? "Or in Anki" : "Follow it in Anki"), steps(p.deck, true, p.deckUrl),
     me ? null : h("p", { class: "muted small" }, "Each morning, that day's cards open in your deck."));
   // followed here: the card is only how to get Due Crew into Anki, signed in as me
-  const followed = () => card.replaceChildren(h("h4", {}, "No Due Crew in your Anki yet?"), steps(p.deck, false),
+  const followed = () => card.replaceChildren(h("h4", {}, "No Due Crew in your Anki yet?"), steps(p.deck, false, p.deckUrl),
     h("p", { class: "muted small" }, "Then sign in with the same email, and the plan is there."));
   page(...planIntro(p),
     me ? followBox(p, code, followed) : null,
@@ -1316,10 +1321,39 @@ async function home() {
   // plan I follow, on track or behind; the day-by-day lives on its page and
   // in Anki. Following none, the ways in
   function plansPanel() {
-    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"),
+    if (!followed.length) return h("section", { class: "panel" }, h("h4", {}, "Plans"), planInvites(),
       h("small", { class: "muted" }, "A plan opens a deck’s cards on their days. Find one in the library, paste its code below, or make one in Anki."),
       h("div", { class: "row" }, link("/library", "The library ›"), link("/plans", "Your plans ›")));
-    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), followed.map((p) => onTrack(p, true)));
+    return h("section", { class: "panel" }, h("h4", {}, "Plans", link("/log", "Log")), planInvites(), followed.map((p) => onTrack(p, true)));
+  }
+  /** 3.8.1: a plan I'm asked to co-write, or offered to keep (the board's planInvites), above
+   *  the plans, as the add-on's board says it: Yes or No, one request each. */
+  function planInvites() {
+    const inv = (b.planInvites || []).filter((x) => x && x.id && !x.done);
+    if (!inv.length) return null;
+    return h("div", { class: "pinvs" }, inv.map((x) => {
+      const by = x.by || {};
+      const st = h("span", { class: "status small", role: "status" });
+      const answer = async (yes, btn) => {
+        btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = true; });
+        try { await api("POST", `/plans/${x.id}/invite`, { yes }); }
+        catch (err) {
+          btn.parentNode.querySelectorAll("button").forEach((y) => { y.disabled = false; });
+          st.className = "status bad small"; st.textContent = err.body?.error === "no_invite" ? "That invite isn't there any more." : "That didn't work. Try again.";
+          return;
+        }
+        x.done = yes ? "yes" : "no";
+        line.replaceChildren(yes ? h("span", { class: "small" }, x.kind === "owner" ? `${x.name} is yours. ` : `You co-write ${x.name}. `, link(`/plans/${x.id}/edit`, "Open it ›"))
+          : h("span", { class: "small muted" }, x.kind === "owner" ? `You said no to keeping ${x.name}.` : `You said no to co-writing ${x.name}.`));
+      };
+      const who = [by.emoji ? `${by.emoji} ` : "", h("b", {}, by.name || "Someone")];
+      const line = h("div", { class: "pinv" },
+        h("span", { class: "small" }, ...(x.kind === "owner" ? [...who, " offered you ", h("b", {}, x.name), " to keep."]
+          : [...who, " asked you to co-write ", h("b", {}, x.name), ". Its tags would go on your notes in Anki."])),
+        h("span", { class: "row" }, h("button", { class: "ghost", onclick: (e) => answer(true, e.currentTarget) }, "Yes"),
+          h("button", { class: "quiet", onclick: (e) => answer(false, e.currentTarget) }, "No")), st);
+      return line;
+    }));
   }
   // board.py's footer: Crew (people) and Share (as text, then as a
   // picture: 3.7.1, H3), who I'm waiting on; Refresh as a quiet icon
