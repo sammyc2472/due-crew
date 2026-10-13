@@ -799,12 +799,15 @@ def week_view(doc, prog, today, start, skipped=(), ld=None, shut=()):
             state = ("skip" if skip else "later" if d > today
                      else "done" if int(t) and int(s) >= int(t) else "open")
             rows.append({"uid": u["id"], "name": str(u.get("name") or "?"), "total": total,
-                         "seen": 0 if skip else int(s), "state": state, "prep": bool(u.get("for")),
+                         "seen": 0 if skip else int(s), "state": state,
+                         "prep": bool(u.get("for")) and not reinforces(doc, u),  # 3.8.1: after its event, not prep
                          "moved": bool(u.get("_moved")) and not skip,  # 3.7.6
                          "what": topic_view([u])})  # P7; 3.8.0: each name with its place, for its click
             rm = topic_remarks(doc, [u])
             if rm:
                 rows[-1]["rm"] = rm  # 3.8.1: the authors' notes under the topics they name
+            if u.get("for") and not skip and for_words(doc, u):
+                rows[-1]["ev"] = for_words(doc, u)  # 3.8.1: "for Heme quiz", or "after Heme quiz"
             if not skip and state != "later" and u["id"] in shut:
                 rows[-1]["shut"] = True  # 3.8.1
             if ld and u["id"] in ld and not skip:  # 3.7.81: plan load
@@ -840,7 +843,8 @@ def prep_for(doc, today):
         return None
     us = units(doc)
     now = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") <= today]
-    ahead = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") > today]
+    ahead = [u for u in us if u.get("for") in evs and str(u.get("opens") or "") > today
+             and not reinforces(doc, u)]  # 3.8.1: a date after its event doesn't prep for it
     pick = (now[-1] if now else ahead[0] if ahead else None)
     if not pick:
         return None
@@ -1591,6 +1595,61 @@ def finish_check(doc, left, recent, today, days=PACE_DAYS):
     if late > 0:
         return f"At that pace you open the last date on {when}, {late} day{'s' if late != 1 else ''} after {name}."
     return f"At that pace you open the last date on {when}, in time for {name}."
+
+
+# ---- 3.8.1: a follower's day (plans, round three) ----
+
+AWAY_DAYS = 3   # Welcome back: this many days I studied nothing, whose dates a morning would open, ask first
+AWAY_LOOK = 60  # ...looked for this far back (one revlog query)
+
+
+def reinforces(doc, u):
+    """A date for an event (its `for`) that opens after the event's day is
+    reinforcement: "after Heme quiz", not "for Heme quiz" (the builder says
+    the same). The event, or None. Read on the dates as given: my own days
+    in Anki (events never move)."""
+    ev = event_of(doc, u)
+    day = str((ev or {}).get("day") or "")
+    return ev if day and day < str((u or {}).get("opens") or "") else None
+
+
+def for_words(doc, u):
+    """"for Heme quiz", "after Heme quiz" for reinforcement, "" with no event.
+    Raw: the board escapes the name."""
+    ev = event_of(doc, u)
+    if not ev:
+        return ""
+    return f"{'after' if reinforces(doc, u) else 'for'} {ev.get('name') or '?'}"
+
+
+def away_days(us, applied, today, studied, since=""):
+    """Welcome back: the days before today (and from `since`) with one of
+    these dates (what a morning would open) never opened here, on which I
+    studied nothing at all (`studied`: the days I answered any card, iso).
+    Oldest first."""
+    days = {str(u.get("opens") or "") for u in us if (applied or {}).get(u["id"]) is None}
+    return sorted(d for d in days if d and since <= d < today and d not in studied)
+
+
+def study_cards(idx, cids):
+    """Study this date: its open cards, new and review, due or not (a cram
+    before a quiz): not suspended (a leech stays out) and not buried."""
+    return sorted(c for c in cids if c in idx.cards and idx.cards[c][0] >= 0)
+
+
+def held_rows(idx, doc, held, swap=None):
+    """Held back: what a plan holds shut here now, by date: [[name, opens,
+    n]] in the plan's order, a card on its first date only; what's on no date
+    any more is one row, [None, "", n]."""
+    left, out = set(held), []
+    for u in units(doc):
+        got = idx.match(u, swap, doc) & left
+        if got:
+            out.append([str(u.get("name") or "?"), str(u.get("opens") or ""), len(got)])
+            left -= got
+    if left:
+        out.append([None, "", len(left)])
+    return out
 
 
 # ---- 3.8.0: plan tags ----

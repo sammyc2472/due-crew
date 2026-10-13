@@ -157,7 +157,10 @@ def check(path):
     ok("…remembered as built here, with the parent", pstore.get("built") == [fdid, parent], pstore)
 
     # 3.8.0: the morning's tidy: a filtered deck of ours goes once it's empty; one with cards stays
-    F._filtered(col, F._deck_name("Checkpoint · Empty one"), pick[:3])
+    # three open cards in no filtered deck yet (pick's are in Study's now; until 3.8.1 Anki's second
+    # filter, the current deck's new cards, filled this one whatever it was asked for)
+    spare = [c for c in col.find_cards('deck:"Step Deck" -is:suspended -deck:filtered') if c not in set(pick)][:3]
+    F._filtered(col, F._deck_name("Checkpoint · Empty one"), spare)
     edid = col.decks.id_for_name("Due Crew::Checkpoint · Empty one")
     mine = col.decks.id("Mine, not Due Crew's")
     t = tm(); n_none = F.tidy_decks(col); t_tidy = tm() - t
@@ -169,7 +172,7 @@ def check(path):
        n_one == 1 and not col.decks.get(edid, default=False) and col.decks.get(fdid, default=False)
        and col.decks.get(mine, default=False) and sorted(pstore.get("built")) == sorted([fdid, parent]),
        (n_one, pstore, col.undo_status().undo))
-    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in pick[:3])} deck:\"Step Deck\"")) == 3)
+    ok("…and the cards it held are back home", len(col.find_cards(f"cid:{','.join(str(c) for c in spare)} deck:\"Step Deck\"")) == 3)
     col.sched.empty_filtered_deck(fdid)
     n_two = F.tidy_decks(col)
     ok("tidy: the last one under Due Crew goes with the parent, one undo step",
@@ -562,6 +565,51 @@ def check(path):
            all(col.get_card(c).queue == -1 for c in today_cards) and held_now == sum(1 for c in late_new if col.get_card(c).queue == -1)
            and F.new_limit(col, did) == base + 5 and (pstore["plans"]["pM"].get("later") or {}).get("r1") == later(1),
            f"latest step now {col.undo_status().undo!r}")
+        # 3.8.1, plans round three: Hold back's sheet, Open them: what the plan holds opens in one undo step,
+        # a leech stays shut, the yes stays (what an author adds later is still held); Edit › Undo shuts them again
+        st9 = pstore["plans"]["pM"]
+        lee_c = late_new[0]
+        lnote = col.get_card(lee_c).note()
+        lnote.tags.append("leech")
+        col.update_note(lnote)
+        shut = [c for c in st9.get("held") or [] if col.get_card(c).queue == -1]
+        n_menu = F.held_count("pM")
+        t = tm(); F.open_held("pM"); t_held = tm() - t
+        step = col.undo_status().undo
+        ok("held back, Open them: all it holds but the leech, in one undo step; Hold back stays on",
+           n_menu == len(shut) - 1 > 0 and col.get_card(lee_c).queue == -1
+           and all(col.get_card(c).queue != -1 for c in shut if c != lee_c)
+           and step == "Due Crew: open what Morning held back" and st9.get("hold_yes") is True,
+           f"{n_menu} opened, undo {step!r}, {t_held*1000:.0f} ms")
+        col.undo()
+        ok("held back: Edit › Undo shuts them again", all(col.get_card(c).queue == -1 for c in shut))
+        # 3.8.1, Study this date: a Due Crew deck of the date's open cards, new and review, due or not (a cram
+        # before a quiz), random order, Anki rescheduling them; Anki's own one undo step; its Study screen on it
+        r0 = sorted(P.DeckIndex(col, did).match(rdates[0], None, "Step Deck"))
+        for c in [c for c in r0 if col.get_card(c).queue == 0][:8]:
+            card = col.get_card(c)
+            card.type, card.queue, card.ivl, card.due = 2, 2, 20, col.sched.today + 15  # reviews, not due for weeks
+            col.update_card(card)
+        i11 = P.DeckIndex(col, did)
+        want = P.study_cards(i11, i11.match(rdates[0], None, "Step Deck"))
+        moved = []
+        F.mw.moveToState = moved.append
+        t = tm(); F.study_date("pM", "r0"); t_study = tm() - t
+        sname = F._deck_name(rdates[0]["name"])
+        sdid = col.decks.id_for_name(sname)
+        sdeck = col.decks.get(sdid) if sdid else {}
+        got = set(col.find_cards(f'"deck:{sname}"')) if sdid else set()
+        reviews = sum(1 for c in got if col.get_card(c).type == 2)
+        ok("study this date: Anki's filtered deck of the date's open cards, new and reviews not due, random, rescheduling",
+           sdid and sdeck.get("dyn") and got == set(want) and 0 < reviews < len(got) == len(want)
+           and sdeck["terms"][0][2] == 1 and sdeck.get("resched") and moved == ["overview"] and col.decks.selected() == sdid
+           and not any(col.get_card(c).queue == -1 for c in got),
+           f"{len(got)} cards ({reviews} reviews), terms {sdeck.get('terms')}, {t_study*1000:.0f} ms")
+        sstep = col.undo_status().undo
+        col.undo()
+        ok("study this date: one undo step of Anki's own; Edit › Undo takes the deck away, the cards go home",
+           not col.decks.id_for_name(sname) and all(col.get_card(c).odid == 0 and col.get_card(c).did == did for c in want),
+           f"undo {sstep!r}")
     finally:
         for k, v in F_real.items():
             setattr(F, k, v)

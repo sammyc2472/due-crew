@@ -120,6 +120,10 @@ def plan_dates(today):
                           "rm": P.topic_remarks(doc, [named.get(u["id"], u)]),  # 3.8.1: the authors' notes under its topics
                           "crew": [int(crew.get(u["id"]) or 0), followers] if followers > 1 else None,
                           "prep": str(ev.get("name") or "") if ev else None,
+                          # 3.8.1: a date after its event reinforces it ("after Heme quiz"); Study
+                          # on a date with cards open (a Due Crew deck of them); view() adds both to its row
+                          "after": bool(ev) and P.reinforces(doc, u) is not None,
+                          "study": opens <= today and int(o) > 0,
                           # 3.7.3: an author's update adds to it, waiting for Open (its count when it's
                           # the only date the update touches; -1: one of several)
                           "upd": (0 if u["id"] not in (upd.get("units") or []) else
@@ -299,7 +303,13 @@ def view(c):
                    suggestions=suggestions(c, today), notes=notes(), every=plan_every(today))
         v["folded"] = D.fold_state(c.get("due_fold"), v, today)
         v["done"] = D.done_for_today(v)
-        v["opened"] = _pf().morning_opened() if mw.col else None  # 3.8.0: the morning's line, with Not today
+        # 3.8.0: the morning's line, with Not today; 3.8.1: and what it opened, by date
+        v["opened"] = _pf().opened_view() if mw.col else None
+        more = {(x["pid"], x["uid"]): x for x in dates}
+        for r in v.get("rows") or []:
+            x = more.get((r.get("pid"), r.get("uid"))) if r.get("kind") == "plan" else None
+            if x:  # 3.8.1: what due.view's rows don't carry: "after" its event, Study
+                r["after"], r["study"] = bool(x.get("after")), bool(x.get("study"))
         v["study_to"] = ((_reviews() or {}).get("next") or "") if v.get("study") and mw.col else ""
     except Exception:
         traceback.print_exc()
