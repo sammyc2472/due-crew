@@ -8955,6 +8955,68 @@ def test_builder_work_and_suggestions_v381():
           and "u.tags = [...(u.tags || []), p]; mark(); draw();" in b)
 
 
+def test_study_for_a_quiz_v381():
+    """3.8.1 (plans, rethought): from three days out, the plan's box offers
+    Study for a quiz: one Due Crew deck of the open cards of every date that
+    preps for it (not one after it), the shakiest first, Anki's own step."""
+    import due_crew as dc
+    from due_crew import plans as P, board
+    from aqt.deckbrowser import DeckBrowser
+    t = _day(0)
+    doc = {"units": [{"id": "a", "name": "A", "opens": _day(-2), "for": "q"}, {"id": "b", "name": "B", "opens": _day(-1), "for": "q"},
+                     {"id": "c", "name": "C", "opens": _day(4), "for": "q"},          # after the quiz: reinforcement
+                     {"id": "d", "name": "D", "opens": _day(1), "for": "q"}],         # not open yet
+           "events": [{"id": "q", "name": "Heme <quiz>", "day": _day(3)}, {"id": "z", "name": "Later", "day": _day(9)}]}
+    prog = {"a": [40, 10, 40], "b": [30, 0, 30], "c": [5, 0, 5]}
+    qz = P.quiz(doc, t, prog)
+    check("quiz: its dates open by today and before it; their opened cards counted",
+          qz == {"id": "q", "name": "Heme <quiz>", "day": _day(3), "units": ["a", "b"], "open": 70}, qz)
+    check("quiz: not four days out, not with nothing open, not after it",
+          P.quiz(doc, _day(-1), prog) is None and P.quiz(doc, t, {}) is None and P.quiz(doc, _day(4), prog) is None)
+    html = board._plan_card_html(dict({"id": "p1", "title": "Plan"}, prep={"name": "Heme <quiz>", "day": _day(3), "when": "Thu", "left": 1, "today": False},
+                                      quiz=dict(qz, when="Thu")))
+    check("quiz: one line for the event, its prep days and its cards, Study for it; its name escaped",
+          "duecrew:planquiz:p1:q" in html and "Heme &lt;quiz&gt;" in html and "Heme <quiz>" not in html
+          and html.count("Heme &lt;quiz&gt;") == 1 and "1 more day of prep &middot; 70 cards open from its dates" in html, html[-1200:])
+    html2 = board._plan_card_html(dict({"id": "p1", "title": "Plan"}, prep={"name": "Other", "day": _day(1), "when": "Tue", "left": 0},
+                                       quiz=dict(qz, when="Thu", today=False)))
+    check("quiz: beside the prep line when that names another event", "70 cards open from its dates" in html2
+          and "planquiz:p1:q" in html2 and "<b>Other</b>" in html2)
+    units = [dict(u, **{"for": "q"}) if u["id"] in ("hf", "ar") else u for u in _plan_units()]
+    store, pid, code, maya = _v381_world(units, [{"id": "q", "name": "Cardio quiz", "day": _day(2)}])
+    col = _plan_col()
+    with _PlanGlue({"A": maya}, {"A": col}) as g:
+        F = g.F
+        plan, _ = maya.follow_plan(code)
+        F.on_followed(plan, 10, None, "open")
+        built, sel, moved = [], [], []
+
+        def fake_filtered(c, name, cids, order=4):
+            built.append((name, sorted(cids), order))
+            col.decks.names[98] = name
+            return True
+        saved = (F._filtered, getattr(F.mw, "moveToState", None))
+        F._filtered = fake_filtered
+        col.decks.select = sel.append
+        F.mw.moveToState = moved.append
+        try:
+            dc._on_js(False, f"duecrew:planquiz:{pid}:q", DeckBrowser())
+            dc._on_js(False, f"duecrew:planquiz:{pid}:nope", DeckBrowser())
+        finally:
+            F._filtered = saved[0]
+            if saved[1] is None:
+                F.mw.__dict__.pop("moveToState", None)
+            else:
+                F.mw.moveToState = saved[1]
+        check("quiz: one Due Crew deck of its dates' open cards, the shakiest first, and Anki's Study screen on it",
+              built == [("Due Crew::Cardio quiz", [1, 2, 3], 2)] and sel == [98] and moved == ["overview"], (built, sel, moved))
+        F._state["plan_progress"] = F.progress(col, F.followed(), F._state_cfg())
+        p = next(x for x in F.followed() if x["id"] == pid)
+        v = F.card_view(p, F._state_cfg()[pid], F._state["plan_progress"][pid], _day(0))
+        check("quiz: the plan's box carries it from three days out", (v.get("quiz") or {}).get("id") == "q"
+              and f"duecrew:planquiz:{pid}:q" in board._plan_card_html(v), v.get("quiz"))
+
+
 def test_plan_tags_round_two_v381():
     """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named

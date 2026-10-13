@@ -854,6 +854,37 @@ def prep_for(doc, today):
     return {"name": ev.get("name") or "?", "day": ev["day"], "left": left, "today": ev["day"] == today}
 
 
+QUIZ_DAYS = 3  # Study for a quiz shows from this many days before it
+
+
+def quiz(doc, today, prog=None, days=QUIZ_DAYS):
+    """3.8.1 (plans, rethought), Study for a quiz: the next event, today or
+    within `days`, with dates that prep for it (`for` it, not after it) and
+    have cards opened here: {id, name, day, units: [date ids], open: n}, `n`
+    their opened cards (prog: {unit id: [opened, seen, total]}). Events never
+    move; my own (shifted) dates decide what preps. None otherwise."""
+    try:
+        t = datetime.date.fromisoformat(today)
+    except (TypeError, ValueError):
+        return None
+    prog = prog or {}
+    for e in sorted((e for e in (doc or {}).get("events") or [] if isinstance(e, dict) and e.get("id")),
+                    key=lambda e: str(e.get("day") or "")):
+        try:
+            d = datetime.date.fromisoformat(str(e.get("day") or ""))
+        except ValueError:
+            continue
+        if not 0 <= (d - t).days <= days:
+            continue
+        us = [u for u in units(doc) if u.get("for") == e["id"] and not reinforces(doc, u)
+              and str(u.get("opens") or "9999") <= today]
+        n = sum(int((prog.get(u["id"]) or [0])[0] or 0) for u in us)
+        if us and n:
+            return {"id": str(e["id"]), "name": str(e.get("name") or "the quiz"), "day": str(e["day"]),
+                    "units": [u["id"] for u in us], "open": n}
+    return None
+
+
 def event_of(doc, u):
     """The event a date preps for (its `for` is the event's id), or None."""
     want = (u or {}).get("for")

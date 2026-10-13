@@ -868,6 +868,10 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
     prep = None if plan.get("paused") else P.prep_for(doc, today)
     if prep:
         prep["when"] = _short_day(prep["day"], today)
+    # 3.8.1 (plans, rethought): from three days out, Study for a quiz: its dates' open cards in one deck
+    quiz = None if plan.get("paused") or not st else P.quiz(doc, today, prog)
+    if quiz:
+        quiz["when"], quiz["today"] = _short_day(quiz["day"], today), quiz["day"] == today
     # 3.5.0: a week of the calendar (today's dates are Due's Today since 3.8.0)
     moved = plan.get("moved") or {}
     skipped_units = [dict(u, opens=P._later(u["opens"], shift + int(moved.get(u["id"]) or 0)))
@@ -895,7 +899,7 @@ def card_view(plan, st, prog, today, session=None, week_offset=0):
             "team_ask": bool(plan.get("teamAsk")),  # 3.7.6: shared before the merge: asked once
             "owner_name": str(plan.get("ownerName") or ""),
             "session": None if no_deck or plan.get("paused") else session,
-            "prep": prep,
+            "prep": prep, "quiz": quiz,
             "fallback_ok": bool(((_pcfg().get("fallback_ok") or {}) if mw else {}).get(plan["id"])),
             "aside": aside(plan, st), "aside_ok": list(((_pcfg().get("aside_ok") or {}) if mw else {}).get(plan["id"]) or [0, 0]),
             "put_off": put_off, "waiting": waiting,
@@ -1629,6 +1633,39 @@ def study_date(pid, uid):
             mw.moveToState("overview")
 
 
+QUIZ_ORDER = 2  # Anki's filtered-deck order: smallest intervals first, the shakiest (and the unseen) first
+
+
+def study_quiz(pid, eid):
+    """3.8.1 (plans, rethought), Study for a quiz: one Due Crew deck of the
+    open cards of every date that preps for the event (P.quiz: not a date
+    after it), the shakiest first, Anki rescheduling them as it would; one
+    undo step of Anki's own, then Anki's Study screen on it. A search run
+    here; nothing is sent, and nobody else sees it."""
+    got = _plan_idx(pid)
+    if not got:
+        return
+    _p, st, doc, idx = got
+    ev = next((e for e in doc.get("events") or [] if isinstance(e, dict) and e.get("id") == eid), None)
+    if not ev:
+        return
+    cids = set()
+    for u in P.units(doc):
+        if u.get("for") == eid and not P.reinforces(doc, u):
+            cids |= idx.match(u, _swap(st), doc)
+    cids = P.study_cards(idx, cids)
+    if not cids:
+        tooltip("None of its cards are open yet.")
+        return
+    name = _deck_name(f"{ev.get('name') or 'quiz'}")
+    if _filtered(mw.col, name, cids, order=QUIZ_ORDER):
+        _after_change()
+        did = mw.col.decks.id_for_name(name)
+        if did:
+            mw.col.decks.select(did)
+            mw.moveToState("overview")
+
+
 def _deck_name(name):
     """A filtered deck's name from a date's, under Due Crew's parent deck."""
     return P.our_deck(name)
@@ -2132,6 +2169,8 @@ def on_message(cmd, parts):
         raise_limit(arg)
     elif cmd == "planstudydate" and arg and len(parts) > 3:
         study_date(arg, parts[3])
+    elif cmd == "planquiz" and arg and len(parts) > 3:  # 3.8.1: Study for a quiz
+        study_quiz(arg, parts[3])
     elif cmd == "planasideok" and arg:
         st = _state_cfg().get(arg)
         p = next((x for x in followed() if x.get("id") == arg), None)

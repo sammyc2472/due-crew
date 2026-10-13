@@ -269,6 +269,12 @@ _C3 = dict(PLAN_CARD, week=_W3, tabs={"summary": None}, ins=None, waiting=0)
 _DV3 = dict(_DV, rows=[dict(r, study=True) if r.get("kind") == "plan" and r["uid"] in ("u1", "u2") else r for r in _DV["rows"]],
             opened={"n": 120, "dates": [["p1", "u1", "Renal physiology", 80], ["p1", "u2", "Antiarrhythmics", 40]]})
 _DV3["rows"] = [dict(r, after=True, prep="KSA F3-1") if r.get("uid") == "u2" else r for r in _DV3["rows"]]
+# 3.8.1 (plans, rethought): Study for a quiz, from three days out, on what the plan says about now
+sections.append("<h3>3.8.1: Study for a quiz, three days out</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV, you=_YOU("plans", plans={"cards": [
+        dict(_C3, prep={"name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "left": 2, "today": False},
+             quiz={"id": "q", "name": "Cardio <quiz>", "day": "2026-10-09", "when": "Fri", "today": False, "units": ["a", "b"], "open": 412})],
+        "offers": []})).replace('id="du-', 'id="duq-'))
 sections.append("<h3>3.8.1: Today: the morning's line by date, Study on a plan's date, a date after its quiz</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DV3, you=_YOU("today")).replace('id="du-', 'id="du3-'))
 sections.append("<h3>3.8.1: the morning's line, four or more dates</h3>" + board.render(

@@ -1642,6 +1642,7 @@ def _plan_now(card, pid):
         return (f'<div class="pn"><span>No new cards while it&rsquo;s paused.</span>'
                 f'<span class="acts"><a href="#" onclick="{_pycmd("planresume:" + pid)}">Resume now</a></span></div>')
     out = _own_html(card.get("own"), pid) if card.get("own") else ""
+    out += _quiz_line(card, pid)
     kind = (card.get("session") or {}).get("kind")
     if kind in ("rest", "catchup", "taper"):
         word = {"rest": "a rest day", "catchup": "in its catch-up week", "taper": "in its taper"}[kind]
@@ -1657,6 +1658,26 @@ def _plan_now(card, pid):
                 f'<span class="acts"><a href="#" onclick="{_pycmd(f"insstudy:{did}:h")}">Study {n:,}</a>'
                 f'<a href="#" onclick="{_pycmd(f"youins:{did}")}">Insights &rsaquo;</a></span></div>')
     return out
+
+
+def _quiz_line(card, pid):
+    """3.8.1 (plans, rethought), Study for a quiz: from three days out, the
+    event, its prep days left, the cards its dates opened here, and Study for
+    it (one deck of them, the shakiest first). The event's name is the
+    author's: escaped here."""
+    qz = card.get("quiz")
+    if not qz:
+        return ""
+    e = _html.escape
+    pf = card.get("prep") or {}
+    left = int(pf.get("left") or 0) if pf.get("day") == qz.get("day") and pf.get("name") == qz.get("name") else 0
+    n = int(qz.get("open") or 0)
+    when = "today" if qz.get("today") else f'on {e(str(qz.get("when") or ""))}'
+    return (f'<div class="pn"><span>For <b>{e(str(qz.get("name") or "?"))}</b> {when}'
+            + (f' &middot; {left} more day{"s" if left != 1 else ""} of prep' if left else "")
+            + f' &middot; {n:,} card{"s" if n != 1 else ""} open from its dates</span>'
+            f'<span class="acts"><a href="#" title="Its dates&rsquo; open cards in one deck, the shakiest first" '
+            f'onclick="{_pycmd(f"planquiz:{pid}:" + str(qz.get("id") or ""))}">Study for it</a></span></div>')
 
 
 def _own_html(ow, pid):
@@ -2410,8 +2431,9 @@ def _plan_notes(card, pid):
                 else f'open{"s" if len(names) == 1 else ""} tomorrow morning')
         out.append(f'<div class="pn"><span>{what} {when}</span>'
                    f'<span class="acts"><a href="#" onclick="{_pycmd("planputback:" + pid)}">Open now</a></span></div>')
-    pf = card.get("prep")
-    if pf:
+    pf, qz = card.get("prep"), card.get("quiz")
+    # 3.8.1: Study for a quiz says this, in what the plan says about now (_plan_now)
+    if pf and not (qz and qz.get("day") == pf.get("day") and qz.get("name") == pf.get("name")):
         left = int(pf.get("left") or 0)
         what = (f'<b>{e(str(pf.get("name") or "?"))}</b> is today' if pf.get("today")
                 else f'For <b>{e(str(pf.get("name") or "?"))}</b> on {e(str(pf.get("when") or ""))}'
