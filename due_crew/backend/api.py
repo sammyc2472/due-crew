@@ -58,6 +58,18 @@ def _said(path):
     return re.sub(r"/(codes|invites)/[^/]+", r"/\1/…", path.split("?")[0])
 
 
+def _addon_version():
+    """This add-on's version (its manifest), for the plan docs it keeps."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "manifest.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "?")
+    except (OSError, ValueError):
+        return "?"
+
+
+_KEPT_BY = _addon_version()
+
+
 def _with_kept_docs(plans, kept):
     """3.8.1: the board's plans, each one sent without its doc (`same`, my
     stamp hadn't moved) given the doc I kept for that version. None when I
@@ -289,8 +301,10 @@ class ApiClient:
         got = int(self.session.get("cheers_got") or 0)
         # 3.7.3: the plans' stamp as I last saw it; they come again only when it moved
         pv = re.sub(r"[^0-9a-f]", "", str(self.session.get("plans_pv") or ""))[:40]
-        # 3.8.1: same=1, I keep the docs I have: a morning whose stamp didn't move brings none
-        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}&same=1" if with_decks
+        # 3.8.1: same=1, I keep the docs I have: a morning whose stamp didn't move brings none.
+        # Only docs this version cleaned: an older add-on's cleaner left out what it didn't know
+        same = "&same=1" if self.session.get("plans_by") == _KEPT_BY else ""
+        status, data = self._call("GET", f"/board?decks=1&wk={wk}&got={got}&pv={pv}{same}" if with_decks
                                   else f"/board?got={got}&pv={pv}")
         if status != 200:
             raise TransportError(f"board: {status}", status)
@@ -356,6 +370,9 @@ class ApiClient:
                 self._save_session()
             else:
                 data["plans"] = raw
+                if self.session.get("plans_by") != _KEPT_BY:
+                    self.session["plans_by"] = _KEPT_BY  # 3.8.1: the docs I keep, cleaned by this version
+                    self._save_session()
         if plans_came:
             plans = [p for p in map(clean_plan, data.get("plans") or []) if p]
             offers = [o for o in map(clean_offer, data.get("planOffers") or []) if o]

@@ -8875,6 +8875,15 @@ def test_morning_keeps_unchanged_plan_docs_v381():
     moved = maya.fetch_board(labels, with_decks=True)
     check("lean plans: the stamp moved: the docs come again, with the post", moved["plans_fresh"] and saw[-1] is False
           and maya.session["plans"][0]["posts"][0]["text"] == "Read chapter 6 first.")
+    # an older add-on's docs (its cleaner left out what it didn't know) are never kept: the first morning brings them whole
+    maya.session["plans_by"] = "3.7.9"
+    maya.session["plans"] = [dict(p, doc=dict(p["doc"], units=p["doc"]["units"][:1])) for p in maya.session["plans"]]
+    up = maya.fetch_board(labels, with_decks=True)
+    check("lean plans: after an upgrade, the docs come whole once, and are kept from then on",
+          up["plans_fresh"] and saw[-1] is False and len(maya.session["plans"][0]["doc"]["units"]) == len(_plan_units())
+          and maya.session.get("plans_by") == api._KEPT_BY and api._KEPT_BY == json.load(open(os.path.join(REPO, "due_crew", "manifest.json")))["version"])
+    maya.fetch_board(labels, with_decks=True)
+    check("lean plans: the next morning asks with same=1 again", saw[-1] is True)
     maya.session["plans"] = []  # a session that lost its plans but kept its stamp
     lost = maya.fetch_board(labels, with_decks=True)
     check("lean plans: a doc I don't have: nothing of them is used, the stamp is let go",
@@ -8941,7 +8950,11 @@ def test_builder_work_and_suggestions_v381():
         " s1: Suggest.tags('Renal physiology', tree), s2: Suggest.tags('Cardiac physiology', tree),"
         " s3: Suggest.tags('Lecture 14: Herpes viruses', tree), s4: Suggest.tags('Read: Chapter 3', tree),"
         " s5: Suggest.tags('Arrhythmia', tree, (p) => p.includes('Cardio')), s6: Suggest.tags('Diuretics', tree),"
-        " s7: Suggest.tags('Cardio arrhythmia', tree), s8: Suggest.tags('Renal and cardio physiology', tree) }));")
+        " s7: Suggest.tags('Cardio arrhythmia', tree), s8: Suggest.tags('Renal and cardio physiology', tree),"
+        " n1: Suggest.tags('SLG 12', [['DueCrew::B1::SLG_3', 9], ['DueCrew::B1::SLG_12', 40], ['DueCrew::B1::SLG_1', 5]]),"
+        " n2: Suggest.tags('Block 2 cardiology', [['Block_3::Cardiology', 9], ['Block_2::Cardiology', 30]]),"
+        " n3: Suggest.tags('Hemolytic anemia', [['#Path::03_Hemolytic_Anemia', 20]]),"
+        " n4: Suggest.tags('Lecture 14: Herpes viruses', [['#Videos::05_Herpes_Viruses', 88]]) }));")
     out = subprocess.run([node, "-e", prog], capture_output=True, text=True, timeout=60)
     try:
         r = json.loads(out.stdout)
@@ -8960,6 +8973,13 @@ def test_builder_work_and_suggestions_v381():
     check("suggest: lecture words and numbers aside; nothing for a chapter", r["s3"] == [["#Videos::Heme::Herpes_Viruses", 88]]
           and r["s4"] == [], str(r["s3"]))
     check("suggest: what's placed is left out; a word inside a part", r["s5"] == [] and r["s6"] == [["#Book::Pharm::Ch07_Diuretics", 64]])
+    check("suggest: a name's number picks its own tag (SLG 12, never SLG 3 or 1); a deck's 03_ order is no number",
+          r["n1"] == [["DueCrew::B1::SLG_12", 40]] and r["n2"] == [["Block_2::Cardiology", 30]]
+          and r["n3"] == [["#Path::03_Hemolytic_Anemia", 20]] and r["n4"] == [["#Videos::05_Herpes_Viruses", 88]], str([r["n1"], r["n2"], r["n3"], r["n4"]]))
+    check("builder: a renamed tag is followed string by string (never inside a number), a kept-without-extras tag is placed",
+          "const follow = (u) => (ren.length ? walk(u, \"\") : u);" in b and "JSON.parse(x)" not in b
+          and "const p = extrasOf(q); return p ? `tag:${p}` : null;" in b
+          and b.index("const extrasOf = (q) =>") < b.index("const placedKeys = () =>"))
     check("suggest: half a name is noise; all but one of three words will do",
           r["s7"] == [["#Videos::Cardio::Arrhythmias", 61]] and r["s8"] and all(p.endswith("Physiology") for p, _n in r["s8"]), str(r["s7"]) + str(r["s8"]))
     check("builder: the heavy note and the Text preview read the day's work",

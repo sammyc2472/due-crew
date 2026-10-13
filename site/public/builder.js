@@ -188,6 +188,9 @@ const Suggest = (() => {
     "video", "videos", "intro", "introduction", "review", "notes", "extra", "extras", "session", "class"]);
   const words = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
+  // a name's numbers ("SLG 12", "Block 2"), and a tag part's own ones: a leading "03_" is the deck's order, not a number
+  const nums = (s) => (String(s || "").match(/\d+/g) || []).map(Number);
+  const partNums = (seg) => nums(String(seg).replace(/^[#^]?\d+[_ .-]+/, ""));
   // "arrhythmia" and "arrhythmias", "cardiac" and "cardio": the same word here
   const same = (a, b) => {
     const [s, l] = a.length <= b.length ? [a, b] : [b, a];
@@ -198,14 +201,19 @@ const Suggest = (() => {
   function tags(name, rows, skip = () => false, max = 3) {
     const want = [...new Set(words(name))];
     if (!want.length) return [];
+    const have = new Set(nums(name));
     const out = [];
     for (const [path, n] of rows) {
-      if (!n || skip(path)) continue;
+      if (!n) continue;
       const segs = String(path).split("::");
       const leaf = words(segs[segs.length - 1]);
       const all = words(segs.join(" "));
       const hit = want.filter((w) => all.some((x) => same(w, x))).length;
       if (!hit || !want.some((w) => leaf.some((x) => same(w, x)))) continue;
+      // "SLG 12" is never SLG 3: a part a word matched that carries its own number must carry one of the name's
+      if (have.size && segs.some((g) => want.some((w) => words(g).some((x) => same(w, x)))
+          && partNums(g).length && !partNums(g).some((k) => have.has(k)))) continue;
+      if (skip(path)) continue;
       out.push([path, n, hit / want.length, segs.length]);
     }
     out.sort((x, y) => y[2] - x[2] || y[3] - x[3] || x[1] - y[1]);
@@ -374,6 +382,15 @@ async function builder(id) {
   walk("root:tag"); walk("root:deck");
   const n = (key) => count.get(key) || 0;
   const under = (a, b) => kindOf(a) === kindOf(b) && pathOf(b).toLowerCase().startsWith(`${pathOf(a).toLowerCase()}::`);  // b is below a
+  // ---- 3.8.1: a deck tag's extras (Extra, Bonus): with them, or without ----
+  const extraKids = (key) => (kindOf(key) === "tag" ? kidsOf(key).filter((k) => isExtra(pathOf(k).split("::").pop())) : []);
+  /** the tag less its extras, as an Anki search: "tag:X" -"tag:X::Extra" */
+  const withoutQ = (path) => [Tags.ankiSearch("tag", path), ...extraKids(`tag:${path}`).map((k) => `-${Tags.ankiSearch("tag", pathOf(k))}`)].join(" ");
+  let extraMap = null;  // each without-extras search: its tag, worked out once
+  const extrasOf = (q) => {
+    if (!extraMap) { extraMap = new Map(); for (const k of count.keys()) if (extraKids(k).length) extraMap.set(withoutQ(pathOf(k)), pathOf(k)); }
+    return extraMap.get(q) || null;
+  };
   // which views the tags have: by resource, by system, the rest
   const tagKind = new Map(tree.tags.map(([p]) => [`tag:${p}`, Tags.kind(p)]));
   const subKinds = new Map();
@@ -488,7 +505,8 @@ async function builder(id) {
 
   // ---- units and sources ----
   const srcs = (u) => [...(u.tags || []).map((t) => `tag:${t}`), ...(u.decks || []).map((d) => `deck:${d}`)];
-  const placedKeys = () => new Set(doc.units.flatMap(srcs));
+  // 3.8.1: a tag kept without its extras (its "Without" search) is on the calendar too
+  const placedKeys = () => new Set(doc.units.flatMap((u) => [...srcs(u), ...(u.search || []).map((q) => { const p = extrasOf(q); return p ? `tag:${p}` : null; }).filter(Boolean)]));
   const isPlaced = (key, placed = placedKeys()) => placed.has(key) || [...placed].some((p) => under(p, key));
   /** The placed keys strictly below `key` that aren't below another one. */
   function placedBelow(key, placed = placedKeys()) {
@@ -545,6 +563,8 @@ async function builder(id) {
   const autoName = (u) => {
     const ks = srcs(u);
     if (!ks.length && (u.cut || []).length) return `${cutName(u.cut[0])}${u.cut.length > 1 ? ` + ${u.cut.length - 1} more` : ""}`.slice(0, 60);
+    const wo = (u.search || []).map(extrasOf).find(Boolean);  // 3.8.1: a tag without its extras is still that tag
+    if (!ks.length && wo) return label(`tag:${wo}`).slice(0, 60);
     if (!ks.length) return (u.search || []).length ? "Search" : hasIds(u) ? idsText(u) : (u.cards || []).length ? `${u.cards.length} single card${u.cards.length === 1 ? "" : "s"}` : "?";
     return `${label(ks[0])}${ks.length > 1 ? ` + ${ks.length - 1} more` : ""}`.slice(0, 60);
   };
@@ -1057,11 +1077,7 @@ async function builder(id) {
     for (const u of doc.units) {
       if (u.even && u.due) {
         const total = unitTotal(u, placed);
-        const days = [];
-        for (let d = u.opens; d <= u.due; d = addDays(d, 1)) {
-          const s = Sched.quota(doc, u, null, total, d) - Sched.quota(doc, u, null, total, addDays(d, -1));
-          if (s > 0) days.push([d, s]);
-        }
+        const days = Work.spread(doc, u, total, pace.days);  // 3.8.1: as its bars spread it, the days as set now
         days.forEach(([d, s], i) => {
           if (d < from || d > to) return;
           const e = at(d);
@@ -1405,7 +1421,8 @@ async function builder(id) {
         h("div", { class: "dn2" }, h("span", {}, num), nNotes(d) ? h("span", { class: "nb", title: "Notes" }, `💬 ${nNotes(d)}`) : null, e.load ? h("b", {}, e.load.toLocaleString()) : null), ...evs, ...chips,
         fors.map((id) => h("span", { class: "for" }, evById(id).day < d ? "after " : "for ", h("b", {}, evById(id).name))), bar,
         you ? h("span", { class: "you" }, you) : null);
-      if (fors.length) cell.dataset.for = fors.join(" ");
+      const preps = [...new Set(doc.units.filter((u) => u.opens === d && u.for && evById(u.for) && !afterEv(u)).map((u) => u.for))];
+      if (preps.length) cell.dataset.for = preps.join(" ");  // 3.8.1: a date after its event isn't its prep
       if (author) dropOn(cell, (what) => dropped(d, what));
       cells.push(cell);
     }
@@ -1469,8 +1486,17 @@ async function builder(id) {
    *  name points at that no date has yet, each added in one click. */
   function sugRows(u) {
     if (!author || !count.size || auto.has(u.id) || !String(u.name || "").trim()) return [];
-    const placed = placedKeys();
-    const skip = (p) => { const k = `tag:${p}`; return isPlaced(k, placed) || [...placed].some((q) => under(q, k)); };
+    // what any date has (a tag, a subdeck, a cut, a tag without its extras): the tag itself, a tag under it, a tag above it
+    const on = new Set(), above = new Set();
+    const put = (k) => { const p = pathOf(k).toLowerCase(); on.add(p); const segs = p.split("::"); for (let i = 1; i < segs.length; i++) above.add(segs.slice(0, i).join("::")); };
+    for (const k of placedKeys()) if (kindOf(k) === "tag") put(k);
+    for (const x of doc.units) for (const c of x.cut || []) put(`tag:${c.tag}`);
+    const skip = (p) => {
+      const l = p.toLowerCase(), segs = l.split("::");
+      if (on.has(l) || above.has(l)) return true;
+      for (let i = 1; i < segs.length; i++) if (on.has(segs.slice(0, i).join("::"))) return true;
+      return false;
+    };
     const found = Suggest.tags(u.name, tree.tags, skip);
     if (!found.length) return [];
     return [h("span", { class: "muted small" }, "In your deck:"), ...found.map(([p, k]) => h("button", { class: `ch2 sug1 ${hue(`tag:${p}`)}`, title: `Add ${Tags.name(p)}`,
@@ -1480,15 +1506,7 @@ async function builder(id) {
       } }, h("span", {}, `+ ${chipLabel(`tag:${p}`)}`), h("small", {}, k.toLocaleString())))];
   }
 
-  // ---- 3.8.1: a deck tag's extras (Extra, Bonus): with them, or without ----
-  const extraKids = (key) => (kindOf(key) === "tag" ? kidsOf(key).filter((k) => isExtra(pathOf(k).split("::").pop())) : []);
-  /** the tag less its extras, as an Anki search: "tag:X" -"tag:X::Extra" */
-  const withoutQ = (path) => [Tags.ankiSearch("tag", path), ...extraKids(`tag:${path}`).map((k) => `-${Tags.ankiSearch("tag", pathOf(k))}`)].join(" ");
-  let extraMap = null;  // each without-extras search: its tag, worked out once
-  const extrasOf = (q) => {
-    if (!extraMap) { extraMap = new Map(); for (const k of count.keys()) if (extraKids(k).length) extraMap.set(withoutQ(pathOf(k)), pathOf(k)); }
-    return extraMap.get(q) || null;
-  };
+  // ---- 3.8.1: a deck tag's extras: extraKids, withoutQ, extrasOf (up with the tree: placedKeys and autoName read them) ----
   /** "64 + 22 extra", and With extras / Without: a tag's chip, or the search that is it without */
   function extrasPick(u, c) {
     const path = c.search ? extrasOf(c.search) : c.key && !c.cut && !c.picks && extraKids(c.key).length ? pathOf(c.key) : null;
@@ -3254,16 +3272,20 @@ async function builder(id) {
     const bt = new Map((before.tags || []).map((t) => [t.id, t])), at = new Map((after.tags || []).map((t) => [t.id, t]));
     const ren = [...at.values()].filter((t) => bt.has(t.id) && bt.get(t.id).name !== t.name).map((t) => [bt.get(t.id), t]);
     const pathIn = (d, t) => `DueCrew::${d.tagroot || tagRootNow()}::${Tags.part(t.name)}`;
-    const js = (x) => JSON.stringify(x).slice(1, -1);
-    const follow = (u) => {
-      let x = JSON.stringify(u);
+    // each string on its own (never the JSON text, where a name could land inside a number): a whole
+    // tag path, the tag inside a search, and the old name inside the date's own name, word for word
+    const subst = (v, key) => {
       for (const [o, t] of ren) {
         const p0 = pathIn(before, o), p1 = pathIn(after, t);
-        x = x.split(JSON.stringify(p0)).join(JSON.stringify(p1)).split(js(Tags.ankiSearch("tag", p0))).join(js(Tags.ankiSearch("tag", p1)))
-          .replace(new RegExp(`${js(o.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "gu"), () => js(t.name));
+        if (v === p0) { v = p1; continue; }
+        v = v.split(Tags.ankiSearch("tag", p0)).join(Tags.ankiSearch("tag", p1));
+        if (key === "name") v = v.replace(new RegExp(`(?<![\\p{L}\\p{N}])${o.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "gu"), () => t.name);
       }
-      return JSON.parse(x);
+      return v;
     };
+    const walk = (v, key) => (typeof v === "string" ? subst(v, key) : Array.isArray(v) ? v.map((x) => walk(x, key))
+      : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)])) : v);
+    const follow = (u) => (ren.length ? walk(u, "") : u);
     const added = [...a.values()].filter((u) => !b.has(u.id));
     const gone = [...b.values()].filter((u) => !a.has(u.id));
     const moved = [...a.values()].filter((u) => b.has(u.id) && b.get(u.id).opens !== u.opens);
