@@ -8,7 +8,7 @@
 import type { Session } from "./auth";
 import { tipWrite } from "./cards";
 import { hit, limitOrThrow } from "./limits";
-import { sendMail } from "./mail";
+import * as R from "./reports";
 import * as V from "./validate";
 import { ankiDay, Env, HttpError, json, nowSec, readJson, readText } from "./util";
 
@@ -21,6 +21,15 @@ export const NEW_CODES_PER_DAY = 20;  // POST /codes, per account
 export function checkUid(uid: string): string {
   if (!UID_RE.test(uid)) throw new HttpError(404, "no_user");
   return uid;
+}
+
+/** 3.8.1 (the audit): did `owner` mute `other`? Mute is an account setting
+ *  (`muted` in my settings), and the server keeps it too: a muted person's
+ *  cheers and knocks never land, on any screen, and they're never told. */
+export async function mutedBy(env: Env, owner: string, other: string): Promise<boolean> {
+  return !!(await env.DB.prepare(
+    "SELECT 1 FROM settings st, json_each(st.json, '$.muted') j WHERE st.uid = ? AND j.value = ? LIMIT 1",
+  ).bind(owner, other).first());
 }
 
 /** Did `owner` add `other`? */
@@ -178,7 +187,7 @@ export async function addByCode(s: Session, env: Env, [code]: string[]): Promise
   if (await added(env, s.uid, owner)) throw new HttpError(409, "already");
   await addEdge(env, s.uid, owner);
   const isMutual = await mutual(env, s.uid, owner);
-  if (!isMutual) {
+  if (!isMutual && !(await mutedBy(env, owner, s.uid))) {
     await env.DB.prepare(
       `INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES (?, ?, NULL, ?)
        ON CONFLICT(to_uid, from_uid) DO UPDATE SET squad = NULL, at = excluded.at`,
@@ -199,6 +208,8 @@ export async function sendCheer(req: Request, s: Session, env: Env, [to]: string
   // a cheer overwrites the last, but each is a write: a ceiling (a room's
   // cheer goes to every member, a card script could loop it)
   await limitOrThrow(env, `cheer:${s.uid}`, 200, 3600);
+  // muted: it goes nowhere, and the sender sees what any cheer gets
+  if (await mutedBy(env, to, s.uid)) return json({ ok: true });
   const now = nowSec();
   if (!c.guid) {
     // 3.7.1: a cheer received counts on my year card, a sender once a day,
@@ -253,6 +264,8 @@ export function withoutFlags<T extends Record<string, unknown>>(week: T, guids: 
 
 // ---- knocks ----
 
+export const KNOCKS_AN_HOUR = 60;
+
 /** POST /knocks/{to} {squad}: "added you", between two members of a squad. */
 export async function sendKnock(req: Request, s: Session, env: Env, [to]: string[]): Promise<Response> {
   checkUid(to);
@@ -262,6 +275,11 @@ export async function sendKnock(req: Request, s: Session, env: Env, [to]: string
   const both = await env.DB.prepare("SELECT COUNT(*) AS n FROM members WHERE squad = ? AND uid IN (?, ?)")
     .bind(body.squad, s.uid, to).first<number>("n");
   if (to === s.uid || both !== 2) throw new HttpError(403, "no_squad_in_common");
+  await limitOrThrow(env, `knock:${s.uid}`, KNOCKS_AN_HOUR, 3600);
+  // 3.8.1 (the audit): never from someone they muted, and one a day a pair, so a
+  // knock they dismissed isn't back within the day. Either way it reads as sent.
+  if (await mutedBy(env, to, s.uid)) return json({ ok: true });
+  if (!(await hit(env, `knockpair:${s.uid}:${to}`, 1, 86400))) return json({ ok: true });
   await env.DB.prepare(
     `INSERT INTO knocks (to_uid, from_uid, squad, at) VALUES (?, ?, ?, ?)
      ON CONFLICT(to_uid, from_uid) DO UPDATE SET squad = excluded.squad, at = excluded.at`,
@@ -272,7 +290,8 @@ export async function sendKnock(req: Request, s: Session, env: Env, [to]: string
 export async function listKnocks(env: Env, uid: string) {
   const rows = await env.DB.prepare(
     `SELECT k.from_uid, k.squad, k.at, u.name, u.emoji FROM knocks k JOIN users u ON u.uid = k.from_uid
-     WHERE k.to_uid = ? ORDER BY k.at DESC LIMIT 50`,
+     WHERE k.to_uid = ?1 AND k.from_uid NOT IN (SELECT j.value FROM settings st, json_each(st.json, '$.muted') j WHERE st.uid = ?1)
+     ORDER BY k.at DESC LIMIT 50`,
   ).bind(uid).all<{ from_uid: string; squad: string | null; at: number; name: string | null; emoji: string | null }>();
   // names from the profile, never from the knock: senders can't spoof
   return rows.results.map((r) => ({ from: r.from_uid, name: r.name || "?", emoji: r.emoji || "", squad: r.squad || "" }));
@@ -296,10 +315,11 @@ export const REPORT_REASONS: Record<string, string> = {
 };
 export const REPORT_NOTE_MAX = 500;
 
-/** POST /reports {uid, reason, note?}: stores nothing. The report goes by
- *  mail to REPORT_TO: who reported whom, the reported name and emoji, the
- *  reason and note, and their last cheer to me if one is waiting. Never
- *  the reporter's email. Muting is the client's; nobody is told. */
+/** POST /reports {uid, reason, note?}: kept for the admin's Inbox (3.8.1,
+ *  reports.ts) and mailed to REPORT_TO when it's set: who reported whom, the
+ *  reported name and emoji, the reason and note, and their last cheer to me
+ *  if one is waiting. Never the reporter's email. Muting is the reporter's
+ *  own setting (the client mutes as it reports); nobody is told. */
 export async function report(req: Request, s: Session, env: Env): Promise<Response> {
   const body = await readJson(req);
   for (const k of Object.keys(body)) if (!["uid", "reason", "note"].includes(k)) throw V.bad("report");
@@ -313,10 +333,6 @@ export async function report(req: Request, s: Session, env: Env): Promise<Respon
   if (!who) throw new HttpError(404, "no_user");
   await limitOrThrow(env, `report:${s.uid}`, 10, 3600);
   const note = typeof body.note === "string" ? V.oneLine(body.note, REPORT_NOTE_MAX) : "";
-  if (!env.REPORT_TO) {
-    console.log("due crew: report received");
-    return json({ ok: true });
-  }
   const c = await env.DB.prepare(
     "SELECT emoji, note, luck, guid, at FROM cheers WHERE to_uid = ? AND from_uid = ?",
   ).bind(s.uid, uid).first<{ emoji: string; note: string | null; luck: number | null; guid: string | null; at: number }>();
@@ -335,6 +351,6 @@ export async function report(req: Request, s: Session, env: Env): Promise<Respon
     "",
     `Reporter: ${s.uid}`,
   ].join("\n");
-  await sendMail(env, env.REPORT_TO, "Due Crew report", text);
+  await R.keep(env, { by: s.uid, kind: "person", target: uid, reason, note, detail: c ? cheer : "" }, "Due Crew report", text);
   return json({ ok: true });
 }

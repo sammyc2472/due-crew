@@ -223,6 +223,8 @@ class ApiClient:
         except TransportError as e:
             if e.status == 429:
                 raise AuthError("slow_down")
+            if e.status in (502, 503):  # 3.8.1 (the audit): the mail, not the address
+                raise AuthError("mail_failed")
             raise
         if status != 200:
             raise AuthError(str(data.get("error") or "bad_email"))

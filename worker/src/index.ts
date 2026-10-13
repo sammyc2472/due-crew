@@ -3,6 +3,7 @@
 
 import * as Ad from "./admin";
 import * as Fb from "./feedback";
+import * as Rp from "./reports";
 import * as A from "./auth";
 import * as B from "./board";
 import * as C from "./cards";
@@ -107,6 +108,10 @@ authed("GET", r("/admin/feedback"), Fb.list);
 authed("PATCH", r("/admin/feedback/([0-9A-Z]{26})"), Fb.mark);
 authed("DELETE", r("/admin/feedback/([0-9A-Z]{26})"), (_q, s, env, p) => Fb.remove(s, env, p));
 authed("POST", r("/admin/feedback/([0-9A-Z]{26})/reply"), Fb.reply);
+// 3.8.1 (the audit): reports, kept for the admin (they went only by mail)
+authed("GET", r("/admin/reports"), Rp.list);
+authed("PATCH", r("/admin/reports/([0-9A-Z]{26})"), Rp.mark);
+authed("DELETE", r("/admin/reports/([0-9A-Z]{26})"), (_q, s, env, p) => Rp.remove(s, env, p));
 authed("PUT", r("/admin/bingo/([a-z0-9]{1,12})"), Bingo.adminPut);
 // 3.2.1: the admin's notice on everyone's board
 authed("GET", r("/admin/notices"), N.list);
@@ -180,6 +185,7 @@ export async function housekeeping(env: Env, now = Math.floor(Date.now() / 1000)
     env.DB.prepare("DELETE FROM invites WHERE expires_at <= ?").bind(now - 351 * 86400),
     // 3.6.5, P6: feedback is kept a year
     env.DB.prepare("DELETE FROM feedback WHERE at <= ?").bind(now - 365 * 86400),
+    env.DB.prepare("DELETE FROM reports WHERE at <= ?").bind(now - Rp.REPORTS_KEPT_DAYS * 86400),  // 3.8.1
     // the admin's audit log is kept a year; an email change lapses after a week
     env.DB.prepare("DELETE FROM admin_actions WHERE at <= ?").bind(now - 365 * 86400),
     env.DB.prepare("DELETE FROM email_changes WHERE at <= ?").bind(now - 7 * 86400),

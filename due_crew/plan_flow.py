@@ -1004,6 +1004,15 @@ def _tags_changed():
         pass
 
 
+def _deck_index(cache, did):
+    """3.8.1 (the audit, #9): one read of a deck for every plan on it in one
+    pass. The caller drops it once a plan's tags moved notes (a tag made from
+    a tag reads them)."""
+    if did not in cache:
+        cache[did] = P.DeckIndex(mw.col, did)
+    return cache[did]
+
+
 def apply_tags(plan_list, toast=True):
     """3.8.0, main thread: the plans' own tags on this copy's notes, as soon as
     a plan's update is here. Its callers make that after the day's AnkiWeb
@@ -1017,6 +1026,7 @@ def apply_tags(plan_list, toast=True):
     state = _state_cfg(c)
     today = _today()
     said, changed, moved = [], False, False
+    idxs = {}
     for p in plan_list:
         st = state.get(p["id"])
         doc = _plan_doc(p)
@@ -1028,11 +1038,14 @@ def apply_tags(plan_list, toast=True):
         if st.get("tags_sig") == sig and st.get("tags_day") == today:
             continue
         try:
-            applied, res = P.sync_tags(mw.col, P.DeckIndex(mw.col, st["deck_id"]), doc, st.get("tags"),
+            applied, res = P.sync_tags(mw.col, _deck_index(idxs, st["deck_id"]), doc, st.get("tags"),
                                        f"Due Crew: {p.get('name') or 'plan'}'s tags", _swap(st))
         except Exception:
             traceback.print_exc()
+            idxs.pop(st["deck_id"], None)
             continue
+        if res["added"] or res["removed"]:
+            idxs.pop(st["deck_id"], None)  # notes' tags moved: the next plan reads them fresh
         if res["added"] or res["removed"] or applied != (st.get("tags") or {}):
             moved = True
         if applied:
@@ -1075,6 +1088,7 @@ def apply_authored_tags(toast=True):
     today = _today()
     names = {n.lower(): d for d, n in P.deck_choices(mw.col)}
     said, changed, moved = [], False, False
+    idxs = {}
     ids = {a["id"] for a in auth}
     for pid in [k for k in mine if k not in ids or k in followed]:
         st = mine.pop(pid)
@@ -1094,11 +1108,14 @@ def apply_authored_tags(toast=True):
         if did is None or (st.get("tags_sig") == sig and st.get("tags_day") == today and st.get("deck_id") == did):
             continue
         try:
-            applied, res = P.sync_tags(mw.col, P.DeckIndex(mw.col, did), doc, st.get("tags"),
+            applied, res = P.sync_tags(mw.col, _deck_index(idxs, did), doc, st.get("tags"),
                                        f"Due Crew: {a.get('name') or 'plan'}'s tags")
         except Exception:
             traceback.print_exc()
+            idxs.pop(did, None)
             continue
+        if res["added"] or res["removed"]:
+            idxs.pop(did, None)
         if res["added"] or res["removed"] or applied != (st.get("tags") or {}):
             moved = True
         mine[pid] = {"deck_id": did, "tags_sig": sig, "tags_day": today, **({"tags": applied} if applied else {})}

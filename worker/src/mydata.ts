@@ -60,6 +60,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q("SELECT p.name AS plan, t.joined_at, t.days, t.play FROM plan_team t JOIN plans p ON p.id = t.plan WHERE t.uid = ?1"),
     q(`SELECT p.name AS plan, a.parent IS NOT NULL AS answer, a.text, a.guid, a.ord, a.topic, a.helped, a.at
          FROM plan_asks a JOIN plans p ON p.id = a.plan WHERE a.uid = ?1 ORDER BY a.at`),
+    q("SELECT kind, reason, note, at FROM reports WHERE by_uid = ?1 ORDER BY at"),  // 3.8.1
   ]);
   const rows = (i: number) => r[i].results as Record<string, unknown>[];
   const one = (i: number) => rows(i)[0];
@@ -100,6 +101,7 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     planPosts: rows(28).map((t) => ({ ...t, at: when(t.at) })),
     teams: rows(29).map((t) => ({ plan: t.plan, joined: when(t.joined_at), daysShowedUp: parse(t.days), bingo: parse(t.play) })),
     teamQuestionsAndAnswers: rows(30).map((a) => ({ ...a, answer: a.answer === 1, helped: a.helped === 1, at: when(a.at) })),
+    reportsYouMade: rows(31).map((x) => ({ ...x, at: when(x.at) })),
   };
   return new Response(JSON.stringify(out, null, 1), {
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",

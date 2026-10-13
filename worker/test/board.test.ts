@@ -281,7 +281,7 @@ describe("POST /reports (3.0.1)", () => {
   const report = (who: P, body: unknown, env: Record<string, unknown> = {}) =>
     api("POST", "/reports", { token: who.token, body, env: env as any });
 
-  it("mails who, what and why to REPORT_TO, never the reporter's address, and stores nothing", async () => {
+  it("mails who, what and why to REPORT_TO, never the reporter's address; keeps one row and touches nothing else", async () => {
     const sent: any[] = [];
     const EMAIL = { send: async (m: any) => { sent.push(m); } };
     await dre.call("POST", "/sync", { profile: { emoji: "🐢" } });
@@ -299,15 +299,20 @@ describe("POST /reports (3.0.1)", () => {
                         "Note: too many cheers", '🔥 "hi there"']) expect(text).toContain(want);
     expect(text).not.toContain("@example.com");
     expect(await tables()).toBe(before);  // and the cheer is still Sam's to read
+    // 3.8.1: and it's kept for the admin's Inbox
+    expect(await db().prepare("SELECT by_uid, kind, target, reason, note, done FROM reports").all().then((r) => r.results))
+      .toEqual([{ by_uid: "sam", kind: "person", target: "dre", reason: "cheers", note: "too many cheers", done: 0 }]);
   });
 
-  it("without REPORT_TO: ok, one log line with no one in it, nothing sent", async () => {
+  it("3.8.1: without REPORT_TO it's still kept (it used to go nowhere); nothing sent, nothing logged", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const sent: any[] = [];
     const EMAIL = { send: async (m: any) => { sent.push(m); } };
     expect((await report(sam, { uid: "dre", reason: "name", note: "dre" }, { EMAIL })).status).toBe(200);
     expect(sent).toEqual([]);
-    expect(log.mock.calls.map((c) => c.join(" "))).toEqual(["due crew: report received"]);
+    expect(log).not.toHaveBeenCalled();
+    expect(await db().prepare("SELECT target, reason FROM reports").all().then((r) => r.results))
+      .toEqual([{ target: "dre", reason: "name" }]);
   });
 
   it("checks what it's given", async () => {
@@ -334,8 +339,12 @@ describe("POST /reports (3.0.1)", () => {
     expect((await report(dre, { uid: "sam", reason: "other" })).status).toBe(200);
   });
 
-  it("mail that fails says so", async () => {
+  it("3.8.1: mail that fails doesn't fail the report: it's kept, so nobody sends it twice; the log names no one", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const EMAIL = { send: async () => { throw new Error("nope"); } };
-    expect((await report(sam, { uid: "dre", reason: "other" }, { EMAIL, REPORT_TO: "reports@duecrew.com" })).status).toBe(502);
+    expect((await report(sam, { uid: "dre", reason: "other" }, { EMAIL, REPORT_TO: "reports@duecrew.com" })).status).toBe(200);
+    expect(await db().prepare("SELECT COUNT(*) AS n FROM reports").first("n")).toBe(1);
+    const said = log.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(said).not.toMatch(/sam|dre/);
   });
 });

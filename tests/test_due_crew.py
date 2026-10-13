@@ -2696,6 +2696,36 @@ def test_mute_and_report_v301():
     check("report: ten an hour", len(store.reports) == 10 and eleventh == 429)
 
 
+
+def test_mute_on_the_server_v381():
+    """3.8.1, the audit (#3, #10): mute is an account setting, and the server
+    keeps it too, so the site never shows a muted person's cheer: it goes
+    nowhere at send, one waiting from before is dropped as read, and their
+    knocks aren't listed. Knocks have ceilings; reports are kept."""
+    store = world({"sam": "Sammy", "dre": "Dre"}, {"sam": ["dre"], "dre": ["sam"]})
+    sam = new_client(store, "sam", "Sammy")
+    dre = new_client(store, "dre", "Dre")
+    labels = [TODAY.isoformat()]
+    sid = "sq1"
+    store.members.update({(sid, "sam"): {}, (sid, "dre"): {}})
+    dre.send_cheer("sam", "\U0001F525", "before")
+    dre.send_knock("sam", sid)
+    check("mute: put_settings carries it to the server", sam.put_settings("2026-10-13T10:00:00Z", {"muted": ["dre"]}))
+    got = acked(sam, sam.fetch_board(labels))
+    check("mute: one waiting from before isn't delivered, nor their knock", got["cheers"] == [] and got["knocks"] == [])
+    acked(sam, sam.fetch_board(labels))
+    check("mute: and the next read lets the cheer go", not any(k[0] == "sam" for k in store.cheers))
+    dre.send_cheer("sam", "\U0001F389", "after")
+    check("mute: a new one reads as sent and isn't kept", not any(k[0] == "sam" for k in store.cheers))
+    sam.put_settings("2026-10-13T10:05:00Z", {"muted": []})
+    check("unmute: the knock that was kept shows again",
+          [k[0] for k in acked(sam, sam.fetch_board(labels))["knocks"]] == ["dre"])
+    store.knocks.clear()  # dismissed
+    check("knocks: reads as sent", dre.send_knock("sam", sid) is not False)
+    check("knocks: one a day a pair: a dismissed one isn't back today", store.knocks == {})
+    check("reports: kept", sam.report("dre", "other") and store.reports[-1]["uid"] == "dre")
+
+
 def test_not_yet_today_is_unranked():
     """A crewmate who synced but hasn't studied yet isn't a row of zeros
     with a rank: dashes, no rank, under everyone who studied, "not yet
@@ -11013,6 +11043,59 @@ def test_plan_tags_insights_v381():
     check("r2 insights: the plan's way reads what its tags hold in this deck, cards in play only",
           way["name"] == "MS2 Block 1's tags" and way["none"] == ["SLG 9"]
           and [(t["name"], t["n"]) for t in tiles] == [("SLG 2", 3), ("SLG 1", 2)], str((way, tiles)))
+
+
+def test_tag_pass_reads_a_deck_once_v381():
+    """3.8.1, the audit (#9): plans that share a deck read it once a tag pass,
+    and a plan whose tags moved notes makes the next plan read it fresh."""
+    from due_crew import plan_flow as F, plans as P
+    reads, moves = [], {}
+    pc = {"plans": {"a": {"deck_id": 10}, "b": {"deck_id": 10}, "c": {"deck_id": 20}}}
+    plan_list = [{"id": k, "name": k, "doc": {"tags": [{"id": "t1", "name": "SLG 1", "notes": ["g1"]}]}} for k in ("a", "b", "c")]
+    names = ("_pcfg", "_psave", "_today", "tooltip", "_deck_ok", "_tags_changed")
+    saved = {n: getattr(F, n) for n in names}
+    real = (P.DeckIndex, P.sync_tags, dc_mw().col)
+    try:
+        F._pcfg, F._psave, F.tooltip = (lambda: pc), (lambda c: None), (lambda *a, **k: None)
+        F._deck_ok, F._tags_changed = (lambda col, did: True), (lambda: None)
+        dc_mw().col = object()
+        P.DeckIndex = lambda col, did: reads.append(did) or ("idx", did)
+        P.sync_tags = lambda col, idx, doc, applied, label, swap=None: (
+            {"t1": "DueCrew::x::SLG_1"}, {"added": moves.get(label, 0), "removed": 0, "new": [], "missing": {}})
+        F._today = lambda: "2026-10-13"
+        F.apply_tags(plan_list, toast=False)
+        check("tag pass: two plans on one deck read it once", reads == [10, 20], str(reads))
+        reads.clear()
+        moves["Due Crew: a's tags"] = 3
+        F._today = lambda: "2026-10-14"
+        F.apply_tags(plan_list, toast=False)
+        check("tag pass: a plan whose tags moved notes makes the next one read fresh", reads == [10, 10, 20], str(reads))
+    finally:
+        for n, v in saved.items():
+            setattr(F, n, v)
+        P.DeckIndex, P.sync_tags, dc_mw().col = real
+
+
+def test_sign_in_says_what_went_wrong_v381():
+    """3.8.1, the audit (#5): asking for a code blames the address only when
+    the server says the address is bad; the mail being down says so."""
+    cl = api.ApiClient(os.path.join(tempfile.mkdtemp(), "session.json"))
+    said = []
+    for status in (502, 503, 429):
+        def boom(*a, _s=status, **k):
+            raise shapes.TransportError("x", status=_s)
+        cl._call = boom
+        try:
+            cl.request_code("dre@example.com")
+        except api.AuthError as e:
+            said.append(str(e))
+    cl._call = lambda *a, **k: (400, {"error": "bad_email"})
+    try:
+        cl.request_code("nope")
+    except api.AuthError as e:
+        said.append(str(e))
+    check("sign-in: mail trouble isn't the address; too many is too many; a bad address is",
+          said == ["mail_failed", "mail_failed", "slow_down", "bad_email"], str(said))
 
 
 def test_plan_tags_glue_v380():

@@ -1437,3 +1437,25 @@ every release that changes how something works.
   "opens N cards". The builder's suggestions keep a tag's numbers ("Week
   2"), a renamed tag's text follows it in the description, and Without
   extras keeps the tag.
+
+- 3.8.1, the outside audit of 3.8.0 (ten findings, each checked against the
+  code; #6, the default ranking, is Sam's call and stays). Mute is a block
+  on the server too: a muted person's cheer reads as sent and goes nowhere,
+  one waiting from before is dropped as read (the site's home showed it),
+  and their knocks aren't listed (`mutedBy` in social.ts reads the `muted`
+  list in my settings; the home feed already did). Knocks have ceilings:
+  60 an hour a sender, one a day a pair, so a dismissed one isn't back
+  within the day. Reports are kept for the admin's Inbox (`reports.ts`,
+  migration 0027, 180 days, gone with either account, in Your data):
+  without `REPORT_TO` they went nowhere while the reporter was told they
+  were sent, and a mail that fails no longer fails the report. The site's
+  sign-in says what went wrong (the mail being down isn't "that doesn't
+  look like an email address"), sends one code a click, and the code box
+  tells an outage from a miss; Anki's sign-in says the same about mail.
+  Joining a squad on the site writes the settings only over a read that
+  worked (a failed read wrote a doc of squads alone over everything). On a
+  phone, the home puts people first: the board, what friends said, the
+  invite box, then my own panels, my year last, and the board is as tall
+  as its rows. `tools/real_anki.py` exits non-zero on any FAIL. A tag pass
+  reads a deck once for every plan on it (`plan_flow._deck_index`),
+  fresh again after a plan's tags move notes.

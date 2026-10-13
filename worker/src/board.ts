@@ -90,7 +90,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const [meRes, friendsRes, cheersRes] = await db.batch([
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
-         (SELECT at FROM settings WHERE uid = u.uid) AS sat FROM users u
+         (SELECT at FROM settings WHERE uid = u.uid) AS sat,
+         (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added
     db.prepare(
@@ -109,10 +110,13 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
         week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at) }
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
+  // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen
+  let muted = new Set<string>();
+  try { const m = JSON.parse(me.muted || "[]"); if (Array.isArray(m)) muted = new Set(m.filter((x) => typeof x === "string")); } catch { /* none */ }
   const cheers = [];
   for (const c of cheersRes.results as any[]) {
     const from = byUid.get(c.from_uid);
-    if (!from?.mutual) continue;  // added me once, not any more (or never back): dropped
+    if (!from?.mutual || muted.has(c.from_uid)) continue;  // added me once, not any more (or never back), or muted: dropped
     cheers.push({ from: c.from_uid, name: from.name, emoji: c.emoji, note: c.note || "",
                   luck: c.luck === 1, guid: c.guid || "", at: iso(c.at) });
   }

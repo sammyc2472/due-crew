@@ -286,6 +286,7 @@ export async function deleteAccount(s: Session, env: Env): Promise<Response> {
     "DELETE FROM logs WHERE uid = ?1",
     "DELETE FROM cheer_counts WHERE uid = ?1",  // 3.7.1
     "DELETE FROM feedback WHERE uid = ?1",  // 3.6.5, P6
+    "DELETE FROM reports WHERE by_uid = ?1 OR (kind = 'person' AND target = ?1)",  // 3.8.1
     "DELETE FROM admin_notes WHERE uid = ?1",
     "DELETE FROM email_changes WHERE uid = ?1",
     "DELETE FROM codes WHERE uid = ?1",

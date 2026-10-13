@@ -7,9 +7,9 @@
 
 import type { Session } from "./auth";
 import { limitOrThrow } from "./limits";
-import { sendMail } from "./mail";
 import { isAdmin } from "./notices";
 import * as P from "./plans";
+import * as R from "./reports";
 import * as V from "./validate";
 import { Env, HttpError, json, nowSec, readJson } from "./util";
 
@@ -153,9 +153,9 @@ export const PLAN_REPORT_REASONS: Record<string, string> = {
   other: "Something else",
 };
 
-/** POST /plans/{id}/report {reason, note?}: a listed plan, reported. Stores
- *  nothing; it goes by mail to REPORT_TO with the plan's id, name and
- *  author's uid. Never the reporter's email. */
+/** POST /plans/{id}/report {reason, note?}: a listed plan, reported. Kept for
+ *  the admin's Inbox (3.8.1) and mailed to REPORT_TO when it's set, with the
+ *  plan's id, name and author's uid. Never the reporter's email. */
 export async function report(req: Request, s: Session, env: Env, [id]: string[]): Promise<Response> {
   const p = await P.getPlan(env, id);
   if (p.listed !== 1) throw new HttpError(404, "no_plan");
@@ -166,11 +166,9 @@ export async function report(req: Request, s: Session, env: Env, [id]: string[])
   if (p.owner === s.uid) throw new HttpError(400, "self");
   await limitOrThrow(env, `report:${s.uid}`, 10, 3600);
   const note = typeof body.note === "string" ? V.oneLine(body.note, REPORT_NOTE_MAX) : "";
-  if (!env.REPORT_TO) {
-    console.log("due crew: plan report received");
-    return json({ ok: true });
-  }
-  await sendMail(env, env.REPORT_TO, "Due Crew report: a plan in the library", [
+  await R.keep(env, { by: s.uid, kind: "plan", target: p.id, reason: body.reason, note,
+                      detail: `${p.name} · duecrew.com/p/${p.code} · author ${p.owner}` },
+               "Due Crew report: a plan in the library", [
     `Reason: ${PLAN_REPORT_REASONS[body.reason]}`,
     `Note: ${note || "(none)"}`,
     "",

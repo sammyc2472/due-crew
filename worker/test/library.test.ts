@@ -193,7 +193,7 @@ describe("the library (3.5, B)", () => {
     expect((await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true })).body.listed).toBe(1);
   });
 
-  it("a listed plan can be reported (stores nothing); an unlisted one can't", async () => {
+  it("a listed plan can be reported (kept for the admin, 3.8.1); an unlisted one can't", async () => {
     const dre = await person("dre");
     const p = await plan(dre);
     const maya = await person("maya");
@@ -201,6 +201,8 @@ describe("the library (3.5, B)", () => {
     await dre.call("PUT", `/plans/${p.id}/listed`, { listed: true });
     expect(await maya.status("POST", `/plans/${p.id}/report`, { reason: "rude" })).toBe(400);
     expect(await maya.status("POST", `/plans/${p.id}/report`, { reason: "spam", note: "ads" })).toBe(200);
+    expect(await db().prepare("SELECT by_uid, kind, target, reason, note FROM reports").all().then((r) => r.results))
+      .toEqual([{ by_uid: "maya", kind: "plan", target: p.id, reason: "spam", note: "ads" }]);
     expect(await dre.status("POST", `/plans/${p.id}/report`, { reason: "spam" })).toBe(400);  // your own
   });
 

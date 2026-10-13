@@ -66,7 +66,13 @@ def check(path):
 
     col = Collection(path)
     did = col.decks.id_for_name("Step Deck")
-    ok = lambda name, cond, extra="": print(("PASS " if cond else "FAIL ") + name, extra)
+    failed = []
+
+    def ok(name, cond, extra=""):
+        # 3.8.1 (the audit, #8): a FAIL fails the run, so an exit code can gate a release
+        print(("PASS " if cond else "FAIL ") + name, extra)
+        if not cond:
+            failed.append(name)
     tm = lambda: time.perf_counter()
 
     t = tm(); idx = P.DeckIndex(col, did); t_idx = tm() - t
@@ -615,10 +621,13 @@ def check(path):
             setattr(F, k, v)
         F.mw.__dict__.pop("undo", None)
     col.close()
+    return failed
 
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "big.anki2")
         make(p)
-        check(p)
+        failed = check(p)
+    print(f"\n{len(failed)} failed" + (": " + "; ".join(failed) if failed else ""))
+    sys.exit(1 if failed else 0)

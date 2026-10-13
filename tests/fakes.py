@@ -381,7 +381,7 @@ class FakeWorker:
         self.codes = {}      # code -> uid
         self.invites = {}    # 3.5.0: code -> {uid, used_by} (the Worker keeps only a hash)
         self.new_codes = {}  # uid -> POST /codes today (20 a day)
-        self.reports = []    # what POST /reports mailed (the Worker stores none)
+        self.reports = []    # what POST /reports kept (3.8.1: the Worker keeps them for the admin too)
         self.feedback = []   # 3.6.5, P6: [{uid, text, ver}] for the admin's page
         self.otp = {}        # email -> code
         # 3.1: plans (worker/src/plans.ts)
@@ -663,7 +663,7 @@ class FakeWorker:
         for (to, frm), c in sorted(self.cheers.items()):
             if to != me:
                 continue
-            if self.mutual(me, frm):
+            if self.mutual(me, frm) and not self._muted_by(me, frm):  # 3.8.1: muted, dropped as read
                 cheers.append({"from": frm, "name": self.users[frm]["name"] or "?", "emoji": c["emoji"],
                                "note": c.get("note") or "", "luck": bool(c.get("luck")),
                                "guid": c.get("guid") or "", "at": c["at"]})
@@ -707,10 +707,16 @@ class FakeWorker:
     def _decks_for(self, me):
         return {u: d for u, d in self.decks.items() if u == me or self.mutual(me, u)}
 
+    def _muted_by(self, owner, other):
+        """social.ts mutedBy (3.8.1): `other` is in `owner`'s settings' `muted`."""
+        muted = ((self.settings.get(owner) or {}).get("settings") or {}).get("muted")
+        return isinstance(muted, list) and other in muted
+
     def _knocks_of(self, me):
         return [{"from": frm, "name": self.users[frm]["name"] or "?", "emoji": self.users[frm]["emoji"] or "",
                  "squad": k.get("squad") or ""}
-                for (to, frm), k in sorted(self.knocks.items()) if to == me and frm in self.users]
+                for (to, frm), k in sorted(self.knocks.items())
+                if to == me and frm in self.users and not self._muted_by(me, frm)]
 
     WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap"}
     DAY_KEYS = {"studied", "reviews", "studyTimeMs", "streak", "newCards", "accuracy", "status"}
@@ -995,7 +1001,7 @@ class FakeWorker:
                 raise Bad(409, "already")
             self.friends.add((me, owner))
             mutual = self.mutual(me, owner)
-            if not mutual:
+            if not mutual and not self._muted_by(owner, me):
                 self.knocks[(owner, me)] = {"squad": "", "at": _now()}
             o = self.users[owner]
             return 200, {"uid": owner, "name": o["name"] or "?", "emoji": o["emoji"] or "",
@@ -1029,7 +1035,7 @@ class FakeWorker:
             # used: as their friend code (add, then their Add back)
             self.friends.add((me, owner))
             mutual = self.mutual(me, owner)
-            if not mutual:
+            if not mutual and not self._muted_by(owner, me):
                 self.knocks[(owner, me)] = {"squad": "", "at": _now()}
             return 200, {**info, "mutual": mutual, "knocked": not mutual}
         raise Bad(405, "method")
@@ -1045,6 +1051,8 @@ class FakeWorker:
             raise Bad(400, "bad_guid")
         if (to, me) not in self.friends:
             raise Bad(403, "not_friends")
+        if self._muted_by(to, me):  # 3.8.1: it goes nowhere, and reads as sent
+            return 200, {"ok": True}
         if not body.get("guid"):  # 3.7.1: a cheer received counts on my year card, a sender once a day
             day = datetime.date.today().isoformat()
             seen = self.__dict__.setdefault("cheer_days", set())
@@ -1096,7 +1104,7 @@ class FakeWorker:
             raise Bad(404, "no_user")
         if sum(1 for r in self.reports if r["reporter"] == me) >= 10:
             raise Bad(429, "slow_down")
-        # the Worker stores nothing and mails this; the fake keeps the mail
+        # the Worker keeps it for the admin (3.8.1) and mails it when REPORT_TO is set
         u = self.users[uid]
         c = self.cheers.get((me, uid))
         self.reports.append({"reporter": me, "uid": uid, "name": u["name"] or "?", "emoji": u["emoji"] or "",
@@ -1117,6 +1125,17 @@ class FakeWorker:
             sid = body["squad"]
             if to == me or (sid, me) not in self.members or (sid, to) not in self.members:
                 raise Bad(403, "no_squad_in_common")
+            # 3.8.1: 60 an hour a sender; never from someone muted; one a day a pair
+            sent = self.__dict__.setdefault("knocks_sent", {})
+            sent[me] = sent.get(me, 0) + 1
+            if sent[me] > 60:
+                raise Bad(429, "slow_down")
+            if self._muted_by(to, me):
+                return 200, {"ok": True}
+            pairs = self.__dict__.setdefault("knock_pairs", set())
+            if (me, to, datetime.date.today().isoformat()) in pairs:
+                return 200, {"ok": True}
+            pairs.add((me, to, datetime.date.today().isoformat()))
             self.knocks[(to, me)] = {"squad": sid, "at": _now()}
             return 200, {"ok": True}
         raise Bad(405, "method")
