@@ -47,7 +47,9 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     q(`SELECT u.name AS to_name, c.emoji, c.note, c.at FROM cheers c LEFT JOIN users u ON u.uid = c.to_uid WHERE c.from_uid = ?1`),
     q(`SELECT u.name AS from_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.from_uid WHERE k.to_uid = ?1`),
     q(`SELECT u.name AS to_name, k.at FROM knocks k LEFT JOIN users u ON u.uid = k.to_uid WHERE k.from_uid = ?1`),
-    q("SELECT p.name AS plan, e.at FROM plan_editors e JOIN plans p ON p.id = e.plan WHERE e.uid = ?1"),
+    // 3.8.1: an invite I haven't answered is kept too (pending), and a plan offered to me
+    q(`SELECT p.name AS plan, e.at, e.accepted_at IS NULL AS pending, p.handover = ?1 AS offered
+         FROM plan_editors e JOIN plans p ON p.id = e.plan WHERE e.uid = ?1`),
     q("SELECT p.name AS plan, l.version, l.summary, l.at FROM plan_log l JOIN plans p ON p.id = l.plan WHERE l.uid = ?1 ORDER BY l.at"),
     q("SELECT guid FROM tip_helped WHERE by_uid = ?1"),
     q("SELECT q.name FROM bans b JOIN squads q ON q.id = b.squad WHERE b.uid = ?1"),
@@ -88,7 +90,8 @@ export async function getData(s: Session, env: Env): Promise<Response> {
     cheersSentNotYetRead: rows(19).map((c) => ({ ...c, at: when(c.at) })),
     knocksToYou: rows(20).map((k) => ({ ...k, at: when(k.at) })),
     knocksYouSent: rows(21).map((k) => ({ ...k, at: when(k.at) })),
-    plansCoAuthored: rows(22).map((e) => ({ ...e, at: when(e.at) })),
+    plansCoAuthored: rows(22).map((e) => ({ plan: e.plan, at: when(e.at), ...(e.pending === 1 ? { pending: true } : {}),
+                                            ...(e.offered === 1 ? { offeredToYou: true } : {}) })),
     planSaves: rows(23).map((l) => ({ ...l, at: when(l.at) })),
     tipsYouSaidHelped: rows(24).map((t) => t.guid),
     squadsBlockedFrom: rows(25).map((b) => b.name),

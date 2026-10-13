@@ -33,7 +33,7 @@ const FEED_MAX = 20;
  *  exams come with the board already. */
 async function feed(env: Env, uid: string) {
   const since = nowSec() - FEED_DAYS * 86400;
-  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION SELECT plan FROM plan_editors WHERE uid = ?1`;
+  const mine = `SELECT id FROM plans WHERE owner = ?1 UNION ${P.FOLLOWED} UNION ${P.COAUTHORED}`;
   const [back, notes, saves, sett, posted] = await env.DB.batch<any>([
     env.DB.prepare(
       `SELECT f.owner AS uid, f.at, u.name, u.emoji FROM friends f JOIN friends b ON b.owner = ?1 AND b.friend = f.owner
@@ -42,7 +42,7 @@ async function feed(env: Env, uid: string) {
       `SELECT n.plan, p.name AS plan_name, n.day, n.text, n.at, n.uid, u.name, u.emoji FROM plan_notes n
          JOIN plans p ON p.id = n.plan LEFT JOIN users u ON u.uid = n.uid
         WHERE n.plan IN (${mine}) AND n.uid != ?1 AND n.at > ?2
-          AND (p.listed != 1 OR n.uid = p.owner OR n.uid IN (SELECT e.uid FROM plan_editors e WHERE e.plan = n.plan))
+          AND (p.listed != 1 OR n.uid = p.owner OR n.uid IN (SELECT e.uid FROM plan_editors e WHERE e.plan = n.plan AND e.accepted_at IS NOT NULL))
         ORDER BY n.at DESC LIMIT ?3`).bind(uid, since, FEED_MAX),
     env.DB.prepare(
       `SELECT l.plan, p.name AS plan_name, l.summary, l.at, l.uid, u.name FROM plan_log l
@@ -141,6 +141,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     if (withDecks || pv !== stamp) Object.assign(out, await P.forBoard(env, s.uid));
     out.pv = stamp;
   }
+  // 3.8.1: the site's home lists my invites to co-write a plan, and plans offered to me
+  if (keep) out.planInvites = await P.planInvites(env, s.uid);
   // 3.6: squad bingo's card for my week (wk=2026-W40), when I'm in a squad;
   // and the squads I'm in, so an add-on whose config was reset finds them
   if (withDecks && !keep) {

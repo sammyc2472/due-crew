@@ -51,10 +51,10 @@ export async function connected(env: Env, a: string, b: string): Promise<boolean
          OR EXISTS (SELECT 1 FROM knocks WHERE (to_uid = ?1 AND from_uid = ?2) OR (to_uid = ?2 AND from_uid = ?1))
          OR EXISTS (SELECT 1 FROM members x JOIN members y ON y.squad = x.squad WHERE x.uid = ?1 AND y.uid = ?2)
          OR EXISTS (SELECT 1 FROM (SELECT id AS plan FROM plans WHERE owner = ?1
-                                   UNION SELECT plan FROM plan_editors WHERE uid = ?1
+                                   UNION SELECT plan FROM plan_editors WHERE uid = ?1 AND accepted_at IS NOT NULL
                                    UNION SELECT plan FROM plan_follows WHERE uid = ?1) m
                     WHERE m.plan IN (SELECT id FROM plans WHERE owner = ?2
-                                     UNION SELECT plan FROM plan_editors WHERE uid = ?2
+                                     UNION SELECT plan FROM plan_editors WHERE uid = ?2 AND accepted_at IS NOT NULL
                                      UNION SELECT plan FROM plan_follows WHERE uid = ?2)) AS ok`,
   ).bind(a, b).first<number>("ok");
   return row === 1;

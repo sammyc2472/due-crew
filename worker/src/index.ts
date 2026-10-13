@@ -142,6 +142,9 @@ authed("PUT", r(`/plans/${ID}/ids`), P.putIds);
 authed("POST", r(`/plans/${ID}/undo`), P.undo);
 authed("POST", r(`/plans/${ID}/editors`), P.addEditor);
 authed("DELETE", r(`/plans/${ID}/editors/${ID}`), (_q, s, env, p) => P.removeEditor(s, env, p));
+authed("POST", r(`/plans/${ID}/invite`), P.answerInvite);  // 3.8.1: yes or no to co-writing it, or to keeping it
+authed("POST", r(`/plans/${ID}/owner`), P.offerPlan);      // 3.8.1: the owner offers it to a co-author
+authed("POST", r(`/plans/${ID}/remarks`), P.remarks);       // 3.8.1: a note on a card or tag, from Anki's Browse
 authed("GET", r(`/plans/${ID}/notes`), (_q, s, env, p) => P.notes(s, env, p));
 authed("POST", r(`/plans/${ID}/notes`), P.addNote);
 authed("DELETE", r(`/plans/${ID}/notes/(\\d{1,12})`), (_q, s, env, p) => P.removeNote(s, env, p));

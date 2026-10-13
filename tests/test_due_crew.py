@@ -8731,6 +8731,126 @@ def test_plans_review_follows_authors_twin():
           len(maya.session.get("plans") or []) == 21, str(len(maya.session.get("plans") or [])))
 
 
+def test_coauthors_say_yes_v381():
+    """3.8.1, round three, the fake's side (worker/src/plans.ts): asking
+    someone to co-write a plan is an invite until they say yes: no saves, no
+    tags in their Anki, listed only to the authors. The day's first board
+    carries my invites (who asked, by name and emoji) and the stamp moves
+    with them, so an invite costs no request of its own. An owner offers the
+    plan to a co-author; a yes swaps them, the plan's code and followers stay."""
+    w = world({"dre": "Dre", "jo": "Jo", "kim": "Kim"}, friends={"dre": ["jo"], "jo": ["dre"]})
+    dre, jo, kim = new_client(w, "dre", "Dre"), new_client(w, "jo", "Jo"), new_client(w, "kim", "Kim")
+    w.users["dre"]["emoji"] = "🦊"
+    pid, code = w.add_plan("dre", "MS2 Block 1", "Step 1", _plan_units())
+    check("follow: kim follows it", kim.follow_plan(code)[1] == 200)
+    labels = [_day(0)]
+    jo.fetch_board(labels, with_decks=True)
+    pv = jo.session.get("plans_pv")
+    check("invite: a stranger to the owner can't be asked", dre._call("POST", f"/plans/{pid}/editors", {"uid": "kim"})[0] == 403)
+    st, view = dre._call("POST", f"/plans/{pid}/editors", {"uid": "jo"})
+    check("invite: the owner sees it waiting", st == 200 and view["editors"] == [{"uid": "jo", "name": "Jo", "emoji": "", "pending": True}],
+          str(view.get("editors")))
+    check("invite: a follower doesn't", kim._call("GET", f"/plans/{pid}")[1]["editors"] == [])
+    n = len(w.requests())
+    upd = jo.fetch_board(labels)
+    check("invite: it arrives with the next refresh, no request of its own (the stamp moved)",
+          upd["plans_fresh"] and jo.session.get("plans_pv") != pv and len(w.requests()) == n + 1)
+    st, b = jo._call("GET", "/board?decks=1")
+    check("invite: the day's first board names who asked, by name and emoji only",
+          b["planInvites"] == [{"id": pid, "name": "MS2 Block 1", "kind": "coauthor", "by": {"name": "Dre", "emoji": "🦊"}}],
+          str(b.get("planInvites")))
+    check("invite: and the site's home", jo._call("GET", "/board?keep=1")[1].get("planInvites") == b["planInvites"])
+    check("invite: until a yes, not a co-author: no ids, no notes, not in my Anki's authored plans",
+          not jo.put_ids(pid, {}) and jo._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["g", 0], "text": "x"}})[0] == 403
+          and b["authored"] == [] and jo.my_plans() == [])
+    check("invite: a yes", jo._call("POST", f"/plans/{pid}/invite", {"yes": True})[1].get("role") == "editor")
+    st, b = jo._call("GET", "/board?decks=1")
+    check("invite: answered, it goes; the plan is one I write", b["planInvites"] == [] and [a["id"] for a in b["authored"]] == [pid])
+    check("invite: nothing more to answer", jo._call("POST", f"/plans/{pid}/invite", {"yes": True}) == (404, {"error": "no_invite"}))
+    # the plan handed over
+    check("owner: only to a co-author who said yes",
+          dre._call("POST", f"/plans/{pid}/owner", {"uid": "kim"}) == (400, {"error": "not_coauthor"}))
+    st, view = dre._call("POST", f"/plans/{pid}/owner", {"uid": "jo"})
+    check("owner: offered, the authors see to whom", st == 200 and view.get("handover") == "jo"
+          and "handover" not in kim._call("GET", f"/plans/{pid}")[1])
+    check("owner: it waits on her board", jo._call("GET", "/board?decks=1")[1]["planInvites"]
+          == [{"id": pid, "name": "MS2 Block 1", "kind": "owner", "by": {"name": "Dre", "emoji": "🦊"}}])
+    st, view = jo._call("POST", f"/plans/{pid}/invite", {"yes": True})
+    check("owner: a yes makes it hers, its owner a co-author; its code and followers stay",
+          view["role"] == "owner" and w.plans[pid]["owner"] == "jo" and w.plans[pid]["editors"] == {"dre"}
+          and w.plans[pid]["code"] == code and (pid, "kim") in w.follows and w.plans[pid].get("handover") is None, str(view))
+    check("owner: the old owner writes it still, as a co-author", dre._call("GET", f"/plans/{pid}")[1]["role"] == "editor")
+    jo._call("POST", f"/plans/{pid}/owner", {"uid": "dre"})
+    check("owner: no leaves it hers", dre._call("POST", f"/plans/{pid}/invite", {"yes": False})[1]["role"] == "editor"
+          and w.plans[pid]["owner"] == "jo")
+    jo._call("POST", f"/plans/{pid}/owner", {"uid": "dre"})
+    check("owner: removing the one it's offered to ends the offer",
+          dre._call("DELETE", f"/plans/{pid}/editors/dre")[0] == 200 and w.plans[pid].get("handover") is None
+          and "dre" not in w.plans[pid]["editors"])
+
+
+def test_remarks_deck_link_and_picks_named_v381():
+    """3.8.1, round three, the fake's side: where to get the deck (deckUrl,
+    an https link); the authors' notes on a tag or a card (remarks), in the
+    doc and one at a time from Anki's Browse; what a date's picked cards are
+    (pl, from the author's "#lbl" counts), kept while its picks are the same."""
+    w = world({"dre": "Dre", "kim": "Kim"})
+    dre, kim = new_client(w, "dre", "Dre"), new_client(w, "kim", "Kim")
+    pid, code = w.add_plan("dre", "MS2 Block 1", "Step 1", _plan_units())
+    kim.follow_plan(code)
+    base = w.plans[pid]["doc"]
+
+    def doc_ok(**extra):
+        try:
+            return w._plan_doc(dict(base, **extra))
+        except fakes.Bad:
+            return None
+    check("deck link: an https link is kept", doc_ok(deckUrl="https://example.org/deck?v=2")["deckUrl"] == "https://example.org/deck?v=2")
+    check("deck link: none is none", "deckUrl" not in doc_ok(deckUrl=""))
+    check("deck link: not http, a space, no host, or past 300",
+          all(doc_ok(deckUrl=u) is None for u in ("http://example.org", "https://e.org/a b", "https://", "https:///x",
+                                                   "https://e.org/" + "x" * 300, 7)))
+    got = doc_ok(remarks=[{"id": "r1", "tag": "Step1::Micro::Herpes_Viruses", "text": " Watch the\nvideo first "},
+                          {"id": "r2", "card": ["guid000050", 1], "text": "Mixes up with the next"}])
+    check("remarks: a tag's and a card's, one line each", got["remarks"] == [
+        {"id": "r1", "tag": "Step1::Micro::Herpes_Viruses", "text": "Watch the video first"},
+        {"id": "r2", "card": ["guid000050", 1], "text": "Mixes up with the next"}], str(got.get("remarks")))
+    check("remarks: exactly one target, 280 at most, ids unique, 300 a plan", all(doc_ok(remarks=r) is None for r in (
+        [{"id": "r1", "tag": "T", "card": ["g", 0], "text": "both"}], [{"id": "r1", "text": "neither"}],
+        [{"id": "r1", "card": ["g", -1], "text": "x"}], [{"id": "r1", "tag": "T", "text": "x" * 281}],
+        [{"id": "r1", "tag": "T", "text": "a"}, {"id": "r1", "tag": "U", "text": "b"}],
+        [{"id": f"r{i}", "tag": "T", "text": "a"} for i in range(301)])))
+    v = w.plans[pid]["version"]
+    st, view = dre._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["guid000050", 1], "text": "Read it twice"}})
+    rid = (view.get("doc", {}).get("remarks") or [{}])[0].get("id")
+    check("remarks: one from Browse is a save", st == 200 and w.plans[pid]["version"] == v + 1 and rid, str(view.get("doc", {}).get("remarks")))
+    dre._call("POST", f"/plans/{pid}/remarks", {"add": {"card": ["guid000050", 1], "text": "Read it once"}})
+    check("remarks: a second on that card changes its text", w.plans[pid]["doc"]["remarks"] == [
+        {"id": rid, "card": ["guid000050", 1], "text": "Read it once"}])
+    check("remarks: a follower can't", kim._call("POST", f"/plans/{pid}/remarks", {"remove": rid})[0] == 403)
+    check("remarks: the author takes it off", dre._call("POST", f"/plans/{pid}/remarks", {"remove": rid})[0] == 200
+          and "remarks" not in w.plans[pid]["doc"])
+    check("remarks: a follower's board carries them with the plan",
+          dre._call("POST", f"/plans/{pid}/remarks", {"add": {"tag": "Step1::Renal", "text": "Start here"}})[0] == 200
+          and kim._call("GET", "/board?decks=1")[1]["plans"][0]["doc"]["remarks"][0]["text"] == "Start here")
+    # a date's picks, named by the author's Anki
+    lbl = [["Step1::Micro::Herpes_Viruses", 88], ["Step1::Micro::Pox", 2]]
+    check("picks: named from the author's Anki", dre.put_ids(pid, {}, counts={"cz": {"#lbl": lbl}, "hf": {"#lbl": lbl}}))
+    cz = lambda: next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "cz")
+    hf = next(u for u in w.plans[pid]["doc"]["units"] if u["id"] == "hf")
+    check("picks: kept as the date's pl; a date with no picks has nothing to name", cz().get("pl") == lbl and "pl" not in hf)
+    dre.put_ids(pid, {}, counts={"cz": {"#lbl": [["a", 1]] * 4}})
+    check("picks: anything else is skipped", cz().get("pl") == lbl)
+    w.edit_plan(pid, [dict(u, name="Cloze 2") if u["id"] == "cz" else u for u in w.plans[pid]["doc"]["units"]])
+    check("picks: a save with the same picks keeps it", cz().get("pl") == lbl and cz()["name"] == "Cloze 2")
+    check("picks: and its followers get it", kim._call("GET", "/board?decks=1")[1]["plans"][0]["doc"]["units"][3].get("pl") == lbl)
+    dre.add_plan_cards(pid, [["guid000051", 0]], unit="cz")
+    check("picks: cards added from Browse: gone until it's named again", "pl" not in cz())
+    dre.put_ids(pid, {}, counts={"cz": {"#lbl": lbl}})
+    w.edit_plan(pid, [dict(u, cards=[["guid000050", 1]]) if u["id"] == "cz" else u for u in w.plans[pid]["doc"]["units"]])
+    check("picks: other picks on the site: gone", "pl" not in cz())
+
+
 def test_plan_tags_round_two_v381():
     """3.8.1, plan tags round two (Sam's picks on the mock): a date can keep a
     video's tag to the cards one of the plan's own tags holds (a cut, named

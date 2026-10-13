@@ -63,6 +63,7 @@ describe("quiet accounts", () => {
     };
     const withEd = await mk("Cardio"), alone = await mk("Renal"), nobody = await mk("Neuro");
     await dre.call("POST", `/plans/${withEd.id}/editors`, { uid: "kai" });
+    await kai.call("POST", `/plans/${withEd.id}/invite`, { yes: true });  // 3.8.1: a co-author says yes
     await maya.call("POST", "/plans/follow", { code: withEd.code });
     await maya.call("POST", "/plans/follow", { code: alone.code });
     await age("dre", 400);
