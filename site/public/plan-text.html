@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A plan as text · Due Crew</title>
-<meta name="description" content="The lines a Due Crew plan reads in Text: dates, events and the plan's own tags. For you, and for an AI drafting a plan with you.">
+<meta name="description" content="The lines a Due Crew plan reads in Text: dates, events, the plan's own tags and notes for followers. For you, and for an AI drafting a plan with you.">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon.png" type="image/png">
 <style>
@@ -52,8 +52,8 @@
   </picture></a>
 
   <h1>A plan as text</h1>
-  <p class="lede">What a plan's Text tab reads: one line a date, an event or one of the plan's own tags. For you, and for an AI drafting a plan with you.</p>
-  <nav><a href="#dates">Dates</a><a href="#events">Events</a><a href="#tags">The plan's tags</a><a href="#notes">Notes to yourself</a><a href="#rules">Rules</a><a href="#where">Where it goes</a></nav>
+  <p class="lede">What a plan's Text tab reads: one line a date, an event, one of the plan's own tags or a note for followers. For you, and for an AI drafting a plan with you.</p>
+  <nav><a href="#dates">Dates</a><a href="#events">Events</a><a href="#tags">The plan's tags</a><a href="#remarks">Notes for followers</a><a href="#notes">Notes to yourself</a><a href="#rules">Rules</a><a href="#where">Where it goes</a></nav>
 
   <p>Each line is parts split by <code>|</code> (two or more spaces work too). Blank lines and a leading <code>-</code>, <code>*</code> or <code>•</code> are fine. A line that starts with <code>#</code> is shown with the plan, never imported.</p>
   <pre>2026-10-05 | Microcytic anemias | tag:Heme::Red_cells::Microcytic
@@ -76,7 +76,7 @@
     <tr><td><code>12 single cards</code></td><td>Written by the plan's own text: keeps the date's single cards as they are.</td></tr>
     <tr><td><code>due 2026-10-09</code></td><td>By when it's meant to be done (otherwise: before the next date opens).</td></tr>
     <tr><td><code>even</code></td><td>Spread its cards evenly from its day to its due date.</td></tr>
-    <tr><td><code>for Heme quiz</code></td><td>The event it preps for, named as on its event line.</td></tr>
+    <tr><td><code>for Heme quiz</code></td><td>The event it preps for, named as on its event line. On a date after that event it reads &ldquo;after Heme quiz&rdquo;: review after it.</td></tr>
     <tr><td><code>watch:</code>, <code>read:</code>, <code>do:</code></td><td>Things cards can't measure, ticked by hand (up to 8): <code>read: chapter 6</code>. A link may follow the words.</td></tr>
   </table></div>
   <pre>2026-10-07 | Lecture 12 cards | notes:Ab3$kL9qZ1 p&amp;x8Hk!eQ2 | cards:Zq7!mN2pLk:2 | for Heme quiz
@@ -98,6 +98,18 @@ tag | Unit 3 | deck:Spanish 1::Unit 3 | search:tag:Vocab -tag:Review</pre>
     <li>Up to 100 tags a plan, 5,000 notes and 5,000 single cards a tag. A second line with the same name adds to the tag.</li>
   </ul>
 
+  <h2 id="remarks">Notes for followers</h2>
+  <p>A note on a video, a chapter or one card, in your own words. Each follower's Anki shows it: a card's on the review screen when that card comes up, a tag's with that tag (and the tags under it) in You &rsaquo; Plans and Due.</p>
+  <pre>note | tag:#Videos::Pharm::Cephalosporins | Skip the last two minutes; it's not on our exam.
+note | tag:SLG 12 | Lecture 12's slides cover this better than the book.
+note | card:Zq7!mN2pLk:2 | This one is on the quiz.</pre>
+  <ul>
+    <li><code>tag:</code> takes a deck tag's full path, or one of the plan's own tags by its name. <code>card:ID:N</code> is card N of that note (1 is the first), as <code>cards:</code> writes it.</li>
+    <li>One line, up to 280 characters. One note a tag or a card: a second line for the same one replaces it. Up to 300 a plan.</li>
+    <li>Never card text: a note is yours to write, and Due Crew never sees a card.</li>
+    <li>On a plan's page, a tag's note shows as &#9432; on its dates; Note on a tag in a day writes one. A card's note is written in Anki: Browse, right-click the card &rsaquo; Due Crew: note for the plan's followers&hellip;</li>
+  </ul>
+
   <h2 id="notes">Notes to yourself</h2>
   <ul>
     <li><code># …</code>: shown with the plan as the AI's notes; never imported.</li>
@@ -114,8 +126,8 @@ tag | Unit 3 | deck:Spanish 1::Unit 3 | search:tag:Vocab -tag:Review</pre>
 
   <h2 id="where">Where it goes</h2>
   <ul>
-    <li><b>Add dates</b> adds: a line with the same day and name as a date already there adds to it. Tag lines add to the plan's tags.</li>
-    <li><b>Edit the whole plan</b> replaces the plan's dates, events and tags with the text. A line with a date's day and name is that date; otherwise the one date with that name on another day is that date moved, and the one date that day with the same tags is that date renamed, so followers keep their progress on it. A tag the text leaves out goes; the preview names the dates still using it, and offers to take it off them too or keep it. What a date already opened stays open.</li>
+    <li><b>Add dates</b> adds: a line with the same day and name as a date already there adds to it. Tag lines add to the plan's tags. A note line adds a note, or rewrites the one on that tag or card.</li>
+    <li><b>Edit the whole plan</b> replaces the plan's dates, events, tags and notes with the text. A line with a date's day and name is that date; otherwise the one date with that name on another day is that date moved, and the one date that day with the same tags is that date renamed, so followers keep their progress on it. A tag line with a new name that holds just what one of the plan's tags holds is that tag renamed: the dates using it follow. A tag the text leaves out goes; the preview names the dates still using it, and offers to take it off them too or keep it. What a date already opened stays open.</li>
     <li>Edit the whole plan doesn't carry the weekly lines, review days, catch-up weeks or the pace: those stay as they are.</li>
     <li>Read it shows what the text does before anything changes; Save keeps it.</li>
   </ul>

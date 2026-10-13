@@ -996,3 +996,50 @@ button.linkish.quiet2 { color: var(--muted); font-weight: 500; }
 .followbox { margin: 14px 0; max-width: 640px; }
 .followbox p { margin: 0; }
 .followbox .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+/* 3.8.1 (plans, round three) */
+/* first steps on an empty plan: 1 Tick · 2 Fill · 3 Save · 4 Share, the one to do now bold */
+.firststeps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-size: 13.5px; color: var(--muted); }
+.firststeps li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.firststeps .n { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%; border: 1px solid var(--line); font-size: 11.5px; font-weight: 700; }
+.firststeps li.now { color: var(--ink); }
+.firststeps li.now .n { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.firststeps li.done .n { border-color: var(--accent); color: var(--accent); }
+/* a note for followers on a tag: ⓘ on its chip; its words under the chip in the day panel */
+.ri { font-style: normal; font-weight: 400; }
+.cal2 .ch .ri { color: var(--muted); }
+.chips2 .rmk { flex-basis: 100%; display: flex; gap: 6px; align-items: baseline; min-width: 0; margin: -1px 0 3px 9px; color: var(--muted); overflow-wrap: anywhere; text-align: left; }
+.chips2 .rmk .ri { color: var(--accent); }
+.chips2 .rmk.edit { align-items: center; margin-left: 0; }
+.chips2 .rmk.edit input { flex: 1 1 auto; min-width: 0; font-size: 13px; padding: 4px 8px; }
+/* a tag's extras: 64 + 22 extra, With extras / Without */
+.ch2 .xtra { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ch2 .xtra .seg button { font-size: 11.5px; padding: 1px 8px; }
+.dayp .ch2:has(.xtra) { flex-wrap: wrap; row-gap: 2px; }
+.dayp .ch2:has(.xtra) > span:first-child { flex-basis: 100%; }
+.dayp .ch2 > .xtra { flex: 0 1 auto; min-width: 0; }
+.dayp .ch2:has(.inpick) > .x, .dayp .ch2:has(.xtra) > .x { margin-left: auto; }  /* wrapped: the × at the row's end */
+/* a date's picked cards, open in the day panel: every label, whole */
+.dayp .ch2.single > span:first-child, .dayp .ch2.single .raw { white-space: normal; overflow-wrap: anywhere; }
+/* notes on single cards, by ID and number */
+.cnotes summary { cursor: pointer; }
+.cnotes[open] summary { margin-bottom: 6px; }
+.cnote { display: grid; grid-template-columns: minmax(0, 14em) minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--line); text-align: left; }
+.cnote .mono { overflow-wrap: anywhere; color: var(--muted); }
+.cnote .x { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 15px; }
+@media (max-width: 560px) { .cnote { grid-template-columns: minmax(0, 1fr) auto; } .cnote .mono { grid-column: 1 / -1; } }
+/* Settings' co-authors: invited, waiting; Hand it to; offered, Take back */
+.coas { display: grid; gap: 6px; }
+.coa { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 6px 10px; border-radius: 8px; background: var(--well); font-size: 14px; color: var(--ink); }
+.coa .sp { flex: 1; }
+.coa.offer { background: var(--you); }
+.who2.wait { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+/* Home: asked to co-write a plan, or offered one */
+.pinvs { display: grid; gap: 8px; }
+.pinv { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--you); overflow-wrap: anywhere; }
+.pinv .row { gap: 8px; }
+.pinv button { padding: 4px 14px; font-size: 13px; }
+.pinv .status:empty, .coas .status:empty { display: none; }
+/* the poster: where to get the deck, its address on paper */
+.printout.poster .pdeck { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+.printout.poster .pdeck a { color: #2e7d32; }
+.printout.poster .purl { color: #6b6b64; }
