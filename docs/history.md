@@ -1496,8 +1496,9 @@ every release that changes how something works.
   end: the question waits those five, `ASK`); Another fifteen now (the
   start moves back so the next starts this minute: it's mine alone, so
   nobody holds the old one); Stop here. Each yes adds one, up to the
-  room's eight. No answer in five minutes and it ends quietly; it still
-  counts. The Decks screen's lobby asks it too (the chip's clock tells
+  room's eight. No answer in five minutes and it ends quietly, with the
+  same line as a stop (Sam: no "it still counts", on the question or
+  after). The Decks screen's lobby asks it too (the chip's clock tells
   the board when a phase changes, `roomtick`), and so does the chip's
   card. A fifteen never rides my week doc as a room (nobody joins one
   yet: the buddy comes later): my crew sees I'm studying now, to the end
@@ -1515,9 +1516,12 @@ every release that changes how something works.
   drawn again; a state (a nap, heads down, a break) loops gently. The
   still frame is the markup, and motion lives under the computer's own
   Reduce motion (Anki's is on unless switched off, so it isn't asked:
-  Sam's call). Beside the logo, never on it: away, in a session, a cheer
-  that just landed, exam eve, the day done (the week's squares fly,
-  Thursday's grey), studying, else a nap. In a fifteen: a jump to start,
+  Sam's call). Beside the logo, never on it, and only for a moment (Sam:
+  not always there): something just happened (a cheer landed, the first
+  day back from away, exam eve, the day done: the week's squares fly,
+  Thursday's grey), the first time the board draws it; it pops in, plays
+  it and goes after `sev.LOGO_SECONDS` (a redraw meanwhile keeps its
+  place), and the logo's alone the rest of the time. In a fifteen: a jump to start,
   heads down (a blink every seven seconds, eyes along its card, the card
   turns now and then), the clock at the question, breathing along with
   the break (a square, four counts a side) or stretching, a square on
@@ -1525,3 +1529,12 @@ every release that changes how something works.
   top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
   Stretch, all on this computer. Not yet: Sev on crew rows (the site's
   board would need it too), the week card, Welcome back, the buddy.
+  Sev's spacing (Sam: review it wherever it shows): its body sits low in
+  its drawing (the effects need the room above), so a box the drawing's
+  size left it low and loose: 3 to 6 px under its neighbours' middle,
+  nearly touching a chip's bottom edge, gaps that changed with the pose.
+  It goes in a slot its body fills now (`sev.SLOT`, `sev.slot`, the same
+  numbers in the widgets), and centres on its neighbours within a pixel
+  on the board and in the top bar's and review bar's chips. The question
+  and the break leave room under Sev's shadow; beside the logo it's a
+  size smaller, its feet on the logo's line.

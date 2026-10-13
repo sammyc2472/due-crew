@@ -494,27 +494,26 @@ sections.append("<h3>just me, the day I joined (2.9)</h3>" + board.render(SOLO, 
 # under way, its question on the Decks screen, the session's line
 from due_crew import sev as _sev  # noqa: E402
 _DVN = dict(_DV, nudge=True, nudge_sev=_sev.svg("peek"), done_n=0)
-sections.append("<h3>3.8.1: not started by my usual time: the nudge, and Sev napping by the logo</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DVN, you=_YOU("today"),
-    sev=_sev.svg("nap")).replace('id="du-', 'id="dun-'))
+sections.append("<h3>3.8.1: not started by my usual time: the nudge</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DVN, you=_YOU("today")).replace('id="du-', 'id="dun-'))
 _fif = room_model.make_fifteen("sam", NOW - datetime.timedelta(minutes=6))
 sections.append("<h3>3.8.1: a fifteen under way (Sev heads down)</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, sev=_sev.svg("focus"),
+    DATA, {"period": "today"}, now_ts - 60,
     room={"mine": dict(room_model.fifteen_view(_fif), sev=_sev.svg("focus")), "invites": [], "done": None}))
 _ask = room_model.make_fifteen("sam", NOW - datetime.timedelta(minutes=16))
 sections.append("<h3>3.8.1: the fifteen's question on the Decks screen</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, sev=_sev.svg("focus"),
+    DATA, {"period": "today"}, now_ts - 60,
     room={"mine": dict(room_model.fifteen_view(_ask), cards=38, sev=_sev.svg("ring")), "invites": [], "done": None}))
 _brk = room_model.fifteen_next(_ask)
 sections.append("<h3>3.8.1: its break</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, sev=_sev.svg("focus"),
+    DATA, {"period": "today"}, now_ts - 60,
     room={"mine": dict(room_model.fifteen_view(_brk), sev=_sev.svg("rest")), "invites": [], "done": None}))
-sections.append("<h3>3.8.1: the session's line; Sev hops (the day's done)</h3>" + board.render(
-    DATA, {"period": "today"}, now_ts - 60, sev=_sev.svg("hop"),
+sections.append("<h3>3.8.1: the session's line; Sev hops by the logo for a moment (the day's done)</h3>" + board.render(
+    DATA, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg("hop"), "ago": 0},
     room={"mine": None, "invites": [], "done": None,
           "fifteen_done": {"n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": _sev.svg("stack", stack=3)}}))
-sections.append("<h3>3.8.1: a cheer lands; exam eve; away</h3>" + "".join(board.render(
-    SOLO, {"period": "today"}, now_ts - 60, sev=_sev.svg(k)) for k in ("cheer", "exam", "away")))
+sections.append("<h3>3.8.1: by the logo for a moment: a cheer lands; exam eve; back from away</h3>" + "".join(board.render(
+    SOLO, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg(k), "ago": 0}) for k in ("cheer", "exam", "hello")))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

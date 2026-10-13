@@ -1021,8 +1021,10 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
-    # 3.8.1: Sev beside the logo, never on it (the logo itself never changes)
-    beside = f'<span class="dc-sev">{sev}</span>' if sev else ""
+    # 3.8.1: Sev beside the logo, never on it (the logo itself never changes),
+    # and only for a moment: it pops in, plays it, and goes (Sam)
+    beside = (f'<span class="dc-sev once" style="--ago:{float(sev.get("ago") or 0):.2f}s">{_sev.slot(sev["svg"], 36)}</span>'
+              if sev and sev.get("svg") else "")
     return (f'<div class="dc-head"><span class="dc-title">{board_mark()}{beside}</span>'
             f'<span>{pills}</span></div>')
 
@@ -3045,7 +3047,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
     asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
-    sev (3.8.1): Sev's markup beside the logo (rooms.board_sev), or None."""
+    sev (3.8.1): Sev beside the logo for a moment, {svg, ago} (rooms.board_sev), or None."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3535,9 +3537,8 @@ def room_html(room):
         what = f'{n} fifteen{"" if n == 1 else "s"} &middot; {e(room_model.duration_text(mins))}'
         if isinstance(cards, int):
             what += f' &middot; {cards:,} card{"" if cards == 1 else "s"}'
-        icon = f'<span class="dc-sevw st">{fd["sev"]}</span>' if fd.get("sev") else "<span>&#10003;</span>"
-        out += (f'<div class="dc-wrap">{icon}<span><b>Your session:</b> {what}.'
-                f'{" It ended at the question. That still counts." if fd.get("walked") else ""}</span>'
+        icon = _sev.slot(fd["sev"], 44) if fd.get("sev") else "<span>&#10003;</span>"
+        out += (f'<div class="dc-wrap{" dc-stack" if fd.get("sev") else ""}">{icon}<span><b>Your session:</b> {what}.</span>'
                 f'<a class="wx" href="#" title="Done" style="margin-left:auto" onclick="{_pycmd("room15x")}">&times;</a></div>')
     done = room.get("done")
     if done:
@@ -3590,7 +3591,7 @@ def _fifteen_lobby(m):
         acts = go("room15now", "Start now") + go("room15stop", "Stop here", "lv")
     else:
         acts = go("duestudy", "Study") + go("room15stop", "Stop here", "lv")
-    sv = f'<span class="dc-sevw">{m["sev"]}</span>' if m.get("sev") else ""
+    sv = _sev.slot(m["sev"], 46) if m.get("sev") else ""
     return (f'<div class="dc-room dc-fif"><span class="rgw">{sv}<span class="rg{" brk" if m.get("brk") else ""}" '
             f'style="--p:{float(m.get("frac", 0)):.3f}"><b>{e(str(m.get("label", "")))}</b></span></span>'
             f'<span class="rt"><b>{e(str(m.get("title", "")))}</b><small>{e(sub)}</small></span>'
@@ -3600,16 +3601,22 @@ def _fifteen_lobby(m):
 # 3.8.1: Sev on the board wears the board's colours; its size is its body's
 SEV_CSS = """
     #due-crew { --sv-a: var(--dc-accent); --sv-line: var(--dc-line); --sv-amb: var(--dc-hours); --sv-mut: var(--dc-muted); }
-    #due-crew .dc-sev { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center;
-      margin-left: 6px; vertical-align: middle; line-height: normal; }
-    #due-crew .dc-sev svg { width: 44px; height: 44px; margin: -8px; }
-    #due-crew .dc-sevw { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; flex: none; }
-    #due-crew .dc-sevw svg { width: 48px; height: 48px; margin: -9px; }
+    /* its feet on the logo's line, a little shorter than the wordmark is tall */
+    #due-crew .dc-sev { display: inline-block; margin-left: 8px; vertical-align: middle; line-height: normal;
+      position: relative; top: -1px; }
+    /* by the logo it's a moment: out for a few seconds, then gone (still, it just goes) */
+    #due-crew .dc-sev.once { animation: dc-sev-go 0s linear calc(5s - var(--ago, 0s)) forwards; }
+    @keyframes dc-sev-go { to { visibility: hidden; } }
+    @media (prefers-reduced-motion: no-preference) {
+      #due-crew .dc-sev.once { transform-origin: 50% 100%;
+        animation: dc-sev-pop 5s linear calc(0s - var(--ago, 0s)) forwards; }
+      @keyframes dc-sev-pop { 0% { transform: scale(0); } 7% { transform: scale(1.12); } 11%, 90% { transform: scale(1); }
+        100% { transform: scale(0); visibility: hidden; } }
+    }
     #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
     #due-crew .dc-fif .rt { text-align: left; }
     /* the session's line: room above Sev's head for the squares it stacks */
-    #due-crew .dc-sevw.st { height: 50px; align-items: flex-end; }
-    #due-crew .dc-sevw.st svg { margin: 0 -9px -8px; }
+    #due-crew .dc-wrap.dc-stack { padding-top: 26px; }
     #due-crew .dc-fif .rw { flex-wrap: wrap; justify-content: flex-end; }
     #due-crew .du-nudge { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center;
       font-size: 12.5px; padding: 6px 2px 8px; text-align: left; }

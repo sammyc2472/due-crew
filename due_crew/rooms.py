@@ -762,25 +762,32 @@ def nudge_sev():
 
 
 def board_sev(c, v):
-    """Sev beside the logo: how my day is going, never how much. One moment
-    that happens once (a hop, a cheer) plays once a day; drawn again, it rests."""
+    """Sev beside the logo, for a moment (Sam): {svg, ago} when something
+    just happened (sev.moment), the first time the board draws it; ago is
+    how long it's been out, so a redraw in its few seconds keeps its place.
+    None the rest of the time, and after."""
     if not sev_on():
         return None
     try:
         from .backend.shapes import away_range
         today = datetime.date.today()
         rng = away_range(c)
-        exam = str(c.get("exam_date") or "") == (today + datetime.timedelta(days=1)).isoformat()
-        cheered = time.time() - float(_state.get("sev_cheer") or 0) < 15 * 60
-        mood = sev.mood(away=bool(rng and rng[0] <= today <= rng[1]), in_session=my_room() is not None,
-                        cheered=cheered, exam_eve=exam, day_done=bool(v and v.get("done")),
-                        studied=_studied_today() if mw.col else False)
+        cheer_at = float(_state.get("sev_cheer") or 0)
+        pose = sev.moment(cheered=time.time() - cheer_at < 15 * 60,
+                          back=bool(rng and rng[1] + datetime.timedelta(days=1) == today),
+                          exam_eve=str(c.get("exam_date") or "") == (today + datetime.timedelta(days=1)).isoformat(),
+                          day_done=bool(v and v.get("done")))
     except Exception:
         traceback.print_exc()
         return None
-    played = _state.setdefault("sev_played", set())
-    mark = (str(_state["labels"][0] if _state.get("labels") else ""), mood)
-    rest = mark in played
-    played.add(mark)
-    return sev.svg(mood, rest=rest)
-
+    if not pose:
+        return None
+    day = str(_state["labels"][0] if _state.get("labels") else "")
+    key = (day, pose, int(cheer_at) if pose == "cheer" else 0)  # each cheer its own moment; the rest once a day
+    shown = _state.setdefault("sev_shown", {})
+    now = time.time()
+    first = shown.setdefault(key, now)
+    ago = now - first
+    if ago >= sev.LOGO_SECONDS:
+        return None
+    return {"svg": sev.svg(pose), "ago": round(ago, 2)}

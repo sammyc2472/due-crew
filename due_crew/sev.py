@@ -8,7 +8,8 @@ never drawn twice and there's no JS twin. Every pose draws the same named
 parts (sv-body, sv-eyes, sv-pupils, sv-armL/R, sv-card, sv-clock, ...), so
 a moment (`m-*`) moves whatever pose it's given.
 
-Still is the frame: each moment's resting markup is the frame that says it
+By the logo it's a moment: it comes when something happens and goes
+(`moment`). Still is the frame: each moment's resting markup is the frame that says it
 standing still, and the motion lives under prefers-reduced-motion:
 no-preference, the computer's Reduce motion. Anki's own is on unless
 switched off, so it isn't asked (Sam's call). A moment that happens once (a
@@ -221,28 +222,50 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
             f'<g class="sv-body">{back_arms}{body}{front_arms}{_held(p.get("prop"))}</g>{fx_front}</svg>')
 
 
-def mood(away=False, in_session=False, cheered=False, exam_eve=False, day_done=False, studied=False):
-    """Sev beside the logo: how my day is going, never how much I did.
-    Away first (off on a trip), then a session under way, a cheer that just
-    landed, the night before an exam, the day done (a hop), studying (a
-    blink), and before all that, a nap. Never cross: a gap gets a nap."""
-    if away:
-        return "away"
-    if in_session:
-        return "focus"
+# Sev's body sits low in its drawing (its effects need the room above), so
+# a box the drawing's size centres it too low and too loose. A slot is the
+# body's own size: SLOT[0] of the drawing square, with the drawing placed so
+# the body (arms, feet) sits in its middle; effects spill out of it. The
+# widgets place it the same way, from these numbers (room_model hands them over).
+SLOT = (0.6, -0.2, -0.32)
+
+
+def slot(markup, size):
+    """An svg() drawing, `size` px square, in a slot its body fills."""
+    w, x, y = (round(size * k) for k in SLOT)
+    return (f'<span class="sv-slot" style="width:{w}px;height:{w}px">'
+            + markup.replace('<svg class="', f'<svg style="left:{x}px;top:{y}px;width:{size}px;height:{size}px" class="', 1)
+            + "</span>")
+
+
+# 3.8.1 (Sam): by the logo Sev is a moment, not a fixture. It comes when
+# something just happened, plays it, and goes; the rest of the time the
+# logo is alone. LOGO_SECONDS: how long it stays.
+LOGO_SECONDS = 5
+
+
+def moment(cheered=False, back=False, exam_eve=False, day_done=False):
+    """What brings Sev beside the logo, or None: a cheer that just landed,
+    the first day back from away (a wave), the night before an exam (a
+    star), the day done (a hop, the week's squares flying). Never a mood
+    that lasts, never cross."""
     if cheered:
         return "cheer"
+    if back:
+        return "hello"
     if exam_eve:
         return "exam"
     if day_done:
         return "hop"
-    return "idle" if studied else "nap"
+    return None
 
 
 # the motion sheet. Outside the media query: the still frame of each moment.
 # Inside it: the motion, which ends where a moment rests.
 CSS = r"""
 svg.sv { overflow: visible; display: block; flex: none; }
+.sv-slot { position: relative; display: inline-block; flex: none; vertical-align: middle; }
+.sv-slot > svg.sv { position: absolute; }
 .sv .sv-body, .sv .sv-shadow, .sv .sv-eyes, .sv .sv-pupils, .sv .sv-armL, .sv .sv-armR, .sv .sv-card, .sv .sv-clock,
 .sv .sv-case, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk, .sv .sv-ring, .sv .spark, .sv .sv-cheek,
 .sv .sv-footL, .sv .sv-footR, .sv .sv-boxdot { transform-box: fill-box; }

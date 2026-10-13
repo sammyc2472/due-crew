@@ -288,7 +288,7 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "line": "" if fifteen else names_line(ms),
             "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side),
             "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
-            "sev": sevs, "sevcss": css, "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
+            "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
             "cards": cards, "total": total}
 
 
@@ -296,7 +296,7 @@ def start_data(accent_pair, side="right", sev=True, nap=False, compact=False):
     """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room."""
     sevs, css = _sevs(("idle", "nap"), sev)
     return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
-            "nap": bool(nap), "sev": sevs, "sevcss": css}
+            "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT)}
 
 
 SQUARES = ('<svg viewBox="0 27.7 484 48.3" style="display:block;width:100%;height:auto" aria-hidden="true">'
@@ -520,13 +520,20 @@ _RUNTIME = r"""
     var css = document.createElement('style'); css.id = 'dc-sev-css'; css.textContent = D.sevcss;
     (document.head || document.body).appendChild(css);
   }
-  function sev(key, size, pad) {
-    var w = el('span', 'display:inline-flex;align-items:center;justify-content:center;flex:none;width:' + size + 'px;height:' + size +
-      'px;margin:' + (pad || 0) + 'px;--sv-a:' + c.a + ';--sv-line:' + c.line + ';--sv-amb:' + c.warm + ';--sv-mut:' + c.mut + ';');
-    w.set = function (k) {
-      if (w.k === k || !D.sev || !D.sev[k]) { return; }
-      w.k = k; w.innerHTML = D.sev[k];
-      var v = w.firstChild; if (v && v.style) { v.style.width = v.style.height = '100%'; }
+  // a slot the body fills (sev.SLOT), so Sev centres on its neighbours; full:
+  // the whole drawing (the question and the break have room for its effects)
+  function sev(key, size, full) {
+    var k = D.slot || [0.6, -0.2, -0.32], s = full ? size : Math.round(size * k[0]);
+    var w = el('span', 'position:relative;display:inline-block;flex:none;width:' + s + 'px;height:' + s +
+      'px;--sv-a:' + c.a + ';--sv-line:' + c.line + ';--sv-amb:' + c.warm + ';--sv-mut:' + c.mut + ';');
+    w.set = function (key2) {
+      if (w.k === key2 || !D.sev || !D.sev[key2]) { return; }
+      w.k = key2; w.innerHTML = D.sev[key2];
+      var v = w.firstChild;
+      if (v && v.style) {
+        v.style.position = 'absolute'; v.style.width = v.style.height = size + 'px';
+        v.style.left = (full ? 0 : Math.round(size * k[1])) + 'px'; v.style.top = (full ? 0 : Math.round(size * k[2])) + 'px';
+      }
     };
     w.set(key);
     return w;
@@ -556,7 +563,7 @@ _RUNTIME = r"""
       'padding:0 10px 0 5px;border:1px solid ' + c.a + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
       ';font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
     root.title = FIF ? 'Your fifteen' : 'Your study room';
-    var sq = FIF && D.sev ? sev('focus', 30, -3) : squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
+    var sq = FIF && D.sev ? sev('focus', 32) : squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
         t1 = el('b', 'font-size:11.5px;', D.title), t2 = el('small', 'font-size:10.5px;color:' + c.mut + ';'), fc = faces(c, 18);
     tx.appendChild(t1); tx.appendChild(t2);
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
@@ -573,7 +580,7 @@ _RUNTIME = r"""
     var cell = edit ? edit.parentNode : document.body;
     root = el('span', 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding-left:10px;border-left:1px solid ' + c.line +
       ';font:12px -apple-system,Segoe UI,sans-serif;color:' + c.mut + ';vertical-align:middle;cursor:pointer;white-space:nowrap;');
-    var sv2 = FIF && D.sev ? sev('focus', 28, -4) : null, rg2 = ring(20, c), tx2 = el('span');
+    var sv2 = FIF && D.sev ? sev('focus', 30) : null, rg2 = ring(20, c), tx2 = el('span');
     if (sv2) { root.appendChild(sv2); }
     root.appendChild(rg2); root.appendChild(tx2);
     root.onclick = function () { send('roomcard'); };
@@ -591,7 +598,7 @@ _RUNTIME = r"""
       ';font:12px -apple-system,Segoe UI,sans-serif;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.08);z-index:50;cursor:pointer;');
     var rg3 = ring(40, c), g1 = el('b', 'font-size:12.5px;'), g2 = el('small', 'color:' + c.mut + ';font-size:11px;'),
         g3 = el('small', 'color:' + c.mut + ';font-size:11px;line-height:1.3;', D.line);
-    var sv3 = FIF && D.sev ? sev('focus', 64) : null;
+    var sv3 = FIF && D.sev ? sev('focus', 72) : null;
     root.appendChild(sv3 || squares(c, 56)); root.appendChild(rg3); root.appendChild(g1); root.appendChild(g2); root.appendChild(faces(c, 26)); root.appendChild(g3);
     root.onclick = function () { send('roomcard'); };
     update = function (p) {
@@ -632,7 +639,10 @@ _RUNTIME = r"""
     var box = el('div', 'display:grid;justify-items:center;gap:14px;max-width:520px;padding:20px;');
     var logo = el('span', 'display:flex;align-items:center;gap:8px;');
     // 3.8.1: a fifteen's break is Sev's: breathe along (a square, four counts a side), or stretch
-    logo.appendChild(FIF && D.sev ? sev(D.brk_pose === 'stretch' ? 'stretch' : 'breathe', 180) : squares(c, 110));
+    // breathing draws its square around Sev: the whole drawing; a stretch needs only Sev's own room
+    var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev('stretch', 170) : sev('breathe', 180, true)) : null;
+    if (bs) { bs.style.marginBottom = '10px'; }  // its shadow (or the square's "out") clear of the ring
+    logo.appendChild(bs || squares(c, 110));
     var rg4 = ring(FIF ? 96 : 150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
     var btns = el('div', 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;');
     function btn(text, go, cmd) {
@@ -677,7 +687,7 @@ _RUNTIME = r"""
     root = el('div', 'position:fixed;inset:0;background:' + c.bg + ';color:' + c.ink + ';display:grid;place-items:center;z-index:9999;' +
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var qb = el('div', 'display:grid;justify-items:center;gap:12px;max-width:520px;padding:20px;');
-    if (D.sev) { qb.appendChild(sev('ring', 180)); } else { qb.appendChild(squares(c, 110)); }
+    if (D.sev) { var qs0 = sev('ring', 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); }  // its shadow clear of the words else { qb.appendChild(squares(c, 110)); }
     var n = D.rounds, cap = n >= D.max;
     qb.appendChild(el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;', 'That’s fifteen.'));
     if (D.cards != null) {
@@ -696,7 +706,6 @@ _RUNTIME = r"""
     if (!cap) { qbtn('Take five, then another fifteen', true, 'room15five'); qbtn('Another fifteen now', false, 'room15now'); }
     qbtn('Stop here', cap, 'room15stop');
     qb.appendChild(qs);
-    qb.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', 'No answer in five minutes and the session ends here. It still counts.'));
     root.appendChild(qb);
     var gone = false;
     update = function (p) {
@@ -704,12 +713,12 @@ _RUNTIME = r"""
     };
   } else if (KIND === 'start') {
     // 3.8.1: ▶ Fifteen? in the top bar, at the chip's end, whenever I'm in no room
-    root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:5px;' +
-      'padding:0 10px 0 4px;border:1px solid ' + c.line + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
+    root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:6px;' +
+      'padding:0 10px 0 6px;border:1px solid ' + c.line + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
       ';font:600 12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
     root.title = 'Fifteen minutes, now. At the end, one question: a break and another?';
-    if (D.sev) { root.appendChild(sev(D.nap ? 'nap' : 'idle', 30, -3)); }
-    root.appendChild(el('span', 'color:' + c.a + ';font-size:10px;', '▶'));
+    if (D.sev) { root.appendChild(sev(D.nap ? 'nap' : 'idle', 32)); }
+    root.appendChild(el('span', 'color:' + c.a + ';font-size:10px;margin-left:2px;', '▶'));
     var word = el('span', '', 'Fifteen?');
     root.appendChild(word);
     if (D.compact) { word.style.display = 'none'; }
@@ -725,7 +734,7 @@ _RUNTIME = r"""
     var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
         x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
     hd.title = 'Drag to move';
-    var sv5 = FIF && D.sev ? sev('focus', 44, -6) : null;
+    var sv5 = FIF && D.sev ? sev('focus', 40) : null;
     hd.appendChild(sv5 || squares(c, 70)); hd.appendChild(x);
     var AT = 'dcRoomCardAt';
     function put(px, py) {

@@ -1826,7 +1826,7 @@ def test_study_rooms_v212():
     data = rm.widget_data(room, entries, ("#6b3fb5", "#b89cf0"))
     js = rm.widget_js("chip", data)
     check("widgets: names ride as JSON data and go in as text",
-          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "").replace("w.innerHTML = D.sev[k]", "")
+          '"title": "Dre\\u2019s room"' in js and "innerHTML" not in js.replace("s.innerHTML = SQ", "").replace("w.innerHTML = D.sev[key2]", "")
           and "textContent" in js)
     check("widgets: faces are each person's own initial, mine too (not Y for 'you')",
           data["initials"] == ["D", "A", "S"] and data["names"][-1] == "you")
@@ -12155,7 +12155,7 @@ def test_fifteen_widgets_v381():
     ask = rm.widget_js("ask", rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), cards=38, total=61))
     check("the question: three answers, keyed, Sev with the clock",
           all(f"'{c}'" in ask for c in ("room15five", "room15now", "room15stop")) and "That’s fifteen." in ask
-          and "m-ring" in ask and '"cards": 38' in ask and "No answer in five minutes" in ask)
+          and "m-ring" in ask and '"cards": 38' in ask and "No answer" not in ask)
     brk = rm.widget_js("break", rm.widget_data(dict(f, rounds=2), [], ("#2e7d32", "#7cc47f"), brk_pose="stretch"))
     check("a fifteen's break: Start now and Stop here, Sev stretching (Settings), no cheer for nobody",
           "'room15now'" in brk and "'room15stop'" in brk and '"brk_pose": "stretch"' in brk and "Cheer the room" in brk
@@ -12236,7 +12236,7 @@ def test_fifteen_flow_v381():
         finally:
             R.room_model.is_over = lambda r, now=None: r is None or real_phase(r, now)["state"] == "done"
         d = cl.session.get("fifteen_done") or {}
-        check("no answer: over, quietly (no request), and it still counts", gone is None and d.get("walked") is True
+        check("no answer: over, quietly (no request), and its line is there", gone is None and d.get("walked") is True
               and d.get("n") == 1 and len(syncs) == n and "live_until" not in cl.session, str((d, len(syncs), n, sorted(cl.session))))
     finally:
         (R.client, R._now, R._eval, R._webs, appmod.sync, appmod.swap, due_flow.study_today, R.mw.state, R.mw.col,
@@ -12244,6 +12244,40 @@ def test_fifteen_flow_v381():
         _state.clear()
         _state.update(st)
         R.room_model.is_over = rm.__dict__["is_over"]
+
+
+def test_sev_by_the_logo_is_a_moment_v381():
+    """Sam: Sev isn't always by the logo. It comes when something just
+    happened, the first time the board draws it, and goes after a few
+    seconds; a redraw meanwhile keeps its place; then the logo's alone."""
+    from due_crew import rooms as R
+    from due_crew.app import _state
+    saved = (R.cfg, dict(_state), R.time.time)
+    clock = {"t": 1000.0}
+    try:
+        R.cfg = lambda: {}
+        R.time.time = lambda: clock["t"]
+        _state["labels"] = ["2026-10-13"]
+        _state.pop("sev_shown", None)
+        _state["sev_cheer"] = 0
+        check("nothing happening: no Sev by the logo", R.board_sev({}, {"done": False}) is None)
+        first = R.board_sev({}, {"done": True})
+        clock["t"] += 2
+        again = R.board_sev({}, {"done": True})
+        clock["t"] += 4
+        later = R.board_sev({}, {"done": True})
+        check("the day done: a hop, kept through a redraw, gone after its few seconds, not back that day",
+              first and "m-hop" in first["svg"] and first["ago"] == 0 and again["ago"] == 2 and later is None)
+        _state["sev_cheer"] = clock["t"] - 1
+        cheer = R.board_sev({}, {"done": True})
+        check("a cheer is its own moment, the same day", cheer and "m-cheer" in cheer["svg"])
+        R.cfg = lambda: {"sev": False}
+        _state.pop("sev_shown", None)
+        check("Sev off: never", R.board_sev({}, {"done": True}) is None)
+    finally:
+        R.cfg, st, R.time.time = saved
+        _state.clear()
+        _state.update(st)
 
 
 def test_fifteen_board_v381():
@@ -12261,8 +12295,8 @@ def test_fifteen_board_v381():
     rnd = board.room_html({"mine": rm.fifteen_view(f, t0 + datetime.timedelta(minutes=3))})
     check("…in a fifteen: Study and Stop here", "duecrew:duestudy" in rnd and "room15stop" in rnd and "12 min left" in rnd)
     line = board.room_html({"fifteen_done": {"n": 3, "minutes": 45, "cards": 1212, "walked": True, "sev": sev.svg("stack", stack=3)}})
-    check("the session's line: fifteens, minutes, cards, and that a quiet end still counts",
-          "3 fifteens &middot; 45 m &middot; 1,212 cards." in line and "still counts" in line and "room15x" in line)
+    check("the session's line: fifteens, minutes, cards, the same however it ended",
+          "3 fifteens &middot; 45 m &middot; 1,212 cards.</span>" in line and "counts" not in line and "room15x" in line)
     v = {"today": "2026-10-13", "name": "Due", "done_n": 0, "total_n": 2, "behind_n": 0, "folded": False, "tab": "today",
          "rows": [], "suggestions": [], "notes": [], "later": [], "later_n": 0, "nudge": True, "nudge_sev": sev.svg("peek")}
     try:
@@ -12271,12 +12305,13 @@ def test_fifteen_board_v381():
         nud = str(ex)
     check("the nudge: Not started yet today. Fifteen? Start, and Not today",
           "Not started yet today." in nud and "duecrew:room15" in nud and "duecrew:duex:fifteen" in nud and "m-peek" in nud, nud[:300])
-    head = board._head("today", sev=sev.svg("nap"))
-    check("Sev beside the logo, never on it", 'class="dc-sev"' in head and head.index("dc-mark") < head.index("dc-sev"))
-    check("moods: away, a session, a cheer, exam eve, day done, studying, a nap",
-          [sev.mood(away=True, in_session=True), sev.mood(in_session=True, cheered=True), sev.mood(cheered=True, exam_eve=True),
-           sev.mood(exam_eve=True, day_done=True), sev.mood(day_done=True, studied=True), sev.mood(studied=True), sev.mood()]
-          == ["away", "focus", "cheer", "exam", "hop", "idle", "nap"])
+    head = board._head("today", sev={"svg": sev.svg("hop"), "ago": 1.5})
+    check("Sev beside the logo, never on it, for a moment (it goes; a redraw keeps its place)",
+          'class="dc-sev once"' in head and head.index("dc-mark") < head.index("dc-sev") and "--ago:1.50s" in head
+          and board._head("today") .count("dc-sev") == 0)
+    check("by the logo only when something happens: a cheer, back from away, exam eve, the day done; else nothing",
+          [sev.moment(cheered=True, back=True), sev.moment(back=True, exam_eve=True), sev.moment(exam_eve=True, day_done=True),
+           sev.moment(day_done=True), sev.moment()] == ["cheer", "hello", "exam", "hop", None])
     check("Sev: every pose draws; the cheer blushes and nothing else does; a stack of one",
           all(sev.svg(k).startswith('<svg class="sv m-') for k in sev.POSES) and "sv-cheek" in sev.svg("cheer")
           and "sv-cheek" not in sev.svg("idle") and sev.svg("stack", stack=1).count('class="stk') == 1)
@@ -12291,9 +12326,10 @@ def test_fifteen_board_v381():
           and SM.change(["set", "sev_break", "stretch"], {}) == {"sev_break": "stretch"}
           and SM.change(["set", "sev_break", "dance"], {}) is None and SM.change(["set", "fifteen", "0"], {}) == {"fifteen": False})
     off = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {"sev": False}, 0)
-    on = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {}, 0, sev=sev.svg("nap"))
+    on = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {}, 0,
+                      sev={"svg": sev.svg("hop"), "ago": 0})
     check("Sev off: no motion sheet on the board; on, the sheet and Sev by the logo",
-          "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev"' in on)
+          "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev once"' in on)
 
 
 def main():

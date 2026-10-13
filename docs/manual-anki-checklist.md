@@ -674,9 +674,9 @@ In Anki (as a follower):
 - [ ] Another fifteen now: the card comes back and the chip says Fifteen 2 · 15 min left.
 - [ ] On the Decks screen when a fifteen ends: the board asks the same question (Take five, Another now, Stop here); the chip says done · your call, and its card answers too.
 - [ ] Stop here (from the question, the break, the board or the chip's card): back on the Decks screen, "Your session: N fifteens · M m · C cards." with Sev stacking a square for each; × takes it away. Your crew stops seeing you studying at their next refresh.
-- [ ] Walk away at the question: after five minutes it ends by itself; the line says it ended at the question and still counts.
+- [ ] Walk away at the question: after five minutes it ends by itself, and the session's line is there.
 - [ ] Eight fifteens: the eighth's question offers Stop here only.
 - [ ] Close Anki in a fifteen: next open, no fifteen, and the session's line is there.
-- [ ] Sev by the logo: napping before you've studied, blinking once you have, a hop when Today's done (once; back on the Decks screen it rests), a gift when a cheer lands, a star the night before your exam, a suitcase on away days. System Settings › Reduce motion: Sev stands still in each.
+- [ ] Sev by the logo, only for a moment: Today done, back on the Decks screen it pops in, hops (the week's squares fly) and goes after a few seconds, not again that day; a cheer that lands: a gift and a blush, then gone; the night before your exam: a star; the first day back from away: a wave. Any other time the logo's alone. System Settings › Reduce motion: it shows still for those seconds, then goes.
 - [ ] The nudge: with cards due, nothing studied, past your usual start (three days of history needed), the You box's Today says "Not started yet today. Fifteen?" with Sev peeking; Start starts one; × hides it for today; not on an away day.
 - [ ] Settings › Sev off: no Sev anywhere (the chip, the question and the break show the logo's squares).
