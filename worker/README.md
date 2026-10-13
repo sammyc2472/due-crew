@@ -100,8 +100,9 @@ cookie) except these, which need no sign-in: `GET /version`,
 
 ### Plans (3.1)
 
-See `docs/plans-design.md` for the endpoints (`/plans/*`, `/auth/link`), the
-doc shape and the rules. `GET /board?decks=1` adds `plans` (the plans I
+`docs/plans.md` is how plans work now (the doc and a date's fields, who
+writes each, the limits, a follow, the morning); `docs/plans-design.md`
+has the 3.1–3.5 reasoning. The paragraphs below are the API, by version. `GET /board?decks=1` adds `plans` (the plans I
 follow) and `planOffers` (plans offered to my squads); `POST /sync` takes
 `plans: {id: {unitId: [opened, seen, total]}}`. 3.2: a plan's doc may have
 `end`, `phases: {catchup, taper}` and a date's `check` (a checkpoint); a
@@ -121,9 +122,9 @@ save only). `PUT /plans/trees` takes `{v: 2}` nested trees up to 1.5 MB;
 `GET /plans/trees?deck=` returns that deck's.
 
 3.7.3 plan updates: `GET /board?pv=STAMP` (an add-on sends the stamp it last
-saw on every refresh) answers `pv` (a short hash of the plans I follow:
-their versions, my follow's own days, their newest post; never my
-progress) and carries `plans`, `planOffers` and `authored` again only when
+saw on every refresh) answers `pv` (a short hash of the plans I follow, and since 3.8.1 the
+plans I write or co-author and my squads' offers: their versions, my
+follow's own days, their newest post; never my progress) and carries `plans`, `planOffers` and `authored` again only when
 it moved, so a save reaches followers at their next refresh with no
 request of its own. Each plan on the board has `posts` (its newest 3:
 `{id, name, text, withSave, at}`), and the board marks the version as
@@ -173,8 +174,10 @@ write, lean) and each plan's `early`.
 the lean `authored` docs carry each date's searches. `GET
 /plans/ics?code=` (no sign-in) is the plan as iCalendar; the site serves
 it at `/p/CODE.ics` (1,000 an hour an address). `POST /plans/follow`
-shares peek's 60 an hour. `GET /plans/mine` leaves each doc's single
-cards and note ids out; `GET /plans/{id}/progress` is for co-authors too.
+shares peek's 60 an hour. `GET /plans/mine` leaves each date's single
+cards and note ids out (`cards`, `ids`; its `idr`, `notes` and the plan
+tags' lists stay: Export cards for my AI, Tag for a plan and the log page
+read them); `GET /plans/{id}/progress` is for co-authors too.
 The UI review: `GET /plans/public?code=` (no sign-in, code plans only) is
 what a plan's link shows before signing in: `{name, ownerName, line,
 deck, followers, units: [{name, opens, due?, n}]}`, days and counts, never
@@ -228,6 +231,39 @@ date's `tags` and its `q` out of `search` and `sn`; a copy's new root
 rewrites `tag` and `q`. `PUT /plans/{id}/ids` takes a fourth item a
 date, `[[tag, in]]`, its cuts as the author's Anki read them; the note
 ids are kept only while they match.
+3.8.1, the plans review: a plan's totals (`plans.totals`, `totals_at`;
+migration 0025: followers, how many of them have the version, done per
+date) are counted again when read over an hour old, so the board's
+`followers`/`crewDone`, a plan's `followers`, `/plans/mine`, peek, the
+library and `/plans/public` read one row; up to an hour old. An author's
+`reached` and `GET /plans/{id}/progress` are counted live. `PUT
+/plans/{id}` writes `post` even when nothing else changed (the reply's
+`posted`: `{id, text}` or `{error: "too_many_posts"}`), ignores a date's
+`ids` in the body (the stored ones stay while the date's tags, subdecks
+and cuts are unchanged, and go otherwise until `PUT /ids` sends them
+again). `POST /plans/follow`: 409 `too_many_plans` at 20 follows I can
+see (a squad plan of a squad I left doesn't count) or 100 follow rows in
+all. `POST /plans/{id}/cards`: the saves' daily limit (429 `slow_down`)
+and room (409 `plans_full`); `POST /plans/{id}/tags` counts the doc kept
+for Undo in its room. `PUT /plans/{id}/ids` has its own daily limit (500,
+`planids`). `POST /plans/{id}/undo` shares the saves' limit and undoes
+the newest logged save, even after an ids upload; `GET /plans/{id}/log`
+marks it `undo: true`. A tag root past `_50` is `<root>_<plan id>`, then
+the plan id.
+
+A date's id fields, who writes each, and when it goes:
+
+| Field | What | Written by | Kept while |
+|---|---|---|---|
+| `nids`, `cids` | numbers pasted from one Anki | the builder | the author keeps them |
+| `notes` | note guids, every card of each | the builder | the author keeps them |
+| `cards` | `[[guid, ord]]` single cards | the builder, the author's Anki | the author keeps them |
+| `idr` | `nids`/`cids` as `[[guid, ord]]` | the author's Anki (`PUT /ids` `refs`) | `nids` and `cids` are unchanged |
+| `ids` | the author's note guids behind the date's tags and subdecks | the author's Anki (`PUT /ids` `units`) | its tags, subdecks and cuts are unchanged |
+| `idn` | how many cards the pasted ids found | the author's Anki (`counts` `#ids`) | its ids are unchanged |
+| `sn` | how many cards each search found | the author's Anki (`counts`) | the search is there |
+| `pn` | `[new, repeat, missing]` in the author's copy | the author's Anki (`counts` `#pn`) | `opens`, tags, subdecks, searches, ids and notes are unchanged |
+| `n` | a total, from older builders | the builder | as saved |
 F1: the doc may carry `events: [{id, day, name}]` (up to 200) and a date
 `for` (an event's id; one naming no event is dropped). The calendar feed
 has each event as its own day, with how many dates prep for it.
