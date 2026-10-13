@@ -8721,6 +8721,152 @@ def test_plan_tags_builder_v381():
           and "const y = window.scrollY;\n    drawNow();\n    if (y) window.scrollTo(0, y);" in builder)
 
 
+def test_builder_review_bugs_v381():
+    """The plan builder's review (Sam's picks): Fill to a date stops there and
+    says what didn't fit; /plans/new draws before it can fail and says why;
+    a replaced doc brings its pace; Edit the whole plan keeps a renamed or
+    moved date's id and reads a name as a name; a plan tag's x names its
+    dates first; the server's ceilings are said where they're hit, each
+    refusal in its own words; Starts and Move this day move everything."""
+    import re
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    plans_ts = open(os.path.join(REPO, "worker", "src", "plans.ts"), encoding="utf-8").read()
+    # 1: Fill to <date>
+    check("review: Fill to a date never runs past it; an even piece there takes fewer days",
+          "let until = end;" in builder and "if (end && studyDays(d, end) < k) { k = studyDays(d, end); clipped = true; }" in builder
+          and "if (pace.mode === \"end\") pace.daily = endDaily();" not in builder)
+    check("review: whole chapters leave gaps, so the pace rises a little (8 tries) before anything is left off",
+          "cap = Math.min(5000, Math.ceil(cap * 1.1));" in builder and "tries >= 7" in builder)
+    check("review: what didn't fit is said, by name; an end before the dates places nothing (no 1-a-day pace)",
+          "didn't fit${end && !full ? ` by ${pretty(end)}` : \"\"}: ${leftNames(r.left)}." in builder
+          and "`Nothing fits by ${pretty(end)}: " in builder and "if (d1) pace.daily = d1;" in builder)
+    # 2: /plans/new
+    new_plan = app[app.index("async function newPlan()"):app.index("// ---- the builder: builder.js ----")]
+    check("review: a new plan is named for the deck's last part, 60 characters at most",
+          'const name = (deck.split("::").pop().trim() || deck.trim()).slice(0, 60).trim() || "My plan";' in new_plan
+          and 'api("POST", "/plans", { name, deck })' in new_plan and "{ name: deck, deck }" not in new_plan)
+    check("review: /plans/new draws its page before any request, so a failure shows; each reason its own",
+          new_plan.index("page(h(\"h1\"") < new_plan.index('api("GET", "/plans/mine")')
+          and all(k in new_plan for k in ('"too_many_plans"', '"plans_full"', '"bad_plan"', "err.status === 429")))
+    # 3: the doc replaced, the pace follows
+    check("review: History's Undo and a (merged) save reload the pace, what to cover and the start with the doc",
+          "function reload(d) {" in builder and builder.count("reload(plan.doc)") == 2 and "fromDoc(); study.days = pace.days;" in builder
+          and "doc = structuredClone(plan.doc); base = structuredClone(plan.doc);" not in builder)
+    check("review: a save to an end date keeps the pace it was filled at (5,000 at most, as the server takes)",
+          "p.daily = Math.max(1, Math.min(5000, endDaily() || pace.daily));" in builder)
+    # 4: Edit the whole plan
+    check("review: the whole plan's text keeps a moved date (its name, another day) or a renamed one (its day and cards)",
+          "fromText(ta.value, !adding)" in builder and "function fromText(text, whole = false)" in builder
+          and "oldSig(u) === sigOf(e)" in builder and "loose.filter((x) => x.key === e.key).length === 1" in builder
+          and "claimed.has(u.id)" in builder)
+    check("review: the part after the date is a name (Read: Chapter 3, For the midterm, Evenly), keywords only after it",
+          "const namePart = !opens || k === at + 1;" in builder and "!namePart && /^even(ly)?$/i.test(part)" in builder
+          and "!namePart && (m = /^for\\s+(.+)$/i.exec(part))" in builder and "!namePart && (m = /^(watch|read|do):" in builder)
+    check("review: the preview says a date moved or was renamed", "` · moved from ${pretty(was.opens)}`" in builder and "` · was ${was.name}`" in builder)
+    # 5: a plan tag's x
+    check("review: a plan tag's x names the dates it's on, and which go, before Delete it",
+          "function dropSay(t)" in builder and "nothing else, so ${gone.length === 1 ? \"it goes\" : \"they go\"}, to-dos too." in builder
+          and 'tagDrop === t.id ? h("div", { class: "ptdrop small"' in builder)
+    # 6: the server's ceilings, where they're hit
+    want = {k: re.search(rf"const {k} = (\d+);", plans_ts).group(1) for k in ("UNITS_MAX", "EVENTS_MAX", "REVIEWS_MAX", "SOURCES_MAX", "SEARCH_MAX")}
+    check("review: the builder's ceilings are the Worker's", all(f"{k} = {v}" in builder for k, v in want.items()), str(want))
+    check("review: a date made past 200, a search past 10 (search box, Overlap, a moved chip), a review day past 60 are refused, said",
+          "if (doc.units.length >= UNITS_MAX) { note = FULL; return null; }" in builder
+          and "if (!addSearch(u, q)) { why.textContent = note;" in builder and ".slice(0, 10)" not in builder
+          and "if (!addSearch(t, c.search)) { cleanup(); draw(); return; }" in builder
+          and "(doc.reviews || []).length >= REVIEWS_MAX" in builder)
+    check("review: a cleared date name is the date's own again; a cleared event name keeps the one it had",
+          "const nameIt = (u, v) =>" in builder and 'x.name = was.trim() ? was : "Event";' in builder
+          and "for (const u of doc.units) if (!String(u.name || \"\").trim()) { auto.add(u.id); u.name = autoName(u); }" in builder)
+    codes = ("plans_full", "bad_plan", "bad_name", "bad_line", "bad_post", "bad_squad", "not_owner", "not_author", "no_plan", "too_big", "slow_down")
+    check("review: each refusal of a save has its own words; the old catch-all about due dates is gone",
+          all(f"    {c}: " in builder for c in codes) and "A date isn't valid: a due date can't be before it opens" not in builder
+          and "const over = overLimit()" in builder)
+    worker_src = "".join(open(os.path.join(REPO, "worker", "src", f), encoding="utf-8").read() for f in ("plans.ts", "util.ts", "limits.ts", "validate.ts"))
+    check("review: those codes are the Worker's", all(f'"{c}"' in worker_src or f'bad("{c[4:]}")' in worker_src for c in codes)
+          and 'bad = (what: string) => new HttpError(400, "bad_" + what)' in worker_src)
+    # 7: Starts, Move this day, failures said, Split
+    check("review: Starts moves the review days, the events and the end with the dates",
+          "for (const r of doc.reviews || []) r.day = addDays(r.day, delta);" in builder and "for (const x of events()) x.day = addDays(x.day, delta);" in builder
+          and "if (doc.end) doc.end = addDays(doc.end, delta);" in builder)
+    check("review: Move this day onto a date merges its to-dos, its for and its cuts too",
+          "function mergeInto(into, u)" in builder and "if (u.for && !into.for) into.for = u.for;" in builder
+          and "into.cut = [...(into.cut || []), c]" in builder and "into.todo = all.slice(0, Todo.MAX);" in builder
+          and "const r = mergeInto(other, u);" in builder)
+    check("review: a note, a co-author, a follower's pace, History and Updates say when they fail",
+          '"That note didn\'t post. Try again."' in builder and '"Couldn\'t load your crew. Try again."' in builder
+          and "That didn't change. Try again.\"" in builder and "That didn't reset. Try again.\"" in builder and '"Couldn\'t load the history. "' in builder
+          and '"Couldn\'t load the updates. "' in builder and "catch { return; }" not in builder
+          and "/* stays as it was */" not in builder and "history = []; draw();" not in builder)
+    check("review: Split has no choice its button ignores; picking in Anki is a line",
+          'opt("anki"' not in builder and '"Or pick cards in Anki: "' in builder and "} else return;" not in builder)
+
+
+def test_builder_review_wording_v381():
+    """The builder's words (Sam's picks): followers are asked at their next
+    refresh; Fill, not Lay it out; the Text tab's line is true; my squads
+    vs the plan's squad; a neutral example beside the med one; the review
+    day says what it makes; the empty tree names the deck; most of the
+    last; per-date counts from 3 in the squad; the whole format's page."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    classes = open(os.path.join(site, "classes.html"), encoding="utf-8").read()
+    check("words: an opened date's followers are asked at their next refresh",
+          "Followers who opened it are asked at their next refresh" in builder and "tomorrow morning" not in builder)
+    check("words: the empty List says Fill", "Tick what to cover and Fill, or drag" in builder and "Lay it out, or drag" not in builder)
+    check("words: Edit the whole plan says nothing changes before Replace and Save",
+          "Nothing does until you Replace the plan's dates, and Save." in builder and "Saving replaces the plan's dates with this text." not in builder)
+    check("words: Settings offers it to one of my squads, not the plan's squad",
+          '"Offer it to one of my squads"' in builder and '"Only people in that squad of mine"' in builder and '"Offer it to a squad"' not in builder)
+    check("words: each example has a neutral one beside the med one",
+          "(SLG 12, or Unit 3)" in builder and "2026-10-20 | Chapter 4 | deck:Chemistry::Unit 3::Chapter 4" in builder
+          and "2026-10-12 | Chapter 4 | tag:Chemistry::Unit_3::Chapter_4" in builder and '"tag | Unit 3 | tag:Chemistry::Unit_3"' in builder
+          and "Heart failure | tag:Step1::Cardio::Heart_failure" in builder)
+    check("words: Make it a review day says followers get a Due Crew deck of what they've seen, that morning",
+          "That morning, followers get a Due Crew deck of what they've seen from these dates" in builder)
+    check("words: the empty tree names the plan's deck, and Anki's deck needs that name",
+          "and pick ${doc.deck}: the deck in Anki needs that name." in builder)
+    check("words: at my own pace, the next once I've seen most of the last",
+          "when I'm ready, the next once I've seen most of the last" in builder and "the next once I've seen the last\"" not in builder)
+    check("words: Progress shows per-date counts only from 3 in the squad, as the class hint",
+          "if (pr.sharing < 3) {" in builder and "Each date's counts show once 3 or more are in it." in builder)
+    check("words: For classes says the plan's squad", "among those in the plan&rsquo;s squad" in classes and "among those who share it" not in classes)
+    check("words: the Format box links the whole format; both prompts name it",
+          'h("a", { class: "small", href: "/plan-text"' in builder and "The whole format ›" in builder
+          and builder.count('"The whole format: https://duecrew.com/plan-text",') == 2)
+
+
+def test_builder_undo_follow_asof_v381():
+    """Sam's picks: Undo in the builder, a step at a time, never across a
+    save or a reload; Follow on a plan's link page, one request; "Tags as
+    of" the day the author's Anki sent them."""
+    site = os.path.join(REPO, "site", "public")
+    builder = open(os.path.join(site, "builder.js"), encoding="utf-8").read()
+    app = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(site, "app.css"), encoding="utf-8").read()
+    plans_ts = open(os.path.join(REPO, "worker", "src", "plans.ts"), encoding="utf-8").read()
+    check("undo: each change keeps the state before it (doc, pace, what to cover, the start), 20 at most",
+          "const UNDO_MAX = 20;" in builder and "const snap = () => JSON.stringify({ doc, pace, cover: [...cover], start, meta, auto: [...auto] });" in builder
+          and "if (undos.length > UNDO_MAX) { undos.shift(); undoLost = true; }" in builder)
+    check("undo: typing in one box is one step", "mark(`name:${u.id}`)" in builder and 'mark("title")' in builder and "!(key && key === undoKey)" in builder)
+    check("undo: a save or a reload starts over; back to the saved plan is clean",
+          "settled();" in builder and "  settled();  // Undo starts from the plan as it loaded\n  draw();" in builder
+          and "if (!undos.length && !undoLost) { dirty = false;" in builder)
+    check("undo: the button beside Save, and Ctrl/Cmd+Z when no text box has the focus",
+          "undoBtn, saveBtn) : null);" in builder and '.savebar button.undo' in css
+          and 'e.key.toLowerCase() === "z" && document.contains(saveBtn)' in builder and "&& undos.length && !typing(e.target)) { e.preventDefault(); undo(); }" in builder)
+    fb = app[app.index("function followBox(p, code, followed) {"):app.index("/** /p/CODE: what a shared link shows. */")]
+    check("follow: signed in, a plan's link page follows on one request, then says where its cards go",
+          fb.count("api(") == 1 and 'api("POST", "/plans/follow", { code })' in fb and "picks it up at its next refresh" in fb
+          and '"You follow 20 plans. Stop one first."' in fb and "me ? followBox(p, code, followed) : null" in app)
+    check("follow: its authors and followers get the way to it instead",
+          '"It\'s your plan. "' in fb and '"You follow it. "' in fb and "following: !!peek.following" in app)
+    check("as of: the tree's day, from GET /plans/trees' at, under its heading",
+          "at: r.at, ...JSON.parse(r.doc)" in plans_ts and "const treeAt = raw.at ?" in builder and "`Tags as of ${pretty(treeAt)}`" in builder)
+
+
 def test_plan_tags_insights_v381():
     """3.8.1 (Sam's pick): a plan's own tags stay out of Insights' own
     choices (its topics, the map's first pick); the map's "by" gets one
