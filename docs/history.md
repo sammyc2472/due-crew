@@ -1527,8 +1527,10 @@ every release that changes how something works.
   the break (a square, four counts a side) or stretching, a square on
   its head for each fifteen at the end. Settings › Fifteen and Sev: the
   top bar's Fifteen? (and the nudge), Sev, and the break's Breathe or
-  Stretch, all on this computer. Not yet: Sev on crew rows (the site's
-  board would need it too), Welcome back, the buddy.
+  Stretch, all on this computer. Sev on crew rows was mocked on the real
+  board and Sam said no: rows have emojis, and Sevs that differ only by
+  colour would need to be more customisable to stand for people. Not
+  yet: the buddy (Sam: still not there).
   In a room with my crew, each member is their Sev (Sam's pick): on the
   room's card and the Decks screen's lobby, where the initials were, each
   in its person's accent (by day or by night, as the widget or the board
@@ -1588,3 +1590,13 @@ every release that changes how something works.
   each dot by the same arithmetic); `test_week_card_sev_v381` runs both.
   In Anki the card follows Settings › Sev; the site has no switch and
   always draws it.
+  Welcome back (Sam's pick, from the same mock): the window a plan's
+  follower gets after three or more days away has Sev waving from its
+  top left, still (a Qt window can't play the board's motion; it's the
+  frame Reduce motion shows), in the accent and Anki's theme:
+  `ui.sev_label` draws `sev.still` through the logo's SVG path
+  (`ui._svg_pixmap`, which `logo_label` uses now too). Same words and
+  buttons; Settings › Sev off, the window as it was (`plan_flow._ask_away`
+  passes `sev_on()`). And the fifteen's question with Sev off showed no
+  squares: its else sat inside a `//` comment (found merging the room
+  seats); it draws the logo's squares now, as the checklist says.

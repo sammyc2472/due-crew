@@ -721,7 +721,8 @@ _RUNTIME = r"""
     root = el('div', 'position:fixed;inset:0;background:' + c.bg + ';color:' + c.ink + ';display:grid;place-items:center;z-index:9999;' +
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var qb = el('div', 'display:grid;justify-items:center;gap:12px;max-width:520px;padding:20px;');
-    if (D.sev) { var qs0 = sev('ring', 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); }  // its shadow clear of the words else { qb.appendChild(squares(c, 110)); }
+    // Sev with the clock (its shadow clear of the words), or with Sev off the logo's squares
+    if (D.sev) { var qs0 = sev('ring', 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); } else { qb.appendChild(squares(c, 110)); }
     var n = D.rounds, cap = n >= D.max;
     qb.appendChild(el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;', 'That’s fifteen.'));
     if (D.cards != null) {

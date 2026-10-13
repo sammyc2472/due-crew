@@ -617,8 +617,16 @@ def main(out):
     def away():
         # 3.8.1: Welcome back, before the morning opens dates from days with nothing studied
         from due_crew.ui.away_dialog import AwayDialog, days_words
-        dlg = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
+        dlg = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240, sev=True)
         settle()
+        # 3.8.1: Sev waves from its corner (still), in the accent: its forehead's pixel says QtSvg drew it
+        from due_crew.ui import accent
+        if dlg.sev is None:
+            raise RuntimeError("away: no Sev with Sev on")
+        img = dlg.sev.pixmap().toImage()
+        k = img.width() / 64
+        if img.pixelColor(int(32 * k), int(30 * k)).name() != accent():
+            raise RuntimeError(f"away: Sev isn't in the accent: {img.pixelColor(int(32 * k), int(30 * k)).name()}")
         labels = dlg.findChildren(QtWidgets.QLabel)
         if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
             raise RuntimeError("away: the plan's name went in as markup")
@@ -627,6 +635,10 @@ def main(out):
                 or "4 dates would open now: 240 new cards." not in dlg.body.text()):
             raise RuntimeError(f"away: {dlg.push_btn.text()!r} {dlg.body.text()!r}")
         shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
+        plain = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
+        if plain.sev is not None:
+            raise RuntimeError("away: Sev with Sev off")
+        shoot(plain, os.path.join(out, "plan-welcome-back-plain.png"))
         dlg = AwayDialog(None, "Cardio", [f"2026-10-{d:02d}" for d in range(5, 15)], 9, 610)
         dlg.show()
         dlg.push_btn.click()

@@ -12676,6 +12676,37 @@ def test_week_card_sev_v381():
           not bad and len(got["draws"]) == len(draws) == 32, bad[:1])
 
 
+def test_welcome_back_sev_v381():
+    """Sam liked Welcome back with Sev: Sev waves from the window's corner
+    (still: a Qt window can't play the board's motion), unless Settings ›
+    Sev is off. tools/dialogs.py draws it and checks the pixel; here, the
+    switch reaches the window, and the drawing is sev.py's still one."""
+    from due_crew import plan_flow, rooms as R, sev, room_model as rm
+    got = []
+    fake = types.ModuleType("due_crew.ui.away_dialog")
+    fake.ask_away = lambda parent, name, days, n_dates, n_cards, sev=False: (got.append(sev), "later")[1]
+    saved = (sys.modules.get("due_crew.ui.away_dialog"), R.cfg)
+    sys.modules["due_crew.ui.away_dialog"] = fake
+    try:
+        R.cfg = lambda: {}
+        plan_flow._ask_away("Big Step 1", ["2026-10-05"], 1, 20)
+        R.cfg = lambda: {"sev": False}
+        plan_flow._ask_away("Big Step 1", ["2026-10-05"], 1, 20)
+    finally:
+        R.cfg = saved[1]
+        if saved[0] is None:
+            sys.modules.pop("due_crew.ui.away_dialog", None)
+        else:
+            sys.modules["due_crew.ui.away_dialog"] = saved[0]
+    check("Welcome back: Sev on, the window waves; Settings › Sev off, it's as before", got == [True, False], got)
+    art = sev.still("hello", "#6b3fb5")
+    check("…its Sev is the still drawing, waving, in the accent", art.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+          and "#6b3fb5" in art and "var(" not in art and "class=" not in art)
+    ask = next(ln for ln in rm._RUNTIME.splitlines() if "squares(c, 110)" in ln and "qb." in ln)
+    check("the fifteen's question with Sev off shows the logo's squares (the else was inside a comment)",
+          "//" not in ask.split("squares(c, 110)")[0], ask.strip())
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

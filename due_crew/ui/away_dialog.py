@@ -2,13 +2,14 @@
 more days on which I studied nothing in Anki. Asked before anything opens:
 Open them · Push my dates back N days (my follow's shift, one request) ·
 Not today (nothing opens; tomorrow morning asks again). Plan names are the
-author's: plain text only."""
+author's: plain text only. Sev waves from its corner (Sam's pick), still,
+unless Settings › Sev is off."""
 
 import datetime
 
-from aqt.qt import QDialog, QDialogButtonBox, QLabel, QPushButton, Qt, QVBoxLayout
+from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, Qt, QVBoxLayout
 
-from . import attach_alive
+from . import attach_alive, sev_label
 
 
 def _day(iso):
@@ -35,7 +36,7 @@ def days_words(days):
 class AwayDialog(QDialog):
     """choice: "open", "push", or None (Not today, or closed: the same)."""
 
-    def __init__(self, parent, name, days, n_dates, n_cards):
+    def __init__(self, parent, name, days, n_dates, n_cards, sev=False):
         super().__init__(parent)
         attach_alive(self)
         self.choice = None
@@ -43,23 +44,31 @@ class AwayDialog(QDialog):
         self.setWindowTitle("Welcome back")
         self.setMinimumWidth(430)
         root = QVBoxLayout(self)
+        words = QVBoxLayout()
+        top = QHBoxLayout()
+        self.sev = sev_label("hello", 64, "Sev, waving") if sev else None
+        if self.sev is not None:
+            top.addWidget(self.sev, 0, Qt.AlignmentFlag.AlignTop)
+            top.addSpacing(8)
+        top.addLayout(words, 1)
+        root.addLayout(top)
         head = QLabel(f"Welcome back to {name}")
         head.setTextFormat(Qt.TextFormat.PlainText)
         head.setWordWrap(True)
         head.setStyleSheet("font-weight: 600;")
-        root.addWidget(head)
+        words.addWidget(head)
         self.body = QLabel(f"{days_words(days)} "
                            f"{n_dates:,} date{'s' if n_dates != 1 else ''} would open now: "
                            f"{n_cards:,} new card{'s' if n_cards != 1 else ''}.")
         self.body.setTextFormat(Qt.TextFormat.PlainText)
         self.body.setWordWrap(True)
-        root.addWidget(self.body)
+        words.addWidget(self.body)
         note = QLabel("Pushing moves only your dates; the plan and its events stay put. "
                       "Not today opens nothing and asks again tomorrow morning.")
         note.setTextFormat(Qt.TextFormat.PlainText)
         note.setWordWrap(True)
         note.setStyleSheet("color: palette(placeholder-text); font-size: 11.5px;")
-        root.addWidget(note)
+        words.addWidget(note)
         buttons = QDialogButtonBox()
         buttons.addButton("Not today", QDialogButtonBox.ButtonRole.RejectRole).clicked.connect(self.reject)
         self.push_btn = QPushButton(f"Push my dates back {n} day{'s' if n != 1 else ''}")
@@ -76,7 +85,7 @@ class AwayDialog(QDialog):
         self.accept()
 
 
-def ask_away(parent, name, days, n_dates, n_cards):
+def ask_away(parent, name, days, n_dates, n_cards, sev=False):
     """"open", "push", or "later" (Not today, or the window closed)."""
-    dlg = AwayDialog(parent, name, days, n_dates, n_cards)
+    dlg = AwayDialog(parent, name, days, n_dates, n_cards, sev)
     return (dlg.choice if dlg.exec() else None) or "later"

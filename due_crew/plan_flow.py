@@ -3619,8 +3619,9 @@ def _welcome_one(pid, ask=None):
 
 
 def _ask_away(name, days, n_dates, n_cards):
+    from .rooms import sev_on  # 3.8.1: Sev waves from its corner, as Settings › Sev says
     from .ui.away_dialog import ask_away
-    return ask_away(mw, name, days, n_dates, n_cards)
+    return ask_away(mw, name, days, n_dates, n_cards, sev=sev_on())
 
 
 # ---- following ----

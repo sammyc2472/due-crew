@@ -66,7 +66,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   from `session.week_raw` with the current Privacy switches at every sync,
   so turning a switch off takes that number off every day.
 - Consent: friendship is two edges (`friends(owner, friend)`); only mutual
-  friends read my week, decks and heatmap; a cheer lands only if its
+  friends read my week, decks, heatmap and accent; a cheer lands only if its
   recipient added the sender; a knock needs a squad in common or my code.
   Someone connected to me gets a name and an emoji, nothing more; a
   stranger's uid gets the same 404 as no account.
@@ -147,7 +147,7 @@ same commit, each with its test:
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
-| Sev (3.8.1, Block): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card | `sev.py` (one drawing; the widgets get its markup, the week card `sev.still`), `rooms.board_sev`, `sharecard.hops` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
+| Sev (3.8.1, Block): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back (not on crew rows: Sam's no) | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`), `rooms.board_sev`, `sharecard.hops`, `room_model.seats`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |
