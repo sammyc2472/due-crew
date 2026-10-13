@@ -517,6 +517,20 @@ class DeckIndex:
 TREE_BUDGET = 1_400_000  # bytes of JSON: under the server's 1.5 MB for a tree, with room for decks
 
 
+def tree_rows(idx):
+    """(tags, decks) of a deck as they go up for the builder (DeckIndex.tree),
+    each path one printable line of at most 200 characters (the server's)."""
+    tags, decks = idx.tree()
+    ok = lambda path: len(path) <= 200 and path.isprintable()
+    return [t for t in tags if ok(t[0])], [d for d in decks if ok(d[0])]
+
+
+def tree_hash(deck, tags, decks):
+    """3.8.2: what a deck's tree was when this computer last sent it."""
+    blob = json.dumps([str(deck), tags, decks], separators=(",", ":"))
+    return hashlib.sha1(blob.encode()).hexdigest()[:16]
+
+
 def _qid(path):
     """A question bank's id: a leaf that's only digits.
     Thousands of them, one card or two each; they go last."""

@@ -3,8 +3,8 @@ follow, the morning, progress for the sync, the Decks tab's plan card,
 and the menus. Main-thread rules as in __init__: every collection read and
 the one unsuspend step happen here, on the main thread; plan_flow makes a
 request of its own only on a click (follow, pause, stop) and, for a plan
-I write, at the day's first refresh (send_ids: in the background, only
-when what it sends changed).
+I write, at the day's first refresh (send_ids, send_trees: in the
+background, only when what they send changed).
 
 Per profile and computer, in user_files/<profile>/plans.json (deck ids
 belong to one collection, so not in the add-on's config, which every
@@ -21,6 +21,7 @@ plans.json, per profile:
   built                  filtered decks Due Crew built here (the last 200), for the morning's tidy
   authored_tags          plans I write, not follow: {plan id: {deck_id, tags, tags_sig, tags_day}}
   ids_sent               {plan id: hash of the note ids, counts and refs last sent} (send_ids)
+  trees_sent             3.8.2: {deck name, lowercased: {h, day}}, its tree last sent, the day last read (send_trees)
   posts_seen             {plan id: the newest post read}
   aside_ok               {plan id: [leeches, missing]} as last OK'd
   fallback_ok            {plan id: true}: its renamed-tags note OK'd
@@ -1118,6 +1119,7 @@ def maybe_morning(awaiting_sync, fresh=False, toast=True, update=False):
                 c["plans"] = state
                 _psave(c)
             send_ids()  # 3.3, C5: the plans I write
+            send_trees()  # 3.8.2: and their decks' tags, for the builder, when they changed
         if awaiting_sync or (c.get("plans_day") == today and not fresh):
             return None
         if c.get("plans_day") == today:
@@ -1423,6 +1425,75 @@ def send_ids():
             _psave(pc)
 
     _bg(job, done)
+
+
+def send_trees():
+    """3.8.2, main thread, at the same moment as send_ids: the tag and
+    subdeck tree of each deck a plan I write runs on (the deck named like
+    the plan's) goes up for the builder, so its tag list keeps up without
+    Make a plan from a deck. Each deck is read once an Anki day; its tree
+    goes (one request a deck, in the background) only when it differs from
+    what this computer last sent (`trees_sent`). Nothing on a day nothing
+    changed; a failed one is tried again at the next refresh."""
+    cl = client()
+    auth = cl.session.get("plans_authored") or []
+    if not auth or not mw.col:
+        return
+    pc = _pcfg()
+    today = _today()
+    names = {n.lower(): d for d, n in P.deck_choices(mw.col)}
+    want = {str(a["doc"].get("deck") or "").lower() for a in auth}
+    sent = {k: v for k, v in (pc.get("trees_sent") or {}).items() if k in want and isinstance(v, dict)}
+    jobs, seen, checked = [], set(), {}
+    try:
+        for a in auth:
+            deck = str(a["doc"].get("deck") or "")
+            key = deck.lower()
+            did = names.get(key)
+            if did is None or key in seen:
+                continue
+            seen.add(key)
+            was = sent.get(key) or {}
+            if was.get("day") == today:
+                continue
+            tags, decks = P.tree_rows(P.DeckIndex(mw.col, did))
+            h = P.tree_hash(deck, tags, decks)
+            if was.get("h") == h or not (tags or decks):
+                checked[key] = dict(was, day=today)  # the same as sent, or nothing to send
+            else:
+                jobs.append((key, deck, tags, decks, h))
+    except Exception:
+        traceback.print_exc()
+        return
+    if checked or sent != (pc.get("trees_sent") or {}):
+        pc["trees_sent"] = dict(sent, **checked)
+        _psave(pc)
+    if not jobs:
+        return
+    gen = app.generation
+
+    def job():
+        return [(key, h) for key, deck, tags, decks, h in jobs if cl.put_tree(deck, tags, decks)]
+
+    def done(ok):
+        if not ok or gen != app.generation:
+            return  # nothing went, or another profile or account since: the next refresh asks again
+        pc2 = _pcfg()
+        pc2.setdefault("trees_sent", {}).update({key: {"h": h, "day": today} for key, h in ok})
+        _psave(pc2)
+
+    _bg(job, done)
+
+
+def note_tree(deck, tags, decks):
+    """Make a plan from a deck just sent this deck's tree: noted as sent
+    today, so the next refresh doesn't send it again."""
+    try:
+        pc = _pcfg()
+        pc.setdefault("trees_sent", {})[str(deck).lower()] = {"h": P.tree_hash(deck, tags, decks), "day": _today()}
+        _psave(pc)
+    except Exception:
+        traceback.print_exc()
 
 
 CHECK_CARDS = 60
@@ -3115,7 +3186,7 @@ def open_make():
     if not mw.col:
         return
     from .ui.plan_dialog import MakePlanDialog
-    MakePlanDialog(mw, client(), mw.col, site_base()).exec()
+    MakePlanDialog(mw, client(), mw.col, site_base(), on_sent=note_tree).exec()
 
 
 def open_site(path):

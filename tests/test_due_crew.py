@@ -1430,6 +1430,28 @@ def test_request_budget():
           and due_crew._wants_fetch(True, True, 0, False, fetch=True) is True)
     check("push on open: goes unless something already pushed; the open's fetch is not a push",
           due_crew._open_push_due(1000, 0) and not due_crew._open_push_due(1000, 950))
+    # 3.8.2: someone who writes a plan sends its deck's tree for the builder at the moment the
+    # day's first refresh sends the plan's note ids: one PUT on a day its tags changed, none otherwise
+    store.add_plan("sam", "Step 1", "Step 1", _plan_units())
+    sam.fetch_board(labels, tomorrow, with_decks=True)
+    col = _plan_col()
+    trees = lambda: sum(1 for m, p, _s in store.log if m == "PUT" and p == "/plans/trees")
+    with _PlanGlue({"A": sam}, {"A": col}) as g, _SyncBg(g.F):
+        refresh = lambda: g.F.maybe_morning(True, fresh=True)  # the day's first refresh, before the AnkiWeb sync
+        n = trees()
+        refresh()
+        refresh()
+        first = trees() - n
+        g.today["d"] = _day(1)
+        refresh()
+        same = trees() - n - first
+        col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Long_QT ' WHERE id = 3")
+        g.today["d"] = _day(2)
+        refresh()
+        refresh()
+        changed = trees() - n - first - same
+    check("budget: a plan's deck tree goes up once on a day its tags changed, never on a day they didn't",
+          first == 1 and same == 0 and changed == 1, (first, same, changed))
 
 
 def test_week_doc_v29():
@@ -9178,6 +9200,81 @@ def test_plan_words_v382():
           reader == ["Due Crew: why isn't it showing?", "Due Crew: open these…"]
           and writer == reader + ["Due Crew: add to a plan…", "Due Crew: tag for a plan…",
                                   "Due Crew: copy as plan selector", "Due Crew: export for my AI…"], (reader, writer))
+
+
+def test_builder_tags_keep_up_v382():
+    """3.8.2, Sam's pick "Keep the builder's tag list current": a deck's tag
+    tree reached duecrew.com's builder only through Make a plan from a deck.
+    Now, at the day's first refresh, each deck a plan I write runs on is
+    read (once an Anki day) and its tree goes up only when it differs from
+    what this computer last sent. One that didn't go is tried again; one
+    that lands after a profile switch isn't kept; Make a plan's counts."""
+    from due_crew import plans as P
+    from due_crew import app as appmod
+    store = world({"dre": "Dre"})
+    store.add_plan("dre", "Step 1", "Step 1", _plan_units())
+    dre = new_client(store, "dre", "Dre")
+    dre.fetch_board([_day(0)], with_decks=True)
+    col = _plan_col()
+    puts = lambda: sum(1 for m, path, _s in store.log if m == "PUT" and path == "/plans/trees")
+    reads = []
+    real_rows = P.tree_rows
+    with _PlanGlue({"A": dre}, {"A": col}) as g, _SyncBg(g.F):
+        F = g.F
+        P.tree_rows = lambda idx: reads.append(idx.did) or real_rows(idx)
+        real_put = dre.put_tree
+        try:
+            F.send_trees()
+            sent = g.state()["trees_sent"]["step 1"]
+            check("trees: the first refresh sends the deck's tree, noted as sent today",
+                  puts() == 1 and sent["day"] == _day(0) and sent["h"]
+                  and "Arrhythmia" in json.dumps(store.plan_trees[("dre", "Step 1")]), sent)
+            F.send_trees()
+            check("trees: the same day again: not read, not sent", puts() == 1 and reads == [10], reads)
+            g.today["d"] = _day(1)
+            F.send_trees()
+            check("trees: the next day it's read; nothing changed, nothing sent",
+                  puts() == 1 and len(reads) == 2 and g.state()["trees_sent"]["step 1"]["day"] == _day(1))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Long_QT ' WHERE id = 3")
+            g.today["d"] = _day(2)
+            F.send_trees()
+            check("trees: on a day its tags changed, one request", puts() == 2
+                  and "Long_QT" in json.dumps(store.plan_trees[("dre", "Step 1")]))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia ' WHERE id = 3")
+            g.today["d"] = _day(3)
+            dre.put_tree = lambda *a: False
+            F.send_trees()
+            check("trees: one that didn't go isn't noted as sent", g.state()["trees_sent"]["step 1"]["day"] == _day(2))
+
+            def switched(*a):
+                appmod.generation += 1  # a profile switch while it was out
+                return real_put(*a)
+            dre.put_tree = switched
+            F.send_trees()
+            check("trees: tried again at the next refresh; a reply after a profile switch isn't kept",
+                  puts() == 3 and g.state()["trees_sent"]["step 1"]["day"] == _day(2))
+            dre.put_tree = real_put
+            F.send_trees()
+            check("trees: so the next refresh sends it", puts() == 4 and g.state()["trees_sent"]["step 1"]["day"] == _day(3))
+            col.db.conn.execute("UPDATE notes SET tags = ' Step1::Cardio::Arrhythmia Step1::Cardio::Torsades ' WHERE id = 3")
+            F.note_tree("Step 1", *real_rows(P.DeckIndex(col, 10)))
+            g.today["d"] = _day(4)
+            F.send_trees()
+            check("trees: what Make a plan from a deck sent counts as sent", puts() == 4)
+        finally:
+            P.tree_rows, dre.put_tree = real_rows, real_put
+        maya = new_client(store, "maya", "Maya")
+        F.client = lambda: maya
+        F.send_trees()
+        check("trees: someone who writes no plan sends nothing", puts() == 4)
+    check("tree hash: the same tree, the same hash; a count, a name or the deck changes it",
+          P.tree_hash("Step 1", [["a", 1]], []) == P.tree_hash("Step 1", [["a", 1]], [])
+          and len({P.tree_hash("Step 1", [["a", 1]], []), P.tree_hash("Step 1", [["a", 2]], []),
+                   P.tree_hash("Step 1", [["b", 1]], []), P.tree_hash("Step 2", [["a", 1]], [])}) == 4)
+    fakes.add_card(col.db.conn, 40, did=10, queue=-1, tags="Step1::" + "x" * 200)
+    tags, _decks = P.tree_rows(P.DeckIndex(col, 10))
+    check("tree: a path the server won't take stays here", not any(len(t[0]) > 200 for t in tags)
+          and any(t[0] == "Step1::Cardio" for t in tags), [t[0] for t in tags][:6])
 
 
 def test_plan_tags_builder_v381():
