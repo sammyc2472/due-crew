@@ -1459,3 +1459,21 @@ every release that changes how something works.
   as its rows. `tools/real_anki.py` exits non-zero on any FAIL. A tag pass
   reads a deck once for every plan on it (`plan_flow._deck_index`),
   fresh again after a plan's tags move notes.
+  Settings merge across computers (the audit's #2, migration 0028): a save
+  replaced the whole doc, so two computers (or a computer and the site)
+  saving close together lost one side's change, and the server kept
+  whichever came last. Each save now moves `rev`; a save names the rev it
+  started from (`base`), and one made over an older rev is turned away
+  with the doc as it is (409). The add-on merges from the save both
+  started from (`account.merge3`, kept in the session as `settings_base`):
+  a key one side changed takes that side's; the muted, squads, shared
+  decks and to-dos merge item by item (what one side added stays, what
+  one side took off goes), ticks day by day; anything both changed takes
+  the save being made now. An edit here not yet up when a pull brings a
+  save from elsewhere merges the same way. Older add-ons and a sync's
+  settings save without `base` and win as before; against a Worker before
+  3.8.1 the add-on saves again without it. The site's squad join saves
+  over the rev it read and redoes it once on a 409. And the study room's
+  rings all fill as their time passes, a break's too (on the Decks screen
+  the top bar's chip filled while the board's drained); the number is
+  what's left.

@@ -70,7 +70,7 @@ cookie) except these, which need no sign-in: `GET /version`,
 | `GET /admin/squads/{id}` | One squad (A4): name, founder, open, made, members by name and emoji (never their numbers), how many removed, and what the admin did there. `PATCH {open?, name?, founder?}` as its founder would (a founder must already be in it); `POST .../code` a new code, in the answer once and the founder's email, the old one opening nothing (`squad_codes`, the id unchanged); `POST .../remove/{uid} {why?}` removes and blocks (never the founder); `DELETE {name}` the squad, its name typed out. The founder is emailed for each. |
 | `GET /decks` | Shared-deck progress: mine and my mutual friends'. |
 | `GET /heatmap/{uid}` | Mine or a mutual friend's; `{counts: null}` when they don't share one. |
-| `GET` / `PUT /settings` | `{v, at, settings}`, mine only, up to 64 KB (Due's own to-dos ride it). |
+| `GET` / `PUT /settings` | `{v, at, settings, rev}`, mine only, up to 64 KB (Due's own to-dos ride it). 3.8.1 (migration 0028): each save that writes moves `rev`. A PUT with `base` (the rev it started from) is written only if nobody saved since, else 409 `conflict` with the current `{v, at, settings, rev}` for the client to merge and save over; the same doc again is no conflict. Without `base` (older add-ons, a sync's `settings`) the save wins as before. Answers `{ok, rev}`. |
 
 **The week doc** is 2.9's `shared/week`:
 - `{v, days: {label: {studied, reviews, studyTimeMs, accuracy, streak, newCards, status}}, paused, examDate, awayFrom, awayTo, liveUntil, tricky, room}`.

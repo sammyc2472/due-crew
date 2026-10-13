@@ -77,9 +77,12 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   plan tags and plan squad questions carry a note guid and card number, and
   each reader's Anki reads its own copy.
 - Settings that belong to a person (`account.ACCOUNT_KEYS`) live on the
-  server; an install pulls before it uploads (`account.ensure()`), and the
-  newest save wins. Theme, sort, tab, hidden tabs and the room chip's side
-  stay per computer.
+  server; an install pulls before it uploads (`account.ensure()`). Since
+  3.8.1 a save names the rev it started from; one made over an older rev
+  comes back with the doc as it is, and the two merge (`account.merge3`:
+  each side's own changes, lists item by item, both: the save being made
+  now). Theme, sort, tab, hidden tabs and the room chip's side stay per
+  computer.
 - Plans (`docs/plans.md` is how they work now: the doc, a follow,
   plans.json, the morning, the limits): the plan says what and by when; my follow (shift, skips, moves,
   pause, catch-up, and since 3.8.0 `own`, my own pace) says when for me

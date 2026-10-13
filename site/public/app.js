@@ -524,10 +524,20 @@ async function newPlan() {
 async function squadToSettings(sq) {
   let doc = null;
   try { doc = await api("GET", "/settings"); } catch (err) { if (err.status !== 404) return; }
-  const set = { ...(doc?.settings || {}) };
-  const list = Array.isArray(set.squads) ? set.squads.filter((q) => q && q.id !== sq.id) : [];
-  set.squads = [...list, { id: sq.id, code: sq.code, name: sq.name, founder: sq.founder }];
-  await api("PUT", "/settings", { v: doc?.v || 1, at: new Date().toISOString(), settings: set }).catch(() => {});
+  // 3.8.1 (#2): over the rev it read; a save from elsewhere meanwhile comes back
+  // with the doc as it is now, and the squad goes onto that instead (once)
+  for (let tries = 0; tries < 2; tries++) {
+    const set = { ...(doc?.settings || {}) };
+    const list = Array.isArray(set.squads) ? set.squads.filter((q) => q && q.id !== sq.id) : [];
+    set.squads = [...list, { id: sq.id, code: sq.code, name: sq.name, founder: sq.founder }];
+    try {
+      await api("PUT", "/settings", { v: doc?.v || 1, at: new Date().toISOString(), settings: set, base: doc?.rev ?? 0 });
+      return;
+    } catch (err) {
+      if (err.status !== 409 || !err.body?.settings) return;
+      doc = err.body;
+    }
+  }
 }
 
 /** 3.4 review, H1: any code someone sent: a friend's (6), a plan's or a

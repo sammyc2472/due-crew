@@ -350,9 +350,9 @@ def _now():
 
 
 class Bad(Exception):
-    def __init__(self, status, code):
+    def __init__(self, status, code, extra=None):
         super().__init__(code)
-        self.status, self.code = status, code
+        self.status, self.code, self.extra = status, code, extra or {}  # extra: as the Worker's HttpError
 
 
 class FakeWorker:
@@ -455,7 +455,7 @@ class FakeWorker:
             status, body = self._route(method, route, dict(p.split("=", 1) for p in query.split("&") if "=" in p),
                                        auth, json_body)
         except Bad as e:
-            status, body = e.status, {"error": e.code}
+            status, body = e.status, {"error": e.code, **e.extra}
         self.log.append((method, route, status))
         return FakeResponse(status, body)
 
@@ -494,8 +494,7 @@ class FakeWorker:
                 raise Bad(404, "no_settings")
             return 200, dict(self.settings[me])
         if m == ("PUT", "settings"):
-            self._put_settings(me, body)
-            return 200, {"ok": True}
+            return self._put_settings(me, body, conditional=True)
         if m == ("GET", "users") and len(parts) == 2:
             u = self.users.get(parts[1])
             if not u or not self._connected(me, parts[1]):  # 3.7.1, D5
@@ -552,6 +551,7 @@ class FakeWorker:
             if doc:
                 doc["settings"] = dict(doc["settings"], due_items=[], due_ticks={})
                 doc["at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                doc["rev"] = doc.get("rev", 0) + 1  # 3.8.1
             return 200, {"ok": True}
         if m == ("GET", "log"):
             return 200, {"days": dict(self.logs.get(me) or {})}
@@ -942,11 +942,26 @@ class FakeWorker:
                 out[g] = {"knows": knows, "tips": tips}
         return out
 
-    def _put_settings(self, me, doc):
-        if not isinstance(doc, dict) or set(doc) != {"v", "at", "settings"} or not isinstance(doc["settings"], dict):
+    def _put_settings(self, me, doc, conditional=False):
+        """board.ts putSettings. 3.8.1 (the audit, #2): each save that writes moves
+        `rev`; a PUT naming the rev it started from (`base`) is turned away with
+        the current doc (409 conflict) when someone saved since. A sync's
+        settings, and a PUT without base, win as before."""
+        keys = {"v", "at", "settings"} | ({"base"} if conditional else set())
+        if not isinstance(doc, dict) or not {"v", "at", "settings"} <= set(doc) <= keys or not isinstance(doc["settings"], dict):
             raise Bad(400, "bad_settings")
-        self.settings[me] = {"v": doc["v"], "at": doc["at"], "settings": doc["settings"]}
-        self._count("settings")
+        base = doc.get("base")
+        if "base" in doc and (not isinstance(base, int) or isinstance(base, bool) or base < 0):
+            raise Bad(400, "bad_settings")
+        have = self.settings.get(me)
+        same = have and (have["v"], have["at"], have["settings"]) == (doc["v"], doc["at"], doc["settings"])
+        if have and not same and base is not None and have.get("rev", 0) != base:
+            raise Bad(409, "conflict", {**json.loads(json.dumps(have)), "rev": have.get("rev", 0)})
+        if not same:
+            rev = (have or {}).get("rev", 0) + 1
+            self.settings[me] = {"v": doc["v"], "at": doc["at"], "settings": doc["settings"], "rev": rev}
+            self._count("settings")
+        return 200, {"ok": True, "rev": self.settings[me].get("rev", 0)}
 
     # -- people ------------------------------------------------------------
     def _friends(self, method, me, rest, body):

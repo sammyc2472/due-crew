@@ -121,6 +121,11 @@ check("squad: rows read back", r["reviews"] == 205 and r["new_cards"] == 20 and 
 check("squad: block", sam.block_member(sq["id"], dre.user_id) and dre.join_squad(sq["id"], sq["code"]) == 403)
 check("settings: put, get", sam.put_settings("2026-09-26T10:00:00Z", {"share_time": False})
       and sam.get_settings()[0]["settings"] == {"share_time": False})
+_doc = sam.get_settings()[0]
+_r1 = sam.put_settings("2026-09-26T10:01:00Z", {"share_time": True}, base=_doc["rev"])
+_r2 = sam.put_settings("2026-09-26T10:02:00Z", {"share_time": False}, base=_doc["rev"])
+check("settings (3.8.1): a save names its rev; one over an older rev comes back with the doc to merge",
+      _r1 and _r1.rev == _doc["rev"] + 1 and _r2.status == 409 and (_r2.conflict or {}).get("settings") == {"share_time": True})
 check("version: current", sam.check_version(labels[0], "3.1.0") is False)
 sam.session.pop("version_check", None)
 check("version: 3.0.x is behind (it can't send a squad's code)", sam.check_version(labels[0], "3.0.9") is True)

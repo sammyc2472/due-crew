@@ -147,3 +147,49 @@ describe("reports, kept for the admin (audit #4)", () => {
     expect(await db().prepare("SELECT COUNT(*) AS n FROM reports").first("n")).toBe(0);
   });
 });
+
+describe("settings revisions (audit #2)", () => {
+  const put = (p: { call: Function }, body: unknown) => (p.call as any)("PUT", "/settings", body);
+
+  it("a save names the rev it started from; someone saved since: 409 with the current doc, nothing written", async () => {
+    const sam = await person("sam");
+    const first = await put(sam, { v: 1, at: "2026-10-13T10:00:00Z", settings: { paused: true }, base: 0 });
+    expect(first.body).toEqual({ ok: true, rev: 1 });
+    expect((await sam.call("GET", "/settings")).body).toEqual({ v: 1, at: "2026-10-13T10:00:00Z", settings: { paused: true }, rev: 1 });
+    // the laptop saves over rev 1
+    expect((await put(sam, { v: 1, at: "2026-10-13T10:05:00Z", settings: { paused: true, muted: ["dre"] }, base: 1 })).body.rev).toBe(2);
+    // the desktop, still on rev 1, saves an older picture of everything: turned away, told what's there
+    const late = await put(sam, { v: 1, at: "2026-10-13T10:06:00Z", settings: { paused: false }, base: 1 });
+    expect(late.status).toBe(409);
+    expect(late.body).toEqual({ error: "conflict", v: 1, at: "2026-10-13T10:05:00Z", settings: { paused: true, muted: ["dre"] }, rev: 2 });
+    expect((await sam.call("GET", "/settings")).body.settings).toEqual({ paused: true, muted: ["dre"] });
+    // the merged save, over rev 2
+    expect((await put(sam, { v: 1, at: "2026-10-13T10:07:00Z", settings: { paused: false, muted: ["dre"] }, base: 2 })).body.rev).toBe(3);
+  });
+
+  it("the same save again is no conflict; a save without base wins as it always did (older add-ons, a sync)", async () => {
+    const sam = await person("sam");
+    const doc = { v: 1, at: "2026-10-13T10:00:00Z", settings: { paused: true } };
+    await put(sam, { ...doc, base: 0 });
+    expect((await put(sam, { ...doc, base: 0 })).body).toEqual({ ok: true, rev: 1 });  // a retry of the same save
+    expect((await put(sam, { v: 1, at: "2026-10-13T09:00:00Z", settings: { paused: false } })).body).toEqual({ ok: true, rev: 2 });
+    await sam.call("POST", "/sync", { settings: { v: 1, at: "2026-10-13T11:00:00Z", settings: { paused: true } } });
+    expect((await sam.call("GET", "/settings")).body.rev).toBe(3);
+  });
+
+  it("Delete my to-dos moves rev too, so an Anki holding the old ones merges rather than puts them back", async () => {
+    const sam = await person("sam");
+    await put(sam, { v: 1, at: "2026-10-13T10:00:00Z", settings: { due_items: [{ id: "abcd", t: "x" }] }, base: 0 });
+    await sam.call("DELETE", "/account/todos");
+    const got = (await sam.call("GET", "/settings")).body;
+    expect(got.rev).toBe(2);
+    expect((await put(sam, { v: 1, at: "2026-10-13T12:00:00Z", settings: { due_items: [{ id: "abcd", t: "x" }] }, base: 1 })).status).toBe(409);
+  });
+
+  it("base is a whole number or nothing", async () => {
+    const sam = await person("sam");
+    for (const base of [-1, "1", 1.5, null]) {
+      expect((await put(sam, { v: 1, at: "2026-10-13T10:00:00Z", settings: {}, base })).status, String(base)).toBe(400);
+    }
+  });
+});

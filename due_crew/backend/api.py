@@ -86,6 +86,22 @@ def _with_kept_docs(plans, kept):
     return out
 
 
+class Saved:
+    """put_settings's answer: true when it saved. `rev`, the server's rev now
+    (None from a Worker before 3.8.1); `conflict`, the doc someone saved
+    since this save started ({v, at, settings, rev}), or None."""
+
+    def __init__(self, status, data):
+        self.status = status
+        data = data if isinstance(data, dict) else {}
+        rev = data.get("rev")
+        self.rev = rev if isinstance(rev, int) and not isinstance(rev, bool) else None
+        self.conflict = data if status == 409 and isinstance(data.get("settings"), dict) else None
+
+    def __bool__(self):
+        return self.status == 200
+
+
 class ApiClient:
     def __init__(self, session_file, base=None):
         self.session_file = session_file
@@ -699,13 +715,23 @@ class ApiClient:
         return {str(k): int(v) for k, v in got.items() if str(k).isdigit() and isinstance(v, int) and v >= 0}
 
     def get_settings(self):
-        """(doc, status): {v, at, settings}; 404 when there's none yet."""
+        """(doc, status): {v, at, settings, rev}; 404 when there's none yet."""
         status, data = self._call("GET", "/settings")
         return (data if status == 200 else None), status
 
-    def put_settings(self, at, settings):
-        status, _ = self._call("PUT", "/settings", {"v": 1, "at": at, "settings": settings})
-        return status == 200
+    def put_settings(self, at, settings, base=None):
+        """A Saved: true when it saved. 3.8.1 (the audit, #2): `base`, the rev
+        this save started from; someone saved since, it's turned away with
+        their doc (`conflict`) to merge with. A Worker before 3.8.1 refuses
+        `base` (400): the save goes again without it, as before."""
+        body = {"v": 1, "at": at, "settings": settings}
+        if base is not None:
+            body["base"] = int(base)
+        status, data = self._call("PUT", "/settings", body)
+        if status == 400 and base is not None:
+            del body["base"]
+            status, data = self._call("PUT", "/settings", body)
+        return Saved(status, data)
 
     # ---- friends and codes ----
 

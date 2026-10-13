@@ -494,7 +494,7 @@ _RUNTIME = r"""
         if (!ended) { ended = true; send('roombreakend'); }
         return;
       }
-      rg4.set(p.left / p.total, mmss(p.left), true);
+      rg4.set(1 - p.left / p.total, mmss(p.left), true);  // fills as the break passes, as every ring does
       h.textContent = 'Round ' + p.round + ' done. Break.';
       var others = D.names.filter(function (n) { return n !== 'you'; });
       p1.textContent = (others.length ? others.join(' and ') + (others.length > 1 ? ' are' : ' is') + ' on the same break. ' : '') +
@@ -533,7 +533,7 @@ _RUNTIME = r"""
       });
     }, 0);
     update = function (p) {
-      rg5.set(p.state === 'before' ? 0 : p.state === 'break' ? p.left / p.total : 1 - p.left / p.total,
+      rg5.set(p.state === 'before' ? 0 : 1 - p.left / p.total,
               p.state === 'before' ? '·' : String(mins(p.left)), p.state === 'break');
       k2.textContent = p.state === 'before' ? 'Starts at ' + hm(D.start) + ' · ' + D.rounds + ' rounds' :
         p.state === 'break' ? 'Break · round ' + (p.round + 1) + ' at ' + hm(p.until) :
@@ -639,7 +639,9 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None):
             sub, label, frac = f"Starts at {_clock(start)} · {my_room['rounds']} rounds of {my_room['round']} min", "·", 0.0
         elif p["state"] == "break":
             sub = f"Break · round {p['round'] + 1} starts at {_clock(p['until'])}"
-            label, frac = str(max(1, int(-(-p['left'] // 60)))), p["left"] / p["total"]
+            # 3.8.1: every ring fills as its time passes, a break's too (the top bar's
+            # chip did, this one drained: two directions on one screen); the number is what's left
+            label, frac = str(max(1, int(-(-p['left'] // 60)))), 1 - p["left"] / p["total"]
         else:
             nxt = (f", then a {my_room['brk']}-min break" if p["round"] < my_room["rounds"] and my_room["brk"] else "")
             sub = (f"Round {p['round']} of {my_room['rounds']} · {max(1, int(-(-p['left'] // 60)))} min left{nxt}"

@@ -1783,6 +1783,12 @@ def test_study_rooms_v212():
           view["mine"]["title"] == "Dre\u2019s room" and view["mine"]["label"] == "19"
           and view["mine"]["bars"][0] == 1.0 and 0 < view["mine"]["bars"][1] < 1
           and view["mine"]["initials"] == ["D", "A", "S"] and view["invites"] == [])
+    brk = rm.board_view(room, entries, now=at(26))["mine"]
+    import re as _re
+    with open(rm.__file__) as fh:
+        drains = _re.findall(r"(?<!1 - )p\.left / p\.total", fh.read())
+    check("rooms (3.8.1): a break's ring fills as it passes, as every ring does, on the board and in each widget; the number is what's left",
+          brk["brk"] and brk["frac"] == 0.2 and brk["label"] == "4" and drains == [], str((brk["frac"], drains)))
     html = board.room_html(view)
     check("lobby html: names escaped, Study and Leave",
           "Dre <K>" not in html and "roomstudy" in html and "roomleave" in html)
@@ -3242,6 +3248,101 @@ def test_plans_buried_siblings():
         {"id": "u", "name": "Cloze", "opens": _day(-1), "cards": [["guid000050", o] for o in range(5)]}]}}
     v2 = F.session_view(plan2, {"deck_id": 10}, idx, {5: 1}, _day(0))
     check("siblings: a day whose note started then, its buried sibling with it, isn't missed", _day(-1) not in v2["missed"], v2["missed"])
+
+
+def test_settings_merge_v381():
+    """3.8.1, the audit (#2): a settings save replaced the whole doc, so two
+    computers saving close together lost one side's change. A save now names
+    the rev it started from; turned away, the add-on merges (merge3) and saves
+    the merge. Keys one side changed take that side's; lists merge item by
+    item; anything both changed takes the save being made now."""
+    from due_crew import account, app as appmod
+    from due_crew.app import _state
+    m = account.merge3
+    check("merge: each side's own change kept",
+          m({"paused": False, "muted": []}, {"paused": True, "muted": []}, {"paused": False, "muted": ["dre"]})
+          == {"paused": True, "muted": ["dre"]})
+    check("merge: a list both changed: both additions, in theirs' order then mine",
+          m({"muted": ["a"]}, {"muted": ["a", "b"]}, {"muted": ["a", "c"]}) == {"muted": ["a", "c", "b"]})
+    check("merge: one side took an item off, the other added: off stays off, the new one stays",
+          m({"muted": ["a", "b"]}, {"muted": ["b"]}, {"muted": ["a", "b", "c"]}) == {"muted": ["b", "c"]})
+    x = {"id": "aaaa", "t": "Read ch 3", "d": "", "done": "", "at": ""}
+    y = {"id": "bbbb", "t": "Quiz", "d": "", "done": "", "at": ""}
+    ticked = dict(x, done="2026-10-13")
+    check("merge: to-dos item by item: theirs ticked one, mine added one",
+          m({"due_items": [x]}, {"due_items": [x, y]}, {"due_items": [ticked]}) == {"due_items": [ticked, y]})
+    check("merge: Delete my to-dos elsewhere, a new one here: the old go, the new one stays",
+          m({"due_items": [x]}, {"due_items": [x, y]}, {"due_items": []}) == {"due_items": [y]})
+    check("merge: ticks day by day",
+          m({"due_ticks": {"p:u:1": "2026-10-12"}}, {"due_ticks": {"p:u:1": "2026-10-12", "p:u:2": "2026-10-13"}},
+            {"due_ticks": {"p:u:3": "2026-10-13"}}) == {"due_ticks": {"p:u:3": "2026-10-13", "p:u:2": "2026-10-13"}})
+    check("merge: a status both changed takes mine (the save being made now); squads by id",
+          m({"status": "a", "squads": [{"id": "s1"}]}, {"status": "b", "squads": [{"id": "s1"}, {"id": "s2"}]},
+            {"status": "c", "squads": [{"id": "s3"}]}) == {"status": "b", "squads": [{"id": "s3"}, {"id": "s2"}]})
+
+    # two computers on one account, saving close together
+    saved = (account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col)
+
+    def _bg(job, done=None):
+        r = job()
+        if done:
+            done(r)
+    store = world({"sam": "Sammy"}, {})
+    a, b = new_client(store, "sam", "Sammy"), new_client(store, "sam", "Sammy")
+    boxes = {"a": {"paused": False, "muted": [], "status": ""}, "b": {"paused": False, "muted": [], "status": ""}}
+    who = {"now": "a"}
+    clients = {"a": a, "b": b}
+    try:
+        appmod._bg, appmod.swap, account.mw.col = _bg, None, None
+        account.cfg = lambda: dict(boxes[who["now"]])
+        account.client = lambda: clients[who["now"]]
+        appmod.save_cfg = lambda c, from_account=False: boxes[who["now"]].update(c)
+
+        def as_(k):
+            who["now"] = k
+            _state.update(settings_ready=True, settings_pulling=False)
+        as_("a")
+        account.push(boxes["a"])  # the account's first save
+        for k in ("a", "b"):
+            as_(k)
+            clients[k].session["settings_day"] = ""
+            _state.update(settings_ready=False)
+            account.ensure()
+        check("two computers: both start from the same save", a.session.get("settings_rev") == b.session.get("settings_rev") == 1,
+              str((a.session.get("settings_rev"), b.session.get("settings_rev"))))
+        as_("a")
+        boxes["a"]["muted"] = ["dre"]
+        account.on_change(boxes["a"])
+        as_("b")
+        boxes["b"]["paused"] = True
+        account.on_change(boxes["b"])  # over rev 1, which a has moved on from: turned away, merged, saved
+        kept = store.settings["sam"]
+        check("two computers: the second save keeps the first's change (it used to replace it)",
+              kept["settings"].get("muted") == ["dre"] and kept["settings"].get("paused") is True and kept["rev"] == 3, str(kept))
+        check("two computers: the merge is in this computer's config too, and nothing waits",
+              boxes["b"]["muted"] == ["dre"] and not b.session.get("settings_dirty") and b.session.get("settings_rev") == 3)
+        as_("a")
+        a.session["settings_day"] = ""
+        _state.update(settings_ready=False)
+        account.ensure()
+        check("two computers: the first takes the merged save at its next pull", boxes["a"]["paused"] is True and boxes["a"]["muted"] == ["dre"])
+        # a save that comes back turned away more than MERGES times stops and waits for a pull
+        n = {"puts": 0}
+        real_put = a.put_settings
+
+        def stubborn(at, settings, base=None):
+            n["puts"] += 1
+            from due_crew.backend.api import Saved
+            return Saved(409, {"error": "conflict", "v": 1, "at": "x", "settings": {"status": "elsewhere"}, "rev": 99})
+        a.put_settings = stubborn
+        boxes["a"]["status"] = "here"
+        account.on_change(boxes["a"])
+        a.put_settings = real_put
+        check("merge: turned away again and again, it stops after a few and the next pull sorts it out",
+              n["puts"] == account.MERGES + 1, str(n))
+    finally:
+        account.cfg, account.client, appmod.save_cfg, appmod._bg, appmod.swap, account.mw.col = saved
+        _state.update(settings_ready=False, settings_pulling=False)
 
 
 def test_bug_squash_oct():

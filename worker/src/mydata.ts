@@ -120,6 +120,6 @@ export async function deleteTodos(s: Session, env: Env): Promise<Response> {
   doc.due_ticks = {};
   // the add-on's own timestamp shape (microseconds), so newest-wins compares
   const at = new Date().toISOString().replace("Z", "000Z");
-  await env.DB.prepare("UPDATE settings SET at = ?, json = ? WHERE uid = ?").bind(at, JSON.stringify(doc), s.uid).run();
+  await env.DB.prepare("UPDATE settings SET at = ?, json = ?, rev = rev + 1 WHERE uid = ?").bind(at, JSON.stringify(doc), s.uid).run();  // rev: 3.8.1
   return json({ ok: true, at });
 }

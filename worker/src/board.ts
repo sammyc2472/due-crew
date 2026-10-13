@@ -209,7 +209,8 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
   const weekDoc = "week" in body ? V.week(body.week) : null;
   const decks = "decks" in body ? JSON.stringify(V.decks(body.decks)) : null;
   const heat = "heatmap" in body ? (body.heatmap === null ? null : JSON.stringify(V.heatmap(body.heatmap))) : undefined;
-  const settings = "settings" in body ? V.settingsDoc(body.settings) : null;
+  // a sync's settings win as they always did (3.8.1's base is PUT /settings's)
+  const settings = "settings" in body ? { ...V.settingsDoc(body.settings), base: undefined } : null;
   const planProgress = "plans" in body ? P.progressPart(body.plans) : null;  // 3.1
   const knows = "knows" in body ? C.knowsPart(body.knows) : null;           // 3.2
   const stuck = "stuck" in body ? C.stuckPart(body.stuck) : null;
@@ -363,23 +364,37 @@ export async function sync(req: Request, s: Session, env: Env): Promise<Response
 
 // ---- settings (2.13): mine only ----
 
-function putSettingsStmt(env: Env, uid: string, s: { v: number; at: string; json: string }) {
-  // the same save again writes nothing (3.7.2)
+function putSettingsStmt(env: Env, uid: string, s: { v: number; at: string; json: string; base?: number }) {
+  // the same save again writes nothing (3.7.2); each save that writes moves rev (3.8.1).
+  // With `base`, only over the rev it started from: someone saved since, it writes nothing
   return env.DB.prepare(
-    `INSERT INTO settings (uid, v, at, json) VALUES (?, ?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json
-       WHERE NOT (v IS excluded.v AND at IS excluded.at AND json IS excluded.json)`,
-  ).bind(uid, s.v, s.at, s.json);
+    `INSERT INTO settings (uid, v, at, json, rev) VALUES (?1, ?2, ?3, ?4, 1)
+     ON CONFLICT(uid) DO UPDATE SET v = excluded.v, at = excluded.at, json = excluded.json, rev = settings.rev + 1
+       WHERE NOT (settings.v IS excluded.v AND settings.at IS excluded.at AND settings.json IS excluded.json)
+         AND (?5 IS NULL OR settings.rev = ?5)`,
+  ).bind(uid, s.v, s.at, s.json, s.base ?? null);
 }
+
+type SettingsRow = { v: number; at: string; json: string; rev: number };
+const docOf = (row: SettingsRow) => ({ v: row.v, at: row.at, settings: JSON.parse(row.json), rev: row.rev });
 
 export async function getSettings(s: Session, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT v, at, json FROM settings WHERE uid = ?").bind(s.uid)
-    .first<{ v: number; at: string; json: string }>();
+  const row = await env.DB.prepare("SELECT v, at, json, rev FROM settings WHERE uid = ?").bind(s.uid).first<SettingsRow>();
   if (!row) throw new HttpError(404, "no_settings");
-  return json({ v: row.v, at: row.at, settings: JSON.parse(row.json) });
+  return json(docOf(row));
 }
 
+/** PUT /settings {v, at, settings, base?}: 3.8.1 (the audit, #2), with `base` (the rev
+ *  the client last saw): written only if nobody saved since; else 409 `conflict` with
+ *  the current doc ({v, at, settings, rev}), for the client to merge and save over.
+ *  The same doc again is no conflict. Without `base` (older add-ons), the save wins. */
 export async function putSettings(req: Request, s: Session, env: Env): Promise<Response> {
-  await putSettingsStmt(env, s.uid, V.settingsDoc(await readJson(req))).run();
-  return json({ ok: true });
+  const doc = V.settingsDoc(await readJson(req));
+  const r = await putSettingsStmt(env, s.uid, doc).run();
+  const row = await env.DB.prepare("SELECT v, at, json, rev FROM settings WHERE uid = ?").bind(s.uid).first<SettingsRow>();
+  if (!r.meta.changes && row && doc.base !== undefined && row.rev !== doc.base
+      && !(row.v === doc.v && row.at === doc.at && row.json === doc.json)) {
+    throw new HttpError(409, "conflict", docOf(row));
+  }
+  return json({ ok: true, rev: row?.rev ?? 0 });
 }

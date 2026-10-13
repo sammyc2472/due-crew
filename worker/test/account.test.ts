@@ -18,7 +18,7 @@ describe("delete account", () => {
       db().prepare("INSERT INTO weeks VALUES (?, '{}', ?), (?, '{}', ?)").bind(sam.uid, t, dre.uid, t),
       db().prepare("INSERT INTO decks VALUES (?, '[]')").bind(sam.uid),
       db().prepare("INSERT INTO heatmaps VALUES (?, '{}')").bind(sam.uid),
-      db().prepare("INSERT INTO settings VALUES (?, 1, 'x', '{}')").bind(sam.uid),
+      db().prepare("INSERT INTO settings (uid, v, at, json) VALUES (?, 1, 'x', '{}')").bind(sam.uid),
       db().prepare("INSERT INTO codes VALUES ('SAM123', ?), ('DRE123', ?)").bind(sam.uid, dre.uid),
       db().prepare("INSERT INTO cheers (to_uid, from_uid, emoji, at) VALUES (?, ?, '🎉', ?), (?, ?, '🎉', ?)")
         .bind(sam.uid, dre.uid, t, dre.uid, sam.uid, t),

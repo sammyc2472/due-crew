@@ -272,7 +272,7 @@ describe("my settings follow me (2.13): one doc, mine only", () => {
   it("settings", async () => {
     const mine = { v: 1, at: "2026-09-24T10:00:00Z", settings: { share_retention: false, status: "hi" } };
     expect(await bob.status("PUT", "/settings", mine), "settings: I save mine").toBe(200);
-    expect((await bob.call("GET", "/settings")).body, "settings: I read mine").toEqual(mine);
+    expect((await bob.call("GET", "/settings")).body, "settings: I read mine").toEqual({ ...mine, rev: 1 });  // rev: 3.8.1
     expect(await alice.status("GET", "/settings"), "settings: a friend can't read them (GET /settings is always the caller's)").toBe(404);
     await carol.call("PUT", "/settings", { ...mine, settings: { status: "carol's" } });
     expect((await bob.call("GET", "/settings")).body.settings.status, "settings: nobody else can write them").toBe("hi");
