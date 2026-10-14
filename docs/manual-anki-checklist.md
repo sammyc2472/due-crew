@@ -669,6 +669,7 @@ In Anki (as a follower):
 
 - [ ] Squads › a squad: each person's Pip where the emoji was; yours in your look (it opens the closet), a crewmate's in their colour and look, everyone else a plain green Pip. Settings › Pip off: the emojis come back.
 - [ ] Squads › a plan's squad: the faces under Showed up today are Pips, and so is whoever asked a question. duecrew.com's Squads the same.
+- [ ] A crew study room: the top bar's chip shows each person's Pip where the initials were (yours in your look, a crewmate's in theirs); with five or more, four and +N. On the review screen, the margin card beside a narrow card and the room's break show everyone's Pips, no hat touching the line above. Settings › Pip off: the initials come back. A Fifteen's chip is as before.
 
 ### 3.8.2: Pip's closet
 

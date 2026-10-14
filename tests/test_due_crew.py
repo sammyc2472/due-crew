@@ -12393,7 +12393,8 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
     js = rm.widget_js("card", on)
     check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
-          "seats(40) : faces(c, 24)" in js and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
+          "who.appendChild(people(c, 24));" in js and "Math.round(size / (D.slot || [0.6])[0]), f = seats(s, most)" in js
+          and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
           and "v.setAttribute('aria-label', s.n)" in js and round(40 * sev.SLOT[0]) == 24)
     off = rm.widget_data(room, ents, mine, sev=False)
     fif = rm.widget_data(rm.make_fifteen("sam", datetime.datetime.now(utc)), ents, mine)
@@ -13177,6 +13178,89 @@ def test_squad_pips_v3821():
           and 'squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name)' in app_js
           and "pip: (x) => squadPip(x, pips)" in app_js and "new Map(people.map((p) => [p.uid, p]))" in app_js
           and "pipOf(f) || face(f.emoji, f.name)" in builder_js and "[pipOf(x) || (x.emoji" in builder_js)
+
+
+def test_room_widget_pips_v3821():
+    """3.8.21 (Sam: "no pips here either!"): a crew room's people are their
+    Pips in every widget that showed their initials: the top bar's chip (four,
+    then +N), the margin card and the break (a crowd wraps, hats clear the line
+    above), as on the room's card. Pip off: the initials, as before. The
+    widgets run in node on a small fake page; skipped without node."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm, sev
+    utc = datetime.timezone.utc
+    now = datetime.datetime.now(utc)
+    js_of = lambda kind: rm.widget_js(kind, rm.widget_data(rm.make_room("sam", now), [], ("#2e7d32", "#7cc47f")))
+    check("every crew room widget draws its people one way (Pips, or the initials with Pip off), at the faces' size",
+          "fc = people(c, 18, 4);" in js_of("chip") and "root.appendChild(people(c, 26, 0, true));" in js_of("gutter")
+          and "box.appendChild(people(c, 32, 0, true));" in js_of("break") and "who.appendChild(people(c, 24));" in js_of("card")
+          and "faces(c, " not in rm._RUNTIME.replace("return faces(c, size);", "").replace("function faces(c, size)", ""))
+    node = shutil.which("node")
+    if not node:
+        print("SKIP room widget Pips: no node")
+        return
+    names = [("sam", "Sammy", True), ("lu", "Lu <b>", False), ("dre", "Dre", False),
+             ("ana", "Ana", False), ("kai", "Kai", False), ("nia", "Nia", False)]
+
+    def ents(room, n):
+        return [{"user_id": u, "name": nm, "you": y, "accent": "blue", "look": ["cap"] if u == "lu" else [], "room": room}
+                for u, nm, y in names[:n]]
+    before = rm.make_room("sam", now + datetime.timedelta(minutes=20))
+    fif = rm.make_fifteen("sam", now - datetime.timedelta(minutes=3))
+    cases = [(kind, n, pip, before) for kind in ("chip", "gutter", "break", "card") for n, pip in ((2, True), (6, True), (2, False))]
+    cases.append(("chip", 1, True, fif))
+    progs = [rm.widget_js(kind, rm.widget_data(room, ents(room, n), board.accent_pair("green"), sev=pip))
+             for kind, n, pip, room in cases]
+    dom = r"""
+class Sty { constructor() { this.cssText = ''; } setProperty(k, v) { this[k] = v; } }
+class E {
+  constructor(tag) { this.tag = tag; this.kids = []; this.style = new Sty(); this.textContent = ''; this.title = ''; }
+  appendChild(k) { this.kids.push(k); k.parentNode = this; return k; }
+  set innerHTML(h) { this.html = h; this.kids = []; const m = /^<([a-z]+)/.exec(h); if (m) { this.kids.push(new E(m[1])); } }
+  get firstChild() { return this.kids[0] || null; }
+  setAttribute(k, v) { this[k] = v; } querySelectorAll() { return []; } addEventListener() {} remove() {}
+}
+const body = new E('body'); body.className = '';
+globalThis.window = globalThis; window.addEventListener = () => {};
+globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), getElementById: () => null,
+  querySelector: () => null, documentElement: { classList: { contains: () => false } } };
+globalThis.setInterval = () => 0; globalThis.pycmd = () => {};
+const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
+"""
+    out = []
+    for prog in progs:
+        run = subprocess.run([node, "-e", dom + prog + r"""
+const all = walk(body, []);
+const pips = all.filter((e) => e.style['--sv-d'] !== undefined);
+console.log(JSON.stringify({
+  pips: pips.map((e) => e.title), slot: pips.length ? /width:(\d+)px/.exec(pips[0].style.cssText)[1] : null,
+  initials: all.filter((e) => e.tag === 'i' && /border-radius:50%/.test(e.style.cssText)).map((e) => e.textContent),
+  more: all.filter((e) => e.tag === 'small' && /^\+/.test(e.textContent)).map((e) => e.textContent),
+  row: pips.length ? pips[0].parentNode.style.cssText : '' }));"""], capture_output=True, text=True, timeout=60)
+        try:
+            out.append(json.loads(run.stdout))
+        except ValueError:
+            out.append({"error": run.stdout[-300:] + run.stderr[-1500:]})
+    got = {(kind, n, pip, room is fif): o for (kind, n, pip, room), o in zip(cases, out)}
+    check("the widgets run in node", all("error" not in o for o in out), [o for o in out if "error" in o])
+    six = ["You", "Ana", "Dre", "Kai", "Lu <b>", "Nia"]
+    check("chip, Pip on: each person is their Pip, host first, a name only a label; four, then +2",
+          got[("chip", 2, True, False)]["pips"] == ["You", "Lu <b>"] and got[("chip", 2, True, False)]["more"] == []
+          and got[("chip", 6, True, False)]["pips"] == six[:4] and got[("chip", 6, True, False)]["more"] == ["+2"]
+          and got[("chip", 2, True, False)]["initials"] == [], got)
+    check("…each Pip's slot is the face it replaces (chip 18, margin card 26, break 32, room card 24)",
+          [got[(k, 2, True, False)]["slot"] for k in ("chip", "gutter", "break", "card")] == ["18", "26", "32", "24"]
+          and all(round(round(f / sev.SLOT[0]) * sev.SLOT[0]) == f for f in (18, 26, 32, 24)), got)
+    check("margin card and break: everyone (no +N), wrapping, with room above for a hat",
+          all(got[(k, 6, True, False)]["pips"] == six and got[(k, 6, True, False)]["more"] == []
+              and "flex-wrap:wrap" in got[(k, 6, True, False)]["row"] and "padding-top:" in got[(k, 6, True, False)]["row"]
+              for k in ("gutter", "break")), got)
+    check("Pip off: the initials, as before, in every widget",
+          all(got[(k, 2, False, False)]["pips"] == [] and got[(k, 2, False, False)]["initials"] == ["S", "L"]
+              for k in ("chip", "gutter", "break", "card")), got)
+    check("a fifteen's chip: its own Pip, no people", got[("chip", 1, True, True)]["pips"] == []
+          and got[("chip", 1, True, True)]["initials"] == [], got)
 
 
 def test_closet_flow_v382():

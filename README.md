@@ -24,7 +24,7 @@ screen, with your note.
 bar, breaks together. Each of you sits in the room as your own Pip, in
 your own colour.
 
-<img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
+<img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png?v=2" width="420">
 
 - **Stuck on a card?** Ask your crew. Anyone who has it down can send a
   tip, which shows next time the card comes up.

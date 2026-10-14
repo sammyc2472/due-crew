@@ -1752,4 +1752,13 @@ every release that changes how something works.
   squadmate who isn't a mutual friend shares a name and an emoji, nothing
   more, and that's all they get here too. Nothing new is asked of the
   server. Pip off, the emojis as before. The site the same (`squadPip` in
-  app.js's `Board`, `on.pip` into builder.js's `PlanSquad.view`).
+  app.js's `Board`, `on.pip` into builder.js's `PlanSquad.view`). And in a
+  study room (Sam, on the top bar's chip: "no pips here either!"): every
+  room widget that showed initials shows each person's Pip, in their colour
+  and look, as the room's card and the Decks lobby already did: the top
+  bar's chip (four, then +N, so it never crowds the bar), the margin card
+  beside the card and the break (everyone, wrapping, with room above for a
+  hat). One helper draws them (`people` in `room_model`'s widget runtime),
+  each Pip's slot the size of the face it replaces; the gap between them
+  grows with their size, so a held mug clears the next one. Pip off, the
+  initials as before. README's room picture re-rendered from the widget.
