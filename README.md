@@ -21,7 +21,8 @@ screen, with your note.
 <img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
-bar, breaks together.
+bar, breaks together. Each of you sits in the room as your own Sev, in
+your own colour.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
 
@@ -55,13 +56,21 @@ Above the board is yours.
   each week.
 - **Upcoming** is the next two weeks, and **Later** whatever has no day
   yet.
-- **Study today** goes through the day's decks, your plans' first, then
-  today's misses (Ctrl+Shift+S).
+- **Study today** goes through the day's decks, your plans' first
+  (Ctrl+Shift+S).
+- **Fifteen?** One click in Anki's top bar starts fifteen minutes of
+  Study today. At the end: take five, go again, or stop there. Your crew
+  sees you're studying. Not started by your usual time? Today nudges you.
 - **Insights**, for any deck: the cards Anki won't show you before your
   exam, what isn't sticking yet, your week in time, and a map of what you
   know, topic by topic. Click a topic to open its parts. It's worked out
   in your Anki and never sent; copy the map as a picture or as text if you
   want to share it.
+
+**Sev**, the square from the logo, keeps you company: heads down in a
+fifteen, breathing with you on a break, a hop when the day's done, a wave
+when you're back. It keeps still with Reduce motion on, and Settings
+turns it off.
 
 ## Study plans
 
@@ -111,9 +120,9 @@ Right-click a card, or a tag in the sidebar:
 
 ## Share
 
-Share your day, week, year or all time as a picture, made in Anki. Pick
-which numbers show, then copy or save it. It goes only where you paste
-it.
+Share your day, week, year or all time as a picture, made in Anki. Sev
+hops across your week. Pick which numbers show, then copy or save it. It
+goes only where you paste it.
 
 ## Install
 

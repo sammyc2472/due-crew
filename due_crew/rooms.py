@@ -82,12 +82,14 @@ def board_view():
         if mine["state"] == "ask":
             mine["cards"] = _cards_since(room_model.fifteen_round_start(room, room["rounds"]))
         pose = {"ask": "ring", "break": "stretch" if _brk_pose() == "stretch" else "rest"}.get(mine["state"], "focus")
-        mine["sev"] = _sev_markup(pose, rest=pose == "ring" and _state.get("sev_rang") == room["start"])
+        # its move takes turns a round at a time, as the widgets' do (room_model.FIFTEEN_VARY)
+        turn = sev.nth(pose, int(mine.get("n") or 0) + room_model.vary_seed(room))
+        mine["sev"] = _sev_markup(pose, rest=pose == "ring" and _state.get("sev_rang") == room["start"], move=turn)
         if pose == "ring":
             _state["sev_rang"] = room["start"]  # the clock rings once a fifteen
     fd = _fifteen_done()
     if fd:
-        out["fifteen_done"] = dict(fd, sev=_sev_markup("stack", stack=fd["n"], rest=bool(fd.get("seen"))))
+        out["fifteen_done"] = dict(fd, sev=_sev_markup("stack", stack=fd["n"], rest=bool(fd.get("seen")), move=fd.get("move")))
         if not fd.get("seen"):
             fd["seen"] = True  # its stack plays once
     return out
@@ -546,8 +548,24 @@ def _brk_pose():
     return "stretch" if cfg().get("sev_break") == "stretch" else "breathe"
 
 
-def _sev_markup(pose, rest=False, stack=None):
-    return sev.svg(pose, rest=rest, stack=stack) if sev_on() else None
+def _sev_markup(pose, rest=False, stack=None, move=None):
+    return sev.move(pose, move, rest=rest, stack=stack) if sev_on() else None
+
+
+def pick(place):
+    """3.8.1 (Sam: "variety!"): a move for Sev at `place` (sev.MOVES), never
+    the one it played there last time. Signed in, the last ones are kept
+    with the session, so a restart doesn't repeat one either."""
+    cl = client()
+    kept = cl.session.get("sev_last") if cl.signed_in else _state.get("sev_last")
+    last = {k: v for k, v in kept.items() if isinstance(v, str)} if isinstance(kept, dict) else {}
+    m = last[place] = sev.pick(place, last.get(place))
+    if cl.signed_in:
+        cl.session["sev_last"] = last
+        cl._save_session()
+    else:
+        _state["sev_last"] = last
+    return m
 
 
 def _cards_since(when):
@@ -671,7 +689,7 @@ def _end_fifteen(room, walked=False, closing=False):
         cl.session.pop("live_until", None)
     if n:
         cl.session["fifteen_done"] = {"n": n, "minutes": minutes, "cards": cards, "walked": bool(walked),
-                                      "day": _state["labels"][0] if _state["labels"] else ""}
+                                      "day": _state["labels"][0] if _state["labels"] else "", "move": pick("stack")}
     cl._save_session()
     for e in _state["entries"] or []:
         if e["you"]:
@@ -755,11 +773,42 @@ def nudge(c, v, dismissed=()):
 
 
 def nudge_sev():
-    """Sev peeking in at the nudge: it rises once a day, then stays put."""
+    """Sev peeking in at the nudge: it rises once a day, then stays put;
+    each day a different way in (sev.MOVES["peek"], in turn)."""
     day = str(_state["labels"][0] if _state.get("labels") else "")
     rest = _state.get("sev_peeked") == day
     _state["sev_peeked"] = day
-    return _sev_markup("peek", rest=rest)
+    return _sev_markup("peek", rest=rest, move=sev.nth("peek", datetime.date.today().toordinal()))
+
+
+def milestone_sevs(milestones):
+    """3.8.1 (Sam's pick): a crewmate's big-streak banner has Sev hopping in
+    its emoji's place, a move from the day done's mix (never the last one),
+    once a banner; drawn again, it rests there. {uid: markup}, or None."""
+    if not sev_on() or not milestones:
+        return None
+    played = _state.setdefault("sev_banner", {})
+    out = {}
+    for uid, _who, days in milestones:
+        key = (str(uid), int(days))
+        rest = key in played
+        if not rest:
+            played[key] = pick("hop")
+        out[uid] = sev.move("hop", played[key], rest=rest, label="Sev: a big streak")
+    return out
+
+
+def signed_out_sev():
+    """3.8.1 (Sam's pick): Sev waving on the signed-out card until you
+    start, a hello from its mix (never the last one) the first time it's
+    drawn while Anki's open; after that it rests there, and blinks."""
+    if not sev_on():
+        return None
+    turn = _state.get("sev_hello")
+    if turn is None:
+        _state["sev_hello"] = pick("hello")
+        return sev.move("hello", _state["sev_hello"])
+    return sev.move("hello", turn, rest=True)
 
 
 def board_sev(c, v):
@@ -787,8 +836,10 @@ def board_sev(c, v):
     key = (day, pose, int(cheer_at) if pose == "cheer" else 0)  # each cheer its own moment; the rest once a day
     shown = _state.setdefault("sev_shown", {})
     now = time.time()
-    first = shown.setdefault(key, now)
+    if key not in shown:
+        shown[key] = (now, pick(pose))  # its move, picked once a moment (never the last one there)
+    first, turn = shown[key]
     ago = now - first
     if ago >= sev.LOGO_SECONDS:
         return None
-    return {"svg": sev.svg(pose), "ago": round(ago, 2)}
+    return {"svg": sev.move(pose, turn), "ago": round(ago, 2)}

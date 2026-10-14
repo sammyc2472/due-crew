@@ -619,19 +619,18 @@ def empty(v):
 STUDY_STEPS = 30  # a walk never takes more steps than this
 
 
-def study_next(plan_decks, due_now, misses, misses_done):
-    """The walk's next step: ("deck", did) or ("misses", n) or None (done).
-    plan_decks: the decks of the plans I follow, in plan order; due_now:
-    {did: cards Anki would show now} for each of those and every top deck
-    (a deck's count takes in its subdecks', within its limits); misses: how
-    many I missed today. Plans' decks first, then the deck with the most
-    due, then today's misses once."""
+def study_next(plan_decks, due_now):
+    """The walk's next step: ("deck", did) or None (done). plan_decks: the
+    decks of the plans I follow, in plan order; due_now: {did: cards Anki
+    would show now} for each of those and every top deck (a deck's count
+    takes in its subdecks', within its limits). Plans' decks first, then
+    the deck with the most due. 3.8.1 (Sam): no "today's misses" step: it
+    built a filtered deck nobody asked for (a Fifteen starts the walk); the
+    Today box's suggestion is the way to it, a click that says so."""
     for did in plan_decks:
         if int(due_now.get(did) or 0) > 0:
             return ("deck", did)
     rest = [(n, did) for did, n in due_now.items() if did not in plan_decks and int(n or 0) > 0]
     if rest:
         return ("deck", max(rest, key=lambda x: (x[0], -int(x[1])))[1])
-    if misses and not misses_done:
-        return ("misses", int(misses))
     return None

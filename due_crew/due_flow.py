@@ -640,6 +640,9 @@ def go(key):
         cids = [int(x) for x in mw.col.db.list(
             "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)][:500]
         if cids and pf._filtered(mw.col, MISSES, cids):
+            c = pf._pcfg()
+            c["misses_day"] = pf._today()  # 3.8.1: the next morning empties it back if it's left
+            pf._psave(c)
             pf._after_change()
             did = mw.col.decks.id_for_name(MISSES)
             if did:
@@ -746,26 +749,21 @@ def _next_deck(tree):
     last name, for the button; from the tree _reviews already read."""
     try:
         plan = _plan_decks()
-        step = D.study_next(plan, _due_now(mw.col, set(plan), tree), 0, True)
+        step = D.study_next(plan, _due_now(mw.col, set(plan), tree))
         return str(mw.col.decks.name(int(step[1]))).split("::")[-1] if step else ""
     except Exception:
         traceback.print_exc()
         return ""
 
 
-def _misses_today(col):
-    start = (col.sched.day_cutoff - 86400) * 1000
-    return [int(x) for x in col.db.list("SELECT DISTINCT cid FROM revlog WHERE id >= ? AND ease = 1", start)]
-
-
 def study_today():
-    """Study today › (the box, its folded line, Ctrl+Shift+S): the walk
-    starts. Plans' decks first, then the deck with the most due, then
-    today's misses, each in Anki's own review; it goes on when a deck runs
-    out and ends when I leave the review."""
+    """Study today › (the box, its folded line, Ctrl+Shift+S, a Fifteen):
+    the walk starts. Plans' decks first, then the deck with the most due,
+    each in Anki's own review; it goes on when a deck runs out and ends
+    when I leave the review. It never builds a deck (3.8.1)."""
     if not mw.col:
         return
-    _state["study_walk"] = {"misses": False, "steps": 0}
+    _state["study_walk"] = {"steps": 0}
     study_step(first=True)
 
 
@@ -778,21 +776,9 @@ def study_step(first=False):
     if w["steps"] <= D.STUDY_STEPS:
         try:
             plan = _plan_decks()
-            misses = _misses_today(mw.col)
-            step = D.study_next(plan, _due_now(mw.col, set(plan)),
-                                len(misses) if len(misses) >= AGAIN_MIN else 0, w["misses"])
+            step = D.study_next(plan, _due_now(mw.col, set(plan)))
         except Exception:
             traceback.print_exc()
-    if step and step[0] == "misses":
-        w["misses"] = True
-        pf = _pf()
-        name = MISSES
-        if pf._filtered(mw.col, name, _misses_today(mw.col)[:500]):
-            pf._after_change()
-            did = mw.col.decks.id_for_name(name)
-            if did:
-                return _study_deck(did, first, "today's misses")
-        step = None
     if step:
         return _study_deck(step[1], first)
     _state["study_walk"] = None

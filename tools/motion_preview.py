@@ -106,10 +106,16 @@ S.update({
 })
 # 3.8.1: Sev by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
 from due_crew import sev as SV
-S.update({f"sev{k}": (base, R(due=DV_BASE, you=you("today"), sev={"svg": SV.svg(k), "ago": 0}), None)
-          for k in ("hop", "cheer", "exam", "hello")})
-S["fifteendone"] = (base, R(due=DV_BASE, you=you("today"), room={"mine": None, "invites": [], "done": None, "fifteen_done": {
-    "n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": SV.svg("stack", stack=3)}}), None)
+# each of its moves (Sam: "variety!"): a different one each time it comes
+S.update({f"sev{k}{'' if m == SV.moves(k)[0] else '.' + m}": (base, R(due=DV_BASE, you=you("today"), sev={"svg": SV.move(k, m), "ago": 0}), None)
+          for k in ("hop", "cheer", "exam", "hello") for m in SV.moves(k)})
+S.update({f"fifteendone{'' if m == 'stack' else '.' + m}": (base, R(due=DV_BASE, you=you("today"), room={
+    "mine": None, "invites": [], "done": None, "fifteen_done": {"n": 3, "minutes": 45, "cards": 212, "walked": False,
+                                                                "sev": SV.move("stack", m, stack=3)}}), None)
+          for m in SV.moves("stack")})
+S.update({f"streak.{m}": (base, R(due=DV_BASE, you=you("today"), milestones=[("dre", "Dre", 100)],
+                                  milestone_sev={"dre": SV.move("hop", m, label="Sev: a big streak")}), None)
+          for m in SV.moves("hop")})
 out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js()) if b else "")
            + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
 NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for today", "add": "4 A to-do lands (today)",
@@ -125,7 +131,14 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
          "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck",
          "sevhop": "Sev: the day's done (a hop, the week's squares fly)", "sevcheer": "Sev: a cheer lands",
-         "sevexam": "Sev: exam eve", "sevhello": "Sev: back from away", "fifteendone": "Sev: the session's line (a square a fifteen)"}
+         "sevexam": "Sev: exam eve", "sevhello": "Sev: back from away", "fifteendone": "Sev: the session's line (a square a fifteen)",
+         "sevhop.twirl": "Sev: the day's done, a twirl", "sevhop.shuffle": "Sev: the day's done, a little dance",
+         "sevhop.jump": "Sev: the day's done, a big jump", "sevcheer.hug": "Sev: a cheer lands, hugs the gift",
+         "sevcheer.giftspin": "Sev: a cheer lands, spins with it", "sevexam.pep": "Sev: exam eve, a pep fist",
+         "sevhello.walkin": "Sev: back from away, walks in", "sevhello.popup": "Sev: back from away, up from below",
+         "fifteendone.wobble": "Sev: the session's line, the tower wobbles",
+         "fifteendone.catch": "Sev: the session's line, steps under them",
+         **{f"streak.{m}": f"Sev: a crewmate's 100-day streak ({m})" for m in SV.moves("hop")}}
 END, SAFE = "</", "<" + "\\" + "/"  # a script ends at </; inside one it is written <\\/
 init_js = B.keep_me_in_view_js().replace(END, SAFE)
 scen_js = json.dumps(out).replace(END, SAFE)

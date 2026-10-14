@@ -7819,14 +7819,21 @@ def test_tidy_filtered_v380():
                 self.d.pop(i, None)
 
     cards = {2: 3}
-    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, *a: cards.get(a[0], 0)))
-    pc = {"built": [3, 2, 8, 77, "x"]}
-    saved = (F._pcfg, F._psave)
+    emptied = []
+    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, *a: cards.get(a[0], 0)),
+                                sched=types.SimpleNamespace(empty_filtered_deck=lambda d: emptied.append(d)))
+    pc = {"built": [3, 2, 8, 77, "x"], "misses_day": "2026-10-14"}
+    saved = (F._pcfg, F._psave, F._today)
     try:
-        F._pcfg, F._psave = (lambda: pc), (lambda c: None)
+        F._pcfg, F._psave, F._today = (lambda: pc), (lambda c: None), (lambda: "2026-10-14")
         n = F.tidy_decks(col)
         check("tidy: one step, the empty ones of ours; the parent stays while a deck under it has cards",
               n == 3 and col.decks.removed == [[1, 3, 6]] and pc["built"] == [2, 8], (n, col.decks.removed, pc))
+        check("tidy: today's misses, built today from the box, stay put till tomorrow", emptied == [] and pc.get("misses_day"))
+        F._today = lambda: "2026-10-15"
+        F.tidy_decks(col)
+        check("tidy: the next morning they're emptied back into their decks (3.8.1, Sam), and the day forgotten",
+              emptied == [2] and "misses_day" not in pc, (emptied, pc))
         cards[2] = 0
         n = F.tidy_decks(col)
         check("tidy: the last one under it studied, it goes with the parent, one step",
@@ -7836,7 +7843,7 @@ def test_tidy_filtered_v380():
         F._note_built(2)
         check("tidy: a deck built is remembered once, newest last", pc["built"] == [5, 2], pc)
     finally:
-        F._pcfg, F._psave = saved
+        F._pcfg, F._psave, F._today = saved
 
 
 def test_due_repeat_site_twin():
@@ -7947,10 +7954,10 @@ def test_one_settings_keys_study_v380():
         TF.ask_this_card()
         check("keys: Ctrl+Shift+Q off the review screen says what it's for", said and "reviewing" in said[0], said)
         # Study today: the walk's order
-        check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}, 12, False) == ("deck", 3))
-        check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}, 12, False) == ("deck", 9))
-        check("study: then today's misses, once", D.study_next([5], {5: 0, 9: 0}, 12, False) == ("misses", 12)
-              and D.study_next([5], {5: 0}, 12, True) is None and D.study_next([], {}, 0, False) is None)
+        check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}) == ("deck", 3))
+        check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}) == ("deck", 9))
+        check("study: then done; no misses step (3.8.1, Sam: it built a deck nobody asked for)",
+              D.study_next([5], {5: 0, 9: 0}) is None and D.study_next([], {}) is None)
         # the walk, through Anki's screens
         sel = []
         F.tooltip = lambda m, **k: said.append(m)
@@ -7959,11 +7966,13 @@ def test_one_settings_keys_study_v380():
         mw.col = types.SimpleNamespace(
             decks=types.SimpleNamespace(select=lambda d: sel.append(d), name=lambda d: f"Deck {d}", id_for_name=lambda n: 77),
             sched=types.SimpleNamespace(counts=lambda: counts["left"]))
-        sv = (F._plan_decks, F._due_now, F._misses_today, F._reviews)
+        sv = (F._plan_decks, F._due_now, F._reviews)
         F._plan_decks = lambda: [3]
         F._due_now = lambda col, dids: dict(due["n"])
-        F._misses_today = lambda col: []
         F._reviews = lambda: {"back": 0, "at": ""}
+        from due_crew import plan_flow as PF
+        built, sv_filtered = [], PF._filtered
+        PF._filtered = lambda col, name, cids, order=4: (built.append(name), True)[1]
         calls.clear()
         try:
             dc._on_js(False, "duecrew:duestudy", DeckBrowser())
@@ -7980,8 +7989,10 @@ def test_one_settings_keys_study_v380():
             due["n"] = {3: 0, 9: 0}
             F.study_today()
             check("study: nothing due, it says so and stays put", "Nothing due now." in said[-1] and _state.get("study_walk") is None)
+            check("study: the walk never builds a deck, whatever today's misses (a Fifteen starts it)", built == [], built)
         finally:
-            F._plan_decks, F._due_now, F._misses_today, F._reviews = sv
+            F._plan_decks, F._due_now, F._reviews = sv
+            PF._filtered = sv_filtered
             mw.col = None
         T0 = "2026-10-03"
         v = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5}], [], {},
@@ -12175,7 +12186,7 @@ def test_fifteen_flow_v381():
     top bar, the board and the review screen send them."""
     import due_crew as dc
     from aqt.deckbrowser import DeckBrowser
-    from due_crew import rooms as R, room_model as rm, app as appmod, due_flow
+    from due_crew import rooms as R, room_model as rm, app as appmod, due_flow, sev
     from due_crew.app import _state
     utc = datetime.timezone.utc
     t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
@@ -12220,6 +12231,8 @@ def test_fifteen_flow_v381():
               "room" not in cl.session and "live_until" not in cl.session and done
               and (done["n"], done["minutes"], done["cards"], done["walked"]) == (2, 20, 7, False) and len(syncs) == 4,
               str((done, len(syncs), sorted(cl.session))))
+        check("…Sev's move for it picked as it ended (one of the stack's), kept with the session as its last there",
+              done.get("move") in sev.moves("stack") and cl.session.get("sev_last") == {"stack": done["move"]})
         view = R.board_view()
         check("…on the board, with Sev stacking (once)", view.get("fifteen_done", {}).get("n") == 2
               and "stk" in (view["fifteen_done"].get("sev") or "") and " rest" not in view["fifteen_done"]["sev"].split('"')[1])
@@ -12252,7 +12265,7 @@ def test_sev_by_the_logo_is_a_moment_v381():
     """Sam: Sev isn't always by the logo. It comes when something just
     happened, the first time the board draws it, and goes after a few
     seconds; a redraw meanwhile keeps its place; then the logo's alone."""
-    from due_crew import rooms as R
+    from due_crew import rooms as R, sev
     from due_crew.app import _state
     saved = (R.cfg, dict(_state), R.time.time)
     clock = {"t": 1000.0}
@@ -12268,11 +12281,21 @@ def test_sev_by_the_logo_is_a_moment_v381():
         again = R.board_sev({}, {"done": True})
         clock["t"] += 4
         later = R.board_sev({}, {"done": True})
-        check("the day done: a hop, kept through a redraw, gone after its few seconds, not back that day",
-              first and "m-hop" in first["svg"] and first["ago"] == 0 and again["ago"] == 2 and later is None)
+        mv = lambda h: re.search(r'class="sv m-([a-z]+)', h).group(1)  # noqa: E731
+        check("the day done: a hop (one of its moves), kept through a redraw, gone after its few seconds, not back that day",
+              first and mv(first["svg"]) in sev.moves("hop") and mv(again["svg"]) == mv(first["svg"])
+              and first["ago"] == 0 and again["ago"] == 2 and later is None)
         _state["sev_cheer"] = clock["t"] - 1
         cheer = R.board_sev({}, {"done": True})
-        check("a cheer is its own moment, the same day", cheer and "m-cheer" in cheer["svg"])
+        check("a cheer is its own moment, the same day", cheer and mv(cheer["svg"]) in sev.moves("cheer"))
+        _state["sev_cheer"] = 0
+        seen = [mv(first["svg"])]
+        for d in range(14, 26):
+            _state["labels"] = [f"2026-10-{d}"]
+            clock["t"] += 100
+            seen.append(mv(R.board_sev({}, {"done": True})["svg"]))
+        check("Sam, variety: each day done a move from the mix, never the same twice in a row",
+              all(a != b for a, b in zip(seen, seen[1:])) and set(seen) == set(sev.moves("hop")), seen)
         R.cfg = lambda: {"sev": False}
         _state.pop("sev_shown", None)
         check("Sev off: never", R.board_sev({}, {"done": True}) is None)
@@ -12358,7 +12381,8 @@ def test_crew_room_sevs_wear_their_accents_v381():
     check("card, Sev on: each member is their Sev in their accent (mine is mine; junk wears the default), host first",
           [s["n"] for s in on["seats"]] == ["Dre <K>", "Ana", "You"] and seats["Dre <K>"]["a"] == list(board.accent_pair("blue"))
           and seats["Ana"]["a"] == list(board.accent_pair("green")) and seats["You"]["a"] == list(mine)
-          and on["sev"] == {"idle": sev.svg("idle")} and "sv-blink" in on["sevcss"], on["seats"])
+          and on["sev"] == dict({"idle": sev.svg("idle")}, **{f"idle.{m}": sev.svg("idle", m) for m in sev.SEAT_MOVES[1:]})
+          and "sv-blink" in on["sevcss"], on["seats"])
     check("…each started at its own moment: the blinks never line up (a delay in the blink, each different)",
           [s["d"] for s in on["seats"]] == [0, -1.7, -3.4] and "sv-blink 4.6s var(--sv-d, 0s)" in sev.CSS
           and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
@@ -12376,7 +12400,8 @@ def test_crew_room_sevs_wear_their_accents_v381():
     lobby = board.room_html(rm.board_view(room, ents, now=now, sev=True, accent_pair=mine))
     blue, amber = board.accent_pair("blue"), mine
     check("lobby, Sev on: each member is their Sev, in their accent by day and by night, blinking at its own moment",
-          lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby and lobby.count("m-idle") == 3
+          lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby
+          and [lobby.count(f"sv m-{m}") for m in ("idle", "sread", "snod")] == [1, 1, 1]
           and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
           and "--sv-d:-1.70s" in lobby)
     check("…the name only as its label, escaped",
@@ -12437,7 +12462,8 @@ def test_fifteen_board_v381():
           and 'style="padding:7px 0 3px"' in one and 'style="padding:19px 0 3px"' in line
           and "dc-sess" in one and "padding-top: 26px" not in board.SEV_CSS and ".dc-sess { text-align: left; }" in board.SEV_CSS)
     check("…and the sparks that twinkle as it lands are gone once it rests, or when nothing moves",
-          ".sv.m-stack .spark, .sv.m-cheer .spark { opacity: 0; }" in sev.CSS.split("@media")[0]
+          all(f".sv.m-{m} .spark" in sev.CSS.split("@media")[0].split("{ opacity: 0; }")[0]
+              for m in ("stack", "cheer", "hug", "giftspin", "wobble", "catch"))
           and ".sv.rest .spark" in sev.CSS)
     v = {"today": "2026-10-13", "name": "Due", "done_n": 0, "total_n": 2, "behind_n": 0, "folded": False, "tab": "today",
          "rows": [], "suggestions": [], "notes": [], "later": [], "later_n": 0, "nudge": True, "nudge_sev": sev.svg("peek")}
@@ -12705,6 +12731,159 @@ def test_welcome_back_sev_v381():
     ask = next(ln for ln in rm._RUNTIME.splitlines() if "squares(c, 110)" in ln and "qb." in ln)
     check("the fifteen's question with Sev off shows the logo's squares (the else was inside a comment)",
           "//" not in ask.split("squares(c, 110)")[0], ask.strip())
+
+
+def test_sev_moves_v381():
+    """Sam's picks (Sev's Places): every move in the mix at every place Sev
+    already is, a different one each time (never the same twice in a row);
+    where it stays a while, one small thing now and then. And two new
+    places: the signed-out card, and a crewmate's big streak."""
+    import random
+    from due_crew import room_model as rm, rooms as R, sev
+    from due_crew.app import _state
+    still, motion = sev.CSS.split("@media", 1)
+    mom = lambda h: re.search(r'class="sv m-([a-z]+)', h).group(1)  # noqa: E731
+    rests = lambda h: " rest" in h.split('"')[1]  # noqa: E731
+    check("Sam's picks, all in the mix, each place's own move first (the one it played before)",
+          {k: sev.moves(k) for k in sev.MOVES} == {
+              "hop": ("hop", "twirl", "shuffle", "jump"), "cheer": ("cheer", "hug", "giftspin"),
+              "hello": ("in", "walkin", "popup"), "exam": ("exam", "pep"), "focus": ("focus", "nod", "think", "tap"),
+              "stretch": ("stretch", "shake", "march", "look"), "ring": ("ring", "point", "bigring"),
+              "stack": ("stack", "wobble", "catch"), "peek": ("peek", "knock", "bounce")}
+          and all(sev.MOVES[k][0] == (k, sev.MOMENT[k]) for k in sev.MOVES)
+          and sev.SEAT_MOVES == ("idle", "sread", "snod", "sreach", "slook"))
+    every = {m for k in sev.MOVES for m in sev.moves(k)} | set(sev.SEAT_MOVES)
+    check("every move moves, under Reduce motion's query", all(f".sv.m-{m} " in motion for m in every - {"idle"}),
+          sorted(m for m in every - {"idle"} if f".sv.m-{m} " not in motion))
+    props = set(re.findall(r"[{;]\s*([a-z-]+)\s*:", motion))
+    check("transforms and opacity only (the drawing never changes, it moves)",
+          props <= {"animation", "animation-delay", "animation-duration", "animation-direction", "transform", "transform-origin",
+                    "opacity", "visibility"}, props)
+    check("the ones that happen once rest when drawn again; the ones that stay a while loop",
+          {"twirl", "shuffle", "jump", "hug", "giftspin", "walkin", "popup", "point", "bigring", "wobble", "catch", "knock",
+           "bounce"} <= sev.ONCE and not ({"pep", "nod", "think", "tap", "shake", "march", "look"} | set(sev.SEAT_MOVES)) & sev.ONCE
+          and all(rests(sev.move(k, m, rest=True)) for k in sev.MOVES for m in sev.moves(k) if m in sev.ONCE))
+    check("still, each is the frame that says it: peeking low, the day done in the air (and at rest it's landed)",
+          ".sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }" in still
+          and ".sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body" in still
+          and ".sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }" in motion
+          and ".sv.rest .sv-footL, .sv.rest .sv-footR" in motion)
+    after = sev.CSS.rsplit("\n}\n", 1)[1]
+    check("drawn again it rests with Reduce motion on too: landed, what flew gone (a banner isn't left mid-hop)",
+          ".sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }" in after
+          and ".sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }" in after and "animation" not in after
+          and "translateY(22%)" in after)
+
+    rnd = random.Random(7)
+    never = all(sev.pick(k, last, rnd) != last for k in sev.MOVES for last in sev.moves(k) for _ in range(20))
+    seq, last = [], None
+    for _ in range(40):
+        last = sev.pick("hop", last, rnd)
+        seq.append(last)
+    check("pick: from the mix at random, never the one it played last", never and set(seq) == set(sev.moves("hop"))
+          and all(a != b for a, b in zip(seq, seq[1:])))
+    check("nth: in turn, one after another never the same",
+          all(sev.nth(k, i) != sev.nth(k, i + 1) for k in sev.MOVES for i in range(-3, 9)))
+    check("a place with one move keeps it (Breathe stays); a move that isn't the place's plays its own",
+          sev.moves("breathe") == ("breathe",) and sev.pick("rest") == "breathe" and mom(sev.move("hop", "knock")) == "hop"
+          and mom(sev.move("focus")) == "focus" and mom(sev.move("hello")) == "in")
+    check("a move keeps its place's words (marching is the break's stretch)",
+          'class="sv m-march"' in sev.move("stretch", "march") and 'aria-label="Sev, stretching"' in sev.move("stretch", "march"))
+
+    # a fifteen's widgets: the moves take turns, a round each
+    utc = datetime.timezone.utc
+    t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=utc)
+    f = dict(rm.make_fifteen("sam", t0), rounds=3)
+    d = rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), brk_pose="stretch")
+    check("a fifteen's widgets get each move's markup and their turns, its own first",
+          d["vary"] == {"focus": ["focus", "focus.nod", "focus.think", "focus.tap"], "ring": ["ring", "ring.point", "ring.bigring"],
+                        "stretch": ["stretch", "stretch.shake", "stretch.march", "stretch.look"]}
+          and all(k in d["sev"] for v in d["vary"].values() for k in v) and mom(d["sev"]["focus.tap"]) == "tap"
+          and d["vseed"] == rm.vary_seed(f) and 0 <= d["vseed"] < 12, d["vary"])
+    check("…heads down, the break's stretch and the clock each take theirs; Breathe stays itself",
+          "return vk('focus', p.round);" in rm._RUNTIME and "D.brk_pose === 'stretch' ? vk('stretch', p.round) : 'rest'" in rm._RUNTIME
+          and "return vk('ring', p.round);" in rm._RUNTIME and "sev(vk('stretch', phase(Date.now()).round), 170)" in rm._RUNTIME
+          and "sev(vk('ring', D.rounds), 170)" in rm._RUNTIME and "sev('breathe', 180, true)" in rm._RUNTIME
+          and "function vk(k, n)" in rm.widget_js("card", d))
+    off = rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), sev=False)
+    check("Sev off: no moves either", off["sev"] is None and off["vary"] is None and off["vseed"] == 0)
+    check("the board's line takes the widgets' turn (sev.nth, the same seed)",
+          all(d["vary"][k][(r + d["vseed"]) % len(d["vary"][k])].split(".")[-1] == sev.nth(k, r + rm.vary_seed(f))
+              for k in d["vary"] for r in range(1, 9)))
+    saved = (R.cfg, R.my_room, R._done, R._fifteen_done, R._now, R.datetime, dict(_state))
+    try:
+        R.cfg = lambda: {"sev_break": "stretch"}
+        R.my_room, R._done, R._fifteen_done = (lambda: f), (lambda: None), (lambda: None)
+        _state.update(entries=[], room_dismissed=set(), labels=["2026-10-13"])
+        got = []
+        for minutes in (3, 23, 43, 17):  # rounds 1, 2 and 3, and the break after the first
+            R._now = lambda m=minutes: t0 + datetime.timedelta(minutes=m)
+            got.append(mom(R.board_view()["mine"]["sev"]))
+        seed = rm.vary_seed(f)
+        check("on the board: a round each, never the same move twice running; the break's stretch takes its turn too",
+              got == [sev.nth("focus", r + seed) for r in (1, 2, 3)] + [sev.nth("stretch", 1 + seed)]
+              and got[0] != got[1] != got[2], got)
+
+        # the nudge: a different way in each day
+        real = datetime
+        ways = []
+        for day in (13, 14, 15, 16):
+            _state["labels"] = [f"2026-10-{day}"]
+            R.datetime = types.SimpleNamespace(date=types.SimpleNamespace(today=lambda d=day: real.date(2026, 10, d)))
+            ways.append(R.nudge_sev())
+        again = R.nudge_sev()
+        check("the nudge: a different way in each day (in turn), and drawn again the same day it stays put",
+              all(mom(w) in sev.moves("peek") for w in ways) and all(mom(a) != mom(b) for a, b in zip(ways, ways[1:]))
+              and not rests(ways[-1]) and rests(again) and mom(again) == mom(ways[-1]))
+        R.datetime = real
+
+        # a room's seats
+        ms = [(u, u.upper(), u == "me") for u in ("a", "b", "c", "d", "e", "me")]
+        check("a room's seats: each its own small thing now and then, side by side never the same",
+              [x["m"] for x in rm.seats(ms, [], ("#2e7d32", "#7cc47f"))] == ["idle", "sread", "snod", "sreach", "slook", "idle"]
+              and "'idle.' + s.m" in rm._RUNTIME)
+        check("…the board draws the seat's move, and only a seat's",
+              mom(board._seat_html({"n": "A", "m": "snod"})) == "snod" and mom(board._seat_html({"n": "A", "m": "hop"})) == "idle"
+              and mom(board._seat_html({"n": "A"})) == "idle")
+
+        # new: signed out
+        R.cfg = lambda: {}
+        _state.pop("sev_hello", None)
+        a, b = R.signed_out_sev(), R.signed_out_sev()
+        card = board.signed_out_card({}, sev=a)
+        check("signed out (Sam's pick): Sev waves, a hello from its mix, once; drawn again it rests there",
+              mom(a) in sev.moves("hello") and not rests(a) and mom(b) == mom(a) and rests(b))
+        check("…beside the words on the card, with its colours and motion sheet",
+              card.index('class="dc-hi"') < card.index("Your friends&rsquo;") and "sv-blink" in card
+              and "--sv-a: var(--dc-accent)" in card and "duecrew:setup" in card)
+        check("…only on the way in: an expired sign-in or a deleted account says just what happened",
+              "dc-hi" not in board.signed_out_card({}, expired=True, sev=a) and "dc-hi" not in board.signed_out_card({}, gone=True, sev=a))
+        R.cfg = lambda: {"sev": False}
+        check("…Settings › Sev off: the card as it was", R.signed_out_sev() is None
+              and "sv-" not in board.signed_out_card({}, sev=None) and "Start with your email" in board.signed_out_card({}))
+
+        # new: a crewmate's big streak
+        R.cfg = lambda: {}
+        _state.pop("sev_banner", None)
+        big = [("dre", "Dre <b>", 100), ("ana", "Ana", 365)]
+        one, two = R.milestone_sevs(big), R.milestone_sevs(big)
+        check("a crewmate's big streak (Sam's pick): Sev hops in the emoji's place, from the day done's mix, once a banner",
+              set(one) == {"dre", "ana"} and all(mom(one[u]) in sev.moves("hop") for u in one) and mom(one["dre"]) != mom(one["ana"])
+              and not any(rests(x) for x in one.values()) and all(rests(two[u]) and mom(two[u]) == mom(one[u]) for u in two)
+              and 'aria-label="Sev: a big streak"' in one["dre"] and "Dre" not in one["dre"])
+        data = {"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}
+        ban = board.render(data, {}, 0, milestones=big, milestone_sev=one)
+        plain = board.render(data, {}, 0, milestones=big)
+        check("…on the banner; Send stays as it was, the name escaped",
+              ban.count('<span class="dc-fig">') == 2 and "Send &#128175;" in ban and "Send &#127881;" in ban
+              and "Dre &lt;b&gt;" in ban and "<span>&#128175;</span>" not in ban)
+        R.cfg = lambda: {"sev": False}
+        check("…Sev off: the emoji, as before", R.milestone_sevs(big) is None and "<span>&#128175;</span>" in plain
+              and "<span>&#127881;</span>" in plain and '<span class="dc-fig">' not in plain)
+    finally:
+        R.cfg, R.my_room, R._done, R._fifteen_done, R._now, R.datetime, st = saved
+        _state.clear()
+        _state.update(st)
 
 
 def main():
