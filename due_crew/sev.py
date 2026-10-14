@@ -21,6 +21,7 @@ accent), --sv-line, --sv-amb, --sv-mut, with a fallback each.
 """
 
 import math
+import random
 import re
 
 INK = "var(--sv-ink,#1f2a1f)"
@@ -66,7 +67,9 @@ MOMENT = {"idle": "idle", "nap": "nap", "peek": "peek", "ready": "ready", "focus
           "stack": "stack", "cheer": "cheer", "exam": "exam", "away": "away", "hello": "in"}
 
 # moments that happen once (an event); the rest loop while their state lasts
-ONCE = frozenset({"peek", "ready", "ring", "again", "hop", "stack", "cheer", "in"})
+ONCE = frozenset({"peek", "ready", "ring", "again", "hop", "stack", "cheer", "in",
+                  "twirl", "shuffle", "jump", "hug", "giftspin", "walkin", "popup", "point", "bigring",
+                  "wobble", "catch", "knock", "bounce"})
 
 LABELS = {"idle": "Sev", "nap": "Sev, napping", "peek": "Sev, peeking in", "ready": "Sev: let's go",
           "focus": "Sev, heads down", "ring": "Sev: fifteen's up", "stretch": "Sev, stretching",
@@ -303,6 +306,52 @@ def moment(cheered=False, back=False, exam_eve=False, day_done=False):
     return None
 
 
+# 3.8.1 (Sam: "variety!"): each place Sev goes has its mix of moves, the
+# place's own first, as (pose, moment). Each time it comes it plays a
+# different one, never the same twice in a row (pick: at random, not the
+# last; nth: in turn). Where it stays a while (a fifteen, a break, a room's
+# seats) the move loops, one small thing now and then. A break's moves are
+# Stretch's; Breathe stays itself.
+MOVES = {
+    "hop": (("hop", "hop"), ("hop", "twirl"), ("hop", "shuffle"), ("hop", "jump")),
+    "cheer": (("cheer", "cheer"), ("cheer", "hug"), ("cheer", "giftspin")),
+    "hello": (("hello", "in"), ("hello", "walkin"), ("hello", "popup")),
+    "exam": (("exam", "exam"), ("exam", "pep")),
+    "focus": (("focus", "focus"), ("focus", "nod"), ("focus", "think"), ("focus", "tap")),
+    "stretch": (("stretch", "stretch"), ("stretch", "shake"), ("idle", "march"), ("idle", "look")),
+    "ring": (("ring", "ring"), ("ring", "point"), ("ring", "bigring")),
+    "stack": (("stack", "stack"), ("stack", "wobble"), ("stack", "catch")),
+    "peek": (("peek", "peek"), ("peek", "knock"), ("peek", "bounce")),
+}
+# a study room's seats, each its own: blinks, reads, nods, reaches, looks around
+SEAT_MOVES = ("idle", "sread", "snod", "sreach", "slook")
+
+
+def moves(place):
+    """The moments Sev can play at `place` (a MOVES key, or any pose: just its own), its own first."""
+    return tuple(m for _p, m in MOVES[place]) if place in MOVES else (MOMENT.get(place, "idle"),)
+
+
+def pick(place, last=None, rnd=random):
+    """A move for `place`, at random, never `last` (the one it played there last time)."""
+    ms = moves(place)
+    return rnd.choice([m for m in ms if m != last] or list(ms))
+
+
+def nth(place, n):
+    """The n-th of `place`'s moves, in turn: one after another, never the same."""
+    ms = moves(place)
+    return ms[int(n) % len(ms)]
+
+
+def move(place, m=None, **kw):
+    """Sev at `place` playing its move `m` (its own when m isn't one of
+    them), labelled as the place is; the rest goes to svg()."""
+    pose, mm = next(((p, x) for p, x in MOVES.get(place, ()) if x == m), (place, None))
+    kw.setdefault("label", LABELS.get(place))
+    return svg(pose, mm, **kw)
+
+
 # the motion sheet. Outside the media query: the still frame of each moment.
 # Inside it: the motion, which ends where a moment rests.
 CSS = r"""
@@ -316,17 +365,20 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv .sv-shadow, .sv .sv-eyes, .sv .sv-card, .sv .sv-clock, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk,
 .sv .spark, .sv .sv-ring { transform-origin: 50% 50%; }
 .sv .sv-armL, .sv .sv-armR { transform-origin: 50% 8%; }
+.sv .sv-footL, .sv .sv-footR { transform-origin: 30% 100%; }
 .sv .sv-case { transform-origin: 50% 0%; }
 .sv .sv-cheek { opacity: .6; }
-.sv.m-stack .spark, .sv.m-cheer .spark { opacity: 0; } /* they twinkle once and go: at rest, and still, they're gone */
+.sv.m-stack .spark, .sv.m-cheer .spark, .sv.m-hug .spark, .sv.m-giftspin .spark, .sv.m-wobble .spark,
+.sv.m-catch .spark { opacity: 0; } /* they twinkle once and go: at rest, and still, they're gone */
 .sv .sv-z.z2 { transform: translate(6px, -8px); }
 .sv .sv-z.z3 { transform: translate(12px, -16px); }
 .sv .cf { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); }
 .sv .lab { opacity: .35; }
 .sv .lab.l1 { opacity: 1; }
-.sv.m-peek .sv-body { transform: translateY(22%); }
-.sv.m-peek .sv-shadow, .sv.m-in .sv-shadow { display: none; }
-.sv.m-hop .sv-body { transform: translateY(-12px); }
+.sv.m-peek .sv-body, .sv.m-knock .sv-body, .sv.m-bounce .sv-body { transform: translateY(22%); }
+.sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
+.sv.m-popup .sv-shadow { display: none; }
+.sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body { transform: translateY(-12px); }
 @media (prefers-reduced-motion: no-preference) {
   .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
@@ -435,10 +487,138 @@ svg.sv { overflow: visible; display: block; flex: none; }
   .sv.m-in .sv-body { animation: sv-in .5s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-in .sv-armR { animation: sv-wave 1.6s ease-in-out .3s 1 both; }
   @keyframes sv-in { 0% { transform: scale(0); } 70% { transform: scale(1.14); } 100% { transform: scale(1); } }
+  /* 3.8.1, more moves: the day's done */
+  .sv.m-twirl .sv-body { animation: sv-twirl 1.5s ease-in-out 1 both; }
+  .sv.m-twirl .cf, .sv.m-shuffle .cf, .sv.m-jump .cf { animation: sv-cf 1.8s cubic-bezier(.2, .7, .3, 1) .35s 1 both; }
+  .sv.m-twirl .sv-shadow, .sv.m-jump .sv-shadow { animation: sv-shad 1.4s ease-out 1 both; }
+  @keyframes sv-twirl { 0% { transform: none; } 14% { transform: scale(1.12, .88); } 34% { transform: translateY(-14px) scaleX(-1); }
+    54% { transform: translateY(-17px) scaleX(1); } 74% { transform: translateY(-8px) scaleX(-1); } 90% { transform: translateY(0) scale(1.08, .92); } 100% { transform: none; } }
+  .sv.m-shuffle .sv-body { animation: sv-shuffle .8s ease-in-out 3 both; }
+  .sv.m-shuffle .sv-footL { animation: sv-step .4s ease-in-out 6; }
+  .sv.m-shuffle .sv-footR { animation: sv-step .4s ease-in-out -.2s 6; }
+  .sv.m-shuffle .sv-armL, .sv.m-shuffle .sv-armR { animation: sv-armwig .8s ease-in-out 3; }
+  @keyframes sv-shuffle { 0%, 100% { transform: none; } 25% { transform: translateX(-5px) rotate(-7deg); } 50% { transform: none; } 75% { transform: translateX(5px) rotate(7deg); } }
+  .sv.m-jump .sv-body { animation: sv-jump 1.4s cubic-bezier(.3, .7, .4, 1) 1 both; }
+  .sv.m-jump .sv-armL { animation: sv-pumpL 1.4s ease-out 1 both; }
+  .sv.m-jump .sv-armR { animation: sv-pump 1.4s ease-out 1 both; }
+  @keyframes sv-jump { 0% { transform: none; } 22% { transform: scale(1.24, .74); } 46% { transform: translateY(-34px) scale(.9, 1.12); }
+    62% { transform: translateY(-36px) rotate(10deg); } 84% { transform: translateY(0) scale(1.16, .84); } 100% { transform: none; } }
+  @keyframes sv-pumpL { 0%, 25% { transform: rotate(0); } 50% { transform: rotate(24deg); } 70% { transform: rotate(-14deg); } 100% { transform: rotate(0); } }
+  /* 3.8.1, more moves: a cheer lands */
+  .sv.m-hug .sv-gift, .sv.m-giftspin .sv-gift { animation: sv-gift 1.2s cubic-bezier(.5, 0, .75, 0) 1 both; }
+  .sv.m-hug .sv-body { animation: sv-hug 2.6s ease-in-out 1 both; }
+  .sv.m-hug .sv-cheek, .sv.m-giftspin .sv-cheek { animation: sv-blush 1.6s ease-out .5s 1 both; }
+  @keyframes sv-hug { 0%, 46% { transform: none; } 56% { transform: scale(1.07, .93) rotate(-6deg); } 68% { transform: scale(1.07, .93) rotate(6deg); }
+    80% { transform: scale(1.05, .95) rotate(-4deg); } 92%, 100% { transform: none; } }
+  .sv.m-giftspin .sv-body { animation: sv-giftspin 2.2s ease-in-out 1 both; }
+  .sv.m-hug .spark, .sv.m-giftspin .spark { animation: sv-spark 1.4s ease-out 1.3s 1 both; }
+  .sv.m-hug .spark.s2, .sv.m-giftspin .spark.s2 { animation-delay: 1.5s; }
+  @keyframes sv-giftspin { 0%, 50% { transform: none; } 62% { transform: translateY(-8px) scaleX(-1); } 74% { transform: translateY(-10px) scaleX(1); }
+    86% { transform: translateY(0) scale(1.07, .93); } 100% { transform: none; } }
+  /* 3.8.1, more moves: back from away */
+  .sv.m-walkin .sv-body, .sv.m-walkin .sv-shadow { animation: sv-walkin 1.4s linear 1 both; }
+  .sv.m-walkin .sv-footL { animation: sv-step .35s ease-in-out 4; }
+  .sv.m-walkin .sv-footR { animation: sv-step .35s ease-in-out -.175s 4; }
+  .sv.m-walkin .sv-armR { animation: sv-wave 1.6s ease-in-out 1.35s 1 both; }
+  @keyframes sv-walkin { 0% { transform: translateX(-40px); } 12% { transform: translateX(-34px) translateY(-2px); } 24% { transform: translateX(-28px); }
+    36% { transform: translateX(-22px) translateY(-2px); } 48% { transform: translateX(-16px); } 60% { transform: translateX(-10px) translateY(-2px); }
+    72% { transform: translateX(-5px); } 84% { transform: translateX(-1px) translateY(-2px); } 100% { transform: none; } }
+  .sv.m-popup .sv-body { animation: sv-popup .9s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
+  .sv.m-popup .sv-armR { animation: sv-wave 1.6s ease-in-out .55s 1 both; }
+  .sv.m-popup .sv-armL { animation: sv-waveL 1.6s ease-in-out .65s 1 both; }
+  @keyframes sv-popup { 0% { transform: translateY(80%) scale(.92); } 65% { transform: translateY(-8px); } 100% { transform: none; } }
+  @keyframes sv-waveL { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(26deg); } 40%, 80% { transform: rotate(-10deg); } }
+  /* 3.8.1, more moves: exam eve */
+  .sv.m-pep .sv-star { animation: sv-spin 2.6s ease-in-out infinite; }
+  .sv.m-pep .sv-armR { animation: sv-pep 2.6s ease-out infinite; }
+  .sv.m-pep .sv-body { animation: sv-pepb 2.6s ease-out infinite; }
+  .sv.m-pep .spark { animation: sv-sparkle 2.6s ease-in-out infinite; }
+  @keyframes sv-spin { 0% { transform: rotate(0) scale(1); } 50% { transform: rotate(180deg) scale(1.25); } 100% { transform: rotate(360deg) scale(1); } }
+  @keyframes sv-pep { 0%, 40%, 100% { transform: rotate(0); } 52% { transform: rotate(-30deg); } 64% { transform: rotate(6deg); } 76% { transform: rotate(-30deg); } 88% { transform: rotate(0); } }
+  @keyframes sv-pepb { 0%, 40%, 100% { transform: none; } 52%, 76% { transform: translateY(-3px) scale(.97, 1.04); } 64%, 88% { transform: scale(1.04, .96); } }
+  /* 3.8.1, more moves: in a fifteen: the same reading, plus one small thing now and then */
+  .sv.m-nod .sv-eyes, .sv.m-think .sv-eyes, .sv.m-tap .sv-eyes { animation-duration: 7s; }
+  .sv.m-nod .sv-pupils, .sv.m-tap .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
+  .sv.m-nod .sv-card, .sv.m-tap .sv-card { animation: sv-flip 9s ease-in-out infinite; }
+  .sv.m-nod .sv-body { animation: sv-nod 6s ease-in-out infinite; }
+  @keyframes sv-nod { 0%, 70%, 100% { transform: none; } 75% { transform: rotate(5deg) translateY(1px); } 80% { transform: none; }
+    85% { transform: rotate(5deg) translateY(1px); } 90% { transform: none; } }
+  .sv.m-think .sv-armR { animation: sv-scratch 7s ease-in-out infinite; }
+  .sv.m-think .sv-pupils { animation: sv-lookup 7s ease-in-out infinite; }
+  @keyframes sv-scratch { 0%, 55%, 100% { transform: rotate(0); } 63% { transform: rotate(-205deg); } 67% { transform: rotate(-192deg); } 71% { transform: rotate(-205deg); }
+    75% { transform: rotate(-192deg); } 79% { transform: rotate(-205deg); } 88% { transform: rotate(0); } }
+  @keyframes sv-lookup { 0%, 55%, 90%, 100% { transform: none; } 62%, 84% { transform: translate(1.3px, -1.5px); } }
+  .sv.m-tap .sv-footR { animation: sv-tap .9s ease-in-out infinite; }
+  @keyframes sv-tap { 0%, 50%, 100% { transform: none; } 25% { transform: rotate(-16deg); } }
+  /* 3.8.1, more moves: on a break */
+  .sv.m-shake .sv-body { animation: sv-shake2 3.2s ease-in-out infinite; }
+  .sv.m-shake .sv-armL { animation: sv-flap 3.2s ease-in-out infinite; }
+  .sv.m-shake .sv-armR { animation: sv-flap 3.2s ease-in-out -.1s infinite reverse; }
+  @keyframes sv-shake2 { 0%, 50%, 100% { transform: none; } 56% { transform: rotate(-9deg); } 62% { transform: rotate(9deg); } 68% { transform: rotate(-7deg); }
+    74% { transform: rotate(7deg); } 80% { transform: rotate(-3deg); } 86% { transform: none; } }
+  @keyframes sv-flap { 0%, 50%, 100% { transform: rotate(0); } 56% { transform: rotate(32deg); } 62% { transform: rotate(-22deg); } 68% { transform: rotate(28deg); }
+    74% { transform: rotate(-16deg); } 82% { transform: rotate(0); } }
+  .sv.m-march .sv-body { animation: sv-bob .9s ease-in-out infinite; }
+  .sv.m-march .sv-footL { animation: sv-stepup .9s ease-in-out infinite; }
+  .sv.m-march .sv-footR { animation: sv-stepup .9s ease-in-out -.45s infinite; }
+  .sv.m-march .sv-armL { animation: sv-armwig .9s ease-in-out infinite; }
+  .sv.m-march .sv-armR { animation: sv-armwig .9s ease-in-out -.45s infinite; }
+  @keyframes sv-stepup { 0%, 50%, 100% { transform: none; } 25% { transform: translateY(-5px); } }
+  .sv.m-look .sv-pupils { animation: sv-look 7s ease-in-out infinite; }
+  .sv.m-look .sv-body { animation: sv-lean 7s ease-in-out infinite; }
+  @keyframes sv-look { 0%, 100% { transform: none; } 15%, 30% { transform: translate(-1.7px, -1px); } 45%, 60% { transform: translate(1.7px, -1px); }
+    72%, 86% { transform: translate(0, -1.8px); } }
+  @keyframes sv-lean { 0%, 100% { transform: none; } 22% { transform: rotate(-3deg); } 52% { transform: rotate(3deg); } 78% { transform: translateY(-2px); } }
+  /* 3.8.1, more moves: the question */
+  .sv.m-point .sv-clock { animation: sv-shake .8s linear .5s 1 both; }
+  .sv.m-point .sv-armR { animation: sv-point 2s ease-in-out 1 both; }
+  .sv.m-point .sv-ring { animation: sv-rings 1.2s ease-out .5s 1 both; }
+  .sv.m-point .sv-ring.r2 { animation-delay: .68s; }
+  @keyframes sv-point { 0% { transform: rotate(0); } 25% { transform: rotate(-78deg); } 40% { transform: rotate(-66deg); } 55% { transform: rotate(-78deg); }
+    70% { transform: rotate(-66deg); } 85%, 100% { transform: rotate(-74deg); } }
+  .sv.m-bigring .sv-body { animation: sv-jump 1.3s cubic-bezier(.3, .7, .4, 1) 1 both; }
+  .sv.m-bigring .sv-clock { animation: sv-shake .8s linear .2s 2 both; }
+  .sv.m-bigring .sv-ring { animation: sv-rings 1.2s ease-out .2s 2 both; }
+  .sv.m-bigring .sv-ring.r2 { animation-delay: .38s; }
+  .sv.m-bigring .sv-shadow { animation: sv-shad 1.3s ease-out 1 both; }
+  /* 3.8.1, more moves: the session's line */
+  .sv.m-wobble .stk { animation: sv-stkw 2.2s ease-out 1 both; transform-origin: 50% 100%; }
+  .sv.m-wobble .stk.k2 { animation-delay: .35s; } .sv.m-wobble .stk.k3 { animation-delay: .7s; }
+  @keyframes sv-stkw { 0% { opacity: 0; transform: translateY(-30px); } 22% { opacity: 1; transform: translateY(0) scale(1.1, .86); } 34% { transform: none; }
+    48% { transform: rotate(10deg); } 60% { transform: rotate(-8deg); } 72% { transform: rotate(5deg); } 84% { transform: rotate(-2deg); } 100% { opacity: 1; transform: none; } }
+  .sv.m-wobble .sv-body { animation: sv-wobb 2.2s ease-in-out 1 both; }
+  @keyframes sv-wobb { 0%, 40% { transform: none; } 48% { transform: rotate(-4deg); } 60% { transform: rotate(4deg); } 72% { transform: rotate(-2deg); } 84%, 100% { transform: none; } }
+  .sv.m-catch .stk { animation: sv-stk .6s cubic-bezier(.34, 1.4, .64, 1) 1 both; }
+  .sv.m-catch .stk.k1 { animation-delay: .5s; } .sv.m-catch .stk.k2 { animation-delay: 1s; } .sv.m-catch .stk.k3 { animation-delay: 1.5s; }
+  .sv.m-catch .sv-body, .sv.m-catch .sv-shadow { animation: sv-under 2.2s ease-in-out 1 both; }
+  @keyframes sv-under { 0% { transform: translateX(-18px); } 18% { transform: translateX(3px); } 26% { transform: none; } 40% { transform: translateX(-3px); }
+    48% { transform: none; } 62% { transform: translateX(3px); } 70%, 100% { transform: none; } }
+  .sv.m-wobble .spark, .sv.m-catch .spark { animation: sv-spark 1.4s ease-out 1.6s 1 both; }
+  .sv.m-wobble .spark.s2, .sv.m-catch .spark.s2 { animation-delay: 1.8s; }
+  /* 3.8.1, more moves: the nudge */
+  .sv.m-knock .sv-body { animation: sv-peek .7s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
+  .sv.m-knock .sv-armR { animation: sv-knock 1.4s ease-in-out .6s 1 both; }
+  @keyframes sv-knock { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-52deg); } 25% { transform: rotate(-30deg); } 35% { transform: rotate(-52deg); }
+    45% { transform: rotate(-30deg); } 55% { transform: rotate(-52deg); } 70% { transform: rotate(-10deg); } }
+  .sv.m-bounce .sv-body { animation: sv-bounce 1.6s cubic-bezier(.34, 1.2, .64, 1) 1 both; }
+  @keyframes sv-bounce { 0% { transform: translateY(75%); } 25% { transform: translateY(8%); } 42% { transform: translateY(45%); } 66% { transform: translateY(2%); }
+    82% { transform: translateY(28%); } 100% { transform: translateY(22%); } }
+  /* 3.8.1, more moves: a room's seats: each does one small thing now and then, at its own time */
+  .sv.m-sread .sv-pupils { animation: sv-read 1.75s ease-in-out infinite alternate; }
+  .sv.m-snod .sv-body { animation: sv-nod 6s ease-in-out var(--sv-d, 0s) infinite; }
+  .sv.m-sreach .sv-armL, .sv.m-sreach .sv-armR { animation: sv-reach 8s ease-in-out var(--sv-d, 0s) infinite; }
+  .sv.m-sreach .sv-armR { animation-direction: reverse; }
+  @keyframes sv-reach { 0%, 70%, 100% { transform: rotate(0); } 78%, 86% { transform: rotate(40deg); } }
+  .sv.m-slook .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-d, 0s) infinite; }
   /* drawn again after it played: it rests, and blinks */
   .sv.rest .sv-body, .sv.rest .sv-armR, .sv.rest .sv-armL, .sv.rest .sv-shadow, .sv.rest .sv-clock,
-  .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark { animation: none; transform: none; }
-  .sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { animation: none; opacity: 0; }
-  .sv.rest.m-peek .sv-body { transform: translateY(22%); }
+  .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,
+  .sv.rest .sv-footL, .sv.rest .sv-footR, .sv.rest .cf, .sv.rest .sv-ring { animation: none; }
 }
+/* at rest, still too: landed, what flew gone (a banner that stays isn't left mid-hop) */
+.sv.rest .sv-body, .sv.rest .sv-armR, .sv.rest .sv-armL, .sv.rest .sv-shadow, .sv.rest .sv-clock,
+.sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,
+.sv.rest .sv-footL, .sv.rest .sv-footR { transform: none; }
+.sv.rest .cf, .sv.rest .spark, .sv.rest .sv-ring { opacity: 0; }
+.sv.rest.m-peek .sv-body, .sv.rest.m-knock .sv-body, .sv.rest.m-bounce .sv-body { transform: translateY(22%); }
 """

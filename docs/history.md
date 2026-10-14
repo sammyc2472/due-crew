@@ -1616,3 +1616,36 @@ every release that changes how something works.
   the end of the clock's row, centred on the ring (Sam: its spacing was
   off in the header); "then your call" is gone from the card, the lobby
   and the chip (done), as exposition.
+  Sev's places, Sam's picks (the "Sev's Places" mock, on the real board):
+  two new places, and more moves (Sam: "variety!") wherever it already
+  is. Signed out, Sev waves beside the card's words until you start
+  (`board.signed_out_card(sev=)`, `rooms.signed_out_sev`: a hello from
+  its mix the first time it's drawn while Anki's open, then it rests);
+  not on an expired sign-in or a deleted account, which say just what
+  happened. A crewmate's 100-day (or year) streak: the banner's emoji
+  becomes Sev hopping (`rooms.milestone_sevs`, `render(milestone_sev=)`),
+  once a banner, then it rests; Send 💯 as it was. The rest of the mock's
+  places were a no (the day you join, following no plan, bingo, done for
+  today, couldn't sync, the welcome screen, the year card, duecrew.com).
+  The moves are `sev.MOVES`, each place's own first: the day done (hop,
+  twirl, a little dance, a big jump), a cheer (catches it, hugs the gift,
+  spins with it), back from away (pops in, walks in, up from below), exam
+  eve (fingers crossed, a pep fist), a fifteen (reads, nods along,
+  scratches its head, taps a foot), a break (stretch, shakes it out,
+  marches, looks around), the question (the clock rings, points at it,
+  jumps at it), the session's line (squares land, the tower wobbles,
+  steps under them), the nudge (peeks, knocks, bobs up twice), and a
+  room's seats (`SEAT_MOVES`: blinks, reads, nods, reaches, looks around).
+  Each time Sev comes it plays a different one, never the same twice in a
+  row: by the logo, the streak banner, the session's line and signed out
+  it's `sev.pick` (at random, not the last), picked once a showing; the
+  last kept with the session (`sev_last`) so a restart doesn't repeat it
+  either. Where it stays a while it takes turns (`sev.nth`): a fifteen's
+  heads-down, its break's stretch and its question change each round (the
+  widgets' `vk` and the board's line, `room_model.vary_seed` the same on
+  both), the nudge each day, a room's seats one each, side by side never
+  the same. On a break the moves rotate only with Settings › On a break ›
+  Stretch; Breathe stays itself. All transforms and opacity, each with
+  its still frame for Reduce motion; and drawn again, a Sev that played
+  rests with Reduce motion on too (landed, what flew gone), so a banner
+  that stays isn't left mid-hop.

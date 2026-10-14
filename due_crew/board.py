@@ -3045,7 +3045,7 @@ def _one_at_a_time(bans):
 def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
            rules_stale=False, squad_view=None, knocks=None, reviews=None,
            sync_error=False, live=False, tricky=None, milestones=None, room=None, plans=None,
-           notice=None, asks=None, due=None, you=None, sticking=None, sev=None):
+           notice=None, asks=None, due=None, you=None, sticking=None, sev=None, milestone_sev=None):
     """3.8.0: two parts, apart. On top the You bubble (you_html): due,
     Due's view (due_flow.view, None when Due is off), and you, its Plans and
     Insights ({tab, folded, plans, insights}; None draws Due alone). Under it
@@ -3059,7 +3059,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
     asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
-    sev (3.8.1): Sev beside the logo for a moment, {svg, ago} (rooms.board_sev), or None."""
+    sev (3.8.1): Sev beside the logo for a moment, {svg, ago} (rooms.board_sev), or None.
+    milestone_sev (3.8.1): {uid: Sev's markup} for a streak banner, Sev in its emoji's place."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3106,7 +3107,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>')
     for uid, who, days in (milestones or [])[:2]:
         emoji = "&#128175;" if int(days) < 365 else "&#127881;"
-        bans.append(f'<div class="dc-wrap"><span>{emoji}</span>'
+        fig = (milestone_sev or {}).get(uid)  # 3.8.1 (Sam's pick): Sev hops in the emoji's place
+        icon = f'<span class="dc-fig">{_sev.slot(fig, 40)}</span>' if fig else f"<span>{emoji}</span>"
+        bans.append(f'<div class="dc-wrap">{icon}'
                     f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
                     f'<a class="wc" href="#" title="Send a cheer" '
                     f'onclick="{_pycmd("milestonecheer:" + str(uid))}">Send {emoji}</a>'
@@ -3605,7 +3608,8 @@ def _seat_html(s):
     """3.8.1: a crew room's member as their Sev (room_model.seats), a 24 px
     seat like the initials' circles: their accent by day and by night (only
     a colour reaches the style; anything else, the default's), blinking at
-    its own moment, their name its label (escaped)."""
+    its own moment and doing its own small thing (a SEAT_MOVES one), their
+    name its label (escaped)."""
     dflt, a = accent_pair(None), s.get("a")
     pair = a if isinstance(a, (list, tuple)) and len(a) == 2 else dflt
     light, dark = (x if isinstance(x, str) and _HEX.fullmatch(x) else d for x, d in zip(pair, dflt))
@@ -3614,8 +3618,9 @@ def _seat_html(s):
     except (TypeError, ValueError):
         delay = 0.0
     name = _html.escape(str(s.get("n") or ""), quote=True)
+    turn = s.get("m") if s.get("m") in _sev.SEAT_MOVES else "idle"  # its own small thing now and then
     return (f'<span class="seat" title="{name}" style="--sa-l:{light};--sa-d:{dark};--sv-d:{delay:.2f}s">'
-            f'{_sev.slot(_sev.svg("idle", label=name), 40)}</span>')
+            f'{_sev.slot(_sev.svg("idle", turn, label=name), 40)}</span>')
 
 
 def _fifteen_lobby(m):
@@ -3663,6 +3668,9 @@ SEV_CSS = """
     #due-crew .dc-fif .rt { text-align: left; }
     /* the session's line: Sev and its stack, the box's own padding around them (stack_reach) */
     #due-crew .dc-wrap .dc-fig { display: inline-flex; flex: none; }
+    /* signed out: Sev waves beside the words, until you start */
+    #due-crew .dc-card .dc-so { display: inline-flex; align-items: center; gap: 8px; text-align: left; max-width: 100%; }
+    #due-crew .dc-card .dc-hi { flex: none; line-height: 0; }
     #due-crew .dc-sess { text-align: left; }
     #due-crew .dc-fif .rw { flex-wrap: wrap; justify-content: flex-end; }
     #due-crew .du-nudge { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center;
@@ -3674,14 +3682,16 @@ SEV_CSS = """
 """
 
 
-def _card(cfg, title, body_html):
+def _card(cfg, title, body_html, sheet=""):
     head = board_mark() if title == "Due Crew" else f"<b>{title}</b>"
-    return (f'<div id="due-crew">{_css(cfg)}<div class="dc-card">'
+    return (f'<div id="due-crew">{_css(cfg)}{sheet}<div class="dc-card">'
             f'{head}<span>{body_html}</span></div></div>')
 
 
-def signed_out_card(cfg, expired=False, gone=False):
-    """gone (Q4): the account was deleted after 12 months without activity."""
+def signed_out_card(cfg, expired=False, gone=False, sev=None):
+    """gone (Q4): the account was deleted after 12 months without activity.
+    sev (3.8.1, Sam's pick): Sev's markup, waving beside the words until
+    you start (rooms.signed_out_sev), or None."""
     if gone:
         return _card(cfg, "Welcome back",
                      f'Your Due Crew account was deleted after 12 months without activity, '
@@ -3693,9 +3703,12 @@ def signed_out_card(cfg, expired=False, gone=False):
                      f'Your sign-in expired. '
                      f'<a href="#" onclick="{_pycmd("setup")}">Sign in again</a>')
     # 3.4 review, C4: one way in; the emailed code knows if the address is new
-    return _card(cfg, "Due Crew",
-                 f'Your friends&rsquo; studying next to yours. Nothing is shared '
-                 f'until you start. <a href="#" onclick="{_pycmd("setup")}">Start with your email</a>')
+    words = (f'Your friends&rsquo; studying next to yours. Nothing is shared '
+             f'until you start. <a href="#" onclick="{_pycmd("setup")}">Start with your email</a>')
+    if not sev:
+        return _card(cfg, "Due Crew", words)
+    return _card(cfg, "Due Crew", f'<span class="dc-so"><span class="dc-hi">{_sev.slot(sev, 44)}</span><span>{words}</span></span>',
+                 f'<style>{SEV_CSS}{_sev.CSS}</style>')
 
 
 def loading_card(cfg):

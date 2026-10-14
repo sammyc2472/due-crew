@@ -451,7 +451,7 @@ def _on_render(deck_browser, content):
         if not client().signed_in or client().session_dead:
             _state["board_shown"] = False
             content.stats += board.signed_out_card(c, expired=client().session_dead,
-                                                   gone=client().deleted_quiet)
+                                                   gone=client().deleted_quiet, sev=rooms.signed_out_sev())
         elif _state["entries"] is None:
             _state["board_shown"] = False
             content.stats += board.loading_card(c)
@@ -537,6 +537,7 @@ def _board_html(c):
                         tricky=together.tricky_view() if c.get("period") == "decks" else None,
                         asks=together.my_asks_view() if c.get("period") == "decks" else None,
                         milestones=None if show_up else _state["milestones"],
+                        milestone_sev=None if show_up else rooms.milestone_sevs(_state["milestones"][:2]),
                         room=rooms.board_view(), plans=plans,
                         due=due, you=_you(c, due, plans), sticking=_sticking(c),
                         sev=rooms.board_sev(c, due))

@@ -263,10 +263,38 @@ def done_share(done):
 
 # 3.8.1: Sev in a fifteen's widgets, drawn by sev.py and handed over as markup
 FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
+# the places in a fifteen whose moves take turns, a round each (Sam: "variety!")
+FIFTEEN_VARY = ("focus", "ring", "stretch")
 
 
-def _sevs(keys, on):
-    return ({k: _sev.svg(k) for k in keys}, _sev.CSS) if on else (None, "")
+def _sevs(keys, on, vary=(), seat=False):
+    """Sev's markup for the widgets by key, and its motion sheet. vary: places
+    whose other moves come too ("focus.nod"), with their turns, {place:
+    [key, ...]}, its own first; seat: a room's seat moves too ("idle.snod")."""
+    if not on:
+        return None, "", None
+    out, turns = {k: _sev.svg(k) for k in keys}, {}
+    for place in vary:
+        others = _sev.moves(place)[1:]
+        turns[place] = [place] + [f"{place}.{m}" for m in others]
+        out.update({f"{place}.{m}": _sev.move(place, m) for m in others})
+    if seat:
+        out.update({f"idle.{m}": _sev.svg("idle", m) for m in _sev.SEAT_MOVES if m != "idle"})
+    return out, _sev.CSS, turns or None
+
+
+def vary_seed(room):
+    """Where a fifteen's turns start (its start's minute): the first round
+    isn't always the same move, and round after round never repeats."""
+    try:
+        return int(_parse(room["start"]).timestamp() // 60) % 12
+    except Exception:
+        return 0
+
+
+def seat_key(m):
+    """The widgets' markup key for a seat's move (a SEAT_MOVES one)."""
+    return "idle" if m == "idle" or m not in _sev.SEAT_MOVES else f"idle.{m}"
 
 
 def _pair_of(name):
@@ -279,10 +307,12 @@ def seats(ms, entries, my_pair):
     [{n: the name, its label (text, never markup), a: [light, dark], d: s}].
     A crewmate wears their accent (the add-on's colours for it; one it
     doesn't know, the default's), I wear mine, and each started at its own
-    moment (d, sev.started), so the blinks never line up."""
+    moment (d, sev.started), so the blinks never line up. Each has its own
+    small thing to do now and then (m, sev.SEAT_MOVES), side by side never the same."""
     accent = {e.get("user_id"): e.get("accent") for e in entries or []}
     return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of(accent.get(uid))),
-             "d": _sev.started(i)} for i, (uid, name, you) in enumerate(ms)]
+             "d": _sev.started(i), "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)]}
+            for i, (uid, name, you) in enumerate(ms)]
 
 
 def widget_data(room, entries, accent_pair, compact=False, side="right", sev=True, brk_pose="breathe",
@@ -296,7 +326,8 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
     start = _parse(room["start"])
     fifteen = is_fifteen(room)
     seat = seats(ms, entries, accent_pair) if sev and not fifteen else []
-    sevs, css = _sevs(FIFTEEN_SEV, sev and fifteen) if fifteen else _sevs(("idle",), bool(seat))
+    sevs, css, turns = (_sevs(FIFTEEN_SEV, sev, FIFTEEN_VARY) if fifteen
+                        else _sevs(("idle",), bool(seat), seat=True))
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
             "title": "Fifteen" if fifteen else title(entries, room),
@@ -308,12 +339,13 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "accent": list(accent_pair), "compact": bool(compact), "side": chip_side(side),
             "kind": "fifteen" if fifteen else "room", "ask": ASK * 60000, "max": MAX_ROUNDS,
             "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT), "brk_pose": "stretch" if brk_pose == "stretch" else "breathe",
+            "vary": turns, "vseed": vary_seed(room) if turns else 0,
             "cards": cards, "total": total}
 
 
 def start_data(accent_pair, side="right", sev=True, nap=False, compact=False):
     """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room."""
-    sevs, css = _sevs(("idle", "nap"), sev)
+    sevs, css, _turns = _sevs(("idle", "nap"), sev)
     return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
             "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT)}
 
@@ -563,7 +595,7 @@ _RUNTIME = r"""
   function seats(size) {
     var f = el('span', 'display:inline-flex;align-items:center;gap:3px;'), n = night();
     D.seats.forEach(function (s) {
-      var w = sev('idle', size), v = w.firstChild;
+      var w = sev(s.m && s.m !== 'idle' && D.sev['idle.' + s.m] ? 'idle.' + s.m : 'idle', size), v = w.firstChild;
       w.style.setProperty('--sv-a', n ? s.a[1] : s.a[0]);
       w.style.setProperty('--sv-d', s.d + 's');
       w.title = s.n;
@@ -579,10 +611,15 @@ _RUNTIME = r"""
   // the little Sev's moment: heads down in a fifteen (after a jump or a shake-out
   // as it starts), resting or stretching on a break, the clock at the question
   function fkey(p, fresh) {
-    if (p.state === 'ask') { return 'ring'; }
-    if (p.state === 'break') { return D.brk_pose === 'stretch' ? 'stretch' : 'rest'; }
+    if (p.state === 'ask') { return vk('ring', p.round); }
+    if (p.state === 'break') { return D.brk_pose === 'stretch' ? vk('stretch', p.round) : 'rest'; }
     if (fresh) { return p.round > 1 ? 'again' : 'ready'; }
-    return 'focus';
+    return vk('focus', p.round);
+  }
+  // 3.8.1 (Sam: "variety!"): a place's moves take turns, a round each (room_model.FIFTEEN_VARY)
+  function vk(k, n) {
+    var v = D.vary && D.vary[k];
+    return v && v.length ? v[(((n + (D.vseed || 0)) % v.length) + v.length) % v.length] : k;
   }
   function fresh(p) { return p.state === 'round' && p.total - p.left < 4000; }
   function sub(p) {
@@ -674,7 +711,7 @@ _RUNTIME = r"""
     var logo = el('span', 'display:flex;align-items:center;gap:8px;');
     // 3.8.1: a fifteen's break is Sev's: breathe along (a square, four counts a side), or stretch
     // breathing draws its square around Sev: the whole drawing; a stretch needs only Sev's own room
-    var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev('stretch', 170) : sev('breathe', 180, true)) : null;
+    var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev(vk('stretch', phase(Date.now()).round), 170) : sev('breathe', 180, true)) : null;
     if (bs) { bs.style.marginBottom = '10px'; }  // its shadow (or the square's "out") clear of the ring
     logo.appendChild(bs || squares(c, 110));
     var rg4 = ring(FIF ? 96 : 150, c), h = el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;'), p1 = el('div', 'color:' + c.mut + ';max-width:40ch;');
@@ -722,7 +759,7 @@ _RUNTIME = r"""
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var qb = el('div', 'display:grid;justify-items:center;gap:12px;max-width:520px;padding:20px;');
     // Sev with the clock (its shadow clear of the words), or with Sev off the logo's squares
-    if (D.sev) { var qs0 = sev('ring', 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); } else { qb.appendChild(squares(c, 110)); }
+    if (D.sev) { var qs0 = sev(vk('ring', D.rounds), 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); } else { qb.appendChild(squares(c, 110)); }
     var n = D.rounds, cap = n >= D.max;
     qb.appendChild(el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;', 'That’s fifteen.'));
     if (D.cards != null) {

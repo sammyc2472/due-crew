@@ -512,6 +512,9 @@ sections.append("<h3>3.8.1: the session's line; Sev hops by the logo for a momen
     DATA, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg("hop"), "ago": 0},
     room={"mine": None, "invites": [], "done": None,
           "fifteen_done": {"n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": _sev.svg("stack", stack=3)}}))
+sections.append("<h3>3.8.1: a crewmate's 100-day streak: Sev hops in the emoji's place</h3>" + board.render(
+    dict(DATA, entries=TOGETHER), {"period": "today"}, now_ts - 60, live=True,
+    milestones=[("dre", "Dre", 100)], milestone_sev={"dre": _sev.move("hop", label="Sev: a big streak")}))
 sections.append("<h3>3.8.1: by the logo for a moment: a cheer lands; exam eve; back from away</h3>" + "".join(board.render(
     SOLO, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg(k), "ago": 0}) for k in ("cheer", "exam", "hello")))
 # 3.8.1: a crew room with Sev on: each member is their Sev, in their own accent
@@ -541,6 +544,7 @@ for accent in board.ACCENTS:
         for theme in ("light", "dark"))
     sections.append(f"<h3>accent: {accent}</h3><div style='display:flex;flex-wrap:wrap'>{frames}</div>")
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))
+sections.append("<h3>3.8.1: signed out, Sev on: it waves beside the words</h3>" + board.signed_out_card({}, sev=_sev.move("hello")))
 
 profile_js = board.profile_overlay_js({
     "name": "Dre", "streak": 41, "last_active": ago(minutes=12),
