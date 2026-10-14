@@ -56,8 +56,8 @@ Above the board is yours.
   each week.
 - **Upcoming** is the next two weeks, and **Later** whatever has no day
   yet.
-- **Study today** goes through the day's decks, your plans' first, then
-  today's misses (Ctrl+Shift+S).
+- **Study today** goes through the day's decks, your plans' first
+  (Ctrl+Shift+S).
 - **Fifteen?** One click in Anki's top bar starts fifteen minutes of
   Study today. At the end: take five, go again, or stop there. Your crew
   sees you're studying. Not started by your usual time? Today nudges you.

@@ -1747,9 +1747,17 @@ def tidy_decks(col):
     """3.8.0, the morning, before it unsuspends (its undo step stays the
     latest): the filtered decks Due Crew built that are empty now go, and
     the Due Crew parent deck once nothing's under it, in one step (Anki's
-    Delete Deck). Returns how many."""
+    Delete Deck). Returns how many. 3.8.1 (Sam): "Today's misses" is
+    today's: one left from an earlier day is emptied back into its decks
+    first (Anki's Empty), so it goes with the rest."""
     try:
         normal = {int(d.id) for d in col.decks.all_names_and_ids(include_filtered=False)}
+        mid = col.decks.id_for_name(P.our_deck("Today's misses"))
+        if mid and int(mid) not in normal and _pcfg().get("misses_day") != _today():
+            col.sched.empty_filtered_deck(int(mid))
+            c = _pcfg()
+            c.pop("misses_day", None)
+            _psave(c)
         rows = [(int(d.id), d.name, col.db.scalar("SELECT count() FROM cards WHERE did = ?", int(d.id)) or 0)
                 for d in col.decks.all_names_and_ids(include_filtered=True) if int(d.id) not in normal]
         c = _pcfg()

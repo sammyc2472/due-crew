@@ -574,7 +574,7 @@ _RUNTIME = r"""
   }
   function ftitle(p) { var n = p.state === 'break' ? p.round + 1 : p.round; return p.state === 'break' ? 'Break' : 'Fifteen' + (n > 1 ? ' ' + n : ''); }
   function fsub(p) {
-    return p.state === 'break' ? 'fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'ask' ? 'done · your call' : mins(p.left) + ' min left';
+    return p.state === 'break' ? 'fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'ask' ? 'done' : mins(p.left) + ' min left';
   }
   // the little Sev's moment: heads down in a fifteen (after a jump or a shake-out
   // as it starts), resting or stretching on a break, the clock at the question
@@ -624,7 +624,7 @@ _RUNTIME = r"""
               p.state === 'before' ? '·' : p.state === 'ask' ? '✓' : String(mins(p.left)), p.state === 'break');
       if (sv2) { sv2.set(fkey(p, fresh(p))); }
       tx2.textContent = (p.state === 'break' ? 'break ' + mins(p.left) + ' min' : p.state === 'before' ? 'starts ' + hm(D.start) :
-        p.state === 'ask' ? 'your call' : mins(p.left) + ' min') + (D.line ? ' · ' + D.line : '');
+        p.state === 'ask' ? 'done' : mins(p.left) + ' min') + (D.line ? ' · ' + D.line : '');
     };
   } else if (KIND === 'gutter') {
     root = el('div', 'position:fixed;left:16px;top:16px;width:' + __GUTTER__ + 'px;box-sizing:border-box;display:grid;justify-items:center;gap:5px;' +
@@ -769,8 +769,9 @@ _RUNTIME = r"""
     var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
         x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
     hd.title = 'Drag to move';
-    var sv5 = FIF && D.sev ? sev('focus', 40) : null;
-    hd.appendChild(sv5 || squares(c, 70)); hd.appendChild(x);
+    // the logo's squares head every room's card; a fifteen's Sev sits by its clock (Sam: the spacing)
+    var sv5 = FIF && D.sev ? sev('focus', 44) : null;
+    hd.appendChild(squares(c, 70)); hd.appendChild(x);
     var AT = 'dcRoomCardAt';
     function put(px, py) {
       var w = root.offsetWidth, h = root.offsetHeight;
@@ -800,9 +801,10 @@ _RUNTIME = r"""
       }
       document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
     });
-    var row = el('div', 'display:flex;gap:10px;align-items:center;'), rg5 = ring(44, c), rt = el('div', 'display:grid;'),
+    var row = el('div', 'display:flex;gap:10px;align-items:center;'), rg5 = ring(44, c), rt = el('div', 'display:grid;flex:1;min-width:0;'),
         k1 = el('b', '', D.title), k2 = el('small', 'color:' + c.mut + ';font-size:12px;');
     rt.appendChild(k1); rt.appendChild(k2); row.appendChild(rg5); row.appendChild(rt);
+    if (sv5) { row.appendChild(sv5); }
     var bar = el('div', 'display:flex;gap:3px;align-items:center;'), segs = [];
     for (var i = 1; i <= D.rounds; i++) {
       var sg = el('i', 'flex:' + D.round + ';height:8px;border-radius:4px;background:' + c.line + ';position:relative;overflow:hidden;display:block;');
@@ -853,7 +855,7 @@ _RUNTIME = r"""
         if (sv5) { sv5.set(fkey(p, false)); }
         k1.textContent = p.state === 'ask' ? 'That’s fifteen.' : ftitle(p);
         k2.textContent = p.state === 'ask' ? (cap ? 'That’s eight: two hours. Enough for one sitting.' : 'A five-minute break, then another fifteen?') :
-          p.state === 'break' ? 'Fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : mins(p.left) + ' min left, then your call';
+          p.state === 'break' ? 'Fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : mins(p.left) + ' min left';
         five.style.display = p.state === 'ask' && !cap ? '' : 'none';
         now5.style.display = (p.state === 'ask' && !cap) || p.state === 'break' ? '' : 'none';
         now5.textContent = p.state === 'break' ? 'Start now' : 'Another fifteen now';
@@ -967,7 +969,7 @@ def fifteen_view(room, now=None):
         label, frac = str(mins), 1 - p["left"] / p["total"]
     else:
         title = "Fifteen" + (f" {p['round']}" if p["round"] > 1 else "")
-        sub = f"{mins} min left, then your call"
+        sub = f"{mins} min left"
         label, frac = str(mins), 1 - p["left"] / p["total"]
     return {"fifteen": True, "state": p["state"], "title": title, "sub": sub, "label": label,
             "frac": round(frac, 3), "brk": p["state"] == "break", "cap": cap, "n": p["round"]}

@@ -7819,14 +7819,21 @@ def test_tidy_filtered_v380():
                 self.d.pop(i, None)
 
     cards = {2: 3}
-    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, *a: cards.get(a[0], 0)))
-    pc = {"built": [3, 2, 8, 77, "x"]}
-    saved = (F._pcfg, F._psave)
+    emptied = []
+    col = types.SimpleNamespace(decks=Decks(), db=types.SimpleNamespace(scalar=lambda q, *a: cards.get(a[0], 0)),
+                                sched=types.SimpleNamespace(empty_filtered_deck=lambda d: emptied.append(d)))
+    pc = {"built": [3, 2, 8, 77, "x"], "misses_day": "2026-10-14"}
+    saved = (F._pcfg, F._psave, F._today)
     try:
-        F._pcfg, F._psave = (lambda: pc), (lambda c: None)
+        F._pcfg, F._psave, F._today = (lambda: pc), (lambda c: None), (lambda: "2026-10-14")
         n = F.tidy_decks(col)
         check("tidy: one step, the empty ones of ours; the parent stays while a deck under it has cards",
               n == 3 and col.decks.removed == [[1, 3, 6]] and pc["built"] == [2, 8], (n, col.decks.removed, pc))
+        check("tidy: today's misses, built today from the box, stay put till tomorrow", emptied == [] and pc.get("misses_day"))
+        F._today = lambda: "2026-10-15"
+        F.tidy_decks(col)
+        check("tidy: the next morning they're emptied back into their decks (3.8.1, Sam), and the day forgotten",
+              emptied == [2] and "misses_day" not in pc, (emptied, pc))
         cards[2] = 0
         n = F.tidy_decks(col)
         check("tidy: the last one under it studied, it goes with the parent, one step",
@@ -7836,7 +7843,7 @@ def test_tidy_filtered_v380():
         F._note_built(2)
         check("tidy: a deck built is remembered once, newest last", pc["built"] == [5, 2], pc)
     finally:
-        F._pcfg, F._psave = saved
+        F._pcfg, F._psave, F._today = saved
 
 
 def test_due_repeat_site_twin():
@@ -7947,10 +7954,10 @@ def test_one_settings_keys_study_v380():
         TF.ask_this_card()
         check("keys: Ctrl+Shift+Q off the review screen says what it's for", said and "reviewing" in said[0], said)
         # Study today: the walk's order
-        check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}, 12, False) == ("deck", 3))
-        check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}, 12, False) == ("deck", 9))
-        check("study: then today's misses, once", D.study_next([5], {5: 0, 9: 0}, 12, False) == ("misses", 12)
-              and D.study_next([5], {5: 0}, 12, True) is None and D.study_next([], {}, 0, False) is None)
+        check("study: the plans' decks first, in plan order", D.study_next([5, 3], {5: 0, 3: 4, 9: 40}) == ("deck", 3))
+        check("study: then the deck with the most due", D.study_next([5], {5: 0, 7: 3, 9: 40}) == ("deck", 9))
+        check("study: then done; no misses step (3.8.1, Sam: it built a deck nobody asked for)",
+              D.study_next([5], {5: 0, 9: 0}) is None and D.study_next([], {}) is None)
         # the walk, through Anki's screens
         sel = []
         F.tooltip = lambda m, **k: said.append(m)
@@ -7959,11 +7966,13 @@ def test_one_settings_keys_study_v380():
         mw.col = types.SimpleNamespace(
             decks=types.SimpleNamespace(select=lambda d: sel.append(d), name=lambda d: f"Deck {d}", id_for_name=lambda n: 77),
             sched=types.SimpleNamespace(counts=lambda: counts["left"]))
-        sv = (F._plan_decks, F._due_now, F._misses_today, F._reviews)
+        sv = (F._plan_decks, F._due_now, F._reviews)
         F._plan_decks = lambda: [3]
         F._due_now = lambda col, dids: dict(due["n"])
-        F._misses_today = lambda col: []
         F._reviews = lambda: {"back": 0, "at": ""}
+        from due_crew import plan_flow as PF
+        built, sv_filtered = [], PF._filtered
+        PF._filtered = lambda col, name, cids, order=4: (built.append(name), True)[1]
         calls.clear()
         try:
             dc._on_js(False, "duecrew:duestudy", DeckBrowser())
@@ -7980,8 +7989,10 @@ def test_one_settings_keys_study_v380():
             due["n"] = {3: 0, 9: 0}
             F.study_today()
             check("study: nothing due, it says so and stays put", "Nothing due now." in said[-1] and _state.get("study_walk") is None)
+            check("study: the walk never builds a deck, whatever today's misses (a Fifteen starts it)", built == [], built)
         finally:
-            F._plan_decks, F._due_now, F._misses_today, F._reviews = sv
+            F._plan_decks, F._due_now, F._reviews = sv
+            PF._filtered = sv_filtered
             mw.col = None
         T0 = "2026-10-03"
         v = D.view(T0, [{"pid": "p", "uid": "u", "plan": "P", "name": "A", "opens": T0, "seen": 2, "total": 5}], [], {},

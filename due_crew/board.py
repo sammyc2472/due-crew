@@ -4672,7 +4672,7 @@ def _study_to(v):
     return f' <span class="nm">{_html.escape(str(to))}</span>' if to else ""
 
 
-STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first, then today&rsquo;s misses ({STUDY_KBD})"
+STUDY_TIP = f"Each deck with cards due, your plans&rsquo; first ({STUDY_KBD})"
 
 
 def _due_html(v, more=(), more_tab=None, more_body="", folded=None):

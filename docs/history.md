@@ -1600,3 +1600,19 @@ every release that changes how something works.
   passes `sev_on()`). And the fifteen's question with Sev off showed no
   squares: its else sat inside a `//` comment (found merging the room
   seats); it draws the logo's squares now, as the checklist says.
+  "Today's misses" built a deck nobody asked for (Sam, after a Fifteen):
+  Study today's last step made `Due Crew::Today's misses` from every card
+  answered Again today (352 of them), and a Fifteen starts Study today, so
+  with nothing else due its first step built the deck and opened it,
+  unsaid; the morning's tidy only clears empty decks, so it stayed, its
+  cards out of their decks, rescheduling as they were studied. Sam's
+  call: the walk has no misses step now (`due.study_next(plans, due)`,
+  plans' decks, then the most due, then done), and it never builds a
+  deck; going over the misses is the Today box's suggestion, a click that
+  says so, which notes its day (`misses_day`, plans.json); a misses deck
+  left from an earlier day is emptied back into its decks the next
+  morning (`tidy_decks`, Anki's Empty) and goes with the tidy. A fifteen's
+  card: the logo's squares head it again, as a room's, and Sev sits at
+  the end of the clock's row, centred on the ring (Sam: its spacing was
+  off in the header); "then your call" is gone from the card, the lobby
+  and the chip (done), as exposition.
