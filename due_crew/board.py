@@ -3665,7 +3665,8 @@ def closet_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in CLOSET_TABS else "All"
     new = [k for k in view.get("new") or [] if k in have]
     near = {k: (got, need) for k, got, need, _u in view.get("near") or []}
-    shown = _closet.wear(look, trying) if trying and trying not in look else look
+    hidden = trying and _closet.BY[trying]["group"] == "Secret" and trying not in have  # a secret stays one
+    shown = _closet.wear(look, trying) if trying and trying not in look and not hidden else look
     fig = _sev.svg("hello" if trying or new else "idle", rest=bool(view.get("rest")), look=shown,
                    label="Your Sev" + (" trying something on" if trying else ""))
     chips = "".join(f'<button title="Take it off" {_st_click("closetwear:" + k)}>{e(_closet.BY[k]["name"])}</button>' for k in look)

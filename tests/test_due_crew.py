@@ -12983,6 +12983,9 @@ def test_closet_board_v382():
           and CA.ART["cap"][0][:40] in page.split('class="cl-fig"')[1].split("</div>")[0])
     check("almost there, on All; what just came is marked", "11 of 14 days in a row" in page and 'cl-t lk tr' in page
           and page.count(" new\"") == 1)
+    secret = board.closet_html(dict(view, **{"try": "catears"}), {})
+    check("trying on a secret you haven't found shows nothing of it", "A secret: you&rsquo;ll know it when it happens." in secret
+          and CA.ART["catears"][0][:40] not in secret)
     tab = board.closet_html(dict(view, tab="Costumes", near=[], try_=None), {"theme": "dark"})
     check("a tab shows its own: Costumes are the whole looks",
           tab.count('class="cl-t') == sum(1 for t in C.THINGS if t["slot"] == C.COSTUME) and "11 of 14" not in tab)
