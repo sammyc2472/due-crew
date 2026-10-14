@@ -665,6 +665,11 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.8.3: Pips on Squads
+
+- [ ] Squads › a squad: each person's Pip where the emoji was; yours in your look (it opens the closet), a crewmate's in their colour and look, everyone else a plain green Pip. Settings › Pip off: the emojis come back.
+- [ ] Squads › a plan's squad: the faces under Showed up today are Pips, and so is whoever asked a question. duecrew.com's Squads the same.
+
 ### 3.8.2: Pip's closet
 
 - [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Pip where their emoji was, in their colour (yours in yours); Settings › Pip off brings the emojis back.

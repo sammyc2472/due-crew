@@ -887,6 +887,8 @@ def _css(cfg):
     #due-crew .faces {{ display: flex; flex-wrap: wrap; gap: 8px 14px; text-align: left; }}
     #due-crew .face {{ display: grid; justify-items: center; gap: 1px; font-size: 11px; color: var(--dc-muted); min-width: 44px; }}
     #due-crew .face .e {{ font-size: 20px; line-height: 24px; }}
+    #due-crew .face .e .dc-rsev {{ margin: 4px 0 0; }}
+    #due-crew .face:not(:hover) .dc-rsev .sv, #due-crew .face:not(:hover) .dc-rsev .sv * {{ animation: none !important; }}
     #due-crew .ini {{ display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--dc-you-bg); color: var(--dc-accent); font-size: 12px; font-weight: 700; line-height: 1; vertical-align: middle; }}
     #due-crew .ini.sm {{ width: 17px; height: 17px; font-size: 10px; }}
     #due-crew .face.away {{ opacity: .38; }}
@@ -1798,7 +1800,7 @@ def face(emoji, name, small=False):
     return f'<span class="ini{" sm" if small else ""}">{_html.escape(initial(name))}</span>'
 
 
-def _plan_squad_html(pid, tabs):
+def _plan_squad_html(pid, tabs, people=None, cfg=None):
     """3.8.0, a plan's squad on the Squads tab (the plan's Team tab until
     then): who showed up today, its bingo, Ask the squad and its threads,
     and the way out. Names, words and topics are other people's: escaped here."""
@@ -1816,10 +1818,14 @@ def _plan_squad_html(pid, tabs):
                 'your progress counts for the plan&rsquo;s authors. Never your numbers.</span>'
                 f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join its squad</a></div>')
     me = tabs.get("me")
+
+    def who_face(x, size=None, small=False):  # 3.8.3: their Pip, as on the squad's table; Pip off, the emoji
+        pip = squad_pip(x.get("uid"), x.get("name"), x.get("uid") == me, people, cfg, size) if cfg is not None else None
+        return pip or face(x.get("emoji"), x.get("name"), small=small)
     faces = ""
     for f in v.get("faces") or []:
         name = "You" if f.get("uid") == me else str(f.get("name") or "?")
-        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{face(f.get("emoji"), f.get("name"))}</span>'
+        faces += (f'<div class="face{"" if f.get("shown") else " away"}"><span class="e">{who_face(f, 40)}</span>'
                   f'<b>{e(name)}</b></div>')
     if int(v.get("more") or 0):
         more = int(v["more"])
@@ -1848,7 +1854,7 @@ def _plan_squad_html(pid, tabs):
     down, have = set(known.get("down") or []), set(known.get("have") or [])
     for a in v.get("asks") or []:
         aid = int(a["id"])
-        who = "You" if a.get("mine") else f'{face(a.get("emoji"), a.get("name"), small=True)} <b>{e(str(a.get("name") or "?"))}</b>'
+        who = "You" if a.get("mine") else f'{who_face(a, small=True)} <b>{e(str(a.get("name") or "?"))}</b>'
         if a.get("guid"):
             on = " on a card you have down" if a["guid"] in down else " on a card"
             head = f'<span>{who}{on}</span>'
@@ -2617,14 +2623,15 @@ def _squad_week_line(rows, day):
     return f'<div class="dc-line dc-sum sqwk">Last 7 days: <b>{days:,}</b> study days between {people:,} of you</div>'
 
 
-def _squads_html(view, cfg):
+def _squads_html(view, cfg, crew_by=None):
     """A squad board: everyone here holds the same invite. Plain ranks — no
     medals, no cheers; these aren't necessarily people you know. Add lives
-    on the person's card (click a name), not on the row."""
+    on the person's card (click a name), not on the row. crew_by (3.8.3): my
+    crew by uid, so a crewmate's Pip wears their colour and look."""
     state = view.get("state")
     sw = _switcher(view)
     if view.get("kind") == "plan":
-        return sw + _plan_squad_html(str(view.get("pid") or ""), view)
+        return sw + _plan_squad_html(str(view.get("pid") or ""), view, crew_by, cfg)
     name = _html.escape(str(view.get("name") or "?"))
     if state == "none":
         return sw + '<div class="dc-line">No squads yet.</div>'  # the way in is right above it
@@ -2685,8 +2692,9 @@ def _squads_html(view, cfg):
     n = 0
     folded = False
     for r in live + waiting_today + rest:
-        pname = _label(r["name"], r.get("emoji"))
         uid = str(r["user_id"])
+        pip = squad_pip(uid, r["name"], r.get("you"), crew_by, cfg)  # 3.8.3: Pip where the emoji was
+        pname = _html.escape(str(r["name"])) if pip else _label(r["name"], r.get("emoji"))
         cls, note = "", ""
         if id(r) in long_ids:
             if not folded:
@@ -2707,6 +2715,8 @@ def _squads_html(view, cfg):
                 note = ' <span class="la faded">&middot; waiting</span>'
             link = (f'<a class="dc-pl" href="#" title="Open card" '
                     f'onclick="{_pycmd("ecard:" + uid)}">{pname}</a>')
+        if pip:  # beside the name, outside its underline, as on Crew; room above for a hat (tr.sv)
+            link, cls = pip + link, cls + " sv"
         if r.get("day") != day:
             cls += " dim"
             when = "yesterday" if r.get("day") == yesterday else "quiet"
@@ -3083,7 +3093,8 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     show_up = bool(cfg.get("show_up"))
     pick = "" if period == "squads" else _crew_picker(period, show_up, hidden)
     body = (_decks_html(data, deltas, tricky, None, asks, sticking, pick) if period == "decks"
-            else _squads_html(squad_view or {"state": "none"}, cfg)
+            else _squads_html(squad_view or {"state": "none"}, cfg,
+                              {e.get("user_id"): e for e in data.get("entries") or [] if not e.get("you")})
             if period == "squads"
             else _table_html(data, cfg, period, pick))
     # 3.4 review, H6: one banner at a time, the most time-bound first; the
@@ -3817,7 +3828,7 @@ def closet_line(news, look, first=False):
             f'<a class="wx" href="#" title="Later" onclick="{_pycmd("closetnew")}">&times;</a></div>')
 
 
-def row_sev(row, cfg):
+def row_sev(row, cfg, size=None):
     """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
     at. My own opens the closet. None with Pip off."""
@@ -3826,12 +3837,22 @@ def row_sev(row, cfg):
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
     label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
-    fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
+    fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), size or _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
     style = f'--rs-l:{light};--rs-d:{dark}'
     if row.get("you"):
         return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
     return f'<span class="dc-rsev" style="{style}">{fig}</span>'
+
+
+def squad_pip(uid, name, you, people, cfg, size=None):
+    """3.8.3: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
+    squads page still has the old emojis"): mine as on my row; a crewmate's
+    in their colour and look (a mutual friend's, which only the crew brings);
+    anyone else plain, in the default colour, since all a squadmate shares is
+    a name and an emoji. people: {uid: crew entry}. None with Pip off."""
+    p = (people or {}).get(uid) or {}
+    return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size)
 
 
 def card_sev(row, cfg, size=44):

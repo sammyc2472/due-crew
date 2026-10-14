@@ -726,7 +726,7 @@ def test_squad_view_html():
           "&middot; 2,713 reviews together" in html, html)
     check("squad view: yesterday's row is dim, unranked, and last",
           html.index("Marcus") > html.index("Priya") and "&middot; yesterday" in html
-          and re.search(r'<td class="rk"></td><td class="nm"><a[^>]*ecard:u3', html) is not None)
+          and re.search(r'<td class="rk"></td><td class="nm">(?:(?!</tr>).)*ecard:u3', html) is not None)
     check("squad view: founder controls and the shared footer",
           "squadlock" in html and ">Open<" in html and "squadinvite" in html
           and "squadleave" in html)
@@ -892,8 +892,11 @@ def test_v25_edges_emoji_week():
             "name": "busm", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
             "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
     html = board._squads_html(view, {"sort": "week"})
-    check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
-          "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
+    plain = board._squads_html(view, {"sort": "week", "sev": False})
+    check("squad board: a Pip in front of each name (3.8.3; the emoji with Pip off), a rolling 7-days column, sortable by it",
+          "🐢" not in html and "🦊" not in html and html.count('class="dc-rsev"') == 3
+          and "🐢 igk" in plain and "🦊 Sammy" in plain and "dc-rsev" not in plain
+          and "7/7" in html and "6/7" in html
           and '<span class="hl">7 days</span> &#9662;' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
@@ -2766,7 +2769,7 @@ def test_not_yet_today_is_unranked():
             "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
     sq = board._squads_html(view, {})
     check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
-          and "#1" in sq and "#2" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
+          and ">#1<" in sq and ">#2<" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
 
 
 def test_ui_review_board():
@@ -13116,6 +13119,66 @@ def test_closet_board_v382():
         dc._state["closet_open"] = dc._state["closet_new"] = None
 
 
+def test_squad_pips_v383():
+    """3.8.3 (Sam: "squads page still has the old emojis and not the new
+    pips"): the Squads tab's people are Pips, as Crew's are: mine in my colour
+    and look, a crewmate's in theirs (a mutual friend's, which only the crew
+    brings), anyone else plain in the default colour, since a squadmate
+    shares a name and an emoji, nothing more. A plan's squad too, its faces
+    and its threads. With Pip off, the emojis. And the site's twin."""
+    from due_crew import closet_art as CA
+    lb = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(2)]
+    rows = [{"user_id": "me", "name": "Sammy", "emoji": "🦊", "day": lb[0], "reviews": 50, "time_ms": 60000, "you": True},
+            {"user_id": "dre", "name": "Dre", "emoji": "🐢", "day": lb[0], "reviews": 40, "time_ms": 60000, "crew": True},
+            {"user_id": "zed", "name": "Zed <b>", "emoji": "🐸", "day": lb[0], "reviews": 30, "time_ms": 60000}]
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": rows, "day": lb[0], "yesterday": lb[1], "people": 3, "reviews": 120}
+    conf = {"accent": "rose", "sev_look": ["cap"], "sev_closet": {"cap": "2026-01-01"}}
+    crew = {"dre": {"user_id": "dre", "accent": "blue", "look": ["dino"]}}
+    html = board._squads_html(view, conf, crew)
+
+    def row(name):
+        i = html.index(name)
+        return html[html.rfind("<tr", 0, i):html.index("</tr>", i)]
+    me, dre, zed = row(">Sammy<"), row(">Dre<"), row(">Zed &lt;b&gt;<")
+    green = board.accent_pair(None)[0]
+    check("squads: a Pip where each emoji was, room above it for a hat",
+          not any(x in html for x in ("🦊", "🐢", "🐸")) and all('class="sv"' in r or ' sv"' in r for r in (me, dre, zed)))
+    check("…mine in my colour and look, opening the closet; a crewmate's in theirs",
+          CA.ART["cap"][0][:30] in me and "--rs-l:#b03052" in me and "duecrew:closet'" in me
+          and CA.ART["dino"][0][:30] in dre and "--rs-l:#1e5fb4" in dre)
+    check("…anyone else plain, in the default colour (nothing of theirs but a name), the name still text",
+          f"--rs-l:{green}" in zed and "cl-" not in zed.split("dc-pl")[0] and "Zed <b>" not in zed
+          and "Zed &lt;b&gt;’s Pip" in zed)
+    plain = board._squads_html(view, dict(conf, sev=False), crew)
+    check("…Pip off: the emojis as before", "🦊 Sammy" in plain and "🐢 Dre" in plain and "dc-rsev" not in plain)
+    team = {"on": True, "count": 3, "shown": 2,
+            "faces": [{"uid": "me", "name": "Sammy", "emoji": "🦊", "shown": True},
+                      {"uid": "dre", "name": "Dre", "emoji": "🐢", "shown": True},
+                      {"uid": "zed", "name": "Zed", "emoji": "🐸", "shown": False}],
+            "asks": [{"id": 1, "uid": "dre", "name": "Dre", "emoji": "🐢", "text": "why?", "replies": [], "mine": False}]}
+    ps = board._plan_squad_html("p1", {"team": team, "me": "me"}, crew, conf)
+    faces = ps.split('class="faces"')[1].split('<div class="tg">')[0]
+    check("a plan's squad: its faces are Pips, a size up (mine, my crewmate's in their look, the rest plain)",
+          not any(x in ps for x in ("🦊", "🐢", "🐸")) and faces.count('class="dc-rsev') == 3
+          and "width:24px" in faces and CA.ART["dino"][0][:30] in faces and CA.ART["cap"][0][:30] in faces)
+    check("…and so is who asked", CA.ART["dino"][0][:30] in ps.split('class="tqa"')[1]
+          and "🐢" in board._plan_squad_html("p1", {"team": team, "me": "me"}, crew, dict(conf, sev=False))
+          and "🐢" in board._plan_squad_html("p1", {"team": team, "me": "me"}))
+    page = board.render({"entries": [{"user_id": "me", "name": "Sammy", "you": True, "days": {}},
+                                     dict(crew["dre"], name="Dre", days={})], "labels": lb, "tomorrow": "", "pending": []},
+                        dict(conf, period="squads"), 0, squad_view=view)
+    check("…the board hands the squads its crew", CA.ART["dino"][0][:30] in page.split(">Dre<")[0].rsplit("<tr", 1)[1])
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app_js = open(os.path.join(root, "site", "public", "app.js"), encoding="utf-8").read()
+    builder_js = open(os.path.join(root, "site", "public", "builder.js"), encoding="utf-8").read()
+    check("the site's twin: squad rows, a plan squad's faces and threads, by the same rule",
+          "function squadPip(x, pips)" in app_js and "accentPair(you ? p.accent || worn : p.accent)" in app_js
+          and 'squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name)' in app_js
+          and "pip: (x) => squadPip(x, pips)" in app_js and "new Map(people.map((p) => [p.uid, p]))" in app_js
+          and "pipOf(f) || face(f.emoji, f.name)" in builder_js and "[pipOf(x) || (x.emoji" in builder_js)
+
+
 def test_closet_flow_v382():
     """3.8.2: the facts come from the revlog (the days and hours, read once
     a day, today's fresh), the cards, the board and a few tallies; what's new
@@ -13246,11 +13309,11 @@ def test_closet_site_rows_v382():
           '<script src="/sev.js" defer></script>\n<script src="/app.js" defer></script>' in app_html
           and "script-src 'self'" in open(os.path.join(REPO, "site", "src", "index.ts"), encoding="utf-8").read())
     table, presence = app_js.split("  function nameCell(r, period) {")[1], app_js.split("  function presence(people, today, picker = null) {")[1]
-    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; squads keep theirs",
+    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; so do squads (3.8.3)",
           table.split("\n")[2].strip() == 'const cell = h("td", { class: "nm" }, who(p));'
           and 'h("td", { class: "nm" }, who(r.p), note(r))' in presence.split("  function decks(")[0]
           and "Sev.row(p.look, accentPair(p.accent)" in app_js and "you: true, accent: me?.accent || worn }" in app_js
-          and '`${r.emoji ? r.emoji + " " : ""}${r.name}`' in app_js)
+          and 'squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name)' in app_js)
     check("…its accent by day and night from board.py's, a name not ours the default's",
           all(f'{k}: [["{v["light"][0]}", ' in app_js and f'["{v["dark"][0]}", ' in app_js for k, v in board.ACCENTS.items())
           and "const accentPair = (name) => { const a = Object.prototype.hasOwnProperty.call(ACCENTS, name) ? ACCENTS[name] : ACCENTS.green; return [a[0][0], a[1][0]]; };" in app_js)
