@@ -5,7 +5,10 @@ a cheer lands). Pure: no aqt.
 One drawing for every pose, and one motion sheet (CSS). The board draws Sev
 from here, and the room's widgets get its markup from here as data, so it's
 never drawn twice and there's no JS twin; the week picture card draws
-`still`, and the site's cards.js keeps a copy of it the suite checks.
+`still`, and the site's cards.js keeps a copy of it the suite checks. 3.8.2:
+the site's crew rows fill in `site_kit` (sev.js, written by
+tools/gen_sev_js.py), the one drawing again; only the closet's rules for a
+look are restated there.
 Every pose draws the same named parts (sv-body, sv-eyes, sv-pupils,
 sv-armL/R, sv-card, sv-clock, ...), so a moment (`m-*`) moves whatever
 pose it's given.
@@ -86,14 +89,21 @@ _HOLD, _SIDE, _TOP = (40, 56), (67, 58), (40, 27)
 HAND = (64.6, 56.8)  # the right hand of a hanging arm, where the closet draws what it holds
 
 
+def _held_in(hand, arms):
+    """What the right hand holds (drawn at HAND), moved into the right arm
+    as `arms` (_ARMS) holds it: at its hand, upright. "" when it holds nothing."""
+    a = _ARMS.get(arms, _ARMS["down"])
+    return (f'<g transform="translate(0 11.5) rotate({-a[1]})"><g transform="translate({-HAND[0]} {-HAND[1]})">{hand}</g></g>'
+            if hand else "")
+
+
 def _arms(pose, hand=""):
     """The arms, behind or in front. hand (3.8.2): what the right hand
     holds, drawn at HAND; it's moved into the arm, so it goes where the hand
     goes (up for a hop, round for a wave), and stays upright."""
     a = _ARMS.get(pose, _ARMS["down"])
     limb = _r(-2.6, -1, 5.2, 12.5, 2.6, ACC)
-    held = (f'<g transform="translate(0 11.5) rotate({-a[1]})"><g transform="translate({-HAND[0]} {-HAND[1]})">{hand}</g></g>'
-            if hand else "")
+    held = _held_in(hand, pose)
     html = "".join(f'<g transform="translate({x} 47) rotate({ang})"><g class="sv-arm{side}">{limb}{held if side == "R" else ""}</g></g>'
                    for side, x, ang in (("L", 21.5, a[0]), ("R", 58.5, a[1])))
     return ("", html) if pose in ("hold", "cross") else (html, "")  # held things go in front
@@ -223,11 +233,13 @@ def busy(pose):
     return bool(p.get("prop")) or p["arms"] in ("hold", "cross")
 
 
-def _figure(p, blush, look=None):
+def _figure(p, blush, look=None, worn=None):
     """Sev itself: feet, body, face, arms and what it holds. Every drawing's.
-    look (3.8.2): what it has on from the closet: behind it, over it, in its hand."""
-    back = front = hand = ""
-    if look:
+    look (3.8.2): what it has on from the closet: behind it, over it, in its
+    hand. worn: that look already drawn, (back, front, hand), in its place
+    (site_kit's blanks)."""
+    back, front, hand = worn or ("", "", "")
+    if look and not worn:
         from . import closet  # its drawings only when there's a look to draw
         back, front, hand = closet.art(look, pose_holds=bool(p.get("prop")) or p["arms"] in ("hold", "cross"))
     back_arms, front_arms = _arms(p["arms"], hand)
@@ -237,12 +249,13 @@ def _figure(p, blush, look=None):
     return f'<g class="sv-body">{back}{back_arms}{body}{front}{front_arms}{_held(p.get("prop"))}</g>'
 
 
-def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None):
+def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None, worn=None):
     """Sev in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
     stack: squares on its head, one a fifteen (three at most). look (3.8.2):
-    what it has on from the closet (closet.clean rules it)."""
+    what it has on from the closet (closet.clean rules it); worn: a look
+    already drawn, (back, front, hand), in place of `look` (site_kit)."""
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
     blush = p.get("cheeks") if cheeks is None else cheeks
@@ -251,7 +264,7 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     cls = f"sv m-{m}" + (" rest" if rest and m in ONCE else "")
     return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Sev")}">'
             f'<ellipse class="sv-shadow" cx="40" cy="74.5" rx="16" ry="2.6" style="fill:{LINE}"/>{fx_back}'
-            f'{_figure(p, blush, look)}{fx_front}</svg>')
+            f'{_figure(p, blush, look, worn)}{fx_front}</svg>')
 
 
 def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None, look=None):
@@ -283,6 +296,35 @@ def slot(markup, size):
     return (f'<span class="sv-slot" style="width:{w}px;height:{w}px">'
             + markup.replace('<svg class="', f'<svg style="left:{x}px;top:{y}px;width:{size}px;height:{size}px" class="', 1)
             + "</span>")
+
+
+# 3.8.2: duecrew.com's crew rows show each person's Sev as the add-on's do
+# (board.row_sev). The site never draws Sev itself: site/public/sev.js holds
+# this kit (tools/gen_sev_js.py writes it) and only fills in its blanks; the
+# suite checks the file holds this kit, and that what it fills in is svg()'s.
+ROW_SIZE = 30  # px: a crew row's Sev (board.row_sev), in its slot()
+BLANKS = ("%B%", "%F%", "%H%")  # where a look's back, front and held things go
+
+
+def site_kit():
+    """A crew row's Sev for the site, as data. row: the still idle Sev in
+    its slot, BLANKS where the look goes, its colours the page's (--sv-a and
+    the rest, as svg()'s); held: what puts a held thing (its %H%) in the
+    right hand; slots, costume, max: closet's SLOTS (drawn in that order,
+    then a costume), COSTUME and LOOK_MAX; things: each thing's place, the
+    other places it takes, and its drawing (front, back). Filled in as
+    closet.art fills them, it's slot(svg("idle", rest=True, look=look),
+    ROW_SIZE), to the byte."""
+    from . import closet
+    from .closet_art import ART
+    held = _held_in(BLANKS[2], POSES["idle"]["arms"])
+    row = slot(svg("idle", rest=True, worn=BLANKS), ROW_SIZE)
+    if row.count(held) != 1 or any(row.count(b) != 1 for b in BLANKS):
+        raise ValueError("site_kit: a blank isn't where the look goes")
+    return {"row": row.replace(held, BLANKS[2]), "held": held, "slots": list(closet.SLOTS), "costume": closet.COSTUME,
+            "max": closet.LOOK_MAX,
+            "things": {t["k"]: [t["slot"], list(t.get("also") or ()), ART[t["k"]][0], ART[t["k"]][1]]
+                       for t in closet.THINGS}}
 
 
 def stack_reach(n, size):

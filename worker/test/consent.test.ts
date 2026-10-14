@@ -233,6 +233,23 @@ describe("friendship consent unchanged", () => {
     await save(alice, []);
     expect((await seen(dave, "alice")).look, "look: nothing on, nothing sent").toBeUndefined();
   });
+
+  it("look (3.8.2): my own comes back on me, as my crew sees it (the site's rows draw it)", async () => {
+    const save = (p: P, settings: Record<string, unknown>) => p.call("PUT", "/settings", { v: 1, at: new Date().toISOString(), settings });
+    const mine = async (p: P) => (await p.call("GET", "/board")).body.me;
+    const seen = async (p: P, uid: string) => (await p.call("GET", "/board")).body.friends.find((f: any) => f.uid === uid);
+    expect((await mine(alice)).look, "my look: none saved, none sent").toBeUndefined();
+    await save(alice, { sev_look: ["headphones", "glasses"], accent: "rose" });
+    const me = await mine(alice);
+    expect(me.look, "my look: on me, as saved").toEqual(["headphones", "glasses"]);
+    expect(Object.keys(me).sort(), "my look: nothing else of my settings rides along").toEqual(["code", "emoji", "look", "name", "uid", "updatedAt", "week"]);
+    expect((await seen(dave, "alice")).look, "my look: the same my crew sees").toEqual(me.look);
+    expect((await mine(dave)).look, "my look: only mine").toBeUndefined();
+    await save(alice, { sev_look: ["<b>"] });
+    expect((await mine(alice)).look, "my look: names only, or nothing").toBeUndefined();
+    await save(alice, { sev_look: [] });
+    expect((await mine(alice)).look, "my look: nothing on, nothing sent").toBeUndefined();
+  });
 });
 
 describe("retired paths: nothing answers", () => {

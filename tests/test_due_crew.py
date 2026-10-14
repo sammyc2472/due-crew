@@ -13155,6 +13155,88 @@ def test_closet_flow_v382():
           next(e for e in cl.fetch_board(labels)["entries"] if e["user_id"] == "bob")["look"] == [])
 
 
+def test_closet_site_rows_v382():
+    """3.8.2, the twin on duecrew.com: the site's crew rows show each
+    person's Sev in the emoji's place, as board.row_sev does. The site never
+    draws Sev: site/public/sev.js holds sev.site_kit() (tools/gen_sev_js.py
+    writes it; running it again changes nothing) and fills in its blanks
+    following the closet's rules, restated in JS (run here in node against
+    closet.clean, shown and the drawing itself). My own look comes on /board's
+    me, as my crew sees it."""
+    import importlib.util
+    import random
+    import shutil
+    import subprocess
+    from due_crew import closet as C, closet_art as CA, sev
+    store = world({"alice": "Alice", "bob": "Bob"}, {"alice": ["bob"], "bob": ["alice"]})
+    check("my look: none saved, none on me", "look" not in store._board("alice", False)["me"])
+    store.settings["alice"] = {"v": 1, "at": "x", "settings": {"sev_look": ["cap", "glasses"], "accent": "rose"}, "rev": 1}
+    me, bob_sees = store._board("alice", False)["me"], {f["uid"]: f for f in store._board("bob", False)["friends"]}["alice"]
+    check("my look on /board's me (board.ts), as my crew sees it, and nothing else of my settings",
+          me["look"] == ["cap", "glasses"] == bob_sees["look"] and "accent" not in me, me)
+    store.settings["alice"]["settings"]["sev_look"] = ["<b>"]
+    check("my look: names only, or nothing", "look" not in store._board("alice", False)["me"])
+
+    kit = sev.site_kit()
+    plain = sev.slot(sev.svg("idle", rest=True), sev.ROW_SIZE)
+    filled = kit["row"].replace("%B%", "").replace("%F%", "").replace("%H%", "")
+    check("the kit: the row's still Sev, a blank each for the back, the front and the hand; empty, it's the plain row Sev",
+          all(kit["row"].count(b) == 1 for b in sev.BLANKS) and kit["held"].count("%H%") == 1 and filled == plain
+          and "var(--sv-a,#2e7d32)" in plain and 'style="width:18px;height:18px"' in plain and 'class="sv m-idle"' in plain)
+    check("the kit: every thing, its place and drawings the closet's; nothing in a drawing a blank could catch",
+          list(kit["things"]) == [t["k"] for t in C.THINGS] and kit["slots"] == list(C.SLOTS) and kit["costume"] == C.COSTUME
+          and all(v == [C.BY[k]["slot"], list(C.BY[k].get("also") or ()), *CA.ART[k]] for k, v in kit["things"].items())
+          and not any("%" in a for v in kit["things"].values() for a in v[2:]))
+    js_path = os.path.join(REPO, "site", "public", "sev.js")
+    js = open(js_path, encoding="utf-8").read()
+    spec = importlib.util.spec_from_file_location("gen_sev_js", os.path.join(REPO, "tools", "gen_sev_js.py"))
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    check("site/public/sev.js holds sev.site_kit() as tools/gen_sev_js.py writes it: running it again changes nothing",
+          gen.render(js) == js and gen.kit_js() in js)
+    site = os.path.join(REPO, "site", "public")
+    app_js = open(os.path.join(site, "app.js"), encoding="utf-8").read()
+    app_html = open(os.path.join(site, "app.html"), encoding="utf-8").read()
+    check("the app page loads sev.js before app.js, from the site itself (the CSP's script-src 'self')",
+          '<script src="/sev.js" defer></script>\n<script src="/app.js" defer></script>' in app_html
+          and "script-src 'self'" in open(os.path.join(REPO, "site", "src", "index.ts"), encoding="utf-8").read())
+    table, presence = app_js.split("  function nameCell(r, period) {")[1], app_js.split("  function presence(people, today, picker = null) {")[1]
+    check("the site's crew rows (Today, Week and the days view) say who with Sev, no emoji; squads keep theirs",
+          table.split("\n")[2].strip() == 'const cell = h("td", { class: "nm" }, who(p));'
+          and 'h("td", { class: "nm" }, who(r.p), note(r))' in presence.split("  function decks(")[0]
+          and "Sev.row(p.look, accentPair(p.accent)" in app_js and "you: true, accent: me?.accent || worn }" in app_js
+          and '`${r.emoji ? r.emoji + " " : ""}${r.name}`' in app_js)
+    check("…its accent by day and night from board.py's, a name not ours the default's",
+          all(f'{k}: [["{v["light"][0]}", ' in app_js and f'["{v["dark"][0]}", ' in app_js for k, v in board.ACCENTS.items())
+          and "const accentPair = (name) => { const a = Object.prototype.hasOwnProperty.call(ACCENTS, name) ? ACCENTS[name] : ACCENTS.green; return [a[0][0], a[1][0]]; };" in app_js)
+
+    node = shutil.which("node")
+    if not node:
+        print("SKIP the site's rows' Sev twin: no node")
+        return
+    ks = [t["k"] for t in C.THINGS]
+    rnd = random.Random(382)
+    looks = ([[], None, "beanie", 7, {"cap": 1}, ["cap"], ["<b>", "cap"], ["constructor", "__proto__", "toString", "cap"],
+              ["beanie", "nope", 7, "cap", "cap", "dino", "ghost", "glasses"], ["headphones", "mug", "cape"],
+              ["scarf", "headphones", "winter"], ["winter", "medal"], ["dino", "glasses"], ["glasses", "dino"], ks, ks[::-1]]
+             + [[k] for k in ks] + [[k, "mug", "glasses"] for k in ks]
+             + [rnd.sample(ks + ["nope", "x1"], rnd.randint(1, 16)) for _ in range(300)])
+    prog = (js + "\nconst looks = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+            "console.log(JSON.stringify(looks.map((l) => [Sev.clean(l), Sev.shown(l), Sev.markup(l)])));")
+    run = subprocess.run([node, "-e", prog], input=json.dumps(looks), capture_output=True, text=True, timeout=60)
+    try:
+        got = json.loads(run.stdout)
+    except ValueError:
+        got = None
+    check("sev.js runs in node", got is not None and len(got) == len(looks), run.stderr[-2000:])
+    if got is None:
+        return
+    bad = [(look, g) for look, g in zip(looks, got)
+           if g != [C.clean(look), C.shown(look), sev.slot(sev.svg("idle", rest=True, look=look), sev.ROW_SIZE)]]
+    check(f"sev.js is the closet's twin: clean, shown and the row's Sev to the byte, on {len(looks)} looks "
+          "(each thing alone and with others, clashes, costumes, junk, every thing at once)", not bad, bad[:1])
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

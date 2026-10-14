@@ -38,7 +38,7 @@ python3 tests/test_due_crew.py | tail -1
 say "Worker: typecheck and tests"
 (cd worker && npm ci --silent && npx tsc --noEmit && npx vitest run 2>&1 | grep -E "Tests|Test Files")
 say "site JS"
-node --check site/public/app.js && node --check site/public/builder.js && echo ok
+node --check site/public/app.js && node --check site/public/builder.js && node --check site/public/sev.js && echo ok
 
 say "due_crew.ankiaddon"
 rm -f due_crew.ankiaddon

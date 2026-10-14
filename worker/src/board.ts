@@ -99,11 +99,11 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     await db.prepare("DELETE FROM cheers WHERE to_uid = ? AND at <= ?").bind(s.uid, Math.floor(got)).run();
   }
   const [meRes, friendsRes, cheersRes] = await db.batch([
+    // 3.8.2: and what my own Sev has on (the site's rows draw it), from the same settings row
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
-         (SELECT at FROM settings WHERE uid = u.uid) AS sat,
-         (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
-       LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
+         t.at AS sat, json_extract(t.json, '$.muted') AS muted, json_extract(t.json, '$.sev_look') AS look FROM users u
+       LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added; 3.8.1: so
     // does their accent (from their settings: their Sev wears it in a study room);
     // 3.8.2: and what their Sev has on from the closet (its look)
@@ -146,7 +146,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   }
   const out: Record<string, unknown> = {
     me: { uid: me.uid, name: me.name || "", emoji: me.emoji || "", code: me.code || "",
-          week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at) },
+          week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at),
+          ...(lookOf(me.look) ? { look: lookOf(me.look) } : {}) },  // 3.8.2: as my crew sees it
     friends, cheers, cheersAt, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen
