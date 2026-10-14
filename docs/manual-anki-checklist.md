@@ -671,7 +671,7 @@ In Anki (as a follower):
 - [ ] The closet (Settings › Fifteen and Sev › Sev's closet, or Tools › Due Crew › Sev's closet, or click your Sev on your row): your Sev big, in what it has on; ‹ Board goes back. The count says N of 61.
 - [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
 - [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
-- [ ] A thing you don't have yet: click it, Sev shows it on and says what it needs (and how far along); Stop trying on. A secret says it's a secret and shows nothing.
+- [ ] A thing you don't have yet: greyed, with what it needs (and how far along); clicking it does nothing, Sev never wears it. A secret says it's a secret and shows nothing.
 - [ ] Almost there (on All): the next in a line you're at least halfway to, with a bar.
 - [ ] Something new (do your first Fifteen: the headphones): the board's line says New for your Sev: Headphones; Wear it puts them on and the line goes; × just goes; the closet marks it new.
 - [ ] A held thing (the coffee mug): by the logo when Sev hops, the mug goes up with the hand; in a fifteen's chip (Sev holding its card) no mug.

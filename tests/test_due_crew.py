@@ -12968,28 +12968,30 @@ def test_closet_board_v382():
     from due_crew import closet as C, closet_art as CA
     from aqt.deckbrowser import DeckBrowser
     have = {"sprout": "2026-01-01", "beanie": "2026-01-08", "headphones": "2026-02-01", "dino": "2026-08-01", "bowtie": "2026-03-01"}
-    view = {"tab": "All", "have": have, "look": ["bowtie", "glasses", "headphones"], "try": "cap",
+    view = {"tab": "All", "have": have, "look": ["bowtie", "glasses", "headphones"],
             "near": [("cap", 11, 14, "days in a row")], "new": ["dino"], "msg": ""}
     page = board.closet_html(view, {"theme": "light"})
     check("the closet: its own page, a way back, how many of how many",
           "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(C.THINGS)}" in page)
-    check("every thing is a tile: mine to put on, the rest to try on, secrets a question mark",
+    check("every thing is a tile: mine to put on, the rest only shown (no click), secrets a question mark",
           page.count('class="cl-t') == len(C.THINGS) and "duecrew:closetwear:beanie" in page
-          and "duecrew:closettry:cap" in page and page.count("A secret") >= 4 and "Pi day" not in page)
+          and page.count('<button class="cl-t') == len(have) and page.count('<div class="cl-t lk') == len(C.THINGS) - len(have)
+          and "duecrew:closetwear:cap" not in page and "closettry" not in page
+          and page.count("A secret") >= 4 and "Pi day" not in page)
     check("only what I have is on: a look naming what I haven't earned drops it",
           "Take it off" in page and page.count('title="Take it off"') == 2 and CA.ART["glasses"][0][:30] not in page.split('class="cl-on"')[0].split('class="cl-fig"')[1].split("</div>")[0])
-    check("trying on: Sev shows it, and says what it needs and how far along",
-          "Trying on <b>Cap</b>: 14 days in a row (11 so far)." in page and "Stop trying on" in page
-          and CA.ART["cap"][0][:40] in page.split('class="cl-fig"')[1].split("</div>")[0])
-    check("almost there, on All; what just came is marked", "11 of 14 days in a row" in page and 'cl-t lk tr' in page
+    check("nothing tried on: Sev wears only what's mine, and no thing I haven't got is worn anywhere",
+          "rying on" not in page and CA.ART["cap"][0][:40] not in page.split('class="cl-fig"')[1].split("</div>")[0]
+          and "Take it all off" in page)
+    check("almost there, on All, and on its tile; what just came is marked", "11 of 14 days in a row" in page
+          and '<small>11 of 14</small>' in page.split("duecrew:closetwear:sprout")[0] + page.split('class="cl-grid"')[1]
           and page.count(" new\"") == 1)
-    secret = board.closet_html(dict(view, **{"try": "catears"}), {})
-    check("trying on a secret you haven't found shows nothing of it", "A secret: you&rsquo;ll know it when it happens." in secret
-          and CA.ART["catears"][0][:40] not in secret)
-    tab = board.closet_html(dict(view, tab="Costumes", near=[], try_=None), {"theme": "dark"})
+    check("a secret you haven't found shows nothing of it", "A secret: you&rsquo;ll know it when it happens" in page
+          and CA.ART["catears"][0][:40] not in page)
+    tab = board.closet_html(dict(view, tab="Costumes", near=[]), {"theme": "dark"})
     check("a tab shows its own: Costumes are the whole looks",
           tab.count('class="cl-t') == sum(1 for t in C.THINGS if t["slot"] == C.COSTUME) and "11 of 14" not in tab)
-    off = board.closet_html(dict(view, try_=None), {"sev": False})
+    off = board.closet_html(view, {"sev": False})
     check("with Sev off, the closet says nobody sees it for now", "nobody sees it" in off)
     line = board.closet_line(["cap"], ["beanie"])
     check("the board's line: Sev in the new thing, its name and why, Wear it, the closet, later",
@@ -13039,8 +13041,8 @@ def test_closet_board_v382():
         st = dict(dc._state["closet_open"])
         send("closettab:9")
         tab9 = dc._state["closet_open"]["tab"]
-        send("closettry:cap")
-        tried = dc._state["closet_open"]["try"]
+        send("closettry:cap")  # an older page's try-on: nothing, and nothing worn
+        tried = "try" in dc._state["closet_open"] or "cap" in mine["sev_look"]
         send("closetwear:headphones")
         send("closetwear:cap")  # not mine: nothing
         send("closetwear:dino")
@@ -13054,8 +13056,8 @@ def test_closet_board_v382():
         send("closetclose")
         check("the closet opens in the board's place; what just came is new there, and the line is done",
               st["tab"] == "All" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == board.CLOSET_TABS[9])
-        check("its clicks: try one on, put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
-              tried == "cap" and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
+        check("its clicks: put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
+              not tried and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
         check("take it all off; its view holds what's mine and what's near; back to the board",
               offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap"
               and dc._state["closet_open"] is None and len(swaps) >= 8)

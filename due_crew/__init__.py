@@ -1152,7 +1152,7 @@ def open_closet(tab=None):
     anywhere: what just came for Sev shows as new there, and the board's
     line for it is done."""
     news = list((_state.get("closet_new") or {}).get("keys") or [])
-    _state["closet_open"] = {"tab": tab or "All", "try": None, "msg": "", "new": news, "drawn": False}
+    _state["closet_open"] = {"tab": tab or "All", "msg": "", "new": news, "drawn": False}
     _state["closet_new"] = None
     _state["settings_tab"] = None
     _close_addons_dialog()
@@ -1168,8 +1168,8 @@ def _closet_view():
     from . import closet_flow
     st = _state.get("closet_open") or {}
     c = cfg()
-    rest, st["drawn"] = bool(st.get("drawn")), True  # Sev waves when it opens and at a try-on, then rests
-    return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c), "try": st.get("try"),
+    rest, st["drawn"] = bool(st.get("drawn")), True  # Sev waves when it opens and at a change, then rests
+    return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c),
             "near": closet_flow.near(c), "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
 
 
@@ -1189,15 +1189,12 @@ def _closet_cmd(cmd, parts):
     elif cmd == "closetwear" and arg in cl.BY:
         if closet_flow.wear(arg):
             if st:
-                st.update({"try": None, "msg": "", "drawn": False})
+                st.update({"msg": "", "drawn": False})
                 focus = "closetwear:" + arg
             else:
                 _state["closet_new"] = None  # Wear it, on the board's line: on, and the line's done
-    elif cmd == "closettry" and st is not None:
-        st.update({"try": arg if arg in cl.BY and arg != st.get("try") else None, "msg": "", "drawn": False})
-        focus = "closettry:" + arg if arg else None
     elif cmd == "closettab" and st is not None and arg.isdigit() and int(arg) < len(board.CLOSET_TABS):
-        st.update({"tab": board.CLOSET_TABS[int(arg)], "try": None, "msg": ""})
+        st.update({"tab": board.CLOSET_TABS[int(arg)], "msg": ""})
         focus = "closettab:" + arg
     elif cmd == "closetoff":
         c = cfg()
@@ -1206,7 +1203,7 @@ def _closet_cmd(cmd, parts):
             c[closet_flow.LOOK_KEY] = []
             save_cfg(c)
         if st:
-            st.update({"try": None, "msg": ""})
+            st.update({"msg": ""})
     else:
         return
     if _board_on_screen() or _state.get("closet_open"):

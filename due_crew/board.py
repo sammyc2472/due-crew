@@ -3601,8 +3601,8 @@ CLOSET_CSS = """
     #due-crew .cl-t.on { border-color: var(--dc-accent); background: var(--dc-you-bg); }
     #due-crew .cl-t.new { box-shadow: 0 0 0 2px var(--dc-hours); }
     #due-crew .cl-t.lk .cl-f { filter: grayscale(1); opacity: .38; }
+    #due-crew .cl-t.lk { cursor: default; }
     #due-crew .cl-t.lk b { color: var(--dc-muted); }
-    #due-crew .cl-t.tr { border-style: dashed; border-color: var(--dc-accent); }
     #due-crew .cl-t .cl-q { width: 34px; height: 34px; border-radius: 50%; border: 2px dashed var(--dc-line);
       display: grid; place-items: center; color: var(--dc-muted); font-weight: 800; font-size: 17px; margin-bottom: 4px; }
     #due-crew .cl-t .cl-bar { width: 70%; margin: 3px 0 1px; }
@@ -3625,11 +3625,13 @@ def my_look(cfg):
     return [k for k in _closet.clean(cfg.get("sev_look")) if k in have]
 
 
-def _closet_tile(t, have, look, trying, near, new):
+def _closet_tile(t, have, look, near, new):
+    """A thing in the closet: mine is a button that puts it on (or takes it
+    off); one I haven't got is only shown, what it needs and how far along."""
     e = _html.escape
     k = t["k"]
     mine, secret = k in have, t["group"] == "Secret"
-    cls = "cl-t" + (" on" if k in look else "") + ("" if mine else " lk") + (" tr" if k == trying else "") + (" new" if k in new else "")
+    cls = "cl-t" + (" on" if k in look else "") + ("" if mine else " lk") + (" new" if k in new else "")
     if not mine and secret:
         fig, name, rule = '<span class="cl-q" aria-hidden="true">?</span>', "A secret", "Found by doing it"
         tip = "A secret: you&rsquo;ll know it when it happens"
@@ -3643,46 +3645,34 @@ def _closet_tile(t, have, look, trying, near, new):
         bar = (f'<span class="cl-bar" aria-hidden="true"><i style="width:{min(100, round(100 * got / need))}%"></i></span>'
                f'<small>{got:,} of {need:,}</small>')
     when = f'<small class="w">{e(t["when"])}</small>' if t.get("when") and (mine or not secret) else ""
-    cmd = ("closetwear:" if mine else "closettry:") + k
-    state = "on" if k in look else "yours" if mine else "not yet"
-    return (f'<button class="{cls}" title="{tip}" aria-label="{e(name)}, {state}" '
-            f'aria-pressed="{"true" if k in look else "false"}" {_st_click(cmd)}>'
-            f'{fig}<b>{e(name)}</b><small>{e(rule)}</small>{when}{bar}</button>')
+    body = f'{fig}<b>{e(name)}</b><small>{e(rule)}</small>{when}{bar}'
+    if not mine:
+        return f'<div class="{cls}" title="{tip}" role="group" aria-label="{e(name)}, not yet">{body}</div>'
+    return (f'<button class="{cls}" title="{tip}" aria-label="{e(name)}, {"on" if k in look else "yours"}" '
+            f'aria-pressed="{"true" if k in look else "false"}" {_st_click("closetwear:" + k)}>{body}</button>')
 
 
 def closet_html(view, cfg):
     """3.8.2: Sev's closet, in place of the board (as Settings is).
-    view: {tab, have: {thing: day}, look, try, near: [(k, got, need,
+    view: {tab, have: {thing: day}, look, near: [(k, got, need,
     unit)], new: [k], msg}, from the glue (closet_flow). On the left your
-    Sev in what it has on (or trying something on), what's on as chips
-    that take it off; on the right the groups, what you're close to, and
-    every thing: yours to put on, the rest to try on, secrets a question
-    mark until they're found."""
+    Sev in what it has on, what's on as chips that take it off; on the
+    right the groups, what you're close to, and every thing: yours to put
+    on, the rest shown with what they need (never worn before they're
+    earned), secrets a question mark until they're found."""
     e = _html.escape
     have = _closet.clean_closet(view.get("have"))
     look = [k for k in _closet.clean(view.get("look")) if k in have]
-    trying = view.get("try") if view.get("try") in _closet.BY else None
     tab = view.get("tab") if view.get("tab") in CLOSET_TABS else "All"
     new = [k for k in view.get("new") or [] if k in have]
     near = {k: (got, need) for k, got, need, _u in view.get("near") or []}
-    hidden = trying and _closet.BY[trying]["group"] == "Secret" and trying not in have  # a secret stays one
-    shown = _closet.wear(look, trying) if trying and trying not in look and not hidden else look
-    fig = _sev.svg("hello" if trying or new else "idle", rest=bool(view.get("rest")), look=shown,
-                   label="Your Sev" + (" trying something on" if trying else ""))
+    fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Sev")
     chips = "".join(f'<button title="Take it off" {_st_click("closetwear:" + k)}>{e(_closet.BY[k]["name"])}</button>' for k in look)
     msg = str(view.get("msg") or "")
-    if trying and not msg:
-        t = _closet.BY[trying]
-        if t["group"] == "Secret" and trying not in have:
-            msg = "A secret: you&rsquo;ll know it when it happens."
-        else:
-            got = f" ({near[trying][0]:,} so far)" if trying in near else ""
-            msg = f'Trying on <b>{e(t["name"])}</b>: {e(t["rule"])}{got}.'
     me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>'
           f'<div class="cl-on" aria-label="What your Sev has on">{chips}</div>'
           f'<div class="cl-msg" aria-live="polite">{msg}</div>'
-          + (f'<a class="st-lk" href="#" {_st_click("closettry:")}>Stop trying on</a>' if trying else "")
-          + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look and not trying else "")
+          + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
           + '</div>')
     pills = "".join(f'<button class="st-pill{" on" if t == tab else ""}" aria-pressed="{"true" if t == tab else "false"}" '
                     f'{_st_click(f"closettab:{i}")}>{e(t)}</button>' for i, t in enumerate(CLOSET_TABS))
@@ -3694,7 +3684,7 @@ def closet_html(view, cfg):
             f'<span><b>{e(_closet.BY[k]["name"])}</b><span class="cl-bar"><i style="width:{min(100, round(100 * got / need))}%"></i></span>'
             f'<small>{got:,} of {need:,} {e(unit)}</small></span></div>'
             for k, got, need, unit in view.get("near")) + "</div>"
-    grid = '<div class="cl-grid">' + "".join(_closet_tile(t, have, look, trying, near, new) for t in things) + "</div>"
+    grid = '<div class="cl-grid">' + "".join(_closet_tile(t, have, look, near, new) for t in things) + "</div>"
     count = f'{len(have)} of {len(_closet.THINGS)}'
     off = "" if cfg.get("sev", True) else " Sev is off in Settings, so nobody sees it for now."
     return (f'<div id="due-crew" class="dc-frame dc-set dc-closet">{_css(cfg)}<style>{SETTINGS_CSS}{SEV_CSS}{CLOSET_CSS}{_sev.CSS}</style>'

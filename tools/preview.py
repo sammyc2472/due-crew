@@ -542,11 +542,10 @@ sections.append("<h3>3.8.2: something new for Sev: its line on the board</h3>" +
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": ["propeller"]}))
 sections.append("<h3>3.8.2: the day the closet comes: one line for what your days earned</h3>" + board.render(
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": list(_MINE["sev_closet"]), "first": True}))
-_CV = {"tab": "All", "have": _MINE["sev_closet"], "look": _MINE["sev_look"], "try": None,
+_CV = {"tab": "All", "have": _MINE["sev_closet"], "look": _MINE["sev_look"],
        "near": [("cap", 11, 14, "days in a row"), ("propeller", 7, 10, "Fifteens"), ("magnifier", 6, 10, "leeches turned around")],
        "new": ["dino"], "msg": "", "rest": True}
 sections.append("<h3>3.8.2: Sev's closet, in the board's place: all of it</h3>" + board.closet_html(_CV, {"accent": "green"}))
-sections.append("<h3>3.8.2: trying on something you haven't got yet</h3>" + board.closet_html(dict(_CV, tab="Showing up", **{"try": "cap"}), {}))
 sections.append("<h3>3.8.2: the costumes (one at a time; your things wait under it)</h3>" + board.closet_html(
     dict(_CV, tab="Costumes", look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
 # Each board styles `#due-crew`; on one page the last <style> would win for

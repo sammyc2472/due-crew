@@ -1703,8 +1703,9 @@ every release that changes how something works.
   `closet*` commands): your Sev big in what it has on, each thing as a
   chip that takes it off, Take it all off; the groups and Costumes; the
   few you're close to (`closet.near`: the next in each line, at least
-  half there); every thing, yours to put on, the rest to try on (Sev
-  shows it, and what it needs). Ways in: Settings › Fifteen and Sev ›
+  half there); every thing, yours to put on, the rest only shown, with
+  what it needs and how far along (no try-on: Sam's call, nothing is
+  worn before it's earned). Ways in: Settings › Fifteen and Sev ›
   Sev's closet, Tools › Due Crew › Sev's closet, your Sev (by the logo,
   on your row), the board's line. Your Sev wears your look wherever it
   shows (by the logo, the nudge, the session's line, a fifteen's chip,
