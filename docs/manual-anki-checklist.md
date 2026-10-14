@@ -665,6 +665,20 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.8.2: Sev's closet
+
+- [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Sev where their emoji was, in their colour (yours in yours); Settings › Sev off brings the emojis back.
+- [ ] The closet (Settings › Fifteen and Sev › Sev's closet, or Tools › Due Crew › Sev's closet, or click your Sev on your row): your Sev big, in what it has on; ‹ Board goes back. The count says N of 61.
+- [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
+- [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
+- [ ] A thing you don't have yet: click it, Sev shows it on and says what it needs (and how far along); Stop trying on. A secret says it's a secret and shows nothing.
+- [ ] Almost there (on All): the next in a line you're at least halfway to, with a bar.
+- [ ] Something new (do your first Fifteen: the headphones): the board's line says New for your Sev: Headphones; Wear it puts them on and the line goes; × just goes; the closet marks it new.
+- [ ] A held thing (the coffee mug): by the logo when Sev hops, the mug goes up with the hand; in a fifteen's chip (Sev holding its card) no mug.
+- [ ] A crewmate on 3.8.2 puts something on: after your next refresh, their row's Sev wears it, and in a room together their seat does too. A crewmate on an older add-on: their Sev, plain.
+- [ ] Another computer: what's earned and what's on follow you (Settings sync), nothing earned is lost if both earn at once.
+- [ ] Night mode and Reduce motion: rows' Sevs still (they move only when the row is pointed at), the closet's tiles still.
+
 ### 3.8.1: the Fifteen and Sev
 
 - [ ] Signed in, in no room: ▶ Fifteen? (with Sev) at the chip's end of the top bar, on the Decks screen, Overview and Review; Settings › Room chip Left moves it; Settings › Fifteen and Sev › Fifteen? off takes it away.

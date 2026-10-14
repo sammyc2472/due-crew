@@ -1649,3 +1649,68 @@ every release that changes how something works.
   its still frame for Reduce motion; and drawn again, a Sev that played
   rests with Reduce motion on too (landed, what flew gone), so a banner
   that stays isn't left mid-hop.
+
+- 3.8.2, Sev's closet (the "Fun Round" page, round two; Sam: "costumes tied
+  to achievements ... more more more", then "make sure someone can't enable
+  multiple costumes at a time that conflict, one should replace the
+  other"). 61 things Sev earns, `closet.THINGS` (the drawings in
+  `closet_art`), in groups: showing up (days studied, days in a row,
+  mornings before 8, evenings after 9, nothing left due seven days
+  running, a whole Anki life's reviews, cards learned), Fifteens, the crew
+  (a crewmate, a cheer landing, a room together, a day the whole crew
+  studied, ten crewmates cheered, a 100-day streak cheered, cheers on 30
+  days), squads (joined, a bingo line, a whole card, started one), plans
+  (followed, every date done, exam and all), coming back (after a week,
+  a month), card care (cards you added, leeches turned around: a card
+  that lapsed 8 times now three weeks or more between reviews), the
+  seasons (Halloween week a thing a day for five days, winter, the
+  longest night, New Year, Friends' day, spring, summer: studied on the
+  day, any year) and five secrets (Pi day, a Friday the 13th, a year with
+  your Sev, the year turning, a leap day; a question mark until found).
+  Never for getting cards right (Again stays honest), never for one big
+  day, never bought, never taken away. Five more (a viking helmet, a book,
+  a watch, the knight, the beast hood) wait for the Beast and Crew Town.
+  A look is one thing in each place (`closet.SLOTS`: back, body, face,
+  head, hand): `closet.wear` puts a thing on in place of whatever was
+  there, a thing that reaches into another place takes it too (winter's
+  earmuffs come with a scarf: `also`), and a costume covers the look,
+  one at a time (a second replaces the first), the look waiting under it
+  to come back when it comes off; anything else put on takes the costume
+  off. `closet.clean` makes any look follow the same rules (an old one, a
+  crewmate's off the server), `closet.shown` what shows. Sev wears it
+  (`sev.svg(look=)`, `sev.still(look=)`): the back behind the body, the
+  rest over it, and what it holds in the right arm (`sev._arms(pose,
+  hand)`), so it follows a wave and stays upright; a pose whose hands are
+  full (a card, the clock, the gift, the case, fingers crossed) holds its
+  own (`sev.busy`). To let the arm hold something, the arms turn at their
+  own origin (`transform-box: view-box`), pixel for pixel the same as
+  before. What's earned is worked out here (`closet_flow`): the revlog's
+  days and hours in one grouped query a day (today's read fresh), cards
+  learned and leeches turned around (one query each), the board's crew,
+  squads and plans, and tallies this computer keeps in wrap.json's
+  "closet" (Fifteens, rooms with the crew, cheers sent and got, cards
+  added in the Add window, days with nothing left due, bingo lines).
+  `closet_flow.check` at each refresh adds what's new to the account's
+  `sev_closet` ({thing: day}; one settings save, only when there's
+  something), and the board says so in one line (`board.closet_line`:
+  Wear it, or Be one, and the closet); the day it comes, one line for
+  everything your days had already earned. `sev_look` and `sev_closet`
+  are account keys: `account.merge3` merges two computers' closets thing
+  by thing (nothing earned is lost) and takes my look. The look rides
+  with the accent to mutual friends: `board.ts` `lookOf` (a handful of
+  names, nothing else), the fake, `consent.test.ts`. The closet opens in
+  place of the board, as Settings does (`board.closet_html`, the
+  `closet*` commands): your Sev big in what it has on, each thing as a
+  chip that takes it off, Take it all off; the groups and Costumes; the
+  few you're close to (`closet.near`: the next in each line, at least
+  half there); every thing, yours to put on, the rest to try on (Sev
+  shows it, and what it needs). Ways in: Settings › Fifteen and Sev ›
+  Sev's closet, Tools › Due Crew › Sev's closet, your Sev (by the logo,
+  on your row), the board's line. Your Sev wears your look wherever it
+  shows (by the logo, the nudge, the session's line, a fifteen's chip,
+  question and break, the signed-out card, Welcome back), a crewmate's
+  wears theirs (a room's seats, the streak banner), and crew rows now show
+  each person's Sev in the emoji's place, in their colour and look (Sam:
+  "move away from emojis toward Sevs"; `board.row_sev`); with Sev off in
+  Settings, the emoji as before. The picture cards keep the plain Sev
+  (cards.js draws them on the site too).
