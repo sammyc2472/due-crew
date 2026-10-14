@@ -1819,7 +1819,7 @@ def _plan_squad_html(pid, tabs, people=None, cfg=None):
                 f'<a class="bt" href="#" onclick="{_pycmd(f"planteamjoin:{pid}")}">Join its squad</a></div>')
     me = tabs.get("me")
 
-    def who_face(x, size=None, small=False):  # 3.8.3: their Pip, as on the squad's table; Pip off, the emoji
+    def who_face(x, size=None, small=False):  # 3.8.21: their Pip, as on the squad's table; Pip off, the emoji
         pip = squad_pip(x.get("uid"), x.get("name"), x.get("uid") == me, people, cfg, size) if cfg is not None else None
         return pip or face(x.get("emoji"), x.get("name"), small=small)
     faces = ""
@@ -2626,7 +2626,7 @@ def _squad_week_line(rows, day):
 def _squads_html(view, cfg, crew_by=None):
     """A squad board: everyone here holds the same invite. Plain ranks — no
     medals, no cheers; these aren't necessarily people you know. Add lives
-    on the person's card (click a name), not on the row. crew_by (3.8.3): my
+    on the person's card (click a name), not on the row. crew_by (3.8.21): my
     crew by uid, so a crewmate's Pip wears their colour and look."""
     state = view.get("state")
     sw = _switcher(view)
@@ -2693,7 +2693,7 @@ def _squads_html(view, cfg, crew_by=None):
     folded = False
     for r in live + waiting_today + rest:
         uid = str(r["user_id"])
-        pip = squad_pip(uid, r["name"], r.get("you"), crew_by, cfg)  # 3.8.3: Pip where the emoji was
+        pip = squad_pip(uid, r["name"], r.get("you"), crew_by, cfg)  # 3.8.21: Pip where the emoji was
         pname = _html.escape(str(r["name"])) if pip else _label(r["name"], r.get("emoji"))
         cls, note = "", ""
         if id(r) in long_ids:
@@ -3846,7 +3846,7 @@ def row_sev(row, cfg, size=None):
 
 
 def squad_pip(uid, name, you, people, cfg, size=None):
-    """3.8.3: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
+    """3.8.21: someone's Pip on the Squads tab, in the emoji's place (Sam: "the
     squads page still has the old emojis"): mine as on my row; a crewmate's
     in their colour and look (a mutual friend's, which only the crew brings);
     anyone else plain, in the default colour, since all a squadmate shares is

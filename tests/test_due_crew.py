@@ -893,7 +893,7 @@ def test_v25_edges_emoji_week():
             "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
     html = board._squads_html(view, {"sort": "week"})
     plain = board._squads_html(view, {"sort": "week", "sev": False})
-    check("squad board: a Pip in front of each name (3.8.3; the emoji with Pip off), a rolling 7-days column, sortable by it",
+    check("squad board: a Pip in front of each name (3.8.21; the emoji with Pip off), a rolling 7-days column, sortable by it",
           "🐢" not in html and "🦊" not in html and html.count('class="dc-rsev"') == 3
           and "🐢 igk" in plain and "🦊 Sammy" in plain and "dc-rsev" not in plain
           and "7/7" in html and "6/7" in html
@@ -13119,8 +13119,8 @@ def test_closet_board_v382():
         dc._state["closet_open"] = dc._state["closet_new"] = None
 
 
-def test_squad_pips_v383():
-    """3.8.3 (Sam: "squads page still has the old emojis and not the new
+def test_squad_pips_v3821():
+    """3.8.21 (Sam: "squads page still has the old emojis and not the new
     pips"): the Squads tab's people are Pips, as Crew's are: mine in my colour
     and look, a crewmate's in theirs (a mutual friend's, which only the crew
     brings), anyone else plain in the default colour, since a squadmate
@@ -13309,7 +13309,7 @@ def test_closet_site_rows_v382():
           '<script src="/sev.js" defer></script>\n<script src="/app.js" defer></script>' in app_html
           and "script-src 'self'" in open(os.path.join(REPO, "site", "src", "index.ts"), encoding="utf-8").read())
     table, presence = app_js.split("  function nameCell(r, period) {")[1], app_js.split("  function presence(people, today, picker = null) {")[1]
-    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; so do squads (3.8.3)",
+    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; so do squads (3.8.21)",
           table.split("\n")[2].strip() == 'const cell = h("td", { class: "nm" }, who(p));'
           and 'h("td", { class: "nm" }, who(r.p), note(r))' in presence.split("  function decks(")[0]
           and "Sev.row(p.look, accentPair(p.accent)" in app_js and "you: true, accent: me?.accent || worn }" in app_js

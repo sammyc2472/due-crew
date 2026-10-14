@@ -1743,7 +1743,7 @@ every release that changes how something works.
   beside the name's line, the name and the streak on one baseline. The
   README's board picture is re-rendered with the crew's Pips.
 
-- 3.8.3, Pips on Squads (Sam: "squads page still has the old emojis and
+- 3.8.21, Pips on Squads (Sam: "squads page still has the old emojis and
   not the new pips"). The Squads tab's people are Pips, as Crew's are: a
   squad's table, a plan's squad's faces (a size up) and who asked in its
   threads. Mine wears my colour and look; a crewmate's wears theirs, from

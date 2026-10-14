@@ -275,7 +275,7 @@ const PlanSquad = (() => {
     const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the squad" });
     const send = () => { const text = ask.value.trim(); if (text) again(api("POST", `/plans/${id}/asks`, { text })); };
     ask.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-    // 3.8.3: a person's Pip where the emoji was (on.pip, from the board's Squads: board._plan_squad_html's who_face)
+    // 3.8.21: a person's Pip where the emoji was (on.pip, from the board's Squads: board._plan_squad_html's who_face)
     const pipOf = (x) => (on.pip ? on.pip(x) : null);
     const who = (x) => (x.mine ? "You" : [pipOf(x) || (x.emoji ? `${x.emoji} ` : ""), h("b", {}, x.name)]);
     const thread = (a) => {

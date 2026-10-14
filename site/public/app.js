@@ -1049,7 +1049,7 @@ const Board = (() => {
     return h("span", { class: "who" }, Sev.row(p.look, accentPair(p.accent), p.you ? "Your Pip" : `${name}’s Pip`), name);
   }
 
-  /** board.squad_pip (3.8.3): someone's Pip on Squads, in the emoji's place: mine, a crewmate's in their
+  /** board.squad_pip (3.8.21): someone's Pip on Squads, in the emoji's place: mine, a crewmate's in their
    *  colour and look (pips: the crew by uid, as /board brings them), anyone else plain in the default
    *  colour (a squadmate shares a name and an emoji, nothing more). Without sev.js, null: the emoji. */
   function squadPip(x, pips) {
@@ -1359,7 +1359,7 @@ async function home() {
       const left = (pid) => { const p = followed.find((x) => x.id === pid); if (p) p.following.share = false; draw(); };
       panel.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
       return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left,
-        new Map(people.map((p) => [p.uid, p]))));  // 3.8.3: their Pips, mine and my crew's in colour
+        new Map(people.map((p) => [p.uid, p]))));  // 3.8.21: their Pips, mine and my crew's in colour
     }
     const picker = h("div", { class: "sqsw" }, views.map(([k, l]) =>
       h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));
