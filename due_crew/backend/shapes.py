@@ -104,6 +104,14 @@ def clean_accent(name):
     return name if isinstance(name, str) and name in ACCENTS else ""
 
 
+def clean_look(v):
+    """3.8.2: a crewmate's look from GET /board (what their Sev has on): only
+    things the closet knows, as it would wear them (closet.clean); names,
+    never markup, ever reach a page."""
+    from ..closet import clean  # pure; asked here, the shapes load without it
+    return clean(v)
+
+
 def emoji_fits(emoji):
     """The server caps an emoji at 16 UTF-16 units (what the Worker's .length
     counts). Too long is refused whole: never truncated into a broken glyph,

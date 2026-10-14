@@ -905,8 +905,8 @@ def test_v25_edges_emoji_week():
     crew = board.render({"entries": [{"user_id": "sam", "name": "Sammy", "emoji": "🦊", "you": True,
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
-                         "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week"}, 0)
-    check("crew board: emoji by the name; the squads-only sort falls back to reviews",
+                         "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week", "sev": False}, 0)
+    check("crew board: emoji by the name (Sev off: 3.8.2 puts Sev in its place); the squads-only sort falls back to reviews",
           "🦊 Sammy" in crew and '<span class="hl">Reviews</span> &#9662;' in crew)
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
     esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
@@ -12884,6 +12884,270 @@ def test_sev_moves_v381():
         R.cfg, R.my_room, R._done, R._fifteen_done, R._now, R.datetime, st = saved
         _state.clear()
         _state.update(st)
+
+
+def test_closet_core_v382():
+    """3.8.2, Sev's closet: one thing in each place, a costume the whole look
+    (one at a time, the look waiting under it), things earned from facts,
+    the next in each line when it's close, and Sev wearing it all (what it
+    holds in its right hand, where the hand goes)."""
+    from due_crew import closet as C, closet_art as CA, sev
+    ks = [t["k"] for t in C.THINGS]
+    check("every thing has its drawing, and every drawing a thing", set(ks) == set(CA.ART) and len(ks) == len(set(ks)) == 61,
+          (len(ks), set(ks) ^ set(CA.ART)))
+    check("each thing has a place, a group and a rule; seasons say when",
+          all(t["slot"] in C.SLOTS + (C.COSTUME,) and t["group"] in C.GROUPS and t["rule"] and t["name"] for t in C.THINGS)
+          and all(t.get("when") for t in C.THINGS if t["group"] == "Seasons"))
+    check("one in each place: a hat replaces the hat",
+          C.wear(["beanie", "glasses"], "cap") == ["glasses", "cap"] and C.wear(["cap"], "cap") == [])
+    check("a costume over the look, one at a time: the second replaces the first, the look waits under them",
+          C.wear(["headphones", "glasses"], "dino") == ["headphones", "glasses", "dino"]
+          and C.wear(["headphones", "glasses", "dino"], "ghost") == ["headphones", "glasses", "ghost"]
+          and C.shown(["headphones", "glasses", "ghost"]) == ["ghost"] and C.costume(["headphones", "ghost"]) == "ghost")
+    check("taking the costume off brings the look back; putting a thing on takes the costume off",
+          C.wear(["headphones", "dino"], "dino") == ["headphones"]
+          and C.wear(["headphones", "dino"], "glasses") == ["headphones", "glasses"])
+    check("a thing that reaches into another place takes it too (winter's scarf)",
+          C.wear(["scarf", "headphones"], "winter") == ["winter"] and C.wear(["winter"], "medal") == ["medal"]
+          and C.places("winter") == {"head", "body"})
+    check("any look anyone sends is made one the closet can draw: unknown things out, clashes settled as worn, no repeats",
+          C.clean(["beanie", "nope", 7, "cap", "cap", "dino", "ghost", "glasses"]) == ["cap", "ghost", "glasses"]
+          and C.clean("beanie") == [] and C.clean(None) == [] and len(C.clean(ks)) <= C.LOOK_MAX)
+    f = {"days": 120, "run": 12, "reviews": 26000, "fifteens": 1, "crew": 2, "halloween": 3, "leeches": 6, "own_cards": 10}
+    got = C.earned(f)
+    check("earned from facts: each thing's need met",
+          {"sprout", "beanie", "glasses", "stetho", "mustache", "headphones", "bowtie", "pumpkin", "witch", "batwings"} == set(got)
+          and "cap" not in got and "ghost" not in got)
+    check("what's new is only what wasn't there, on today",
+          C.new(f, {"sprout": "2026-01-02", "beanie": "2026-02-01"}, "2026-10-14") == {k: "2026-10-14" for k in got if k not in ("sprout", "beanie")})
+    near = C.near(f, {})
+    check("almost there: the next in each line, at least half there, closest first; never seasons or secrets",
+          [n[0] for n in near] == ["cap", "magnifier", "tophat"] and near[0] == ("cap", 12, 14, "days in a row"))
+    check("a closet from the server: known things with a date", C.clean_closet({"cap": "2026-01-01", "x": "2026-01-01", "beanie": "soon", "sprout": 3}) == {"cap": "2026-01-01"})
+    check("two computers' closets: everything either earned, on its first day",
+          C.merge_closets({"cap": "2026-03-01"}, {"cap": "2026-02-01", "beanie": "2026-01-01"}) == {"cap": "2026-02-01", "beanie": "2026-01-01"})
+    days = ["2025-10-24", "2025-10-25", "2025-10-29", "2026-02-13", "2026-02-14", "2026-03-20", "2024-02-29",
+            "2025-12-31", "2026-01-01", "2026-01-02", "2026-01-03"] + [f"2026-04-{d:02d}" for d in range(1, 21)]
+    fd = C.from_days(days)
+    check("the days give: how many, the longest run, the comebacks, the seasons and the secrets",
+          fd["days"] == len(days) and fd["run"] == 20 and fd["back7"] >= 3 and fd["back30"] >= 2 and fd["halloween"] == 3
+          and fd["winter"] == 4 and fd["newyear"] == 1 and fd["friends"] == 1 and fd["spring"] == 1 and fd["fri13"] == 1
+          and fd["leap"] == 1 and fd["pi"] == 0 and fd["summer"] == 0, fd)
+    dt = datetime.datetime
+    fh = C.from_hours([dt(2026, 5, 1, 6), dt(2026, 5, 1, 7), dt(2026, 5, 2, 3), dt(2026, 5, 2, 22), dt(2026, 5, 3, 1),
+                       dt(2025, 12, 31, 23)])
+    check("the hours give: mornings before 8 (not the small hours), evenings after 9 (by the evening), the year turning",
+          fh == {"mornings": 1, "evenings": 2, "yearturn": 1}, fh)
+    plain = sev.svg("idle", rest=True)
+    check("no look: Sev is drawn as it always was", sev.svg("idle", rest=True, look=[]) == plain
+          and sev.still("idle", "#2e7d32") == sev.still("idle", "#2e7d32", look=None))
+    dressed = sev.svg("hello", look=["headphones", "mug", "cape"])
+    arm = dressed.split('class="sv-armR">', 1)[1]
+    check("a look goes on: behind, over, and what it holds in the right arm, upright",
+          CA.ART["cape"][1][:40] in dressed.split("sv-armL")[0] and CA.ART["headphones"][0][:40] in dressed
+          and CA.ART["mug"][0][:30] in arm.split("</g></g></g>")[0] and "rotate(150)" in arm)
+    check("a busy pose's hands hold their own thing; the closet's waits",
+          CA.ART["mug"][0][:30] not in sev.svg("focus", look=["mug"]) and CA.ART["mug"][0][:30] not in sev.svg("away", look=["mug"])
+          and sev.busy("focus") and sev.busy("exam") and not sev.busy("hop"))
+    check("a costume shows alone", CA.ART["headphones"][0][:40] not in sev.svg("idle", look=["headphones", "dino"])
+          and CA.ART["dino"][0][:40] in sev.svg("idle", look=["headphones", "dino"]))
+    check("a still Sev wears it too, colours its own", CA.ART["cap"][0][:30] in sev.still("idle", "#2e7d32", look=["cap"]))
+    still, motion = sev.CSS.split("@media", 1)
+    check("an arm turns at its shoulder whatever it holds; the closet's things move only under no-preference",
+          ".sv .sv-armL, .sv .sv-armR { transform-box: view-box; transform-origin: 0 0; }" in still
+          and all(f".sv .cl-{c} {{ animation" in motion for c in ("prop", "steam", "flame", "flick", "bal", "flag", "blink", "glow", "wl", "wr"))
+          and "animation" not in still.split("3.8.2: the closet's things that move")[1])
+
+
+def test_closet_board_v382():
+    """3.8.2, Sev's closet on the board: in place of the board (as Settings
+    is), its clicks reaching it through the add-on's own handler, the
+    board's line when something comes, and each crew row's Sev in the
+    emoji's place, wearing its person's colour and look."""
+    import due_crew as dc
+    from due_crew import closet as C, closet_art as CA
+    from aqt.deckbrowser import DeckBrowser
+    have = {"sprout": "2026-01-01", "beanie": "2026-01-08", "headphones": "2026-02-01", "dino": "2026-08-01", "bowtie": "2026-03-01"}
+    view = {"tab": "All", "have": have, "look": ["bowtie", "glasses", "headphones"], "try": "cap",
+            "near": [("cap", 11, 14, "days in a row")], "new": ["dino"], "msg": ""}
+    page = board.closet_html(view, {"theme": "light"})
+    check("the closet: its own page, a way back, how many of how many",
+          "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(C.THINGS)}" in page)
+    check("every thing is a tile: mine to put on, the rest to try on, secrets a question mark",
+          page.count('class="cl-t') == len(C.THINGS) and "duecrew:closetwear:beanie" in page
+          and "duecrew:closettry:cap" in page and page.count("A secret") >= 4 and "Pi day" not in page)
+    check("only what I have is on: a look naming what I haven't earned drops it",
+          "Take it off" in page and page.count('title="Take it off"') == 2 and CA.ART["glasses"][0][:30] not in page.split('class="cl-on"')[0].split('class="cl-fig"')[1].split("</div>")[0])
+    check("trying on: Sev shows it, and says what it needs and how far along",
+          "Trying on <b>Cap</b>: 14 days in a row (11 so far)." in page and "Stop trying on" in page
+          and CA.ART["cap"][0][:40] in page.split('class="cl-fig"')[1].split("</div>")[0])
+    check("almost there, on All; what just came is marked", "11 of 14 days in a row" in page and 'cl-t lk tr' in page
+          and page.count(" new\"") == 1)
+    tab = board.closet_html(dict(view, tab="Costumes", near=[], try_=None), {"theme": "dark"})
+    check("a tab shows its own: Costumes are the whole looks",
+          tab.count('class="cl-t') == sum(1 for t in C.THINGS if t["slot"] == C.COSTUME) and "11 of 14" not in tab)
+    off = board.closet_html(dict(view, try_=None), {"sev": False})
+    check("with Sev off, the closet says nobody sees it for now", "nobody sees it" in off)
+    line = board.closet_line(["cap"], ["beanie"])
+    check("the board's line: Sev in the new thing, its name and why, Wear it, the closet, later",
+          "New for your Sev: Cap." in line and "14 days in a row" in line and "duecrew:closetwear:cap" in line
+          and "duecrew:closet'" in line and "duecrew:closetnew" in line and CA.ART["cap"][0][:40] in line
+          and "Be one" in board.closet_line(["dino"], []))
+    check("the day it opens, one line for everything your days earned",
+          "earned it 9 things" in board.closet_line(list(C.BY)[:9], [], first=True))
+    # rows: Sev in the emoji's place
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    ents = [{"user_id": "me", "name": "Sammy", "emoji": "🦊", "you": True, "paused": False, "last_updated": "", "exam_date": "",
+             "days": {labels[0]: {"studied": True, "reviews": 30}}, "decks": []},
+            {"user_id": "dre", "name": "Dre <i>", "emoji": "🐢", "you": False, "paused": False, "last_updated": "", "exam_date": "",
+             "accent": "blue", "look": ["dino"], "days": {labels[0]: {"studied": True, "reviews": 20}}, "decks": []}]
+    data = {"entries": ents, "labels": labels, "tomorrow": "", "pending": []}
+    conf = {"accent": "rose", "sev_look": ["cap", "glasses"], "sev_closet": {"cap": "2026-01-01"}}
+    crew = board.render(data, conf, 0)
+    rows = crew.split("<table")[1]
+    check("crew rows: each person's Sev where the emoji was, in their colour",
+          "🦊" not in rows and "🐢" not in rows and rows.count('class="dc-rsev"') == 2
+          and "--rs-l:#1e5fb4" in rows and "--rs-l:#b03052" in rows and "--sv-a: var(--rs-l);" in crew)
+    check("their look on their Sev; mine only what I've earned; my Sev opens the closet",
+          CA.ART["dino"][0][:40] in rows and CA.ART["cap"][0][:40] in rows and CA.ART["glasses"][0][:40] not in rows
+          and 'title="Sev&rsquo;s closet"' in rows and "Dre &lt;i&gt;" in rows and "Dre <i>’s Sev" not in rows)
+    plain = board.render(data, dict(conf, sev=False), 0).split("<table")[1]
+    check("Sev off: the emoji as before", "🦊 Sammy" in plain and "dc-rsev" not in plain)
+    squares = board.render(data, dict(conf, show_up=True), 0)
+    check("the days view's rows too", squares.count('class="dc-rsev"') >= 2)
+    check("Settings › Fifteen and Sev: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
+    # the clicks, as the board sends them
+    if "aqt.reviewer" not in sys.modules:
+        sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
+    mine = {"sev_closet": dict(have), "sev_look": ["beanie"]}
+    saved = (dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen)
+    swaps = []
+    from due_crew import closet_flow as cf
+    saved_flow = (cf.cfg, cf.save_cfg, cf.facts)
+    dc._swap = lambda c, focus=None: swaps.append(focus)
+    dc.cfg = cf.cfg = lambda: mine
+    dc.save_cfg = cf.save_cfg = lambda c, **k: mine.update(c)
+    cf.facts = lambda c=None: {"run": 11}
+    dc._board_on_screen = lambda: True
+    send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+    try:
+        dc._state["closet_new"] = {"keys": ["dino"], "first": False}
+        send("closet")
+        st = dict(dc._state["closet_open"])
+        send("closettab:9")
+        tab9 = dc._state["closet_open"]["tab"]
+        send("closettry:cap")
+        tried = dc._state["closet_open"]["try"]
+        send("closetwear:headphones")
+        send("closetwear:cap")  # not mine: nothing
+        send("closetwear:dino")
+        worn = list(mine["sev_look"])
+        send("closetwear:dino")
+        back = list(mine["sev_look"])
+        send("closettab:99")
+        send("closetoff")
+        offed = list(mine["sev_look"])
+        v = dc._closet_view()
+        send("closetclose")
+        check("the closet opens in the board's place; what just came is new there, and the line is done",
+              st["tab"] == "All" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == board.CLOSET_TABS[9])
+        check("its clicks: try one on, put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
+              tried == "cap" and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
+        check("take it all off; its view holds what's mine and what's near; back to the board",
+              offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap"
+              and dc._state["closet_open"] is None and len(swaps) >= 8)
+        dc._state["closet_new"] = {"keys": ["sprout"], "first": False}
+        send("closetwear:sprout")
+        check("Wear it, on the board's line: on, and the line's done",
+              "sprout" in mine["sev_look"] and dc._state["closet_new"] is None)
+    finally:
+        dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen = saved
+        cf.cfg, cf.save_cfg, cf.facts = saved_flow
+        dc._state["closet_open"] = dc._state["closet_new"] = None
+
+
+def test_closet_flow_v382():
+    """3.8.2: the facts come from the revlog (the days and hours, read once
+    a day, today's fresh), the cards, the board and a few tallies; what's new
+    goes in the closet once, the account keeps it (merged thing by thing),
+    and a mutual friend's look comes with the board."""
+    from due_crew import closet_flow as cf, account
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    days = [TODAY - datetime.timedelta(days=i) for i in range(20)] + [datetime.date(2025, 10, 31), datetime.date(2025, 10, 30)]
+    for d in days:
+        for hour in (6, 22):
+            fakes.add_review(conn, int(datetime.datetime.combine(d, datetime.time(hour)).timestamp() * 1000))
+    for cid in range(12):
+        fakes.add_card(conn, cid + 1, 1, ctype=2, queue=2, ivl=30, lapses=9 if cid < 3 else 0)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(TODAY))
+    cf._RF["key"] = None
+    f = cf.revlog_facts(col)
+    check("the revlog's facts: days, the longest run, mornings and evenings, Halloween, reviews, learned, leeches",
+          f["days"] == 22 and f["run"] == 20 and f["mornings"] == 22 and f["evenings"] == 22 and f["halloween"] == 2
+          and f["reviews"] == 44 and f["learned"] == 12 and f["leeches"] == 3 and f["back7"] == 1, f)
+    fakes.add_review(conn, int(datetime.datetime.combine(TODAY, datetime.time(9)).timestamp() * 1000))
+    check("the days before today are read once a day; today's hours each time",
+          cf.revlog_facts(col)["reviews"] == 45 and cf._RF["key"] == int(col.sched.day_cutoff))
+    t = cf.clean_tallies({"fifteens": 3, "rooms": -1, "cheered": ["a", 5, "b"], "clear_last": "2026-09-01", "crew": True})
+    check("the tallies, as this add-on writes them or less", t == {"fifteens": 3, "cheered": ["a", "b"], "clear_last": "2026-09-01"}, t)
+    bf = cf.board_facts({"squads": [{"id": "s1", "founder": "me"}, {"id": "s2"}]}, [], "me",
+                        [{"id": "p1", "doc": {"units": [{"id": "u1"}, {"id": "u2"}], "events": [{"day": "2026-08-01", "name": "Exam"}]}}],
+                        {"p1": {"u1": [5, 5, 5], "u2": [3, 3, 3]}}, "2026-09-01", {"sprout": "2025-08-01"})
+    check("the board's facts: squads (one I started), a plan followed, done, exam and all; a year with my Sev",
+          bf == {"squads": 2, "founder": 1, "plans": 1, "plan_done": 1, "plan_exam": 1, "sev_days": 396}, bf)
+    from due_crew.wrap import _wrap_data
+    w = _wrap_data()
+    w["closet"] = {}
+    saved = (cf._save,)
+    cf._save = lambda: None
+    try:
+        cf.note_fifteens(4, datetime.datetime(2026, 9, 1, 7, tzinfo=datetime.timezone.utc).astimezone())
+        cf.note_fifteens(1)
+        cf.note_room(True)
+        cf.note_room(False)
+        for u in ("a", "b", "a"):
+            cf.note_cheer(u, "2026-09-01")
+        cf.note_cheer("c", "2026-09-02", big=True)
+        cf.note_cheered()
+        cf.note_bingo(1, False)
+        crew = [{"you": True}, {"you": False, "days": {"2026-09-02": {"studied": True, "reviews": 3}}}]
+        cf.note_day("2026-09-01", crew, True, 0)
+        cf.note_day("2026-09-02", crew, True, 0)
+        cf.note_day("2026-09-02", crew, True, 0)
+        cf.note_day("2026-09-04", crew, True, 5)
+        t = cf._tallies()
+        check("Fifteens (how many, most in one go, the mornings'), rooms with the crew, cheers (whom, which days, a big streak), a cheer landing, a line",
+              t["fifteens"] == 5 and t["fifteen_go"] == 4 and t["rooms"] == 1 and t["cheered"] == ["a", "b", "c"]
+              and t["cheer_days"] == ["2026-09-01", "2026-09-02"] and t["big_cheer"] == 1 and t["cheered_by"] == 1
+              and t["bingo_line"] == 1 and t["fifteen_am"] in (0, 4), t)
+        check("a day with nothing left due, a run of them, once a day; a day the whole crew studied (a crewmate a day ahead too); the most crewmates",
+              t["clear"] == 2 and t["clear_run"] == 2 and t["crew_day"] == 2 and t["crew"] == 1, t)
+        cf.note_day("2026-08-30", crew, True, 5)  # their day two ahead isn't my today
+        check("a crewmate's day two ahead isn't today", cf._tallies()["crew_day"] == 2)
+    finally:
+        cf._save = saved[0]
+        w["closet"] = {}
+    check("the account keeps the look and the closet, cleaned",
+          account.clean({"sev_look": ["cap", "nope", "dino"], "sev_closet": {"cap": "2026-01-01", "x": "2026-01-01"}})
+          == {"sev_look": ["cap", "dino"], "sev_closet": {"cap": "2026-01-01"}}
+          and {"sev_look", "sev_closet"} <= set(account.ACCOUNT_KEYS))
+    m = account.merge3({"sev_closet": {}}, {"sev_closet": {"cap": "2026-02-01"}, "sev_look": ["cap"]},
+                       {"sev_closet": {"beanie": "2026-01-01"}, "sev_look": ["beanie"]})
+    check("two computers earning at once: the closet merges thing by thing (nothing earned is lost); the look is mine",
+          m["sev_closet"] == {"cap": "2026-02-01", "beanie": "2026-01-01"} and m["sev_look"] == ["cap"], m)
+    store = world({"alice": "Alice", "bob": "Bob"}, {"alice": ["bob"], "bob": ["alice"]})
+    store.settings["bob"] = {"v": 1, "at": "x", "settings": {"sev_look": ["dino", "headphones"], "accent": "teal"}, "rev": 1}
+    cl = new_client(store, "alice")
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    got = cl.fetch_board(labels)
+    bob = next(e for e in got["entries"] if e["user_id"] == "bob")
+    me = next(e for e in got["entries"] if e["you"])
+    check("a mutual friend's look comes with the board, as the closet wears it; mine is this computer's",
+          bob["look"] == ["dino", "headphones"] and bob["accent"] == "teal" and me["look"] == [], bob)
+    store.settings["bob"]["settings"]["sev_look"] = ["<script>"]
+    check("a look that isn't names isn't sent",
+          next(e for e in cl.fetch_board(labels)["entries"] if e["user_id"] == "bob")["look"] == [])
 
 
 def main():

@@ -216,6 +216,23 @@ describe("friendship consent unchanged", () => {
     await save(alice, "</style>");
     expect((await seen(dave, "alice")).accent, "accent: one that isn't ours isn't sent").toBeUndefined();
   });
+
+  it("look (3.8.2): what a Sev has on reaches a mutual friend, never a one-way connection", async () => {
+    const save = (p: P, sev_look: unknown) => p.call("PUT", "/settings", { v: 1, at: new Date().toISOString(), settings: { sev_look } });
+    const seen = async (p: P, uid: string) => (await p.call("GET", "/board")).body.friends.find((f: any) => f.uid === uid);
+    expect((await seen(dave, "alice")).look, "look: none saved, none sent").toBeUndefined();
+    await save(alice, ["headphones", "glasses"]);
+    expect((await seen(dave, "alice")).look, "look: a mutual friend reads it (their Sev wears it)").toEqual(["headphones", "glasses"]);
+    await befriend(carol, alice);
+    expect(await seen(carol, "alice"), "look: someone alice hasn't added gets a name and an emoji, nothing more")
+      .toEqual({ uid: "alice", name: "Alice", emoji: "", mutual: false });
+    await save(alice, ["<b>", "cap"]);
+    expect((await seen(dave, "alice")).look, "look: names only, or nothing").toBeUndefined();
+    await save(alice, Array(9).fill("cap"));
+    expect((await seen(dave, "alice")).look, "look: a handful at most").toBeUndefined();
+    await save(alice, []);
+    expect((await seen(dave, "alice")).look, "look: nothing on, nothing sent").toBeUndefined();
+  });
 });
 
 describe("retired paths: nothing answers", () => {

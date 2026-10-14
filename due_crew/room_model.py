@@ -267,17 +267,18 @@ FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
 FIFTEEN_VARY = ("focus", "ring", "stretch")
 
 
-def _sevs(keys, on, vary=(), seat=False):
+def _sevs(keys, on, vary=(), seat=False, look=()):
     """Sev's markup for the widgets by key, and its motion sheet. vary: places
     whose other moves come too ("focus.nod"), with their turns, {place:
-    [key, ...]}, its own first; seat: a room's seat moves too ("idle.snod")."""
+    [key, ...]}, its own first; seat: a room's seat moves too ("idle.snod").
+    look (3.8.2): what my Sev has on from the closet."""
     if not on:
         return None, "", None
-    out, turns = {k: _sev.svg(k) for k in keys}, {}
+    out, turns = {k: _sev.svg(k, look=look) for k in keys}, {}
     for place in vary:
         others = _sev.moves(place)[1:]
         turns[place] = [place] + [f"{place}.{m}" for m in others]
-        out.update({f"{place}.{m}": _sev.move(place, m) for m in others})
+        out.update({f"{place}.{m}": _sev.move(place, m, look=look) for m in others})
     if seat:
         out.update({f"idle.{m}": _sev.svg("idle", m) for m in _sev.SEAT_MOVES if m != "idle"})
     return out, _sev.CSS, turns or None
@@ -302,21 +303,25 @@ def _pair_of(name):
     return accent_pair(name)
 
 
-def seats(ms, entries, my_pair):
+def seats(ms, entries, my_pair, my_look=()):
     """3.8.1: a crew room's members (members()) as their Sevs, in order:
-    [{n: the name, its label (text, never markup), a: [light, dark], d: s}].
-    A crewmate wears their accent (the add-on's colours for it; one it
-    doesn't know, the default's), I wear mine, and each started at its own
-    moment (d, sev.started), so the blinks never line up. Each has its own
-    small thing to do now and then (m, sev.SEAT_MOVES), side by side never the same."""
-    accent = {e.get("user_id"): e.get("accent") for e in entries or []}
-    return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of(accent.get(uid))),
-             "d": _sev.started(i), "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)]}
+    [{n: the name, its label (text, never markup), a: [light, dark], d: s,
+    l: their look}]. A crewmate wears their accent (the add-on's colours
+    for it; one it doesn't know, the default's), I wear mine, and each
+    started at its own moment (d, sev.started), so the blinks never line
+    up. Each has its own small thing to do now and then (m,
+    sev.SEAT_MOVES), side by side never the same. 3.8.2: and each wears
+    what they have on from the closet (l: names, never markup)."""
+    from .closet import clean
+    by = {e.get("user_id"): e for e in entries or []}
+    return [{"n": "You" if you else name, "a": list(my_pair if you else _pair_of((by.get(uid) or {}).get("accent"))),
+             "d": _sev.started(i), "m": _sev.SEAT_MOVES[i % len(_sev.SEAT_MOVES)],
+             "l": clean(my_look if you else (by.get(uid) or {}).get("look"))}
             for i, (uid, name, you) in enumerate(ms)]
 
 
 def widget_data(room, entries, accent_pair, compact=False, side="right", sev=True, brk_pose="breathe",
-                cards=None, total=None):
+                cards=None, total=None, look=()):
     """What every widget needs, all plain values. side: the chip's end of
     the top bar, "right" or "left". 3.8.1, a fifteen: sev (the switch in
     Settings), brk_pose ("breathe" or "stretch"), and for its question the
@@ -325,9 +330,13 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
     ms = members(entries, room)
     start = _parse(room["start"])
     fifteen = is_fifteen(room)
-    seat = seats(ms, entries, accent_pair) if sev and not fifteen else []
-    sevs, css, turns = (_sevs(FIFTEEN_SEV, sev, FIFTEEN_VARY) if fifteen
+    seat = seats(ms, entries, accent_pair, look) if sev and not fifteen else []
+    sevs, css, turns = (_sevs(FIFTEEN_SEV, sev, FIFTEEN_VARY, look=look) if fifteen
                         else _sevs(("idle",), bool(seat), seat=True))
+    for i, s in enumerate(seat):
+        if s["l"] and sevs is not None:  # 3.8.2: a seat whose Sev has something on is its own drawing
+            s["k"] = f"seat.{i}"
+            sevs[s["k"]] = _sev.svg("idle", s["m"] if s["m"] in _sev.SEAT_MOVES else "idle", look=s["l"])
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
             "round": room["round"] * 60000, "brk": room["brk"] * 60000,
             "title": "Fifteen" if fifteen else title(entries, room),
@@ -595,7 +604,7 @@ _RUNTIME = r"""
   function seats(size) {
     var f = el('span', 'display:inline-flex;align-items:center;gap:3px;'), n = night();
     D.seats.forEach(function (s) {
-      var w = sev(s.m && s.m !== 'idle' && D.sev['idle.' + s.m] ? 'idle.' + s.m : 'idle', size), v = w.firstChild;
+      var w = sev(s.k && D.sev[s.k] ? s.k : s.m && s.m !== 'idle' && D.sev['idle.' + s.m] ? 'idle.' + s.m : 'idle', size), v = w.firstChild;
       w.style.setProperty('--sv-a', n ? s.a[1] : s.a[0]);
       w.style.setProperty('--sv-d', s.d + 's');
       w.title = s.n;
@@ -1012,7 +1021,7 @@ def fifteen_view(room, now=None):
             "frac": round(frac, 3), "brk": p["state"] == "break", "cap": cap, "n": p["round"]}
 
 
-def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, accent_pair=None):
+def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, accent_pair=None, look=()):
     """What the Decks screen shows about rooms, as plain values (the board
     escapes every string): my room's lobby, invites to my crew's rooms, and
     the line for a room I finished. 3.8.1: with Sev on (sev; accent_pair:
@@ -1048,7 +1057,7 @@ def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, a
                        "brk": p["state"] == "break", "bars": [round(b, 3) for b in bars],
                        "round": my_room["round"], "brk_min": my_room["brk"],
                        "initials": [n[:1].upper() for _u, n, _y in ms], "line": names_line(ms),
-                       "seats": seats(ms, entries, accent_pair or _pair_of(None)) if sev else []}
+                       "seats": seats(ms, entries, accent_pair or _pair_of(None), look) if sev else []}
     for room, ms in invites(entries, my_room, dismissed, now):
         p = phase(room, now)
         when = (f"starts at {_clock(_parse(room['start']))}" if p["state"] == "before"

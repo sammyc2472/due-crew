@@ -5,6 +5,7 @@ there because they are a squad flow."""
 import datetime
 import html
 import json
+import traceback
 
 from aqt import mw
 from aqt.utils import tooltip
@@ -77,15 +78,22 @@ def _cheer_menu(to_uid):
             _send_cheer(to_uid, entry["name"], emoji, dlg.note)
 
 
-def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None):
+def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=None, big=False):
     """luck: a line held for their exam morning; guid: a tip on one card
-    (2.10). then(ok): on the main thread, after it went (or didn't)."""
+    (2.10). then(ok): on the main thread, after it went (or didn't). big
+    (3.8.2): a cheer for a big streak, which the closet counts."""
     cl = client()
 
     def done(ok):
         if ok is True and not luck:
             from .bingo_flow import bump
             bump("tp" if guid else "ch")  # 3.6: the middle counts cheers and tips
+        if ok is True and not luck and not guid:
+            try:  # 3.8.2: Sev's closet counts the crewmates I cheer, and the days
+                from . import closet_flow
+                closet_flow.note_cheer(to_uid, _state["labels"][0] if _state["labels"] else "", big)
+            except Exception:
+                traceback.print_exc()
         if then is not None:
             then(ok is True)
         if ok is True and luck:

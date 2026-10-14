@@ -31,6 +31,15 @@ from . import app, board, room_model, sev
 from .app import _state, cfg, client, save_cfg
 
 
+def _closet(do):
+    """3.8.2: tell Sev's closet (closet_flow); never in the way of a room."""
+    try:
+        from . import closet_flow
+        do(closet_flow)
+    except Exception:
+        traceback.print_exc()
+
+
 def _accent_pair():
     return board.accent_pair(cfg().get("accent"))
 
@@ -49,6 +58,7 @@ def my_room():
         return None
     ms = room_model.members(_state["entries"], room)
     others = [m for m in ms if not m[2]]
+    _closet(lambda cf: cf.note_room(bool(others)))  # 3.8.2: a room with my crew
     cl.session.pop("room", None)
     cl.session["room_done"] = {"rounds": room["rounds"], "minutes": room_model.room_minutes(room),
                                "with": room_model.names_line(others),
@@ -76,7 +86,7 @@ def board_view():
     room's members as their Sevs, each in their accent."""
     room = my_room()
     out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done(), now=_now(),
-                                sev=sev_on(), accent_pair=_accent_pair())
+                                sev=sev_on(), accent_pair=_accent_pair(), look=my_look())
     mine = out.get("mine")
     if mine and mine.get("fifteen"):
         if mine["state"] == "ask":
@@ -226,7 +236,7 @@ def _data(room, side=None, **kw):
     return room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
-                                  sev=sev_on(), brk_pose=_brk_pose(), **kw)
+                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(), **kw)
 
 
 def refresh_widgets():
@@ -548,8 +558,18 @@ def _brk_pose():
     return "stretch" if cfg().get("sev_break") == "stretch" else "breathe"
 
 
+def my_look():
+    """3.8.2: what my Sev has on from the closet (closet_flow), or nothing."""
+    try:
+        from . import closet_flow
+        return closet_flow.look(cfg())
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
 def _sev_markup(pose, rest=False, stack=None, move=None):
-    return sev.move(pose, move, rest=rest, stack=stack) if sev_on() else None
+    return sev.move(pose, move, rest=rest, stack=stack, look=my_look()) if sev_on() else None
 
 
 def pick(place):
@@ -688,6 +708,7 @@ def _end_fifteen(room, walked=False, closing=False):
     if cl.session.get("live_until") == cl.session.pop("fifteen_live", None):
         cl.session.pop("live_until", None)
     if n:
+        _closet(lambda cf: cf.note_fifteens(n, began))  # 3.8.2: Sev's closet counts them
         cl.session["fifteen_done"] = {"n": n, "minutes": minutes, "cards": cards, "walked": bool(walked),
                                       "day": _state["labels"][0] if _state["labels"] else "", "move": pick("stack")}
     cl._save_session()
@@ -788,13 +809,14 @@ def milestone_sevs(milestones):
     if not sev_on() or not milestones:
         return None
     played = _state.setdefault("sev_banner", {})
+    looks = {e.get("user_id"): e.get("look") for e in _state["entries"] or []}
     out = {}
     for uid, _who, days in milestones:
         key = (str(uid), int(days))
         rest = key in played
         if not rest:
             played[key] = pick("hop")
-        out[uid] = sev.move("hop", played[key], rest=rest, label="Sev: a big streak")
+        out[uid] = sev.move("hop", played[key], rest=rest, label="Sev: a big streak", look=looks.get(uid))  # 3.8.2: in their look
     return out
 
 
@@ -807,8 +829,8 @@ def signed_out_sev():
     turn = _state.get("sev_hello")
     if turn is None:
         _state["sev_hello"] = pick("hello")
-        return sev.move("hello", _state["sev_hello"])
-    return sev.move("hello", turn, rest=True)
+        return sev.move("hello", _state["sev_hello"], look=my_look())
+    return sev.move("hello", turn, rest=True, look=my_look())
 
 
 def board_sev(c, v):
@@ -842,4 +864,4 @@ def board_sev(c, v):
     ago = now - first
     if ago >= sev.LOGO_SECONDS:
         return None
-    return {"svg": sev.move(pose, turn), "ago": round(ago, 2)}
+    return {"svg": sev.move(pose, turn, look=my_look()), "ago": round(ago, 2)}

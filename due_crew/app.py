@@ -198,7 +198,8 @@ def _reset_runtime(keep_sync=False):
                   plan_updates={}, plans_midday=False, plans_morning=None,
                   bingo_open=False, bingo_mine=None, squads_left=set(),
                   settings_tab=None, team_view={}, team_draft={},
-                  team_bingo_open=None, insights={}, you_decks=None)
+                  team_bingo_open=None, insights={}, you_decks=None,
+                  closet_open=None, closet_new=None)  # 3.8.2: Sev's closet, and what just came for it
     _pending_cheers.clear()
 
 

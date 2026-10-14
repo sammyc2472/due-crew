@@ -393,6 +393,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     if fresh:
         _pending_cheers.extend(fresh)
         _state["sev_cheer"] = time.time()  # 3.8.1: Sev catches it by the logo, once
+        _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
 
     if knocks is not None:
         _state["knocks"] = [tuple(k) for k in knocks]
@@ -417,6 +418,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     elif data.get("plans"):
         plan_flow.refresh_progress()
     due_flow.after_refresh()  # Due: a fresh reviews count, and the morning's leeches when asked
+    _closet(lambda cf: _closet_day(cf, labels[0], data["entries"]))  # 3.8.2: Sev's closet
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -432,6 +434,22 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     rooms.refresh_widgets()  # 2.12: who's in the room, as of this fetch
 
 
+def _closet(do):
+    """3.8.2: tell Sev's closet (closet_flow); never in the way of the board."""
+    try:
+        from . import closet_flow
+        do(closet_flow)
+    except Exception:
+        traceback.print_exc()
+
+
+def _closet_day(cf, today, entries):
+    """At a refresh: the day's tallies, and anything newly earned."""
+    rv = due_flow._reviews() or {}
+    cf.note_day(today, entries, int(rv.get("done") or 0) > 0, rv.get("due"))
+    cf.check(today)
+
+
 def _rerender():
     if mw.state == "deckBrowser":
         mw.deckBrowser.refresh()
@@ -444,6 +462,10 @@ def _on_render(deck_browser, content):
             # 3.8.0: Settings shows whatever else is so (signed out, the board off)
             _state["board_shown"] = True
             content.stats += board.settings_html(_settings_view(), c)
+            return
+        if _state.get("closet_open"):
+            _state["board_shown"] = True  # 3.8.2: Sev's closet, as Settings
+            content.stats += board.closet_html(_closet_view(), c)
             return
         if not c.get("show_leaderboard", True):
             _state["board_shown"] = False
@@ -485,6 +507,9 @@ def _squad_view_with_bingo(c):
         bv = bingo_flow.view(sv, c)
         if bv:
             sv = dict(sv, bingo=bv)
+            squares = (bv.get("ev") or {}).get("squares") or []
+            _closet(lambda cf: cf.note_bingo(int((bv.get("ev") or {}).get("lines") or 0),
+                                             bool(squares) and all(q.get("done") for q in squares)))
             if bingo_flow.new_lines(bv):
                 tooltip("BINGO! Your squad just made a line.", period=4000)
     return sv
@@ -513,6 +538,8 @@ def _board_html(c):
     """The board from cache: one call for the first render and every swap."""
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
+    if _state.get("closet_open"):
+        return board.closet_html(_closet_view(), c)  # 3.8.2: Sev's closet in its place
     if _state.get("team_bingo_open"):
         from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
@@ -540,7 +567,7 @@ def _board_html(c):
                         milestone_sev=None if show_up else rooms.milestone_sevs(_state["milestones"][:2]),
                         room=rooms.board_view(), plans=plans,
                         due=due, you=_you(c, due, plans), sticking=_sticking(c),
-                        sev=rooms.board_sev(c, due))
+                        sev=rooms.board_sev(c, due), closet=_state.get("closet_new"))
 
 
 def _you(c, due, plans):
@@ -887,6 +914,8 @@ def _on_js(handled, message, context):
             tooltip("Copied.")
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
+    elif cmd.startswith("closet"):
+        _closet_cmd(cmd, parts[2:])  # 3.8.2: Sev's closet
     elif cmd == "heatday" and len(parts) > 2:
         _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
@@ -1118,6 +1147,74 @@ SETTINGS_CMDS = ("settab", "setclose", "set", "settabs", "setlabel", "setprivacy
 _share_push = {"n": 0}
 
 
+def open_closet(tab=None):
+    """3.8.2: Sev's closet, in place of the board (as Settings is), from
+    anywhere: what just came for Sev shows as new there, and the board's
+    line for it is done."""
+    news = list((_state.get("closet_new") or {}).get("keys") or [])
+    _state["closet_open"] = {"tab": tab or "All", "try": None, "msg": "", "new": news, "drawn": False}
+    _state["closet_new"] = None
+    _state["settings_tab"] = None
+    _close_addons_dialog()
+    if mw.state != "deckBrowser":
+        mw.moveToState("deckBrowser")
+    elif _board_on_screen():
+        _swap(cfg())
+    else:
+        _rerender()
+
+
+def _closet_view():
+    from . import closet_flow
+    st = _state.get("closet_open") or {}
+    c = cfg()
+    rest, st["drawn"] = bool(st.get("drawn")), True  # Sev waves when it opens and at a try-on, then rests
+    return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c), "try": st.get("try"),
+            "near": closet_flow.near(c), "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
+
+
+def _closet_cmd(cmd, parts):
+    """3.8.2: the closet's clicks, and the board line's (Wear it, ×)."""
+    from . import closet as cl, closet_flow
+    st = _state.get("closet_open")
+    arg = parts[0] if parts else ""
+    focus = None
+    if cmd == "closet":
+        open_closet()
+        return
+    if cmd == "closetnew":
+        _state["closet_new"] = None  # the line, later: the things stay in the closet
+    elif cmd == "closetclose":
+        _state["closet_open"] = None
+    elif cmd == "closetwear" and arg in cl.BY:
+        if closet_flow.wear(arg):
+            if st:
+                st.update({"try": None, "msg": "", "drawn": False})
+                focus = "closetwear:" + arg
+            else:
+                _state["closet_new"] = None  # Wear it, on the board's line: on, and the line's done
+    elif cmd == "closettry" and st is not None:
+        st.update({"try": arg if arg in cl.BY and arg != st.get("try") else None, "msg": "", "drawn": False})
+        focus = "closettry:" + arg if arg else None
+    elif cmd == "closettab" and st is not None and arg.isdigit() and int(arg) < len(board.CLOSET_TABS):
+        st.update({"tab": board.CLOSET_TABS[int(arg)], "try": None, "msg": ""})
+        focus = "closettab:" + arg
+    elif cmd == "closetoff":
+        c = cfg()
+        if c.get(closet_flow.LOOK_KEY):
+            c = dict(c)
+            c[closet_flow.LOOK_KEY] = []
+            save_cfg(c)
+        if st:
+            st.update({"try": None, "msg": ""})
+    else:
+        return
+    if _board_on_screen() or _state.get("closet_open"):
+        _swap(cfg(), focus=focus)
+    else:
+        _rerender()
+
+
 def _board_on_screen():
     c = cfg()
     return (mw.state == "deckBrowser" and c.get("show_leaderboard", True) and _state["board_shown"]
@@ -1345,6 +1442,7 @@ def _on_profile_open():
     _closing = False
     _last_attempt = 0.0
     client()                  # rebind to this profile's session
+    _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Sev's closet
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
     _settle_tabs()
@@ -1393,6 +1491,7 @@ def _tools_menu():
                  ("Follow a plan…", plan_flow.open_follow),
                  ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings),
+                 ("Sev’s closet…", lambda: open_closet()),
                  ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:

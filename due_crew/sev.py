@@ -83,10 +83,18 @@ _ARMS = {"down": (32, -32), "up": (155, -155), "wave": (32, -150), "hold": (-50,
 _HOLD, _SIDE, _TOP = (40, 56), (67, 58), (40, 27)
 
 
-def _arms(pose):
+HAND = (64.6, 56.8)  # the right hand of a hanging arm, where the closet draws what it holds
+
+
+def _arms(pose, hand=""):
+    """The arms, behind or in front. hand (3.8.2): what the right hand
+    holds, drawn at HAND; it's moved into the arm, so it goes where the hand
+    goes (up for a hop, round for a wave), and stays upright."""
     a = _ARMS.get(pose, _ARMS["down"])
     limb = _r(-2.6, -1, 5.2, 12.5, 2.6, ACC)
-    html = "".join(f'<g transform="translate({x} 47) rotate({ang})"><g class="sv-arm{side}">{limb}</g></g>'
+    held = (f'<g transform="translate(0 11.5) rotate({-a[1]})"><g transform="translate({-HAND[0]} {-HAND[1]})">{hand}</g></g>'
+            if hand else "")
+    html = "".join(f'<g transform="translate({x} 47) rotate({ang})"><g class="sv-arm{side}">{limb}{held if side == "R" else ""}</g></g>'
                    for side, x, ang in (("L", 21.5, a[0]), ("R", 58.5, a[1])))
     return ("", html) if pose in ("hold", "cross") else (html, "")  # held things go in front
 
@@ -208,20 +216,33 @@ def _fx(kinds, stack=3):
     return back, front
 
 
-def _figure(p, blush):
-    """Sev itself: feet, body, face, arms and what it holds. Every drawing's."""
-    back_arms, front_arms = _arms(p["arms"])
+def busy(pose):
+    """Whether `pose`'s hands are full (a card, the clock, a gift, the
+    case, fingers crossed): then the closet's held thing waits."""
+    p = POSES.get(pose) or POSES["idle"]
+    return bool(p.get("prop")) or p["arms"] in ("hold", "cross")
+
+
+def _figure(p, blush, look=None):
+    """Sev itself: feet, body, face, arms and what it holds. Every drawing's.
+    look (3.8.2): what it has on from the closet: behind it, over it, in its hand."""
+    back = front = hand = ""
+    if look:
+        from . import closet  # its drawings only when there's a look to draw
+        back, front, hand = closet.art(look, pose_holds=bool(p.get("prop")) or p["arms"] in ("hold", "cross"))
+    back_arms, front_arms = _arms(p["arms"], hand)
     body = (_r(28.5, 63, 9, 9.5, 3, ACC, ' class="sv-footL"') + _r(42.5, 63, 9, 9.5, 3, ACC, ' class="sv-footR"')
             + _r(20, 27, 40, 39, 12.5, ACC) + _r(25, 31, 11, 5, 2.5, "#fff", ' opacity=".22"')
             + _eyes(p["eyes"]) + _mouth(p["mouth"]) + (_cheeks() if blush else ""))
-    return f'<g class="sv-body">{back_arms}{body}{front_arms}{_held(p.get("prop"))}</g>'
+    return f'<g class="sv-body">{back}{back_arms}{body}{front}{front_arms}{_held(p.get("prop"))}</g>'
 
 
-def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None):
+def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None):
     """Sev in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
-    stack: squares on its head, one a fifteen (three at most)."""
+    stack: squares on its head, one a fifteen (three at most). look (3.8.2):
+    what it has on from the closet (closet.clean rules it)."""
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
     blush = p.get("cheeks") if cheeks is None else cheeks
@@ -230,19 +251,20 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     cls = f"sv m-{m}" + (" rest" if rest and m in ONCE else "")
     return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Sev")}">'
             f'<ellipse class="sv-shadow" cx="40" cy="74.5" rx="16" ry="2.6" style="fill:{LINE}"/>{fx_back}'
-            f'{_figure(p, blush)}{fx_front}</svg>')
+            f'{_figure(p, blush, look)}{fx_front}</svg>')
 
 
-def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None):
+def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None, look=None):
     """Sev in `pose` for a picture: an SVG of its own (it has the xmlns,
     width and height), each colour given or the drawing's own fallback, no
     classes, no motion. Just Sev: no shadow (it stands on what's under
     it) and none of the moment's effects (they're motion). The week card
     draws it (sharecard), in Qt here and on the site's canvas, whose
-    cards.js keeps a copy the suite checks against this."""
+    cards.js keeps a copy the suite checks against this. look (3.8.2): what
+    it has on from the closet; the copy draws Sev without one."""
     p = POSES.get(pose) or POSES["idle"]
     given = {"a": accent, "line": line, "ink": ink, "amb": amb, "mut": mut, "blush": blush}
-    art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks")))
+    art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks"), look))
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">'
             + re.sub(r' class="[^"]*"', "", art) + "</svg>")
 
@@ -358,13 +380,14 @@ CSS = r"""
 svg.sv { overflow: visible; display: block; flex: none; }
 .sv-slot { position: relative; display: inline-block; flex: none; vertical-align: middle; }
 .sv-slot > svg.sv { position: absolute; }
-.sv .sv-body, .sv .sv-shadow, .sv .sv-eyes, .sv .sv-pupils, .sv .sv-armL, .sv .sv-armR, .sv .sv-card, .sv .sv-clock,
+.sv .sv-body, .sv .sv-shadow, .sv .sv-eyes, .sv .sv-pupils, .sv .sv-card, .sv .sv-clock,
 .sv .sv-case, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk, .sv .sv-ring, .sv .spark, .sv .sv-cheek,
 .sv .sv-footL, .sv .sv-footR, .sv .sv-boxdot { transform-box: fill-box; }
 .sv .sv-body { transform-origin: 50% 100%; }
 .sv .sv-shadow, .sv .sv-eyes, .sv .sv-card, .sv .sv-clock, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk,
 .sv .spark, .sv .sv-ring { transform-origin: 50% 50%; }
-.sv .sv-armL, .sv .sv-armR { transform-origin: 50% 8%; }
+/* 3.8.2: an arm turns at its shoulder, the origin of its own drawing, whatever its hand holds */
+.sv .sv-armL, .sv .sv-armR { transform-box: view-box; transform-origin: 0 0; }
 .sv .sv-footL, .sv .sv-footR { transform-origin: 30% 100%; }
 .sv .sv-case { transform-origin: 50% 0%; }
 .sv .sv-cheek { opacity: .6; }
@@ -379,6 +402,16 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
 .sv.m-popup .sv-shadow { display: none; }
 .sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body { transform: translateY(-12px); }
+/* 3.8.2: the closet's things that move: each turns on its own point */
+.sv .cl-prop, .sv .cl-steam, .sv .cl-flame, .sv .cl-flick, .sv .cl-bal, .sv .cl-flag, .sv .cl-blink, .sv .cl-glow,
+.sv .cl-wing { transform-box: fill-box; }
+.sv .cl-prop, .sv .cl-blink, .sv .cl-glow { transform-origin: 50% 50%; }
+.sv .cl-flame { transform-origin: 50% 0%; }
+.sv .cl-flick, .sv .cl-steam { transform-origin: 50% 100%; }
+.sv .cl-bal { transform-origin: 0% 100%; }
+.sv .cl-flag { transform-origin: 0% 50%; }
+.sv .cl-wl { transform-origin: 100% 40%; }
+.sv .cl-wr { transform-origin: 0% 40%; }
 @media (prefers-reduced-motion: no-preference) {
   .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
@@ -610,6 +643,27 @@ svg.sv { overflow: visible; display: block; flex: none; }
   .sv.m-sreach .sv-armR { animation-direction: reverse; }
   @keyframes sv-reach { 0%, 70%, 100% { transform: rotate(0); } 78%, 86% { transform: rotate(40deg); } }
   .sv.m-slook .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-d, 0s) infinite; }
+  /* 3.8.2: the closet's things: a propeller turns, steam rises, wings flap, a balloon sways */
+  .sv .cl-prop { animation: cl-prop .5s linear infinite; }
+  .sv .cl-steam { animation: cl-steam 2.4s ease-in-out infinite; }
+  .sv .cl-flame { animation: cl-flame .35s ease-in-out infinite alternate; }
+  .sv .cl-flick { animation: cl-flick 1.1s ease-in-out infinite alternate; }
+  .sv .cl-bal { animation: cl-bal 3.2s ease-in-out infinite; }
+  .sv .cl-flag { animation: cl-flag 1.6s ease-in-out infinite; }
+  .sv .cl-blink { animation: cl-blink 1.8s steps(1) infinite; }
+  .sv .cl-glow { animation: cl-glow 2.4s ease-in-out infinite; }
+  .sv .cl-wl { animation: cl-wl 1.4s ease-in-out infinite; }
+  .sv .cl-wr { animation: cl-wr 1.4s ease-in-out infinite; }
+  @keyframes cl-prop { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
+  @keyframes cl-steam { 0% { opacity: 0; transform: translateY(2px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+  @keyframes cl-flame { from { transform: scaleY(.8); } to { transform: scaleY(1.15); } }
+  @keyframes cl-flick { from { transform: scale(.9); opacity: .85; } to { transform: scale(1.08); opacity: 1; } }
+  @keyframes cl-bal { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
+  @keyframes cl-flag { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.86); } }
+  @keyframes cl-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: .35; } }
+  @keyframes cl-glow { 0%, 100% { opacity: .3; } 50% { opacity: .6; } }
+  @keyframes cl-wl { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
+  @keyframes cl-wr { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(14deg); } }
   /* drawn again after it played: it rests, and blinks */
   .sv.rest .sv-body, .sv.rest .sv-armR, .sv.rest .sv-armL, .sv.rest .sv-shadow, .sv.rest .sv-clock,
   .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,

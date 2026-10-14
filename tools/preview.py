@@ -528,6 +528,27 @@ sections.append("<h3>3.8.1: a crew room, Sev on: each member is their Sev, in th
 sections.append("<h3>3.8.1: the same room, Sev off: the initials</h3>" + board.render(
     dict(DATA, entries=SEATED), {"period": "today", "sev": False}, now_ts - 60,
     room=room_model.board_view(_room, SEATED)))
+# 3.8.2: Sev's closet. Crew rows: each person's Sev in the emoji's place, in their colour and look
+_LOOKS = {"dre": ["dino"], "marisa": ["wizard"], "noah": ["partyhat", "scarf"], "priya": ["sprout", "shades", "balloon"]}
+DRESSED = [dict(e, accent=_ACC.get(e["user_id"], "amber" if e["user_id"] == "priya" else ""), look=_LOOKS.get(e["user_id"], []))
+           for e in DATA["entries"]]
+_MINE = {"sev_look": ["headphones", "glasses", "starpin", "mug"],
+         "sev_closet": {k: "2026-09-01" for k in ("sprout", "beanie", "headphones", "bowtie", "blush", "partyhat", "glasses",
+                                                  "lanyard", "starpin", "backpack", "umbrella", "mug", "pencil", "pumpkin",
+                                                  "witch", "winter", "newyear", "bee", "dino")}}
+sections.append("<h3>3.8.2: crew rows, Sev on: each person's Sev in the emoji's place, in their colour and look (mine opens the closet)</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60))
+sections.append("<h3>3.8.2: something new for Sev: its line on the board</h3>" + board.render(
+    dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": ["propeller"]}))
+sections.append("<h3>3.8.2: the day the closet comes: one line for what your days earned</h3>" + board.render(
+    dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": list(_MINE["sev_closet"]), "first": True}))
+_CV = {"tab": "All", "have": _MINE["sev_closet"], "look": _MINE["sev_look"], "try": None,
+       "near": [("cap", 11, 14, "days in a row"), ("propeller", 7, 10, "Fifteens"), ("magnifier", 6, 10, "leeches turned around")],
+       "new": ["dino"], "msg": "", "rest": True}
+sections.append("<h3>3.8.2: Sev's closet, in the board's place: all of it</h3>" + board.closet_html(_CV, {"accent": "green"}))
+sections.append("<h3>3.8.2: trying on something you haven't got yet</h3>" + board.closet_html(dict(_CV, tab="Showing up", **{"try": "cap"}), {}))
+sections.append("<h3>3.8.2: the costumes (one at a time; your things wait under it)</h3>" + board.closet_html(
+    dict(_CV, tab="Costumes", look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

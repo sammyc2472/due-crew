@@ -661,6 +661,11 @@ class FakeWorker:
                 accent = ((self.settings.get(fid) or {}).get("settings") or {}).get("accent")
                 if isinstance(accent, str) and accent in ACCENTS:
                     row["accent"] = accent
+                # 3.8.2: what their Sev has on, as names (board.ts lookOf)
+                look = ((self.settings.get(fid) or {}).get("settings") or {}).get("sev_look")
+                if (isinstance(look, list) and 0 < len(look) <= 8
+                        and all(isinstance(x, str) and re.fullmatch(r"[a-z0-9]{2,16}", x) for x in look)):
+                    row["look"] = list(look)
                 friends.append(row)
             else:
                 friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
@@ -2240,7 +2245,8 @@ def install_fake_aqt():
                  "profile_did_open", "profile_will_close", "card_will_show",
                  "reviewer_will_show_context_menu", "reviewer_did_show_question",
                  "reviewer_did_show_answer", "state_did_change", "top_toolbar_did_redraw",
-                 "browser_will_show_context_menu", "state_shortcuts_will_change"):
+                 "browser_will_show_context_menu", "state_shortcuts_will_change",
+                 "add_cards_did_add_note"):
         setattr(hooks, name, types.SimpleNamespace(append=lambda f: None))
     aqt.gui_hooks = hooks
     deckbrowser = types.ModuleType("aqt.deckbrowser")

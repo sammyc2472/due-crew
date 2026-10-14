@@ -69,6 +69,17 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
+/** 3.8.2: a look from a settings doc (json_extract's text of it): what a Sev has
+ *  on from the closet, as names (the add-on knows the things; a name it
+ *  doesn't know it draws without). Up to LOOK_MAX short names, else none. */
+export const LOOK_MAX = 8;
+export function lookOf(v: unknown): string[] | null {
+  let a: unknown = v;
+  if (typeof v === "string") { try { a = JSON.parse(v); } catch { return null; } }
+  if (!Array.isArray(a) || !a.length || a.length > LOOK_MAX) return null;
+  return a.every((x) => typeof x === "string" && /^[a-z0-9]{2,16}$/.test(x)) ? (a as string[]) : null;
+}
+
 /** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
  *  their week and accent when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
@@ -94,10 +105,11 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
          (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added; 3.8.1: so
-    // does their accent (from their settings: their Sev wears it in a study room)
+    // does their accent (from their settings: their Sev wears it in a study room);
+    // 3.8.2: and what their Sev has on from the closet (its look)
     db.prepare(
       `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
-         json_extract(t.json, '$.accent') AS accent
+         json_extract(t.json, '$.accent') AS accent, json_extract(t.json, '$.sev_look') AS look
        FROM friends f JOIN users u ON u.uid = f.friend
        LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
        LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
@@ -111,7 +123,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const friends = (friendsRes.results as any[]).map((f) => f.mutual
     ? { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: true,
         week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at),
-        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}) }  // none, or not one of ours: none
+        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}),  // none, or not one of ours: none
+        ...(lookOf(f.look) ? { look: lookOf(f.look) } : {}) }
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
   // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen

@@ -212,7 +212,12 @@ def sev_label(pose="hello", size=64, name="Sev"):
     can't draw SVG: the dialog goes without."""
     from aqt.qt import QLabel, Qt
     from ..sev import still
-    pixmap = _svg_pixmap(still(pose, accent()), size, size)
+    try:  # 3.8.2: in what it has on from the closet
+        from ..closet_flow import look
+        mine = look()
+    except Exception:
+        mine = None
+    pixmap = _svg_pixmap(still(pose, accent(), look=mine), size, size)
     if pixmap is None:
         return None
     label = QLabel()
