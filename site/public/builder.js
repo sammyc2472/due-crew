@@ -275,7 +275,9 @@ const PlanSquad = (() => {
     const ask = h("input", { placeholder: "Ask anything…", maxlength: 280, "aria-label": "Ask the squad" });
     const send = () => { const text = ask.value.trim(); if (text) again(api("POST", `/plans/${id}/asks`, { text })); };
     ask.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-    const who = (x) => (x.mine ? "You" : [x.emoji ? `${x.emoji} ` : "", h("b", {}, x.name)]);
+    // 3.8.21: a person's Pip where the emoji was (on.pip, from the board's Squads: board._plan_squad_html's who_face)
+    const pipOf = (x) => (on.pip ? on.pip(x) : null);
+    const who = (x) => (x.mine ? "You" : [pipOf(x) || (x.emoji ? `${x.emoji} ` : ""), h("b", {}, x.name)]);
     const thread = (a) => {
       const reps = a.replies.map((r) => h("div", { class: "rep" }, h("b", {}, r.mine ? "You" : r.name), r.author ? " (author)" : "", `: ${r.text}`,
         a.mine && !r.mine ? h("button", { class: "linkish", onclick: () => again(api("POST", `/plans/${id}/asks/${r.id}/helped`, { on: !r.helped })) }, r.helped ? "Helped ✓" : "That helped")
@@ -298,7 +300,7 @@ const PlanSquad = (() => {
           a.remove ? h("button", { class: "linkish quiet2", onclick: () => again(api("DELETE", `/plans/${id}/asks/${a.id}`)) }, "Remove") : null)));
     };
     const faces = h("div", { class: "faces" }, team.faces.map((f) => h("div", { class: `face${f.shown ? "" : " away"}` },
-      h("span", { class: "e" }, face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
+      h("span", { class: "e" }, pipOf(f) || face(f.emoji, f.name)), h("b", {}, f.uid === me.uid ? "You" : f.name))),
       team.more ? h("div", { class: "face away" }, h("span", { class: "e" }, "+"), h("b", {}, `${team.more} more`)) : null);
     const b = team.bingo;
     let bingo = null;

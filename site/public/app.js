@@ -1049,6 +1049,15 @@ const Board = (() => {
     return h("span", { class: "who" }, Sev.row(p.look, accentPair(p.accent), p.you ? "Your Pip" : `${name}’s Pip`), name);
   }
 
+  /** board.squad_pip (3.8.21): someone's Pip on Squads, in the emoji's place: mine, a crewmate's in their
+   *  colour and look (pips: the crew by uid, as /board brings them), anyone else plain in the default
+   *  colour (a squadmate shares a name and an emoji, nothing more). Without sev.js, null: the emoji. */
+  function squadPip(x, pips) {
+    if (typeof Sev !== "object") return null;
+    const p = pips.get(x.uid) || {}, you = x.uid === me?.uid;
+    return Sev.row(p.look, accentPair(you ? p.accent || worn : p.accent), you ? "Your Pip" : `${x.name || "?"}’s Pip`);
+  }
+
   function nameCell(r, period) {
     const p = r.p;
     const cell = h("td", { class: "nm" }, who(p));
@@ -1182,7 +1191,7 @@ const Board = (() => {
   };
   /** plans: 3.8.0, the plans whose squad I'm in ({id: "plan:<plan id>", pid,
    *  name}), pills after my own; onLeft(pid) when I leave one here. */
-  async function squads(showUp, crewUids, pendingUids, onSort, refresh, plans = [], onLeft = () => {}) {
+  async function squads(showUp, crewUids, pendingUids, onSort, refresh, plans = [], onLeft = () => {}, pips = new Map()) {
     const day = todayLocal(), yday = addDays(day, -1);
     if (!squadsGot || Date.now() - squadsGot.at > 60000) {
       const { squads: got } = await api("GET", "/squads/mine");
@@ -1197,7 +1206,7 @@ const Board = (() => {
     const pill = (q) => h("button", { class: `linkish${q.id === cur ? " on" : ""}`, onclick: () => { store("dc-squad", q.id); onSort(); } }, q.name);
     const sw = h("div", { class: "sqsw" }, list.map(pill), plans.map(pill), joinOrCreate);
     const plan = plans.find((q) => q.id === cur);
-    if (plan) return h("div", {}, sw, PlanSquad.view(plan.pid, onSort, { left: () => { store("dc-squad", ""); onLeft(plan.pid); } }));
+    if (plan) return h("div", {}, sw, PlanSquad.view(plan.pid, onSort, { left: () => { store("dc-squad", ""); onLeft(plan.pid); }, pip: (x) => squadPip(x, pips) }));
     // only the squad on screen is fetched; another one when it's picked
     if (!(cur in squadsGot.boards)) squadsGot.boards[cur] = await api("GET", `/squads/${cur}?wk=${isoWeek(day)}`).catch(() => null);
     const sq = squadsGot.boards[cur];
@@ -1235,7 +1244,7 @@ const Board = (() => {
         h("td", { class: "n k-retention" }, r.accuracy != null ? `${r.accuracy.toFixed(1)}%` : "—"),
         h("td", { class: "n" }, r.streak != null ? String(r.streak) : "—"), wk7];
       return h("tr", { class: [you ? "you" : "", today && !nyet ? "" : "dim"].join(" ").trim() },
-        h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.emoji ? r.emoji + " " : ""}${r.name}`), notes), cells);
+        h("td", { class: "rk" }, rank), h("td", { class: "nm" }, h("span", { class: "who" }, squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name), notes), cells);
     });
     // 3.6: the Squads tab's bingo card, as board.py bingo_card_html: the
     // grid small, how many stamped, what's closest to a line. The Worker
@@ -1349,7 +1358,8 @@ async function home() {
       const mine = followed.filter((p) => p.following.share && !p.following.teamAsk).map((p) => ({ id: `plan:${p.id}`, pid: p.id, name: p.name }));
       const left = (pid) => { const p = followed.find((x) => x.id === pid); if (p) p.following.share = false; draw(); };
       panel.replaceChildren(h("p", { class: "muted small" }, "Loading…"));
-      return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left));
+      return panel.replaceChildren(await Board.squads(showUp, new Set(crew.map((f) => f.uid)), new Set(waiting.map((f) => f.uid)), draw, draw, mine, left,
+        new Map(people.map((p) => [p.uid, p]))));  // 3.8.21: their Pips, mine and my crew's in colour
     }
     const picker = h("div", { class: "sqsw" }, views.map(([k, l]) =>
       h("button", { class: `linkish${view === k ? " on" : ""}`, onclick: () => { view = k; Board.store("dc-crew", k); draw(); } }, l)));

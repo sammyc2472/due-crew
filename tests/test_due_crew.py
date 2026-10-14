@@ -726,7 +726,7 @@ def test_squad_view_html():
           "&middot; 2,713 reviews together" in html, html)
     check("squad view: yesterday's row is dim, unranked, and last",
           html.index("Marcus") > html.index("Priya") and "&middot; yesterday" in html
-          and re.search(r'<td class="rk"></td><td class="nm"><a[^>]*ecard:u3', html) is not None)
+          and re.search(r'<td class="rk"></td><td class="nm">(?:(?!</tr>).)*ecard:u3', html) is not None)
     check("squad view: founder controls and the shared footer",
           "squadlock" in html and ">Open<" in html and "squadinvite" in html
           and "squadleave" in html)
@@ -892,8 +892,11 @@ def test_v25_edges_emoji_week():
             "name": "busm", "open": True, "founder_me": True, "rows": rows, "day": labels[0],
             "yesterday": labels[1], "people": 3, "studying": 3, "reviews": 2225}
     html = board._squads_html(view, {"sort": "week"})
-    check("squad board: emoji in front of names, a rolling 7-days column, sortable by it",
-          "🐢 igk" in html and "🦊 Sammy" in html and "7/7" in html and "6/7" in html
+    plain = board._squads_html(view, {"sort": "week", "sev": False})
+    check("squad board: a Pip in front of each name (3.8.21; the emoji with Pip off), a rolling 7-days column, sortable by it",
+          "🐢" not in html and "🦊" not in html and html.count('class="dc-rsev"') == 3
+          and "🐢 igk" in plain and "🦊 Sammy" in plain and "dc-rsev" not in plain
+          and "7/7" in html and "6/7" in html
           and '<span class="hl">7 days</span> &#9662;' in html
           and html.index("igk") < html.index("Sammy") < html.index("Priya"))
     page = board.render({"entries": [], "labels": labels, "tomorrow": "", "pending": []},
@@ -2766,7 +2769,7 @@ def test_not_yet_today_is_unranked():
             "day": labels[0], "yesterday": labels[1], "people": 2, "reviews": 9}
     sq = board._squads_html(view, {})
     check("not yet: on a squad board the zero is under the ranked, with dashes", sq.index(">Bo<") < sq.index(">Ann<")
-          and "#1" in sq and "#2" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
+          and ">#1<" in sq and ">#2<" not in sq and "nothing yet today" in sq and "1 studying today" in sq)
 
 
 def test_ui_review_board():
@@ -12390,7 +12393,8 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and sev.BLINK == 4.6 and len({sev.started(i) for i in range(6)}) == 6)
     js = rm.widget_js("card", on)
     check("…drawn from sev.py's markup (24 px seats, the faces' size), coloured by day or night, the name only a label set as text",
-          "seats(40) : faces(c, 24)" in js and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
+          "who.appendChild(people(c, 24));" in js and "Math.round(size / (D.slot || [0.6])[0]), f = seats(s, most)" in js
+          and "n ? s.a[1] : s.a[0]" in js and "w.title = s.n;" in js
           and "v.setAttribute('aria-label', s.n)" in js and round(40 * sev.SLOT[0]) == 24)
     off = rm.widget_data(room, ents, mine, sev=False)
     fif = rm.widget_data(rm.make_fifteen("sam", datetime.datetime.now(utc)), ents, mine)
@@ -13116,6 +13120,149 @@ def test_closet_board_v382():
         dc._state["closet_open"] = dc._state["closet_new"] = None
 
 
+def test_squad_pips_v3821():
+    """3.8.21 (Sam: "squads page still has the old emojis and not the new
+    pips"): the Squads tab's people are Pips, as Crew's are: mine in my colour
+    and look, a crewmate's in theirs (a mutual friend's, which only the crew
+    brings), anyone else plain in the default colour, since a squadmate
+    shares a name and an emoji, nothing more. A plan's squad too, its faces
+    and its threads. With Pip off, the emojis. And the site's twin."""
+    from due_crew import closet_art as CA
+    lb = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(2)]
+    rows = [{"user_id": "me", "name": "Sammy", "emoji": "🦊", "day": lb[0], "reviews": 50, "time_ms": 60000, "you": True},
+            {"user_id": "dre", "name": "Dre", "emoji": "🐢", "day": lb[0], "reviews": 40, "time_ms": 60000, "crew": True},
+            {"user_id": "zed", "name": "Zed <b>", "emoji": "🐸", "day": lb[0], "reviews": 30, "time_ms": 60000}]
+    view = {"state": "ok", "squads": [{"id": "s", "name": "S"}], "current": "s", "name": "S", "open": True,
+            "rows": rows, "day": lb[0], "yesterday": lb[1], "people": 3, "reviews": 120}
+    conf = {"accent": "rose", "sev_look": ["cap"], "sev_closet": {"cap": "2026-01-01"}}
+    crew = {"dre": {"user_id": "dre", "accent": "blue", "look": ["dino"]}}
+    html = board._squads_html(view, conf, crew)
+
+    def row(name):
+        i = html.index(name)
+        return html[html.rfind("<tr", 0, i):html.index("</tr>", i)]
+    me, dre, zed = row(">Sammy<"), row(">Dre<"), row(">Zed &lt;b&gt;<")
+    green = board.accent_pair(None)[0]
+    check("squads: a Pip where each emoji was, room above it for a hat",
+          not any(x in html for x in ("🦊", "🐢", "🐸")) and all('class="sv"' in r or ' sv"' in r for r in (me, dre, zed)))
+    check("…mine in my colour and look, opening the closet; a crewmate's in theirs",
+          CA.ART["cap"][0][:30] in me and "--rs-l:#b03052" in me and "duecrew:closet'" in me
+          and CA.ART["dino"][0][:30] in dre and "--rs-l:#1e5fb4" in dre)
+    check("…anyone else plain, in the default colour (nothing of theirs but a name), the name still text",
+          f"--rs-l:{green}" in zed and "cl-" not in zed.split("dc-pl")[0] and "Zed <b>" not in zed
+          and "Zed &lt;b&gt;’s Pip" in zed)
+    plain = board._squads_html(view, dict(conf, sev=False), crew)
+    check("…Pip off: the emojis as before", "🦊 Sammy" in plain and "🐢 Dre" in plain and "dc-rsev" not in plain)
+    team = {"on": True, "count": 3, "shown": 2,
+            "faces": [{"uid": "me", "name": "Sammy", "emoji": "🦊", "shown": True},
+                      {"uid": "dre", "name": "Dre", "emoji": "🐢", "shown": True},
+                      {"uid": "zed", "name": "Zed", "emoji": "🐸", "shown": False}],
+            "asks": [{"id": 1, "uid": "dre", "name": "Dre", "emoji": "🐢", "text": "why?", "replies": [], "mine": False}]}
+    ps = board._plan_squad_html("p1", {"team": team, "me": "me"}, crew, conf)
+    faces = ps.split('class="faces"')[1].split('<div class="tg">')[0]
+    check("a plan's squad: its faces are Pips, a size up (mine, my crewmate's in their look, the rest plain)",
+          not any(x in ps for x in ("🦊", "🐢", "🐸")) and faces.count('class="dc-rsev') == 3
+          and "width:24px" in faces and CA.ART["dino"][0][:30] in faces and CA.ART["cap"][0][:30] in faces)
+    check("…and so is who asked", CA.ART["dino"][0][:30] in ps.split('class="tqa"')[1]
+          and "🐢" in board._plan_squad_html("p1", {"team": team, "me": "me"}, crew, dict(conf, sev=False))
+          and "🐢" in board._plan_squad_html("p1", {"team": team, "me": "me"}))
+    page = board.render({"entries": [{"user_id": "me", "name": "Sammy", "you": True, "days": {}},
+                                     dict(crew["dre"], name="Dre", days={})], "labels": lb, "tomorrow": "", "pending": []},
+                        dict(conf, period="squads"), 0, squad_view=view)
+    check("…the board hands the squads its crew", CA.ART["dino"][0][:30] in page.split(">Dre<")[0].rsplit("<tr", 1)[1])
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app_js = open(os.path.join(root, "site", "public", "app.js"), encoding="utf-8").read()
+    builder_js = open(os.path.join(root, "site", "public", "builder.js"), encoding="utf-8").read()
+    check("the site's twin: squad rows, a plan squad's faces and threads, by the same rule",
+          "function squadPip(x, pips)" in app_js and "accentPair(you ? p.accent || worn : p.accent)" in app_js
+          and 'squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name)' in app_js
+          and "pip: (x) => squadPip(x, pips)" in app_js and "new Map(people.map((p) => [p.uid, p]))" in app_js
+          and "pipOf(f) || face(f.emoji, f.name)" in builder_js and "[pipOf(x) || (x.emoji" in builder_js)
+
+
+def test_room_widget_pips_v3821():
+    """3.8.21 (Sam: "no pips here either!"): a crew room's people are their
+    Pips in every widget that showed their initials: the top bar's chip (four,
+    then +N), the margin card and the break (a crowd wraps, hats clear the line
+    above), as on the room's card. Pip off: the initials, as before. The
+    widgets run in node on a small fake page; skipped without node."""
+    import shutil
+    import subprocess
+    from due_crew import room_model as rm, sev
+    utc = datetime.timezone.utc
+    now = datetime.datetime.now(utc)
+    js_of = lambda kind: rm.widget_js(kind, rm.widget_data(rm.make_room("sam", now), [], ("#2e7d32", "#7cc47f")))
+    check("every crew room widget draws its people one way (Pips, or the initials with Pip off), at the faces' size",
+          "fc = people(c, 18, 4);" in js_of("chip") and "root.appendChild(people(c, 26, 0, true));" in js_of("gutter")
+          and "box.appendChild(people(c, 32, 0, true));" in js_of("break") and "who.appendChild(people(c, 24));" in js_of("card")
+          and "faces(c, " not in rm._RUNTIME.replace("return faces(c, size);", "").replace("function faces(c, size)", ""))
+    node = shutil.which("node")
+    if not node:
+        print("SKIP room widget Pips: no node")
+        return
+    names = [("sam", "Sammy", True), ("lu", "Lu <b>", False), ("dre", "Dre", False),
+             ("ana", "Ana", False), ("kai", "Kai", False), ("nia", "Nia", False)]
+
+    def ents(room, n):
+        return [{"user_id": u, "name": nm, "you": y, "accent": "blue", "look": ["cap"] if u == "lu" else [], "room": room}
+                for u, nm, y in names[:n]]
+    before = rm.make_room("sam", now + datetime.timedelta(minutes=20))
+    fif = rm.make_fifteen("sam", now - datetime.timedelta(minutes=3))
+    cases = [(kind, n, pip, before) for kind in ("chip", "gutter", "break", "card") for n, pip in ((2, True), (6, True), (2, False))]
+    cases.append(("chip", 1, True, fif))
+    progs = [rm.widget_js(kind, rm.widget_data(room, ents(room, n), board.accent_pair("green"), sev=pip))
+             for kind, n, pip, room in cases]
+    dom = r"""
+class Sty { constructor() { this.cssText = ''; } setProperty(k, v) { this[k] = v; } }
+class E {
+  constructor(tag) { this.tag = tag; this.kids = []; this.style = new Sty(); this.textContent = ''; this.title = ''; }
+  appendChild(k) { this.kids.push(k); k.parentNode = this; return k; }
+  set innerHTML(h) { this.html = h; this.kids = []; const m = /^<([a-z]+)/.exec(h); if (m) { this.kids.push(new E(m[1])); } }
+  get firstChild() { return this.kids[0] || null; }
+  setAttribute(k, v) { this[k] = v; } querySelectorAll() { return []; } addEventListener() {} remove() {}
+}
+const body = new E('body'); body.className = '';
+globalThis.window = globalThis; window.addEventListener = () => {};
+globalThis.document = { body, head: new E('head'), createElement: (t) => new E(t), getElementById: () => null,
+  querySelector: () => null, documentElement: { classList: { contains: () => false } } };
+globalThis.setInterval = () => 0; globalThis.pycmd = () => {};
+const walk = (e, out) => { out.push(e); e.kids.forEach((k) => walk(k, out)); return out; };
+"""
+    out = []
+    for prog in progs:
+        run = subprocess.run([node, "-e", dom + prog + r"""
+const all = walk(body, []);
+const pips = all.filter((e) => e.style['--sv-d'] !== undefined);
+console.log(JSON.stringify({
+  pips: pips.map((e) => e.title), slot: pips.length ? /width:(\d+)px/.exec(pips[0].style.cssText)[1] : null,
+  initials: all.filter((e) => e.tag === 'i' && /border-radius:50%/.test(e.style.cssText)).map((e) => e.textContent),
+  more: all.filter((e) => e.tag === 'small' && /^\+/.test(e.textContent)).map((e) => e.textContent),
+  row: pips.length ? pips[0].parentNode.style.cssText : '' }));"""], capture_output=True, text=True, timeout=60)
+        try:
+            out.append(json.loads(run.stdout))
+        except ValueError:
+            out.append({"error": run.stdout[-300:] + run.stderr[-1500:]})
+    got = {(kind, n, pip, room is fif): o for (kind, n, pip, room), o in zip(cases, out)}
+    check("the widgets run in node", all("error" not in o for o in out), [o for o in out if "error" in o])
+    six = ["You", "Ana", "Dre", "Kai", "Lu <b>", "Nia"]
+    check("chip, Pip on: each person is their Pip, host first, a name only a label; four, then +2",
+          got[("chip", 2, True, False)]["pips"] == ["You", "Lu <b>"] and got[("chip", 2, True, False)]["more"] == []
+          and got[("chip", 6, True, False)]["pips"] == six[:4] and got[("chip", 6, True, False)]["more"] == ["+2"]
+          and got[("chip", 2, True, False)]["initials"] == [], got)
+    check("…each Pip's slot is the face it replaces (chip 18, margin card 26, break 32, room card 24)",
+          [got[(k, 2, True, False)]["slot"] for k in ("chip", "gutter", "break", "card")] == ["18", "26", "32", "24"]
+          and all(round(round(f / sev.SLOT[0]) * sev.SLOT[0]) == f for f in (18, 26, 32, 24)), got)
+    check("margin card and break: everyone (no +N), wrapping, with room above for a hat",
+          all(got[(k, 6, True, False)]["pips"] == six and got[(k, 6, True, False)]["more"] == []
+              and "flex-wrap:wrap" in got[(k, 6, True, False)]["row"] and "padding-top:" in got[(k, 6, True, False)]["row"]
+              for k in ("gutter", "break")), got)
+    check("Pip off: the initials, as before, in every widget",
+          all(got[(k, 2, False, False)]["pips"] == [] and got[(k, 2, False, False)]["initials"] == ["S", "L"]
+              for k in ("chip", "gutter", "break", "card")), got)
+    check("a fifteen's chip: its own Pip, no people", got[("chip", 1, True, True)]["pips"] == []
+          and got[("chip", 1, True, True)]["initials"] == [], got)
+
+
 def test_closet_flow_v382():
     """3.8.2: the facts come from the revlog (the days and hours, read once
     a day, today's fresh), the cards, the board and a few tallies; what's new
@@ -13246,11 +13393,11 @@ def test_closet_site_rows_v382():
           '<script src="/sev.js" defer></script>\n<script src="/app.js" defer></script>' in app_html
           and "script-src 'self'" in open(os.path.join(REPO, "site", "src", "index.ts"), encoding="utf-8").read())
     table, presence = app_js.split("  function nameCell(r, period) {")[1], app_js.split("  function presence(people, today, picker = null) {")[1]
-    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; squads keep theirs",
+    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; so do squads (3.8.21)",
           table.split("\n")[2].strip() == 'const cell = h("td", { class: "nm" }, who(p));'
           and 'h("td", { class: "nm" }, who(r.p), note(r))' in presence.split("  function decks(")[0]
           and "Sev.row(p.look, accentPair(p.accent)" in app_js and "you: true, accent: me?.accent || worn }" in app_js
-          and '`${r.emoji ? r.emoji + " " : ""}${r.name}`' in app_js)
+          and 'squadPip(r, pips) || (r.emoji ? r.emoji + " " : ""), r.name)' in app_js)
     check("…its accent by day and night from board.py's, a name not ours the default's",
           all(f'{k}: [["{v["light"][0]}", ' in app_js and f'["{v["dark"][0]}", ' in app_js for k, v in board.ACCENTS.items())
           and "const accentPair = (name) => { const a = Object.prototype.hasOwnProperty.call(ACCENTS, name) ? ACCENTS[name] : ACCENTS.green; return [a[0][0], a[1][0]]; };" in app_js)

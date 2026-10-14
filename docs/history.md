@@ -1742,3 +1742,23 @@ every release that changes how something works.
   or a costume's tail, clears the ▶ and the clock; a profile card puts Pip
   beside the name's line, the name and the streak on one baseline. The
   README's board picture is re-rendered with the crew's Pips.
+
+- 3.8.21, Pips on Squads (Sam: "squads page still has the old emojis and
+  not the new pips"). The Squads tab's people are Pips, as Crew's are: a
+  squad's table, a plan's squad's faces (a size up) and who asked in its
+  threads. Mine wears my colour and look; a crewmate's wears theirs, from
+  the crew the board already has (`board.squad_pip`, `_squads_html`'s
+  `crew_by`); anyone else is a plain Pip in the default colour, since a
+  squadmate who isn't a mutual friend shares a name and an emoji, nothing
+  more, and that's all they get here too. Nothing new is asked of the
+  server. Pip off, the emojis as before. The site the same (`squadPip` in
+  app.js's `Board`, `on.pip` into builder.js's `PlanSquad.view`). And in a
+  study room (Sam, on the top bar's chip: "no pips here either!"): every
+  room widget that showed initials shows each person's Pip, in their colour
+  and look, as the room's card and the Decks lobby already did: the top
+  bar's chip (four, then +N, so it never crowds the bar), the margin card
+  beside the card and the break (everyone, wrapping, with room above for a
+  hat). One helper draws them (`people` in `room_model`'s widget runtime),
+  each Pip's slot the size of the face it replaces; the gap between them
+  grows with their size, so a held mug clears the next one. Pip off, the
+  initials as before. README's room picture re-rendered from the widget.

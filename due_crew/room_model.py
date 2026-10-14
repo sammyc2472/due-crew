@@ -602,9 +602,11 @@ _RUNTIME = r"""
   // 3.8.1: a crew room's members as their Pips (room_model.seats): each in its
   // person's accent (by day or night, as mine), each blinking at its own moment;
   // a name is only ever a label, set as text
-  function seats(size) {
-    var f = el('span', 'display:inline-flex;align-items:center;gap:3px;'), n = night();
-    D.seats.forEach(function (s) {
+  // most: that many, then +N (3.8.21, the top bar's chip)
+  function seats(size, most) {
+    var f = el('span', 'display:inline-flex;align-items:center;gap:' + Math.max(3, Math.round(size / 8)) + 'px;'), n = night();
+    D.seats.forEach(function (s, i) {
+      if (most && i >= most) { return; }
       var w = sev(s.k && D.sev[s.k] ? s.k : s.m && s.m !== 'idle' && D.sev['idle.' + s.m] ? 'idle.' + s.m : 'idle', size), v = w.firstChild;
       w.style.setProperty('--sv-a', n ? s.a[1] : s.a[0]);
       w.style.setProperty('--sv-d', s.d + 's');
@@ -612,6 +614,20 @@ _RUNTIME = r"""
       if (v && v.setAttribute) { v.setAttribute('aria-label', s.n); }
       f.appendChild(w);
     });
+    if (most && D.seats.length > most) { f.appendChild(el('small', 'color:' + c.mut + ';font-size:11px;', '+' + (D.seats.length - most))); }
+    return f;
+  }
+  // 3.8.21 (Sam: "no pips here either!"): with Pip on, a crew room's people are their Pips
+  // wherever its faces were (the chip, the gutter, the break, the card); Pip off, the initials.
+  // A face of size px is a seat of size / sev.SLOT[0]: the slot its Pip fills is the face's size
+  // In a column (stack), their hats clear the line above and a crowd wraps
+  function people(c, size, most, stack) {
+    if (!(D.sev && D.seats && D.seats.length)) { return faces(c, size); }
+    var s = Math.round(size / (D.slot || [0.6])[0]), f = seats(s, most);
+    if (stack) {
+      f.style.cssText += 'flex-wrap:wrap;justify-content:center;max-width:100%;padding-top:' + Math.round(s * .3) +
+        'px;row-gap:' + Math.round(s * .35) + 'px;';
+    }
     return f;
   }
   function ftitle(p) { var n = p.state === 'break' ? p.round + 1 : p.round; return p.state === 'break' ? 'Break' : 'Fifteen' + (n > 1 ? ' ' + n : ''); }
@@ -645,7 +661,7 @@ _RUNTIME = r"""
       ';font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
     root.title = FIF ? 'Your fifteen' : 'Your study room';
     var sq = FIF && D.sev ? sev('focus', 32) : squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
-        t1 = el('b', 'font-size:11.5px;', D.title), t2 = el('small', 'font-size:10.5px;color:' + c.mut + ';'), fc = faces(c, 18);
+        t1 = el('b', 'font-size:11.5px;', D.title), t2 = el('small', 'font-size:10.5px;color:' + c.mut + ';'), fc = people(c, 18, 4);
     tx.appendChild(t1); tx.appendChild(t2);
     if (sq.set) { sq.style.marginRight = '5px'; }  // 3.8.2: what Pip set down to hold its card, clear of the clock
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
@@ -681,7 +697,7 @@ _RUNTIME = r"""
     var rg3 = ring(40, c), g1 = el('b', 'font-size:12.5px;'), g2 = el('small', 'color:' + c.mut + ';font-size:11px;'),
         g3 = el('small', 'color:' + c.mut + ';font-size:11px;line-height:1.3;', D.line);
     var sv3 = FIF && D.sev ? sev('focus', 72) : null;
-    root.appendChild(sv3 || squares(c, 56)); root.appendChild(rg3); root.appendChild(g1); root.appendChild(g2); root.appendChild(faces(c, 26)); root.appendChild(g3);
+    root.appendChild(sv3 || squares(c, 56)); root.appendChild(rg3); root.appendChild(g1); root.appendChild(g2); root.appendChild(people(c, 26, 0, true)); root.appendChild(g3);
     root.onclick = function () { send('roomcard'); };
     update = function (p) {
       rg3.set(p.state === 'before' ? 0 : p.state === 'ask' ? 1 : 1 - p.left / p.total,
@@ -741,7 +757,7 @@ _RUNTIME = r"""
       cheer.onclick = function () { send('roomcheer'); cheer.textContent = 'Cheered ✓'; cheer.disabled = true; };
       btn('Skip the break', false, 'roomskip');
     }
-    box.appendChild(logo); box.appendChild(rg4); box.appendChild(h); box.appendChild(p1); box.appendChild(faces(c, 32)); box.appendChild(btns);
+    box.appendChild(logo); box.appendChild(rg4); box.appendChild(h); box.appendChild(p1); box.appendChild(people(c, 32, 0, true)); box.appendChild(btns);
     box.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', FIF ? (D.brk_pose === 'stretch' ?
       'Stand up, stretch, some water. Look at something far away.' : 'Breathe with Pip: in for four, hold, out for four, hold.') :
       'The break waited for you to finish your card.'));
@@ -862,8 +878,7 @@ _RUNTIME = r"""
       if (i < D.rounds && D.brk) { bar.appendChild(el('i', 'flex:' + D.brk + ';height:4px;border-radius:2px;background:' + c.warm + ';opacity:.45;display:block;')); }
     }
     var who = el('div', 'display:flex;align-items:center;gap:8px;color:' + c.mut + ';font-size:12px;');
-    // Pip off: each person's initial, as before (sev.SLOT: a 40 px Pip is a 24 px seat, the faces' size)
-    who.appendChild(D.sev && D.seats && D.seats.length ? seats(40) : faces(c, 24)); who.appendChild(el('span', '', D.line));
+    who.appendChild(people(c, 24)); who.appendChild(el('span', '', D.line));
     var ft = el('div', 'display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:' + c.a + ';border-top:1px solid ' + c.line + ';padding-top:8px;');
     var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'),
         leave = el('span', 'cursor:pointer;', FIF ? 'Stop here' : 'Leave room');
