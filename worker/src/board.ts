@@ -69,6 +69,17 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
+/** 3.8.2: a look from a settings doc (json_extract's text of it): what a Pip has
+ *  on from the closet, as names (the add-on knows the things; a name it
+ *  doesn't know it draws without). Up to LOOK_MAX short names, else none. */
+export const LOOK_MAX = 8;
+export function lookOf(v: unknown): string[] | null {
+  let a: unknown = v;
+  if (typeof v === "string") { try { a = JSON.parse(v); } catch { return null; } }
+  if (!Array.isArray(a) || !a.length || a.length > LOOK_MAX) return null;
+  return a.every((x) => typeof x === "string" && /^[a-z0-9]{2,16}$/.test(x)) ? (a as string[]) : null;
+}
+
 /** GET /board[?decks=1][&wk=2026-W40][&keep=1][&feed=1][&got=N][&pv=STAMP][&same=1]: me, the people I added (with
  *  their week and accent when they added me back, name and emoji only when they haven't
  *  yet), my cheers, my knocks. One request. keep=1 (3.2, the site's home)
@@ -88,16 +99,17 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     await db.prepare("DELETE FROM cheers WHERE to_uid = ? AND at <= ?").bind(s.uid, Math.floor(got)).run();
   }
   const [meRes, friendsRes, cheersRes] = await db.batch([
+    // 3.8.2: and what my own Pip has on (the site's rows draw it), from the same settings row
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
-         (SELECT at FROM settings WHERE uid = u.uid) AS sat,
-         (SELECT json_extract(json, '$.muted') FROM settings WHERE uid = u.uid) AS muted FROM users u
-       LEFT JOIN weeks w ON w.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
+         t.at AS sat, json_extract(t.json, '$.muted') AS muted, json_extract(t.json, '$.sev_look') AS look FROM users u
+       LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added; 3.8.1: so
-    // does their accent (from their settings: their Sev wears it in a study room)
+    // does their accent (from their settings: their Pip wears it in a study room);
+    // 3.8.2: and what their Pip has on from the closet (its look)
     db.prepare(
       `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
-         json_extract(t.json, '$.accent') AS accent
+         json_extract(t.json, '$.accent') AS accent, json_extract(t.json, '$.sev_look') AS look
        FROM friends f JOIN users u ON u.uid = f.friend
        LEFT JOIN friends b ON b.owner = f.friend AND b.friend = ?1
        LEFT JOIN weeks w ON w.uid = f.friend AND b.owner IS NOT NULL
@@ -111,7 +123,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   const friends = (friendsRes.results as any[]).map((f) => f.mutual
     ? { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: true,
         week: f.doc ? JSON.parse(f.doc) : null, updatedAt: iso(f.updated_at),
-        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}) }  // none, or not one of ours: none
+        ...(accentOf(f.accent) ? { accent: f.accent as string } : {}),  // none, or not one of ours: none
+        ...(lookOf(f.look) ? { look: lookOf(f.look) } : {}) }
     : { uid: f.uid, name: f.name || "?", emoji: f.emoji || "", mutual: false });
   const byUid = new Map(friends.map((f) => [f.uid, f]));
   // 3.8.1 (the audit): someone I muted: their cheer goes as if read, on every screen
@@ -133,7 +146,8 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
   }
   const out: Record<string, unknown> = {
     me: { uid: me.uid, name: me.name || "", emoji: me.emoji || "", code: me.code || "",
-          week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at) },
+          week: me.doc ? JSON.parse(me.doc) : null, updatedAt: iso(me.updated_at),
+          ...(lookOf(me.look) ? { look: lookOf(me.look) } : {}) },  // 3.8.2: as my crew sees it
     friends, cheers, cheersAt, knocks: await listKnocks(env, s.uid),
     notice: await N.forBoard(env, me.client_version ?? null),  // 3.2.1
     settingsAt: me.sat || "",  // 3.7.1: an add-on pulls a save it hasn't seen

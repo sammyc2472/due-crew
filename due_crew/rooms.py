@@ -16,7 +16,7 @@ once the card in front of me is answered, one question: take five, then
 another fifteen; another now; or stop. Each yes adds one, up to eight. No
 answer in five minutes and the session ends quietly. It isn't a room on my
 week doc: my crew sees I'm studying now, nothing more (one write to start,
-one per yes, one to stop). Sev, if on, keeps me company through it.
+one per yes, one to stop). Pip, if on, keeps me company through it.
 """
 
 import datetime
@@ -29,6 +29,15 @@ from aqt.utils import tooltip
 
 from . import app, board, room_model, sev
 from .app import _state, cfg, client, save_cfg
+
+
+def _closet(do):
+    """3.8.2: tell Pip's closet (closet_flow); never in the way of a room."""
+    try:
+        from . import closet_flow
+        do(closet_flow)
+    except Exception:
+        traceback.print_exc()
 
 
 def _accent_pair():
@@ -49,6 +58,7 @@ def my_room():
         return None
     ms = room_model.members(_state["entries"], room)
     others = [m for m in ms if not m[2]]
+    _closet(lambda cf: cf.note_room(bool(others)))  # 3.8.2: a room with my crew
     cl.session.pop("room", None)
     cl.session["room_done"] = {"rounds": room["rounds"], "minutes": room_model.room_minutes(room),
                                "with": room_model.names_line(others),
@@ -72,11 +82,11 @@ def _done():
 
 def board_view():
     """For board.render(room=...). 3.8.1: a fifteen's question shows its
-    cards; the session's line, when one ended today; with Sev on, a crew
-    room's members as their Sevs, each in their accent."""
+    cards; the session's line, when one ended today; with Pip on, a crew
+    room's members as their Pips, each in their accent."""
     room = my_room()
     out = room_model.board_view(room, _state["entries"], _state["room_dismissed"], _done(), now=_now(),
-                                sev=sev_on(), accent_pair=_accent_pair())
+                                sev=sev_on(), accent_pair=_accent_pair(), look=my_look())
     mine = out.get("mine")
     if mine and mine.get("fifteen"):
         if mine["state"] == "ask":
@@ -226,7 +236,7 @@ def _data(room, side=None, **kw):
     return room_model.widget_data(room, _state["entries"], _accent_pair(),
                                   compact=bool(c.get("room_compact")),
                                   side=c.get("room_chip_side") if side is None else side,
-                                  sev=sev_on(), brk_pose=_brk_pose(), **kw)
+                                  sev=sev_on(), brk_pose=_brk_pose(), look=my_look(), **kw)
 
 
 def refresh_widgets():
@@ -243,7 +253,7 @@ def refresh_widgets():
             c = cfg()
             _eval(top, room_model.widget_js("start", room_model.start_data(
                 _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
-                compact=bool(c.get("room_compact")))))
+                compact=bool(c.get("room_compact")), look=my_look())))
         return
     data = _data(room)
     where = _where()
@@ -540,7 +550,7 @@ def start_at(when_local_time, now=None):
 # ---- 3.8.1: the Fifteen ----
 
 def sev_on():
-    """Sev's switch in Settings, on this computer (on unless switched off)."""
+    """Pip's switch in Settings, on this computer (on unless switched off)."""
     return bool(cfg().get("sev", True))
 
 
@@ -548,12 +558,22 @@ def _brk_pose():
     return "stretch" if cfg().get("sev_break") == "stretch" else "breathe"
 
 
+def my_look():
+    """3.8.2: what my Pip has on from the closet (closet_flow), or nothing."""
+    try:
+        from . import closet_flow
+        return closet_flow.look(cfg())
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
 def _sev_markup(pose, rest=False, stack=None, move=None):
-    return sev.move(pose, move, rest=rest, stack=stack) if sev_on() else None
+    return sev.move(pose, move, rest=rest, stack=stack, look=my_look()) if sev_on() else None
 
 
 def pick(place):
-    """3.8.1 (Sam: "variety!"): a move for Sev at `place` (sev.MOVES), never
+    """3.8.1 (Sam: "variety!"): a move for Pip at `place` (sev.MOVES), never
     the one it played there last time. Signed in, the last ones are kept
     with the session, so a restart doesn't repeat one either."""
     cl = client()
@@ -579,7 +599,7 @@ def _cards_since(when):
 
 def _studied_today():
     """Any answer yet this Anki day (asked at every card for the top bar's
-    Sev: once it's yes, the day remembers)."""
+    Pip: once it's yes, the day remembers)."""
     try:
         cutoff = int(mw.col.sched.day_cutoff)
         if _state.get("fifteen_studied") == cutoff:
@@ -678,7 +698,7 @@ def fifteen_answer(how):
 
 def _end_fifteen(room, walked=False, closing=False):
     """The session's over: its line for the board (fifteens, minutes, cards),
-    Sev stacks a square for each, and my crew stops seeing me studying."""
+    Pip stacks a square for each, and my crew stops seeing me studying."""
     cl = client()
     n, minutes = room_model.fifteen_spent(room, _now())
     began = room_model._parse(cl.session.get("fifteen_began") or room["start"])
@@ -688,6 +708,7 @@ def _end_fifteen(room, walked=False, closing=False):
     if cl.session.get("live_until") == cl.session.pop("fifteen_live", None):
         cl.session.pop("live_until", None)
     if n:
+        _closet(lambda cf: cf.note_fifteens(n, began))  # 3.8.2: Pip's closet counts them
         cl.session["fifteen_done"] = {"n": n, "minutes": minutes, "cards": cards, "walked": bool(walked),
                                       "day": _state["labels"][0] if _state["labels"] else "", "move": pick("stack")}
     cl._save_session()
@@ -707,7 +728,7 @@ def _end_fifteen(room, walked=False, closing=False):
     app.sync(light=True, fetch=False)  # my crew stops seeing "studying now"
     refresh_widgets()
     if mw.state == "review":
-        mw.moveToState("deckBrowser")  # the session's line is there, with Sev
+        mw.moveToState("deckBrowser")  # the session's line is there, with Pip
     else:
         app.swap(cfg())
 
@@ -727,7 +748,7 @@ def dismiss_fifteen_done():
     app.swap(cfg())
 
 
-# ---- 3.8.1: the nudge, and Sev by the logo ----
+# ---- 3.8.1: the nudge, and Pip by the logo ----
 
 def _usual_start():
     """When I usually start, in seconds into my Anki day: the middle of my
@@ -773,7 +794,7 @@ def nudge(c, v, dismissed=()):
 
 
 def nudge_sev():
-    """Sev peeking in at the nudge: it rises once a day, then stays put;
+    """Pip peeking in at the nudge: it rises once a day, then stays put;
     each day a different way in (sev.MOVES["peek"], in turn)."""
     day = str(_state["labels"][0] if _state.get("labels") else "")
     rest = _state.get("sev_peeked") == day
@@ -782,24 +803,25 @@ def nudge_sev():
 
 
 def milestone_sevs(milestones):
-    """3.8.1 (Sam's pick): a crewmate's big-streak banner has Sev hopping in
+    """3.8.1 (Sam's pick): a crewmate's big-streak banner has Pip hopping in
     its emoji's place, a move from the day done's mix (never the last one),
     once a banner; drawn again, it rests there. {uid: markup}, or None."""
     if not sev_on() or not milestones:
         return None
     played = _state.setdefault("sev_banner", {})
+    looks = {e.get("user_id"): e.get("look") for e in _state["entries"] or []}
     out = {}
     for uid, _who, days in milestones:
         key = (str(uid), int(days))
         rest = key in played
         if not rest:
             played[key] = pick("hop")
-        out[uid] = sev.move("hop", played[key], rest=rest, label="Sev: a big streak")
+        out[uid] = sev.move("hop", played[key], rest=rest, label="Pip: a big streak", look=looks.get(uid))  # 3.8.2: in their look
     return out
 
 
 def signed_out_sev():
-    """3.8.1 (Sam's pick): Sev waving on the signed-out card until you
+    """3.8.1 (Sam's pick): Pip waving on the signed-out card until you
     start, a hello from its mix (never the last one) the first time it's
     drawn while Anki's open; after that it rests there, and blinks."""
     if not sev_on():
@@ -807,12 +829,12 @@ def signed_out_sev():
     turn = _state.get("sev_hello")
     if turn is None:
         _state["sev_hello"] = pick("hello")
-        return sev.move("hello", _state["sev_hello"])
-    return sev.move("hello", turn, rest=True)
+        return sev.move("hello", _state["sev_hello"], look=my_look())
+    return sev.move("hello", turn, rest=True, look=my_look())
 
 
 def board_sev(c, v):
-    """Sev beside the logo, for a moment (Sam): {svg, ago} when something
+    """Pip beside the logo, for a moment (Sam): {svg, ago} when something
     just happened (sev.moment), the first time the board draws it; ago is
     how long it's been out, so a redraw in its few seconds keeps its place.
     None the rest of the time, and after."""
@@ -842,4 +864,4 @@ def board_sev(c, v):
     ago = now - first
     if ago >= sev.LOGO_SECONDS:
         return None
-    return {"svg": sev.move(pose, turn), "ago": round(ago, 2)}
+    return {"svg": sev.move(pose, turn, look=my_look()), "ago": round(ago, 2)}

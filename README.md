@@ -5,7 +5,7 @@
 
 Your friends' studying next to yours, on Anki's Decks screen.
 
-<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=6" width="600">
+<img alt="The Due Crew board on the Decks screen, your day folded above it" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/board.png?v=7" width="600">
 
 Studying for a big exam is more fun with friends! Due Crew puts your crew on
 Anki's Decks screen: who's studied today, who's studying now, how far
@@ -21,7 +21,7 @@ screen, with your note.
 <img alt="A cheer arriving" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/flurry.png" width="600">
 
 **Study rooms.** 25-minute rounds with your crew, the timer in Anki's top
-bar, breaks together. Each of you sits in the room as your own Sev, in
+bar, breaks together. Each of you sits in the room as your own Pip, in
 your own colour.
 
 <img alt="A study room in Anki's top bar" src="https://raw.githubusercontent.com/sammyc2472/due-crew/main/docs/images/room.png" width="420">
@@ -67,7 +67,7 @@ Above the board is yours.
   in your Anki and never sent; copy the map as a picture or as text if you
   want to share it.
 
-**Sev**, the square from the logo, keeps you company: heads down in a
+**Pip**, the square from the logo, keeps you company: heads down in a
 fifteen, breathing with you on a break, a hop when the day's done, a wave
 when you're back. It keeps still with Reduce motion on, and Settings
 turns it off.
@@ -120,7 +120,7 @@ Right-click a card, or a tag in the sidebar:
 
 ## Share
 
-Share your day, week, year or all time as a picture, made in Anki. Sev
+Share your day, week, year or all time as a picture, made in Anki. Pip
 hops across your week. Pick which numbers show, then copy or save it. It
 goes only where you paste it.
 

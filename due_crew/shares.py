@@ -277,7 +277,7 @@ def picture(kind):
             traceback.print_exc()
             return
         span = [today] if one else list(reversed(board.week_labels(list(_state["labels"]) or [q.day_label(i) for i in range(7)])))
-        from .rooms import sev_on  # 3.8.1: Sev hops across it, as Settings › Sev says
+        from .rooms import sev_on  # 3.8.1: Pip hops across it, as Settings › Pip says
         d = S.week(days, today, one, fresh, stats.streak, _crew_with_me(span), sev_on())
         mon = (datetime.date.fromisoformat(today) - datetime.timedelta(days=datetime.date.fromisoformat(today).weekday())).isoformat()
         card = {"kind": "today" if one else "week", "title": "Share today" if one else "Share my week",

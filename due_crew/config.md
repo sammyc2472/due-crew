@@ -30,8 +30,8 @@ Raw keys, for reference:
 | `due_show` | true/false | Today, Upcoming and Later in that box (Plans and Insights stay) |
 | `shortcuts` | true/false | Ctrl+Shift+S (study what's next) and Ctrl+Shift+Q (ask the squad about this card), on this computer |
 | `fifteen` | true/false | ▶ Fifteen? in the top bar, and the nudge when you haven't started by your usual time, on this computer |
-| `sev` | true/false | Sev, the square from the logo: beside it on the board and in your fifteens, on this computer |
-| `sev_break` | breathe / stretch | A fifteen's break: breathe along with Sev, four counts a side, or stretch |
+| `sev` | true/false | Pip, the square from the logo: beside it on the board and in your fifteens, on this computer |
+| `sev_break` | breathe / stretch | A fifteen's break: breathe along with Pip, four counts a side, or stretch |
 | `ins_deck` | deck id | The deck Insights shows on this computer |
 | `muted` | user ids | Crewmates whose cheers and knocks you don't get; right-click their name on the board |
 

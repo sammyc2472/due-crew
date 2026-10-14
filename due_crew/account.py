@@ -29,7 +29,8 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "share_heatmap", "show_up", "paused", "exam_date", "away_from", "away_to",
                 "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
                 "accent",  # 3.5.0: the site wears it too
-                "due_items", "due_ticks", "due_show", "due_suggest")  # Due: my own to-dos, on every computer
+                "due_items", "due_ticks", "due_show", "due_suggest",  # Due: my own to-dos, on every computer
+                "sev_look", "sev_closet")  # 3.8.2: Pip's closet: what it has on, what it's earned
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
@@ -104,6 +105,12 @@ def clean(s):
     if isinstance(s.get("due_ticks"), dict):
         from .due import clean_ticks
         out["due_ticks"] = clean_ticks(s["due_ticks"])
+    if isinstance(s.get("sev_look"), list):
+        from .closet import clean as clean_look
+        out["sev_look"] = clean_look(s["sev_look"])
+    if isinstance(s.get("sev_closet"), dict):
+        from .closet import clean_closet
+        out["sev_closet"] = clean_closet(s["sev_closet"])
     if isinstance(s.get("muted"), list):
         # 3.0.1: the people whose cheers and knocks I don't get, by uid
         out["muted"] = list(dict.fromkeys(
@@ -178,7 +185,8 @@ def merge3(base, mine, theirs):
     """The account's settings from my save and theirs, both made from `base`.
     A key one side changed takes that side's. A key both changed: the muted,
     squads, shared decks and to-dos merge item by item, the to-do ticks day
-    by day, and anything else (a switch, a status) takes mine. Pure."""
+    by day, the closet thing by thing (3.8.2: nothing earned is lost), and
+    anything else (a switch, a status, Pip's look) takes mine. Pure."""
     base, mine, theirs = (x if isinstance(x, dict) else {} for x in (base, mine, theirs))
     out = {}
     for k in list(theirs) + [k for k in mine if k not in theirs]:
@@ -192,6 +200,9 @@ def merge3(base, mine, theirs):
             v = [x for _k, x in _merge_keys(_by(b, key), _by(m, key), _by(t, key))]
         elif k == "due_ticks" and isinstance(m, dict) and isinstance(t, dict):
             v = dict(_merge_keys(b if isinstance(b, dict) else {}, m, t))
+        elif k == "sev_closet":
+            from .closet import merge_closets
+            v = merge_closets(m if isinstance(m, dict) else {}, t if isinstance(t, dict) else {})  # earned is never lost
         else:
             v = m
         if v is not _GONE:

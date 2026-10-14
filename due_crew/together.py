@@ -199,7 +199,7 @@ def milestone_cheer(uid):
         return
     emoji = cheer_allowed("\U0001F4AF" if m[2] < 365 else "\U0001F389")
     if emoji:
-        _send_cheer(uid, m[1], emoji)
+        _send_cheer(uid, m[1], emoji, big=True)  # 3.8.2: the closet's balloon
     dismiss_milestone(uid)
 
 

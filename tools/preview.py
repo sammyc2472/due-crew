@@ -490,14 +490,14 @@ sections.append("<h3>2.12: invited, and a room I finished</h3>" + board.render(
     room=dict(room_model.board_view(None, INVITED),
               done={"rounds": 4, "minutes": 115, "with": "Dre and Ameya"})))
 sections.append("<h3>just me, the day I joined (2.9)</h3>" + board.render(SOLO, {"period": "today"}, now_ts - 60))
-# 3.8.1: the Fifteen and Sev: the nudge with Sev napping by the logo, a fifteen
+# 3.8.1: the Fifteen and Pip: the nudge with Pip napping by the logo, a fifteen
 # under way, its question on the Decks screen, the session's line
 from due_crew import sev as _sev  # noqa: E402
 _DVN = dict(_DV, nudge=True, nudge_sev=_sev.svg("peek"), done_n=0)
 sections.append("<h3>3.8.1: not started by my usual time: the nudge</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, plans=PLANS, due=_DVN, you=_YOU("today")).replace('id="du-', 'id="dun-'))
 _fif = room_model.make_fifteen("sam", NOW - datetime.timedelta(minutes=6))
-sections.append("<h3>3.8.1: a fifteen under way (Sev heads down)</h3>" + board.render(
+sections.append("<h3>3.8.1: a fifteen under way (Pip heads down)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60,
     room={"mine": dict(room_model.fifteen_view(_fif), sev=_sev.svg("focus")), "invites": [], "done": None}))
 _ask = room_model.make_fifteen("sam", NOW - datetime.timedelta(minutes=16))
@@ -508,26 +508,50 @@ _brk = room_model.fifteen_next(_ask)
 sections.append("<h3>3.8.1: its break</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60,
     room={"mine": dict(room_model.fifteen_view(_brk), sev=_sev.svg("rest")), "invites": [], "done": None}))
-sections.append("<h3>3.8.1: the session's line; Sev hops by the logo for a moment (the day's done)</h3>" + board.render(
+sections.append("<h3>3.8.1: the session's line; Pip hops by the logo for a moment (the day's done)</h3>" + board.render(
     DATA, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg("hop"), "ago": 0},
     room={"mine": None, "invites": [], "done": None,
           "fifteen_done": {"n": 3, "minutes": 45, "cards": 212, "walked": False, "sev": _sev.svg("stack", stack=3)}}))
-sections.append("<h3>3.8.1: a crewmate's 100-day streak: Sev hops in the emoji's place</h3>" + board.render(
+sections.append("<h3>3.8.1: a crewmate's 100-day streak: Pip hops in the emoji's place</h3>" + board.render(
     dict(DATA, entries=TOGETHER), {"period": "today"}, now_ts - 60, live=True,
-    milestones=[("dre", "Dre", 100)], milestone_sev={"dre": _sev.move("hop", label="Sev: a big streak")}))
+    milestones=[("dre", "Dre", 100)], milestone_sev={"dre": _sev.move("hop", label="Pip: a big streak")}))
 sections.append("<h3>3.8.1: by the logo for a moment: a cheer lands; exam eve; back from away</h3>" + "".join(board.render(
     SOLO, {"period": "today"}, now_ts - 60, sev={"svg": _sev.svg(k), "ago": 0}) for k in ("cheer", "exam", "hello")))
-# 3.8.1: a crew room with Sev on: each member is their Sev, in their own accent
+# 3.8.1: a crew room with Pip on: each member is their Pip, in their own accent
 # (mine is the board's), blinking at its own moment
 _ACC = {"dre": "blue", "marisa": "teal", "noah": "rose"}
 SEATED = [dict(e, room=_room, accent=_ACC.get(e["user_id"], "")) if e["user_id"] in _ACC or e["you"] else e
           for e in DATA["entries"]]
-sections.append("<h3>3.8.1: a crew room, Sev on: each member is their Sev, in their accent</h3>" + board.render(
+sections.append("<h3>3.8.1: a crew room, Pip on: each member is their Pip, in their accent</h3>" + board.render(
     dict(DATA, entries=SEATED), {"period": "today"}, now_ts - 60,
     room=room_model.board_view(_room, SEATED, sev=True, accent_pair=board.accent_pair(board.DEFAULT_ACCENT))))
-sections.append("<h3>3.8.1: the same room, Sev off: the initials</h3>" + board.render(
+sections.append("<h3>3.8.1: the same room, Pip off: the initials</h3>" + board.render(
     dict(DATA, entries=SEATED), {"period": "today", "sev": False}, now_ts - 60,
     room=room_model.board_view(_room, SEATED)))
+# 3.8.2: Pip's closet. Crew rows: each person's Pip in the emoji's place, in their colour and look
+_LOOKS = {"dre": ["dino"], "marisa": ["wizard"], "noah": ["partyhat", "scarf"], "priya": ["sprout", "shades", "balloon"]}
+DRESSED = [dict(e, accent=_ACC.get(e["user_id"], "amber" if e["user_id"] == "priya" else ""), look=_LOOKS.get(e["user_id"], []))
+           for e in DATA["entries"]]
+_MINE = {"sev_look": ["headphones", "glasses", "starpin", "mug"],
+         "sev_closet": {k: "2026-09-01" for k in ("sprout", "beanie", "headphones", "bowtie", "blush", "partyhat", "glasses",
+                                                  "lanyard", "starpin", "backpack", "umbrella", "mug", "pencil", "pumpkin",
+                                                  "witch", "winter", "newyear", "bee", "dino")}}
+sections.append("<h3>3.8.2: crew rows, Pip on: each person's Pip in the emoji's place, in their colour and look (mine opens the closet)</h3>"
+                + board.render(dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60))
+sections.append("<h3>3.8.2: something new for Pip: its line on the board</h3>" + board.render(
+    dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": ["propeller"]}))
+sections.append("<h3>3.8.2: the day the closet comes: one line for what your days earned</h3>" + board.render(
+    dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": list(_MINE["sev_closet"]), "first": True}))
+_CV = {"tab": "Yours", "have": _MINE["sev_closet"], "look": _MINE["sev_look"],
+       "progress": {"cap": (11, 14), "propeller": (7, 10), "magnifier": (6, 10), "cape": (21, 60), "stetho": (8400, 10000)},
+       "near": [("cap", 11, 14, "days in a row"), ("propeller", 7, 10, "Fifteens"), ("magnifier", 6, 10, "leeches turned around")],
+       "new": ["dino"], "msg": "", "rest": True}
+sections.append("<h3>3.8.2: Pip's closet, in the board's place: Yours, by place; what's on is filled, with a tick</h3>"
+                + board.closet_html(_CV, {"accent": "green"}))
+sections.append("<h3>3.8.2: a costume over the look (the things under it say Under)</h3>" + board.closet_html(
+    dict(_CV, look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
+sections.append("<h3>3.8.2: To earn: what's close, then the rest by how it's earned</h3>" + board.closet_html(
+    dict(_CV, tab="To earn"), {"accent": "green", "theme": "dark"}))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):
@@ -544,7 +568,7 @@ for accent in board.ACCENTS:
         for theme in ("light", "dark"))
     sections.append(f"<h3>accent: {accent}</h3><div style='display:flex;flex-wrap:wrap'>{frames}</div>")
 sections.append("<h3>signed-out card</h3>" + board.signed_out_card({}))
-sections.append("<h3>3.8.1: signed out, Sev on: it waves beside the words</h3>" + board.signed_out_card({}, sev=_sev.move("hello")))
+sections.append("<h3>3.8.1: signed out, Pip on: it waves beside the words</h3>" + board.signed_out_card({}, sev=_sev.move("hello")))
 
 profile_js = board.profile_overlay_js({
     "name": "Dre", "streak": 41, "last_active": ago(minutes=12),
@@ -553,6 +577,8 @@ profile_js = board.profile_overlay_js({
     "start": (TODAY - datetime.timedelta(days=181)).isoformat(),
     "same_days": 118, "decks_line": "Big Step 1", "uid": "dre",
     "you": False, "paused": False, "exam": "",
+    # 3.8.2: their Pip in the emoji's place, in their colour and look
+    "sev": board.card_sev({"name": "Dre", "accent": "blue", "look": ["partyhat", "bowtie", "balloon"]}, {}),
     "duet": {"run": 5, "best": 23,
              "mine_week": [True, True, False, True, True, True, True],
              "theirs_week": [True, True, True, True, True, True, True]},

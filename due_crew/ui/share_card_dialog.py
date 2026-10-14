@@ -2,7 +2,7 @@
 my day, my week, my year or all time, drawn with QPainter from
 sharecard.draw, in the site's picture-card look. A preview, a switch for
 each number, Story or Link, Light or Dark, then Copy picture or Save….
-Sev on my week (3.8.1) is sev.py's drawing, by QtSvg.
+Pip on my week (3.8.1) is sev.py's drawing, by QtSvg.
 Main thread: no collection, no network (the glue counts cheers)."""
 
 import os
@@ -71,13 +71,19 @@ def paint(kind, size, data, on, look="light"):
 
 
 def _sev(p, pose, color, rect):
-    """Sev, still, in the card's accent: sev.py's one drawing, by QtSvg
-    (where this Qt can't read SVG the card goes without)."""
+    """Pip, still, in the card's accent: sev.py's one drawing, by QtSvg
+    (where this Qt can't read SVG the card goes without). 3.8.2: in what it
+    has on from the closet (my cards are mine: my look)."""
     try:
         from PyQt6.QtSvg import QSvgRenderer
     except Exception:
         return
-    r = QSvgRenderer(QByteArray(sev.still(pose, color).encode("utf-8")))
+    try:
+        from ..closet_flow import look
+        mine = look()
+    except Exception:
+        mine = None
+    r = QSvgRenderer(QByteArray(sev.still(pose, color, look=mine).encode("utf-8")))
     if r.isValid():
         r.render(p, rect)
 

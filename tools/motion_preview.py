@@ -104,7 +104,7 @@ S.update({
     "notein": (base, R(due=toast, you=you("today")), None), "noteout": (R(due=toast, you=you("today")), base, None),
     "studyto": (R(due=dict(DV_BASE, study_to="Pharm"), you=you("today")), R(due=dict(DV_BASE, study_to="Renal"), you=you("today")), None),
 })
-# 3.8.1: Sev by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
+# 3.8.1: Pip by the logo for a moment (it goes by itself after sev.LOGO_SECONDS), and the session's line
 from due_crew import sev as SV
 # each of its moves (Sam: "variety!"): a different one each time it comes
 S.update({f"sev{k}{'' if m == SV.moves(k)[0] else '.' + m}": (base, R(due=DV_BASE, you=you("today"), sev={"svg": SV.move(k, m), "ago": 0}), None)
@@ -114,7 +114,7 @@ S.update({f"fifteendone{'' if m == 'stack' else '.' + m}": (base, R(due=DV_BASE,
                                                                 "sev": SV.move("stack", m, stack=3)}}), None)
           for m in SV.moves("stack")})
 S.update({f"streak.{m}": (base, R(due=DV_BASE, you=you("today"), milestones=[("dre", "Dre", 100)],
-                                  milestone_sev={"dre": SV.move("hop", m, label="Sev: a big streak")}), None)
+                                  milestone_sev={"dre": SV.move("hop", m, label="Pip: a big streak")}), None)
           for m in SV.moves("hop")})
 out = {k: {"a": a, "swap": ((B.swap_js(b) + B.keep_me_in_view_js()) if b else "")
            + (f"dcMotion.arrive({h.split(':', 1)[1]});" if h and h.startswith("arrive:") else ""), "hint": h} for k, (a, b, h) in S.items()}
@@ -130,15 +130,15 @@ NAMES = {"tick": "1 A tick you can see (and 2, the bar)", "done": "3 Done for to
          "planweek": "25 A plan week's bars grow in", "sticking": "26 A topic starts sticking",
          "sticklast": "26 The last topic sticks", "shade": "27 A map tile changes shade", "caught": "29 Caught up",
          "notein": "30 A note slides in", "noteout": "30 A note goes", "studyto": "35 Study today names the next deck",
-         "sevhop": "Sev: the day's done (a hop, the week's squares fly)", "sevcheer": "Sev: a cheer lands",
-         "sevexam": "Sev: exam eve", "sevhello": "Sev: back from away", "fifteendone": "Sev: the session's line (a square a fifteen)",
-         "sevhop.twirl": "Sev: the day's done, a twirl", "sevhop.shuffle": "Sev: the day's done, a little dance",
-         "sevhop.jump": "Sev: the day's done, a big jump", "sevcheer.hug": "Sev: a cheer lands, hugs the gift",
-         "sevcheer.giftspin": "Sev: a cheer lands, spins with it", "sevexam.pep": "Sev: exam eve, a pep fist",
-         "sevhello.walkin": "Sev: back from away, walks in", "sevhello.popup": "Sev: back from away, up from below",
-         "fifteendone.wobble": "Sev: the session's line, the tower wobbles",
-         "fifteendone.catch": "Sev: the session's line, steps under them",
-         **{f"streak.{m}": f"Sev: a crewmate's 100-day streak ({m})" for m in SV.moves("hop")}}
+         "sevhop": "Pip: the day's done (a hop, the week's squares fly)", "sevcheer": "Pip: a cheer lands",
+         "sevexam": "Pip: exam eve", "sevhello": "Pip: back from away", "fifteendone": "Pip: the session's line (a square a fifteen)",
+         "sevhop.twirl": "Pip: the day's done, a twirl", "sevhop.shuffle": "Pip: the day's done, a little dance",
+         "sevhop.jump": "Pip: the day's done, a big jump", "sevcheer.hug": "Pip: a cheer lands, hugs the gift",
+         "sevcheer.giftspin": "Pip: a cheer lands, spins with it", "sevexam.pep": "Pip: exam eve, a pep fist",
+         "sevhello.walkin": "Pip: back from away, walks in", "sevhello.popup": "Pip: back from away, up from below",
+         "fifteendone.wobble": "Pip: the session's line, the tower wobbles",
+         "fifteendone.catch": "Pip: the session's line, steps under them",
+         **{f"streak.{m}": f"Pip: a crewmate's 100-day streak ({m})" for m in SV.moves("hop")}}
 END, SAFE = "</", "<" + "\\" + "/"  # a script ends at </; inside one it is written <\\/
 init_js = B.keep_me_in_view_js().replace(END, SAFE)
 scen_js = json.dumps(out).replace(END, SAFE)

@@ -1,11 +1,14 @@
-"""Sev, the square from the logo's seven days (3.8.1, the "Sev Design" page:
+"""Pip, the square from the logo's seven days (3.8.1, the "Pip Design" page:
 Block, Sam's picks: no belt, big round eyes, stubby arms, cheeks only when
 a cheer lands). Pure: no aqt.
 
-One drawing for every pose, and one motion sheet (CSS). The board draws Sev
+One drawing for every pose, and one motion sheet (CSS). The board draws Pip
 from here, and the room's widgets get its markup from here as data, so it's
 never drawn twice and there's no JS twin; the week picture card draws
-`still`, and the site's cards.js keeps a copy of it the suite checks.
+`still`, and the site's cards.js keeps a copy of it the suite checks. 3.8.2:
+the site's crew rows fill in `site_kit` (sev.js, written by
+tools/gen_sev_js.py), the one drawing again; only the closet's rules for a
+look are restated there.
 Every pose draws the same named parts (sv-body, sv-eyes, sv-pupils,
 sv-armL/R, sv-card, sv-clock, ...), so a moment (`m-*`) moves whatever
 pose it's given.
@@ -71,11 +74,11 @@ ONCE = frozenset({"peek", "ready", "ring", "again", "hop", "stack", "cheer", "in
                   "twirl", "shuffle", "jump", "hug", "giftspin", "walkin", "popup", "point", "bigring",
                   "wobble", "catch", "knock", "bounce"})
 
-LABELS = {"idle": "Sev", "nap": "Sev, napping", "peek": "Sev, peeking in", "ready": "Sev: let's go",
-          "focus": "Sev, heads down", "ring": "Sev: fifteen's up", "stretch": "Sev, stretching",
-          "breathe": "Sev, breathing", "rest": "Sev, resting", "again": "Sev: back to it",
-          "hop": "Sev: day done", "stack": "Sev: session done", "cheer": "Sev: a cheer",
-          "exam": "Sev: good luck", "away": "Sev, away", "hello": "Sev"}
+LABELS = {"idle": "Pip", "nap": "Pip, napping", "peek": "Pip, peeking in", "ready": "Pip: let's go",
+          "focus": "Pip, heads down", "ring": "Pip: fifteen's up", "stretch": "Pip, stretching",
+          "breathe": "Pip, breathing", "rest": "Pip, resting", "again": "Pip: back to it",
+          "hop": "Pip: day done", "stack": "Pip: session done", "cheer": "Pip: a cheer",
+          "exam": "Pip: good luck", "away": "Pip, away", "hello": "Pip"}
 
 # an angle per arm, from hanging straight down
 _ARMS = {"down": (32, -32), "up": (155, -155), "wave": (32, -150), "hold": (-50, 50), "out": (100, -100),
@@ -83,10 +86,25 @@ _ARMS = {"down": (32, -32), "up": (155, -155), "wave": (32, -150), "hold": (-50,
 _HOLD, _SIDE, _TOP = (40, 56), (67, 58), (40, 27)
 
 
-def _arms(pose):
+HAND = (64.6, 56.8)  # the right hand of a hanging arm, where the closet draws what it holds
+
+
+def _held_in(hand, arms):
+    """What the right hand holds (drawn at HAND), moved into the right arm
+    as `arms` (_ARMS) holds it: at its hand, upright. "" when it holds nothing."""
+    a = _ARMS.get(arms, _ARMS["down"])
+    return (f'<g transform="translate(0 11.5) rotate({-a[1]})"><g transform="translate({-HAND[0]} {-HAND[1]})">{hand}</g></g>'
+            if hand else "")
+
+
+def _arms(pose, hand=""):
+    """The arms, behind or in front. hand (3.8.2): what the right hand
+    holds, drawn at HAND; it's moved into the arm, so it goes where the hand
+    goes (up for a hop, round for a wave), and stays upright."""
     a = _ARMS.get(pose, _ARMS["down"])
     limb = _r(-2.6, -1, 5.2, 12.5, 2.6, ACC)
-    html = "".join(f'<g transform="translate({x} 47) rotate({ang})"><g class="sv-arm{side}">{limb}</g></g>'
+    held = _held_in(hand, pose)
+    html = "".join(f'<g transform="translate({x} 47) rotate({ang})"><g class="sv-arm{side}">{limb}{held if side == "R" else ""}</g></g>'
                    for side, x, ang in (("L", 21.5, a[0]), ("R", 58.5, a[1])))
     return ("", html) if pose in ("hold", "cross") else (html, "")  # held things go in front
 
@@ -197,7 +215,7 @@ def _fx(kinds, stack=3):
         elif k == "sparks":
             front += _spark(t[0] - 15, t[1] - 10, 2.8, "s1") + _spark(t[0] + 15, t[1] - 14, 2.4, "s2")
         elif k == "box":
-            # breathe with Sev: a square, four counts a side
+            # breathe with Pip: a square, four counts a side
             back += (f'<rect x="8" y="8" width="64" height="64" rx="12" fill="none" style="stroke:{LINE}" '
                      'stroke-width="1.6" stroke-dasharray="3 3"/>'
                      f'<circle class="sv-boxdot" cx="8" cy="8" r="3.2" style="fill:{ACC}"/>')
@@ -208,46 +226,64 @@ def _fx(kinds, stack=3):
     return back, front
 
 
-def _figure(p, blush):
-    """Sev itself: feet, body, face, arms and what it holds. Every drawing's."""
-    back_arms, front_arms = _arms(p["arms"])
+def busy(pose):
+    """Whether `pose`'s hands are full (a card, the clock, a gift, the
+    case, fingers crossed): then the closet's held thing is set down beside
+    it (closet.art)."""
+    p = POSES.get(pose) or POSES["idle"]
+    return bool(p.get("prop")) or p["arms"] in ("hold", "cross")
+
+
+def _figure(p, blush, look=None, worn=None):
+    """Pip itself: feet, body, face, arms and what it holds. Every drawing's.
+    look (3.8.2): what it has on from the closet: behind it, over it, in its
+    hand. worn: that look already drawn, (back, front, hand), in its place
+    (site_kit's blanks)."""
+    back, front, hand = worn or ("", "", "")
+    if look and not worn:
+        from . import closet  # its drawings only when there's a look to draw
+        back, front, hand = closet.art(look, pose_holds=bool(p.get("prop")) or p["arms"] in ("hold", "cross"))
+    back_arms, front_arms = _arms(p["arms"], hand)
     body = (_r(28.5, 63, 9, 9.5, 3, ACC, ' class="sv-footL"') + _r(42.5, 63, 9, 9.5, 3, ACC, ' class="sv-footR"')
             + _r(20, 27, 40, 39, 12.5, ACC) + _r(25, 31, 11, 5, 2.5, "#fff", ' opacity=".22"')
             + _eyes(p["eyes"]) + _mouth(p["mouth"]) + (_cheeks() if blush else ""))
-    return f'<g class="sv-body">{back_arms}{body}{front_arms}{_held(p.get("prop"))}</g>'
+    return f'<g class="sv-body">{back}{back_arms}{body}{front}{front_arms}{_held(p.get("prop"))}</g>'
 
 
-def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None):
-    """Sev in `pose` (POSES), moving as `moment` (its own by default). rest:
+def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None, worn=None):
+    """Pip in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
-    stack: squares on its head, one a fifteen (three at most)."""
+    stack: squares on its head, one a fifteen (three at most). look (3.8.2):
+    what it has on from the closet (closet.clean rules it); worn: a look
+    already drawn, (back, front, hand), in place of `look` (site_kit)."""
     p = POSES.get(pose) or POSES["idle"]
     m = moment or MOMENT.get(pose, "idle")
     blush = p.get("cheeks") if cheeks is None else cheeks
     fx_back, fx_front = _fx(p.get("fx") or (), max(1, min(3, int(stack or 3))))
     dims = f' width="{int(size)}" height="{int(size)}"' if size else ""
     cls = f"sv m-{m}" + (" rest" if rest and m in ONCE else "")
-    return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Sev")}">'
+    return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Pip")}">'
             f'<ellipse class="sv-shadow" cx="40" cy="74.5" rx="16" ry="2.6" style="fill:{LINE}"/>{fx_back}'
-            f'{_figure(p, blush)}{fx_front}</svg>')
+            f'{_figure(p, blush, look, worn)}{fx_front}</svg>')
 
 
-def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None):
-    """Sev in `pose` for a picture: an SVG of its own (it has the xmlns,
+def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None, look=None):
+    """Pip in `pose` for a picture: an SVG of its own (it has the xmlns,
     width and height), each colour given or the drawing's own fallback, no
-    classes, no motion. Just Sev: no shadow (it stands on what's under
+    classes, no motion. Just Pip: no shadow (it stands on what's under
     it) and none of the moment's effects (they're motion). The week card
     draws it (sharecard), in Qt here and on the site's canvas, whose
-    cards.js keeps a copy the suite checks against this."""
+    cards.js keeps a copy the suite checks against this. look (3.8.2): what
+    it has on from the closet; the copy draws Pip without one."""
     p = POSES.get(pose) or POSES["idle"]
     given = {"a": accent, "line": line, "ink": ink, "amb": amb, "mut": mut, "blush": blush}
-    art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks")))
+    art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks"), look))
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">'
             + re.sub(r' class="[^"]*"', "", art) + "</svg>")
 
 
-# Sev's body sits low in its drawing (its effects need the room above), so
+# Pip's body sits low in its drawing (its effects need the room above), so
 # a box the drawing's size centres it too low and too loose. A slot is the
 # body's own size: SLOT[0] of the drawing square, with the drawing placed so
 # the body (arms, feet) sits in its middle; effects spill out of it. The
@@ -263,35 +299,64 @@ def slot(markup, size):
             + "</span>")
 
 
+# 3.8.2: duecrew.com's crew rows show each person's Pip as the add-on's do
+# (board.row_sev). The site never draws Pip itself: site/public/sev.js holds
+# this kit (tools/gen_sev_js.py writes it) and only fills in its blanks; the
+# suite checks the file holds this kit, and that what it fills in is svg()'s.
+ROW_SIZE = 30  # px: a crew row's Pip (board.row_sev), in its slot()
+BLANKS = ("%B%", "%F%", "%H%")  # where a look's back, front and held things go
+
+
+def site_kit():
+    """A crew row's Pip for the site, as data. row: the still idle Pip in
+    its slot, BLANKS where the look goes, its colours the page's (--sv-a and
+    the rest, as svg()'s); held: what puts a held thing (its %H%) in the
+    right hand; slots, costume, max: closet's SLOTS (drawn in that order,
+    then a costume), COSTUME and LOOK_MAX; things: each thing's place, the
+    other places it takes, and its drawing (front, back). Filled in as
+    closet.art fills them, it's slot(svg("idle", rest=True, look=look),
+    ROW_SIZE), to the byte."""
+    from . import closet
+    from .closet_art import ART
+    held = _held_in(BLANKS[2], POSES["idle"]["arms"])
+    row = slot(svg("idle", rest=True, worn=BLANKS), ROW_SIZE)
+    if row.count(held) != 1 or any(row.count(b) != 1 for b in BLANKS):
+        raise ValueError("site_kit: a blank isn't where the look goes")
+    return {"row": row.replace(held, BLANKS[2]), "held": held, "slots": list(closet.SLOTS), "costume": closet.COSTUME,
+            "max": closet.LOOK_MAX,
+            "things": {t["k"]: [t["slot"], list(t.get("also") or ()), ART[t["k"]][0], ART[t["k"]][1]]
+                       for t in closet.THINGS}}
+
+
 def stack_reach(n, size):
-    """How far the squares Sev stacks (n of them, three at most) and its
+    """How far the squares Pip stacks (n of them, three at most) and its
     shadow reach out of its slot(), in px: (above, below). The session's
-    line pads its Sev by these, so the box fits what's drawn (one square
-    or three) and its words centre on Sev and its stack together."""
+    line pads its Pip by these, so the box fits what's drawn (one square
+    or three) and its words centre on Pip and its stack together."""
     k, y, w = size / 80, round(size * SLOT[2]), round(size * SLOT[0])
     top = _TOP[1] - 13 - 11 * (max(1, min(3, int(n or 1))) - 1)  # the highest square's top (_fx)
     return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
 
 
-# 3.8.1: in a study room each member is their Sev (room_model.seats). They
+# 3.8.1: in a study room each member is their Pip (room_model.seats). They
 # started at different moments, so the blinks never line up: each gets its
 # own place in the blink (--sv-d, a negative delay), a step apart.
 BLINK = 4.6  # s: the blink's cycle (sv-blink, below)
 
 
 def started(i):
-    """The i-th Sev of several: its blink's delay in s (0, then back a step each, round the cycle)."""
+    """The i-th Pip of several: its blink's delay in s (0, then back a step each, round the cycle)."""
     return -round(i * 1.7 % BLINK, 2) or 0
 
 
-# 3.8.1 (Sam): by the logo Sev is a moment, not a fixture. It comes when
+# 3.8.1 (Sam): by the logo Pip is a moment, not a fixture. It comes when
 # something just happened, plays it, and goes; the rest of the time the
 # logo is alone. LOGO_SECONDS: how long it stays.
 LOGO_SECONDS = 5
 
 
 def moment(cheered=False, back=False, exam_eve=False, day_done=False):
-    """What brings Sev beside the logo, or None: a cheer that just landed,
+    """What brings Pip beside the logo, or None: a cheer that just landed,
     the first day back from away (a wave), the night before an exam (a
     star), the day done (a hop, the week's squares flying). Never a mood
     that lasts, never cross."""
@@ -306,7 +371,7 @@ def moment(cheered=False, back=False, exam_eve=False, day_done=False):
     return None
 
 
-# 3.8.1 (Sam: "variety!"): each place Sev goes has its mix of moves, the
+# 3.8.1 (Sam: "variety!"): each place Pip goes has its mix of moves, the
 # place's own first, as (pose, moment). Each time it comes it plays a
 # different one, never the same twice in a row (pick: at random, not the
 # last; nth: in turn). Where it stays a while (a fifteen, a break, a room's
@@ -328,7 +393,7 @@ SEAT_MOVES = ("idle", "sread", "snod", "sreach", "slook")
 
 
 def moves(place):
-    """The moments Sev can play at `place` (a MOVES key, or any pose: just its own), its own first."""
+    """The moments Pip can play at `place` (a MOVES key, or any pose: just its own), its own first."""
     return tuple(m for _p, m in MOVES[place]) if place in MOVES else (MOMENT.get(place, "idle"),)
 
 
@@ -345,7 +410,7 @@ def nth(place, n):
 
 
 def move(place, m=None, **kw):
-    """Sev at `place` playing its move `m` (its own when m isn't one of
+    """Pip at `place` playing its move `m` (its own when m isn't one of
     them), labelled as the place is; the rest goes to svg()."""
     pose, mm = next(((p, x) for p, x in MOVES.get(place, ()) if x == m), (place, None))
     kw.setdefault("label", LABELS.get(place))
@@ -358,13 +423,14 @@ CSS = r"""
 svg.sv { overflow: visible; display: block; flex: none; }
 .sv-slot { position: relative; display: inline-block; flex: none; vertical-align: middle; }
 .sv-slot > svg.sv { position: absolute; }
-.sv .sv-body, .sv .sv-shadow, .sv .sv-eyes, .sv .sv-pupils, .sv .sv-armL, .sv .sv-armR, .sv .sv-card, .sv .sv-clock,
+.sv .sv-body, .sv .sv-shadow, .sv .sv-eyes, .sv .sv-pupils, .sv .sv-card, .sv .sv-clock,
 .sv .sv-case, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk, .sv .sv-ring, .sv .spark, .sv .sv-cheek,
 .sv .sv-footL, .sv .sv-footR, .sv .sv-boxdot { transform-box: fill-box; }
 .sv .sv-body { transform-origin: 50% 100%; }
 .sv .sv-shadow, .sv .sv-eyes, .sv .sv-card, .sv .sv-clock, .sv .sv-star, .sv .sv-gift, .sv .sv-z, .sv .cf, .sv .stk,
 .sv .spark, .sv .sv-ring { transform-origin: 50% 50%; }
-.sv .sv-armL, .sv .sv-armR { transform-origin: 50% 8%; }
+/* 3.8.2: an arm turns at its shoulder, the origin of its own drawing, whatever its hand holds */
+.sv .sv-armL, .sv .sv-armR { transform-box: view-box; transform-origin: 0 0; }
 .sv .sv-footL, .sv .sv-footR { transform-origin: 30% 100%; }
 .sv .sv-case { transform-origin: 50% 0%; }
 .sv .sv-cheek { opacity: .6; }
@@ -379,6 +445,16 @@ svg.sv { overflow: visible; display: block; flex: none; }
 .sv.m-peek .sv-shadow, .sv.m-in .sv-shadow, .sv.m-knock .sv-shadow, .sv.m-bounce .sv-shadow,
 .sv.m-popup .sv-shadow { display: none; }
 .sv.m-hop .sv-body, .sv.m-twirl .sv-body, .sv.m-shuffle .sv-body, .sv.m-jump .sv-body { transform: translateY(-12px); }
+/* 3.8.2: the closet's things that move: each turns on its own point */
+.sv .cl-prop, .sv .cl-steam, .sv .cl-flame, .sv .cl-flick, .sv .cl-bal, .sv .cl-flag, .sv .cl-blink, .sv .cl-glow,
+.sv .cl-wing { transform-box: fill-box; }
+.sv .cl-prop, .sv .cl-blink, .sv .cl-glow { transform-origin: 50% 50%; }
+.sv .cl-flame { transform-origin: 50% 0%; }
+.sv .cl-flick, .sv .cl-steam { transform-origin: 50% 100%; }
+.sv .cl-bal { transform-origin: 0% 100%; }
+.sv .cl-flag { transform-origin: 0% 50%; }
+.sv .cl-wl { transform-origin: 100% 40%; }
+.sv .cl-wr { transform-origin: 0% 40%; }
 @media (prefers-reduced-motion: no-preference) {
   .sv .sv-eyes { animation: sv-blink 4.6s var(--sv-d, 0s) infinite; }
   @keyframes sv-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.12); } 96% { transform: scaleY(1); } }
@@ -419,7 +495,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
     75% { transform: rotate(-6deg); } }
   @keyframes sv-startle { 0% { transform: none; } 15% { transform: translateY(-6px) scale(.95, 1.06); } 40% { transform: scale(1.05, .95); } 60%, 100% { transform: none; } }
   @keyframes sv-rings { 0% { opacity: 0; transform: scale(.8); } 15% { opacity: 1; } 100% { opacity: 0; transform: scale(1.35); } }
-  /* the break: a stretch, or breathe with Sev (a square, four counts a side) */
+  /* the break: a stretch, or breathe with Pip (a square, four counts a side) */
   .sv.m-stretch .sv-body { animation: sv-stretch 4s ease-in-out infinite; }
   .sv.m-stretch .sv-armL { animation: sv-armwig 4s ease-in-out infinite; }
   .sv.m-stretch .sv-armR { animation: sv-armwig 4s ease-in-out infinite reverse; }
@@ -483,7 +559,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-bob { 0%, 50%, 100% { transform: none; } 25%, 75% { transform: translateY(-2.5px); } }
   @keyframes sv-step { 0%, 50%, 100% { transform: none; } 25% { transform: translateY(-3px); } }
   @keyframes sv-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-  /* hello: Sev switched on in Settings pops in and waves */
+  /* hello: Pip switched on in Settings pops in and waves */
   .sv.m-in .sv-body { animation: sv-in .5s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-in .sv-armR { animation: sv-wave 1.6s ease-in-out .3s 1 both; }
   @keyframes sv-in { 0% { transform: scale(0); } 70% { transform: scale(1.14); } 100% { transform: scale(1); } }
@@ -610,6 +686,27 @@ svg.sv { overflow: visible; display: block; flex: none; }
   .sv.m-sreach .sv-armR { animation-direction: reverse; }
   @keyframes sv-reach { 0%, 70%, 100% { transform: rotate(0); } 78%, 86% { transform: rotate(40deg); } }
   .sv.m-slook .sv-pupils { animation: sv-look 7s ease-in-out var(--sv-d, 0s) infinite; }
+  /* 3.8.2: the closet's things: a propeller turns, steam rises, wings flap, a balloon sways */
+  .sv .cl-prop { animation: cl-prop .5s linear infinite; }
+  .sv .cl-steam { animation: cl-steam 2.4s ease-in-out infinite; }
+  .sv .cl-flame { animation: cl-flame .35s ease-in-out infinite alternate; }
+  .sv .cl-flick { animation: cl-flick 1.1s ease-in-out infinite alternate; }
+  .sv .cl-bal { animation: cl-bal 3.2s ease-in-out infinite; }
+  .sv .cl-flag { animation: cl-flag 1.6s ease-in-out infinite; }
+  .sv .cl-blink { animation: cl-blink 1.8s steps(1) infinite; }
+  .sv .cl-glow { animation: cl-glow 2.4s ease-in-out infinite; }
+  .sv .cl-wl { animation: cl-wl 1.4s ease-in-out infinite; }
+  .sv .cl-wr { animation: cl-wr 1.4s ease-in-out infinite; }
+  @keyframes cl-prop { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
+  @keyframes cl-steam { 0% { opacity: 0; transform: translateY(2px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+  @keyframes cl-flame { from { transform: scaleY(.8); } to { transform: scaleY(1.15); } }
+  @keyframes cl-flick { from { transform: scale(.9); opacity: .85; } to { transform: scale(1.08); opacity: 1; } }
+  @keyframes cl-bal { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
+  @keyframes cl-flag { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.86); } }
+  @keyframes cl-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: .35; } }
+  @keyframes cl-glow { 0%, 100% { opacity: .3; } 50% { opacity: .6; } }
+  @keyframes cl-wl { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
+  @keyframes cl-wr { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(14deg); } }
   /* drawn again after it played: it rests, and blinks */
   .sv.rest .sv-body, .sv.rest .sv-armR, .sv.rest .sv-armL, .sv.rest .sv-shadow, .sv.rest .sv-clock,
   .sv.rest .sv-card, .sv.rest .sv-gift, .sv.rest .stk, .sv.rest .sv-cheek, .sv.rest .spark,

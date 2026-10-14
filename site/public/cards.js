@@ -73,7 +73,7 @@ const Cards = (() => {
   const hm = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
   const n = (v) => Number(v).toLocaleString("en-US");
 
-  // ---- 3.8.1: Sev hops across my week (sharecard.py's landings and hops: change one, change both) ----
+  // ---- 3.8.1: Pip hops across my week (sharecard.py's landings and hops: change one, change both) ----
   // sev.still("hop", "%A%") from due_crew/sev.py, the one drawing; the suite checks this copy is it
   const SEV = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><g><g transform="translate(21.5 47) rotate(155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><g transform="translate(58.5 47) rotate(-155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><rect x="28.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="42.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="20" y="27" width="40" height="39" rx="12.5" style="fill:%A%"/><rect x="25" y="31" width="11" height="5" rx="2.5" style="fill:#fff" opacity=".22"/><g><path d="M28.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/><path d="M42.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/></g><path d="M35 50.5 q5 7 10 0 z" style="fill:#1f2a1f"/></g></svg>';
   const SEV_SIZE = 1.8, SEV_FEET = 72.5 / 80, HOP = 0.45, DOT = 0.035, STEP = 0.16, ROOM = 100;
@@ -83,9 +83,9 @@ const Cards = (() => {
     img.onload = () => ok(img); img.onerror = () => ok(null);
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SEV.split("%A%").join(col))}`;
   }));
-  // the days Sev lands on: the days studied so far, or today alone on today's card
+  // the days Pip lands on: the days studied so far, or today alone on today's card
   const landings = (d) => (d.sev ? d.days.map((c, i) => (c.studied && !c.future && (c.today || !d.one) ? i : -1)).filter((i) => i >= 0) : []);
-  // a dotted arc from each day it landed on to the next (a day off under a long one), Sev standing on the last
+  // a dotted arc from each day it landed on to the next (a day off under a long one), Pip standing on the last
   function hops(d, x0, top, s, gap, ring) {
     const land = landings(d), out = { arcs: [], dots: [], r: s * DOT, sev: null };
     if (!land.length) return out;
@@ -307,7 +307,7 @@ const Cards = (() => {
     const cv = document.createElement("canvas");
     cv.className = "sc-canvas";
     let seq = 0, painting = Promise.resolve();
-    // 3.8.1: what leaves the sheet waits for the picture on screen, Sev and the logo drawn in it
+    // 3.8.1: what leaves the sheet waits for the picture on screen, Pip and the logo drawn in it
     const paint = () => (painting = draw());
     const drawn = async () => { for (let p; p !== painting;) { p = painting; await p.catch(() => {}); } };
     async function draw() {
