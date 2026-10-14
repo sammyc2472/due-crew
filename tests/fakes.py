@@ -642,6 +642,15 @@ class FakeWorker:
         self.plan_posts.setdefault(pid, []).append({"id": self._post_n, "name": (self.users.get(uid) or {}).get("name") or "?",
                                                     "text": text, "withSave": False, "at": int(time.time())})
 
+    def _look_of(self, uid):
+        """3.8.2: what someone's Sev has on, from their settings, as board.ts
+        lookOf takes it: a handful of short names, else None."""
+        look = ((self.settings.get(uid) or {}).get("settings") or {}).get("sev_look")
+        if (isinstance(look, list) and 0 < len(look) <= 8
+                and all(isinstance(x, str) and re.fullmatch(r"[a-z0-9]{2,16}", x) for x in look)):
+            return list(look)
+        return None
+
     def _board(self, me, with_decks, wk=None, got=None, pv=None, keep=False, same=False):
         u = self.users[me]
         if got is not None and int(got or 0) > 0:  # 3.7.2: the last reply's cheers arrived
@@ -662,10 +671,9 @@ class FakeWorker:
                 if isinstance(accent, str) and accent in ACCENTS:
                     row["accent"] = accent
                 # 3.8.2: what their Sev has on, as names (board.ts lookOf)
-                look = ((self.settings.get(fid) or {}).get("settings") or {}).get("sev_look")
-                if (isinstance(look, list) and 0 < len(look) <= 8
-                        and all(isinstance(x, str) and re.fullmatch(r"[a-z0-9]{2,16}", x) for x in look)):
-                    row["look"] = list(look)
+                look = self._look_of(fid)
+                if look:
+                    row["look"] = look
                 friends.append(row)
             else:
                 friends.append({"uid": fid, "name": f["name"] or "?", "emoji": f["emoji"] or "",
@@ -687,6 +695,8 @@ class FakeWorker:
                "friends": friends, "cheers": cheers, "knocks": self._knocks_of(me),
                "notice": self._notice_for(u.get("client_version")),
                "settingsAt": (self.settings.get(me) or {}).get("at") or ""}
+        if self._look_of(me):  # 3.8.2: my own look, as my crew sees it (the site's rows draw it)
+            out["me"]["look"] = self._look_of(me)
         stamp = None
         if pv is not None:  # 3.7.3: the plans again, when their stamp moved
             stamp = self._plan_stamp(me)

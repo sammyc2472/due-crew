@@ -123,6 +123,14 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt tr.you td { background: var(--you); border-top-color: var(--you); }
 .brdt tr.you + tr td { border-top-color: var(--you); }  /* no seam under the you row either */
 .brdt tr.you td.nm .who { font-weight: 700; }
+/* 3.8.2: each crew row's Sev in the emoji's place, in its person's colour and look (sev.js; the add-on's .dc-rsev):
+   a 30px drawing in an 18px slot, its body the slot, hanging out of the line so the row keeps its height;
+   a little more room before the name than in Anki, so what Sev holds clears it at the site's size */
+.rsev { display: inline-block; vertical-align: middle; margin: -9px 6px -5px 0; line-height: 0;
+  --sv-a: var(--rs-l); --sv-line: var(--line); --sv-amb: var(--warn); --sv-mut: var(--muted); }
+@media (prefers-color-scheme: dark) { .rsev { --sv-a: var(--rs-d); } }
+.rsev .sv-slot { position: relative; display: inline-block; vertical-align: middle; }
+.rsev .sv-slot > svg { position: absolute; display: block; overflow: visible; }
 .brdt tr.dim td { color: var(--muted); }
 .brdt .ago { font-size: 12px; font-weight: 700; }
 .brdt .ago.fresh { color: var(--accent); } .brdt .ago.hours { color: var(--warn); } .brdt .ago.faded { color: var(--muted); font-weight: 400; }

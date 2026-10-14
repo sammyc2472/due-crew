@@ -114,6 +114,8 @@ const ACCENTS = {
 };
 let worn = "green";
 let brandImgs = null;
+/** board.accent_pair (3.8.2): an accent's colour by day and by night; a name that isn't one of ours gets the default's */
+const accentPair = (name) => { const a = Object.prototype.hasOwnProperty.call(ACCENTS, name) ? ACCENTS[name] : ACCENTS.green; return [a[0][0], a[1][0]]; };
 
 function wearAccent(name) {
   if (!ACCENTS[name] || name === worn) return;
@@ -1039,9 +1041,17 @@ const Board = (() => {
   /** board.plan_target: a status that starts with a number is a plan. */
   const planTarget = (st) => { const m = /^\s*(\d{1,5})(?!\d)/.exec(st || ""); const n = m ? Number(m[1]) : 0; return n > 0 && n <= 20000 ? n : null; };
 
+  /** board._who (3.8.2): a crew row's name, their Sev in the emoji's place (sev.js), in their accent and
+   *  their look; mine in my own. The name stays text. Without sev.js, the emoji as before. */
+  function who(p) {
+    const name = p.name || "?";
+    if (typeof Sev !== "object") return h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${name}`);
+    return h("span", { class: "who" }, Sev.row(p.look, accentPair(p.accent), p.you ? "Your Sev" : `${name}’s Sev`), name);
+  }
+
   function nameCell(r, period) {
     const p = r.p;
-    const cell = h("td", { class: "nm" }, h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${p.name || "?"}`));
+    const cell = h("td", { class: "nm" }, who(p));
     // board.py _chip: one chip, the most time-bound; green only for studying
     // now or a room, amber only for an exam
     if (!r.quiet) {
@@ -1130,7 +1140,7 @@ const Board = (() => {
     return h("div", {}, h("div", { class: "scrollx" }, h("table", { class: "brdt" },
       h("thead", {}, h("tr", {}, picker ? corner(picker) : h("th", { class: "lt", colspan: 2 }, said), wk.map((l) => h("th", { class: l === today ? "sqh on" : "sqh" }, "MTWTFSS"[(parseIso(l).getUTCDay() + 6) % 7])))),
       h("tbody", {}, [...fresh, ...dormant].map((r) => h("tr", { class: [r.you ? "you" : "", r.paused || r.quiet || r.stale ? "dim" : ""].join(" ").trim() },
-        h("td", { class: "rk" }), h("td", { class: "nm" }, h("span", { class: "who" }, `${r.p.emoji ? r.p.emoji + " " : ""}${r.p.name || "?"}`), note(r)),
+        h("td", { class: "rk" }), h("td", { class: "nm" }, who(r.p), note(r)),
         wk.map((l) => { const d = dayOf(r.p.week || {}, l); return h("td", { class: "sqc" }, h("i", { class: `sq${showed(d) ? " on" : d?.away ? " away" : ""}` })); })))))),
       picker ? h("p", { class: "muted small sum" }, said) : null);
   }
@@ -1301,7 +1311,8 @@ async function home() {
   const t = today();
   const mon = Sched.monday(t);
   const showUp = !!sett?.settings?.show_up;
-  const people = [{ ...b.me, you: true }, ...b.friends.filter((f) => f.mutual)];
+  // 3.8.2: my row's Sev wears my accent (/auth/me's, the one the site wears) and my look (/board's me)
+  const people = [{ ...b.me, you: true, accent: me?.accent || worn }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
   // board.py _head (3.8.0): the board is your people, Crew and Squads.

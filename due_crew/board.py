@@ -3741,7 +3741,7 @@ def row_sev(row, cfg):
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
     label = "Your Sev" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Sev', quote=True)
-    fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), 30)
+    fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
     style = f'--rs-l:{light};--rs-d:{dark}'
     if row.get("you"):
         return (f'<a class="dc-rsev" href="#" title="Sev&rsquo;s closet" style="{style}" '

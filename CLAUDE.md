@@ -113,6 +113,12 @@ same commit, each with its test:
 
 - `board.build_rows` and the board ↔ `Board` in `site/public/app.js` (rows,
   chip order, notes, show-up view, Decks, Squads, bingo mini card)
+- `board.row_sev` ↔ `who` in app.js's `Board` (a crew row's Sev in the
+  emoji's place, its accent and look; mine from `/board`'s `me.look`, 3.8.2).
+  The drawing isn't restated: `sev.site_kit()` is written into
+  `site/public/sev.js` by `tools/gen_sev_js.py` (run it when Sev or the
+  closet changes); its `clean`/`shown` restate `closet.clean`/`shown`. The
+  suite checks the kit is current and runs the JS in node against both
 - `schedule.py` ↔ `Sched` in app.js (a date's window, quota, behind)
 - `bingo.evaluate` ↔ `evaluate` in `worker/src/bingo.ts`
 - `due.parse` ↔ `board.DUE_JS` (the add box's preview)
