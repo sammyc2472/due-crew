@@ -231,6 +231,7 @@ def _open_profile(uid):
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
                 "duet": duet, "status": status, "away": away,
                 "emoji": entry.get("emoji") or "",
+                "sev": board.card_sev(entry, cfg()),  # 3.8.2: their Sev in the emoji's place
                 "today": today_nums,
                 "start": my_labels[-1],  # the heatmap's first day, for its weekday rows
             }))

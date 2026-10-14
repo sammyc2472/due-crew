@@ -253,7 +253,7 @@ def refresh_widgets():
             c = cfg()
             _eval(top, room_model.widget_js("start", room_model.start_data(
                 _accent_pair(), c.get("room_chip_side"), sev_on(), nap=not _studied_today(),
-                compact=bool(c.get("room_compact")))))
+                compact=bool(c.get("room_compact")), look=my_look())))
         return
     data = _data(room)
     where = _where()

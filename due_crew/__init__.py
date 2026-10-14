@@ -1152,7 +1152,7 @@ def open_closet(tab=None):
     anywhere: what just came for Sev shows as new there, and the board's
     line for it is done."""
     news = list((_state.get("closet_new") or {}).get("keys") or [])
-    _state["closet_open"] = {"tab": tab or "All", "msg": "", "new": news, "drawn": False}
+    _state["closet_open"] = {"tab": tab or board.CLOSET_TABS[0], "msg": "", "new": news, "drawn": False}
     _state["closet_new"] = None
     _state["settings_tab"] = None
     _close_addons_dialog()
@@ -1169,8 +1169,9 @@ def _closet_view():
     st = _state.get("closet_open") or {}
     c = cfg()
     rest, st["drawn"] = bool(st.get("drawn")), True  # Sev waves when it opens and at a change, then rests
+    near, progress = closet_flow.standing(c)
     return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c),
-            "near": closet_flow.near(c), "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
+            "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
 
 
 def _closet_cmd(cmd, parts):

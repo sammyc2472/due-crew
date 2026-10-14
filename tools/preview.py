@@ -542,12 +542,16 @@ sections.append("<h3>3.8.2: something new for Sev: its line on the board</h3>" +
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": ["propeller"]}))
 sections.append("<h3>3.8.2: the day the closet comes: one line for what your days earned</h3>" + board.render(
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, closet={"keys": list(_MINE["sev_closet"]), "first": True}))
-_CV = {"tab": "All", "have": _MINE["sev_closet"], "look": _MINE["sev_look"],
+_CV = {"tab": "Yours", "have": _MINE["sev_closet"], "look": _MINE["sev_look"],
+       "progress": {"cap": (11, 14), "propeller": (7, 10), "magnifier": (6, 10), "cape": (21, 60), "stetho": (8400, 10000)},
        "near": [("cap", 11, 14, "days in a row"), ("propeller", 7, 10, "Fifteens"), ("magnifier", 6, 10, "leeches turned around")],
        "new": ["dino"], "msg": "", "rest": True}
-sections.append("<h3>3.8.2: Sev's closet, in the board's place: all of it</h3>" + board.closet_html(_CV, {"accent": "green"}))
-sections.append("<h3>3.8.2: the costumes (one at a time; your things wait under it)</h3>" + board.closet_html(
-    dict(_CV, tab="Costumes", look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
+sections.append("<h3>3.8.2: Sev's closet, in the board's place: Yours, by place; what's on is filled, with a tick</h3>"
+                + board.closet_html(_CV, {"accent": "green"}))
+sections.append("<h3>3.8.2: a costume over the look (the things under it say Under)</h3>" + board.closet_html(
+    dict(_CV, look=_MINE["sev_look"] + ["dino"]), {"accent": "purple"}))
+sections.append("<h3>3.8.2: To earn: what's close, then the rest by how it's earned</h3>" + board.closet_html(
+    dict(_CV, tab="To earn"), {"accent": "green", "theme": "dark"}))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):
@@ -573,6 +577,8 @@ profile_js = board.profile_overlay_js({
     "start": (TODAY - datetime.timedelta(days=181)).isoformat(),
     "same_days": 118, "decks_line": "Big Step 1", "uid": "dre",
     "you": False, "paused": False, "exam": "",
+    # 3.8.2: their Sev in the emoji's place, in their colour and look
+    "sev": board.card_sev({"name": "Dre", "accent": "blue", "look": ["partyhat", "bowtie", "balloon"]}, {}),
     "duet": {"run": 5, "best": 23,
              "mine_week": [True, True, False, True, True, True, True],
              "theirs_week": [True, True, True, True, True, True, True]},

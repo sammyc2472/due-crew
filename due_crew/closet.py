@@ -242,6 +242,22 @@ def near(facts, have, n=4):
     return out[:n]
 
 
+def progress(facts, have):
+    """How far along each thing not yet earned is, for those that count up
+    (days, reviews, Fifteens ...): {key: (got, need)}. Never seasons or
+    secrets (dates, not progress), never a thing of one (had or not)."""
+    f, have = facts or {}, clean_closet(have)
+    out = {}
+    for t in THINGS:
+        fact, need = t["need"]
+        if t["k"] in have or fact not in UNITS or need <= 1 or t["group"] == "Secret":
+            continue
+        got = _n(f.get(fact))
+        if got < need:
+            out[t["k"]] = (got, need)
+    return out
+
+
 def _n(v):
     if isinstance(v, bool):
         return int(v)

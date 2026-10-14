@@ -1700,18 +1700,30 @@ every release that changes how something works.
   with the accent to mutual friends: `board.ts` `lookOf` (a handful of
   names, nothing else), the fake, `consent.test.ts`. The closet opens in
   place of the board, as Settings does (`board.closet_html`, the
-  `closet*` commands): your Sev big in what it has on, each thing as a
-  chip that takes it off, Take it all off; the groups and Costumes; the
-  few you're close to (`closet.near`: the next in each line, at least
-  half there); every thing, yours to put on, the rest only shown, with
-  what it needs and how far along (no try-on: Sam's call, nothing is
-  worn before it's earned). Ways in: Settings › Fifteen and Sev ›
-  Sev's closet, Tools › Due Crew › Sev's closet, your Sev (by the logo,
-  on your row), the board's line. Your Sev wears your look wherever it
-  shows (by the logo, the nudge, the session's line, a fifteen's chip,
-  question and break, the signed-out card, Welcome back), a crewmate's
-  wears theirs (a room's seats, the streak banner), and crew rows now show
-  each person's Sev in the emoji's place, in their colour and look (Sam:
-  "move away from emojis toward Sevs"; `board.row_sev`); with Sev off in
-  Settings, the emoji as before. The picture cards keep the plain Sev
-  (cards.js draws them on the site too).
+  `closet*` commands). After Sam's first click-test ("the distinction
+  between which items are active vs inactive aren't really that clear"),
+  it's in two: Yours, your things by place on Sev, head to back and then
+  the costumes, one at a time in each place, each tile saying what earned
+  it; what's on is the accent, filled, with a tick (On), a thing a
+  costume covers says Under, a new one New; a place with nothing yet says
+  what's next. To earn: what you're close to (`closet.near`), then every
+  thing you haven't got by how it's earned, greyed, with how far along
+  (`closet.progress`), never a button (no try-on: Sam's call, nothing is
+  worn before it's earned); secrets a question mark. On the left, your
+  Sev big and what's on, place by place, each taking it off; Take it all
+  off. No explainer under it (Sam: "too explainy"). Ways in: Settings ›
+  Fifteen and Sev › Sev's closet, Tools › Due Crew › Sev's closet, your
+  Sev (by the logo, on your row, on your card), the board's line. Your Sev
+  wears your look wherever it shows (by the logo, ▶ Fifteen? in the top
+  bar, the nudge, the session's line, a fifteen's chip, question and
+  break, the signed-out card, Welcome back, the week picture card made in
+  Anki), a crewmate's wears theirs (a room's seats, the streak banner),
+  and crew rows and profile cards (`board.card_sev`) show each person's
+  Sev in the emoji's place, in their colour and look (Sam: "move away
+  from emojis toward Sevs"; `board.row_sev`); with Sev off in Settings,
+  the emoji as before. Your card keeps Change emoji (squads, bingo and
+  older add-ons still show it) beside Sev's closet. A row with a Sev is a
+  little taller (`tr.sv`): the name's cell clips what spills out, so a
+  hat needs the room, and the whole row gets it so the name and the
+  numbers stay on one line; Sev sits clear of the name, outside its
+  underline. The site's picture cards keep the plain Sev (cards.js).

@@ -311,11 +311,18 @@ def wear(k):
 
 
 def near(c=None):
+    return standing(c)[0]
+
+
+def standing(c=None):
+    """(near, progress) for the closet: the few I'm close to, and how far
+    along every thing that counts up is. One read of the facts."""
     try:
-        return closet.near(facts(c), have(c))
+        f, mine = facts(c), have(c)
+        return closet.near(f, mine), closet.progress(f, mine)
     except Exception:
         traceback.print_exc()
-        return []
+        return [], {}
 
 
 _HOOKED = {"done": False}

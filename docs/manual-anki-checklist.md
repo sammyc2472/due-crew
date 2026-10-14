@@ -668,16 +668,18 @@ In Anki (as a follower):
 ### 3.8.2: Sev's closet
 
 - [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Sev where their emoji was, in their colour (yours in yours); Settings › Sev off brings the emojis back.
-- [ ] The closet (Settings › Fifteen and Sev › Sev's closet, or Tools › Due Crew › Sev's closet, or click your Sev on your row): your Sev big, in what it has on; ‹ Board goes back. The count says N of 61.
+- [ ] The closet (Settings › Fifteen and Sev › Sev's closet, or Tools › Due Crew › Sev's closet, or click your Sev on your row or your card): your Sev big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 61. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
 - [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
 - [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
-- [ ] A thing you don't have yet: greyed, with what it needs (and how far along); clicking it does nothing, Sev never wears it. A secret says it's a secret and shows nothing.
-- [ ] Almost there (on All): the next in a line you're at least halfway to, with a bar.
+- [ ] To earn: everything you haven't got, by how it's earned, greyed, with what it needs (and how far along); clicking does nothing, Sev never wears it. A secret says it's a secret and shows nothing. A place on Yours with nothing yet says what's next.
+- [ ] Almost there (top of To earn): the next in a line you're at least halfway to, with a bar. A costume on: the things under it say Under, and the list on the left greys them.
 - [ ] Something new (do your first Fifteen: the headphones): the board's line says New for your Sev: Headphones; Wear it puts them on and the line goes; × just goes; the closet marks it new.
 - [ ] A held thing (the coffee mug): by the logo when Sev hops, the mug goes up with the hand; in a fifteen's chip (Sev holding its card) no mug.
 - [ ] A crewmate on 3.8.2 puts something on: after your next refresh, their row's Sev wears it, and in a room together their seat does too. A crewmate on an older add-on: their Sev, plain.
 - [ ] Another computer: what's earned and what's on follow you (Settings sync), nothing earned is lost if both earn at once.
 - [ ] Night mode and Reduce motion: rows' Sevs still (they move only when the row is pointed at), the closet's tiles still.
+- [ ] Wear a hat: ▶ Fifteen? in the top bar wears it; on the crew rows no hat is cut off at the top, the name sits clear of Sev and on the numbers' line. Click a crewmate's Sev: their card, with their Sev where the emoji was; yours has Sev's closet · Change emoji.
+- [ ] Share › week picture card: Sev hops across it in your look.
 
 ### 3.8.1: the Fifteen and Sev
 

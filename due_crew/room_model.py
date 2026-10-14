@@ -352,9 +352,10 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
             "cards": cards, "total": total}
 
 
-def start_data(accent_pair, side="right", sev=True, nap=False, compact=False):
-    """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room."""
-    sevs, css, _turns = _sevs(("idle", "nap"), sev)
+def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=()):
+    """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room. look
+    (3.8.2): what my Sev has on from the closet."""
+    sevs, css, _turns = _sevs(("idle", "nap"), sev, look=look)
     return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
             "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT)}
 

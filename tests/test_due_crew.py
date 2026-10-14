@@ -12968,29 +12968,42 @@ def test_closet_board_v382():
     from due_crew import closet as C, closet_art as CA
     from aqt.deckbrowser import DeckBrowser
     have = {"sprout": "2026-01-01", "beanie": "2026-01-08", "headphones": "2026-02-01", "dino": "2026-08-01", "bowtie": "2026-03-01"}
-    view = {"tab": "All", "have": have, "look": ["bowtie", "glasses", "headphones"],
-            "near": [("cap", 11, 14, "days in a row")], "new": ["dino"], "msg": ""}
+    view = {"tab": "Yours", "have": have, "look": ["bowtie", "glasses", "headphones"],
+            "near": [("cap", 11, 14, "days in a row")], "progress": {"cap": (11, 14), "beanie": (3, 7)}, "new": ["dino"], "msg": ""}
     page = board.closet_html(view, {"theme": "light"})
-    check("the closet: its own page, a way back, how many of how many",
-          "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(C.THINGS)}" in page)
-    check("every thing is a tile: mine to put on, the rest only shown (no click), secrets a question mark",
-          page.count('class="cl-t') == len(C.THINGS) and "duecrew:closetwear:beanie" in page
-          and page.count('<button class="cl-t') == len(have) and page.count('<div class="cl-t lk') == len(C.THINGS) - len(have)
-          and "duecrew:closetwear:cap" not in page and "closettry" not in page
-          and page.count("A secret") >= 4 and "Pi day" not in page)
-    check("only what I have is on: a look naming what I haven't earned drops it",
-          "Take it off" in page and page.count('title="Take it off"') == 2 and CA.ART["glasses"][0][:30] not in page.split('class="cl-on"')[0].split('class="cl-fig"')[1].split("</div>")[0])
-    check("nothing tried on: Sev wears only what's mine, and no thing I haven't got is worn anywhere",
-          "rying on" not in page and CA.ART["cap"][0][:40] not in page.split('class="cl-fig"')[1].split("</div>")[0]
-          and "Take it all off" in page)
-    check("almost there, on All, and on its tile; what just came is marked", "11 of 14 days in a row" in page
-          and '<small>11 of 14</small>' in page.split("duecrew:closetwear:sprout")[0] + page.split('class="cl-grid"')[1]
-          and page.count(" new\"") == 1)
-    check("a secret you haven't found shows nothing of it", "A secret: you&rsquo;ll know it when it happens" in page
-          and CA.ART["catears"][0][:40] not in page)
-    tab = board.closet_html(dict(view, tab="Costumes", near=[]), {"theme": "dark"})
-    check("a tab shows its own: Costumes are the whole looks",
-          tab.count('class="cl-t') == sum(1 for t in C.THINGS if t["slot"] == C.COSTUME) and "11 of 14" not in tab)
+    fig = page.split('class="cl-fig"')[1].split("</div>")[0]
+    check("the closet: its own page, a way back, how many of how many; Yours and To earn, each with its count",
+          "dc-closet" in page and "duecrew:closetclose" in page and f"5 of {len(C.THINGS)}" in page
+          and "Yours <small>5</small>" in page and f"To earn <small>{len(C.THINGS) - 5}</small>" in page
+          and "duecrew:closettab:1" in page and "never bought" not in page)
+    check("Yours: only my things, each a button, by place (head to back, then costumes); nothing greyed, nothing to try",
+          page.count('<button class="cl-t') == len(have) and 'class="cl-t lk' not in page and "closettry" not in page
+          and "duecrew:closetwear:cap" not in page and "duecrew:closetwear:beanie" in page
+          and page.index(">Head") < page.index(">Body") < page.index(">Costumes")
+          and "Yours since 8 Jan" in page
+          and "<b>Beanie</b><small>7 days in a row</small>" in page)  # what earned it, under its name
+    check("what's on says so: the accent, filled, a tick; a look naming what I haven't earned drops it",
+          page.count('<span class="cl-badge">&#10003; On</span>') == 2 and page.count('class="cl-t on') == 2
+          and 'aria-label="Headphones, on"' in page and 'aria-label="Beanie, not on"' in page
+          and CA.ART["glasses"][0][:30] not in fig and CA.ART["headphones"][0][:30] in fig)
+    check("what's on, place by place, each taking it off; a place with nothing yet says what's next",
+          page.count('title="Take it off"') == 2 and '<span>Face</span><i>&ndash;</i>' in page
+          and "Next: <b>Round glasses</b>, 100 days studied" in page and "Take it all off" in page)
+    check("what just came is marked New", page.count('class="cl-badge n"') == 1 and " new\"" in page.split("closetwear:dino")[0][-400:])
+    dressed = board.closet_html(dict(view, look=["bowtie", "headphones", "dino"]), {"theme": "dark"})
+    check("a costume on: it's the one On, the costume's row first; the things under it say Under, and come back when it's off",
+          dressed.count("&#10003; On") == 1 and dressed.count('<span class="cl-badge u">Under</span>') == 2
+          and 'cl-ons covered' in dressed and '<div class="cl-o cos"><span>Costume</span>' in dressed
+          and 'aria-label="Bow tie, under the costume"' in dressed)
+    earn = board.closet_html(dict(view, tab="To earn"), {"theme": "light"})
+    secrets = [t for t in C.THINGS if t["group"] == "Secret"]
+    check("To earn: every thing I haven't got, shown but never a button, by how it's earned; how far along",
+          earn.count('<div class="cl-t lk') == len(C.THINGS) - len(have) and '<button class="cl-t' not in earn
+          and "duecrew:closetwear:cap" not in earn and "Almost there" in earn and "11 of 14 days in a row" in earn
+          and "<small>11 of 14</small>" in earn and "<small>3 of 7</small>" not in earn  # beanie is mine
+          and "Showing up <small>" in earn)
+    check("a secret you haven't found shows nothing of it", earn.count("<b>A secret</b>") == len(secrets)
+          and "Pi day" not in earn and CA.ART["catears"][0][:40] not in earn)
     off = board.closet_html(view, {"sev": False})
     check("with Sev off, the closet says nobody sees it for now", "nobody sees it" in off)
     line = board.closet_line(["cap"], ["beanie"])
@@ -13020,6 +13033,29 @@ def test_closet_board_v382():
     check("Sev off: the emoji as before", "🦊 Sammy" in plain and "dc-rsev" not in plain)
     squares = board.render(data, dict(conf, show_up=True), 0)
     check("the days view's rows too", squares.count('class="dc-rsev"') >= 2)
+    dre_row = rows.split('>Dre &lt;i&gt;</a>')[0].rsplit("<tr", 1)[1]
+    check("a row with Sev: room above it for a hat (the whole row, so name and numbers share a line); "
+          "their Sev beside the name's underline, opening their profile too",
+          'class="sv"' in dre_row and 'tr.sv > td { padding-top: 12px; }' in crew
+          and 'class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" onclick="pycmd(\'duecrew:profile:dre\')' in dre_row
+          and dre_row.index('class="dc-rsev"') < dre_row.index('class="dc-pl"')
+          and 'tr.sv' not in board.render(data, dict(conf, sev=False), 0))
+    # profile cards (3.8.2): their Sev where the emoji was, as on their row; mine opens the closet
+    card = board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": None, "emoji": "🐢",
+                                     "sev": board.card_sev(ents[1], conf)})
+    mine_card = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊",
+                                          "sev": board.card_sev(ents[0], conf)})
+    turtle, fox = json.dumps("🐢")[1:-1], json.dumps("🦊")[1:-1]  # as the card's script carries them
+    check("profile cards: Sev in the emoji's place, in their colour and look; mine links to the closet",
+          turtle not in card and "dc-psev" in card and json.dumps(CA.ART["dino"][0])[1:30] in card and "--sv-a: #1e5fb4" in card
+          and fox not in mine_card and json.dumps(CA.ART["cap"][0])[1:30] in mine_card
+          and "remove();pycmd('duecrew:closet')" in mine_card
+          and "Change emoji" in mine_card and board.card_sev(ents[1], dict(conf, sev=False)) is None
+          and turtle in board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": None, "emoji": "🐢"}))
+    from due_crew import room_model as RM
+    chip = RM.start_data(("#2e7d32", "#7cc47f"), "right", True, look=["cap"])
+    check("▶ Fifteen? in the top bar wears my look (it was plain)", CA.ART["cap"][0][:30] in chip["sev"]["idle"]
+          and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
     check("Settings › Fifteen and Sev: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
     # the clicks, as the board sends them
     if "aqt.reviewer" not in sys.modules:
@@ -13039,7 +13075,7 @@ def test_closet_board_v382():
         dc._state["closet_new"] = {"keys": ["dino"], "first": False}
         send("closet")
         st = dict(dc._state["closet_open"])
-        send("closettab:9")
+        send("closettab:1")
         tab9 = dc._state["closet_open"]["tab"]
         send("closettry:cap")  # an older page's try-on: nothing, and nothing worn
         tried = "try" in dc._state["closet_open"] or "cap" in mine["sev_look"]
@@ -13055,11 +13091,11 @@ def test_closet_board_v382():
         v = dc._closet_view()
         send("closetclose")
         check("the closet opens in the board's place; what just came is new there, and the line is done",
-              st["tab"] == "All" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == board.CLOSET_TABS[9])
+              st["tab"] == "Yours" and st["new"] == ["dino"] and dc._state["closet_new"] is None and tab9 == "To earn")
         check("its clicks: put mine on (a hat replaces the hat; a costume over the look, off again: the look's back), never one I haven't",
               not tried and worn == ["headphones", "dino"] and back == ["headphones"], (worn, back))
         check("take it all off; its view holds what's mine and what's near; back to the board",
-              offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap"
+              offed == [] and v["have"] == have and v["near"] and v["near"][0][0] == "cap" and v["progress"]["cap"] == (11, 14)
               and dc._state["closet_open"] is None and len(swaps) >= 8)
         dc._state["closet_new"] = {"keys": ["sprout"], "first": False}
         send("closetwear:sprout")
