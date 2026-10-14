@@ -73,8 +73,8 @@ def heat_level(days):
 def week(days, today, one=False, fresh=None, streak=0, crew=0, sev=False):
     """My week (Monday to today), or today alone (one): seven squares,
     and the numbers over the days so far. fresh: {label: new cards};
-    streak: my streak; crew: how many of my crew studied too; sev: Sev
-    hops across it (Settings › Sev here; the site always)."""
+    streak: my streak; crew: how many of my crew studied too; sev: Pip
+    hops across it (Settings › Pip here; the site always)."""
     t = _day(today)
     mon = t - datetime.timedelta(days=t.weekday())
     lv = heat_level(days)
@@ -267,30 +267,30 @@ def _day_cell(o, x, y, s, c, r, ring):
         o.ring(x - ring, y - ring, s + 2 * ring, s + 2 * ring, r + ring, pal["ink"], ring * 0.75)
 
 
-# 3.8.1, the week card's Sev (Sam's pick, "Sev hops across the week"): it
+# 3.8.1, the week card's Pip (Sam's pick, "Pip hops across the week"): it
 # lands on the days I studied and hops over the rest. A picture is still,
 # so the hops are its trail, a dotted arc from each day it landed on to
-# the next, and Sev stands on the last. Sizes are over a square's side.
-SEV_SIZE = 1.8  # Sev's drawing: its body about a square
+# the next, and Pip stands on the last. Sizes are over a square's side.
+SEV_SIZE = 1.8  # Pip's drawing: its body about a square
 SEV_FEET = 72.5 / 80  # where its feet end in its drawing (sev.py)
 HOP = 0.45  # a hop's height, times the root of the days it spans: a day off, a longer one
 DOT, STEP = 0.035, 0.16  # the trail: a dot's radius, and the way between two dots
-ROOM = 100  # on a story, the squares and what's under them move down this much for Sev
+ROOM = 100  # on a story, the squares and what's under them move down this much for Pip
 
 
 def landings(d):
-    """The days Sev lands on (indexes into d["days"]): the days studied so
-    far, or today alone on today's card; none with Sev off."""
+    """The days Pip lands on (indexes into d["days"]): the days studied so
+    far, or today alone on today's card; none with Pip off."""
     if not d.get("sev"):
         return []
     return [i for i, c in enumerate(d["days"]) if c["studied"] and not c["future"] and (c["today"] or not d["one"])]
 
 
 def hops(d, x0, top, s, gap, ring):
-    """Sev on the row of squares (from x0, top; side s, gap apart; today's
+    """Pip on the row of squares (from x0, top; side s, gap apart; today's
     ringed `ring` out): {"arcs": [(day, next day)], "dots": [(x, y)],
     "r": a dot's radius, "sev": (x, y, size) or None}. Each arc runs from
-    the top of a square it landed on to the next one's, and Sev stands on
+    the top of a square it landed on to the next one's, and Pip stands on
     the last. cards.js hops() is its twin."""
     land = landings(d)
     out = {"arcs": [], "dots": [], "r": s * DOT, "sev": None}

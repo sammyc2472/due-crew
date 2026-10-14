@@ -30,7 +30,7 @@ ACCOUNT_KEYS = ("share_reviews", "share_time", "share_retention", "share_streak"
                 "status", "emoji", "squads", "crew_label", "shared_decks", "muted",
                 "accent",  # 3.5.0: the site wears it too
                 "due_items", "due_ticks", "due_show", "due_suggest",  # Due: my own to-dos, on every computer
-                "sev_look", "sev_closet")  # 3.8.2: Sev's closet: what it has on, what it's earned
+                "sev_look", "sev_closet")  # 3.8.2: Pip's closet: what it has on, what it's earned
 ACCENT_NAMES = ("green", "blue", "purple", "teal", "amber", "rose")
 _BOOLS = ("share_reviews", "share_time", "share_retention", "share_streak",
           "share_heatmap", "show_up", "paused", "due_show", "due_suggest")
@@ -186,7 +186,7 @@ def merge3(base, mine, theirs):
     A key one side changed takes that side's. A key both changed: the muted,
     squads, shared decks and to-dos merge item by item, the to-do ticks day
     by day, the closet thing by thing (3.8.2: nothing earned is lost), and
-    anything else (a switch, a status, Sev's look) takes mine. Pure."""
+    anything else (a switch, a status, Pip's look) takes mine. Pure."""
     base, mine, theirs = (x if isinstance(x, dict) else {} for x in (base, mine, theirs))
     out = {}
     for k in list(theirs) + [k for k in mine if k not in theirs]:

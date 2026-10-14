@@ -98,14 +98,14 @@ def _first_grapheme(text):
 
 def clean_accent(name):
     """3.8.1: a crewmate's accent from GET /board, if it's one of the add-on's
-    (board.ACCENTS), else '': their Sev in a study room wears it, and only a
+    (board.ACCENTS), else '': their Pip in a study room wears it, and only a
     name from that table, as that table's colours, ever reaches a page."""
     from ..board import ACCENTS  # board is pure; asked here, the shapes load without it
     return name if isinstance(name, str) and name in ACCENTS else ""
 
 
 def clean_look(v):
-    """3.8.2: a crewmate's look from GET /board (what their Sev has on): only
+    """3.8.2: a crewmate's look from GET /board (what their Pip has on): only
     things the closet knows, as it would wear them (closet.clean); names,
     never markup, ever reach a page."""
     from ..closet import clean  # pure; asked here, the shapes load without it

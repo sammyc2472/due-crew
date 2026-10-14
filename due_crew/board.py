@@ -50,7 +50,7 @@ DEFAULT_ACCENT = "green"
 
 def accent_pair(name):
     """An accent's colour (light, dark); a name that isn't one of ours gets
-    the default's. 3.8.1: a crewmate's Sev in a room wears theirs from here."""
+    the default's. 3.8.1: a crewmate's Pip in a room wears theirs from here."""
     shades = ACCENTS.get(name if isinstance(name, str) else "", ACCENTS[DEFAULT_ACCENT])
     return shades["light"][0], shades["dark"][0]
 
@@ -320,7 +320,7 @@ def build_rows(entries, labels, tomorrow, period, cfg):
     for e in entries:
         row = {"user_id": e["user_id"], "name": e["name"], "you": e["you"],
                "emoji": e.get("emoji") or "",
-               # 3.8.2: their Sev on the row, in their colour and look (mine come from the config)
+               # 3.8.2: their Pip on the row, in their colour and look (mine come from the config)
                "accent": e.get("accent") or "", "look": e.get("look") or [],
                "paused": e["paused"], "last_updated": e["last_updated"],
                "reviews": None, "time_ms": None, "retention": None,
@@ -1035,11 +1035,11 @@ def _head(period, show_up=False, hidden=frozenset(), crew="today", sev=None):
         cls = "dc-pill on" if on == key else "dc-pill"
         pills += (f'<a class="{cls}" href="#" '
                   f'onclick="{_pycmd("period:" + (crew if key == "crew" else key))}">{label}</a>')
-    # 3.8.1: Sev beside the logo, never on it (the logo itself never changes),
+    # 3.8.1: Pip beside the logo, never on it (the logo itself never changes),
     # and only for a moment: it pops in, plays it, and goes (Sam)
-    beside = (f'<a class="dc-sev once" href="#" title="Sev&rsquo;s closet" onclick="{_pycmd("closet")}" '
+    beside = (f'<a class="dc-sev once" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}" '
               f'style="--ago:{float(sev.get("ago") or 0):.2f}s">{_sev.slot(sev["svg"], 36)}</a>'
-              if sev and sev.get("svg") else "")  # 3.8.2: Sev's closet is a click away
+              if sev and sev.get("svg") else "")  # 3.8.2: Pip's closet is a click away
     return (f'<div class="dc-head"><span class="dc-title">{board_mark()}{beside}</span>'
             f'<span>{pills}</span></div>')
 
@@ -1090,8 +1090,8 @@ def _chip(row):
 
 
 def _who(row, cfg):
-    """3.8.2: a crew row's name, with their Sev in the emoji's place (Sev
-    on), or their emoji (Sev off), as before."""
+    """3.8.2: a crew row's name, with their Pip in the emoji's place (Pip
+    on), or their emoji (Pip off), as before."""
     fig = row_sev(row, cfg)
     return (fig, _html.escape(str(row["name"]))) if fig else ("", _label(row["name"], row.get("emoji")))
 
@@ -1159,7 +1159,7 @@ def _row_html(row, rank, cfg, period="today"):
         cheer = (f'<td class="chc"><a class="dc-cheer" href="#" title="Send a cheer" '
                  f'onclick="{_pycmd("cheerpick:" + str(row["user_id"]))}">&#127881;</a></td>')
         # 3.0.1: right-click for Mute cheers and Report…
-        # 3.8.2: their Sev opens the profile too, outside the name's underline
+        # 3.8.2: their Pip opens the profile too, outside the name's underline
         sev_link = (f'<a class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" '
                     f'onclick="{_pycmd("profile:" + str(row["user_id"]))}">{fig}</a>') if fig else ""
         name = (sev_link + f'<a class="dc-pl" href="#" title="Open profile" '
@@ -3073,9 +3073,9 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     (the cards are You › Plans'; a squad's offers show on Squads too).
     notice (3.2.1): the admin's {id, text, link}, on top of every tab.
     asks (3.5.0): my own asks about cards (together.my_asks_view), Crew › Decks.
-    sev (3.8.1): Sev beside the logo for a moment, {svg, ago} (rooms.board_sev), or None.
-    milestone_sev (3.8.1): {uid: Sev's markup} for a streak banner, Sev in its emoji's place.
-    closet (3.8.2): {keys, first}: what just came for Sev, for its line (closet_line)."""
+    sev (3.8.1): Pip beside the logo for a moment, {svg, ago} (rooms.board_sev), or None.
+    milestone_sev (3.8.1): {uid: Pip's markup} for a streak banner, Pip in its emoji's place.
+    closet (3.8.2): {keys, first}: what just came for Pip, for its line (closet_line)."""
     period = cfg.get("period", "today")
     hidden = hidden_tabs(cfg)
     if period not in PERIODS or period in hidden:
@@ -3122,7 +3122,7 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
                     f'onclick="{_pycmd("knockmute:" + uid)}">&times;</a></div>')
     for uid, who, days in (milestones or [])[:2]:
         emoji = "&#128175;" if int(days) < 365 else "&#127881;"
-        fig = (milestone_sev or {}).get(uid)  # 3.8.1 (Sam's pick): Sev hops in the emoji's place
+        fig = (milestone_sev or {}).get(uid)  # 3.8.1 (Sam's pick): Pip hops in the emoji's place
         icon = f'<span class="dc-fig">{_sev.slot(fig, 40)}</span>' if fig else f"<span>{emoji}</span>"
         bans.append(f'<div class="dc-wrap">{icon}'
                     f'<span><b>{_html.escape(str(who))}</b> just reached a {int(days)}-day streak.</span>'
@@ -3200,11 +3200,11 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
             f'<a class="ic" href="#" title="Refresh" onclick="{_pycmd("refresh")}">&#8635;</a>'
             f'<a class="ic" href="#" title="Settings" onclick="{_pycmd("settings")}">&#9881;&#xFE0E;</a></span></div>')
 
-    # 3.8.1: Sev's moments; a crew room's Sevs each wear their person's accent, by day or by night as the board
+    # 3.8.1: Pip's moments; a crew room's Pips each wear their person's accent, by day or by night as the board
     seat = _by_theme(cfg, "#due-crew .dc-room .seat", "--sv-a: var(--sa-l);", "--sv-a: var(--sa-d);")
-    # 3.8.2: and each crew row's Sev wears its person's colour, as the seats do
+    # 3.8.2: and each crew row's Pip wears its person's colour, as the seats do
     seat += _by_theme(cfg, "#due-crew .dc-rsev", "--sv-a: var(--rs-l);", "--sv-a: var(--rs-d);")
-    # the name's cell clips what spills out of it: room above the line for a Sev's hat, the whole
+    # the name's cell clips what spills out of it: room above the line for a Pip's hat, the whole
     # row's (tr.sv) so the name and the numbers stay on one line
     seat += f"\n    #due-crew tr.sv > td {{ padding-top: {(3 if cfg.get('compact') else 6) + 6}px; }}"
     sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
@@ -3410,15 +3410,15 @@ def _settings_board(cfg):
             + _st_row("Room chip", _st_seg("room_chip_side", (("left", "Left"), ("right", "Right")), cfg.get("room_chip_side", "right"), "Room chip"),
                       "Its side of Anki's top bar")
             + _st_row("Crew name in shares", label_in)
-            + '</div><div class="st-h">Fifteen and Sev</div><div class="st-box">'
+            + '</div><div class="st-h">Fifteen and Pip</div><div class="st-box">'
             + _st_row("Fifteen? in the top bar", _st_switch("fifteen", g("fifteen", True), "Fifteen? in the top bar"),
                       "And the nudge, when you haven't started by your usual time")
-            + _st_row("Sev", _st_switch("sev", g("sev", True), "Sev"), "The square from the logo, beside it and in your fifteens")
-            + _st_row("Sev&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
-                      "What your Sev has on, and what it&rsquo;s earned")
+            + _st_row("Pip", _st_switch("sev", g("sev", True), "Pip"), "The square from the logo, beside it and in your fifteens")
+            + _st_row("Pip&rsquo;s closet", f'<a class="st-lk" href="#" {_st_click("closet")}>Open</a>',
+                      "What your Pip has on, and what it&rsquo;s earned")
             + _st_row("On a break", _st_seg("sev_break", (("breathe", "Breathe"), ("stretch", "Stretch")),
                                             cfg.get("sev_break", "breathe"), "On a break"),
-                      "Breathe with Sev, four counts a side, or stretch")
+                      "Breathe with Pip, four counts a side, or stretch")
             + '</div><div class="st-h">Due</div><div class="st-box">'
             + _st_row("Today, Upcoming, Later", _st_switch("due_show", g("due_show", True), "Today, Upcoming, Later"))
             + _st_row("Suggestions", _st_switch("due_suggest", g("due_suggest", True), "Suggestions"),
@@ -3489,7 +3489,7 @@ FIND_WORDS = {
     "af": "holiday vacation trip break", "setprivacy:paused": "pause break hide", "setprivacy:showup": "show up numbers squares",
     "setsignout": "log out", "setdelete": "remove erase", "setfeedback": "bug idea report", "label": "crew name group",
     "setreset": "default", "friends": "crew code invite", "decks": "share deck",
-    # 3.8.1: the Fifteen and Sev
+    # 3.8.1: the Fifteen and Pip
     "set:fifteen:": "timer pomodoro focus session nudge minutes", "set:sev:": "mascot character buddy animation",
     "set:sev_break:": "breathe stretch rest",
 }
@@ -3569,10 +3569,10 @@ def settings_html(view, cfg):
             f'{f"<div class=st-note>{foot}</div>" if foot else ""}</div>')
 
 
-# ---- 3.8.2: Sev's closet ----
+# ---- 3.8.2: Pip's closet ----
 
 CLOSET_TABS = ("Yours", "To earn")
-# the places on Sev, top to bottom, as the closet lists them; a costume over them all
+# the places on Pip, top to bottom, as the closet lists them; a costume over them all
 CLOSET_PLACES = ("head", "face", "body", "hand", "back")
 PLACE_NAMES = {"head": "Head", "face": "Face", "body": "Body", "hand": "Hand", "back": "Back", _closet.COSTUME: "Costume"}
 
@@ -3644,8 +3644,8 @@ CLOSET_CSS = """
     #due-crew .cl-pills .st-pill.on::before { content: none; }
     #due-crew .cl-pills .st-pill.on { background: var(--dc-accent); border-color: var(--dc-accent); color: var(--dc-accent-ink); }
     #due-crew .cl-earn .dc-fig { display: inline-flex; flex: none; }
-    /* crew rows (3.8.2): each person's Sev in their colour and look, in the emoji's place; still until pointed at */
-    /* Sev's arms and what it holds reach past its slot (sev.SLOT): room beside it so they never touch the name,
+    /* crew rows (3.8.2): each person's Pip in their colour and look, in the emoji's place; still until pointed at */
+    /* Pip's arms and what it holds reach past its slot (sev.SLOT): room beside it so they never touch the name,
        and above it for a hat, so the row is a touch taller than an emoji's */
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
@@ -3655,7 +3655,7 @@ CLOSET_CSS = """
 
 
 def my_look(cfg):
-    """3.8.2: what my Sev has on: things I have, as the closet draws them."""
+    """3.8.2: what my Pip has on: things I have, as the closet draws them."""
     have = _closet.clean_closet(cfg.get("sev_closet"))
     return [k for k in _closet.clean(cfg.get("sev_look")) if k in have]
 
@@ -3724,14 +3724,14 @@ def _closet_ons(look):
         else:
             what = f'<button title="Take it off" {_st_click("closetwear:" + k)}>{e(_closet.BY[k]["name"])}</button>'
         rows.append(f'<div class="cl-o"><span>{PLACE_NAMES[p]}</span>{what}</div>')
-    return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Sev has on">' + "".join(rows) + "</div>")
+    return (f'<div class="cl-ons{" covered" if cos else ""}" aria-label="What your Pip has on">' + "".join(rows) + "</div>")
 
 
 def closet_html(view, cfg):
-    """3.8.2: Sev's closet, in place of the board (as Settings is).
+    """3.8.2: Pip's closet, in place of the board (as Settings is).
     view: {tab, have: {thing: day}, look, near: [(k, got, need, unit)],
     progress: {k: (got, need)}, new: [k], msg, rest}, from the glue
-    (closet_flow). On the left your Sev in what it has on, and what's on,
+    (closet_flow). On the left your Pip in what it has on, and what's on,
     place by place (each takes it off). Yours: your things by place, one at
     a time in each, the costumes over them; what's on is the accent with a
     tick. To earn: what you're close to, then the rest by how it's earned,
@@ -3743,7 +3743,7 @@ def closet_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in CLOSET_TABS else CLOSET_TABS[0]
     new = [k for k in view.get("new") or [] if k in have]
     progress = {k: v for k, v in (view.get("progress") or {}).items() if k in _closet.BY and k not in have}
-    fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Sev")
+    fig = _sev.svg("hello" if new else "idle", rest=bool(view.get("rest")), look=look, label="Your Pip")
     me = (f'<div class="cl-me"><div class="cl-fig">{fig}</div>{_closet_ons(look)}'
           f'<div class="cl-msg" aria-live="polite">{str(view.get("msg") or "")}</div>'
           + (f'<a class="st-lk" href="#" {_st_click("closetoff")}>Take it all off</a>' if look else "")
@@ -3782,17 +3782,17 @@ def closet_html(view, cfg):
                 secs.append(f'<section class="cl-sec"><h4>{e(g)} <small>{len(todo)} to go</small></h4><div class="cl-grid lk">'
                             + "".join(_earn_tile(t, progress) for t in todo) + "</div></section>")
         main = near_html + ("".join(secs) or f'<div class="cl-next">All {len(_closet.THINGS)} earned.</div>')
-    off = "" if cfg.get("sev", True) else '<div class="st-note">Sev is off in Settings, so nobody sees it for now.</div>'
+    off = "" if cfg.get("sev", True) else '<div class="st-note">Pip is off in Settings, so nobody sees it for now.</div>'
     return (f'<div id="due-crew" class="dc-frame dc-set dc-closet">{_css(cfg)}<style>{SETTINGS_CSS}{SEV_CSS}{CLOSET_CSS}{_sev.CSS}</style>'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>'
-            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("closetclose")}>&lsaquo; Board</a><b>Sev&rsquo;s closet</b>'
+            f'<div class="st-bar"><a class="st-back" href="#" {_st_click("closetclose")}>&lsaquo; Board</a><b>Pip&rsquo;s closet</b>'
             f'<span class="cl-n">{len(have)} of {len(_closet.THINGS)}</span></div>'
             f'<div class="cl-wrap">{me}<div class="cl-main"><div class="cl-pills" role="group" aria-label="Show">{pills}</div>'
             f'{main}</div></div>{off}</div>')
 
 
 def closet_line(news, look, first=False):
-    """3.8.2: the board's line when something new is in the closet: Sev
+    """3.8.2: the board's line when something new is in the closet: Pip
     in it, its name and what earned it, Wear it (or Be one, a costume) and
     the closet. The day the closet comes it's one line for all of them."""
     e = _html.escape
@@ -3801,16 +3801,16 @@ def closet_line(news, look, first=False):
         return ""
     k = news[-1]
     t = _closet.BY[k]
-    fig = _sev.svg("hop", rest=True, look=_closet.wear(look, k) if k not in look else look, label="Your Sev")
+    fig = _sev.svg("hop", rest=True, look=_closet.wear(look, k) if k not in look else look, label="Your Pip")
     if first and len(news) > 1:
-        words = f'<b>Sev&rsquo;s closet is open.</b> Your days so far earned it {len(news)} things.'
+        words = f'<b>Pip&rsquo;s closet is open.</b> Your days so far earned it {len(news)} things.'
         acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">See them</a>'
     elif len(news) > 1:
         names = ", ".join(e(_closet.BY[x]["name"]) for x in news[:-1]) + " and " + e(t["name"])
-        words = f'<b>New for your Sev:</b> {names}.'
+        words = f'<b>New for your Pip:</b> {names}.'
         acts = f'<a class="wc" href="#" onclick="{_pycmd("closet")}">See them</a>'
     else:
-        words = f'<b>New for your Sev: {e(t["name"])}.</b> {e(t["rule"])}.'
+        words = f'<b>New for your Pip: {e(t["name"])}.</b> {e(t["rule"])}.'
         acts = (f'<a class="wc" href="#" onclick="{_pycmd("closetwear:" + k)}">{"Be one" if t["slot"] == _closet.COSTUME else "Wear it"}</a>'
                 f'<a class="wc" href="#" onclick="{_pycmd("closet")}">Closet</a>')
     return (f'<div class="dc-wrap cl-earn"><span class="dc-fig">{_sev.slot(fig, 40)}</span><span>{words}</span>{acts}'
@@ -3818,39 +3818,39 @@ def closet_line(news, look, first=False):
 
 
 def row_sev(row, cfg):
-    """3.8.2: someone's Sev on a crew row, in the emoji's place: their colour
+    """3.8.2: someone's Pip on a crew row, in the emoji's place: their colour
     and their look (mine: this computer's), still until the row is pointed
-    at. My own opens the closet. None with Sev off."""
+    at. My own opens the closet. None with Pip off."""
     if not cfg.get("sev", True):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
-    label = "Your Sev" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Sev', quote=True)
+    label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
     fig = _sev.slot(_sev.svg("idle", rest=True, look=look, label=label), _sev.ROW_SIZE)  # the site's rows too (sev.site_kit)
     style = f'--rs-l:{light};--rs-d:{dark}'
     if row.get("you"):
-        return (f'<a class="dc-rsev" href="#" title="Sev&rsquo;s closet" style="{style}" '
+        return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
     return f'<span class="dc-rsev" style="{style}">{fig}</span>'
 
 
 def card_sev(row, cfg, size=44):
-    """3.8.2: someone's Sev on their profile card, in the emoji's place, as
+    """3.8.2: someone's Pip on their profile card, in the emoji's place, as
     on their row: their colour, their look (mine: this computer's), waving
     once as the card opens. The card sits outside the board, so the colours
-    come with it. None with Sev off."""
+    come with it. None with Pip off."""
     if not cfg.get("sev", True):
         return None
     light, dark = accent_pair(cfg.get("accent") if row.get("you") else row.get("accent"))
     look = my_look(cfg) if row.get("you") else row.get("look")
-    label = "Your Sev" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Sev', quote=True)
+    label = "Your Pip" if row.get("you") else _html.escape(f'{row.get("name") or "?"}’s Pip', quote=True)
 
     def colours(theme, a):
         p = palette(theme, cfg.get("accent", DEFAULT_ACCENT))
         return f"--sv-a: {a}; --sv-line: {p['line']}; --sv-amb: {p['hours']}; --sv-mut: {p['muted']};"
     css = _by_theme(cfg, "#dc-profile .dc-psev", colours("light", light), colours("dark", dark))
     fig = _sev.slot(_sev.svg("hello", look=look, label=label), size)
-    return (f'<style>{css}\n#dc-profile .dc-psev {{ display: inline-block; line-height: 0; margin: 0 12px 0 2px; }}</style>'
+    return (f'<style>{css}\n#dc-profile .dc-psev {{ display: inline-block; flex: none; line-height: 0; margin: 0 2px; }}</style>'
             f'<span class="dc-psev">{fig}</span>')
 
 
@@ -3861,7 +3861,7 @@ def room_html(room):
     out = ""
     fd = room.get("fifteen_done")
     if fd:
-        # 3.8.1: a session of fifteens, ended: Sev stacks a square for each
+        # 3.8.1: a session of fifteens, ended: Pip stacks a square for each
         n = int(fd.get("n") or 0)
         mins = int(fd.get("minutes") or 0)
         cards = fd.get("cards")
@@ -3900,7 +3900,7 @@ def room_html(room):
                 bars += f'<em style="flex:{int(mine.get("brk_min", 5)) or 1}"></em>'
             bars += f'<i style="flex:{int(mine.get("round", 25))}"><u style="width:{float(f) * 100:.1f}%"></u></i>'
         seats = [s for s in (mine.get("seats") or []) if isinstance(s, dict)][:6]
-        faces = ("".join(_seat_html(s) for s in seats) if seats  # 3.8.1: Sev on, each member is their Sev
+        faces = ("".join(_seat_html(s) for s in seats) if seats  # 3.8.1: Pip on, each member is their Pip
                  else "".join(f"<i>{e(str(x))}</i>" for x in (mine.get("initials") or [])[:6]))
         out += (f'<div class="dc-room"><span class="rg{" brk" if mine.get("brk") else ""}" style="--p:{float(mine.get("frac", 0)):.3f}">'
                 f'<b>{e(str(mine.get("label", "")))}</b></span>'
@@ -3916,7 +3916,7 @@ _HEX = _re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def _seat_html(s):
-    """3.8.1: a crew room's member as their Sev (room_model.seats), a 24 px
+    """3.8.1: a crew room's member as their Pip (room_model.seats), a 24 px
     seat like the initials' circles: their accent by day and by night (only
     a colour reaches the style; anything else, the default's), blinking at
     its own moment and doing its own small thing (a SEAT_MOVES one), their
@@ -3936,7 +3936,7 @@ def _seat_html(s):
 
 
 def _fifteen_lobby(m):
-    """3.8.1: my fifteen on the Decks screen: its ring with Sev beside it,
+    """3.8.1: my fifteen on the Decks screen: its ring with Pip beside it,
     and what can be said there (the question too, as the review screen asks it)."""
     e = _html.escape
     st = m.get("state")
@@ -3958,7 +3958,7 @@ def _fifteen_lobby(m):
             f'<span class="rw">{acts}</span></div>')
 
 
-# 3.8.1: Sev on the board wears the board's colours; its size is its body's
+# 3.8.1: Pip on the board wears the board's colours; its size is its body's
 SEV_CSS = """
     #due-crew { --sv-a: var(--dc-accent); --sv-line: var(--dc-line); --sv-amb: var(--dc-hours); --sv-mut: var(--dc-muted); }
     /* its feet on the logo's line, a little shorter than the wordmark is tall */
@@ -3973,14 +3973,14 @@ SEV_CSS = """
       @keyframes dc-sev-pop { 0% { transform: scale(0); } 7% { transform: scale(1.12); } 11%, 90% { transform: scale(1); }
         100% { transform: scale(0); visibility: hidden; } }
     }
-    /* a crew room's members as their Sevs: side by side, not overlapping as the circles do */
+    /* a crew room's members as their Pips: side by side, not overlapping as the circles do */
     #due-crew .dc-room .fc.sv-seats { gap: 3px; align-items: center; }
     #due-crew .dc-room .fc .seat { display: inline-flex; }
     #due-crew .dc-fif .rgw { display: inline-flex; align-items: center; gap: 8px; }
     #due-crew .dc-fif .rt { text-align: left; }
-    /* the session's line: Sev and its stack, the box's own padding around them (stack_reach) */
+    /* the session's line: Pip and its stack, the box's own padding around them (stack_reach) */
     #due-crew .dc-wrap .dc-fig { display: inline-flex; flex: none; }
-    /* signed out: Sev waves beside the words, until you start */
+    /* signed out: Pip waves beside the words, until you start */
     #due-crew .dc-card .dc-so { display: inline-flex; align-items: center; gap: 8px; text-align: left; max-width: 100%; }
     #due-crew .dc-card .dc-hi { flex: none; line-height: 0; }
     #due-crew .dc-sess { text-align: left; }
@@ -4002,7 +4002,7 @@ def _card(cfg, title, body_html, sheet=""):
 
 def signed_out_card(cfg, expired=False, gone=False, sev=None):
     """gone (Q4): the account was deleted after 12 months without activity.
-    sev (3.8.1, Sam's pick): Sev's markup, waving beside the words until
+    sev (3.8.1, Sam's pick): Pip's markup, waving beside the words until
     you start (rooms.signed_out_sev), or None."""
     if gone:
         return _card(cfg, "Welcome back",
@@ -4348,16 +4348,14 @@ def profile_overlay_js(profile):
     and the cheer button becomes a Privacy shortcut. Everything user-sourced
     is escaped here; the JS only injects the built HTML and wires buttons."""
     you = bool(profile.get("you"))
-    sev_fig = profile.get("sev")  # 3.8.2: their Sev where the emoji was, as on their row
-    name = (sev_fig + _html.escape(str(profile.get("name", "?")))) if sev_fig else _label(profile.get("name", "?"), profile.get("emoji"))
+    sev_fig = profile.get("sev")  # 3.8.2: their Pip where the emoji was, as on their row
+    name = _html.escape(str(profile.get("name", "?"))) if sev_fig else _label(profile.get("name", "?"), profile.get("emoji"))
     kicker = ""
     if you:
         kicker = ('<div style="font-size: 10px; font-weight: 700; '
                   'letter-spacing: 0.09em; text-transform: uppercase; '
                   'opacity: 0.6; margin-bottom: 6px;">As your crew sees it</div>')
-    # Sev stands on the name's line, room above for a hat or a balloon
-    stand = " display: inline-flex; align-items: flex-end; padding-top: 14px;" if sev_fig else ""
-    bits = [f'<span style="font-size: 15px; font-weight: 700;{stand}">{name}</span>']
+    bits = [f'<span style="font-size: 15px; font-weight: 700;">{name}</span>']
     if profile.get("streak") is not None:
         bits.append(f'<span style="opacity: 0.7; font-size: 12px;">'
                     f'{int(profile["streak"])}-day streak</span>')
@@ -4365,8 +4363,10 @@ def profile_overlay_js(profile):
     if ago_txt:
         bits.append(f'<span style="opacity: 0.55; font-size: 11px; '
                     f'margin-left: auto;">({_html.escape(ago_txt)})</span>')
-    head = (kicker + '<div style="display: flex; align-items: baseline; gap: 8px;">'
-            + "".join(bits) + "</div>")
+    head = '<div style="display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0;">' + "".join(bits) + "</div>"
+    if sev_fig:  # 3.8.2: Pip beside the line, centred on it, with room above for a hat or a balloon
+        head = f'<div style="display: flex; align-items: center; gap: 10px; padding-top: 10px;">{sev_fig}{head}</div>'
+    head = kicker + head
     today = profile.get("today")
     if today and not profile.get("paused"):
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">'
@@ -4397,9 +4397,9 @@ def profile_overlay_js(profile):
         link = ('style="color: inherit; text-decoration: none; '
                 'border-bottom: 1px dotted currentColor;"')
         closet = ""
-        if sev_fig:  # 3.8.2: dress your Sev; the emoji stays for squads, bingo and older add-ons
+        if sev_fig:  # 3.8.2: dress your Pip; the emoji stays for squads, bingo and older add-ons
             closet = (f'<a href="#" {link} onclick="document.getElementById(\'dc-profile\').remove();{_pycmd("closet")}">'
-                      f'Sev&rsquo;s closet</a> &middot; ')
+                      f'Pip&rsquo;s closet</a> &middot; ')
         head += (f'<div style="font-size: 12px; opacity: 0.8; padding: 4px 0 0;">{closet}'
                  f'<a href="#" {link} onclick="{_pycmd("emoji")}">'
                  f'{"Change emoji" if profile.get("emoji") else "Pick an emoji"}</a></div>')

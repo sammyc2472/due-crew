@@ -1,15 +1,15 @@
-"""3.8.2: Sev's closet (the Fun Round, round two; Sam: "costumes tied to
+"""3.8.2: Pip's closet (the Fun Round, round two; Sam: "costumes tied to
 achievements ... more more more"). Pure: no aqt.
 
-Things Sev earns by showing up, coming back, studying together, finishing a
+Things Pip earns by showing up, coming back, studying together, finishing a
 plan and caring for your own cards. Never for getting cards right (Again
 stays honest), never for one big day (the big review counts are a whole Anki
 life's), never bought, never taken away. What's earned is the account's
-(sev_closet: {thing: the day it came}); what Sev has on is too (sev_look),
-and it rides with the accent to mutual friends, whose boards show Sev
+(sev_closet: {thing: the day it came}); what Pip has on is too (sev_look),
+and it rides with the accent to mutual friends, whose boards show Pip
 wearing it.
 
-A look is one thing in each place on Sev (SLOTS): a hat, something on the
+A look is one thing in each place on Pip (SLOTS): a hat, something on the
 face, on the body, in the hand, on the back. A thing replaces whatever was
 in its place, and a thing that reaches into another place too (the winter
 earmuffs come with a scarf) takes that place as well, so two things never
@@ -23,7 +23,7 @@ follow the same rules.
 The facts each thing needs (THINGS' `need`) are worked out in Anki:
 from_days and from_hours read the revlog's days and hours (closet_flow asks
 once a day), and the rest is the board's and a few tallies this computer
-keeps (wrap.json). The drawings are closet_art's; sev.py puts them on Sev.
+keeps (wrap.json). The drawings are closet_art's; sev.py puts them on Pip.
 """
 
 import datetime as _dt
@@ -94,7 +94,7 @@ _T = (
     ("sunhat", "head", "Seasons", "Sun hat", "First day of summer", ("summer", 1), {"when": "21 Jun"}),
     ("piehat", "head", "Secret", "A pie", "Pi day: 14 March", ("pi", 1)),
     ("catears", "head", "Secret", "Cat ears", "A Friday the 13th", ("fri13", 1)),
-    ("cakehat", "head", "Secret", "Birthday cake", "A year with your Sev", ("sev_days", 365)),
+    ("cakehat", "head", "Secret", "Birthday cake", "A year with your Pip", ("sev_days", 365)),
     ("popper", "hand", "Secret", "Party popper", "Studied as the year turned", ("yearturn", 1)),
     # whole costumes
     ("dino", COSTUME, "Showing up", "Dinosaur", "200 days in a row", ("run", 200)),
@@ -124,7 +124,7 @@ UNITS = {"run": "days in a row", "days": "days studied", "mornings": "mornings b
 
 
 def places(k):
-    """The places on Sev a thing takes: its own, and any it reaches into."""
+    """The places on Pip a thing takes: its own, and any it reaches into."""
     t = BY.get(k)
     if not t:
         return frozenset()
@@ -173,15 +173,22 @@ def shown(look):
     return [c] if c else clean(look)
 
 
+DOWN = (4, 12)  # a held thing set down: on the ground at Pip's right (Sam: it never just goes)
+
+
 def art(look, pose_holds=False):
     """The look's drawing for sev.py: (back, front, hand). hand: what the
     right hand holds, drawn at the hand of a hanging arm (sev moves it to
-    the hand's place), "" when the pose's hands are busy (pose_holds)."""
+    the hand's place). While the pose's hands are busy (pose_holds: the
+    card in a fifteen, the clock, a gift) it's set down beside Pip instead,
+    behind it, so a look never loses a thing for a moment."""
     order = {s: i for i, s in enumerate(SLOTS + (COSTUME,))}
     ks = sorted(shown(look), key=lambda k: order.get(BY[k]["slot"], 0))
     back = "".join(ART[k][1] for k in ks if k in ART)
     front = "".join(ART[k][0] for k in ks if k in ART and BY[k]["slot"] != "hand")
-    hand = "" if pose_holds else "".join(ART[k][0] for k in ks if k in ART and BY[k]["slot"] == "hand")
+    hand = "".join(ART[k][0] for k in ks if k in ART and BY[k]["slot"] == "hand")
+    if pose_holds and hand:
+        back, hand = back + f'<g class="cl-down" transform="translate({DOWN[0]} {DOWN[1]})">{hand}</g>', ""
     return back, front, hand
 
 

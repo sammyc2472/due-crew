@@ -1,8 +1,8 @@
-"""Sev, the square from the logo's seven days (3.8.1, the "Sev Design" page:
+"""Pip, the square from the logo's seven days (3.8.1, the "Pip Design" page:
 Block, Sam's picks: no belt, big round eyes, stubby arms, cheeks only when
 a cheer lands). Pure: no aqt.
 
-One drawing for every pose, and one motion sheet (CSS). The board draws Sev
+One drawing for every pose, and one motion sheet (CSS). The board draws Pip
 from here, and the room's widgets get its markup from here as data, so it's
 never drawn twice and there's no JS twin; the week picture card draws
 `still`, and the site's cards.js keeps a copy of it the suite checks. 3.8.2:
@@ -74,11 +74,11 @@ ONCE = frozenset({"peek", "ready", "ring", "again", "hop", "stack", "cheer", "in
                   "twirl", "shuffle", "jump", "hug", "giftspin", "walkin", "popup", "point", "bigring",
                   "wobble", "catch", "knock", "bounce"})
 
-LABELS = {"idle": "Sev", "nap": "Sev, napping", "peek": "Sev, peeking in", "ready": "Sev: let's go",
-          "focus": "Sev, heads down", "ring": "Sev: fifteen's up", "stretch": "Sev, stretching",
-          "breathe": "Sev, breathing", "rest": "Sev, resting", "again": "Sev: back to it",
-          "hop": "Sev: day done", "stack": "Sev: session done", "cheer": "Sev: a cheer",
-          "exam": "Sev: good luck", "away": "Sev, away", "hello": "Sev"}
+LABELS = {"idle": "Pip", "nap": "Pip, napping", "peek": "Pip, peeking in", "ready": "Pip: let's go",
+          "focus": "Pip, heads down", "ring": "Pip: fifteen's up", "stretch": "Pip, stretching",
+          "breathe": "Pip, breathing", "rest": "Pip, resting", "again": "Pip: back to it",
+          "hop": "Pip: day done", "stack": "Pip: session done", "cheer": "Pip: a cheer",
+          "exam": "Pip: good luck", "away": "Pip, away", "hello": "Pip"}
 
 # an angle per arm, from hanging straight down
 _ARMS = {"down": (32, -32), "up": (155, -155), "wave": (32, -150), "hold": (-50, 50), "out": (100, -100),
@@ -215,7 +215,7 @@ def _fx(kinds, stack=3):
         elif k == "sparks":
             front += _spark(t[0] - 15, t[1] - 10, 2.8, "s1") + _spark(t[0] + 15, t[1] - 14, 2.4, "s2")
         elif k == "box":
-            # breathe with Sev: a square, four counts a side
+            # breathe with Pip: a square, four counts a side
             back += (f'<rect x="8" y="8" width="64" height="64" rx="12" fill="none" style="stroke:{LINE}" '
                      'stroke-width="1.6" stroke-dasharray="3 3"/>'
                      f'<circle class="sv-boxdot" cx="8" cy="8" r="3.2" style="fill:{ACC}"/>')
@@ -228,13 +228,14 @@ def _fx(kinds, stack=3):
 
 def busy(pose):
     """Whether `pose`'s hands are full (a card, the clock, a gift, the
-    case, fingers crossed): then the closet's held thing waits."""
+    case, fingers crossed): then the closet's held thing is set down beside
+    it (closet.art)."""
     p = POSES.get(pose) or POSES["idle"]
     return bool(p.get("prop")) or p["arms"] in ("hold", "cross")
 
 
 def _figure(p, blush, look=None, worn=None):
-    """Sev itself: feet, body, face, arms and what it holds. Every drawing's.
+    """Pip itself: feet, body, face, arms and what it holds. Every drawing's.
     look (3.8.2): what it has on from the closet: behind it, over it, in its
     hand. worn: that look already drawn, (back, front, hand), in its place
     (site_kit's blanks)."""
@@ -250,7 +251,7 @@ def _figure(p, blush, look=None, worn=None):
 
 
 def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack=None, look=None, worn=None):
-    """Sev in `pose` (POSES), moving as `moment` (its own by default). rest:
+    """Pip in `pose` (POSES), moving as `moment` (its own by default). rest:
     a moment that happens once has played already; it rests (and blinks).
     cheeks: blushing, which only a cheer does (Sam's pick) unless asked.
     stack: squares on its head, one a fifteen (three at most). look (3.8.2):
@@ -262,19 +263,19 @@ def svg(pose, moment=None, size=None, rest=False, label=None, cheeks=None, stack
     fx_back, fx_front = _fx(p.get("fx") or (), max(1, min(3, int(stack or 3))))
     dims = f' width="{int(size)}" height="{int(size)}"' if size else ""
     cls = f"sv m-{m}" + (" rest" if rest and m in ONCE else "")
-    return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Sev")}">'
+    return (f'<svg class="{cls}"{dims} viewBox="0 0 80 80" role="img" aria-label="{label or LABELS.get(pose, "Pip")}">'
             f'<ellipse class="sv-shadow" cx="40" cy="74.5" rx="16" ry="2.6" style="fill:{LINE}"/>{fx_back}'
             f'{_figure(p, blush, look, worn)}{fx_front}</svg>')
 
 
 def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None, look=None):
-    """Sev in `pose` for a picture: an SVG of its own (it has the xmlns,
+    """Pip in `pose` for a picture: an SVG of its own (it has the xmlns,
     width and height), each colour given or the drawing's own fallback, no
-    classes, no motion. Just Sev: no shadow (it stands on what's under
+    classes, no motion. Just Pip: no shadow (it stands on what's under
     it) and none of the moment's effects (they're motion). The week card
     draws it (sharecard), in Qt here and on the site's canvas, whose
     cards.js keeps a copy the suite checks against this. look (3.8.2): what
-    it has on from the closet; the copy draws Sev without one."""
+    it has on from the closet; the copy draws Pip without one."""
     p = POSES.get(pose) or POSES["idle"]
     given = {"a": accent, "line": line, "ink": ink, "amb": amb, "mut": mut, "blush": blush}
     art = re.sub(r"var\(--sv-([a-z]+),(#[0-9a-f]+)\)", lambda m: given.get(m.group(1)) or m.group(2), _figure(p, p.get("cheeks"), look))
@@ -282,7 +283,7 @@ def still(pose, accent=None, line=None, ink=None, amb=None, mut=None, blush=None
             + re.sub(r' class="[^"]*"', "", art) + "</svg>")
 
 
-# Sev's body sits low in its drawing (its effects need the room above), so
+# Pip's body sits low in its drawing (its effects need the room above), so
 # a box the drawing's size centres it too low and too loose. A slot is the
 # body's own size: SLOT[0] of the drawing square, with the drawing placed so
 # the body (arms, feet) sits in its middle; effects spill out of it. The
@@ -298,16 +299,16 @@ def slot(markup, size):
             + "</span>")
 
 
-# 3.8.2: duecrew.com's crew rows show each person's Sev as the add-on's do
-# (board.row_sev). The site never draws Sev itself: site/public/sev.js holds
+# 3.8.2: duecrew.com's crew rows show each person's Pip as the add-on's do
+# (board.row_sev). The site never draws Pip itself: site/public/sev.js holds
 # this kit (tools/gen_sev_js.py writes it) and only fills in its blanks; the
 # suite checks the file holds this kit, and that what it fills in is svg()'s.
-ROW_SIZE = 30  # px: a crew row's Sev (board.row_sev), in its slot()
+ROW_SIZE = 30  # px: a crew row's Pip (board.row_sev), in its slot()
 BLANKS = ("%B%", "%F%", "%H%")  # where a look's back, front and held things go
 
 
 def site_kit():
-    """A crew row's Sev for the site, as data. row: the still idle Sev in
+    """A crew row's Pip for the site, as data. row: the still idle Pip in
     its slot, BLANKS where the look goes, its colours the page's (--sv-a and
     the rest, as svg()'s); held: what puts a held thing (its %H%) in the
     right hand; slots, costume, max: closet's SLOTS (drawn in that order,
@@ -328,34 +329,34 @@ def site_kit():
 
 
 def stack_reach(n, size):
-    """How far the squares Sev stacks (n of them, three at most) and its
+    """How far the squares Pip stacks (n of them, three at most) and its
     shadow reach out of its slot(), in px: (above, below). The session's
-    line pads its Sev by these, so the box fits what's drawn (one square
-    or three) and its words centre on Sev and its stack together."""
+    line pads its Pip by these, so the box fits what's drawn (one square
+    or three) and its words centre on Pip and its stack together."""
     k, y, w = size / 80, round(size * SLOT[2]), round(size * SLOT[0])
     top = _TOP[1] - 13 - 11 * (max(1, min(3, int(n or 1))) - 1)  # the highest square's top (_fx)
     return max(0, math.ceil(-(y + top * k))), max(0, math.ceil(y + 77.1 * k - w))  # 77.1: the shadow's bottom
 
 
-# 3.8.1: in a study room each member is their Sev (room_model.seats). They
+# 3.8.1: in a study room each member is their Pip (room_model.seats). They
 # started at different moments, so the blinks never line up: each gets its
 # own place in the blink (--sv-d, a negative delay), a step apart.
 BLINK = 4.6  # s: the blink's cycle (sv-blink, below)
 
 
 def started(i):
-    """The i-th Sev of several: its blink's delay in s (0, then back a step each, round the cycle)."""
+    """The i-th Pip of several: its blink's delay in s (0, then back a step each, round the cycle)."""
     return -round(i * 1.7 % BLINK, 2) or 0
 
 
-# 3.8.1 (Sam): by the logo Sev is a moment, not a fixture. It comes when
+# 3.8.1 (Sam): by the logo Pip is a moment, not a fixture. It comes when
 # something just happened, plays it, and goes; the rest of the time the
 # logo is alone. LOGO_SECONDS: how long it stays.
 LOGO_SECONDS = 5
 
 
 def moment(cheered=False, back=False, exam_eve=False, day_done=False):
-    """What brings Sev beside the logo, or None: a cheer that just landed,
+    """What brings Pip beside the logo, or None: a cheer that just landed,
     the first day back from away (a wave), the night before an exam (a
     star), the day done (a hop, the week's squares flying). Never a mood
     that lasts, never cross."""
@@ -370,7 +371,7 @@ def moment(cheered=False, back=False, exam_eve=False, day_done=False):
     return None
 
 
-# 3.8.1 (Sam: "variety!"): each place Sev goes has its mix of moves, the
+# 3.8.1 (Sam: "variety!"): each place Pip goes has its mix of moves, the
 # place's own first, as (pose, moment). Each time it comes it plays a
 # different one, never the same twice in a row (pick: at random, not the
 # last; nth: in turn). Where it stays a while (a fifteen, a break, a room's
@@ -392,7 +393,7 @@ SEAT_MOVES = ("idle", "sread", "snod", "sreach", "slook")
 
 
 def moves(place):
-    """The moments Sev can play at `place` (a MOVES key, or any pose: just its own), its own first."""
+    """The moments Pip can play at `place` (a MOVES key, or any pose: just its own), its own first."""
     return tuple(m for _p, m in MOVES[place]) if place in MOVES else (MOMENT.get(place, "idle"),)
 
 
@@ -409,7 +410,7 @@ def nth(place, n):
 
 
 def move(place, m=None, **kw):
-    """Sev at `place` playing its move `m` (its own when m isn't one of
+    """Pip at `place` playing its move `m` (its own when m isn't one of
     them), labelled as the place is; the rest goes to svg()."""
     pose, mm = next(((p, x) for p, x in MOVES.get(place, ()) if x == m), (place, None))
     kw.setdefault("label", LABELS.get(place))
@@ -494,7 +495,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
     75% { transform: rotate(-6deg); } }
   @keyframes sv-startle { 0% { transform: none; } 15% { transform: translateY(-6px) scale(.95, 1.06); } 40% { transform: scale(1.05, .95); } 60%, 100% { transform: none; } }
   @keyframes sv-rings { 0% { opacity: 0; transform: scale(.8); } 15% { opacity: 1; } 100% { opacity: 0; transform: scale(1.35); } }
-  /* the break: a stretch, or breathe with Sev (a square, four counts a side) */
+  /* the break: a stretch, or breathe with Pip (a square, four counts a side) */
   .sv.m-stretch .sv-body { animation: sv-stretch 4s ease-in-out infinite; }
   .sv.m-stretch .sv-armL { animation: sv-armwig 4s ease-in-out infinite; }
   .sv.m-stretch .sv-armR { animation: sv-armwig 4s ease-in-out infinite reverse; }
@@ -558,7 +559,7 @@ svg.sv { overflow: visible; display: block; flex: none; }
   @keyframes sv-bob { 0%, 50%, 100% { transform: none; } 25%, 75% { transform: translateY(-2.5px); } }
   @keyframes sv-step { 0%, 50%, 100% { transform: none; } 25% { transform: translateY(-3px); } }
   @keyframes sv-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-  /* hello: Sev switched on in Settings pops in and waves */
+  /* hello: Pip switched on in Settings pops in and waves */
   .sv.m-in .sv-body { animation: sv-in .5s cubic-bezier(.34, 1.56, .64, 1) 1 both; }
   .sv.m-in .sv-armR { animation: sv-wave 1.6s ease-in-out .3s 1 both; }
   @keyframes sv-in { 0% { transform: scale(0); } 70% { transform: scale(1.14); } 100% { transform: scale(1); } }

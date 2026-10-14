@@ -345,7 +345,7 @@ class ApiClient:
                 "emoji": clean_emoji(p.get("emoji")),
                 # 3.8.1: a crewmate's accent (mutual friends only); mine is this computer's
                 "accent": "" if you else clean_accent(p.get("accent")),
-                # 3.8.2: what their Sev has on (mutual friends only); mine is this computer's
+                # 3.8.2: what their Pip has on (mutual friends only); mine is this computer's
                 "look": [] if you else clean_look(p.get("look")),
                 "you": you,
                 "paused": bool(week.get("paused")),

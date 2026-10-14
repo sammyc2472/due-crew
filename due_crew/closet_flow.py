@@ -1,4 +1,4 @@
-"""3.8.2: Sev's closet, the glue. closet.py says what a thing needs; this
+"""3.8.2: Pip's closet, the glue. closet.py says what a thing needs; this
 finds out what you've done:
 
 - your reviews: the days and hours studied, read from the revlog in one
@@ -9,7 +9,7 @@ finds out what you've done:
   rooms with your crew, cheers you sent and got, a whole crew's day, days
   with nothing left due, cards you added, bingo lines.
 
-What's earned goes to the account (sev_closet), and what Sev has on
+What's earned goes to the account (sev_closet), and what Pip has on
 (sev_look): both follow you to every computer, and the look rides with your
 accent to mutual friends. Nothing new is asked of the server: a new thing
 is a settings save, the same one any setting makes.
@@ -218,7 +218,7 @@ def revlog_facts(col):
 
 def board_facts(c, entries, me_uid, plans, progress, today, have):
     """What the board knows: squads (founded one?), plans followed and done,
-    a year with my Sev. Pure over its arguments."""
+    a year with my Pip. Pure over its arguments."""
     squads = [q for q in (c.get("squads") or []) if isinstance(q, dict)]
     out = {"squads": len(squads), "founder": int(any(me_uid and q.get("founder") == me_uid for q in squads)),
            "plans": len(plans or [])}
@@ -271,7 +271,7 @@ def have(c=None):
 
 
 def look(c=None):
-    """What my Sev has on: things I have, as the closet draws them."""
+    """What my Pip has on: things I have, as the closet draws them."""
     c = c or cfg()
     mine = have(c)
     return [k for k in closet.clean(c.get(LOOK_KEY)) if k in mine]

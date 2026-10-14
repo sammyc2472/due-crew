@@ -452,7 +452,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Sev’s closet…", "Show on the Decks screen",
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Pip’s closet…", "Show on the Decks screen",
                 "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")
@@ -539,8 +539,8 @@ def main(out):
                         raise RuntimeError(f"share card: no {kind} {size} picture")
                     tag = data.get("year") if kind == "year" else ""
                     img.save(os.path.join(out, f"share-card-{kind}{tag}-{size}-{look}.png"))
-        # 3.8.1: Sev hops across the week (Settings › Sev on): the sample week, one with two days off (the
-        # mock's), today's card; Sev drawn by QtSvg in the card's accent, on the last day studied
+        # 3.8.1: Pip hops across the week (Settings › Pip on): the sample week, one with two days off (the
+        # mock's), today's card; Pip drawn by QtSvg in the card's accent, on the last day studied
         mon = datetime.date(2026, 10, 12)
         two_off = {(mon + datetime.timedelta(days=i)).isoformat(): (60 + 23 * i, (14 + 6 * i) * 60000)
                    for i, x in enumerate((1, 1, 0, 1, 1, 0, 1)) if x}
@@ -554,10 +554,10 @@ def main(out):
                     ops = S.draw(kind, size, data, on, look, lambda s, px, w: 0)[2]
                     sev = [o for o in ops if o[0] == "sev"]
                     if len(sev) != 1:
-                        raise RuntimeError(f"share card: Sev isn't on the {name} card")
+                        raise RuntimeError(f"share card: Pip isn't on the {name} card")
                     _o, _pose, x, y, z, color = sev[0]
                     if img.pixelColor(int(x + z / 2), int(y + z * 38 / 80)).name() != color:  # its forehead, in the accent
-                        raise RuntimeError(f"share card: Sev not drawn on the {name} card ({size}, {look})")
+                        raise RuntimeError(f"share card: Pip not drawn on the {name} card ({size}, {look})")
                     img.save(os.path.join(out, f"share-card-{name}-sev-{size}-{look}.png"))
 
     def why():
@@ -619,14 +619,14 @@ def main(out):
         from due_crew.ui.away_dialog import AwayDialog, days_words
         dlg = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240, sev=True)
         settle()
-        # 3.8.1: Sev waves from its corner (still), in the accent: its forehead's pixel says QtSvg drew it
+        # 3.8.1: Pip waves from its corner (still), in the accent: its forehead's pixel says QtSvg drew it
         from due_crew.ui import accent
         if dlg.sev is None:
-            raise RuntimeError("away: no Sev with Sev on")
+            raise RuntimeError("away: no Pip with Pip on")
         img = dlg.sev.pixmap().toImage()
         k = img.width() / 64
         if img.pixelColor(int(32 * k), int(30 * k)).name() != accent():
-            raise RuntimeError(f"away: Sev isn't in the accent: {img.pixelColor(int(32 * k), int(30 * k)).name()}")
+            raise RuntimeError(f"away: Pip isn't in the accent: {img.pixelColor(int(32 * k), int(30 * k)).name()}")
         labels = dlg.findChildren(QtWidgets.QLabel)
         if any(w.textFormat() != QtCore.Qt.TextFormat.PlainText for w in labels):
             raise RuntimeError("away: the plan's name went in as markup")
@@ -637,7 +637,7 @@ def main(out):
         shoot(dlg, os.path.join(out, "plan-welcome-back.png"))
         plain = AwayDialog(None, "MS2 <i>Block</i> 1", ["2026-10-05", "2026-10-06", "2026-10-07"], 4, 240)
         if plain.sev is not None:
-            raise RuntimeError("away: Sev with Sev off")
+            raise RuntimeError("away: Pip with Pip off")
         shoot(plain, os.path.join(out, "plan-welcome-back-plain.png"))
         dlg = AwayDialog(None, "Cardio", [f"2026-10-{d:02d}" for d in range(5, 15)], 9, 610)
         dlg.show()

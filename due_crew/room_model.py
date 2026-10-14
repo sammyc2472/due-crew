@@ -261,17 +261,17 @@ def done_share(done):
 
 # ---- the widgets ----
 
-# 3.8.1: Sev in a fifteen's widgets, drawn by sev.py and handed over as markup
+# 3.8.1: Pip in a fifteen's widgets, drawn by sev.py and handed over as markup
 FIFTEEN_SEV = ("focus", "ready", "again", "ring", "rest", "stretch", "breathe")
 # the places in a fifteen whose moves take turns, a round each (Sam: "variety!")
 FIFTEEN_VARY = ("focus", "ring", "stretch")
 
 
 def _sevs(keys, on, vary=(), seat=False, look=()):
-    """Sev's markup for the widgets by key, and its motion sheet. vary: places
+    """Pip's markup for the widgets by key, and its motion sheet. vary: places
     whose other moves come too ("focus.nod"), with their turns, {place:
     [key, ...]}, its own first; seat: a room's seat moves too ("idle.snod").
-    look (3.8.2): what my Sev has on from the closet."""
+    look (3.8.2): what my Pip has on from the closet."""
     if not on:
         return None, "", None
     out, turns = {k: _sev.svg(k, look=look) for k in keys}, {}
@@ -304,7 +304,7 @@ def _pair_of(name):
 
 
 def seats(ms, entries, my_pair, my_look=()):
-    """3.8.1: a crew room's members (members()) as their Sevs, in order:
+    """3.8.1: a crew room's members (members()) as their Pips, in order:
     [{n: the name, its label (text, never markup), a: [light, dark], d: s,
     l: their look}]. A crewmate wears their accent (the add-on's colours
     for it; one it doesn't know, the default's), I wear mine, and each
@@ -325,8 +325,8 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
     """What every widget needs, all plain values. side: the chip's end of
     the top bar, "right" or "left". 3.8.1, a fifteen: sev (the switch in
     Settings), brk_pose ("breathe" or "stretch"), and for its question the
-    cards answered in the fifteen and in the session. A crew room with Sev
-    on: its card shows each member as their Sev (seats)."""
+    cards answered in the fifteen and in the session. A crew room with Pip
+    on: its card shows each member as their Pip (seats)."""
     ms = members(entries, room)
     start = _parse(room["start"])
     fifteen = is_fifteen(room)
@@ -334,7 +334,7 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
     sevs, css, turns = (_sevs(FIFTEEN_SEV, sev, FIFTEEN_VARY, look=look) if fifteen
                         else _sevs(("idle",), bool(seat), seat=True))
     for i, s in enumerate(seat):
-        if s["l"] and sevs is not None:  # 3.8.2: a seat whose Sev has something on is its own drawing
+        if s["l"] and sevs is not None:  # 3.8.2: a seat whose Pip has something on is its own drawing
             s["k"] = f"seat.{i}"
             sevs[s["k"]] = _sev.svg("idle", s["m"] if s["m"] in _sev.SEAT_MOVES else "idle", look=s["l"])
     return {"start": int(start.timestamp() * 1000), "rounds": room["rounds"],
@@ -354,7 +354,7 @@ def widget_data(room, entries, accent_pair, compact=False, side="right", sev=Tru
 
 def start_data(accent_pair, side="right", sev=True, nap=False, compact=False, look=()):
     """3.8.1: ▶ Fifteen? in the top bar, whenever I'm in no room. look
-    (3.8.2): what my Sev has on from the closet."""
+    (3.8.2): what my Pip has on from the closet."""
     sevs, css, _turns = _sevs(("idle", "nap"), sev, look=look)
     return {"accent": list(accent_pair), "side": chip_side(side), "compact": bool(compact),
             "nap": bool(nap), "sev": sevs, "sevcss": css, "slot": list(_sev.SLOT)}
@@ -575,13 +575,13 @@ _RUNTIME = r"""
     return f;
   }
   function send(cmd) { try { pycmd('duecrew:' + cmd + '|' + __KEY__); } catch (e) {} }
-  // 3.8.1: Sev, drawn by sev.py: our own markup, never a name, so it goes in as markup
+  // 3.8.1: Pip, drawn by sev.py: our own markup, never a name, so it goes in as markup
   var FIF = D.kind === 'fifteen';
   if (D.sev && D.sevcss && !document.getElementById('dc-sev-css')) {
     var css = document.createElement('style'); css.id = 'dc-sev-css'; css.textContent = D.sevcss;
     (document.head || document.body).appendChild(css);
   }
-  // a slot the body fills (sev.SLOT), so Sev centres on its neighbours; full:
+  // a slot the body fills (sev.SLOT), so Pip centres on its neighbours; full:
   // the whole drawing (the question and the break have room for its effects)
   function sev(key, size, full) {
     var k = D.slot || [0.6, -0.2, -0.32], s = full ? size : Math.round(size * k[0]);
@@ -599,7 +599,7 @@ _RUNTIME = r"""
     w.set(key);
     return w;
   }
-  // 3.8.1: a crew room's members as their Sevs (room_model.seats): each in its
+  // 3.8.1: a crew room's members as their Pips (room_model.seats): each in its
   // person's accent (by day or night, as mine), each blinking at its own moment;
   // a name is only ever a label, set as text
   function seats(size) {
@@ -618,7 +618,7 @@ _RUNTIME = r"""
   function fsub(p) {
     return p.state === 'break' ? 'fifteen ' + (p.round + 1) + ' at ' + hm(p.until) : p.state === 'ask' ? 'done' : mins(p.left) + ' min left';
   }
-  // the little Sev's moment: heads down in a fifteen (after a jump or a shake-out
+  // the little Pip's moment: heads down in a fifteen (after a jump or a shake-out
   // as it starts), resting or stretching on a break, the clock at the question
   function fkey(p, fresh) {
     if (p.state === 'ask') { return vk('ring', p.round); }
@@ -647,6 +647,7 @@ _RUNTIME = r"""
     var sq = FIF && D.sev ? sev('focus', 32) : squares(c, 34), rg = ring(20, c), tx = el('span', 'display:grid;line-height:1.1;'),
         t1 = el('b', 'font-size:11.5px;', D.title), t2 = el('small', 'font-size:10.5px;color:' + c.mut + ';'), fc = faces(c, 18);
     tx.appendChild(t1); tx.appendChild(t2);
+    if (sq.set) { sq.style.marginRight = '5px'; }  // 3.8.2: what Pip set down to hold its card, clear of the clock
     root.appendChild(sq); root.appendChild(rg); root.appendChild(tx); root.appendChild(fc);
     if (D.compact) { tx.style.display = fc.style.display = 'none'; if (!sq.set) { sq.style.display = 'none'; } root.style.padding = '0 3px'; }
     root.onclick = function () { send('roomcard'); };
@@ -662,7 +663,7 @@ _RUNTIME = r"""
     root = el('span', 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding-left:10px;border-left:1px solid ' + c.line +
       ';font:12px -apple-system,Segoe UI,sans-serif;color:' + c.mut + ';vertical-align:middle;cursor:pointer;white-space:nowrap;');
     var sv2 = FIF && D.sev ? sev('focus', 30) : null, rg2 = ring(20, c), tx2 = el('span');
-    if (sv2) { root.appendChild(sv2); }
+    if (sv2) { sv2.style.marginRight = '5px'; root.appendChild(sv2); }
     root.appendChild(rg2); root.appendChild(tx2);
     root.onclick = function () { send('roomcard'); };
     cell.appendChild(root);
@@ -719,8 +720,8 @@ _RUNTIME = r"""
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var box = el('div', 'display:grid;justify-items:center;gap:14px;max-width:520px;padding:20px;');
     var logo = el('span', 'display:flex;align-items:center;gap:8px;');
-    // 3.8.1: a fifteen's break is Sev's: breathe along (a square, four counts a side), or stretch
-    // breathing draws its square around Sev: the whole drawing; a stretch needs only Sev's own room
+    // 3.8.1: a fifteen's break is Pip's: breathe along (a square, four counts a side), or stretch
+    // breathing draws its square around Pip: the whole drawing; a stretch needs only Pip's own room
     var bs = FIF && D.sev ? (D.brk_pose === 'stretch' ? sev(vk('stretch', phase(Date.now()).round), 170) : sev('breathe', 180, true)) : null;
     if (bs) { bs.style.marginBottom = '10px'; }  // its shadow (or the square's "out") clear of the ring
     logo.appendChild(bs || squares(c, 110));
@@ -742,7 +743,7 @@ _RUNTIME = r"""
     }
     box.appendChild(logo); box.appendChild(rg4); box.appendChild(h); box.appendChild(p1); box.appendChild(faces(c, 32)); box.appendChild(btns);
     box.appendChild(el('small', 'color:' + c.mut + ';font-size:12px;', FIF ? (D.brk_pose === 'stretch' ?
-      'Stand up, stretch, some water. Look at something far away.' : 'Breathe with Sev: in for four, hold, out for four, hold.') :
+      'Stand up, stretch, some water. Look at something far away.' : 'Breathe with Pip: in for four, hold, out for four, hold.') :
       'The break waited for you to finish your card.'));
     root.appendChild(box);
     var ended = false;
@@ -768,7 +769,7 @@ _RUNTIME = r"""
     root = el('div', 'position:fixed;inset:0;background:' + c.bg + ';color:' + c.ink + ';display:grid;place-items:center;z-index:9999;' +
       'font:16px -apple-system,Segoe UI,sans-serif;text-align:center;');
     var qb = el('div', 'display:grid;justify-items:center;gap:12px;max-width:520px;padding:20px;');
-    // Sev with the clock (its shadow clear of the words), or with Sev off the logo's squares
+    // Pip with the clock (its shadow clear of the words), or with Pip off the logo's squares
     if (D.sev) { var qs0 = sev(vk('ring', D.rounds), 170); qs0.style.marginBottom = '10px'; qb.appendChild(qs0); } else { qb.appendChild(squares(c, 110)); }
     var n = D.rounds, cap = n >= D.max;
     qb.appendChild(el('div', 'font:600 28px -apple-system,Segoe UI,sans-serif;', 'That’s fifteen.'));
@@ -796,10 +797,11 @@ _RUNTIME = r"""
   } else if (KIND === 'start') {
     // 3.8.1: ▶ Fifteen? in the top bar, at the chip's end, whenever I'm in no room
     root = el('div', 'position:fixed;__SIDE__:10px;top:50%;transform:translateY(-50%);height:26px;display:flex;align-items:center;gap:6px;' +
-      'padding:0 10px 0 6px;border:1px solid ' + c.line + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
+      'padding:0 10px 0 9px;border:1px solid ' + c.line + ';border-radius:14px;background:' + c.bg + ';color:' + c.ink +
       ';font:600 12px -apple-system,Segoe UI,sans-serif;cursor:pointer;z-index:99;white-space:nowrap;');
     root.title = 'Fifteen minutes, now. At the end, one question: a break and another?';
-    if (D.sev) { root.appendChild(sev(D.nap ? 'nap' : 'idle', 32)); }
+    // 3.8.2: what Pip holds, or a costume's tail, reaches past its slot: room before the ▶
+    if (D.sev) { var sw = sev(D.nap ? 'nap' : 'idle', 32); sw.style.marginRight = '4px'; root.appendChild(sw); }
     root.appendChild(el('span', 'color:' + c.a + ';font-size:10px;margin-left:2px;', '▶'));
     var word = el('span', '', 'Fifteen?');
     root.appendChild(word);
@@ -816,7 +818,7 @@ _RUNTIME = r"""
     var hd = el('div', 'display:flex;justify-content:space-between;align-items:center;cursor:grab;user-select:none;'),
         x = el('span', 'cursor:pointer;color:' + c.mut + ';font-size:18px;', '×');
     hd.title = 'Drag to move';
-    // the logo's squares head every room's card; a fifteen's Sev sits by its clock (Sam: the spacing)
+    // the logo's squares head every room's card; a fifteen's Pip sits by its clock (Sam: the spacing)
     var sv5 = FIF && D.sev ? sev('focus', 44) : null;
     hd.appendChild(squares(c, 70)); hd.appendChild(x);
     var AT = 'dcRoomCardAt';
@@ -860,7 +862,7 @@ _RUNTIME = r"""
       if (i < D.rounds && D.brk) { bar.appendChild(el('i', 'flex:' + D.brk + ';height:4px;border-radius:2px;background:' + c.warm + ';opacity:.45;display:block;')); }
     }
     var who = el('div', 'display:flex;align-items:center;gap:8px;color:' + c.mut + ';font-size:12px;');
-    // Sev off: each person's initial, as before (sev.SLOT: a 40 px Sev is a 24 px seat, the faces' size)
+    // Pip off: each person's initial, as before (sev.SLOT: a 40 px Pip is a 24 px seat, the faces' size)
     who.appendChild(D.sev && D.seats && D.seats.length ? seats(40) : faces(c, 24)); who.appendChild(el('span', '', D.line));
     var ft = el('div', 'display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;color:' + c.a + ';border-top:1px solid ' + c.line + ';padding-top:8px;');
     var tuck = el('span', 'cursor:pointer;', D.compact ? 'Show the whole chip' : 'Tuck it away'),
@@ -1025,8 +1027,8 @@ def fifteen_view(room, now=None):
 def board_view(my_room, entries, dismissed=(), done=None, now=None, sev=False, accent_pair=None, look=()):
     """What the Decks screen shows about rooms, as plain values (the board
     escapes every string): my room's lobby, invites to my crew's rooms, and
-    the line for a room I finished. 3.8.1: with Sev on (sev; accent_pair:
-    mine), the lobby's members are their Sevs (seats)."""
+    the line for a room I finished. 3.8.1: with Pip on (sev; accent_pair:
+    mine), the lobby's members are their Pips (seats)."""
     now = _now(now)
     out = {"mine": None, "invites": [], "done": done}
     if my_room and not is_over(my_room, now) and is_fifteen(my_room):

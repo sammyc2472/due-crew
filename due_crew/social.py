@@ -89,7 +89,7 @@ def _send_cheer(to_uid, to_name, emoji, note="", luck=False, guid=None, then=Non
             from .bingo_flow import bump
             bump("tp" if guid else "ch")  # 3.6: the middle counts cheers and tips
         if ok is True and not luck and not guid:
-            try:  # 3.8.2: Sev's closet counts the crewmates I cheer, and the days
+            try:  # 3.8.2: Pip's closet counts the crewmates I cheer, and the days
                 from . import closet_flow
                 closet_flow.note_cheer(to_uid, _state["labels"][0] if _state["labels"] else "", big)
             except Exception:
@@ -231,7 +231,7 @@ def _open_profile(uid):
                 "you": you, "paused": bool(entry.get("paused")), "exam": exam,
                 "duet": duet, "status": status, "away": away,
                 "emoji": entry.get("emoji") or "",
-                "sev": board.card_sev(entry, cfg()),  # 3.8.2: their Sev in the emoji's place
+                "sev": board.card_sev(entry, cfg()),  # 3.8.2: their Pip in the emoji's place
                 "today": today_nums,
                 "start": my_labels[-1],  # the heatmap's first day, for its weekday rows
             }))

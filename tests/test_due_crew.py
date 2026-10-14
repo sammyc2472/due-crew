@@ -906,7 +906,7 @@ def test_v25_edges_emoji_week():
                                        "paused": False, "last_updated": "", "exam_date": "",
                                        "days": {labels[0]: {"studied": True, "reviews": 3}}, "decks": []}],
                          "labels": labels, "tomorrow": "", "pending": []}, {"sort": "week", "sev": False}, 0)
-    check("crew board: emoji by the name (Sev off: 3.8.2 puts Sev in its place); the squads-only sort falls back to reviews",
+    check("crew board: emoji by the name (Pip off: 3.8.2 puts Pip in its place); the squads-only sort falls back to reviews",
           "🦊 Sammy" in crew and '<span class="hl">Reviews</span> &#9662;' in crew)
     js = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊"})
     esc = lambda t: json.dumps(t)[1:-1]  # JS strings carry non-ASCII escaped
@@ -12155,26 +12155,26 @@ def test_fifteen_js_phase_matches_v381():
 
 def test_fifteen_widgets_v381():
     """▶ Fifteen? in the top bar; the question and its break on the review
-    screen, keyed (a card's own script can't answer it); Sev in them."""
+    screen, keyed (a card's own script can't answer it); Pip in them."""
     from due_crew import room_model as rm
     t0 = datetime.datetime.now(datetime.timezone.utc)
     start = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "left", True, nap=True))
-    check("Fifteen? (with its question mark) at the chip's end, napping Sev, starts one",
+    check("Fifteen? (with its question mark) at the chip's end, napping Pip, starts one",
           "'Fifteen?'" in start and "position:fixed;left:10px" in start and "send('room15')" in start
           and "m-nap" in start and "dc-sev-css" in start)
     plain = rm.widget_js("start", rm.start_data(("#2e7d32", "#7cc47f"), "right", False))
-    check("…and with Sev off, no Sev", "sv m-" not in plain and '"sev": null' in plain)
+    check("…and with Pip off, no Pip", "sv m-" not in plain and '"sev": null' in plain)
     f = rm.make_fifteen("me", t0)
     ask = rm.widget_js("ask", rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), cards=38, total=61))
-    check("the question: three answers, keyed, Sev with the clock",
+    check("the question: three answers, keyed, Pip with the clock",
           all(f"'{c}'" in ask for c in ("room15five", "room15now", "room15stop")) and "That’s fifteen." in ask
           and "m-ring" in ask and '"cards": 38' in ask and "No answer" not in ask)
     brk = rm.widget_js("break", rm.widget_data(dict(f, rounds=2), [], ("#2e7d32", "#7cc47f"), brk_pose="stretch"))
-    check("a fifteen's break: Start now and Stop here, Sev stretching (Settings), no cheer for nobody",
+    check("a fifteen's break: Start now and Stop here, Pip stretching (Settings), no cheer for nobody",
           "'room15now'" in brk and "'room15stop'" in brk and '"brk_pose": "stretch"' in brk and "Cheer the room" in brk
           and "FIF ?" in brk)
     room = rm.widget_js("break", rm.widget_data(rm.make_room("dre", t0, 2, 25, 5), [], ("#2e7d32", "#7cc47f")))
-    check("a room with my crew keeps its break as it was (no Sev yet)", '"sev": null' in room and '"kind": "room"' in room)
+    check("a room with my crew keeps its break as it was (no Pip yet)", '"sev": null' in room and '"kind": "room"' in room)
     check("the answers are the widget's own commands", {"room15five", "room15now", "room15stop"} <= set(rm.CARD_PAGE_CMDS))
     msg, ok = rm.trusted("duecrew:room15now", True)
     msg2, ok2 = rm.trusted(f"duecrew:room15now|{rm.CMD_KEY}", True)
@@ -12231,10 +12231,10 @@ def test_fifteen_flow_v381():
               "room" not in cl.session and "live_until" not in cl.session and done
               and (done["n"], done["minutes"], done["cards"], done["walked"]) == (2, 20, 7, False) and len(syncs) == 4,
               str((done, len(syncs), sorted(cl.session))))
-        check("…Sev's move for it picked as it ended (one of the stack's), kept with the session as its last there",
+        check("…Pip's move for it picked as it ended (one of the stack's), kept with the session as its last there",
               done.get("move") in sev.moves("stack") and cl.session.get("sev_last") == {"stack": done["move"]})
         view = R.board_view()
-        check("…on the board, with Sev stacking (once)", view.get("fifteen_done", {}).get("n") == 2
+        check("…on the board, with Pip stacking (once)", view.get("fifteen_done", {}).get("n") == 2
               and "stk" in (view["fifteen_done"].get("sev") or "") and " rest" not in view["fifteen_done"]["sev"].split('"')[1])
         check("…and drawn again it rests", " rest" in R.board_view()["fifteen_done"]["sev"].split('"')[1])
         dc._on_js(False, "duecrew:room15x", DeckBrowser())
@@ -12262,7 +12262,7 @@ def test_fifteen_flow_v381():
 
 
 def test_sev_by_the_logo_is_a_moment_v381():
-    """Sam: Sev isn't always by the logo. It comes when something just
+    """Sam: Pip isn't always by the logo. It comes when something just
     happened, the first time the board draws it, and goes after a few
     seconds; a redraw meanwhile keeps its place; then the logo's alone."""
     from due_crew import rooms as R, sev
@@ -12275,7 +12275,7 @@ def test_sev_by_the_logo_is_a_moment_v381():
         _state["labels"] = ["2026-10-13"]
         _state.pop("sev_shown", None)
         _state["sev_cheer"] = 0
-        check("nothing happening: no Sev by the logo", R.board_sev({}, {"done": False}) is None)
+        check("nothing happening: no Pip by the logo", R.board_sev({}, {"done": False}) is None)
         first = R.board_sev({}, {"done": True})
         clock["t"] += 2
         again = R.board_sev({}, {"done": True})
@@ -12290,6 +12290,8 @@ def test_sev_by_the_logo_is_a_moment_v381():
         check("a cheer is its own moment, the same day", cheer and mv(cheer["svg"]) in sev.moves("cheer"))
         _state["sev_cheer"] = 0
         seen = [mv(first["svg"])]
+        import random as _random
+        _random.seed(26)  # the picks are random: seeded, so twelve days always meet every move (it missed one ~1 run in 50)
         for d in range(14, 26):
             _state["labels"] = [f"2026-10-{d}"]
             clock["t"] += 100
@@ -12298,7 +12300,7 @@ def test_sev_by_the_logo_is_a_moment_v381():
               all(a != b for a, b in zip(seen, seen[1:])) and set(seen) == set(sev.moves("hop")), seen)
         R.cfg = lambda: {"sev": False}
         _state.pop("sev_shown", None)
-        check("Sev off: never", R.board_sev({}, {"done": True}) is None)
+        check("Pip off: never", R.board_sev({}, {"done": True}) is None)
     finally:
         R.cfg, st, R.time.time = saved
         _state.clear()
@@ -12335,9 +12337,9 @@ def test_top_bar_is_our_page_v381():
 
 
 def test_crew_room_sevs_wear_their_accents_v381():
-    """3.8.1 (Sam's pick): in a crew room each member is their Sev, in their
+    """3.8.1 (Sam's pick): in a crew room each member is their Pip, in their
     own accent, and they started at different moments, so the blinks never
-    line up: the room's card and the Decks screen's lobby. Sev off, or a
+    line up: the room's card and the Decks screen's lobby. Pip off, or a
     fifteen: the initials, as before. The accent rides GET /board, a mutual
     friend's only, and only one of the add-on's own reaches a page."""
     from due_crew import room_model as rm, rooms as R, sev
@@ -12378,7 +12380,7 @@ def test_crew_room_sevs_wear_their_accents_v381():
     mine = board.accent_pair("amber")
     on = rm.widget_data(room, ents, mine)
     seats = {s["n"]: s for s in on["seats"]}
-    check("card, Sev on: each member is their Sev in their accent (mine is mine; junk wears the default), host first",
+    check("card, Pip on: each member is their Pip in their accent (mine is mine; junk wears the default), host first",
           [s["n"] for s in on["seats"]] == ["Dre <K>", "Ana", "You"] and seats["Dre <K>"]["a"] == list(board.accent_pair("blue"))
           and seats["Ana"]["a"] == list(board.accent_pair("green")) and seats["You"]["a"] == list(mine)
           and on["sev"] == dict({"idle": sev.svg("idle")}, **{f"idle.{m}": sev.svg("idle", m) for m in sev.SEAT_MOVES[1:]})
@@ -12392,14 +12394,14 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and "v.setAttribute('aria-label', s.n)" in js and round(40 * sev.SLOT[0]) == 24)
     off = rm.widget_data(room, ents, mine, sev=False)
     fif = rm.widget_data(rm.make_fifteen("sam", datetime.datetime.now(utc)), ents, mine)
-    check("card, Sev off: the initials as before; a fifteen has no members (and its own Sevs)",
+    check("card, Pip off: the initials as before; a fifteen has no members (and its own Pips)",
           off["seats"] == [] and off["sev"] is None and off["initials"] == ["D", "A", "S"]
           and fif["seats"] == [] and fif["initials"] == [] and "focus" in fif["sev"])
 
     now = datetime.datetime.now(utc)
     lobby = board.room_html(rm.board_view(room, ents, now=now, sev=True, accent_pair=mine))
     blue, amber = board.accent_pair("blue"), mine
-    check("lobby, Sev on: each member is their Sev, in their accent by day and by night, blinking at its own moment",
+    check("lobby, Pip on: each member is their Pip, in their accent by day and by night, blinking at its own moment",
           lobby.count('class="seat"') == 3 and "<i>D</i>" not in lobby and "sv-seats" in lobby
           and [lobby.count(f"sv m-{m}") for m in ("idle", "sread", "snod")] == [1, 1, 1]
           and f'--sa-l:{blue[0]};--sa-d:{blue[1]};--sv-d:0.00s' in lobby and f'--sa-l:{amber[0]};--sa-d:{amber[1]};--sv-d:-3.40s' in lobby
@@ -12408,7 +12410,7 @@ def test_crew_room_sevs_wear_their_accents_v381():
           'title="Dre &lt;K&gt;"' in lobby and 'aria-label="Dre &lt;K&gt;"' in lobby and "Dre <K>" not in lobby
           and 'aria-label="You"' in lobby)
     plain = board.room_html(rm.board_view(room, ents, now=now))
-    check("lobby, Sev off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
+    check("lobby, Pip off: the initials as before", "<i>D</i><i>A</i><i>S</i>" in plain and "sv-slot" not in plain)
     bad = board._seat_html({"n": '"><b>x', "a": ["red;}</style>", "#2e7d3"], "d": "soon"})
     check("lobby: a seat's colours are colours, or the default's; nothing else reaches its style",
           f'--sa-l:{board.accent_pair(None)[0]};--sa-d:{board.accent_pair(None)[1]};--sv-d:0.00s' in bad
@@ -12420,7 +12422,7 @@ def test_crew_room_sevs_wear_their_accents_v381():
           and "--sa-d" not in light and "body.nightMode #due-crew .dc-room .seat" in auto
           and "@media (prefers-color-scheme: dark) { #due-crew .dc-room .seat { --sv-a: var(--sa-d); } }" in auto)
 
-    # the glue: Settings › Sev decides, my accent is mine
+    # the glue: Settings › Pip decides, my accent is mine
     saved = (R.cfg, R.my_room, R._done, R._fifteen_done, dict(_state))
     try:
         R.my_room, R._done, R._fifteen_done = (lambda: room), (lambda: None), (lambda: None)
@@ -12433,21 +12435,21 @@ def test_crew_room_sevs_wear_their_accents_v381():
         R.cfg, R.my_room, R._done, R._fifteen_done, st = saved
         _state.clear()
         _state.update(st)
-    check("glue: Sev on, the lobby's and the card's seats, me in my accent; Sev off, none",
+    check("glue: Pip on, the lobby's and the card's seats, me in my accent; Pip off, none",
           [s["a"] for s in glue_on["seats"]] == [list(blue), list(board.accent_pair("green")), list(amber)]
           and data_on["seats"] == glue_on["seats"] and glue_off["seats"] == [] and data_off["seats"] == []
           and data_off["initials"] == ["D", "A", "S"])
 
 
 def test_fifteen_board_v381():
-    """The board: the lobby's question, the session's line, the nudge, Sev
+    """The board: the lobby's question, the session's line, the nudge, Pip
     beside the logo, and the Settings that turn it all off."""
     from due_crew import room_model as rm, sev, settings_model as SM
     t0 = datetime.datetime(2026, 10, 13, 18, 0, tzinfo=datetime.timezone.utc)
     f = rm.make_fifteen("me", t0)
     ask = dict(rm.fifteen_view(f, t0 + datetime.timedelta(minutes=16)), cards=38, sev=sev.svg("ring"))
     h = board.room_html({"mine": ask})
-    check("lobby, the question: cards, three answers, Sev with its clock",
+    check("lobby, the question: cards, three answers, Pip with its clock",
           "38 cards." in h and all(f"duecrew:{c}" in h for c in ("room15five", "room15now", "room15stop")) and "m-ring" in h)
     cap = board.room_html({"mine": rm.fifteen_view(dict(f, rounds=8), t0 + datetime.timedelta(minutes=8 * 15 + 7 * 5 + 1))})
     check("…capped: Stop here only", "room15five" not in cap and "room15now" not in cap and "room15stop" in cap)
@@ -12457,7 +12459,7 @@ def test_fifteen_board_v381():
     check("the session's line: fifteens, minutes, cards, the same however it ended",
           "3 fifteens &middot; 45 m &middot; 1,212 cards.</span>" in line and "counts" not in line and "room15x" in line)
     one = board.room_html({"fifteen_done": {"n": 1, "minutes": 11, "cards": 56, "sev": sev.svg("stack", stack=1)}})
-    check("Sam: its box fits what Sev stacks (room for one square, or three), its words left, no fixed gap above",
+    check("Sam: its box fits what Pip stacks (room for one square, or three), its words left, no fixed gap above",
           [sev.stack_reach(n, 44) for n in (1, 2, 3, 8)] == [(7, 3), (13, 3), (19, 3), (19, 3)]
           and 'style="padding:7px 0 3px"' in one and 'style="padding:19px 0 3px"' in line
           and "dc-sess" in one and "padding-top: 26px" not in board.SEV_CSS and ".dc-sess { text-align: left; }" in board.SEV_CSS)
@@ -12474,25 +12476,25 @@ def test_fifteen_board_v381():
     check("the nudge: Not started yet today. Fifteen? Start, and Not today",
           "Not started yet today." in nud and "duecrew:room15" in nud and "duecrew:duex:fifteen" in nud and "m-peek" in nud, nud[:300])
     head = board._head("today", sev={"svg": sev.svg("hop"), "ago": 1.5})
-    check("Sev beside the logo, never on it, for a moment (it goes; a redraw keeps its place)",
+    check("Pip beside the logo, never on it, for a moment (it goes; a redraw keeps its place)",
           'class="dc-sev once"' in head and head.index("dc-mark") < head.index("dc-sev") and "--ago:1.50s" in head
           and board._head("today") .count("dc-sev") == 0)
     check("by the logo only when something happens: a cheer, back from away, exam eve, the day done; else nothing",
           [sev.moment(cheered=True, back=True), sev.moment(back=True, exam_eve=True), sev.moment(exam_eve=True, day_done=True),
            sev.moment(day_done=True), sev.moment()] == ["cheer", "hello", "exam", "hop", None])
-    check("Sev: every pose draws; the cheer blushes and nothing else does; a stack of one",
+    check("Pip: every pose draws; the cheer blushes and nothing else does; a stack of one",
           all(sev.svg(k).startswith('<svg class="sv m-') for k in sev.POSES) and "sv-cheek" in sev.svg("cheer")
           and "sv-cheek" not in sev.svg("idle") and sev.svg("stack", stack=1).count('class="stk') == 1)
-    check("Sev: still unless the computer allows motion; what happens once rests when drawn again",
+    check("Pip: still unless the computer allows motion; what happens once rests when drawn again",
           sev.CSS.index("@media (prefers-reduced-motion: no-preference)") < sev.CSS.index("@keyframes")
           and "animation" not in sev.CSS[:sev.CSS.index("@media")] and ' rest"' in sev.svg("hop", rest=True)
           and " rest" not in sev.svg("nap", rest=True))
     st = board.settings_html({"tab": "board"}, {})
-    check("Settings: Fifteen? in the top bar, Sev, and the break's Breathe or Stretch",
+    check("Settings: Fifteen? in the top bar, Pip, and the break's Breathe or Stretch",
           "set:fifteen:0" in st and "set:sev:0" in st and "set:sev_break:stretch" in st)
     ix = board.settings_index({"tab": "board"}, {})
     hit = lambda word: {r["f"] for r in ix if word in r["k"].split()}
-    check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Sev, stretch finds the break",
+    check("Find a setting: timer or pomodoro finds Fifteen?, mascot finds Pip, stretch finds the break",
           "set:fifteen:" in hit("timer") and "set:fifteen:" in hit("pomodoro") and "set:sev:" in hit("mascot")
           and "set:sev_break:" in hit("stretch"), (hit("timer"), hit("mascot"), hit("stretch")))
     check("…and what a click there saves", SM.change(["set", "sev", "0"], {}) == {"sev": False}
@@ -12501,15 +12503,15 @@ def test_fifteen_board_v381():
     off = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {"sev": False}, 0)
     on = board.render({"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}, {}, 0,
                       sev={"svg": sev.svg("hop"), "ago": 0})
-    check("Sev off: no motion sheet on the board; on, the sheet and Sev by the logo",
+    check("Pip off: no motion sheet on the board; on, the sheet and Pip by the logo",
           "sv-blink" not in off and "dc-sev" not in off.split("</style>")[-1] and "sv-blink" in on and 'class="dc-sev once"' in on)
 
 
 def test_week_card_sev_v381():
-    """3.8.1, the week card (Sam's pick, "Sev hops across the week"): a
+    """3.8.1, the week card (Sam's pick, "Pip hops across the week"): a
     dotted arc from each day studied to the next, a long one over days
-    off, none over days to come, and Sev standing on the last day studied
-    in the card's accent; no Sev with nothing studied or Sev off, and on
+    off, none over days to come, and Pip standing on the last day studied
+    in the card's accent; no Pip with nothing studied or Pip off, and on
     today's card only on today. sev.still is the one drawing: cards.js
     keeps a copy, and lays the card out the same (that part needs node)."""
     import shutil
@@ -12533,7 +12535,7 @@ def test_week_card_sev_v381():
           hp["arcs"] == [(0, 1), (1, 3), (3, 4), (4, 6)] and min(over(1, 3)) < min(over(0, 1)) and min(over(4, 6)) < min(over(3, 4))
           and all(min(over(a, b)) < 560 + S.ROOM for a, b in hp["arcs"]), hp["arcs"])
     sv = of(ops, "sev")
-    check("Sev on the last day studied, standing on today's ring, in the card's accent; the trail drawn in it too",
+    check("Pip on the last day studied, standing on today's ring, in the card's accent; the trail drawn in it too",
           len(sv) == 1 and sv[0][1] == "hop" and abs(sv[0][2] + sv[0][4] / 2 - mid(6)) < 1e-9
           and abs(sv[0][3] + sv[0][4] * S.SEV_FEET - (560 + S.ROOM - 8 * 1.375)) < 1e-9 and sv[0][5] == "#2e7d32"
           and [o[1:3] for o in of(ops, "dot")] == hp["dots"] and {o[4] for o in of(ops, "dot")} == {"#2e7d32"}
@@ -12551,15 +12553,15 @@ def test_week_card_sev_v381():
           tall["arcs"] == [(0, 6)] and min(y - tall["r"] for _x, y in tall["dots"]) - 462 >= 50)
     wed = S.week(dict(log([1, 0, 1, 1, 1, 0, 0])), "2026-10-14", sev=True)
     hw = S.hops(wed, P, 560 + S.ROOM, s, 20, 8)
-    check("nothing over the days to come: Sev on today, the last day so far",
+    check("nothing over the days to come: Pip on today, the last day so far",
           hw["arcs"] == [(0, 2)] and max(x for x, _y in hw["dots"]) < mid(2) and abs(hw["sev"][0] + hw["sev"][2] / 2 - mid(2)) < 1e-9)
     hg = S.hops(S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", sev=True), P, 660, s, 20, 8)
-    check("today not studied yet: Sev on the last day that was, standing on its square (no ring there)",
+    check("today not studied yet: Pip on the last day that was, standing on its square (no ring there)",
           hg["arcs"] == [(0, 1)] and abs(hg["sev"][0] + hg["sev"][2] / 2 - mid(1)) < 1e-9
           and abs(hg["sev"][1] + hg["sev"][2] * S.SEV_FEET - 660) < 1e-9, hg["sev"])
     plain = S.draw("week", "story", S.week(log([1, 1, 0, 1, 1, 0, 1]), "2026-10-18"), on, "light", measure)
     none = S.week({}, "2026-10-14", sev=True)
-    check("no Sev with nothing studied this week, or with Sev off: today's card as it was (squares at 560)",
+    check("no Pip with nothing studied this week, or with Pip off: today's card as it was (squares at 560)",
           not S.landings(none) and not of(S.draw("week", "story", none, on, "light", measure)[2], "sev")
           and S.draw("week", "story", none, on, "light", measure) == S.draw("week", "story", dict(none, sev=False), on, "light", measure)
           and not of(plain[2], "sev") and not of(plain[2], "dot")
@@ -12567,14 +12569,14 @@ def test_week_card_sev_v381():
     one = S.week(log([1, 1, 1, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
     one_ops = S.draw("today", "story", one, on, "light", measure)[2]
     not_yet = S.week(log([1, 1, 0, 0, 0, 0, 0]), "2026-10-14", True, sev=True)
-    check("today's card: Sev on today's square when today was studied, no arcs; not yet today, no Sev",
+    check("today's card: Pip on today's square when today was studied, no arcs; not yet today, no Pip",
           S.landings(one) == [2] and len(of(one_ops, "sev")) == 1 and not of(one_ops, "dot")
           and abs(of(one_ops, "sev")[0][2] + of(one_ops, "sev")[0][4] / 2 - mid(2)) < 1e-9
           and not S.landings(not_yet) and not of(S.draw("today", "story", not_yet, on, "light", measure)[2], "sev"))
     lk = S.draw("week", "link", wk, on, "light", measure)[2]
     ls = (1200 - 64 - 720 - 6 * 12) / 7
     lsev = of(lk, "sev")[0]
-    check("a link: Sev and its trail in the room above the squares, under the logo's row, the squares where they were",
+    check("a link: Pip and its trail in the room above the squares, under the logo's row, the squares where they were",
           {o[1]: o[3] for o in of(lk, "text")}["M"] == 230 + ls + 38 and lsev[3] + lsev[4] * 27 / 80 > 64 + 34 + 20
           and min(o[2] - o[3] for o in of(lk, "dot")) > 64 + 34 + 20
           and min(o[1] for o in of(lk, "dot")) > 720 and abs(lsev[2] + lsev[4] / 2 - mid(6, 720, ls, 12)) < 1e-9)
@@ -12587,12 +12589,12 @@ def test_week_card_sev_v381():
           and "#1f2a1f" in art and sev.still("idle").count("#2e7d32") > 3)
     js = open(os.path.join(REPO, "site", "public", "cards.js"), encoding="utf-8").read()
     const = re.search(r"\n  const SEV = '([^']*)';\n", js)
-    check("cards.js draws sev.py's Sev: its copy is sev.still('hop', '%A%') to the byte",
+    check("cards.js draws sev.py's Pip: its copy is sev.still('hop', '%A%') to the byte",
           const is not None and const.group(1) == sev.still("hop", "%A%"))
     app_js = open(os.path.join(REPO, "site", "public", "app.js"), encoding="utf-8").read()
-    check("the site has no Sev switch: its week card always asks for Sev", "crew: withMe, sev: true }" in app_js)
+    check("the site has no Pip switch: its week card always asks for Pip", "crew: withMe, sev: true }" in app_js)
 
-    # in Anki the card follows Settings › Sev
+    # in Anki the card follows Settings › Pip
     store = world({"sam": "Sam"})
     cl = new_client(store, "sam")
     d0 = datetime.date.today()
@@ -12623,7 +12625,7 @@ def test_week_card_sev_v381():
             for kind in ("pictureweek", "picturetoday"):
                 SH.picture(kind)
                 got.append(made[-1].choose(None)["data"]["sev"])
-        check("in Anki: the week and today cards have Sev as Settings › Sev says (on unless switched off)",
+        check("in Anki: the week and today cards have Pip as Settings › Pip says (on unless switched off)",
               got == [True, True, False, False], got)
     finally:
         (SH.client, SH.cfg, SH._profile_files, sys.modules["aqt"].mw.col, _state["entries"], _state["labels"], R.cfg) = saved
@@ -12636,7 +12638,7 @@ def test_week_card_sev_v381():
 
     node = shutil.which("node")
     if not node:
-        print("SKIP week card Sev twin: no node")
+        print("SKIP week card Pip twin: no node")
         return
     expose = "return { open, short, SIZES, MONTHS };"
     check("cards.js: the card's twin is reachable for the check", expose in js)
@@ -12682,7 +12684,7 @@ def test_week_card_sev_v381():
                 or not all(close(a, b) for a, b in zip(mine["dots"], h["dots"]))
                 or (mine["sev"] is None) != (h["sev"] is None) or (mine["sev"] and not close(mine["sev"], h["sev"]))):
             bad.append((g[0]["days"], g[1:], mine, h))
-    check("cards.js hops() is sharecard.hops: the same arcs, dots and Sev on every week (all 128, three todays, both cards, both sizes)",
+    check("cards.js hops() is sharecard.hops: the same arcs, dots and Pip on every week (all 128, three todays, both cards, both sizes)",
           not bad and len(got["grid"]) == len(grid) == 128 * 3 * 2 * 2, bad[:1])
     bad = []
     for (kind, size, look, d), log_ in zip(draws, got["draws"]):
@@ -12698,14 +12700,14 @@ def test_week_card_sev_v381():
               and len(want["sev"]) == len(have["sev"]) and all(close(a[:4], b[:4]) and a[4] == b[4] for a, b in zip(want["sev"], have["sev"])))
         if not ok:
             bad.append((kind, size, look, [c["studied"] for c in d["days"]], want, have))
-    check("cards.js lays the week and today cards out as sharecard does: words, rule, trail, and Sev (sev.still, in the accent)",
+    check("cards.js lays the week and today cards out as sharecard does: words, rule, trail, and Pip (sev.still, in the accent)",
           not bad and len(got["draws"]) == len(draws) == 32, bad[:1])
 
 
 def test_welcome_back_sev_v381():
-    """Sam liked Welcome back with Sev: Sev waves from the window's corner
+    """Sam liked Welcome back with Pip: Pip waves from the window's corner
     (still: a Qt window can't play the board's motion), unless Settings ›
-    Sev is off. tools/dialogs.py draws it and checks the pixel; here, the
+    Pip is off. tools/dialogs.py draws it and checks the pixel; here, the
     switch reaches the window, and the drawing is sev.py's still one."""
     from due_crew import plan_flow, rooms as R, sev, room_model as rm
     got = []
@@ -12724,17 +12726,17 @@ def test_welcome_back_sev_v381():
             sys.modules.pop("due_crew.ui.away_dialog", None)
         else:
             sys.modules["due_crew.ui.away_dialog"] = saved[0]
-    check("Welcome back: Sev on, the window waves; Settings › Sev off, it's as before", got == [True, False], got)
+    check("Welcome back: Pip on, the window waves; Settings › Pip off, it's as before", got == [True, False], got)
     art = sev.still("hello", "#6b3fb5")
-    check("…its Sev is the still drawing, waving, in the accent", art.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+    check("…its Pip is the still drawing, waving, in the accent", art.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
           and "#6b3fb5" in art and "var(" not in art and "class=" not in art)
     ask = next(ln for ln in rm._RUNTIME.splitlines() if "squares(c, 110)" in ln and "qb." in ln)
-    check("the fifteen's question with Sev off shows the logo's squares (the else was inside a comment)",
+    check("the fifteen's question with Pip off shows the logo's squares (the else was inside a comment)",
           "//" not in ask.split("squares(c, 110)")[0], ask.strip())
 
 
 def test_sev_moves_v381():
-    """Sam's picks (Sev's Places): every move in the mix at every place Sev
+    """Sam's picks (Pip's Places): every move in the mix at every place Pip
     already is, a different one each time (never the same twice in a row);
     where it stays a while, one small thing now and then. And two new
     places: the signed-out card, and a crewmate's big streak."""
@@ -12788,7 +12790,7 @@ def test_sev_moves_v381():
           sev.moves("breathe") == ("breathe",) and sev.pick("rest") == "breathe" and mom(sev.move("hop", "knock")) == "hop"
           and mom(sev.move("focus")) == "focus" and mom(sev.move("hello")) == "in")
     check("a move keeps its place's words (marching is the break's stretch)",
-          'class="sv m-march"' in sev.move("stretch", "march") and 'aria-label="Sev, stretching"' in sev.move("stretch", "march"))
+          'class="sv m-march"' in sev.move("stretch", "march") and 'aria-label="Pip, stretching"' in sev.move("stretch", "march"))
 
     # a fifteen's widgets: the moves take turns, a round each
     utc = datetime.timezone.utc
@@ -12806,7 +12808,7 @@ def test_sev_moves_v381():
           and "sev(vk('ring', D.rounds), 170)" in rm._RUNTIME and "sev('breathe', 180, true)" in rm._RUNTIME
           and "function vk(k, n)" in rm.widget_js("card", d))
     off = rm.widget_data(f, [], ("#2e7d32", "#7cc47f"), sev=False)
-    check("Sev off: no moves either", off["sev"] is None and off["vary"] is None and off["vseed"] == 0)
+    check("Pip off: no moves either", off["sev"] is None and off["vary"] is None and off["vseed"] == 0)
     check("the board's line takes the widgets' turn (sev.nth, the same seed)",
           all(d["vary"][k][(r + d["vseed"]) % len(d["vary"][k])].split(".")[-1] == sev.nth(k, r + rm.vary_seed(f))
               for k in d["vary"] for r in range(1, 9)))
@@ -12851,7 +12853,7 @@ def test_sev_moves_v381():
         _state.pop("sev_hello", None)
         a, b = R.signed_out_sev(), R.signed_out_sev()
         card = board.signed_out_card({}, sev=a)
-        check("signed out (Sam's pick): Sev waves, a hello from its mix, once; drawn again it rests there",
+        check("signed out (Sam's pick): Pip waves, a hello from its mix, once; drawn again it rests there",
               mom(a) in sev.moves("hello") and not rests(a) and mom(b) == mom(a) and rests(b))
         check("…beside the words on the card, with its colours and motion sheet",
               card.index('class="dc-hi"') < card.index("Your friends&rsquo;") and "sv-blink" in card
@@ -12859,7 +12861,7 @@ def test_sev_moves_v381():
         check("…only on the way in: an expired sign-in or a deleted account says just what happened",
               "dc-hi" not in board.signed_out_card({}, expired=True, sev=a) and "dc-hi" not in board.signed_out_card({}, gone=True, sev=a))
         R.cfg = lambda: {"sev": False}
-        check("…Settings › Sev off: the card as it was", R.signed_out_sev() is None
+        check("…Settings › Pip off: the card as it was", R.signed_out_sev() is None
               and "sv-" not in board.signed_out_card({}, sev=None) and "Start with your email" in board.signed_out_card({}))
 
         # new: a crewmate's big streak
@@ -12867,10 +12869,10 @@ def test_sev_moves_v381():
         _state.pop("sev_banner", None)
         big = [("dre", "Dre <b>", 100), ("ana", "Ana", 365)]
         one, two = R.milestone_sevs(big), R.milestone_sevs(big)
-        check("a crewmate's big streak (Sam's pick): Sev hops in the emoji's place, from the day done's mix, once a banner",
+        check("a crewmate's big streak (Sam's pick): Pip hops in the emoji's place, from the day done's mix, once a banner",
               set(one) == {"dre", "ana"} and all(mom(one[u]) in sev.moves("hop") for u in one) and mom(one["dre"]) != mom(one["ana"])
               and not any(rests(x) for x in one.values()) and all(rests(two[u]) and mom(two[u]) == mom(one[u]) for u in two)
-              and 'aria-label="Sev: a big streak"' in one["dre"] and "Dre" not in one["dre"])
+              and 'aria-label="Pip: a big streak"' in one["dre"] and "Dre" not in one["dre"])
         data = {"entries": [], "labels": ["2026-10-13"], "tomorrow": "", "pending": []}
         ban = board.render(data, {}, 0, milestones=big, milestone_sev=one)
         plain = board.render(data, {}, 0, milestones=big)
@@ -12878,7 +12880,7 @@ def test_sev_moves_v381():
               ban.count('<span class="dc-fig">') == 2 and "Send &#128175;" in ban and "Send &#127881;" in ban
               and "Dre &lt;b&gt;" in ban and "<span>&#128175;</span>" not in ban)
         R.cfg = lambda: {"sev": False}
-        check("…Sev off: the emoji, as before", R.milestone_sevs(big) is None and "<span>&#128175;</span>" in plain
+        check("…Pip off: the emoji, as before", R.milestone_sevs(big) is None and "<span>&#128175;</span>" in plain
               and "<span>&#127881;</span>" in plain and '<span class="dc-fig">' not in plain)
     finally:
         R.cfg, R.my_room, R._done, R._fifteen_done, R._now, R.datetime, st = saved
@@ -12887,9 +12889,9 @@ def test_sev_moves_v381():
 
 
 def test_closet_core_v382():
-    """3.8.2, Sev's closet: one thing in each place, a costume the whole look
+    """3.8.2, Pip's closet: one thing in each place, a costume the whole look
     (one at a time, the look waiting under it), things earned from facts,
-    the next in each line when it's close, and Sev wearing it all (what it
+    the next in each line when it's close, and Pip wearing it all (what it
     holds in its right hand, where the hand goes)."""
     from due_crew import closet as C, closet_art as CA, sev
     ks = [t["k"] for t in C.THINGS]
@@ -12939,19 +12941,26 @@ def test_closet_core_v382():
     check("the hours give: mornings before 8 (not the small hours), evenings after 9 (by the evening), the year turning",
           fh == {"mornings": 1, "evenings": 2, "yearturn": 1}, fh)
     plain = sev.svg("idle", rest=True)
-    check("no look: Sev is drawn as it always was", sev.svg("idle", rest=True, look=[]) == plain
+    check("no look: Pip is drawn as it always was", sev.svg("idle", rest=True, look=[]) == plain
           and sev.still("idle", "#2e7d32") == sev.still("idle", "#2e7d32", look=None))
     dressed = sev.svg("hello", look=["headphones", "mug", "cape"])
     arm = dressed.split('class="sv-armR">', 1)[1]
     check("a look goes on: behind, over, and what it holds in the right arm, upright",
           CA.ART["cape"][1][:40] in dressed.split("sv-armL")[0] and CA.ART["headphones"][0][:40] in dressed
           and CA.ART["mug"][0][:30] in arm.split("</g></g></g>")[0] and "rotate(150)" in arm)
-    check("a busy pose's hands hold their own thing; the closet's waits",
-          CA.ART["mug"][0][:30] not in sev.svg("focus", look=["mug"]) and CA.ART["mug"][0][:30] not in sev.svg("away", look=["mug"])
+    busy = sev.svg("focus", look=["mug"])
+    check("a busy pose's hands hold their own thing; the closet's is set down beside it, never gone (Sam: a fifteen took the mug)",
+          CA.ART["mug"][0][:30] in busy.split('class="sv-armL"')[0] and 'class="cl-down" transform="translate(4 12)"' in busy
+          and CA.ART["mug"][0][:30] not in busy.split('class="sv-armR">', 1)[1].split("</g></g>")[0]
+          and 'cl-down' in sev.svg("away", look=["umbrella"]) and 'cl-down' not in sev.svg("idle", look=["mug"])
+          and 'cl-down' not in sev.svg("focus", look=["cap"])
           and sev.busy("focus") and sev.busy("exam") and not sev.busy("hop"))
+    from due_crew import room_model as RM2
+    fif, _css, _t = RM2._sevs(RM2.FIFTEEN_SEV, True, RM2.FIFTEEN_VARY, look=["mug"])
+    check("…so a fifteen's every moment still has it, held or beside", all(CA.ART["mug"][0][:30] in v for v in fif.values()))
     check("a costume shows alone", CA.ART["headphones"][0][:40] not in sev.svg("idle", look=["headphones", "dino"])
           and CA.ART["dino"][0][:40] in sev.svg("idle", look=["headphones", "dino"]))
-    check("a still Sev wears it too, colours its own", CA.ART["cap"][0][:30] in sev.still("idle", "#2e7d32", look=["cap"]))
+    check("a still Pip wears it too, colours its own", CA.ART["cap"][0][:30] in sev.still("idle", "#2e7d32", look=["cap"]))
     still, motion = sev.CSS.split("@media", 1)
     check("an arm turns at its shoulder whatever it holds; the closet's things move only under no-preference",
           ".sv .sv-armL, .sv .sv-armR { transform-box: view-box; transform-origin: 0 0; }" in still
@@ -12960,9 +12969,9 @@ def test_closet_core_v382():
 
 
 def test_closet_board_v382():
-    """3.8.2, Sev's closet on the board: in place of the board (as Settings
+    """3.8.2, Pip's closet on the board: in place of the board (as Settings
     is), its clicks reaching it through the add-on's own handler, the
-    board's line when something comes, and each crew row's Sev in the
+    board's line when something comes, and each crew row's Pip in the
     emoji's place, wearing its person's colour and look."""
     import due_crew as dc
     from due_crew import closet as C, closet_art as CA
@@ -13005,15 +13014,15 @@ def test_closet_board_v382():
     check("a secret you haven't found shows nothing of it", earn.count("<b>A secret</b>") == len(secrets)
           and "Pi day" not in earn and CA.ART["catears"][0][:40] not in earn)
     off = board.closet_html(view, {"sev": False})
-    check("with Sev off, the closet says nobody sees it for now", "nobody sees it" in off)
+    check("with Pip off, the closet says nobody sees it for now", "nobody sees it" in off)
     line = board.closet_line(["cap"], ["beanie"])
-    check("the board's line: Sev in the new thing, its name and why, Wear it, the closet, later",
-          "New for your Sev: Cap." in line and "14 days in a row" in line and "duecrew:closetwear:cap" in line
+    check("the board's line: Pip in the new thing, its name and why, Wear it, the closet, later",
+          "New for your Pip: Cap." in line and "14 days in a row" in line and "duecrew:closetwear:cap" in line
           and "duecrew:closet'" in line and "duecrew:closetnew" in line and CA.ART["cap"][0][:40] in line
           and "Be one" in board.closet_line(["dino"], []))
     check("the day it opens, one line for everything your days earned",
           "earned it 9 things" in board.closet_line(list(C.BY)[:9], [], first=True))
-    # rows: Sev in the emoji's place
+    # rows: Pip in the emoji's place
     labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
     ents = [{"user_id": "me", "name": "Sammy", "emoji": "🦊", "you": True, "paused": False, "last_updated": "", "exam_date": "",
              "days": {labels[0]: {"studied": True, "reviews": 30}}, "decks": []},
@@ -13023,30 +13032,30 @@ def test_closet_board_v382():
     conf = {"accent": "rose", "sev_look": ["cap", "glasses"], "sev_closet": {"cap": "2026-01-01"}}
     crew = board.render(data, conf, 0)
     rows = crew.split("<table")[1]
-    check("crew rows: each person's Sev where the emoji was, in their colour",
+    check("crew rows: each person's Pip where the emoji was, in their colour",
           "🦊" not in rows and "🐢" not in rows and rows.count('class="dc-rsev"') == 2
           and "--rs-l:#1e5fb4" in rows and "--rs-l:#b03052" in rows and "--sv-a: var(--rs-l);" in crew)
-    check("their look on their Sev; mine only what I've earned; my Sev opens the closet",
+    check("their look on their Pip; mine only what I've earned; my Pip opens the closet",
           CA.ART["dino"][0][:40] in rows and CA.ART["cap"][0][:40] in rows and CA.ART["glasses"][0][:40] not in rows
-          and 'title="Sev&rsquo;s closet"' in rows and "Dre &lt;i&gt;" in rows and "Dre <i>’s Sev" not in rows)
+          and 'title="Pip&rsquo;s closet"' in rows and "Dre &lt;i&gt;" in rows and "Dre <i>’s Pip" not in rows)
     plain = board.render(data, dict(conf, sev=False), 0).split("<table")[1]
-    check("Sev off: the emoji as before", "🦊 Sammy" in plain and "dc-rsev" not in plain)
+    check("Pip off: the emoji as before", "🦊 Sammy" in plain and "dc-rsev" not in plain)
     squares = board.render(data, dict(conf, show_up=True), 0)
     check("the days view's rows too", squares.count('class="dc-rsev"') >= 2)
     dre_row = rows.split('>Dre &lt;i&gt;</a>')[0].rsplit("<tr", 1)[1]
-    check("a row with Sev: room above it for a hat (the whole row, so name and numbers share a line); "
-          "their Sev beside the name's underline, opening their profile too",
+    check("a row with Pip: room above it for a hat (the whole row, so name and numbers share a line); "
+          "their Pip beside the name's underline, opening their profile too",
           'class="sv"' in dre_row and 'tr.sv > td { padding-top: 12px; }' in crew
           and 'class="dc-rsevl" href="#" tabindex="-1" aria-hidden="true" onclick="pycmd(\'duecrew:profile:dre\')' in dre_row
           and dre_row.index('class="dc-rsev"') < dre_row.index('class="dc-pl"')
           and 'tr.sv' not in board.render(data, dict(conf, sev=False), 0))
-    # profile cards (3.8.2): their Sev where the emoji was, as on their row; mine opens the closet
+    # profile cards (3.8.2): their Pip where the emoji was, as on their row; mine opens the closet
     card = board.profile_overlay_js({"name": "Dre", "uid": "dre", "cells": None, "emoji": "🐢",
                                      "sev": board.card_sev(ents[1], conf)})
     mine_card = board.profile_overlay_js({"name": "Sammy", "you": True, "cells": None, "emoji": "🦊",
                                           "sev": board.card_sev(ents[0], conf)})
     turtle, fox = json.dumps("🐢")[1:-1], json.dumps("🦊")[1:-1]  # as the card's script carries them
-    check("profile cards: Sev in the emoji's place, in their colour and look; mine links to the closet",
+    check("profile cards: Pip in the emoji's place, in their colour and look; mine links to the closet",
           turtle not in card and "dc-psev" in card and json.dumps(CA.ART["dino"][0])[1:30] in card and "--sv-a: #1e5fb4" in card
           and fox not in mine_card and json.dumps(CA.ART["cap"][0])[1:30] in mine_card
           and "remove();pycmd('duecrew:closet')" in mine_card
@@ -13056,7 +13065,7 @@ def test_closet_board_v382():
     chip = RM.start_data(("#2e7d32", "#7cc47f"), "right", True, look=["cap"])
     check("▶ Fifteen? in the top bar wears my look (it was plain)", CA.ART["cap"][0][:30] in chip["sev"]["idle"]
           and CA.ART["cap"][0][:30] not in RM.start_data(("#2e7d32", "#7cc47f"), "right", True)["sev"]["idle"])
-    check("Settings › Fifteen and Sev: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
+    check("Settings › Fifteen and Pip: the closet, a click away", "duecrew:closet'" in board._settings_board({}))
     # the clicks, as the board sends them
     if "aqt.reviewer" not in sys.modules:
         sys.modules["aqt.reviewer"] = types.SimpleNamespace(Reviewer=type("Reviewer", (), {}))
@@ -13135,7 +13144,7 @@ def test_closet_flow_v382():
     bf = cf.board_facts({"squads": [{"id": "s1", "founder": "me"}, {"id": "s2"}]}, [], "me",
                         [{"id": "p1", "doc": {"units": [{"id": "u1"}, {"id": "u2"}], "events": [{"day": "2026-08-01", "name": "Exam"}]}}],
                         {"p1": {"u1": [5, 5, 5], "u2": [3, 3, 3]}}, "2026-09-01", {"sprout": "2025-08-01"})
-    check("the board's facts: squads (one I started), a plan followed, done, exam and all; a year with my Sev",
+    check("the board's facts: squads (one I started), a plan followed, done, exam and all; a year with my Pip",
           bf == {"squads": 2, "founder": 1, "plans": 1, "plan_done": 1, "plan_exam": 1, "sev_days": 396}, bf)
     from due_crew.wrap import _wrap_data
     w = _wrap_data()
@@ -13193,8 +13202,8 @@ def test_closet_flow_v382():
 
 def test_closet_site_rows_v382():
     """3.8.2, the twin on duecrew.com: the site's crew rows show each
-    person's Sev in the emoji's place, as board.row_sev does. The site never
-    draws Sev: site/public/sev.js holds sev.site_kit() (tools/gen_sev_js.py
+    person's Pip in the emoji's place, as board.row_sev does. The site never
+    draws Pip: site/public/sev.js holds sev.site_kit() (tools/gen_sev_js.py
     writes it; running it again changes nothing) and fills in its blanks
     following the closet's rules, restated in JS (run here in node against
     closet.clean, shown and the drawing itself). My own look comes on /board's
@@ -13216,7 +13225,7 @@ def test_closet_site_rows_v382():
     kit = sev.site_kit()
     plain = sev.slot(sev.svg("idle", rest=True), sev.ROW_SIZE)
     filled = kit["row"].replace("%B%", "").replace("%F%", "").replace("%H%", "")
-    check("the kit: the row's still Sev, a blank each for the back, the front and the hand; empty, it's the plain row Sev",
+    check("the kit: the row's still Pip, a blank each for the back, the front and the hand; empty, it's the plain row Pip",
           all(kit["row"].count(b) == 1 for b in sev.BLANKS) and kit["held"].count("%H%") == 1 and filled == plain
           and "var(--sv-a,#2e7d32)" in plain and 'style="width:18px;height:18px"' in plain and 'class="sv m-idle"' in plain)
     check("the kit: every thing, its place and drawings the closet's; nothing in a drawing a blank could catch",
@@ -13237,7 +13246,7 @@ def test_closet_site_rows_v382():
           '<script src="/sev.js" defer></script>\n<script src="/app.js" defer></script>' in app_html
           and "script-src 'self'" in open(os.path.join(REPO, "site", "src", "index.ts"), encoding="utf-8").read())
     table, presence = app_js.split("  function nameCell(r, period) {")[1], app_js.split("  function presence(people, today, picker = null) {")[1]
-    check("the site's crew rows (Today, Week and the days view) say who with Sev, no emoji; squads keep theirs",
+    check("the site's crew rows (Today, Week and the days view) say who with Pip, no emoji; squads keep theirs",
           table.split("\n")[2].strip() == 'const cell = h("td", { class: "nm" }, who(p));'
           and 'h("td", { class: "nm" }, who(r.p), note(r))' in presence.split("  function decks(")[0]
           and "Sev.row(p.look, accentPair(p.accent)" in app_js and "you: true, accent: me?.accent || worn }" in app_js
@@ -13248,7 +13257,7 @@ def test_closet_site_rows_v382():
 
     node = shutil.which("node")
     if not node:
-        print("SKIP the site's rows' Sev twin: no node")
+        print("SKIP the site's rows' Pip twin: no node")
         return
     ks = [t["k"] for t in C.THINGS]
     rnd = random.Random(382)
@@ -13269,7 +13278,7 @@ def test_closet_site_rows_v382():
         return
     bad = [(look, g) for look, g in zip(looks, got)
            if g != [C.clean(look), C.shown(look), sev.slot(sev.svg("idle", rest=True, look=look), sev.ROW_SIZE)]]
-    check(f"sev.js is the closet's twin: clean, shown and the row's Sev to the byte, on {len(looks)} looks "
+    check(f"sev.js is the closet's twin: clean, shown and the row's Pip to the byte, on {len(looks)} looks "
           "(each thing alone and with others, clashes, costumes, junk, every thing at once)", not bad, bad[:1])
 
 

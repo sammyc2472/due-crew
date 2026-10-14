@@ -69,7 +69,7 @@ async function feed(env: Env, uid: string) {
   return items.sort((a, b) => b.at - a.at).slice(0, FEED_MAX).map((x) => ({ ...x, at: iso(x.at) }));
 }
 
-/** 3.8.2: a look from a settings doc (json_extract's text of it): what a Sev has
+/** 3.8.2: a look from a settings doc (json_extract's text of it): what a Pip has
  *  on from the closet, as names (the add-on knows the things; a name it
  *  doesn't know it draws without). Up to LOOK_MAX short names, else none. */
 export const LOOK_MAX = 8;
@@ -99,14 +99,14 @@ export async function board(req: Request, s: Session, env: Env): Promise<Respons
     await db.prepare("DELETE FROM cheers WHERE to_uid = ? AND at <= ?").bind(s.uid, Math.floor(got)).run();
   }
   const [meRes, friendsRes, cheersRes] = await db.batch([
-    // 3.8.2: and what my own Sev has on (the site's rows draw it), from the same settings row
+    // 3.8.2: and what my own Pip has on (the site's rows draw it), from the same settings row
     db.prepare(
       `SELECT u.uid, u.name, u.emoji, u.code, u.client_version, w.doc, w.updated_at,
          t.at AS sat, json_extract(t.json, '$.muted') AS muted, json_extract(t.json, '$.sev_look') AS look FROM users u
        LEFT JOIN weeks w ON w.uid = u.uid LEFT JOIN settings t ON t.uid = u.uid WHERE u.uid = ?`).bind(s.uid),
     // a week leaves the server only for someone its owner added; 3.8.1: so
-    // does their accent (from their settings: their Sev wears it in a study room);
-    // 3.8.2: and what their Sev has on from the closet (its look)
+    // does their accent (from their settings: their Pip wears it in a study room);
+    // 3.8.2: and what their Pip has on from the closet (its look)
     db.prepare(
       `SELECT f.friend AS uid, u.name, u.emoji, b.owner IS NOT NULL AS mutual, w.doc, w.updated_at,
          json_extract(t.json, '$.accent') AS accent, json_extract(t.json, '$.sev_look') AS look

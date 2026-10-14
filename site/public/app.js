@@ -1041,12 +1041,12 @@ const Board = (() => {
   /** board.plan_target: a status that starts with a number is a plan. */
   const planTarget = (st) => { const m = /^\s*(\d{1,5})(?!\d)/.exec(st || ""); const n = m ? Number(m[1]) : 0; return n > 0 && n <= 20000 ? n : null; };
 
-  /** board._who (3.8.2): a crew row's name, their Sev in the emoji's place (sev.js), in their accent and
+  /** board._who (3.8.2): a crew row's name, their Pip in the emoji's place (sev.js), in their accent and
    *  their look; mine in my own. The name stays text. Without sev.js, the emoji as before. */
   function who(p) {
     const name = p.name || "?";
     if (typeof Sev !== "object") return h("span", { class: "who" }, `${p.emoji ? p.emoji + " " : ""}${name}`);
-    return h("span", { class: "who" }, Sev.row(p.look, accentPair(p.accent), p.you ? "Your Sev" : `${name}’s Sev`), name);
+    return h("span", { class: "who" }, Sev.row(p.look, accentPair(p.accent), p.you ? "Your Pip" : `${name}’s Pip`), name);
   }
 
   function nameCell(r, period) {
@@ -1311,7 +1311,7 @@ async function home() {
   const t = today();
   const mon = Sched.monday(t);
   const showUp = !!sett?.settings?.show_up;
-  // 3.8.2: my row's Sev wears my accent (/auth/me's, the one the site wears) and my look (/board's me)
+  // 3.8.2: my row's Pip wears my accent (/auth/me's, the one the site wears) and my look (/board's me)
   const people = [{ ...b.me, you: true, accent: me?.accent || worn }, ...b.friends.filter((f) => f.mutual)];
   const crew = b.friends.filter((f) => f.mutual);
   const waiting = b.friends.filter((f) => !f.mutual);
@@ -1469,7 +1469,7 @@ async function home() {
     Cards.open({ kind: oneDay ? "today" : "week", title: oneDay ? "Share today" : "Share my week", file: oneDay ? `due-crew-${t}` : `due-crew-week-${mon}`, sizes: ["story", "link"],
       data: { one: !!oneDay, range: oneDay ? `${DAYS[dd.getUTCDay()]} ${Cards.short(t)}` : `${Cards.short(mon)} – ${Cards.short(addDays(mon, 6))}`, days,
         studied: oneDay ? (days.find((x) => x.today)?.studied ? 1 : 0) : days.filter((x) => x.studied).length, elapsed: sofar.length,
-        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe, sev: true },  // 3.8.1: Sev hops across it
+        time: a.time, reviews: a.reviews, newCards: a.new, streak: a.streak, crew: withMe, sev: true },  // 3.8.1: Pip hops across it
       switches: [
         { k: "time", label: "Time studied", off: a.time == null ? hidden : "" },
         { k: "reviews", label: "Reviews and new cards", off: a.reviews == null ? hidden : "" },

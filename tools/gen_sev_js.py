@@ -1,6 +1,6 @@
 """3.8.2: writes the kit in site/public/sev.js from due_crew/sev.py's
-site_kit(), so duecrew.com's crew rows draw the add-on's own Sev, wearing
-the closet's own drawings (board.row_sev's twin). Run it after Sev, its
+site_kit(), so duecrew.com's crew rows draw the add-on's own Pip, wearing
+the closet's own drawings (board.row_sev's twin). Run it after Pip, its
 row or the closet changes; the suite checks that running it changes nothing.
 
     python3 tools/gen_sev_js.py           # rewrites the kit in place

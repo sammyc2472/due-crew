@@ -1,8 +1,8 @@
-// duecrew.com, 3.8.2: each person's Sev on the board's crew rows, in the
+// duecrew.com, 3.8.2: each person's Pip on the board's crew rows, in the
 // emoji's place, as the add-on's rows have it (board.row_sev: a twin):
 // still, in their accent, wearing their look from the closet.
 // The drawing is never made here. The kit below is the add-on's own
-// (sev.site_kit, written in by tools/gen_sev_js.py): Sev standing in its
+// (sev.site_kit, written in by tools/gen_sev_js.py): Pip standing in its
 // row's slot, with blanks where a look goes, and every thing's drawing. This
 // file fills the blanks, following the closet's rules (closet.clean and
 // shown, restated: the suite runs this in node against them). A name from
@@ -12,7 +12,7 @@
 const Sev = (() => {
   // ---- made by tools/gen_sev_js.py from sev.site_kit(): change sev.py or the closet and run it, never by hand ----
   const KIT = {
-    row: "<span class=\"sv-slot\" style=\"width:18px;height:18px\"><svg style=\"left:-6px;top:-10px;width:30px;height:30px\" class=\"sv m-idle\" viewBox=\"0 0 80 80\" role=\"img\" aria-label=\"Sev\"><ellipse class=\"sv-shadow\" cx=\"40\" cy=\"74.5\" rx=\"16\" ry=\"2.6\" style=\"fill:var(--sv-line,#e2e2da)\"/><g class=\"sv-body\">%B%<g transform=\"translate(21.5 47) rotate(32)\"><g class=\"sv-armL\"><rect x=\"-2.6\" y=\"-1\" width=\"5.2\" height=\"12.5\" rx=\"2.6\" style=\"fill:var(--sv-a,#2e7d32)\"/></g></g><g transform=\"translate(58.5 47) rotate(-32)\"><g class=\"sv-armR\"><rect x=\"-2.6\" y=\"-1\" width=\"5.2\" height=\"12.5\" rx=\"2.6\" style=\"fill:var(--sv-a,#2e7d32)\"/>%H%</g></g><rect x=\"28.5\" y=\"63\" width=\"9\" height=\"9.5\" rx=\"3\" style=\"fill:var(--sv-a,#2e7d32)\" class=\"sv-footL\"/><rect x=\"42.5\" y=\"63\" width=\"9\" height=\"9.5\" rx=\"3\" style=\"fill:var(--sv-a,#2e7d32)\" class=\"sv-footR\"/><rect x=\"20\" y=\"27\" width=\"40\" height=\"39\" rx=\"12.5\" style=\"fill:var(--sv-a,#2e7d32)\"/><rect x=\"25\" y=\"31\" width=\"11\" height=\"5\" rx=\"2.5\" style=\"fill:#fff\" opacity=\".22\"/><g class=\"sv-eyes\"><circle cx=\"33\" cy=\"43\" r=\"5.6\" fill=\"#fff\"/><circle cx=\"47\" cy=\"43\" r=\"5.6\" fill=\"#fff\"/><g class=\"sv-pupils\"><circle cx=\"33\" cy=\"43\" r=\"2.6\" style=\"fill:var(--sv-ink,#1f2a1f)\"/><circle cx=\"47\" cy=\"43\" r=\"2.6\" style=\"fill:var(--sv-ink,#1f2a1f)\"/></g></g><path d=\"M36 51.5 q4 3.6 8 0\" style=\"stroke:var(--sv-ink,#1f2a1f)\" stroke-width=\"2.2\" stroke-linecap=\"round\" fill=\"none\"/>%F%</g></svg></span>",
+    row: "<span class=\"sv-slot\" style=\"width:18px;height:18px\"><svg style=\"left:-6px;top:-10px;width:30px;height:30px\" class=\"sv m-idle\" viewBox=\"0 0 80 80\" role=\"img\" aria-label=\"Pip\"><ellipse class=\"sv-shadow\" cx=\"40\" cy=\"74.5\" rx=\"16\" ry=\"2.6\" style=\"fill:var(--sv-line,#e2e2da)\"/><g class=\"sv-body\">%B%<g transform=\"translate(21.5 47) rotate(32)\"><g class=\"sv-armL\"><rect x=\"-2.6\" y=\"-1\" width=\"5.2\" height=\"12.5\" rx=\"2.6\" style=\"fill:var(--sv-a,#2e7d32)\"/></g></g><g transform=\"translate(58.5 47) rotate(-32)\"><g class=\"sv-armR\"><rect x=\"-2.6\" y=\"-1\" width=\"5.2\" height=\"12.5\" rx=\"2.6\" style=\"fill:var(--sv-a,#2e7d32)\"/>%H%</g></g><rect x=\"28.5\" y=\"63\" width=\"9\" height=\"9.5\" rx=\"3\" style=\"fill:var(--sv-a,#2e7d32)\" class=\"sv-footL\"/><rect x=\"42.5\" y=\"63\" width=\"9\" height=\"9.5\" rx=\"3\" style=\"fill:var(--sv-a,#2e7d32)\" class=\"sv-footR\"/><rect x=\"20\" y=\"27\" width=\"40\" height=\"39\" rx=\"12.5\" style=\"fill:var(--sv-a,#2e7d32)\"/><rect x=\"25\" y=\"31\" width=\"11\" height=\"5\" rx=\"2.5\" style=\"fill:#fff\" opacity=\".22\"/><g class=\"sv-eyes\"><circle cx=\"33\" cy=\"43\" r=\"5.6\" fill=\"#fff\"/><circle cx=\"47\" cy=\"43\" r=\"5.6\" fill=\"#fff\"/><g class=\"sv-pupils\"><circle cx=\"33\" cy=\"43\" r=\"2.6\" style=\"fill:var(--sv-ink,#1f2a1f)\"/><circle cx=\"47\" cy=\"43\" r=\"2.6\" style=\"fill:var(--sv-ink,#1f2a1f)\"/></g></g><path d=\"M36 51.5 q4 3.6 8 0\" style=\"stroke:var(--sv-ink,#1f2a1f)\" stroke-width=\"2.2\" stroke-linecap=\"round\" fill=\"none\"/>%F%</g></svg></span>",
     held: "<g transform=\"translate(0 11.5) rotate(32)\"><g transform=\"translate(-64.6 -56.8)\">%H%</g></g>",
     slots: ["back", "body", "face", "head", "hand"], costume: "costume", max: 6,
     things: {
@@ -106,7 +106,7 @@ const Sev = (() => {
     return c ? [c] : ks;
   }
 
-  /** The row's Sev wearing `look`, as markup: closet.art's back, front and
+  /** The row's Pip wearing `look`, as markup: closet.art's back, front and
    *  held things in the kit's blanks; sev.slot(sev.svg("idle", rest=True,
    *  look=look), sev.ROW_SIZE) to the byte. */
   function markup(look) {
@@ -124,7 +124,7 @@ const Sev = (() => {
 
   // one parse per look; each row gets a copy
   const parsed = new Map();
-  /** A crew row's Sev (board.row_sev): `look` on, in `pair`, its accent by
+  /** A crew row's Pip (board.row_sev): `look` on, in `pair`, its accent by
    *  day and by night (the page's theme picks one: .rsev in app.css), and
    *  `label` for a screen reader (set as an attribute, never as markup). */
   function row(look, pair, label) {

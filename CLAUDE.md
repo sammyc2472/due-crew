@@ -97,7 +97,7 @@ module, its `duecrew:` command or its mock's name). These hold everything up:
   the glue.
 - Mine alone, never sent: Insights, my progress on each bingo square,
   checkpoint scores, `wrap.json` (3.8.2: and the closet's tallies in it).
-  Sev's closet is mine (an account key only I read); what my Sev has on
+  Pip's closet is mine (an account key only I read); what my Pip has on
   rides with my accent to mutual friends, as names. A plan's squad (its team on the server) shares only
   that I showed up, my questions and answers, and bingo stamps; never my
   numbers by name, never weak spots. While I'm in it, my per-date progress
@@ -115,10 +115,10 @@ same commit, each with its test:
 
 - `board.build_rows` and the board ↔ `Board` in `site/public/app.js` (rows,
   chip order, notes, show-up view, Decks, Squads, bingo mini card)
-- `board.row_sev` ↔ `who` in app.js's `Board` (a crew row's Sev in the
+- `board.row_sev` ↔ `who` in app.js's `Board` (a crew row's Pip in the
   emoji's place, its accent and look; mine from `/board`'s `me.look`, 3.8.2).
   The drawing isn't restated: `sev.site_kit()` is written into
-  `site/public/sev.js` by `tools/gen_sev_js.py` (run it when Sev or the
+  `site/public/sev.js` by `tools/gen_sev_js.py` (run it when Pip or the
   closet changes); its `clean`/`shown` restate `closet.clean`/`shown`. The
   suite checks the kit is current and runs the JS in node against both
 - `schedule.py` ↔ `Sched` in app.js (a date's window, quota, behind)
@@ -155,8 +155,8 @@ same commit, each with its test:
 | Who knows this, asks, tips | `cards.py`, `together.py` | `cards.ts` |
 | Study rooms | `rooms.py`, `room_model.py` | rides my week |
 | The Fifteen (3.8.1): ▶ Fifteen? in the top bar, the nudge, the question at its end, Take five / Another now / Stop | `room_model.make_fifteen`/`fifteen_next`, `rooms.start_fifteen`/`fifteen_answer` | studying now only (never a room on my week) |
-| Sev (3.8.1, Block): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
-| Sev's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's and profile card's Sev in the emoji's place | `closet.py` (pure: things, wear/clean/shown, facts from days and hours), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, earned, worn), `board.closet_html`/`closet_line`/`row_sev`/`card_sev` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
+| Pip (3.8.1, Block; called Sev until 3.8.2, and still `sev` in code: sev.py, the `sev*` keys, `.sv`, sev.js's `Sev`): by the logo for a moment, in a fifteen's chip, question and break, the nudge, the session's line; hopping across the week picture card; a study room's seats, each crewmate's in their accent; waving in Welcome back and on the signed-out card; hopping on a crewmate's big-streak banner (not on crew rows: Sam's no). Each place has its mix of moves (`sev.MOVES`), never the same twice in a row | `sev.py` (one drawing; the widgets get its markup, the week card and Welcome back `sev.still`; `pick`/`nth` the variety), `rooms.board_sev`/`pick`/`milestone_sevs`/`signed_out_sev`, `sharecard.hops`, `room_model.seats`/`vary_seed`, `ui.sev_label` | never sent; cards.js keeps a copy of `sev.still` (the suite checks it) |
+| Pip's closet (3.8.2): 61 things earned by showing up, coming back, together, plans, card care, seasons, secrets; one per place, a costume over the look; in place of the board (Yours by place, To earn by how); each crew row's and profile card's Pip in the emoji's place | `closet.py` (pure: things, wear/clean/shown, facts from days and hours), `closet_art.py` (the drawings), `closet_flow.py` (facts, tallies in wrap.json, earned, worn), `board.closet_html`/`closet_line`/`row_sev`/`card_sev` | account keys `sev_look`, `sev_closet`; a mutual friend's look on /board (`lookOf` in `board.ts`) |
 | Plans (follow, morning, week, load; You › Plans) | `plans.py`, `schedule.py`, `plan_flow.py` | `plans.ts`, `library.ts`; `builder.js`, app.js |
 | A plan's squad (3.8.0, on the Squads tab; its team on the server) | `team.py`, `team_flow.py` | `team.ts`; `PlanSquad` in builder.js |
 | Insights (the deck's, a plan only sharpens it; You › Insights; the topic map, tiles open into parts; its card and text, shared by hand) | `team.py`, `team_flow.py`, `mapcard.py`, `ui/map_card_dialog.py` | never sent |

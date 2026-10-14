@@ -643,7 +643,7 @@ class FakeWorker:
                                                     "text": text, "withSave": False, "at": int(time.time())})
 
     def _look_of(self, uid):
-        """3.8.2: what someone's Sev has on, from their settings, as board.ts
+        """3.8.2: what someone's Pip has on, from their settings, as board.ts
         lookOf takes it: a handful of short names, else None."""
         look = ((self.settings.get(uid) or {}).get("settings") or {}).get("sev_look")
         if (isinstance(look, list) and 0 < len(look) <= 8
@@ -670,7 +670,7 @@ class FakeWorker:
                 accent = ((self.settings.get(fid) or {}).get("settings") or {}).get("accent")
                 if isinstance(accent, str) and accent in ACCENTS:
                     row["accent"] = accent
-                # 3.8.2: what their Sev has on, as names (board.ts lookOf)
+                # 3.8.2: what their Pip has on, as names (board.ts lookOf)
                 look = self._look_of(fid)
                 if look:
                     row["look"] = look

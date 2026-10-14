@@ -287,14 +287,14 @@ def check(path):
     ok("…read in one pass of the recent answers", t_full < 60 and t_light < 20,
        f"{t_full*1000:.0f} ms a full sync, {t_light*1000:.0f} ms a light one")
 
-    # 3.8.2: Sev's closet reads the revlog's days and hours in one grouped query
+    # 3.8.2: Pip's closet reads the revlog's days and hours in one grouped query
     # a day (today's own hours each time), and the cards learned and leeches
     from due_crew import closet_flow as CF
     CF._RF["key"] = None
     t = tm(); facts = CF.revlog_facts(col); t_day = tm() - t
     t = tm(); again = CF.revlog_facts(col); t_again = tm() - t
     answers = col.db.scalar("SELECT COUNT(*) FROM revlog WHERE ease > 0 AND id < ?", cut * 1000)
-    ok("Sev's closet: every answer counted, its days and runs, the first read of the day and each one after, quick",
+    ok("Pip's closet: every answer counted, its days and runs, the first read of the day and each one after, quick",
        facts["reviews"] == answers and again == facts and facts["days"] > 300 and facts["run"] >= 1
        and facts["learned"] >= 12000 and t_day < 2.5 and t_again < 0.2,
        f"{answers:,} answers, {facts['days']} days, {t_day*1000:.0f} ms the day's first, {t_again*1000:.0f} ms after")

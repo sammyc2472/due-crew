@@ -392,7 +392,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     toasts += together.keep(luck, tips, my_exam, today_lb)
     if fresh:
         _pending_cheers.extend(fresh)
-        _state["sev_cheer"] = time.time()  # 3.8.1: Sev catches it by the logo, once
+        _state["sev_cheer"] = time.time()  # 3.8.1: Pip catches it by the logo, once
         _closet(lambda cf: cf.note_cheered())  # 3.8.2: a crewmate's cheer
 
     if knocks is not None:
@@ -418,7 +418,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
     elif data.get("plans"):
         plan_flow.refresh_progress()
     due_flow.after_refresh()  # Due: a fresh reviews count, and the morning's leeches when asked
-    _closet(lambda cf: _closet_day(cf, labels[0], data["entries"]))  # 3.8.2: Sev's closet
+    _closet(lambda cf: _closet_day(cf, labels[0], data["entries"]))  # 3.8.2: Pip's closet
     toasts += _update_returns(data["entries"], labels, tomorrow, c)
     milestone = _update_wrap(data["entries"], labels)
     if milestone and c.get("sync_notifications", True):
@@ -435,7 +435,7 @@ def _commit(data, c, labels, tomorrow, knocks=None, gone=(), failed=False):
 
 
 def _closet(do):
-    """3.8.2: tell Sev's closet (closet_flow); never in the way of the board."""
+    """3.8.2: tell Pip's closet (closet_flow); never in the way of the board."""
     try:
         from . import closet_flow
         do(closet_flow)
@@ -464,7 +464,7 @@ def _on_render(deck_browser, content):
             content.stats += board.settings_html(_settings_view(), c)
             return
         if _state.get("closet_open"):
-            _state["board_shown"] = True  # 3.8.2: Sev's closet, as Settings
+            _state["board_shown"] = True  # 3.8.2: Pip's closet, as Settings
             content.stats += board.closet_html(_closet_view(), c)
             return
         if not c.get("show_leaderboard", True):
@@ -539,7 +539,7 @@ def _board_html(c):
     if _state.get("settings_tab"):
         return board.settings_html(_settings_view(), c)  # 3.5.0: Settings in its place
     if _state.get("closet_open"):
-        return board.closet_html(_closet_view(), c)  # 3.8.2: Sev's closet in its place
+        return board.closet_html(_closet_view(), c)  # 3.8.2: Pip's closet in its place
     if _state.get("team_bingo_open"):
         from . import team_flow  # 3.7.3: a plan team's card in its place
         pid = _state["team_bingo_open"]
@@ -915,7 +915,7 @@ def _on_js(handled, message, context):
     elif cmd == "settings":
         open_settings(tab=parts[2] if len(parts) > 2 else None)
     elif cmd.startswith("closet"):
-        _closet_cmd(cmd, parts[2:])  # 3.8.2: Sev's closet
+        _closet_cmd(cmd, parts[2:])  # 3.8.2: Pip's closet
     elif cmd == "heatday" and len(parts) > 2:
         _browse_day(parts[2])
     elif cmd in SETTINGS_CMDS:
@@ -1148,8 +1148,8 @@ _share_push = {"n": 0}
 
 
 def open_closet(tab=None):
-    """3.8.2: Sev's closet, in place of the board (as Settings is), from
-    anywhere: what just came for Sev shows as new there, and the board's
+    """3.8.2: Pip's closet, in place of the board (as Settings is), from
+    anywhere: what just came for Pip shows as new there, and the board's
     line for it is done."""
     news = list((_state.get("closet_new") or {}).get("keys") or [])
     _state["closet_open"] = {"tab": tab or board.CLOSET_TABS[0], "msg": "", "new": news, "drawn": False}
@@ -1168,7 +1168,7 @@ def _closet_view():
     from . import closet_flow
     st = _state.get("closet_open") or {}
     c = cfg()
-    rest, st["drawn"] = bool(st.get("drawn")), True  # Sev waves when it opens and at a change, then rests
+    rest, st["drawn"] = bool(st.get("drawn")), True  # Pip waves when it opens and at a change, then rests
     near, progress = closet_flow.standing(c)
     return {"tab": st.get("tab"), "have": closet_flow.have(c), "look": closet_flow.look(c),
             "near": near, "progress": progress, "new": st.get("new") or [], "msg": st.get("msg") or "", "rest": rest}
@@ -1440,7 +1440,7 @@ def _on_profile_open():
     _closing = False
     _last_attempt = 0.0
     client()                  # rebind to this profile's session
-    _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Sev's closet
+    _closet(lambda cf: cf.hook())  # 3.8.2: cards I add count for Pip's closet
     if client().signed_in:
         account.ensure()      # 2.13: my settings, before anything uploads
     _settle_tabs()
@@ -1489,7 +1489,7 @@ def _tools_menu():
                  ("Follow a plan…", plan_flow.open_follow),
                  ("Export cards for my AI…", plan_flow.open_export), None,
                  ("Settings…", open_settings),
-                 ("Sev’s closet…", lambda: open_closet()),
+                 ("Pip’s closet…", lambda: open_closet()),
                  ("Show on the Decks screen", _toggle_board),
                  ("Send feedback…", open_feedback)):
         if item is None:

@@ -205,8 +205,8 @@ def _svg_pixmap(markup, width, height):
     return pixmap
 
 
-def sev_label(pose="hello", size=64, name="Sev"):
-    """3.8.1: Sev in a dialog's corner (Welcome back), in the accent and
+def sev_label(pose="hello", size=64, name="Pip"):
+    """3.8.1: Pip in a dialog's corner (Welcome back), in the accent and
     Anki's theme: sev.py's one drawing, still (a Qt window can't play the
     board's motion; it's the frame Reduce motion shows). None if this Qt
     can't draw SVG: the dialog goes without."""

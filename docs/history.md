@@ -1650,10 +1650,10 @@ every release that changes how something works.
   rests with Reduce motion on too (landed, what flew gone), so a banner
   that stays isn't left mid-hop.
 
-- 3.8.2, Sev's closet (the "Fun Round" page, round two; Sam: "costumes tied
+- 3.8.2, Pip's closet (the "Fun Round" page, round two; Sam: "costumes tied
   to achievements ... more more more", then "make sure someone can't enable
   multiple costumes at a time that conflict, one should replace the
-  other"). 61 things Sev earns, `closet.THINGS` (the drawings in
+  other"). 61 things Pip earns, `closet.THINGS` (the drawings in
   `closet_art`), in groups: showing up (days studied, days in a row,
   mornings before 8, evenings after 9, nothing left due seven days
   running, a whole Anki life's reviews, cards learned), Fifteens, the crew
@@ -1666,7 +1666,7 @@ every release that changes how something works.
   seasons (Halloween week a thing a day for five days, winter, the
   longest night, New Year, Friends' day, spring, summer: studied on the
   day, any year) and five secrets (Pi day, a Friday the 13th, a year with
-  your Sev, the year turning, a leap day; a question mark until found).
+  your Pip, the year turning, a leap day; a question mark until found).
   Never for getting cards right (Again stays honest), never for one big
   day, never bought, never taken away. Five more (a viking helmet, a book,
   a watch, the knight, the beast hood) wait for the Beast and Crew Town.
@@ -1677,7 +1677,7 @@ every release that changes how something works.
   one at a time (a second replaces the first), the look waiting under it
   to come back when it comes off; anything else put on takes the costume
   off. `closet.clean` makes any look follow the same rules (an old one, a
-  crewmate's off the server), `closet.shown` what shows. Sev wears it
+  crewmate's off the server), `closet.shown` what shows. Pip wears it
   (`sev.svg(look=)`, `sev.still(look=)`): the back behind the body, the
   rest over it, and what it holds in the right arm (`sev._arms(pose,
   hand)`), so it follows a wave and stays upright; a pose whose hands are
@@ -1702,7 +1702,7 @@ every release that changes how something works.
   place of the board, as Settings does (`board.closet_html`, the
   `closet*` commands). After Sam's first click-test ("the distinction
   between which items are active vs inactive aren't really that clear"),
-  it's in two: Yours, your things by place on Sev, head to back and then
+  it's in two: Yours, your things by place on Pip, head to back and then
   the costumes, one at a time in each place, each tile saying what earned
   it; what's on is the accent, filled, with a tick (On), a thing a
   costume covers says Under, a new one New; a place with nothing yet says
@@ -1710,20 +1710,35 @@ every release that changes how something works.
   thing you haven't got by how it's earned, greyed, with how far along
   (`closet.progress`), never a button (no try-on: Sam's call, nothing is
   worn before it's earned); secrets a question mark. On the left, your
-  Sev big and what's on, place by place, each taking it off; Take it all
+  Pip big and what's on, place by place, each taking it off; Take it all
   off. No explainer under it (Sam: "too explainy"). Ways in: Settings ›
-  Fifteen and Sev › Sev's closet, Tools › Due Crew › Sev's closet, your
-  Sev (by the logo, on your row, on your card), the board's line. Your Sev
+  Fifteen and Pip › Pip's closet, Tools › Due Crew › Pip's closet, your
+  Pip (by the logo, on your row, on your card), the board's line. Your Pip
   wears your look wherever it shows (by the logo, ▶ Fifteen? in the top
   bar, the nudge, the session's line, a fifteen's chip, question and
   break, the signed-out card, Welcome back, the week picture card made in
   Anki), a crewmate's wears theirs (a room's seats, the streak banner),
   and crew rows and profile cards (`board.card_sev`) show each person's
-  Sev in the emoji's place, in their colour and look (Sam: "move away
-  from emojis toward Sevs"; `board.row_sev`); with Sev off in Settings,
+  Pip in the emoji's place, in their colour and look (Sam: "move away
+  from emojis toward Pips"; `board.row_sev`); with Pip off in Settings,
   the emoji as before. Your card keeps Change emoji (squads, bingo and
-  older add-ons still show it) beside Sev's closet. A row with a Sev is a
+  older add-ons still show it) beside Pip's closet. A row with a Pip is a
   little taller (`tr.sv`): the name's cell clips what spills out, so a
   hat needs the room, and the whole row gets it so the name and the
-  numbers stay on one line; Sev sits clear of the name, outside its
-  underline. The site's picture cards keep the plain Sev (cards.js).
+  numbers stay on one line; Pip sits clear of the name, outside its
+  underline. The site's picture cards keep the plain Pip (cards.js).
+
+  Then, before it shipped: Sev is Pip (Sam's pick, from "Pip, Sevvy,
+  Cubby, Bean, Moss": a pip is a little square, like the seven days in
+  the logo). Everywhere a person reads it, in Anki, on the site, the
+  README and the privacy page; the code keeps `sev` (sev.py, the `sev`,
+  `sev_look`, `sev_closet` and `sev_break` keys, the `.sv` classes,
+  sev.js's `Sev`), since the switch and the break shipped in 3.8.1 and
+  renaming a key would reset them. And a held thing never just goes: while
+  Pip's hands are full (the card in a fifteen, the clock, a gift) it's set
+  down on the ground beside it (`closet.art`, `DOWN`), so a fifteen keeps
+  the mug in view (Sam: "the thing in Pip's hand gets removed"). The
+  ▶ Fifteen? chip and a fifteen's chips give Pip room so what it holds,
+  or a costume's tail, clears the ▶ and the clock; a profile card puts Pip
+  beside the name's line, the name and the streak on one baseline. The
+  README's board picture is re-rendered with the crew's Pips.
