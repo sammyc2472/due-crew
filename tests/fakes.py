@@ -173,11 +173,11 @@ def make_collection(conn):
     """The slices of Anki's schema the add-on queries: revlog (with cid, so
     reviews can be credited to a deck), cards, and notes."""
     conn.execute("CREATE TABLE revlog (id INTEGER PRIMARY KEY, ease INTEGER, "
-                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0, lastIvl INTEGER DEFAULT 0)")
+                 "time INTEGER, type INTEGER, cid INTEGER DEFAULT 0, lastIvl INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, "
                  "odid INTEGER DEFAULT 0, type INTEGER DEFAULT 0, "
                  "queue INTEGER DEFAULT 0, ivl INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, "
-                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '')")
+                 "due INTEGER DEFAULT 0, lapses INTEGER DEFAULT 0, data TEXT DEFAULT '', odue INTEGER DEFAULT 0)")
     conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, guid TEXT, mid INTEGER DEFAULT 0, flds TEXT DEFAULT '', "
                  "tags TEXT DEFAULT '', mod INTEGER DEFAULT 0)")
     # Anki bumps a note's mod on every edit; the plan index keeps tags by it
@@ -739,7 +739,7 @@ class FakeWorker:
                 for (to, frm), k in sorted(self.knocks.items())
                 if to == me and frm in self.users and not self._muted_by(me, frm)]
 
-    WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap"}
+    WEEK_KEYS = {"v", "days", "paused", "examDate", "awayFrom", "awayTo", "liveUntil", "tricky", "room", "recap", "beast"}
     DAY_KEYS = {"studied", "reviews", "studyTimeMs", "streak", "newCards", "accuracy", "status"}
 
     def _clean_week(self, w):
@@ -771,6 +771,14 @@ class FakeWorker:
                     or not _is_int(r.get("n"), 1, 200) or not DATE_RE.fullmatch(str(r.get("day")))):
                 raise Bad(400, "bad_week")
             out["recap"] = {"name": r["name"][:60], "n": r["n"], "day": r["day"]}
+        if "beast" in w:
+            # 3.9.0 (validate.ts: case "beast"): kind and how far, an end day only at 100
+            b = w["beast"]
+            if (not isinstance(b, dict) or b.get("k") not in ("snooze", "owl", "leech", "pile", "backlog")
+                    or not _is_int(b.get("p"), 0, 100)
+                    or ("end" in b and (b["p"] != 100 or not DATE_RE.fullmatch(str(b["end"]))))):
+                raise Bad(400, "bad_week")
+            out["beast"] = {k: b[k] for k in ("k", "p", "end") if k in b}  # anything else is dropped
         return out
 
     ROW_KEYS = {"name", "day", "reviews", "studyTimeMs", "accuracy", "streak", "week", "emoji", "newCards", "play"}

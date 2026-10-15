@@ -456,7 +456,7 @@ def main(out):
             raise RuntimeError(f"tools menu: {len(subs)} Due Crew submenus")
         items = [a.text() or "—" for a in subs[0].actions()]
         want = ["Study what’s next", "—", "Friends…", "Squads…", "—", "Make a plan from a deck…",
-                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Pip’s closet…", "Show on the Decks screen",
+                "Follow a plan…", "Export cards for my AI…", "—", "Settings…", "Pip’s closet…", "Your year…", "Show on the Decks screen",
                 "Send feedback…"]
         if items != want:
             raise RuntimeError(f"tools menu: {items}")

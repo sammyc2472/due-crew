@@ -139,6 +139,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .brdt .chip.live { color: var(--accent); font-weight: 700; }
 .brdt .chip.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 5px; vertical-align: 1px; }
 .brdt .chip.exam { color: var(--warn); font-weight: 700; }
+/* 3.9.0: a crew row's Backlog Beast (board.beast_chip): small, then how far it's beaten */
+.brdt .chip.bst { display: inline-flex; align-items: center; gap: 3px; vertical-align: -1px; }
+.brdt .chip .dc-bst { width: 18px; height: 15px; overflow: hidden; display: inline-block; }
 .brdt .bub { display: inline-block; margin-top: 5px; font-size: 12.5px; padding: 3px 10px; border-radius: 99px; background: var(--well); color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .brdt .chc { width: 30px; position: relative; } .brdt .cheer { font-size: 15px; opacity: 0.6; } .brdt .cheer:hover { opacity: 1; }
 .sq { width: 14px; height: 14px; border-radius: 3px; background: var(--well); display: inline-block; } .sq.on { background: var(--accent); }

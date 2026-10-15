@@ -491,6 +491,37 @@ ART = {
          '<circle cx="69.5" cy="46.5" r="6.4" style="fill:rgba(200,230,255,.55)" stroke="#6b4b2b" stroke-width="2"/>'
          '<path d="M66.6 44 C67.4 42.6 68.8 41.9 70.2 41.9" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round"/>'),
         ""),
+    # 3.9.0: the Backlog Beast's (the fun round's mock, round three)
+    "viking": (
+        ('<path d="M24 25 C19 22 15 16 15 9 C19 13 22 15 27 18 Z" style="fill:#f4efe6"/>'
+         '<path d="M56 25 C61 22 65 16 65 9 C61 13 58 15 53 18 Z" style="fill:#f4efe6"/>'
+         '<path d="M22.5 31.5 C22.5 20 30 15 40 15 C50 15 57.5 20 57.5 31.5 Z" style="fill:#9aa3ad"/>'
+         '<rect x="20.5" y="27.5" width="39" height="5" rx="2.5" style="fill:#7f8892"/>'
+         '<circle cx="25" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<circle cx="31" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<circle cx="37" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<circle cx="43" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<circle cx="49" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<circle cx="55" cy="30" r=".9" style="fill:#c9ced4"/>'
+         '<path d="M40 15 V27.5" stroke="#7f8892" stroke-width="2"/>'),
+        ""),
+    "beasthood": (
+        ('<path d="M18.5 40 C18.5 23 28 16 40 16 C52 16 61.5 23 61.5 40 L57.5 40 C57.5 29 50 22 40 22 C30 22 22.5 29 22.5 40 Z" style="fill:#7b5cd6"/>'
+         '<path d="M26 20 L28 11 L34 18 Z M54 20 L52 11 L46 18 Z" style="fill:#f2b33d"/>'
+         '<circle cx="34" cy="19" r="3.4" style="fill:#fff"/>'
+         '<circle cx="46" cy="19" r="3.4" style="fill:#fff"/>'
+         '<circle cx="34.6" cy="19.6" r="1.6" style="fill:#241640"/>'
+         '<circle cx="46.6" cy="19.6" r="1.6" style="fill:#241640"/>'
+         '<path d="M26 38 l2 3 l2 -3 M50 38 l2 3 l2 -3" style="fill:#fff"/>'),
+        ""),
+    "knight": (
+        ('<path d="M21.5 34 C21.5 21 29.5 15 40 15 C50.5 15 58.5 21 58.5 34 Z" style="fill:#aeb6bf"/>'
+         '<path d="M40 15 V34" stroke="#8f98a3" stroke-width="2"/>'
+         '<rect x="21.5" y="31" width="37" height="4" rx="2" style="fill:#8f98a3"/>'
+         '<path d="M40 15 C44 9 49 8 54 10 C49 11 45 13 42 16 Z" style="fill:#d9534f"/>'
+         '<path d="M5 45 H19 V55 C19 61 12 65 12 65 C12 65 5 61 5 55 Z" style="fill:#2f6fb5" stroke="#f2c230" stroke-width="1.4"/>'
+         '<path d="M12 46.5 V62 M6.5 52 H17.5" stroke="#f2c230" stroke-width="1.6"/>'),
+        ""),
     "ghost": (
         ('<path d="M16.5 70.5 L16.5 41 C16.5 27 27 21 40 21 C53 21 63.5 27 63.5 41 L63.5 70.5 Q60 66.5 56.5 70.5 Q53 66.5 49.5 70.5 Q46 66.5 42.5 70.5 Q39 66.5 35.5 70.5 Q32 66.5 28.5 70.5 Q25 66.5 21.5 70.5 Q19 67.5 16.5 70.5 Z" style="fill:#fbfbf7" stroke="#d6d6cf" stroke-width="1"/>'
          '<g class="sv-eyes"><ellipse cx="33" cy="43" rx="3.9" ry="5.4" style="fill:#2b2d29"/>'

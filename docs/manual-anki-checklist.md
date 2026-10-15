@@ -665,6 +665,18 @@ In Anki (as a follower):
 - [ ] Plan ▾ › How its cards open: switch to When I'm ready (a deck with open later cards offers Hold back), and back to the plan's dates (dates passed since ask, as Resume does). duecrew.com's plan page shows "At your pace · next: …" and the same choice; changing it there reaches Anki at its next refresh.
 - [ ] Browse: right-click a tag in the sidebar › Due Crew: open its cards…: the sheet counts what opens, what's open already, the leeches (they stay suspended), and the plans that hold them; Open with First in line ticked puts them first in Anki's new cards; one Edit › Undo shuts them. Pick cards in the table › Due Crew: open these…: the same for just those. Signed out: both are there.
 
+### 3.9.0: the Backlog Beast
+
+- [ ] A profile with a real pile (a week away is easiest: 100 overdue cards or more, and two of your usual days' worth), after the day's AnkiWeb sync: a card in the You bubble, "The Backlog Beast" (or the Snoozasaurus after a week away, the Overdue Owl, the Leech Lord, the Pile), "Turned up today · N left · today's bite B", its health bar in its colour. It shows on every tab of the bubble; folded, the beast sits small on the one line. Before the AnkiWeb sync: nothing yet.
+- [ ] Study the bite ›: Anki's Study screen on "Due Crew::The Backlog Beast" with B cards, the most overdue first; Edit › Undo takes the deck away. Review some: back on the Decks screen, the card's left count and health drop (Again counts too). Leave some of the bite: the next morning the deck is gone and those cards are back in their decks.
+- [ ] Click the beast: the fight, in the board's place: big, what it says, its health with quarter ticks, "N of M knocked off · L left", Gentle / Steady / Fast (Steady on; Fast doubles the bite and the days drop), Study the bite, Let it go. A quarter beaten: a horn falls. Half: the other, a brow and a sweat. Three quarters: dizzy eyes, a wobble. ‹ Board goes back. Reduce motion: no breathing or wobble.
+- [ ] Suspend a few of its cards in Browse: they leave it without a hit. Suspend half: it wanders off ("wandered off" on the card, once).
+- [ ] Beat it (review its last card): the card says "You beat The Backlog Beast!" with a pet and its x; the fight page shows the pet; the closet has the beast hood (Beasts); Your year's beasts slide has it. No new beast for a week.
+- [ ] Let it go (asked first): it's gone, nobody's told, no pet; a week before another. Not for me: beasts off; Settings › Board › Backlog beasts brings them back.
+- [ ] A crewmate's beast (theirs on 3.9.0, My beast on): after the name, their beast small and "62%"; never a number of cards. Their beaten one: a banner "Dre beat The Snoozasaurus." with Send 🏆 (a cheer) and ×, for two days. Settings › Privacy › My beast off: after your next sync, gone from your row on their board. Just that I studied: you see nobody's beast.
+- [ ] Your other computer after an AnkiWeb sync and a Due Crew refresh: the same beast, the same count left.
+- [ ] duecrew.com, Crew › Today: a crewmate's beast after their name, the same drawing and percent.
+
 ### 3.9.0: your Wrapped
 
 - [ ] Tools › Due Crew › Your year…: the board's place shows Your 2026 on a phone-shaped card; it moves on every few seconds and waits while the pointer is on it; the right side or → goes on, the left or ← goes back. Each slide's Pip plays as it comes, in your look. ‹ Board goes back.
@@ -693,7 +705,7 @@ In Anki (as a follower):
 ### 3.8.2: Pip's closet
 
 - [ ] First refresh after updating: the board's line says the closet is open and how many things your days had earned already; See them opens it. Your crew's rows show each person's Pip where their emoji was, in their colour (yours in yours); Settings › Pip off brings the emojis back.
-- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 61. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
+- [ ] The closet (Settings › Fifteen and Pip › Pip's closet, or Tools › Due Crew › Pip's closet, or click your Pip on your row or your card): your Pip big, in what it has on, and what's on place by place; ‹ Board goes back. The count says N of 64. Yours shows your things by place, each with what earned it; what's on is filled with a ✓ On.
 - [ ] Put on a hat, then another hat: the second replaces the first. Glasses and a hat together: both on. Earmuffs and a scarf (winter) with a scarf on: the scarf comes off.
 - [ ] A costume (the Dinosaur, say) over a look: only the costume shows; a second costume replaces the first; take the costume off (click it again, or its chip): the look you had comes back. Put a hat on while in a costume: the costume comes off.
 - [ ] To earn: everything you haven't got, by how it's earned, greyed, with what it needs (and how far along); clicking does nothing, Pip never wears it. A secret says it's a secret and shows nothing. A place on Yours with nothing yet says what's next.

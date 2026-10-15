@@ -1851,3 +1851,48 @@ every release that changes how something works.
   keys move it; Reduce motion never moves it on; All on one page lists
   every slide as text (`board.wrapped_html`, `wrapped_js`, said to the
   page after each draw; `wrapped.py` pure, `wrapped_flow.py` the glue).
+- 3.9.0, the Backlog Beast, yours (Sam's pick, round three: "Build ·
+  Yours · Rule B · My beast on to start · Steady · In parts of three
+  weeks"). When the overdue pile gets real it turns up as a creature
+  whose kind says why the pile built (`beast.KINDS`: the Snoozasaurus after
+  a week or more away, the Overdue Owl when half its cards are two weeks
+  late, the Leech Lord when one in seven is a leech, the Pile at five usual
+  days, the Backlog Beast otherwise). The pile is review cards due before
+  today in decks studied in the last 30 days (a card in a filtered deck by
+  its home's due), never new or learning ones. Rule B (the round's
+  simulation: rule A was seven beasts in four months for someone on and
+  off): two usual days (the middle of the days studied in the last four
+  weeks) and 100 cards or more, a week after the last one left, never
+  away or paused; looked for once an Anki day, after the day's AnkiWeb
+  sync, as the plans' morning waits. It never grows: its cards are the
+  ones overdue that morning, the most overdue for their interval first,
+  at most three weeks of bites (the rest after its rest). Any review of
+  one knocks it, Again too, on any device; a card suspended, deleted or
+  made new leaves it without a hit, and half gone that way it wanders off.
+  The bite is half a usual day at Steady (Gentle a quarter, Fast a whole
+  one), Study the bite a Due Crew deck of it (Anki's relative-overdue
+  order, one undo step; a bite left at the next morning is emptied back,
+  as Today's misses is). It breaks up as it's beaten (a horn at a quarter,
+  the other at half with a sweat, dizzy at three quarters, smaller all the
+  way; `beast_art`), and beaten it's a pet: on the fight's page, on
+  Wrapped's beasts slide, and the closet's three new things (the beast
+  hood, the viking helmet at five, the knight at ten; Beasts is a group).
+  Let it go: it waves and leaves, nobody's told. Where it is: a card in
+  the You bubble on every tab (small on the folded line), the fight in
+  the board's place (`board.beast_html`), the switches in Settings (Board
+  › Backlog beasts; Privacy › My beast, with the numbers). What's sent:
+  with My beast on, my week's `beast` is its kind and how far
+  (`beast.week_field`), never its size or its cards; a crewmate's shows
+  after their name as the last thing a chip says (`board.beast_chip` ↔
+  `beastChip` in app.js, its drawing from sev.js's kit), and a beaten one
+  is a banner for two days with a cheer (a trophy). The account keeps the
+  beast (`beast`: the one now and the last 50 met; `account.merge3` merges
+  two computers' by `beast.merge`), so every computer has the same one;
+  its cards stay here (`user_files/<profile>/beast.json`), and another
+  computer works them out from Anki's history for that morning. Its hits
+  are counted on each computer from Anki's history and never saved, so a
+  review costs no request: the account is written when it comes, when it
+  ends, and at a pace. The Worker checks the week's `beast` (validate.ts,
+  the fake the same); an older Worker that refuses it gets the week
+  without it, so deploy the Worker first. `beast.py` pure, `beast_flow.py`
+  the glue, `beast_art.py` the drawings.

@@ -583,6 +583,43 @@ sections.append("<h3>3.9.0: your Wrapped, in the board's place: the year's story
                 + board.wrapped_html(_WV, dict(_MINE, accent="green")))
 sections.append("<h3>3.9.0: 1 December to 15 January: the line on the board</h3>" + board.render(
     dict(DATA, entries=DRESSED), dict(_MINE, period="today"), now_ts - 60, wrapped={"year": 2026, "so_far": True, "look": _MINE["sev_look"]}))
+# 3.9.0: the Backlog Beast: crewmates' beasts on their rows, a beaten one's banner, my card, the fight
+from due_crew import beast as _bst  # noqa: E402
+_BK = {DRESSED[1]["user_id"]: {"k": "snooze", "p": 62}, DRESSED[2]["user_id"]: {"k": "owl", "p": 100, "end": L[0]},
+       DRESSED[3]["user_id"]: {"k": "leech", "p": 18}}
+BEASTED = [dict(e, beast=_BK.get(e["user_id"])) for e in DRESSED]
+_bnow = dict(_bst.turn_up(L[0], "backlog", list(range(412)), 180), hit=150)
+_bf, _bl = _bst.progress(_bnow)
+
+
+def _bv(now=_bnow, **k):
+    f, left = _bst.progress(now)
+    return dict({"now": now, "frac": f, "left": left, "says": _bst.says(now["k"], f), "bite": _bst.bite(now["usual"], now["pace"]),
+                 "days": _bst.days_left(left, now["usual"], now["pace"]), "met": [], "news": None, "share": True, "on": True,
+                 "naps": False}, **k)
+
+
+_YOU = {"tab": "today", "folded": False, "plans": PLANS, "insights": None}
+sections.append("<h3>3.9.0: the Backlog Beast: crewmates' beasts on their rows, a beaten one's banner, mine in the You bubble the morning it came</h3>"
+                + board.render(dict(DATA, entries=BEASTED), dict(_MINE, period="today"), now_ts - 60, you=_YOU,
+                               beast={"view": _bv(news={"k": "backlog", "how": "came", "day": L[0]}), "seen": []}))
+sections.append("<h3>3.9.0: the You bubble folded: the beast small on its line</h3>"
+                + board.render(dict(DATA, entries=BEASTED), dict(_MINE, period="today"), now_ts - 60,
+                               you=dict(_YOU, folded=True), beast={"view": _bv(), "seen": []}))
+for _k, _hit, _cap in (("backlog", 150, False), ("backlog", 330, False), ("backlog", 2600, True), ("snooze", 2400, True), ("owl", 40, False),
+                       ("pile", 500, False), ("leech", 200, False)):
+    _n = dict(_bst.turn_up(L[0], _k, list(range(3150 if _cap else 640)), 300), hit=_hit, capped=_cap)
+    sections.append(f"<h3>3.9.0: the fight, in the board's place: {_bst.KINDS[_k]['name']}, {int(_bst.progress(_n)[0] * 100)}% beaten</h3>"
+                    + board.beast_html(_bv(_n, met=[{"k": "owl", "day": "2026-08-01", "end": "2026-08-09", "size": 300, "how": "beaten"},
+                                                    {"k": "snooze", "day": "2026-09-01", "end": "2026-09-12", "size": 1800, "how": "beaten"}]),
+                                       dict(_MINE, accent="green")))
+sections.append("<h3>3.9.0: the day it's beaten: the card's line, and the fight page with its pet</h3>"
+                + board.render(dict(DATA, entries=BEASTED), dict(_MINE, period="today"), now_ts - 60, you=_YOU,
+                               beast={"view": {"news": {"k": "pile", "how": "beaten", "day": L[0]},
+                                               "met": [{"k": "pile", "day": L[6], "end": L[0], "size": 1150, "how": "beaten"}]},
+                                      "seen": []})
+                + board.beast_html({"news": {"k": "pile", "how": "beaten", "day": L[0]}, "on": True,
+                                    "met": [{"k": "pile", "day": L[6], "end": L[0], "size": 1150, "how": "beaten"}]}, _MINE))
 # Each board styles `#due-crew`; on one page the last <style> would win for
 # all of them, so every accent gets its own document via srcdoc.
 def _framed(markup, dark):

@@ -34,7 +34,7 @@ SLOTS = ("back", "body", "face", "head", "hand")  # drawn in this order, the han
 COSTUME = "costume"
 LOOK_MAX = len(SLOTS) + 1  # one in each place, and a costume over them
 
-GROUPS = ("Showing up", "Fifteens", "Crew", "Squads", "Plans", "Coming back", "Card care", "Seasons", "Secret")
+GROUPS = ("Showing up", "Fifteens", "Crew", "Squads", "Plans", "Coming back", "Card care", "Beasts", "Seasons", "Secret")
 
 # (key, place, group, name, rule, (fact, n)[, extra]). Order is the closet's.
 # extra: when (a season's dates), tip (what the rule means, in a tooltip),
@@ -82,6 +82,7 @@ _T = (
      {"tip": "Cards you add in Anki’s Add window, counted from when the closet came"}),
     ("magnifier", "hand", "Card care", "Magnifying glass", "10 leeches turned around", ("leeches", 10),
      {"tip": "A card that lapsed 8 times, now going three weeks or more between reviews"}),
+    ("viking", "head", "Beasts", "Viking helmet", "5 beasts beaten", ("beasts", 5)),  # 3.9.0: the Backlog Beast
     ("pumpkin", "head", "Seasons", "Pumpkin", "A day of Halloween week", ("halloween", 1), {"when": "24 to 31 Oct"}),
     ("witch", "head", "Seasons", "Witch hat", "Two days of Halloween week", ("halloween", 2), {"when": "24 to 31 Oct"}),
     ("batwings", "back", "Seasons", "Bat wings", "Three days of Halloween week", ("halloween", 3), {"when": "24 to 31 Oct"}),
@@ -106,6 +107,9 @@ _T = (
      {"tip": "Every date of a plan with an exam on it done, and the exam behind you"}),
     ("detective", COSTUME, "Card care", "Detective", "50 leeches turned around", ("leeches", 50),
      {"tip": "A card that lapsed 8 times, now going three weeks or more between reviews"}),
+    ("beasthood", COSTUME, "Beasts", "Beast hood", "Your first beast beaten", ("beasts", 1),
+     {"tip": "When your overdue pile gets big it turns up as a beast; a bite a day beats it"}),
+    ("knight", COSTUME, "Beasts", "Knight", "10 beasts beaten", ("beasts", 10)),
     ("ghost", COSTUME, "Seasons", "Ghost", "Four days of Halloween week", ("halloween", 4), {"when": "24 to 31 Oct"}),
     ("mummy", COSTUME, "Seasons", "Mummy", "Five days of Halloween week", ("halloween", 5), {"when": "24 to 31 Oct"}),
     ("frog", COSTUME, "Secret", "Frog", "A leap day", ("leap", 1)),
@@ -120,7 +124,7 @@ UNITS = {"run": "days in a row", "days": "days studied", "mornings": "mornings b
          "evenings": "evenings after 9", "clear": "days with nothing left due", "reviews": "reviews",
          "learned": "cards learned", "fifteens": "Fifteens", "fifteen_am": "Fifteens before 9",
          "rooms": "rooms with your crew", "cheered": "crewmates cheered", "cheer_days": "days you cheered",
-         "own_cards": "cards added", "leeches": "leeches turned around"}
+         "own_cards": "cards added", "leeches": "leeches turned around", "beasts": "beasts beaten"}
 
 
 def places(k):

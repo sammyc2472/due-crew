@@ -14,7 +14,8 @@ SWITCHES = ("show_leaderboard", "show_stale", "sync_notifications", "compact",
             "share_streak", "share_heatmap",
             "due_show", "due_suggest", "due_leeches",  # Due
             "shortcuts",  # 3.8.0: Ctrl+Shift+S and Ctrl+Shift+Q
-            "fifteen", "sev")  # 3.8.1: ▶ Fifteen? and the nudge; Pip
+            "fifteen", "sev",  # 3.8.1: ▶ Fifteen? and the nudge; Pip
+            "beasts", "share_beast")  # 3.9.0: the Backlog Beast; My beast (Privacy)
 CHOICES = {"theme": ("auto", "light", "dark"),
            "accent": ("green", "blue", "purple", "teal", "amber", "rose"),
            "room_chip_side": ("left", "right"),
