@@ -14187,8 +14187,8 @@ def test_beast_flow_v390():
             F._write("2026-10-15", kept_ids)
             F.study_bite()
             name, cids, order = built[-1]
-            check("Study the bite: a Due Crew deck of today's bite (30), its unreviewed cards, the most overdue first (Anki's order 8)",
-                  name == "Due Crew::The Backlog Beast" and len(cids) == 30 and not set(cids) & set(ids[:30]) and order == 8
+            check("Study the bite: a Due Crew deck of today's bite (30), its unreviewed cards, the most overdue first (Anki's order by name; Due without Anki)",
+                  name == "Due Crew::The Backlog Beast" and len(cids) == 30 and not set(cids) & set(ids[:30]) and order == F.overdue_order()
                   and pc.get("bite_day"), built[-1][::2])
         finally:
             pf._filtered, pf._after_change, pf._pcfg, pf._psave = old

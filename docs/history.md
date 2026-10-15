@@ -1871,8 +1871,10 @@ every release that changes how something works.
   made new leaves it without a hit, and half gone that way it wanders off.
   The bite is half a usual day at Steady (Gentle a quarter, Fast a whole
   one), Study the bite a Due Crew deck of it (Anki's relative-overdue
-  order, one undo step; a bite left at the next morning is emptied back,
-  as Today's misses is). It breaks up as it's beaten (a horn at a quarter,
+  order, found by its name: Anki renumbered the orders, and on 26.09 the
+  old number is retrievability, which builds nothing on SM-2, as
+  `tools/real_anki.py` caught; one undo step; a bite left at the next
+  morning is emptied back, as Today's misses is). It breaks up as it's beaten (a horn at a quarter,
   the other at half with a sweat, dizzy at three quarters, smaller all the
   way; `beast_art`), and beaten it's a pet: on the fight's page, on
   Wrapped's beasts slide, and the closet's three new things (the beast

@@ -29,8 +29,23 @@ KEY = "beast"  # the account's (account.ACCOUNT_KEYS)
 ON_KEY = "beasts"  # the account's: beasts at all (Settings; the beast's Not for me)
 SHARE_KEY = "share_beast"  # the account's: My beast, in Privacy
 FILE = "beast.json"
-DUE_PRIORITY = 8  # Anki's filtered-deck order: relative overdueness
 CHUNK = 500
+
+
+def overdue_order():
+    """Anki's filtered-deck order for relative overdueness, found by its
+    name: Anki renumbered them (on 26.09 it's 10, and 8 is retrievability,
+    which builds nothing for a deck on SM-2). Due order where it has
+    neither name."""
+    try:
+        from anki.decks_pb2 import Deck
+        order = Deck.Filtered.SearchTerm.Order
+        for name in ("RELATIVE_OVERDUENESS", "DUE_PRIORITY"):
+            if name in order.keys():
+                return int(order.Value(name))
+    except Exception:
+        pass
+    return 6  # DUE, the same number on every version
 
 
 def state(c=None):
@@ -284,7 +299,7 @@ def study_bite():
         tooltip("Nothing left in its bite today.")
         return
     name = P.our_deck(B.KINDS[now["k"]]["name"])
-    if pf._filtered(mw.col, name, ids, order=DUE_PRIORITY):
+    if pf._filtered(mw.col, name, ids, order=overdue_order()):
         c = pf._pcfg()
         c["bite_day"] = pf._today()  # the next morning empties it back if it's left
         pf._psave(c)
