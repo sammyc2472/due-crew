@@ -2200,7 +2200,7 @@ def test_together_v210():
           and chip.get("actcmd", "").startswith("knowshelped:") and "more" not in chip, str(chip))
     js = crew_cards.chip_js(dict(chip, accent="#0a0"))
     check("tips: This helped is its own click, the tip's words go in as text",
-          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and "innerHTML" not in js)
+          "stopPropagation" in js and "duecrew:" in js and "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     from due_crew import room_model as rm
     check("bottom bar: the chip, a room beside Edit, and removing them keep the answer buttons centred",
           "dcBarBalance" in js and "dcBarBalance" in crew_cards.chip_js(None)
@@ -2221,7 +2221,7 @@ def test_together_v210():
     fj = crew_cards.float_js(dict(chip, accent=["#0a0", "#7c7"]))
     check("ask card: above the bar only while the corner is free, else back to the bar",
           "dc-knows-card" in fj and "knowsbar" in fj and "free()" in fj and "Not now" in fj
-          and rm.CMD_KEY in fj and "textContent" in fj and "innerHTML" not in fj
+          and rm.CMD_KEY in fj and "textContent" in fj and fj.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in fj
           and "dc-knows-card" in crew_cards.float_js(None) and "return false" in crew_cards.float_js(None))
     import aqt.utils as _au
     calls, asked = [], []
@@ -5393,7 +5393,7 @@ def test_who_knows_v32():
     check("chip: a tip's short form names whose tip it is",
           K.chip_view(cardsin["guid000003"], [], names)["short"] == "\U0001F4A1 Dre's tip")
     js = K.chip_js({"text": "</span><script>x</script>", "cmd": "knowsask", "act": "Ask", "accent": "#0a0"})
-    check("chip: text goes in as text", "textContent" in js and "innerHTML" not in js)
+    check("chip: text goes in as text (3.8.22: the one markup is a Pip's own drawing)", "textContent" in js and js.count("innerHTML") == 1 and "p.innerHTML = D.pip.svg" in js)
     acked(sam, sam.fetch_board(labels))  # Dre's tip is read, and the next refresh
     sam.fetch_board(labels)               # says so: a flag on that card may go up again
     sam.session["tricky"] = [{"guid": "guid000003", "deck": "Step 1", "at": _day(0), "text": "A card", "q": "Trick?"}]
@@ -13323,6 +13323,114 @@ def test_plan_card_squad_pips_v3822():
     sq = sq[:sq.index("</div>")]
     check("board: the plan card's squad line, Pips from the board's own crew",
           sq.count("dc-rsev") == 3 and f"--rs-l:{blue[0]}" in sq and "#due-crew .pcrew .pips" in html, sq[:300])
+
+
+def test_pips_where_emojis_were_v3822():
+    """3.8.22 (Sam: "all the places where there are emojis we should reflect
+    pips, including bottom bars, we can make the bingo stamps bigger.
+    remove emojis from the friends dialog. invites and text shares can stay
+    as is"): the review screen's chip, a squadmate's card, Settings › You,
+    the bingo stamps, and on the site the account page, the exam rail and
+    who added me back. Pip off: the emojis, as before. A Pip is our own
+    markup; a name is only ever its label, escaped."""
+    import shutil
+    import subprocess
+    from due_crew import cards as K, sev
+    from due_crew.app import _state
+    blue, plain = board.accent_pair("blue"), board.accent_pair(None)
+    # ---- the review screen: who asked, or knows it, as their Pip ----
+    saved = dict(_state)
+    try:
+        _state["entries"] = [{"user_id": "me", "name": "Sammy", "you": True},
+                             {"user_id": "dre", "name": "Dre <b>Ng", "emoji": "🐢", "accent": "blue", "look": ["dino"]},
+                             {"user_id": "mo", "name": "Mo", "emoji": ""},
+                             {"user_id": "zz", "name": '"><img src=x onerror=alert(1)>', "look": ['"><b>x', "dino\"><i>"],
+                              "accent": "red;}</style>"}]
+        pips = K.pips_by_uid({})
+        off = K.pips_by_uid({"sev": False})
+    finally:
+        _state.clear()
+        _state.update(saved)
+    hostile = pips.pop("zz")
+    check("chip: a hostile name, look or accent never becomes markup in a Pip",
+          not any(x in hostile["svg"] for x in ("<img", "<b>", "<i>", "</style>")) and hostile["a"] == list(plain)
+          and "&lt;img" in hostile["svg"], hostile["svg"][:300])
+    check("chip: each crewmate's Pip, in their colour, a name only its label (escaped); none of mine; Pip off, none",
+          sorted(pips) == ["dre", "mo"] and pips["dre"]["a"] == list(blue) and pips["mo"]["a"] == list(plain)
+          and "Dre &lt;b&gt;Ng’s Pip" in pips["dre"]["svg"] and "<b>" not in pips["dre"]["svg"]
+          and len(pips["dre"]["svg"]) > len(pips["mo"]["svg"]) and off == {}, pips.get("dre", {}).get("svg", "")[:200])
+    names = {"dre": ("Dre <b>Ng", "🐢"), "mo": ("Mo", "")}
+    knows = K.chip_view({"knows": ["dre", "mo"], "tips": []}, [], names, pips=pips)
+    asked = K.chip_view(None, [], names, asks=[("dre", 1, "why?")], pips=pips)
+    old = K.chip_view({"knows": ["dre"], "tips": []}, [], names)
+    check("chip: knows and asked lead with the Pip, no emoji in the words; without pips, the emoji as before",
+          knows["text"] == "Dre and 1 more know this" and knows["pip"] == pips["dre"] and knows["sevcss"] == sev.CSS
+          and asked["text"] == "Dre: “why?”" and asked["pip"] == pips["dre"]
+          and old["text"] == "🐢 Dre knows this" and "pip" not in old, (knows, asked["text"], old["text"]))
+    bar, card = K.chip_js(knows), K.float_js(dict(knows, accent=["#2e7d32", "#7cc47f"]))
+    check("chip: the bar and the card both draw it (its own markup, the words still text)",
+          all("p.innerHTML = D.pip.svg" in x and "pip(" in x and "t.textContent = D.text" in bar for x in (bar, card))
+          and "__PIP__" not in bar + card and "dc-sev-css-k" in bar)
+    node = shutil.which("node")
+    if node:
+        ok = subprocess.run([node, "--check"], input=bar + "\n;" + card, capture_output=True, text=True, timeout=30)
+        check("chip: its scripts parse", ok.returncode == 0, ok.stderr[-400:])
+
+    # ---- a squadmate's card: a plain Pip ----
+    fig = board.card_sev({"name": "igk"}, {})
+    sq = board.stranger_card_js({"uid": "u1", "name": "igk <i>", "emoji": "🐢", "reviews": 1, "time_ms": 1, "retention": None,
+                                 "streak": 1, "rank": 1, "squad": "busm", "today": True, "pending": False,
+                                 "knocked_me": False, "founder_me": False, "sev": fig})
+    check("squadmate card: a plain Pip, in the default colour, no emoji; the name escaped",
+          json.dumps(fig)[1:40] in sq and f"--sv-a: {plain[0]}" in fig and "🐢" not in sq and "\\ud83d\\udc22" not in sq
+          and "igk &lt;i&gt;" in sq, sq[:300])
+    check("squadmate card: Pip off, no figure: the emoji, as before", board.card_sev({"name": "igk"}, {"sev": False}) is None)
+
+    # ---- Settings › You: my Pip, opening the closet ----
+    view = {"tab": "you", "signed_in": True, "name": "Sam", "emoji": "🦊", "status": "", "sync": "", "crew": 1,
+            "squads": [], "decks": []}
+    you = board.settings_html(view, {"accent": "blue", "sev_look": ["cap"], "sev_closet": {"cap": "2026-09-01"}})
+    off = board.settings_html(view, {"sev": False})
+    check("Settings › You: my Pip in my colour and look, opening the closet; Emoji… stays",
+          'class="st-pip"' in you and "duecrew:closet" in you and "🦊" not in you and f"--sv-a: {blue[0]}" in you
+          and 'aria-label="Your Pip"' in you and "setemoji" in you and sev.CSS in you)
+    check("Settings › You: Pip off, my emoji as before", "🦊" in off and "st-pip" not in off)
+
+    # ---- squad bingo: who stamped a square, as a bigger Pip ----
+    from due_crew import bingo as B
+    sqs = [{"id": f"q{i}", "fam": "often", "diff": "m", "icon": "x", "title": "T", "rule": "R", "detail": "D",
+            "type": "days", "params": {"days": 1}} for i in range(8)]
+    bcard = B.clean_card(_bingo_card(squares=sqs))
+    rows = [{"user_id": u, "emoji": "🐢", "day": "2026-09-01", "joined": "2026-01-01",
+             "play": {"wk": 202636, "s": 0b1}} for u in ("me", "dre", "zed")]
+    ev = B.evaluate(bcard, rows)
+    bv = {"card": bcard, "ev": ev, "names": {"me": ("Sammy", "🦊"), "dre": ("Dre", "🐢"), "zed": ("Zed", "🐸")}, "me": "me",
+          "squad": "s", "squad_id": "s", "closest": B.closest(bcard, ev), "progress": [], "new": False, "withheld": [],
+          "today": "2026-09-01"}
+    people = {"me": {"user_id": "me", "you": True}, "dre": {"user_id": "dre", "accent": "blue", "look": ["dino"]}}
+    cfg = {"accent": "amber"}
+    full = board.bingo_html(bv, cfg, people=people)
+    sq0 = full[full.rindex("<button", 0, full.index('data-i="0"')):]
+    sq0 = sq0[:sq0.index("</button>")]
+    amber = board.accent_pair("amber")
+    check("bingo: who stamped are Pips (mine, a crewmate's dressed, a squadmate plain), a size up from the emoji, no emoji",
+          sq0.count('class="st sp"') == 3 and f"--rs-l:{amber[0]}" in sq0 and f"--rs-l:{blue[0]}" in sq0
+          and f"--rs-l:{plain[0]}" in sq0 and not any(x in sq0 for x in ("🦊", "🐢", "🐸")) and "stamped" in sq0
+          and f"width:{round(board.STAMP_PIP * sev.SLOT[0])}px" in sq0 and board.STAMP_PIP * sev.SLOT[0] > 22, sq0[:400])
+    check("bingo: a square is a button, so no stamp is a link (mine doesn't open the closet from here)",
+          "<a " not in sq0 and "duecrew:closet" not in sq0)
+    plain_card = board.bingo_html(bv, {"sev": False}, people=people)
+    p0 = plain_card[plain_card.index('data-i="0"'):]
+    check("bingo: Pip off, the emojis as before", "🐢" in p0[:p0.index("</button>")] and "st sp" not in plain_card)
+
+    # ---- the site: the account page, the exam rail, who added me back ----
+    app_js = open(os.path.join(os.path.dirname(__file__), "..", "site", "public", "app.js"), encoding="utf-8").read()
+    check("site: one helper draws someone's Pip by uid, as squad_pip does; the account page, the exam rail and "
+          "who added me back use it, the emoji only without sev.js",
+          "function pipFor(uid, name, crew, look)" in app_js
+          and "pipFor(me.uid, me.name, [], st?.settings?.sev_look) || face(me.emoji, me.name)" in app_js
+          and "pipFor(f.uid, f.name, crew) || face(f.emoji, f.name)" in app_js
+          and "const pip = pipFor(x.uid, x.name, crew); return pip ? [pip, x.name]" in app_js)
 
 
 def test_closet_flow_v382():

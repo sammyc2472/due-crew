@@ -167,8 +167,12 @@ def main(out):
 
     def friends():
         from due_crew.ui.friends_dialog import FriendsDialog
+        STORE.users["igk"]["emoji"] = "\U0001F422"  # 3.8.22: names alone in the list, never an emoji
         dlg = FriendsDialog(None, CLIENT, muted=[], on_mute=noop)
         shoot(dlg, os.path.join(out, "friends.png"))
+        rows = [dlg.list.item(i).text() for i in range(dlg.list.count())]
+        if not any("igk" in r for r in rows) or any("\U0001F422" in r for r in rows):
+            raise RuntimeError(f"friends: the list shows emojis, or not the crew: {rows}")
 
     def decks():
         from due_crew.ui.decks_dialog import DecksDialog

@@ -668,6 +668,10 @@ In Anki (as a follower):
 ### 3.8.22: Pips on a plan card's squad line
 
 - [ ] You › Plans, a plan whose squad you're in: "Squad: N of M showed up" starts with who showed up as Pips (yours in your look, a crewmate's in their colour and look, anyone else a plain green Pip), no emojis; no hat touches the line above. Click your Pip: the closet. Settings › Pip off: the emojis come back.
+- [ ] Review a card a crewmate knows or asked about: the chip beside Edit (and the card in the bottom right corner, when it's free) starts with their Pip in their colour and look, no emoji, nothing touching the words. Night mode: their night colour.
+- [ ] Squads › click someone who isn't in your crew: their card has a plain Pip where the emoji was. Settings › You: your Pip by your name; click it, the closet. Squad bingo: who stamped a square are Pips, bigger than the old emoji circles, none cut off at the square's edge. Tools › Due Crew › Friends: names, no emojis.
+- [ ] duecrew.com: your Pip at the top of Account; Home's Since you were here: "added you back" and a crewmate's exam lead with their Pip.
+- [ ] Settings › Pip off: every one of these is back to emojis (the Friends dialog stays names only).
 
 ### 3.8.21: Pips on Squads
 

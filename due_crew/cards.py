@@ -177,6 +177,26 @@ def names_by_uid():
             for e in _state["entries"] or [] if not e.get("you")}
 
 
+CHIP_PIP = 24  # 3.8.22: a crewmate's Pip on the review screen's chip, its slot the chip's line
+
+
+def pips_by_uid(c=None):
+    """3.8.22 (Sam: "all the places where there are emojis"): each
+    crewmate's Pip for the review screen's chip, where their emoji was:
+    {uid: {svg, a: [light, dark]}}, in their colour and look (a mutual
+    friend's, which only the crew brings); {} with Pip off. Our own markup:
+    a name is only its label, escaped."""
+    if not (app.cfg() if c is None else c).get("sev", True):
+        return {}
+    import html
+    from . import sev
+    from .board import accent_pair
+    return {e["user_id"]: {"svg": sev.slot(sev.svg("idle", rest=True, look=e.get("look"),
+                                                   label=html.escape(f'{e.get("name") or "?"}’s Pip', quote=True)), CHIP_PIP),
+                           "a": list(accent_pair(e.get("accent")))}
+            for e in _state["entries"] or [] if not e.get("you") and e.get("user_id")}
+
+
 def tip_list(info, local_tips, names):
     """The tips on one card, each person once: [{from, name, text, helped}].
     The server's first (on a card I'm stuck on, from crewmates I can name),
@@ -200,23 +220,35 @@ def tip_list(info, local_tips, names):
     return out
 
 
-def chip_view(info, local_tips, names, asks=(), mine=False):
+def chip_view(info, local_tips, names, asks=(), mine=False, pips=None):
     """What the chip says for one card, or None. info: the session's entry
     for the card; local_tips: the tips kept here for it (together.local_tips);
     asks: [(uid, index[, line])] crewmates asking about this card (on their
     week); mine: I've asked about it myself and no tip has come yet.
     3.5.0, K1: a tip shows its own words in the bar, with This helped.
-    `short` is what the bar says when the words don't fit beside Edit."""
+    `short` is what the bar says when the words don't fit beside Edit.
+    pips (3.8.22, pips_by_uid): who asked, or knows it, leads with their Pip
+    in place of their emoji."""
+    pips = pips or {}
+
+    def who_of(uid):
+        name, emoji = names[uid]
+        return name.split(" ")[0] if uid in pips else f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+
+    def with_pip(view, uid):
+        if uid in pips:
+            from .sev import CSS
+            view.update(pip=pips[uid], sevcss=CSS)
+        return view
     asks = [a for a in asks if a[0] in names]
     if asks:
-        name, emoji = names[asks[0][0]]
-        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+        who = who_of(asks[0][0])
         q = str(asks[0][2]) if len(asks[0]) > 2 and asks[0][2] else ""
         view = {"kind": "asked", "text": f"{who}: \u201c{q}\u201d" if q else f"{who} asked about this",
                 "short": f"{who} asked", "ask": False, "cmd": f"knowsreply:{asks[0][0]}:{int(asks[0][1])}", "act": "Tip"}
         if q:
             view["title"] = q
-        return view
+        return with_pip(view, asks[0][0])
     knows = [u for u in (info or {}).get("knows") or [] if u in names]
     tips = tip_list(info, local_tips, names)
     if tips:
@@ -231,12 +263,11 @@ def chip_view(info, local_tips, names, asks=(), mine=False):
             view["actcmd"] = f"knowshelped:{first['from']}"
         return view
     if knows:
-        name, emoji = names[knows[0]]
-        who = f"{emoji + ' ' if emoji else ''}{name.split(' ')[0]}"
+        who = who_of(knows[0])
         more = len(knows) - 1
-        return {"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
-                "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
-                "cmd": "knowsask", "act": "Asked" if mine else "Ask"}
+        return with_pip({"kind": "knows", "text": who + (f" and {more} more know this" if more > 0 else " knows this"),
+                         "short": who + (f" +{more}" if more > 0 else ""), "ask": True,
+                         "cmd": "knowsask", "act": "Asked" if mine else "Ask"}, knows[0])
     return None
 
 
@@ -252,18 +283,32 @@ def remark_view(plans, guid, ord_):
     return {"kind": "remark", "text": f"\U0001F4CC {name}: {text}", "short": f"\U0001F4CC {name}", "title": text}
 
 
+# 3.8.22: who asked, or knows it, as their Pip (pips_by_uid): sev.py's own
+# drawing, a name only in its label (escaped there), so it goes in as
+# markup; its motion sheet comes along once
+_PIP_JS = """function pip(into, D, night, css) {
+    if (!D.pip || !D.pip.svg) { return; }
+    if (D.sevcss && !document.getElementById('dc-sev-css-k')) {
+      var st = document.createElement('style'); st.id = 'dc-sev-css-k'; st.textContent = D.sevcss;
+      (document.head || document.body).appendChild(st);
+    }
+    var p = document.createElement('span'); p.innerHTML = D.pip.svg;
+    p.style.cssText = 'display:inline-flex;flex:none;line-height:0;' + css + '--sv-a:' + D.pip.a[night ? 1 : 0] + ';' +
+      (night ? '--sv-line:#3d403b;' : '');
+    into.appendChild(p);
+  }"""
+
 _CHIP_JS = """(function () {
   var old = document.getElementById('dc-knows'); if (old) { old.remove(); }
   var D = __DATA__; if (!D) { return; }
-  if (Array.isArray(D.accent)) {
-    var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
-    D.accent = D.accent[night ? 1 : 0];
-  }
+  var night = /night/i.test(document.body.className) || document.documentElement.classList.contains('night-mode');
+  if (Array.isArray(D.accent)) { D.accent = D.accent[night ? 1 : 0]; }
   var edit = document.querySelector('button[onclick*="edit"]');
   var cell = edit ? edit.parentNode : document.body;
   var s = document.createElement('span'); s.id = 'dc-knows';
   s.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 10px;border-radius:99px;' +
     'border:1px solid ' + D.accent + ';font:11.5px -apple-system,Segoe UI,sans-serif;white-space:nowrap;vertical-align:middle;cursor:pointer;';
+  pip(s, D, night, 'margin:-5px 1px -2px -4px;');  // 3.8.22: who it is, as their Pip
   var t = document.createElement('span'); t.id = 'dc-knows-t'; t.textContent = D.text; s.appendChild(t);
   t.setAttribute('data-full', D.text); t.setAttribute('data-short', D.short || D.text);
   if (D.kind === 'tip') { t.setAttribute('data-tip', '1'); }
@@ -276,12 +321,13 @@ _CHIP_JS = """(function () {
   }
   if (D.cmd) { s.onclick = function () { try { pycmd('duecrew:' + D.cmd); } catch (e) {} }; } else { s.style.cursor = 'default'; }
   cell.appendChild(s);
+  __PIP__
 })();"""
 
 
 def chip_js(data):
     from .room_model import BAR_BALANCE
-    return _CHIP_JS.replace("__DATA__", json.dumps(data)) + BAR_BALANCE
+    return _CHIP_JS.replace("__PIP__", _PIP_JS).replace("__DATA__", json.dumps(data)) + BAR_BALANCE
 
 
 # The chip as a small card above the bar, bottom right of the review
@@ -308,6 +354,11 @@ _FLOAT_JS = """(function () {
   var head = el('div', 'font-weight:600;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;', D.text);
   if (D.title) { head.title = D.title; }
   if (D.cmd) { head.onclick = function () { send(D.cmd); }; } else { head.style.cursor = 'default'; }
+  if (D.pip) {  // 3.8.22: who it is, as their Pip, before the words
+    var hr = el('div', 'display:flex;gap:6px;align-items:center;');
+    pip(hr, D, night, 'margin:-4px 0 -2px -2px;');
+    hr.appendChild(head); head = hr;
+  }
   var acts = el('div', 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;');
   function link(text, color, bold, fn) {
     var a = el('span', 'cursor:pointer;color:' + color + ';' + (bold ? 'font-weight:700;' : ''), text);
@@ -317,6 +368,7 @@ _FLOAT_JS = """(function () {
   if (D.more) { link('+' + D.more + ' more', c.mut, false, function () { send('knowstip'); }); }
   link('Not now', c.mut, false, function () { off(); });
   box.appendChild(head); box.appendChild(acts);
+  __PIP__
   document.body.appendChild(box);
   function hit(r, b) { return r.width > 0 && r.height > 0 && r.left < b.right + 8 && r.right > b.left - 8 && r.top < b.bottom + 8 && r.bottom > b.top - 8; }
   function free() {
@@ -355,7 +407,8 @@ _FLOAT_JS = """(function () {
 
 def float_js(data):
     from .room_model import CMD_KEY
-    return _FLOAT_JS.replace("__KEY__", json.dumps(CMD_KEY)).replace("__DATA__", json.dumps(data))
+    return (_FLOAT_JS.replace("__PIP__", _PIP_JS).replace("__KEY__", json.dumps(CMD_KEY))
+            .replace("__DATA__", json.dumps(data)))
 
 
 _LAST = {"n": 0, "view": None}
@@ -430,7 +483,8 @@ def on_answer(card):
                 for i, t in enumerate(e.get("tricky") or []) if t.get("guid") == guid and t.get("q")]
         from .together import _today
         mine = any(f["guid"] == guid for f in clean_tricky(client().session.get("tricky"), _today()))
-        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine)
+        view = chip_view((client().session.get("cards") or {}).get(guid), local_tips(guid), names_by_uid(), asks, mine,
+                         pips_by_uid())
         if view is None or view.get("kind") == "knows":
             view = remark_view(client().session.get("plans"), guid, card.ord) or view  # 3.8.1
     except Exception:

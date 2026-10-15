@@ -547,7 +547,8 @@ def _board_html(c):
         return board.bingo_html(team_flow.bingo_view(pid), c, loading=tv.get("state") == "fetching", team=True)
     if _state.get("bingo_open"):
         return board.bingo_html(_bingo_view(c), c,  # 3.6: the squad's card in its place
-                                loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()))
+                                loading=_squad_view(c).get("state") == "loading" and bool(bingo_flow.card()),
+                                people={e.get("user_id"): e for e in _state["entries"] or []})  # 3.8.22: stamps as Pips
     show_up = bool(c.get("show_up"))
     notice = _state.get("notice")
     if notice and notice["id"] in (_wrap_data().get("notices_dismissed") or []):

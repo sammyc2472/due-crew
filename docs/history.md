@@ -1776,3 +1776,20 @@ every release that changes how something works.
   older server without `who`, the emojis as before; an older add-on reads
   `faces` alone. The Pips sit a little above the line's text, so a hat
   clears the line before it.
+  Then the rest (Sam: "all the places where there are emojis we should
+  reflect pips, including bottom bars, we can make the bingo stamps bigger.
+  remove emojis from the friends dialog. invites and text shares can stay
+  as is"): the review screen's chip, in the bottom bar and as the card in
+  the corner, leads "Dre knows this" and "Dre asked about this" with Dre's
+  Pip (`cards.pips_by_uid`, `chip_view`'s `pips`; sev.py's own markup, a
+  name only in its escaped label, its motion sheet carried once); a
+  squadmate's card (not crew) has a plain Pip, as the Squads tab does;
+  Settings › You shows my Pip, opening the closet (Emoji… stays: it shows
+  with Pip off and in text shares); squad bingo's stamps are Pips, a size
+  up from the emoji (`stamp_pip`, never a link inside the square's
+  button); the Friends dialog lists names alone. duecrew.com: my Pip tops
+  the account page, and a crewmate's leads "added you back" and their
+  exam's Send good luck (`pipFor` in app.js, as `squadPip` draws them).
+  Invites, text shares, cheers (the emoji someone sent) and the admin
+  pages (a report can be about an emoji) keep their emojis. Pip off: the
+  emojis everywhere, as before.

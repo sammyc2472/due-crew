@@ -2875,12 +2875,16 @@ def bingo_card_html(bv):
 CELLS_BINGO = (0, 1, 2, 3, 5, 6, 7, 8)
 
 
-def bingo_html(bv, cfg, loading=False, team=False):
+def bingo_html(bv, cfg, loading=False, team=False, people=None):
     """The whole card, in the board's place (like Settings). Every string
     from the server is escaped here. A square's details show in the page
-    when it's clicked: no request."""
+    when it's clicked: no request. people (3.8.22): {uid: crew entry}, mine
+    too, so who stamped a square shows as their Pip (stamp_pip)."""
     e = _html.escape
-    head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>'
+    pips = cfg.get("sev", True)
+    sheet = (f'<style>{_sev.CSS}{BINGO_PIP_CSS}{_by_theme(cfg, "#due-crew .dc-rsev", "--sv-a: var(--rs-l);", "--sv-a: var(--rs-d);")}</style>'
+             if pips else "")
+    head = (f'<div id="due-crew" class="dc-frame bg-full">{_css(cfg)}<style>{BINGO_CSS}</style>{sheet}'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span></div>')
     team_card = bool(bv and bv.get("team")) or team  # 3.7.3: a plan team's card: counts, never who
     back = (f'<a class="bg-a" href="#" onclick="{_pycmd("planteambingoback")}">&lsaquo; Squads</a>' if team_card
@@ -2927,11 +2931,13 @@ def bingo_html(bv, cfg, loading=False, team=False):
             team = (f'<span class="tm{" ok" if st["done"] else ""}">&#128101; {_bg_need(sq, st["need"])}'
                     f'{so_far}</span>')
         marks = "".join(
+            f'<span class="st sp" style="right:{8 + k * 27}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
+            f'{stamp_pip(u, names.get(u, ("?", ""))[0], people, cfg)}</span>' if pips else
             f'<span class="st" style="right:{3 + k * 15}px;{"" if st["done"] else "opacity:.55"}" title="{e(names.get(u, ("?", ""))[0])}">'
             f'{e(names.get(u, ("?", ""))[1]) or "&#10003;"}</span>' for k, u in enumerate(who[:3]))
         dots, dname = diffs.get(sq.get("diff"), diffs["m"])
         rule = f'<span class="rl">{e(sq["rule"])}</span>' if known else ""
-        squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}" data-i="{i}" onclick="{show}">'
+        squares += (f'<button class="bg-sq {"done" if st["done"] else ""} {cls}{" stamped" if pips and who else ""}" data-i="{i}" onclick="{show}">'
                     f'<span class="fm">{fams.get(sq.get("fam"), "")}</span><span class="df" title="{dname}">{dots}</span>'
                     f'<span class="ic">{e(sq["icon"])}</span><span class="tt">{e(sq["title"]) if known else "Update to play"}</span>'
                     f'{rule}{team}{marks}</button>')
@@ -3365,14 +3371,19 @@ def _st_seg(key, options, current, label):
     return f'<span class="st-seg" role="group" aria-label="{label}">{btns}</span>'
 
 
-def _settings_you(view):
+def _settings_you(view, cfg=None):
+    """cfg (3.8.22): with Pip on, my Pip where my emoji was, opening the
+    closet (Emoji… stays: it shows with Pip off and in text shares)."""
     e = _html.escape
     if not view.get("signed_in"):
         return (f'<p>Not signed in.</p><div class="st-acts">'
                 f'<a class="st-lk" href="#" {_st_click("setsignin")}>Start with your email</a></div>')
     emoji = e(str(view.get("emoji") or ""))
     status = str(view.get("status") or "")
-    out = (f'<div class="st-who">{f"<span class=em>{emoji}</span>" if emoji else ""}'
+    fig = (f'<a class="st-pip" href="#" title="Pip&rsquo;s closet" onclick="{_pycmd("closet")}">'
+           f'{_sev.slot(_sev.svg("idle", rest=True, look=my_look(cfg), label="Your Pip"), SETTINGS_PIP)}</a>'
+           if cfg is not None and cfg.get("sev", True) else f"<span class=em>{emoji}</span>" if emoji else "")
+    out = (f'<div class="st-who">{fig}'
            f'<span style="display:grid"><b>{e(str(view.get("name") or "?"))}</b>'
            f'<span style="color:var(--dc-muted)">{"&ldquo;" + e(status) + "&rdquo;" if status else "No status"}</span></span></div>'
            f'<div class="st-acts"><a class="st-lk" href="#" {_st_click("setname")}>Name&hellip;</a>'
@@ -3576,10 +3587,15 @@ def settings_html(view, cfg):
     tab = view.get("tab") if view.get("tab") in dict(SETTINGS_TABS) else "you"
     pills = "".join(f'<a class="dc-pill{" on" if k == tab else ""}" href="#" {_st_click("settab:" + k)}>{t}</a>'
                     for k, t in SETTINGS_TABS)
-    body = (_settings_you(view) if tab == "you" else _settings_board(cfg) if tab == "board"
+    body = (_settings_you(view, cfg) if tab == "you" else _settings_board(cfg) if tab == "board"
             else _settings_privacy(cfg))
     foot = "Privacy, dates, status and accent follow your account." if view.get("signed_in") else ""
-    return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>'
+    pip = ""
+    if tab == "you" and cfg.get("sev", True):  # 3.8.22: my Pip in my colour, by day or night as the board
+        light, dark = accent_pair(cfg.get("accent"))
+        pip = (f'<style>{_sev.CSS}{_by_theme(cfg, "#due-crew .st-pip", f"--sv-a: {light};", f"--sv-a: {dark};")}'
+               '\n#due-crew .st-pip { display: inline-flex; line-height: 0; margin: 6px 8px 0 0; text-decoration: none; border: 0; }</style>')
+    return (f'<div id="due-crew" class="dc-frame dc-set">{_css(cfg)}<style>{SETTINGS_CSS}</style>{pip}'
             f'<div class="dc-head"><span class="dc-title">{board_mark()}</span><span>{pills}</span></div>'
             f'<div class="st-bar"><a class="st-back" href="#" {_st_click("setclose")}>&lsaquo; Board</a><b>Settings</b>'
             # 3.8.0, pick 28: a word finds a setting on any tab (FIND_JS)
@@ -3861,6 +3877,7 @@ def row_sev(row, cfg, size=None):
 
 
 PCREW_PIP = 26  # 3.8.22: a Pip on a plan card's squad line, its slot a line of its small text
+SETTINGS_PIP = 44  # 3.8.22: mine in Settings › You, beside my name and status
 
 
 def squad_pip(uid, name, you, people, cfg, size=None):
@@ -3871,6 +3888,26 @@ def squad_pip(uid, name, you, people, cfg, size=None):
     a name and an emoji. people: {uid: crew entry}. None with Pip off."""
     p = (people or {}).get(uid) or {}
     return row_sev({"you": bool(you), "name": name, "accent": p.get("accent"), "look": p.get("look")}, cfg, size)
+
+
+STAMP_PIP = 40  # 3.8.22: who stamped a bingo square, bigger than the emoji was (Sam: "make the bingo stamps bigger")
+BINGO_PIP_CSS = """
+    #due-crew .bg-sq.stamped { padding-bottom: 34px; }
+    #due-crew .bg-sq .st.sp { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; bottom: 4px; }
+    #due-crew .bg-sq .st.sp .dc-rsev { display: inline-block; line-height: 0; margin: 0; }
+    #due-crew .bg-sq:not(:hover) .dc-rsev .sv, #due-crew .bg-sq:not(:hover) .dc-rsev .sv * { animation: none !important; }
+"""
+
+
+def stamp_pip(uid, name, people, cfg):
+    """3.8.22: who stamped a bingo square, as their Pip: mine and a
+    crewmate's in colour and look, a squadmate's plain (all they share is a
+    name and an emoji). The square is a button, so never a link: mine
+    doesn't open the closet from here."""
+    p = (people or {}).get(uid) or {}
+    you = bool(p.get("you"))
+    return row_sev({"name": name, "accent": cfg.get("accent") if you else p.get("accent"),
+                    "look": my_look(cfg) if you else p.get("look")}, cfg, STAMP_PIP) or ""
 
 
 def card_sev(row, cfg, size=44):
@@ -4154,8 +4191,11 @@ def stranger_card_js(info):
     """Card for a squadmate who isn't crew. Deliberately spare — no heatmap,
     no cheer, no celebration: we don't necessarily know them. info: uid,
     name, reviews, time_ms, retention, streak, rank, squad, today (bool),
-    pending, knocked_me, founder_me."""
-    name = _label(info.get("name", "?"), info.get("emoji"))
+    pending, knocked_me, founder_me; sev (3.8.22): card_sev's markup, a
+    plain Pip in the emoji's place (all a squadmate shares is a name and an
+    emoji, so no colour or look), or None."""
+    sev_fig = info.get("sev")
+    name = _html.escape(str(info.get("name", "?"))) if sev_fig else _label(info.get("name", "?"), info.get("emoji"))
     squad = _html.escape(str(info.get("squad") or "squad"))
     numberless = all(info.get(k) is None for k in ("reviews", "time_ms", "retention", "streak"))
     if info.get("show_up") or numberless:
@@ -4174,12 +4214,13 @@ def stranger_card_js(info):
             bits.append(f'{float(info["retention"]):.1f}% retention')
         bits.append(f'{int(info.get("streak") or 0)}-day streak')
     stat = " &middot; ".join(bits)
-    inner = _json.dumps(
-        f'<div style="display: flex; align-items: baseline; gap: 8px;">'
-        f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
-        f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
-        f' letter-spacing: 0.08em;">{where}</span></div>'
-        f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
+    head = (f'<div style="display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0;">'
+            f'<span style="font-size: 15px; font-weight: 700;">{name}</span>'
+            f'<span style="opacity: 0.6; font-size: 10.5px; text-transform: uppercase;'
+            f' letter-spacing: 0.08em;">{where}</span></div>')
+    if sev_fig:  # 3.8.22: as on a crewmate's card, Pip beside the line, room above for a hat
+        head = f'<div style="display: flex; align-items: center; gap: 10px; padding-top: 10px;">{sev_fig}{head}</div>'
+    inner = _json.dumps(head + f'<div style="font-size: 12px; opacity: 0.8; padding: 6px 0 2px;">{stat}</div>')
     uid = str(info.get("uid", ""))
     if info.get("knocked_me"):
         act_label = _json.dumps("\U0001F91D Add back")
