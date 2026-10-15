@@ -13797,6 +13797,168 @@ def test_cheers_with_pips_v3822():
           and said[0].count("Pip") >= 3 and "dino" not in said[0].split("var pips")[0], said[0][:300] if said else said)
 
 
+def _wr_year(seed, keep, until=datetime.date(2026, 11, 30), start=datetime.date(2026, 1, 1)):
+    import random as _r
+    r, out, d = _r.Random(seed), {}, start
+    while d <= until:
+        if keep(d, r):
+            out[d.isoformat()] = (r.randint(60, 400), r.randint(0, 25), r.randint(600000, 4000000))
+        d += datetime.timedelta(days=1)
+    return out
+
+
+def test_wrapped_story_v390():
+    """3.9.0, your Wrapped (Sam's pick, round three): a year's story from my
+    own reviews, only the slides that year can fill, every line kind (no
+    missed days, no "fewer", no comparing: wrapped.SAD, read in every slide
+    of every year here), the card I turned around shown here only, and the
+    board's line from 1 December to 15 January."""
+    from due_crew import wrapped as W
+    full = W.facts(2026, "2026-12-01", _wr_year(9, lambda d, r: r.random() < (.97 if d.month == 3 else .85)),
+                   {22: 5000, 23: 3000, 9: 1000}, "2023-02-01")
+    fall = W.facts(2026, "2026-12-01", _wr_year(4, lambda d, r: d >= datetime.date(2026, 9, 2) and r.random() < .82),
+                   {7: 4000, 8: 2000, 20: 500}, "2026-09-02")
+    back = W.facts(2026, "2026-12-01", _wr_year(5, lambda d, r: not (datetime.date(2026, 2, 9) <= d <= datetime.date(2026, 4, 13)) and r.random() < .9),
+                   {14: 100, 15: 100}, "2025-01-01")
+    one = W.facts(2026, "2026-03-03", {"2026-03-02": (12, 12, 60000)}, {}, "2026-03-02")
+    none = W.facts(2026, "2026-03-03", {}, {}, None)
+    names = {k: t["name"] for k, t in __import__("due_crew.closet", fromlist=["BY"]).BY.items()}
+    counts = {"fifteens": 38, "hours": {"20": 20}, "cheers_sent": 12, "cheered_by": 41, "rooms": 6, "worn": {"headphones": 40}}
+    sl_full = W.slides(full, counts, {"sprout": "2026-10-14", "headphones": "2026-10-14"}, ["Headphones"], 4,
+                       {"front": "Which nerve <b>x</b>?", "lapses": 9, "ivl": 41}, 12, [{"k": "snooze", "name": "The Snoozasaurus", "days": 11}], 4, names)
+    sl_fall = W.slides(fall, {}, {"sprout": "2026-09-02"}, ["Sprout"], 0, None, 0, [], 4, names)
+    sl_back = W.slides(back, {}, {}, [], 2, None, 0, [], 4, names)
+    kinds = lambda sl: [x["kind"] for x in sl]
+    check("a full year: every slide it can fill, in the story's order",
+          kinds(sl_full) == ["cover", "days", "run", "back", "time", "cards", "turned", "fifteens", "things", "crew", "beasts", "picture"]
+          or kinds(sl_full) == ["cover", "days", "run", "time", "cards", "turned", "fifteens", "things", "crew", "beasts", "picture"], kinds(sl_full))
+    check("met Anki this year: says so; an early bird; no crew, no Fifteens, no comebacks: those slides aren't made",
+          sl_fall[0]["line"] == "You and Anki met on 2 September." and "time" in kinds(sl_fall)
+          and next(x for x in sl_fall if x["kind"] == "time")["big"] == "Early bird"
+          and not {"crew", "fifteens", "back", "turned", "beasts"} & set(kinds(sl_fall)), kinds(sl_fall))
+    bk = next(x for x in sl_back if x["kind"] == "back")
+    check("a comeback after weeks away is its own big slide: the day, how long, and the days that followed (more than half)",
+          bk["big"].endswith("April") and bk["line"].startswith("after nine weeks away. Then you showed up on") and "next" in bk["line"], bk)
+    check("one day: a short story (cover, days, cards, picture); no reviews: nothing",
+          kinds(W.slides(one)) == ["cover", "days", "cards", "picture"] and W.slides(none) == [])
+    every = sl_full + sl_fall + sl_back + W.slides(one)
+    said = [W.words(x).lower() for x in every]
+    bad = [(w, t) for t in said for w in W.SAD if re.search(rf"\b{w}", t)]
+    check("kind, always: no slide says missed, only, fewer, down, worst, lost, behind, less ...", not bad, bad[:5])
+    check("the card I turned around: its front on its slide, marked as staying here; never on the picture",
+          next(x for x in sl_full if x["kind"] == "turned")["tag"].startswith("Stays on this computer")
+          and "nerve" not in W.words(sl_full[-1]).lower())
+    check("since October, for what Due Crew only began counting then", next(x for x in sl_full if x["kind"] == "fifteens")["tag"] == "Since October"
+          and next(x for x in sl_full if x["kind"] == "crew")["tag"] == "Since October")
+    things = next(x for x in sl_full if x["kind"] == "things")
+    check("Pip's things: what came this year, worn most (a week or more of it)",
+          things["big"] == "2 things" and "headphones, 40 days" in things["small"], things)
+    check("the picture: days, longest run, and reviews (new cards when the year was mostly new)",
+          sl_full[-1]["grid"][2][1] == "reviews" and sl_fall[-1]["grid"][2][1] in ("reviews", "new cards")
+          and sl_full[-1]["kicker"] == "My 2026 so far in Anki" and sl_full[-1]["small"] == "See you in 2027.")
+    check("the board's line: 1 December to 15 January, for the year just ending; else none; the year it's about",
+          W.banner_year("2026-12-01") == 2026 and W.banner_year("2027-01-15") == 2026 and W.banner_year("2027-01-16") is None
+          and W.banner_year("2026-11-30") is None and W.default_year("2027-01-10") == 2026 and W.default_year("2026-12-02") == 2026)
+    cells = W.heat(full)
+    check("the year's squares: Monday-first weeks, levels against the year's own days, the days still to come empty",
+          len(cells) % 7 == 0 and 53 <= len(cells) // 7 <= 54 and {c[1] for c in cells if c and c != ""} <= {0, 1, 2, 3, 4}
+          and any(c == "" for c in cells) and cells[0] is None)
+    check("every kind of slide is in the table that says when it's made", {x["kind"] for x in every} <= {k for k, _w in W.SLIDES}
+          and set(W.BG) == {k for k, _w in W.SLIDES})
+    # drawn, in the board's place
+    view = {"year": 2026, "years": [2026, 2025], "slides": sl_full, "heat": cells, "look": ["headphones"], "card": True, "card_on": True}
+    h = board.wrapped_html(view, {"accent": "green"})
+    check("drawn: a slide each, Pip in my look, the year's squares, another year, All on one page, the card's switch, the way back",
+          h.count('<section class="wr-s') == len(sl_full) and "duecrew:wrappedyear:2025" in h and "All on one page" in h
+          and "duecrew:wrappedcard" in h and "duecrew:wrappedclose" in h and "duecrew:wrappedpic:2026" in h
+          and 'class="wh"' in h and '<svg class="sv' in h, h[:300])
+    check("the card's front is text, escaped", "Which nerve &lt;b&gt;x&lt;/b&gt;?" in h and "<b>x</b>" not in h)
+    off = board.wrapped_html(view, {"sev": False})
+    check("Pip off: the story without Pip (no Pip's things slide)", "<svg class=\"sv" not in off and off.count('<section class="wr-s') == len(sl_full) - 1)
+    js = board.wrapped_js()
+    check("the player: arrows and the sides move it, it moves on by itself, never with Reduce motion, once a card",
+          "ArrowRight" in js and "prefers-reduced-motion: reduce" in js and "if (!still) { requestAnimationFrame(tick); }" in js
+          and "data-on" in js)
+    import shutil
+    import subprocess
+    if shutil.which("node"):
+        r = subprocess.run(["node", "--check", "-"], input=js, capture_output=True, text=True)
+        check("the player is valid JS", r.returncode == 0, r.stderr[:300])
+    line = board.wrapped_line(2026, True, ["dino"])
+    check("the line: Your 2026 so far, Open, and its x for the year", "Your 2026 so far" in line and "duecrew:wrappedopen:2026" in line
+          and "duecrew:wrappedx:2026" in line and "&#127873;" in board.wrapped_line(2026, False, [], pip=False))
+    from due_crew import account
+    check("the line's x is the account's (wrapped_seen), so it holds on every computer",
+          "wrapped_seen" in account.ACCOUNT_KEYS and account.clean({"wrapped_seen": "2026xx"}) == {"wrapped_seen": "2026"})
+
+
+def test_wrapped_flow_v390():
+    """3.9.0: Wrapped's glue reads the year in one grouped query (an hour a
+    row), new cards met as first answers, the first review ever, the years
+    there are, and the card I turned around as plain text; the commands
+    reach it as the board sends them."""
+    from due_crew import wrapped_flow as F
+    import due_crew as dc
+    from aqt.deckbrowser import DeckBrowser
+    conn = sqlite3.connect(":memory:")
+    fakes.make_collection(conn)
+    at = lambda d, h: int(datetime.datetime.combine(d, datetime.time(h)).timestamp() * 1000)
+    for d, h in ((datetime.date(2026, 3, 2), 22), (datetime.date(2026, 3, 2), 23), (datetime.date(2026, 3, 3), 1), (datetime.date(2025, 12, 31), 10)):
+        fakes.add_review(conn, at(d, h), rtype=1, time_ms=60000)
+    fakes.add_review(conn, at(datetime.date(2026, 3, 2), 22), rtype=0, last_ivl=0, cid=7)   # a new card, first seen
+    fakes.add_review(conn, at(datetime.date(2026, 3, 2), 22), rtype=0, last_ivl=-600, cid=7)  # its next learning step
+    fakes.add_card(conn, 5, 1, ctype=2, queue=2, ivl=41, lapses=9)
+    col = fakes.FakeCol(conn, fakes.day_cutoff_for(datetime.date(2026, 3, 10)))
+    days, hours = F.year_rows(col, 2026)
+    check("the year in one query: 1 am counts for the day before (the rollover); a new card met once; the hours",
+          days.get("2026-03-02", (0,))[0] == 5 and days["2026-03-02"][1] == 1 and "2026-03-03" not in days
+          and "2025-12-31" not in days and hours.get(22) == 3 and hours.get(1) == 1, (days, hours))
+    check("the first review ever, and the years there are", F.first_day(col) == "2025-12-31" and F.years(col) == [2026, 2025])
+    col.get_card = lambda cid: types.SimpleNamespace(question=lambda: '<style>.x{}</style><div>Which <b>nerve</b>?</div>[sound:a.mp3]&amp; why')
+    n, card = F.turned(col)
+    check("the card I turned around: as plain text (no markup, no media)", n == 1 and card == {"front": "Which nerve ? & why", "lapses": 9, "ivl": 41}, card)
+    # the board's commands
+    saved = (dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen, dict(dc._state))
+    opened, conf, swaps = [], {"accent": "green"}, []
+    import due_crew.shares as SH
+    pics = []
+    saved_pic = SH.picture
+    dc.open_wrapped = lambda year=None: opened.append(year)
+    dc._swap = lambda c, focus=None: swaps.append(1)
+    dc.cfg = lambda: conf
+    dc.save_cfg = lambda c, **k: conf.update(c)
+    dc._board_on_screen = lambda: True
+    SH.picture = lambda kind, year=None: pics.append((kind, year))
+    try:
+        send = lambda m: dc._on_js(False, "duecrew:" + m, DeckBrowser())
+        send("wrappedopen:2026")
+        send("wrappedyear:2025")
+        send("wrappedpic:2026")
+        send("wrappedx:2026")
+        dc._state["wrapped_open"] = {"year": 2026}
+        send("wrappedcard")
+        send("wrappedclose")
+        check("the board's clicks reach it: open, another year, the picture on that year, the line's x for the year, the card off, back",
+              opened == [2026, 2025, 2026] and pics == [("pictureyear", 2026)] and conf.get("wrapped_seen") == "2026"
+              and conf.get(F.CARD_KEY) is False and dc._state.get("wrapped_open") is None and swaps, (opened, pics, conf))
+    finally:
+        dc.open_wrapped, dc._swap, dc.cfg, dc.save_cfg, dc._board_on_screen = saved[:5]
+        dc._state.clear()
+        dc._state.update(saved[5])
+        SH.picture = saved_pic
+    check("the board's line: in its fortnight-and-a-month, until its x for that year",
+          F.banner("2026-12-03", {"sev": False})["year"] == 2026 and F.banner("2026-12-03", {"wrapped_seen": "2026"}) is None
+          and F.banner("2027-01-10", {"sev": False}) == {"year": 2026, "so_far": False, "look": []} and F.banner("2026-10-03", {}) is None)
+    from due_crew import sharecard as S
+    d = S.year({"2026-03-02": (5, 60000)}, 2026, "2026-03-10", None, True)
+    ops = S.draw("year", "story", d, {"time": True, "reviews": True, "streak": True, "best": True}, "light", lambda s, px, w: len(s) * px * 0.5)[2]
+    js = open(os.path.join(REPO, "site", "public", "cards.js"), encoding="utf-8").read()
+    check("the year card can carry Pip (Wrapped's picture), and cards.js draws it the same",
+          any(o[0] == "sev" for o in ops) and not any(o[0] == "sev" for o in S.draw("year", "story", dict(d, sev=False), {}, "light", lambda s, px, w: 1)[2])
+          and "if (d.sev) { const img = await sevImg(pal.g); if (img) c.drawImage(img, W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, YEAR_SEV); }" in js
+          and "YEAR_SEV = 220" in js and S.YEAR_SEV == 220)
+
+
 def main():
     names = [n for n in list(globals()) if n.startswith("test_")]
     for n in names:

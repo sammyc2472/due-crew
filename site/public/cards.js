@@ -76,7 +76,7 @@ const Cards = (() => {
   // ---- 3.8.1: Pip hops across my week (sharecard.py's landings and hops: change one, change both) ----
   // sev.still("hop", "%A%") from due_crew/sev.py, the one drawing; the suite checks this copy is it
   const SEV = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><g><g transform="translate(21.5 47) rotate(155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><g transform="translate(58.5 47) rotate(-155)"><g><rect x="-2.6" y="-1" width="5.2" height="12.5" rx="2.6" style="fill:%A%"/></g></g><rect x="28.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="42.5" y="63" width="9" height="9.5" rx="3" style="fill:%A%"/><rect x="20" y="27" width="40" height="39" rx="12.5" style="fill:%A%"/><rect x="25" y="31" width="11" height="5" rx="2.5" style="fill:#fff" opacity=".22"/><g><path d="M28.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/><path d="M42.8 44.4 q4.2 -4.6 8.4 0" fill="none" style="stroke:#1f2a1f" stroke-width="2.2" stroke-linecap="round"/></g><path d="M35 50.5 q5 7 10 0 z" style="fill:#1f2a1f"/></g></svg>';
-  const SEV_SIZE = 1.8, SEV_FEET = 72.5 / 80, HOP = 0.45, DOT = 0.035, STEP = 0.16, ROOM = 100;
+  const SEV_SIZE = 1.8, SEV_FEET = 72.5 / 80, HOP = 0.45, DOT = 0.035, STEP = 0.16, ROOM = 100, YEAR_SEV = 220;
   const sevs = {};
   const sevImg = (col) => (sevs[col] ||= new Promise((ok) => {
     const img = new Image();
@@ -181,6 +181,7 @@ const Cards = (() => {
     eyebrow(c, `My year in Anki · ${d.year}`, P, 236, 30, pal);
     text(c, `${n(d.studied)} day${d.studied === 1 ? "" : "s"}`, P, 380, 132, pal.ink, { weight: 700 });
     text(c, d.since ? `studied, since ${d.since}` : `studied in ${d.year}`, P, 446, 38, pal.mut);
+    if (d.sev) { const img = await sevImg(pal.g); if (img) c.drawImage(img, W - P - YEAR_SEV, 446 - YEAR_SEV * SEV_FEET, YEAR_SEV, YEAR_SEV); }  // 3.9.0: as sharecard's
     const w = W - 2 * P, cols = d.cols, gap = 4, s = (w - (cols - 1) * gap) / cols;
     d.cells.forEach((x, i) => {
       const cx = P + Math.floor(i / 7) * (s + gap), cy = 520 + (i % 7) * (s + gap);

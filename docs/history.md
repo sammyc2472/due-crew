@@ -1821,3 +1821,33 @@ every release that changes how something works.
   with the crew, cheers sent (new) and got, crew days, each squad card's
   lines (its most, once), and the days each thing Pip had on was worn
   (new, once a day). Nothing of it is sent.
+
+- 3.9.0, your Wrapped (Sam's pick, the fun round's third round: "Build ·
+  Start the year counts · Show the card you turned around, here only ·
+  Night owl or early bird · Past years from Anki's history · 1 Dec to 15
+  Jan"). Your own year as a short story, in the board's place (as the
+  closet is): the board's line from 1 December to 15 January ("Your 2026
+  so far is ready"; its x is for the year, on every computer: the
+  account's `wrapped_seen`), and Tools › Due Crew › Your year… any time,
+  any year Anki's history has. Made on this computer from one grouped query
+  over the year's reviews (an hour a row; new cards met are first answers)
+  and the year counts above; nothing is sent. Only the slides a year can
+  fill (`wrapped.SLIDES` says when each is made): the cover (or "You and
+  Anki met on…"), days with the year's squares and the steadiest month,
+  the longest run (gold on the squares; "and still going"), coming back
+  (nine weeks away gets its own big slide, and the days that followed when
+  most were studied), night owl or early bird (30 days or more, half the
+  reviews either side), the cards, the card you turned around (its front,
+  plain text, drawn here and never on the picture; a switch on the page
+  leaves it out), Fifteens and their favourite hour, Pip's things and what
+  was worn most, you and your crew (your own numbers only), the beasts you
+  beat, and the picture: days, longest run, reviews (or new cards), and
+  Make the picture, the year card, made in Anki, with Pip hopping on it
+  now (`sharecard.year`'s `sev`, cards.js the same). Kind, always: no
+  missed days, no "fewer", no comparing; a test reads every slide of
+  three made-up years for the words it never says (`wrapped.SAD`). The
+  slides Due Crew only began counting in October say "Since October". It
+  moves on by itself and waits under the pointer; the sides and the arrow
+  keys move it; Reduce motion never moves it on; All on one page lists
+  every slide as text (`board.wrapped_html`, `wrapped_js`, said to the
+  page after each draw; `wrapped.py` pure, `wrapped_flow.py` the glue).
