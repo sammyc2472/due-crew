@@ -2041,7 +2041,7 @@ class FakeWorker:
                              key=lambda a: (-a["act"], -a["id"]))[:20]
             last = next((a for a in threads if a["uid"] != me), None)
             out[pid] = {"shown": len(shown), "of": len(rows),
-                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4],
+                        "faces": [self.users[u]["emoji"] or "" for u in shown][:4], "who": shown[:4],
                         "act": [a["act"] for a in threads if a.get("act_by", a["uid"]) != me]}
             if last:
                 out[pid]["last"] = {"name": self.users[last["uid"]]["name"] or "?", "text": last["text"]}

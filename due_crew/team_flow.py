@@ -234,7 +234,7 @@ def join(pid, ask=False):
         if data.get("on") and pid not in teams():
             # its pill and the plan card's line now, not at the next refresh
             cl.session["teams"] = dict(cl.session.get("teams") or {}, **{pid: {
-                "shown": int(data.get("shown") or 0), "of": int(data.get("count") or 1), "faces": [], "act": [], "last": None}})
+                "shown": int(data.get("shown") or 0), "of": int(data.get("count") or 1), "faces": [], "who": [], "act": [], "last": None}})
         app.swap(cfg())
         if ask:
             tooltip("You're in. It's on the Squads tab.")

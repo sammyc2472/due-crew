@@ -76,6 +76,9 @@ describe("a plan's team (3.7.3)", () => {
     // the board carries the counts for the Plan tab
     const b = (await kai.call("GET", "/board")).body;
     expect(b.teams[p.id]).toMatchObject({ shown: 1, of: 2, act: [] });
+    // 3.8.22: whose faces they are, one for one, so the add-on draws a crewmate's Pip
+    expect(b.teams[p.id].who).toEqual(["sam"]);
+    expect(b.teams[p.id].faces).toHaveLength(1);
     expect(b.teams[p.id].streak).toBeUndefined();  // the tab says it; the board reads only last days
     expect((await kai.call("GET", "/board?keep=1")).body.teams).toBeUndefined();
     // bad parts

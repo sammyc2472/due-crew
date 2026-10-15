@@ -852,7 +852,8 @@ def _when(v):
 
 def clean_teams(v):
     """The board's counts for the teams I'm on: {plan id: {shown, of,
-    streak, faces, act, last}}."""
+    streak, faces, act, last}}; 3.8.22: who, the faces' uids, one for one
+    ("" where it isn't one)."""
     out = {}
     for pid, t in (v.items() if isinstance(v, dict) else []):
         if not _PLAN_ID.fullmatch(str(pid)) or not isinstance(t, dict):
@@ -860,6 +861,7 @@ def clean_teams(v):
         last = t.get("last") if isinstance(t.get("last"), dict) else None
         out[pid] = {"shown": _nat(t.get("shown")), "of": _nat(t.get("of")),
                     "faces": [clean_emoji(e) for e in (t.get("faces") or [])[:4] if isinstance(e, str)],
+                    "who": [u if isinstance(u, str) and _UID.fullmatch(u) else "" for u in (t.get("who") or [])[:4]],
                     "act": sorted((_when(a) for a in (t.get("act") or [])[:20]), reverse=True),
                     "last": {"name": clean_note(last.get("name"), 60) or "?",
                              "text": clean_note(last.get("text"), TEAM_TEXT_MAX)} if last else None}

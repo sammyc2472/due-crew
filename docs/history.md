@@ -1762,3 +1762,17 @@ every release that changes how something works.
   each Pip's slot the size of the face it replaces; the gap between them
   grows with their size, so a held mug clears the next one. Pip off, the
   initials as before. README's room picture re-rendered from the widget.
+
+- 3.8.22, Pips on a plan card's squad line (Sam: "under squad we haven't
+  switched to pips"). You › Plans, a plan's card: "Squad: N of M showed
+  up" now leads with who showed up as their Pips, as on the Squads tab:
+  mine in my look (it opens the closet), a crewmate's in their colour and
+  look, anyone else plain. The board's summary of each plan squad I'm in
+  carried only the emojis of who showed up, so it now names whose they
+  are too (`who`, their uids, one for one with `faces`; the squad's own
+  view already gives its members each other's uids). Still one request:
+  it rides `GET /board`'s `teams`. The crew is the board's own entries
+  (`you_html`'s `people`, down to `board._squad_line`). Pip off, or an
+  older server without `who`, the emojis as before; an older add-on reads
+  `faces` alone. The Pips sit a little above the line's text, so a hat
+  clears the line before it.

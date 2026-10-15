@@ -1119,7 +1119,7 @@ class ApiClient:
         status, data = self._call("POST", f"/plans/{plan_id}/team" + (f"?wk={wk}" if wk else ""), retry=False)
         if status != 200:
             return status  # 409: the team is full
-        self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "act": [], "last": None}
+        self.session.setdefault("teams", {})[plan_id] = {"shown": 0, "of": 1, "streak": 0, "faces": [], "who": [], "act": [], "last": None}
         self._note_follow(plan_id, share=True, teamAsk=False)  # 3.7.6: on the team is sharing
         return clean_team_view(data)
 

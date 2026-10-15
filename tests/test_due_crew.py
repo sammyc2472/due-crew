@@ -13263,6 +13263,68 @@ console.log(JSON.stringify({
           and got[("chip", 1, True, True)]["initials"] == [], got)
 
 
+def test_plan_card_squad_pips_v3822():
+    """3.8.22 (Sam: "under squad we haven't switched to pips"): the plan
+    card's squad line draws who showed up as their Pips, as the Squads tab
+    does: mine in my look (it opens the closet), a crewmate's in their colour
+    and look, anyone else plain. The board's summary names whose faces they
+    are (who, uids, one for one); Pip off, or a server without who, the
+    emojis as before. Still one request."""
+    from due_crew.backend import shapes as S
+    # the fake (the Worker's twin): who beside faces, one for one
+    store = world({"sam": "Sammy", "dre": "Dre", "zed": "Zed"}, {"sam": ["dre"], "dre": ["sam"]})
+    store.today = TODAY.isoformat()
+    for u in ("sam", "dre", "zed"):
+        store.team[("abcdefghij", u)] = {"joined": 1, "days": [store.today] if u != "zed" else [], "play": None}
+    t = store._teams_for_board("zed")["abcdefghij"]
+    check("server: the board's squad summary names whose faces they are, one for one",
+          sorted(t["who"]) == ["dre", "sam"] and len(t["who"]) == len(t["faces"]) == t["shown"] == 2, t)
+    # the client keeps who beside faces: junk is "", never dropped (they stay one for one)
+    c = S.clean_teams({"abcdefghij": {"shown": 3, "of": 5, "faces": ["🐢", "", "🐸"], "who": ["dre", "<b>", 7]}})["abcdefghij"]
+    check("client: who kept one for one with faces, junk as nothing",
+          c["who"] == ["dre", "", ""] and c["faces"] == ["🐢", "", "🐸"], c)
+    check("client: an older server's summary has no who", S.clean_teams({"abcdefghij": {"shown": 1, "faces": ["🐢"]}})["abcdefghij"]["who"] == [])
+
+    people = {"sam": {"user_id": "sam", "name": "Sammy", "you": True},
+              "dre": {"user_id": "dre", "name": "Dre", "accent": "blue", "look": ["dino"]}}
+    cfg = {"accent": "amber", "sev_look": ["cap"], "sev_closet": {"cap": "2026-09-01"}}
+    summ = {"shown": 3, "of": 11, "faces": ["🦊", "🐢", "🐸"], "who": ["sam", "dre", "zed"]}
+    line = board._squad_line("p1", {"summary": summ, "unread": 0}, people, cfg)
+    pips = line[line.index('class="pips"'):line.index("Squad:")]
+    blue, amber, plain = board.accent_pair("blue"), board.accent_pair("amber"), board.accent_pair(None)
+    check("line: who showed up are Pips, in order, and no emoji",
+          pips.count("dc-rsev") == 3 and not any(x in line for x in ("🦊", "🐢", "🐸"))
+          and "Squad: 3 of 11 showed up" in line and "duecrew:squadplan:p1" in line, line[:300])
+    exact = [board.squad_pip(u, n, y, people, cfg, board.PCREW_PIP)
+             for u, n, y in (("sam", "Sammy", True), ("dre", "Dre", False), ("zed", "A squadmate", False))]
+    check("…each the Squads tab's own Pip, look and all (mine and the crewmate's dressed, the stranger plain)",
+          all(x and x in pips for x in exact) and len(exact[1]) > len(exact[2]) and "duecrew:closet" in exact[0]
+          and f"--rs-l:{amber[0]}" in exact[0])
+    check("…a crewmate's in their colour and look; anyone else plain, labelled as a squadmate",
+          f"--rs-l:{blue[0]}" in pips and pips.count(f"--rs-l:{plain[0]}") == 1 and "A squadmate’s Pip" in pips
+          and "Dre’s Pip" in pips, pips[:400])
+    check("…in that order (me, the crewmate, the stranger)",
+          pips.index(f"--rs-l:{amber[0]}") < pips.index(f"--rs-l:{blue[0]}") < pips.index(f"--rs-l:{plain[0]}"))
+    off = board._squad_line("p1", {"summary": summ, "unread": 0}, people, dict(cfg, sev=False))
+    old = board._squad_line("p1", {"summary": dict(summ, who=[]), "unread": 0}, people, cfg)
+    bare = board._squad_line("p1", {"summary": summ, "unread": 0})
+    check("Pip off, a server without who, or no settings: the emojis, as before",
+          all("🦊🐢🐸 Squad: 3 of 11" in x and "dc-rsev" not in x for x in (off, old, bare)), [off, old, bare])
+
+    # the board end to end: You › Plans has the crew it needs
+    labels = [(TODAY - datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    ents = [dict(x, accent="blue", look=["dino"]) if x["user_id"] == "dre" else x
+            for x in new_client(store, "sam", "Sammy").fetch_board(labels)["entries"]]
+    card = {"id": "p1", "title": "Plan", "tabs": {"unread": 0, "summary": summ}}
+    plans = {"cards": [card]}
+    html = board.render({"entries": ents, "labels": labels, "tomorrow": "", "pending": []}, dict(cfg, due_show=False), 0,
+                        plans=plans, you={"tab": "plans", "plans": plans})
+    sq = html[html.index('class="pcrew"'):]
+    sq = sq[:sq.index("</div>")]
+    check("board: the plan card's squad line, Pips from the board's own crew",
+          sq.count("dc-rsev") == 3 and f"--rs-l:{blue[0]}" in sq and "#due-crew .pcrew .pips" in html, sq[:300])
+
+
 def test_closet_flow_v382():
     """3.8.2: the facts come from the revlog (the days and hours, read once
     a day, today's fresh), the cards, the board and a few tallies; what's new

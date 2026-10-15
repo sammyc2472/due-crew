@@ -1555,20 +1555,20 @@ def _decks_html(data, deltas=None, tricky=None, plans=None, mine=None, sticking=
     return _decks_body(data, deltas, sticking, pick, _tricky_html(tricky, mine))
 
 
-def _plans_html(plans):
+def _plans_html(plans, people=None, cfg=None):
     """3.3: the plans, a card each; 3.5.0: with none, the ways in."""
     cards = (plans or {}).get("cards") or []
-    return "".join(_plan_card_html(card) for card in cards) if cards else _plans_empty_html()
+    return "".join(_plan_card_html(card, people, cfg) for card in cards) if cards else _plans_empty_html()
 
 
-def _you_plans(plans, opened=None):
+def _you_plans(plans, opened=None, people=None, cfg=None):
     """3.8.0, You › Plans: a plan offered to one of my squads, then each plan
     I follow; following none, the ways in. opened: this morning's line, here
     only when Due is off (it's under Today otherwise)."""
     if opened and not opened.get("dates") and (plans or {}).get("opened_dates"):
         opened = dict(opened, dates=plans["opened_dates"])  # 3.8.1: its dates, as Due's Today has them
     return (_opened_line(opened) + _invite_lines((plans or {}).get("invites"))
-            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans))
+            + _offer_banners((plans or {}).get("offers")) + _plans_html(plans, people, cfg))
 
 
 def _invite_lines(invites):
@@ -1635,7 +1635,7 @@ def _plans_empty_html():
             f'</div></div>')
 
 
-def _plan_card_html(card):
+def _plan_card_html(card, people=None, cfg=None):
     """3.5.0, a plan I follow (You › Plans since 3.8.0): the plan, what it
     says about now (_plan_now), this week as the site's calendar draws it
     (a list when narrow), one note at most, and the crew. Today is the tab
@@ -1654,7 +1654,7 @@ def _plan_card_html(card):
     notes = _plan_notes(card, pid)
     if notes:
         out += notes[0]
-    crew = _squad_line(pid, tabs)
+    crew = _squad_line(pid, tabs, people, cfg)
     if not crew:
         # 3.8.0: not in its squad: the crew who follow it, and the way in
         crew = _crew_line(card)
@@ -1757,15 +1757,24 @@ def _own_html(ow, pid):
     return out + "</div>"
 
 
-def _squad_line(pid, tabs):
+def _squad_line(pid, tabs, people=None, cfg=None):
     """3.8.0, the Plan tab's line about the plan's squad: faces, how many
     showed up, and the way there (the newest question from someone else
-    when there is one). "" when I'm not in it."""
+    when there is one). "" when I'm not in it. 3.8.22 (Sam: "under squad we
+    haven't switched to pips"): who showed up are their Pips, as on the
+    Squads tab (squad_pip: mine and a crewmate's in colour and look, anyone
+    else plain), from the uids beside their emojis (who); Pip off, or a
+    server without them, the emojis. people: {uid: crew entry}, mine too."""
     e = _html.escape
     s = tabs.get("summary")
     if not s:
         return ""
-    faces = "".join(e(str(x)) for x in s.get("faces") or [])
+    emojis, who, people = s.get("faces") or [], s.get("who") or [], people or {}
+    pips = [squad_pip(u, (people.get(u) or {}).get("name") or "A squadmate", (people.get(u) or {}).get("you"),
+                      people, cfg, PCREW_PIP)
+            for u in who[:len(emojis)]] if cfg is not None and len(who) >= len(emojis) else []
+    faces = (f'<span class="pips">{"".join(pips)}</span>' if pips and all(pips)
+             else "".join(e(str(x)) for x in emojis))
     n, of = int(s.get("shown") or 0), int(s.get("of") or 0)
     out = f'{faces} Squad: {n} of {of} showed up' if n else f'Squad: {of} in it'
     last, unread = s.get("last"), int(tabs.get("unread") or 0)
@@ -3219,16 +3228,18 @@ def render(data, cfg, fetched_at, wrap=None, deltas=None, exam_eve=None,
     # row's (tr.sv) so the name and the numbers stay on one line
     seat += f"\n    #due-crew tr.sv > td {{ padding-top: {(3 if cfg.get('compact') else 6) + 6}px; }}"
     sheet = f'<style>{SEV_CSS}{CLOSET_CSS}{seat}{_sev.CSS}</style>' if cfg.get("sev", True) else ""
+    people = {x.get("user_id"): x for x in data.get("entries") or []}  # 3.8.22: a plan's squad line, mine too
     return (f'<div id="due-crew" class="dc-frame dc-split">{_css(cfg)}<style>{DUE_CSS}</style>{sheet}'
-            f'{you_html(cfg, due, you)}<div class="dc-sheet">'
+            f'{you_html(cfg, due, you, people)}<div class="dc-sheet">'
             f'{_head(period, show_up, hidden, cfg.get("crew_view") or period, sev)}{body}{foot}</div></div>')
 
 
-def you_html(cfg, due=None, you=None):
+def you_html(cfg, due=None, you=None, people=None):
     """3.8.0, the You bubble: Today, Upcoming and Later (Due's lists, when
     Due is on), then Plans and Insights unless hidden in Settings. due:
     due.view or None; you: {tab, folded, plans, insights, opened}, from the glue
-    (None: Due's lists alone, as before). "" when there's nothing to show."""
+    (None: Due's lists alone, as before). "" when there's nothing to show.
+    people (3.8.22): {uid: crew entry}, mine too, for a plan's squad line."""
     if you is None:
         return _due_html(due)
     hidden = hidden_tabs(cfg)
@@ -3237,7 +3248,7 @@ def you_html(cfg, due=None, you=None):
     if not keys:
         return ""
     tab = you.get("tab") if you.get("tab") in keys else keys[0]
-    body = (_you_plans(you.get("plans"), None if due else you.get("opened")) if tab == "plans"
+    body = (_you_plans(you.get("plans"), None if due else you.get("opened"), people, cfg) if tab == "plans"
             else _you_insights(you.get("insights")) if tab == "insights" else "")
     return _due_html(due, more, tab if tab in dict(more) else None, body, folded=bool(you.get("folded")))
 
@@ -3661,6 +3672,10 @@ CLOSET_CSS = """
     #due-crew .dc-rsev { display: inline-block; vertical-align: middle; margin: -3px 8px -6px 2px; line-height: 0; }
     #due-crew a.dc-rsev, #due-crew a.dc-rsevl { text-decoration: none; border: 0; }
     #due-crew tr:not(:hover) .dc-rsev .sv, #due-crew tr:not(:hover) .dc-rsev .sv * { animation: none !important; }
+    /* 3.8.22: a plan card's squad line: who showed up, side by side, still until it's pointed at */
+    #due-crew .pcrew .pips { display: inline-flex; gap: 4px; vertical-align: middle; margin: 8px 5px 0 0; }  /* a hat clear of the line above */
+    #due-crew .pcrew .pips .dc-rsev { margin: 0; }
+    #due-crew .pcrew:not(:hover) .dc-rsev .sv, #due-crew .pcrew:not(:hover) .dc-rsev .sv * { animation: none !important; }
     @media (max-width: 380px) { #due-crew .dc-rsev { display: none; } }
 """
 
@@ -3843,6 +3858,9 @@ def row_sev(row, cfg, size=None):
         return (f'<a class="dc-rsev" href="#" title="Pip&rsquo;s closet" style="{style}" '
                 f'onclick="{_pycmd("closet")}">{fig}</a>')
     return f'<span class="dc-rsev" style="{style}">{fig}</span>'
+
+
+PCREW_PIP = 26  # 3.8.22: a Pip on a plan card's squad line, its slot a line of its small text
 
 
 def squad_pip(uid, name, you, people, cfg, size=None):
